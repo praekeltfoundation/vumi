@@ -1,0 +1,1 @@
+class VumiError(Exception): pass

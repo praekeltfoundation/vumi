@@ -1,0 +1,14 @@
+pip-log.txt
+ve/*
+tmp/*
+logs/*
+*.pyc
+dropin.cache
+*.swp
+*.pid
+_trial_temp/*
+src/*.egg-info/*
+*.log
+db/*.db
+environments/*
+.DS_Store
