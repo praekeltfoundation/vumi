@@ -16,4 +16,4 @@ iso8601==0.1.4
 -e git+git://github.com/smn/bellville.git#egg=smn-bellville
 -e git+git://github.com/smn/alexandria.git#egg=smn-alexandria
 -e git+git://github.com/inoi/nosedjango.git#egg=nosedjango
-git+git://github.com/dmaclay/python-smpp.git
+-e git+git://github.com/dmaclay/python-smpp.git#egg=python-smpp
