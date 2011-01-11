@@ -66,8 +66,6 @@ class EsmeTransceiver(Protocol):
         print pdu.get_obj()
         self.incSeq()
         self.sendPDU(pdu)
-        self.factory.onConnectionMade.callback(self)
-        self.factory.onConnectionLost = defer.Deferred()
 
 
     def connectionLost(self, *args, **kwargs):
@@ -106,6 +104,8 @@ class EsmeTransceiver(Protocol):
                     #short_message = 'Hello from twisted-smpp',
                     #destination_addr = '27999123456',
                     #)
+            self.factory.onConnectionMade.callback(self)
+            self.factory.onConnectionLost = defer.Deferred()
         print self.name, 'STATE :', self.state
 
 
