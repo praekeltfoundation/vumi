@@ -62,11 +62,6 @@ class EsmeTransceiver(Protocol):
 
 
     def setRegisterCallback(self, app_register_callback):
-        print "######################################"
-        print "######################################"
-        print "######################################"
-        print "######################################"
-        print "######################################"
         app_register_callback(self)
 
 
