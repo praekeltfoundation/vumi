@@ -118,11 +118,12 @@ class Consumer(object):
     def start(self, channel, queue):
         self.channel = channel
         self.queue = queue
+        self.keep_consuming = True
         @inlineCallbacks
         def read_messages():
             log.msg("Consumer starting...")
             try:
-                while True:
+                while self.keep_consuming:
                     message = yield self.queue.get()
                     self.consume(message)
             except txamqp.queue.Closed, e:
@@ -132,8 +133,10 @@ class Consumer(object):
         returnValue(self)
     
     def consume(self, message):
-        self.consume_json(json.loads(message.content.body))
-        self.ack(message)
+        if self.keep_consuming:
+            self.consume_json(json.loads(message.content.body))
+        if self.keep_consuming:
+            self.ack(message)
     
     def consume_json(self, dictionary):
         "helper method"
@@ -141,6 +144,10 @@ class Consumer(object):
     
     def ack(self, message):
         self.channel.basic_ack(message.delivery_tag, True)
+    
+    @inlineCallbacks
+    def stop(self):
+        self.keep_consuming = False
     
 
 class Publisher(object):
