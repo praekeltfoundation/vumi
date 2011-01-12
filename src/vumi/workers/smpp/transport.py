@@ -55,7 +55,8 @@ class SmppTransport(Worker):
         # start the Smpp transport
         factory = EsmeTransceiverFactory()
         factory.loadDefaults(self.config)
-        factory.onConnectionMade.addCallback(self.esme_connected)
+        factory.setRegisterCallback(self.esme_connected)
+        #factory.onConnectionMade.addCallback(self.esme_connected)
         reactor.connectTCP(
                 factory.defaults['host'],
                 factory.defaults['port'],
