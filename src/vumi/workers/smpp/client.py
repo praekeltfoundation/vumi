@@ -16,7 +16,7 @@ class EsmeTransceiver(Protocol):
         print self.name, 'STATE :', self.state
         self.seq = seq
         self.datastream = ''
-        self.__app_register_callback = None
+        self.__connect_callback = None
 
 
     def set_handler(self, handler):
@@ -61,8 +61,8 @@ class EsmeTransceiver(Protocol):
         self.defaults = dict(self.defaults, **defaults)
 
 
-    def setRegisterCallback(self, app_register_callback):
-        self.__app_register_callback = app_register_callback
+    def setConnectCallback(self, connect_callback):
+        self.__connect_callback = connect_callback
 
 
     def connectionMade(self):
@@ -108,7 +108,7 @@ class EsmeTransceiver(Protocol):
                     #short_message = 'Hello from twisted-smpp',
                     #destination_addr = '27999123456',
                     #)
-            self.__app_register_callback(self)
+            self.__connect_callback(self)
         print self.name, 'STATE :', self.state
 
 
@@ -177,8 +177,8 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
 
     def __init__(self):
         self.esme = None
-        self.__app_register_callback = None
-        self.__app_disconnect_callback = None
+        self.__connect_callback = None
+        self.__disconnect_callback = None
         self.seq = [1]
         self.initialDelay = 30.0
         self.maxDelay = 45
@@ -194,12 +194,12 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
         self.defaults = dict(self.defaults, **defaults)
 
 
-    def setRegisterCallback(self, app_register_callback):
-        self.__app_register_callback = app_register_callback
+    def setConnectCallback(self, connect_callback):
+        self.__connect_callback = connect_callback
 
 
-    def setDisconnectCallback(self, app_disconnect_callback):
-        self.__app_disconnect_callback = app_disconnect_callback
+    def setDisconnectCallback(self, disconnect_callback):
+        self.__disconnect_callback = disconnect_callback
 
 
     def startedConnecting(self, connector):
@@ -211,14 +211,14 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
         self.esme = EsmeTransceiver(self.seq)
         self.esme.factory = self
         self.esme.loadDefaults(self.defaults)
-        self.esme.setRegisterCallback(app_register_callback=self.__app_register_callback)
+        self.esme.setConnectCallback(connect_callback=self.__connect_callback)
         self.resetDelay()
         return self.esme
 
 
     def clientConnectionLost(self, connector, reason):
         print 'Lost connection.  Reason:', reason
-        self.__app_disconnect_callback()
+        self.__disconnect_callback()
         ReconnectingClientFactory.clientConnectionLost(self, connector, reason)
 
 
