@@ -62,7 +62,7 @@ class EsmeTransceiver(Protocol):
 
 
     def setRegisterCallback(self, app_register_callback):
-        app_register_callback(self)
+        self.__app_register_callback = app_register_callback
 
 
     def connectionMade(self):
@@ -83,8 +83,6 @@ class EsmeTransceiver(Protocol):
             print self.name, 'stop & del enquire link looping call'
         except:
             pass
-        self.factory.onConnectionLost.callback(self)
-        self.factory.onConnectionMade = defer.Deferred()
 
 
     def dataReceived(self, data):
@@ -110,8 +108,7 @@ class EsmeTransceiver(Protocol):
                     #short_message = 'Hello from twisted-smpp',
                     #destination_addr = '27999123456',
                     #)
-            self.factory.onConnectionMade.callback(self)
-            self.factory.onConnectionLost = defer.Deferred()
+            self.__app_register_callback(self)
         print self.name, 'STATE :', self.state
 
 
@@ -189,8 +186,6 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
                 'dest_addr_ton':0,
                 'dest_addr_npi':0,
                 }
-        self.onConnectionMade = defer.Deferred()
-        self.onConnectionLost = defer.Deferred()
 
 
     def loadDefaults(self, defaults):
