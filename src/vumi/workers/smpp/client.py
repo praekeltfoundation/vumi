@@ -16,6 +16,8 @@ class EsmeTransceiver(Protocol):
         print self.name, 'STATE :', self.state
         self.seq = seq
         self.datastream = ''
+        self.__app_register_callback = None
+
 
     def set_handler(self, handler):
         self.handler = handler
@@ -57,6 +59,15 @@ class EsmeTransceiver(Protocol):
 
     def loadDefaults(self, defaults):
         self.defaults = dict(self.defaults, **defaults)
+
+
+    def setRegisterCallback(self, app_register_callback):
+        print "######################################"
+        print "######################################"
+        print "######################################"
+        print "######################################"
+        print "######################################"
+        app_register_callback(self)
 
 
     def connectionMade(self):
@@ -173,6 +184,7 @@ class EsmeTransceiver(Protocol):
 class EsmeTransceiverFactory(ReconnectingClientFactory):
 
     def __init__(self):
+        self.__app_register_callback = None
         self.seq = [1]
         self.initialDelay = 30.0
         self.maxDelay = 45
@@ -189,6 +201,8 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
     def loadDefaults(self, defaults):
         self.defaults = dict(self.defaults, **defaults)
 
+    def setRegisterCallback(self, app_register_callback):
+        self.__app_register_callback = app_register_callback
 
     def startedConnecting(self, connector):
         print 'Started to connect.'
@@ -199,6 +213,7 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
         esme = EsmeTransceiver(self.seq)
         esme.factory = self
         esme.loadDefaults(self.defaults)
+        esme.setRegisterCallback(app_register_callback=self.__app_register_callback)
         self.resetDelay()
         return esme
 
