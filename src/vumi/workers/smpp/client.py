@@ -176,7 +176,9 @@ class EsmeTransceiver(Protocol):
 class EsmeTransceiverFactory(ReconnectingClientFactory):
 
     def __init__(self):
+        self.esme = None
         self.__app_register_callback = None
+        self.__app_disconnect_callback = None
         self.seq = [1]
         self.initialDelay = 30.0
         self.maxDelay = 45
@@ -191,8 +193,14 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
     def loadDefaults(self, defaults):
         self.defaults = dict(self.defaults, **defaults)
 
+
     def setRegisterCallback(self, app_register_callback):
         self.__app_register_callback = app_register_callback
+
+
+    def setDisconnectCallback(self, app_disconnect_callback):
+        self.__app_disconnect_callback = app_disconnect_callback
+
 
     def startedConnecting(self, connector):
         print 'Started to connect.'
@@ -200,16 +208,17 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
 
     def buildProtocol(self, addr):
         print 'Connected'
-        esme = EsmeTransceiver(self.seq)
-        esme.factory = self
-        esme.loadDefaults(self.defaults)
-        esme.setRegisterCallback(app_register_callback=self.__app_register_callback)
+        self.esme = EsmeTransceiver(self.seq)
+        self.esme.factory = self
+        self.esme.loadDefaults(self.defaults)
+        self.esme.setRegisterCallback(app_register_callback=self.__app_register_callback)
         self.resetDelay()
-        return esme
+        return self.esme
 
 
     def clientConnectionLost(self, connector, reason):
         print 'Lost connection.  Reason:', reason
+        self.__app_disconnect_callback()
         ReconnectingClientFactory.clientConnectionLost(self, connector, reason)
 
 
