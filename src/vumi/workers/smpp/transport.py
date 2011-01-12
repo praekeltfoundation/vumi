@@ -55,7 +55,7 @@ class SmppTransport(Worker):
         # start the Smpp transport
         factory = EsmeTransceiverFactory()
         factory.loadDefaults(self.config)
-        factory.setRegisterCallback(self.esme_connected)
+        factory.setConnectCallback(self.esme_connected)
         factory.setDisconnectCallback(self.esme_disconnected)
         reactor.connectTCP(
                 factory.defaults['host'],
@@ -74,11 +74,12 @@ class SmppTransport(Worker):
         # back consumed AMQP messages over SMPP.
         self.consumer = yield self.start_consumer(SmppConsumer, self.send_smpp)
 
+
     @inlineCallbacks
     def esme_disconnected(self):
         log.msg("ESME Disconnected, stopping consumer")
         self.consumer.stop()
-        print "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@"
+
 
     def send_smpp(self, msisdn, message, *args, **kwargs):
         print "Sending SMPP, to: %s, message: %s" % (msisdn, message)
