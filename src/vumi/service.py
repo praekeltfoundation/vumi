@@ -146,7 +146,9 @@ class Consumer(object):
     @inlineCallbacks
     def stop(self):
         self.keep_consuming = False
+        # This just marks the channel as closed on the client
         #self.channel.close(None)
+        # This actually closes the channel on the server
         d = self.channel.channel_close()
         d.addCallback(self.channel.close)
         returnValue(self.keep_consuming)
