@@ -6,6 +6,8 @@ from twisted.internet import reactor
 from vumi.service import Worker, Consumer, Publisher
 from vumi.workers.smpp.client import EsmeTransceiverFactory, EsmeTransceiver
 
+import json
+
 
 class SmppConsumer(Consumer):
     """
@@ -24,7 +26,11 @@ class SmppConsumer(Consumer):
 
     def consume_json(self, dictionary):
         log.msg("Consumed JSON %s" % dictionary)
-        self.send(**dictionary)
+        return self.send(**dictionary)
+
+    def consume(self, message):
+        if self.consume_json(json.loads(message.content.body)):
+            self.ack(message)
 
 
 class SmppPublisher(Publisher):
@@ -78,12 +84,12 @@ class SmppTransport(Worker):
     @inlineCallbacks
     def esme_disconnected(self):
         log.msg("ESME Disconnected, stopping consumer")
-        self.consumer.stop()
+        #stop = yield self.consumer.stop()
 
 
     def send_smpp(self, msisdn, message, *args, **kwargs):
         print "Sending SMPP, to: %s, message: %s" % (msisdn, message)
-        self.esme_client.submit_sm(
+        return self.esme_client.submit_sm(
                 short_message = str(message),
                 destination_addr = str(msisdn),
                 )
