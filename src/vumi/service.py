@@ -133,10 +133,8 @@ class Consumer(object):
         returnValue(self)
     
     def consume(self, message):
-        if self.keep_consuming:
-            self.consume_json(json.loads(message.content.body))
-        if self.keep_consuming:
-            self.ack(message)
+        self.consume_json(json.loads(message.content.body))
+        self.ack(message)
     
     def consume_json(self, dictionary):
         "helper method"
@@ -148,6 +146,7 @@ class Consumer(object):
     @inlineCallbacks
     def stop(self):
         self.keep_consuming = False
+        returnValue(self.keep_consuming)
     
 
 class Publisher(object):
