@@ -146,6 +146,9 @@ class Consumer(object):
     @inlineCallbacks
     def stop(self):
         self.keep_consuming = False
+        #self.channel.close(None)
+        d = self.channel.channel_close()
+        d.addCallback(self.channel.close)
         returnValue(self.keep_consuming)
     
 
