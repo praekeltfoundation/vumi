@@ -84,7 +84,7 @@ class SmppTransport(Worker):
     @inlineCallbacks
     def esme_disconnected(self):
         log.msg("ESME Disconnected, stopping consumer")
-        #stop = yield self.consumer.stop()
+        stop = yield self.consumer.stop()
 
 
     def send_smpp(self, msisdn, message, *args, **kwargs):
