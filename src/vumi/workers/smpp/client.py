@@ -139,6 +139,8 @@ class EsmeTransceiver(Protocol):
             pdu = SubmitSM(self.getSeq(), **dict(self.defaults, **kwargs))
             self.incSeq()
             self.sendPDU(pdu)
+            return True
+        return False
 
 
     def submit_multi(self, dest_address=[], **kwargs):
@@ -164,6 +166,8 @@ class EsmeTransceiver(Protocol):
                         pdu.addDistributionList(item.get('dl_name'))
             self.incSeq()
             self.sendPDU(pdu)
+            return True
+        return False
 
 
     def enquire_link(self, **kwargs):
@@ -171,6 +175,8 @@ class EsmeTransceiver(Protocol):
             pdu = EnquireLink(self.getSeq(), **dict(self.defaults, **kwargs))
             self.incSeq()
             self.sendPDU(pdu)
+            return True
+        return False
 
 
 class EsmeTransceiverFactory(ReconnectingClientFactory):
