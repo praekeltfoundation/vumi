@@ -37,3 +37,6 @@ def revision(branch='HEAD'):
 
 def local_revision(branch='HEAD'):
     return local("git rev-list --max-count=1 %s" % branch)
+
+def fetch():
+    return run('git fetch')
