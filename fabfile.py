@@ -9,7 +9,7 @@ from deploy import git, system, base, twistd
 
 RELEASE_NAME_FORMAT = '%Y%m%d_%H%M%S' # timestamped
 # default for now
-# env.hosts = ['ubuntu-server.local']
+env.hosts = ['ubuntu@vumi.praekeltfoundation.org']
 
 def _setup_env(fn):
     def wrapper(branch, *args, **kwargs):
@@ -87,6 +87,7 @@ def deploy(branch):
         with cd(env.repo_path):
             git.clone(env.github_repo, env.github_repo_name)
         with _repo(env.github_repo_name):
+            git.fetch()
             git.checkout(branch)
     else:
         # repository exists
