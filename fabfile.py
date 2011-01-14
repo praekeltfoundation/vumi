@@ -87,7 +87,6 @@ def deploy(branch):
         with cd(env.repo_path):
             git.clone(env.github_repo, env.github_repo_name)
         with _repo(env.github_repo_name):
-            git.fetch()
             git.checkout(branch)
     else:
         # repository exists
