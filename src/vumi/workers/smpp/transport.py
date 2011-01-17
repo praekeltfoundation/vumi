@@ -15,11 +15,12 @@ class SmppConsumer(Consumer):
     Anything published to the `vumi.smpp` exchange with
     routing key smpp.* (* == single word match, # == zero or more words)
     """
-    exchange_name = "vumi.smpp"
-    exchange_type = "topic"
-    durable = False
-    queue_name = "smpp"
-    routing_key = "smpp.*"
+    exchange_name = "vumi"
+    exchange_type = "direct"
+    durable = True
+    auto_delete = False
+    queue_name = "sms_send"
+    routing_key = "vumi.*"
 
     def __init__(self, send_callback):
         self.send = send_callback
@@ -29,7 +30,7 @@ class SmppConsumer(Consumer):
         return self.send(**dictionary)
 
     def consume(self, message):
-        if self.consume_json(json.loads(message.content.body)):
+        #if self.consume_json(json.loads(message.content.body)):
             self.ack(message)
 
 
