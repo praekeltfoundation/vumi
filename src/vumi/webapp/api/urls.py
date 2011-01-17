@@ -31,4 +31,7 @@ urlpatterns += patterns('',
     (r'^sms/techsys/',
         include('vumi.webapp.api.gateways.techsys.urls',
                     namespace='techsys')),
+    (r'^sms/smpp/', 
+        include('vumi.webapp.api.gateways.smpp.urls',
+                    namespace='smpp')),
 )
