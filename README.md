@@ -84,6 +84,11 @@ Running the Webapp / API
 
 The webapp is a regular Django application. Before you start make sure the `DATABASE` settings in `src/vumi/webapp/settings.py` are up to date. `Vumi` is being developed with `PostgreSQL` as the default backend for the Django ORM but this isn't a requirement.
 
+To setup PostgeSQL:
+    $ sudo -u postgres createuser --superuser --pwprompt vumi
+    ... // snip, default password is `vumi` // ...
+    $ createdb -W -U vumi -h localhost -E UNICODE vumi
+
 For development start it within the virtual environment:
 
     $ source ve/bin/activate
