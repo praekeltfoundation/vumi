@@ -27,11 +27,19 @@ class SmppConsumer(Consumer):
 
     def consume_json(self, dictionary):
         log.msg("Consumed JSON %s" % dictionary)
-        return self.send(**dictionary)
+        payload = {}
+        kwargs = dictionary.get('kwargs')
+        if kwargs:
+            payload = kwargs.get('payload')
+            if not payload:
+                payload = {}
+
+        return self.send(**payload)
 
     def consume(self, message):
+        print "MESSAGE ####", message.content.body
         #if self.consume_json(json.loads(message.content.body)):
-            self.ack(message)
+        self.ack(message)
 
 
 class SmppPublisher(Publisher):
