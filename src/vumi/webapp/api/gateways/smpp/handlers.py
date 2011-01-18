@@ -32,7 +32,7 @@ class SendSMPPHandler(BaseHandler):
         send_sms = form.save()
         logging.debug('Scheduling an SMPP to: %s' % kwargs['to_msisdn'])
         signals.sms_scheduled.send(sender=SentSMS, instance=send_sms,
-                                    pk=send_sms.pk)
+                pk=send_sms.pk, payload=kwargs.update({'id':send_sms.id})
         return send_sms
 
     @throttle(6000, 60) # allow for 100 a second
