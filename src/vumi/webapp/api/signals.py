@@ -10,11 +10,10 @@ sms_received = Signal(providing_args=['instance', 'pk'])
 sms_receipt = Signal(providing_args=['instance', 'pk', 'receipt'])
 
 def sms_scheduled_handler(*args, **kwargs):
-    sms_scheduled_worker(kwargs['instance'], kwargs['payload'])
+    sms_scheduled_worker(kwargs['instance'], kwargs['payload']=None)
 
 def sms_scheduled_worker(sent_sms, payload):
     """Responsibile for delivering of SMSs"""
-    print "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@", sent_sms.id
     SendSMSTask.delay(pk=sent_sms.pk, payload=payload)
 
 def sms_received_handler(*args, **kwargs):
