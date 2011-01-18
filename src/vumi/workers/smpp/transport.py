@@ -95,12 +95,13 @@ class SmppTransport(Worker):
         stop = yield self.consumer.stop()
 
 
-    def send_smpp(self, to_msisdn, message, *args, **kwargs):
+    def send_smpp(self, id, to_msisdn, message, *args, **kwargs):
         print "Sending SMPP, to: %s, message: %s" % (to_msisdn, message)
-        return self.esme_client.submit_sm(
+        sequence_number = self.esme_client.submit_sm(
                 short_message = str(message),
                 destination_addr = str(to_msisdn),
                 )
+        print "[[[[[[ id", id, " sequence_number", sequence_number, "]]]]]]"
 
     def sms_callback(self, *args, **kwargs):
         print "Got SMS:", args, kwargs
