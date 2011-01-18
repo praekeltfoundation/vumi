@@ -33,13 +33,12 @@ class SmppConsumer(Consumer):
             payload = kwargs.get('payload')
             if not payload:
                 payload = {}
-
         return self.send(**payload)
 
     def consume(self, message):
         print "MESSAGE ####", message.content.body
-        #if self.consume_json(json.loads(message.content.body)):
-        self.ack(message)
+        if self.consume_json(json.loads(message.content.body)):
+            self.ack(message)
 
 
 class SmppPublisher(Publisher):
@@ -96,11 +95,11 @@ class SmppTransport(Worker):
         stop = yield self.consumer.stop()
 
 
-    def send_smpp(self, msisdn, message, *args, **kwargs):
-        print "Sending SMPP, to: %s, message: %s" % (msisdn, message)
+    def send_smpp(self, to_msisdn, message, *args, **kwargs):
+        print "Sending SMPP, to: %s, message: %s" % (to_msisdn, message)
         return self.esme_client.submit_sm(
                 short_message = str(message),
-                destination_addr = str(msisdn),
+                destination_addr = str(to_msisdn),
                 )
 
     def sms_callback(self, *args, **kwargs):
