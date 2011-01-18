@@ -5,16 +5,17 @@ from vumi.webapp.api.tasks import SendSMSTask, ReceiveSMSTask, DeliveryReportTas
 
 # custom signals for the api
 sms_scheduled = Signal(providing_args=['instance', 'pk'])
-sms_sent = Signal(providing_args=['instance', 'pk'])
+sms_sent = Signal(providing_args=['instance', 'pk', 'payload'])
 sms_received = Signal(providing_args=['instance', 'pk'])
 sms_receipt = Signal(providing_args=['instance', 'pk', 'receipt'])
 
 def sms_scheduled_handler(*args, **kwargs):
-    sms_scheduled_worker(kwargs['instance'])
+    sms_scheduled_worker(kwargs['instance'], kwargs['payload'])
 
-def sms_scheduled_worker(sent_sms):
+def sms_scheduled_worker(sent_sms, payload):
     """Responsibile for delivering of SMSs"""
-    SendSMSTask.delay(pk=sent_sms.pk)
+    print "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@", sent_sms.id
+    SendSMSTask.delay(pk=sent_sms.pk, payload=payload)
 
 def sms_received_handler(*args, **kwargs):
     sms_received_worker(kwargs['instance'])
