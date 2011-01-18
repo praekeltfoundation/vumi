@@ -15,6 +15,7 @@ from vumi.webapp.api.gateways.techsys.backend import Techsys
 
 class SendSMSTask(Task):
     routing_key = 'vumi.webapp.sms.send'
+    serializer = 'json'
     
     def send_sms_with_clickatell(self, send_sms):
         logger = self.get_logger(pk=send_sms.pk)
