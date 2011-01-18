@@ -30,9 +30,10 @@ class SendSMPPHandler(BaseHandler):
         if not form.is_valid():
             raise FormValidationError(form)
         send_sms = form.save()
+        kwargs.update({'id':send_sms.id})
         logging.debug('Scheduling an SMPP to: %s' % kwargs['to_msisdn'])
         signals.sms_scheduled.send(sender=SentSMS, instance=send_sms,
-                pk=send_sms.pk, payload=kwargs.update({'id':send_sms.id})
+                pk=send_sms.pk, payload=kwargs)
         return send_sms
 
     @throttle(6000, 60) # allow for 100 a second
