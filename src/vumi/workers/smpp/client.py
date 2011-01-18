@@ -136,16 +136,18 @@ class EsmeTransceiver(Protocol):
 
     def submit_sm(self, **kwargs):
         if self.state in ['BOUND_TX', 'BOUND_TRX']:
-            pdu = SubmitSM(self.getSeq(), **dict(self.defaults, **kwargs))
+            sequence_number = self.getSeq()
+            pdu = SubmitSM(sequence_number, **dict(self.defaults, **kwargs))
             self.incSeq()
             self.sendPDU(pdu)
-            return True
-        return False
+            return sequence_number
+        return 0
 
 
     def submit_multi(self, dest_address=[], **kwargs):
         if self.state in ['BOUND_TX', 'BOUND_TRX']:
-            pdu = SubmitMulti(self.getSeq(), **dict(self.defaults, **kwargs))
+            sequence_number = self.getSeq()
+            pdu = SubmitMulti(sequence_number, **dict(self.defaults, **kwargs))
             for item in dest_address:
                 if isinstance(item, str): # assume strings are addresses not lists
                     pdu.addDestinationAddress(
@@ -166,17 +168,18 @@ class EsmeTransceiver(Protocol):
                         pdu.addDistributionList(item.get('dl_name'))
             self.incSeq()
             self.sendPDU(pdu)
-            return True
-        return False
+            return sequence_number
+        return 0
 
 
     def enquire_link(self, **kwargs):
         if self.state in ['BOUND_TX', 'BOUND_TRX']:
-            pdu = EnquireLink(self.getSeq(), **dict(self.defaults, **kwargs))
+            sequence_number = self.getSeq()
+            pdu = EnquireLink(sequence_number, **dict(self.defaults, **kwargs))
             self.incSeq()
             self.sendPDU(pdu)
-            return True
-        return False
+            return sequence_number
+        return 0
 
 
 class EsmeTransceiverFactory(ReconnectingClientFactory):
