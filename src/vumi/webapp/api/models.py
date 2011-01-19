@@ -105,6 +105,27 @@ class SMPPLink(models.Model):
                                             self.sequence_number, 
                                             self.created_at)
 
+class SMPPResp(models.Model):
+    sent_sms = models.ForeignKey(SentSMS, unique=True)
+    sequence_number = models.IntegerField()
+    command_id = models.CharField(blank=False, max_length=100)
+    command_status = models.CharField(blank=False, max_length=100)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Admin:
+        list_display = ('',)
+        search_fields = ('',)
+    
+    class Meta:
+        ordering = ['-created_at']
+        get_latest_by = 'created_at'
+
+    def __unicode__(self):
+        return u"SMPPLink %s : % = %s @ %s" % (self.sent_sms, 
+                                            self.command_id, 
+                                            self.command_status, 
+                                            self.created_at)
 
 class ReceivedSMS(models.Model):
     user = models.ForeignKey(User)
