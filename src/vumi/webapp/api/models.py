@@ -86,6 +86,25 @@ class SentSMS(models.Model):
                                             self.transport_status, 
                                             self.delivered_at)
 
+class SMPPLink(models.Model):
+    sent_sms = models.ForeignKey(SentSMS, unique=True)
+    sequence_number = models.IntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Admin:
+        list_display = ('',)
+        search_fields = ('',)
+    
+    class Meta:
+        ordering = ['-created_at']
+        get_latest_by = 'created_at'
+
+    def __unicode__(self):
+        return u"SMPPLink %s -> %s @ %s" % (self.sent_sms, 
+                                            self.sequence_number, 
+                                            self.created_at)
+
 
 class ReceivedSMS(models.Model):
     user = models.ForeignKey(User)
