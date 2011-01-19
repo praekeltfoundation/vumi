@@ -5,11 +5,11 @@ class SentSMSForm(forms.ModelForm):
     class Meta:
         model = SentSMS
 
-class SMPPLink(forms.ModelForm):
+class SMPPLinkForm(forms.ModelForm):
     class Meta:
         model = SMPPLink
 
-class SMPPResp(forms.ModelForm):
+class SMPPRespForm(forms.ModelForm):
     class Meta:
         model = SMPPResp
 
