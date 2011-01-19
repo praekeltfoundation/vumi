@@ -123,7 +123,7 @@ class SMPPResp(models.Model):
         get_latest_by = 'created_at'
 
     def __unicode__(self):
-        return u"SMPPLink %s : % = %s @ %s" % (self.sent_sms, 
+        return u"SMPPLink %s : %s = %s @ %s" % (self.sent_sms, 
                                             self.command_id, 
                                             self.command_status, 
                                             self.created_at)
