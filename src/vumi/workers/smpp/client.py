@@ -118,7 +118,12 @@ class EsmeTransceiver(Protocol):
 
 
     def handle_submit_sm_resp(self, pdu):
-        self.__submit_sm_resp_callback(w="woooohoooo")
+        message_id = pdu.get('body',{}).get('mandatory_parameters',{}).get('message_id')
+        self.__submit_sm_resp_callback(
+                sequence_number = pdu['header']['sequence_number'],
+                command_status = pdu['header']['command_status'],
+                command_id = pdu['header']['command_id'],
+                message_id = message_id)
         if pdu['header']['command_status'] == 'ESME_ROK':
             pass
 
