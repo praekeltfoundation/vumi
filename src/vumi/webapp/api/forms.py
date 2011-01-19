@@ -5,6 +5,14 @@ class SentSMSForm(forms.ModelForm):
     class Meta:
         model = SentSMS
 
+class SMPPLink(forms.ModelForm):
+    class Meta:
+        model = SMPPLink
+
+class SMPPResp(forms.ModelForm):
+    class Meta:
+        model = SMPPResp
+
 class URLCallbackForm(forms.ModelForm):
     class Meta:
         model = URLCallback
