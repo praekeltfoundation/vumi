@@ -17,6 +17,7 @@ class EsmeTransceiver(Protocol):
         self.seq = seq
         self.datastream = ''
         self.__connect_callback = None
+        self.__submit_sm_resp_callback = None
 
 
     def set_handler(self, handler):
@@ -63,6 +64,10 @@ class EsmeTransceiver(Protocol):
 
     def setConnectCallback(self, connect_callback):
         self.__connect_callback = connect_callback
+
+
+    def setSubmitSMRespCallback(self, submit_sm_resp_callback):
+        self.__submit_sm_resp_callback = submit_sm_resp_callback
 
 
     def connectionMade(self):
@@ -113,6 +118,7 @@ class EsmeTransceiver(Protocol):
 
 
     def handle_submit_sm_resp(self, pdu):
+        self.__submit_sm_resp_callback(w="woooohoooo")
         if pdu['header']['command_status'] == 'ESME_ROK':
             pass
 
@@ -188,6 +194,7 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
         self.esme = None
         self.__connect_callback = None
         self.__disconnect_callback = None
+        self.__submit_sm_resp_callback = None
         self.seq = [1]
         self.initialDelay = 30.0
         self.maxDelay = 45
@@ -211,6 +218,10 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
         self.__disconnect_callback = disconnect_callback
 
 
+    def setSubmitSMRespCallback(self, submit_sm_resp_callback):
+        self.__submit_sm_resp_callback = submit_sm_resp_callback
+
+
     def startedConnecting(self, connector):
         print 'Started to connect.'
 
@@ -221,6 +232,7 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
         self.esme.factory = self
         self.esme.loadDefaults(self.defaults)
         self.esme.setConnectCallback(connect_callback=self.__connect_callback)
+        self.esme.setSubmitSMRespCallback(submit_sm_resp_callback=self.__submit_sm_resp_callback)
         self.resetDelay()
         return self.esme
 
