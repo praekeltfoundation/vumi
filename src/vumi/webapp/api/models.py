@@ -110,6 +110,7 @@ class SMPPResp(models.Model):
     sequence_number = models.IntegerField()
     command_id = models.CharField(blank=False, max_length=100)
     command_status = models.CharField(blank=False, max_length=100)
+    message_id = models.CharField(blank=False, max_length=100)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
