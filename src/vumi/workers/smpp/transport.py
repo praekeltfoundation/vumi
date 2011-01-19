@@ -110,6 +110,14 @@ class SmppTransport(Worker):
 
     @inlineCallbacks
     def submit_sm_resp(self, *args, **kwargs):
+        smpplink = models.SMPPLink.objects \
+                .filter(sequence_number=kwargs['sequence_number']) \
+                .order_by('-created_at')[:1].get()
+        print "RRRRRRRRRR", smpplink.id, smpplink.sent_sms_id
+        kwargs.update({'sent_sms':smpplink.sent_sms_id})
+        log.msg("SMPPRespForm <- %s" % kwargs)
+        form = forms.SMPPRespForm(kwargs)
+        form.save()
         yield log.msg("SUBMIT SM RESP %s" % (kwargs))
 
 
