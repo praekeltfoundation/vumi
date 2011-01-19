@@ -1,5 +1,5 @@
 from django import forms
-from vumi.webapp.api.models import SentSMS, URLCallback, ReceivedSMS
+from vumi.webapp.api.models import SentSMS, URLCallback, ReceivedSMS, SMPPLink, SMPPResp
 
 class SentSMSForm(forms.ModelForm):
     class Meta:
