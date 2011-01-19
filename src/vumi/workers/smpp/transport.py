@@ -6,6 +6,10 @@ from twisted.internet import reactor
 from vumi.service import Worker, Consumer, Publisher
 from vumi.workers.smpp.client import EsmeTransceiverFactory, EsmeTransceiver
 
+import os
+os.environ['DJANGO_SETTINGS_MODULE'] = 'vumi.webapp.settings'
+from vumi.webapp.api.models import *
+
 import json
 
 
