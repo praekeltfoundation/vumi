@@ -6,11 +6,12 @@ from twisted.internet import reactor
 from vumi.service import Worker, Consumer, Publisher
 from vumi.workers.smpp.client import EsmeTransceiverFactory, EsmeTransceiver
 
+import json
+
 import os
 os.environ['DJANGO_SETTINGS_MODULE'] = 'vumi.webapp.settings'
-from vumi.webapp.api.models import *
-
-import json
+from vumi.webapp.api import models
+from vumi.webapp.api import forms
 
 
 class SmppConsumer(Consumer):
@@ -37,10 +38,17 @@ class SmppConsumer(Consumer):
             payload = kwargs.get('payload')
             if not payload:
                 payload = {}
-        return self.send(**payload)
+        sequence_number = self.send(**payload)
+        formdict = {
+                "sent_sms":payload.get("id"),
+                "sequence_number": sequence_number,
+                }
+        log.msg("SMPPLinkForm <- %s" % formdict)
+        form = forms.SMPPLinkForm(formdict)
+        form.save()
+        return sequence_number
 
     def consume(self, message):
-        print "MESSAGE ####", message.content.body
         if self.consume_json(json.loads(message.content.body)):
             self.ack(message)
 
@@ -69,16 +77,17 @@ class SmppTransport(Worker):
 
     def startWorker(self):
         log.msg("Starting the SmppTransport")
-
         # start the Smpp transport
         factory = EsmeTransceiverFactory()
         factory.loadDefaults(self.config)
         factory.setConnectCallback(self.esme_connected)
         factory.setDisconnectCallback(self.esme_disconnected)
+        factory.setSubmitSMRespCallback(self.submit_sm_resp)
         reactor.connectTCP(
                 factory.defaults['host'],
                 factory.defaults['port'],
                 factory)
+
 
     @inlineCallbacks
     def esme_connected(self, client):
@@ -99,13 +108,19 @@ class SmppTransport(Worker):
         stop = yield self.consumer.stop()
 
 
+    @inlineCallbacks
+    def submit_sm_resp(self, *args, **kwargs):
+        yield log.msg("SUBMIT SM RESP %s" % (kwargs))
+
+
     def send_smpp(self, id, to_msisdn, message, *args, **kwargs):
         print "Sending SMPP, to: %s, message: %s" % (to_msisdn, message)
         sequence_number = self.esme_client.submit_sm(
                 short_message = str(message),
                 destination_addr = str(to_msisdn),
                 )
-        print "[[[[[[ id", id, " sequence_number", sequence_number, "]]]]]]"
+        return sequence_number
+
 
     def sms_callback(self, *args, **kwargs):
         print "Got SMS:", args, kwargs
