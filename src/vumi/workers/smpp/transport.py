@@ -113,7 +113,6 @@ class SmppTransport(Worker):
         smpplink = models.SMPPLink.objects \
                 .filter(sequence_number=kwargs['sequence_number']) \
                 .order_by('-created_at')[:1].get()
-        print "RRRRRRRRRR", smpplink.id, smpplink.sent_sms_id
         kwargs.update({'sent_sms':smpplink.sent_sms_id})
         log.msg("SMPPRespForm <- %s" % kwargs)
         form = forms.SMPPRespForm(kwargs)
