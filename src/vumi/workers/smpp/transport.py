@@ -80,7 +80,7 @@ class SmppTransport(Worker):
         # start the Smpp transport
         factory = EsmeTransceiverFactory()
         factory.loadDefaults(self.config)
-        factory.setSequenceNumber(1)
+        factory.setSequenceNumber(self.getLatestSequenceNumber())
         factory.setConnectCallback(self.esme_connected)
         factory.setDisconnectCallback(self.esme_disconnected)
         factory.setSubmitSMRespCallback(self.submit_sm_resp)
@@ -88,6 +88,15 @@ class SmppTransport(Worker):
                 factory.defaults['host'],
                 factory.defaults['port'],
                 factory)
+
+
+    def getLatestSequenceNumber(self):
+        sequence_number = 1
+        try:
+            sequence_number = 1 + models.SMPPLink.objects.latest().sequence_number
+        except Exception, e:
+            log.msg("No SMPPLink entries yet")
+        return sequence_number
 
 
     @inlineCallbacks
