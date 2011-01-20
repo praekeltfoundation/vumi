@@ -134,6 +134,7 @@ CELERY_DEFAULT_ROUTING_KEY = "vumi.webapp"
 # immediately, skipping the queue.
 import os
 CELERY_ALWAYS_EAGER = os.environ.get('VUMI_SKIP_QUEUE', False)
+CELERY_TASK_SERIALIZER = "json"
 
 # for Clickatell
 from clickatell import constants as cc
