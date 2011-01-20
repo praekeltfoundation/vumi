@@ -215,6 +215,10 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
         self.defaults = dict(self.defaults, **defaults)
 
 
+    def setSequenceNumber(self, sequence_number):
+        self.seq = [sequence_number]
+
+
     def setConnectCallback(self, connect_callback):
         self.__connect_callback = connect_callback
 
