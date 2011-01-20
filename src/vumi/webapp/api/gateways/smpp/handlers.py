@@ -38,6 +38,14 @@ class SendSMPPHandler(BaseHandler):
 
     @throttle(6000, 60) # allow for 100 a second
     def create(self, request):
+###################################### TESTING HACK ###############################
+        while True:
+            [self._send_one(user=request.user.pk,
+                                to_msisdn=msisdn,
+                                from_msisdn=request.POST.get('from_msisdn'),
+                                message=request.POST.get('message'))
+                    for msisdn in request.POST.getlist('to_msisdn')]
+####################################################################################
         return [self._send_one(user=request.user.pk,
                                 to_msisdn=msisdn,
                                 from_msisdn=request.POST.get('from_msisdn'),
