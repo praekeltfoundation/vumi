@@ -88,7 +88,7 @@ class SentSMS(models.Model):
 
 class SMPPLink(models.Model):
     sent_sms = models.ForeignKey(SentSMS, unique=True)
-    sequence_number = models.IntegerField()
+    sequence_number = models.IntegerField(db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
