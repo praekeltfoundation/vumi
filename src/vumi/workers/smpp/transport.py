@@ -80,6 +80,7 @@ class SmppTransport(Worker):
         # start the Smpp transport
         factory = EsmeTransceiverFactory()
         factory.loadDefaults(self.config)
+        factory.setSequenceNumber(1)
         factory.setConnectCallback(self.esme_connected)
         factory.setDisconnectCallback(self.esme_disconnected)
         factory.setSubmitSMRespCallback(self.submit_sm_resp)
