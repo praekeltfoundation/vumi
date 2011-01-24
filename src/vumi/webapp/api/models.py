@@ -57,9 +57,32 @@ CLICKATELL_MESSAGE_STATUSES = (
     (12, 'Out of credit'),
 )
 
+class SendGroup(models.Model):
+    """A set of Messages to be sent through Vumi"""
+    user = models.ForeignKey(User)
+    title = models.CharField(blank=False, max_length=100)
+    created_at = models.DateTimeField(blank=True, auto_now_add=True)
+    updated_at = models.DateTimeField(blank=True, auto_now=True)
+    
+    class Admin:
+        list_display = ('',)
+        search_fields = ('',)
+    
+    class Meta:
+        ordering = ['-created_at']
+        get_latest_by = 'created_at'
+    
+    def __unicode__(self):
+        return u"SendGroup %s: %s (%s) @ %s" % (self.id,
+                                            self.title,
+                                            self.user, 
+                                            self.created_at)
+
+
 class SentSMS(models.Model):
     """An Message to be sent through Vumi"""
     user = models.ForeignKey(User)
+    send_group = models.ForeignKey(SendGroup, null=True)
     to_msisdn = models.CharField(blank=False, max_length=100)
     from_msisdn = models.CharField(blank=False, max_length=100)
     charset = models.CharField(blank=True, default='utf8', max_length=32)
@@ -197,3 +220,4 @@ admin.site.register(Profile)
 admin.site.register(URLCallback)
 admin.site.register(SMPPLink)
 admin.site.register(SMPPResp)
+admin.site.register(SendGroup)
