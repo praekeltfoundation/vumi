@@ -32,21 +32,20 @@ class SmppConsumer(Consumer):
 
     def consume_json(self, dictionary):
         log.msg("Consumed JSON %s" % dictionary)
-        payload = {}
+        payload = []
         kwargs = dictionary.get('kwargs')
         if kwargs:
-            payload = kwargs.get('payload')
-            if not payload:
-                payload = {}
-        sequence_number = self.send(**payload)
-        formdict = {
-                "sent_sms":payload.get("id"),
-                "sequence_number": sequence_number,
-                }
-        log.msg("SMPPLinkForm <- %s" % formdict)
-        form = forms.SMPPLinkForm(formdict)
-        form.save()
-        return sequence_number
+            payload = kwargs.get('payload', [])
+        for mess in payload:
+            sequence_number = self.send(**mess)
+            formdict = {
+                    "sent_sms":mess.get("id"),
+                    "sequence_number": sequence_number,
+                    }
+            log.msg("SMPPLinkForm <- %s" % formdict)
+            form = forms.SMPPLinkForm(formdict)
+            form.save()
+        return True
 
     def consume(self, message):
         if self.consume_json(json.loads(message.content.body)):
