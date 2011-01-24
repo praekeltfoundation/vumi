@@ -88,7 +88,7 @@ To setup PostgeSQL:
     $ sudo -u postgres createuser --superuser --pwprompt vumi
     ... // snip, default password is `vumi` // ...
     $ createdb -W -U vumi -h localhost -E UNICODE vumi
-    $ pip -E ve install pyscopg2
+    $ pip -E ve install psycopg2
 
 For development start it within the virtual environment:
 
