@@ -22,7 +22,7 @@ class SendSMPPHandler(BaseHandler):
         include=['transport_status_display'],
         exclude=['user'])
 
-    def _send_one(self, **kwargs):
+    def _send_one(self, send_list, **kwargs):
         kwargs.update({
             'transport_name': 'smpp'
         })
@@ -32,23 +32,26 @@ class SendSMPPHandler(BaseHandler):
         send_sms = form.save()
         kwargs.update({'id':send_sms.id})
         logging.debug('Scheduling an SMPP to: %s' % kwargs['to_msisdn'])
-        signals.sms_scheduled.send(sender=SentSMS, instance=send_sms,
-                pk=send_sms.pk, payload=kwargs)
+        send_list.append(kwargs)
+        #signals.sms_scheduled.send(sender=SentSMS, instance=send_sms,
+                #pk=send_sms.pk, payload=kwargs)
         return send_sms
 
     @throttle(6000, 60) # allow for 100 a second
     def create(self, request):
-###################################### TESTING HACK ###############################
-        while True:
-            [self._send_one(user=request.user.pk,
+        send_list = []
+        form = forms.SendGroupForm({'title':'test group', 'user':request.user.pk})
+        if not form.is_valid():
+            raise FormValidationError(form)
+        send_group = form.save()
+        returnable = [self._send_one(send_list,
+                                send_group=send_group.id,
+                                user=request.user.pk,
                                 to_msisdn=msisdn,
                                 from_msisdn=request.POST.get('from_msisdn'),
                                 message=request.POST.get('message'))
                     for msisdn in request.POST.getlist('to_msisdn')]
-####################################################################################
-        return [self._send_one(user=request.user.pk,
-                                to_msisdn=msisdn,
-                                from_msisdn=request.POST.get('from_msisdn'),
-                                message=request.POST.get('message'))
-                    for msisdn in request.POST.getlist('to_msisdn')]
+        signals.sms_scheduled.send(sender=SentSMS, instance=send_group,
+                pk=send_group.pk, payload=send_list)
+        return returnable
 
