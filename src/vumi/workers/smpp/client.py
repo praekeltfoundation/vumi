@@ -18,6 +18,7 @@ class EsmeTransceiver(Protocol):
         self.datastream = ''
         self.__connect_callback = None
         self.__submit_sm_resp_callback = None
+        self.__deliver_sm_callback = None
 
 
     def set_handler(self, handler):
@@ -68,6 +69,10 @@ class EsmeTransceiver(Protocol):
 
     def setSubmitSMRespCallback(self, submit_sm_resp_callback):
         self.__submit_sm_resp_callback = submit_sm_resp_callback
+
+
+    def setDeliverSMCallback(self, deliver_sm_callback):
+        self.__deliver_sm_callback = deliver_sm_callback
 
 
     def connectionMade(self):
@@ -136,8 +141,9 @@ class EsmeTransceiver(Protocol):
     def handle_deliver_sm(self, pdu):
         if pdu['header']['command_status'] == 'ESME_ROK':
             sequence_number = pdu['header']['sequence_number']
-            pdu = DeliverSMResp(sequence_number, **self.defaults)
-            self.sendPDU(pdu)
+            pdu_resp = DeliverSMResp(sequence_number, **self.defaults)
+            self.sendPDU(pdu_resp)
+        #self.__deliver_sm_callback(pdu = pdu)
 
 
     def handle_enquire_link_resp(self, pdu):
@@ -200,6 +206,7 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
         self.__connect_callback = None
         self.__disconnect_callback = None
         self.__submit_sm_resp_callback = None
+        self.__deliver_sm_callback = None
         self.seq = [1]
         self.initialDelay = 30.0
         self.maxDelay = 45
@@ -231,6 +238,10 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
         self.__submit_sm_resp_callback = submit_sm_resp_callback
 
 
+    def setDeliverSMCallback(self, deliver_sm_callback):
+        self.__deliver_sm_callback = deliver_sm_callback
+
+
     def startedConnecting(self, connector):
         print 'Started to connect.'
 
@@ -240,8 +251,12 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
         self.esme = EsmeTransceiver(self.seq)
         self.esme.factory = self
         self.esme.loadDefaults(self.defaults)
-        self.esme.setConnectCallback(connect_callback=self.__connect_callback)
-        self.esme.setSubmitSMRespCallback(submit_sm_resp_callback=self.__submit_sm_resp_callback)
+        self.esme.setConnectCallback(
+                connect_callback = self.__connect_callback)
+        self.esme.setSubmitSMRespCallback(
+                submit_sm_resp_callback = self.__submit_sm_resp_callback)
+        self.esme.setDeliverSMCallback(
+                deliver_sm_callback = self.__deliver_sm_callback)
         self.resetDelay()
         return self.esme
 
