@@ -148,7 +148,7 @@ class SmppTransport(Worker):
         if not form.is_valid():
             raise FormValidationError(form)
         send_sms = form.save()
-        sequence_number = self.send(
+        sequence_number = self.send_smpp(
                 to_msisdn = send_sms.to_msisdn,
                 message = send_sms.message
                 )
