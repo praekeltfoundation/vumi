@@ -132,11 +132,12 @@ class SmppTransport(Worker):
 
     @inlineCallbacks
     def deliver_sm(self, *args, **kwargs):
-        form = form = forms.SendGroupForm({'title':'reply', 'user':1})
-        if not form.is_valid():
-            raise FormValidationError(form)
-        send_group = form.save()
-        formdict = {
+        groupdict = {'title':'reply', 'user':1}
+        groupform = forms.SendGroupForm(groupdict)
+        if not groupform.is_valid():
+            raise FormValidationError(groupform)
+        send_group = groupform.save()
+        sentdict = {
                 'transport_name': 'smpp',
                 'from_msisdn': u'27123456789',
                 'send_group': send_group.id,
@@ -144,22 +145,23 @@ class SmppTransport(Worker):
                 'to_msisdn': kwargs['source_addr'],
                 'message': 'You said: "'+kwargs['short_message']+'"'
                 }
-        form = forms.SentSMSForm(formdict)
-        if not form.is_valid():
-            raise FormValidationError(form)
-        sent_sms = form.save()
+        sentform = forms.SentSMSForm(sentdict)
+        if not sentform.is_valid():
+            raise FormValidationError(sentform)
+        sent_sms = sentform.save()
         sequence_number = self.send_smpp(
                 sent_sms.id,
                 sent_sms.to_msisdn,
                 sent_sms.message
                 )
-        formdict = {
+        linkdict = {
                 "sent_sms":sent_sms.id,
                 "sequence_number": sequence_number,
                 }
-        log.msg("SMPPLinkForm <- %s" % formdict)
-        form = forms.SMPPLinkForm(formdict)
-        form.save()
+        log.msg("SMPPLinkForm <- %s" % linkdict)
+        linkform = forms.SMPPLinkForm(linkdict)
+        linkform.save()
+        yield log.msg("DELIVER SM %s" % (sentdict))
 
 
     def send_smpp(self, id, to_msisdn, message, *args, **kwargs):
