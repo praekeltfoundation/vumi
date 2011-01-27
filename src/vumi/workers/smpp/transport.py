@@ -83,6 +83,7 @@ class SmppTransport(Worker):
         factory.setConnectCallback(self.esme_connected)
         factory.setDisconnectCallback(self.esme_disconnected)
         factory.setSubmitSMRespCallback(self.submit_sm_resp)
+        factory.setDeliverSMCallback(self.deliver_sm)
         reactor.connectTCP(
                 factory.defaults['host'],
                 factory.defaults['port'],
@@ -127,6 +128,37 @@ class SmppTransport(Worker):
         form = forms.SMPPRespForm(kwargs)
         form.save()
         yield log.msg("SUBMIT SM RESP %s" % (kwargs))
+
+
+    @inlineCallbacks
+    def deliver_sm(self, *args, **kwargs):
+        form = form = forms.SendGroupForm({'title':'reply', 'user':1})
+        if not form.is_valid():
+            raise FormValidationError(form)
+        send_group = form.save()
+        formdict = {
+                'transport_name': 'smpp',
+                'from_msisdn': u'27123456789',
+                'send_group': send_group.id,
+                'user': 1,
+                'to_msisdn': kwargs['source_addr'],
+                'message': 'You said: "'+kwargs['short_message']+'"'
+                }
+        form = forms.SentSMSForm(formdict)
+        if not form.is_valid():
+            raise FormValidationError(form)
+        send_sms = form.save()
+        sequence_number = self.send(
+                to_msisdn = send_sms.to_msisdn,
+                message = send_sms.message
+                )
+        formdict = {
+                "sent_sms":mess.get("id"),
+                "sequence_number": sequence_number,
+                }
+        log.msg("SMPPLinkForm <- %s" % formdict)
+        form = forms.SMPPLinkForm(formdict)
+        form.save()
 
 
     def send_smpp(self, id, to_msisdn, message, *args, **kwargs):
