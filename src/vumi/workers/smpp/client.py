@@ -146,7 +146,7 @@ class EsmeTransceiver(Protocol):
             ####################################################################
             source_addr = pdu['body']['mandatory_parameters']['source_addr']
             short_message = pdu['body']['mandatory_parameters']['short_message']
-            new_message = 'Simon says: "'+short_message+'"'
+            new_message = 'You said: "'+short_message+'"'
             self.submit_sm(
                     short_message = new_message,
                     destination_addr = source_addr,
