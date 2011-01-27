@@ -147,14 +147,14 @@ class SmppTransport(Worker):
         form = forms.SentSMSForm(formdict)
         if not form.is_valid():
             raise FormValidationError(form)
-        send_sms = form.save()
+        sent_sms = form.save()
         sequence_number = self.send_smpp(
-                send_sms.id,
-                send_sms.to_msisdn,
-                send_sms.message
+                sent_sms.id,
+                sent_sms.to_msisdn,
+                sent_sms.message
                 )
         formdict = {
-                "sent_sms":mess.get("id"),
+                "sent_sms":sent_sms.id,
                 "sequence_number": sequence_number,
                 }
         log.msg("SMPPLinkForm <- %s" % formdict)
