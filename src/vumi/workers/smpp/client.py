@@ -143,16 +143,10 @@ class EsmeTransceiver(Protocol):
             sequence_number = pdu['header']['sequence_number']
             pdu_resp = DeliverSMResp(sequence_number, **self.defaults)
             self.sendPDU(pdu_resp)
-            ####################################################################
-            source_addr = pdu['body']['mandatory_parameters']['source_addr']
-            short_message = pdu['body']['mandatory_parameters']['short_message']
-            new_message = 'You said: "'+short_message+'"'
-            self.submit_sm(
-                    short_message = new_message,
-                    destination_addr = source_addr,
+            self.__deliver_sm_callback(
+                    source_addr = pdu['body']['mandatory_parameters']['source_addr'],
+                    short_message = pdu['body']['mandatory_parameters']['short_message']
                     )
-            ####################################################################
-        #self.__deliver_sm_callback(pdu = pdu)
 
 
     def handle_enquire_link_resp(self, pdu):
