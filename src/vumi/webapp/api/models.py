@@ -82,7 +82,7 @@ class SendGroup(models.Model):
 class SentSMS(models.Model):
     """An Message to be sent through Vumi"""
     user = models.ForeignKey(User)
-    send_group = models.ForeignKey(SendGroup, null=True)
+    send_group = models.ForeignKey(SendGroup, blank=True, null=True)
     to_msisdn = models.CharField(blank=False, max_length=100)
     from_msisdn = models.CharField(blank=False, max_length=100)
     charset = models.CharField(blank=True, default='utf8', max_length=32)
