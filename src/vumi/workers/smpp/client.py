@@ -8,13 +8,14 @@ from smpp.pdu_builder import *
 
 class EsmeTransceiver(Protocol):
 
-    def __init__(self, seq=[1]):
+    def __init__(self, seq, inc):
         self.name = 'Proto' + str(seq)
         print '__init__', self.name
         self.defaults = {}
         self.state = 'CLOSED'
         print self.name, 'STATE :', self.state
         self.seq = seq
+        self.inc = inc
         self.datastream = ''
         self.__connect_callback = None
         self.__submit_sm_resp_callback = None
@@ -30,7 +31,7 @@ class EsmeTransceiver(Protocol):
 
 
     def incSeq(self):
-        self.seq[0] +=1
+        self.seq[0] += self.inc
 
 
     def popData(self):
@@ -204,13 +205,22 @@ class EsmeTransceiver(Protocol):
 
 class EsmeTransceiverFactory(ReconnectingClientFactory):
 
-    def __init__(self):
+    def __init__(self, increment, offset):
+        if increment < offset:
+            raise Exception("increment may not be less than offset")
+        if increment < 1:
+            raise Exception("increment may not be less than 1")
+        if offset < 1:
+            raise Exception("offset may not be less than 1")
         self.esme = None
         self.__connect_callback = None
         self.__disconnect_callback = None
         self.__submit_sm_resp_callback = None
         self.__deliver_sm_callback = None
-        self.seq = [1]
+        self.seq = [offset]
+        self.inc = increment
+        self.offset = offset
+        print '#########################', self.seq, self.inc, self.offset
         self.initialDelay = 30.0
         self.maxDelay = 45
         self.defaults = {
@@ -225,8 +235,15 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
         self.defaults = dict(self.defaults, **defaults)
 
 
-    def setSequenceNumber(self, sequence_number):
+    def setLatestSequenceNumber(self, latest_sequence_number):
+        sequence_number = (latest_sequence_number/self.inc)*self.inc \
+                + self.inc + self.offset
         self.seq = [sequence_number]
+        print '#########################', self.seq, self.inc, self.offset
+
+
+    def setSequenceIncrement(self, sequence_increment):
+        self.inc = sequence_increment
 
 
     def setConnectCallback(self, connect_callback):
@@ -251,8 +268,8 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
 
     def buildProtocol(self, addr):
         print 'Connected'
-        self.esme = EsmeTransceiver(self.seq)
-        self.esme.factory = self
+        self.esme = EsmeTransceiver(self.seq, self.inc)
+        #self.esme.factory = self
         self.esme.loadDefaults(self.defaults)
         self.esme.setConnectCallback(
                 connect_callback = self.__connect_callback)
