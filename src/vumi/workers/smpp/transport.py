@@ -93,7 +93,7 @@ class SmppTransport(Worker):
 
 
     def getLatestSequenceNumber(self):
-        sequence_number = 1
+        sequence_number = 0
         try:
             sequence_number = models.SMPPLink.objects.latest().sequence_number
         except Exception, e:
