@@ -1,3 +1,4 @@
+import re
 import yaml
 from zope.interface import implements
 from twisted.python import log
@@ -35,7 +36,13 @@ class VumiService(Service):
                 self.options.update({
                     'config': yaml.load(stream)
                 })
-        
+        else:
+            self.options['config'] = {}
+
+        for k in self.options.keys():
+            if re.match("config_", k):
+                self.options['config'].update({k[7:]: self.options[k]})
+
         worker_class = load_class_by_string(worker_class_name)
         creator = WorkerCreator(worker_class, **self.options)
         # after that you connect it to the AMQP server
@@ -52,6 +59,8 @@ class BasicSet(Options):
     optParameters = Options.optParameters + [
         ["worker_class", None, None, "class of a worker to start"],
         ["config", None, None, "YAML config file to load"],
+        ["config_smpp_increment", None, 1, "Increment for SMPP sequence number (must be >= number of SMPP workers on a single SMPP account)"],
+        ["config_smpp_offset", None, 1, "Offset for this worker's SMPP sequence numbers (no duplicates on a single SMPP account and must be <= increment)"],
     ]
 
 # This create the service, runnable on command line with twistd
