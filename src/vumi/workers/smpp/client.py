@@ -235,9 +235,10 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
         self.defaults = dict(self.defaults, **defaults)
 
 
-    def setLatestSequenceNumber(self, latest_sequence_number):
-        sequence_number = (latest_sequence_number/self.inc)*self.inc \
-                + self.inc + self.offset
+    def setLatestSequenceNumber(self, latest):
+        sequence_number = (latest/self.inc)*self.inc + self.offset
+        if latest >= sequence_number:
+            sequence_number += self.inc
         self.seq = [sequence_number]
         print '#########################', self.seq, self.inc, self.offset
 
