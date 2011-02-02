@@ -12,6 +12,7 @@ decorator==3.1.2
 pystache==0.3.1
 django-piston==0.2.2
 iso8601==0.1.4
+supervisor
 -e git+git://github.com/praekelt/python-ssmi.git#egg=python-ssmi
 -e git+git://github.com/smn/bellville.git#egg=smn-bellville
 -e git+git://github.com/smn/alexandria.git#egg=smn-alexandria
