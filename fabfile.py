@@ -366,3 +366,38 @@ def stop_celery_worker(branch, uuid):
         for pid,uuid_ in sessions:
             if uuid_ == uuid:
                 run("kill %s" % pid)
+
+
+@_setup_env
+def start(branch):
+    """
+    Start the webapp
+    
+        $ fab start:staging
+        
+    """
+    return execute(branch, "supervisord -c supervisord.%s.cfg -j %s/supervisord.pid " % (env.branch, env.pids_path))
+
+
+@_setup_env
+def stop(branch):
+    """
+    Stop the webapp
+    
+        $ fab stop:staging
+    
+    """
+    return run("kill `cat %s/supervisord.pid`" % env.pids_path) or True
+
+
+@_setup_env
+def restart(branch):
+    """
+    Restart the webapp
+    
+        $ fab restart:staging
+    
+    """
+    if stop(branch):
+        start(branch)
+
