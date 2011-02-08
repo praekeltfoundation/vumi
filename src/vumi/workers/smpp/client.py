@@ -106,7 +106,8 @@ class EsmeTransceiver(Protocol):
 
     def sendPDU(self, pdu):
         data = pdu.get_bin()
-        print 'OUTGOING >>>>', unpack_pdu(data)
+        #print 'OUTGOING >>>>', unpack_pdu(data)
+        print 'OUTGOING >>>>', pdu.get_obj()
         self.transport.write(data)
 
 
