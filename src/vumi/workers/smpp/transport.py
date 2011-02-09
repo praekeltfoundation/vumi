@@ -86,6 +86,7 @@ class SmppTransport(Worker):
         factory.setDisconnectCallback(self.esme_disconnected)
         factory.setSubmitSMRespCallback(self.submit_sm_resp)
         factory.setDeliverSMCallback(self.deliver_sm)
+        print factory.defaults
         reactor.connectTCP(
                 factory.defaults['host'],
                 factory.defaults['port'],
@@ -134,6 +135,10 @@ class SmppTransport(Worker):
 
     @inlineCallbacks
     def deliver_sm(self, *args, **kwargs):
+        print "#####DELIVERED#####", kwargs
+
+    @inlineCallbacks
+    def deliver_sm__(self, *args, **kwargs):
         groupdict = {'title':'reply', 'user':1}
         groupform = forms.SendGroupForm(groupdict)
         if not groupform.is_valid():
