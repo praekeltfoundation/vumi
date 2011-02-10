@@ -145,6 +145,7 @@ class EsmeTransceiver(Protocol):
             pdu_resp = DeliverSMResp(sequence_number, **self.defaults)
             self.sendPDU(pdu_resp)
             self.__deliver_sm_callback(
+                    destination_addr = pdu['body']['mandatory_parameters']['destination_addr'],
                     source_addr = pdu['body']['mandatory_parameters']['source_addr'],
                     short_message = pdu['body']['mandatory_parameters']['short_message']
                     )
