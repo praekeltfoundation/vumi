@@ -13,6 +13,9 @@ os.environ['DJANGO_SETTINGS_MODULE'] = 'vumi.webapp.settings'
 from vumi.webapp.api import models
 from vumi.webapp.api import forms
 
+import urllib
+import urllib2
+
 
 class SmppConsumer(Consumer):
     """
@@ -135,7 +138,16 @@ class SmppTransport(Worker):
 
     @inlineCallbacks
     def deliver_sm(self, *args, **kwargs):
-        print "#####DELIVERED#####", kwargs
+        url = "http://localhost:8080/"
+        params = {'json' : '{"route":"%s", "msisdn":"%s", "message":"%s"}' % (
+            kwargs.get('source_addr'),
+            kwargs.get('source_addr'),
+            kwargs.get('short_message')
+            )}
+        data = urllib.urlencode(params)
+        req = urllib2.Request(url, data)
+        resp = urllib2.urlopen(req)
+        yield log.msg("DELIVER SM %s" % (json.dumps(kwargs)))
 
     @inlineCallbacks
     def deliver_sm__(self, *args, **kwargs):
