@@ -140,7 +140,7 @@ class SmppTransport(Worker):
     def deliver_sm(self, *args, **kwargs):
         url = "http://localhost:8080/"
         params = {'json' : '{"route":"%s", "msisdn":"%s", "message":"%s"}' % (
-            kwargs.get('source_addr'),
+            kwargs.get('destination_addr'),
             kwargs.get('source_addr'),
             kwargs.get('short_message')
             )}
