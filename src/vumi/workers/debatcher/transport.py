@@ -10,7 +10,7 @@ import json
 import os
 os.environ['DJANGO_SETTINGS_MODULE'] = 'vumi.webapp.settings'
 from vumi.webapp.api import models
-from vumi.webapp.api import forms
+#from vumi.webapp.api import forms
 
 
 class BatchConsumer(Consumer):
@@ -34,10 +34,20 @@ class BatchConsumer(Consumer):
         payload = []
         kwargs = dictionary.get('kwargs')
         if kwargs:
-            payload = kwargs.get('payload', [])
-        for mess in payload:
-            #reactor.callLater(0, self.publisher.publish_json, mess)
-            self.publisher.publish_json(mess)
+            pk = kwargs.get('pk')
+            for o in models.SentSMS.objects.filter(send_group=pk):
+                mess = {
+                        'transport_name':o.transport_name,
+                        'send_group':o.send_group_id,
+                        'from_msisdn':o.from_msisdn,
+                        'user':o.user_id,
+                        'to_msisdn':o.to_msisdn,
+                        'message':o.message,
+                        'id':o.id
+                        }
+                print ">>>>", json.dumps(mess)
+                self.publisher.publish_json(mess)
+                #reactor.callLater(0, self.publisher.publish_json, mess)
         return True
 
     def consume(self, message):
@@ -52,10 +62,9 @@ class IndivPublisher(Publisher):
     """
     exchange_name = "vumi"
     exchange_type = "direct"
-    routing_key = "sms_receive"
+    routing_key = "vumi.webapp.sms.receipt"
     durable = True
     auto_delete = False
-    queue_name = "smpp"
     delivery_mode = 2
 
     def publish_json(self, dictionary, **kwargs):
