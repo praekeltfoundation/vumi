@@ -27,7 +27,7 @@ class SmppConsumer(Consumer):
     exchange_type = "direct"
     durable = True
     auto_delete = False
-    queue_name = "sms_send"
+    queue_name = "sms_receipt"
     routing_key = "vumi.*"
 
     def __init__(self, send_callback):
@@ -35,19 +35,14 @@ class SmppConsumer(Consumer):
 
     def consume_json(self, dictionary):
         log.msg("Consumed JSON %s" % dictionary)
-        payload = []
-        kwargs = dictionary.get('kwargs')
-        if kwargs:
-            payload = kwargs.get('payload', [])
-        for mess in payload:
-            sequence_number = self.send(**mess)
-            formdict = {
-                    "sent_sms":mess.get("id"),
-                    "sequence_number": sequence_number,
-                    }
-            log.msg("SMPPLinkForm <- %s" % formdict)
-            form = forms.SMPPLinkForm(formdict)
-            form.save()
+        sequence_number = self.send(**dictionary)
+        formdict = {
+                "sent_sms":dictionary.get("id"),
+                "sequence_number": sequence_number,
+                }
+        log.msg("SMPPLinkForm <- %s" % formdict)
+        form = forms.SMPPLinkForm(formdict)
+        form.save()
         return True
 
     def consume(self, message):
