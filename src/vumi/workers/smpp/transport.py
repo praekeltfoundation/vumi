@@ -8,8 +8,8 @@ from vumi.workers.smpp.client import EsmeTransceiverFactory, EsmeTransceiver
 
 import json
 
-import os
-os.environ['DJANGO_SETTINGS_MODULE'] = 'vumi.webapp.settings'
+#import os
+#os.environ['DJANGO_SETTINGS_MODULE'] = 'vumi.webapp.settings'
 from vumi.webapp.api import models
 from vumi.webapp.api import forms
 
