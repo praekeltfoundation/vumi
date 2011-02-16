@@ -1,5 +1,6 @@
 import importlib
 import os.path
+import re
 
 def load_class(module_name, class_name):
     """
@@ -41,4 +42,25 @@ def filter_options_on_prefix(options, prefix, delimiter='-'):
     return dict((key.split(delimiter,1)[1], value) \
                 for key, value in options.items() \
                 if key.startswith(prefix))
+
+
+
+def cleanup_msisdn(number, country_code):
+    number = re.sub('\+', '', number)
+    number = re.sub('^0', country_code, number)
+    return number
+
+def get_operator_name(msisdn, mapping):
+    for key, value in mapping.items():
+        if msisdn.startswith(str(key)):
+            if isinstance(value, dict):
+                return get_operator_name(msisdn, value)
+            return value
+    return 'UNKNOWN'
+
+def get_operator_number(msisdn, country_code, mapping, numbers):
+    msisdn = cleanup_msisdn(msisdn, country_code)
+    operator = get_operator_name(msisdn, mapping)
+    number = numbers.get(operator, '')
+    return number
 
