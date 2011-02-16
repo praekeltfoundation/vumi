@@ -13,6 +13,7 @@ import re
 #os.environ['DJANGO_SETTINGS_MODULE'] = 'vumi.webapp.settings'
 from vumi.webapp.api import models
 from vumi.webapp.api import forms
+from vumi.utils import *
 
 import urllib
 import urllib2
@@ -79,7 +80,7 @@ class SmppTransport(Worker):
         factory = EsmeTransceiverFactory(
                 int(self.config['smpp_increment']),
                 int(self.config['smpp_offset']))
-        self.set_route_config()
+        print "#@#@#@#@#@#@#@#@#@#@#@#@@#@#", self.config
         factory.loadDefaults(self.config)
         factory.setLatestSequenceNumber(self.getLatestSequenceNumber())
         factory.setConnectCallback(self.esme_connected)
@@ -180,72 +181,12 @@ class SmppTransport(Worker):
         yield log.msg("DELIVER SM %s" % (sentdict))
 
 
-    def set_route_config(self):
-        #TODO this should come in via a config file
-        self.country_code = "27"
-        self.msisdn_maps = [
-                {
-                    "network":"vodacom",
-                    "route":"278200702230015",
-                    "patterns":[
-                        "2782",
-                        "27710",
-                        "27711",
-                        "27712",
-                        "27713",
-                        "27714",
-                        "27715",
-                        "27716",
-                        "2772",
-                        "2776",
-                        "2779"
-                    ]
-                },
-                {
-                    "network":"mtn",
-                    "route":"278326451590115",
-                    "patterns":[
-                        "2783",
-                        "27718",
-                        "27719",
-                        "2773",
-                        "2778"
-                    ]
-                },
-                {
-                    "network":"cellc",
-                    "route":"278400317700115",
-                    "patterns":[
-                        "2784",
-                        "2774"
-                    ]
-                }
-        ]
-
-
-    def clean_number(self, number):
-        number = re.sub('\+', '', number)
-        number = re.sub('^0', self.country_code, number)
-        return number
-
-
-    def get_route(self, number):
-        msisdn = self.clean_number(number)
-        route = None
-        for m in self.msisdn_maps:
-            if not route:
-                for p in m.get('patterns',[]):
-                    if not route:
-                        if re.match(p, msisdn):
-                            route = m.get('route')
-        return route
-
-
     def send_smpp(self, id, to_msisdn, message, *args, **kwargs):
         print "Sending SMPP, to: %s, message: %s" % (to_msisdn, message)
-        route = self.get_route(to_msisdn)
-        if not route:
-            route = ''
+        route = get_operator_number(to_msisdn,
+                self.config['COUNTRY_CODE'],
+                self.config.get('OPERATOR_PREFIX',{}),
+                self.config.get('OPERATOR_NUMBER',{}))
         sequence_number = self.esme_client.submit_sm(
                 short_message = str(message),
                 destination_addr = str(to_msisdn),
