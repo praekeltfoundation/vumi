@@ -195,7 +195,7 @@ class Profile(models.Model):
         search_fields = ('',)
 
     def __unicode__(self):
-        return u"Profile"
+        return u"Profile for %s" % self.user
     
 
 CALLBACK_CHOICES = (

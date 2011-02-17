@@ -65,7 +65,7 @@ def callback(url, list_of_tuples):
     ch.setopt(pycurl.SSL_VERIFYPEER, 1)
     ch.setopt(pycurl.SSL_VERIFYHOST, 2)
     ch.setopt(pycurl.HTTPHEADER, [
-            "User-Agent: Vumi Callback Client"
+            "User-Agent: Vumi Callback Client",
             "Accept:"
         ])
     ch.setopt(pycurl.WRITEFUNCTION, data.write)
@@ -80,6 +80,37 @@ def callback(url, list_of_tuples):
     except pycurl.error, e:
         logging.debug("Posting to %s resulted in error: %s" % (url, e))
         return (url, e)
+
+def post_data_to_url(url,payload,content_type):
+    """
+    HTTP POST the data to the given URL with the correct content-type
+    """
+    data = StringIO()
+    ch = pycurl.Curl()
+    ch.setopt(pycurl.URL, str(url))
+    ch.setopt(pycurl.VERBOSE, 0)
+    ch.setopt(pycurl.SSLVERSION, 3)
+    ch.setopt(pycurl.SSL_VERIFYPEER, 1)
+    ch.setopt(pycurl.SSL_VERIFYHOST, 2)
+    ch.setopt(pycurl.HTTPHEADER, [
+            "User-Agent: Vumi Callback Client",
+            "Accept:",
+            "Content-Type: %s" % content_type,
+        ])
+    ch.setopt(pycurl.WRITEFUNCTION, data.write)
+    ch.setopt(ch.POSTFIELDS, payload)
+    ch.setopt(pycurl.POSTFIELDSIZE, len(payload))
+    ch.setopt(pycurl.FOLLOWLOCATION, 1)
+    
+    try:
+        result = ch.perform()
+        resp = data.getvalue()
+        logging.debug("Posting to %s which returned %s" % (url, resp))
+        return (url, resp)
+    except pycurl.error, e:
+        logging.debug("Posting to %s resulted in error: %s" % (url, e))
+        return (url, e)
+    
 
 
 def require_content_type(*content_types):
