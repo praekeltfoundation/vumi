@@ -13,3 +13,4 @@ db/*.db
 environments/*
 config/*
 .DS_Store
+fabric.config
