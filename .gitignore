@@ -11,4 +11,5 @@ src/*.egg-info/*
 *.log
 db/*.db
 environments/*
+config/*
 .DS_Store
