@@ -149,13 +149,15 @@ class SmppTransport(Worker):
                 try:
                     #url = "http://localhost:8080/"
                     url = urlcallback.url
+                    log.msg('URL: %s' % urlcallback.url)
                     params = [("json",
                         '{"route":"%s", "msisdn":"%s", "message":"%s"}' % (
                         kwargs.get('destination_addr'),
                         kwargs.get('source_addr'),
                         kwargs.get('short_message'))
                         )]
-                    utils.callback(url, params)
+                    url, resp = utils.callback(url, params)
+                    log.msg('RESP: %s' % resp) 
                     #params = {'json' : '{"route":"%s", "msisdn":"%s", "message":"%s"}' % (
                         #kwargs.get('destination_addr'),
                         #kwargs.get('source_addr'),
@@ -165,7 +167,7 @@ class SmppTransport(Worker):
                     #req = urllib2.Request(url, data)
                     #resp = urllib2.urlopen(req)
                 except Exception, e:
-                    log.error(e)
+                    log.err(e)
         else:
             log.msg("Couldn't find user for message: %s" % message)
         yield log.msg("DELIVER SM %s" % (json.dumps(kwargs)))
