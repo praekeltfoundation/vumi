@@ -20,7 +20,7 @@ class SendSMPPHandler(BaseHandler):
     allowed_methods = ('GET', 'POST',)
     exclude, fields = specify_fields(SentSMS,
         include=['transport_status_display'],
-        exclude=['user'])
+        exclude=['user','send_group'])
 
     def _send_one(self, **kwargs):
         kwargs.update({
@@ -48,5 +48,5 @@ class SendSMPPHandler(BaseHandler):
                     for msisdn in request.POST.getlist('to_msisdn')]
         signals.sms_scheduled.send(sender=SentSMS, instance=send_group,
                 pk=send_group.pk)
-        return returnable
+        return send_group.sentsms_set.all()
 
