@@ -220,7 +220,6 @@ class EsmeTransceiver(Protocol):
                     source_addr,
                     **dict(self.defaults, **kwargs))
             self.incSeq()
-            #print "QUERY_SM", pdu.get_obj()
             self.sendPDU(pdu)
             return sequence_number
         return 0
