@@ -1,6 +1,7 @@
 from twisted.python import log
 from twisted.python.log import logging
 from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.task import LoopingCall
 from twisted.internet import reactor
 
 from vumi.service import Worker, Consumer, Publisher
@@ -87,6 +88,7 @@ class SmppTransport(Worker):
         factory.setDisconnectCallback(self.esme_disconnected)
         factory.setSubmitSMRespCallback(self.submit_sm_resp)
         factory.setDeliverSMCallback(self.deliver_sm)
+        factory.setLoopingQuerySMCallback(self.query_sm_group)
         print factory.defaults
         reactor.connectTCP(
                 factory.defaults['host'],
@@ -135,6 +137,30 @@ class SmppTransport(Worker):
 
 
     @inlineCallbacks
+    def query_sm_group(self, *args, **kwargs):
+        try:
+            self.second_counter += 1
+            if self.second_counter >= 60:
+                self.second_counter = 0
+        except:
+            self.second_counter = 0
+        smppRespList = models.SMPPResp.objects \
+                .extra(where=['ROUND(EXTRACT(SECOND FROM created_at)) = %d' % (self.second_counter)]) \
+                .order_by('-created_at')
+        print len(smppRespList), [r.message_id for r in smppRespList]
+        #route = get_operator_number(to_msisdn,
+                #self.config['COUNTRY_CODE'],
+                #self.config.get('OPERATOR_PREFIX',{}),
+                #self.config.get('OPERATOR_NUMBER',{}))
+        for r in smppRespList:
+            sequence_number = self.esme_client.query_sm(
+                    message_id = r.message_id,
+                    source_addr = ''
+                    )
+        yield log.msg("LOOPING QUERY SM" % (kwargs))
+
+
+    @inlineCallbacks
     def deliver_sm(self, *args, **kwargs):
         message = kwargs.get('short_message')
         head = message.split(' ')[0]
@@ -147,7 +173,6 @@ class SmppTransport(Worker):
             urlcallback_set = profile.urlcallback_set.filter(name='sms_received')
             for urlcallback in urlcallback_set:
                 try:
-                    #url = "http://localhost:8080/"
                     url = urlcallback.url
                     log.msg('URL: %s' % urlcallback.url)
                     params = [("json",
@@ -158,19 +183,12 @@ class SmppTransport(Worker):
                         )]
                     url, resp = utils.callback(url, params)
                     log.msg('RESP: %s' % resp) 
-                    #params = {'json' : '{"route":"%s", "msisdn":"%s", "message":"%s"}' % (
-                        #kwargs.get('destination_addr'),
-                        #kwargs.get('source_addr'),
-                        #kwargs.get('short_message')
-                        #)}
-                    #data = urllib.urlencode(params)
-                    #req = urllib2.Request(url, data)
-                    #resp = urllib2.urlopen(req)
                 except Exception, e:
                     log.err(e)
         else:
             log.msg("Couldn't find user for message: %s" % message)
         yield log.msg("DELIVER SM %s" % (json.dumps(kwargs)))
+
 
     @inlineCallbacks
     def deliver_sm__(self, *args, **kwargs):
