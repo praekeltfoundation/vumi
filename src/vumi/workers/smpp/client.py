@@ -76,6 +76,10 @@ class EsmeTransceiver(Protocol):
         self.__deliver_sm_callback = deliver_sm_callback
 
 
+    def setLoopingQuerySMCallback(self, looping_query_sm_callback):
+        self.__looping_query_sm_callback = looping_query_sm_callback
+
+
     def connectionMade(self):
         self.state = 'OPEN'
         print self.name, 'STATE :', self.state
@@ -92,6 +96,12 @@ class EsmeTransceiver(Protocol):
             self.lc_enquire.stop()
             del self.lc_enquire
             print self.name, 'stop & del enquire link looping call'
+        except:
+            pass
+        try:
+            self.lc_query.stop()
+            del self.lc_query
+            print self.name, 'stop & del query sm looping call'
         except:
             pass
 
@@ -115,10 +125,8 @@ class EsmeTransceiver(Protocol):
             self.state = 'BOUND_TRX'
             self.lc_enquire = LoopingCall(self.enquire_link)
             self.lc_enquire.start(55.0)
-            #self.submit_sm(
-                    #short_message = 'Hello from twisted-smpp',
-                    #destination_addr = '27999123456',
-                    #)
+            self.lc_query = LoopingCall(self.query_sm_group)
+            self.lc_query.start(1.0)
             self.__connect_callback(self)
         print self.name, 'STATE :', self.state
 
@@ -204,6 +212,25 @@ class EsmeTransceiver(Protocol):
         return 0
 
 
+    def query_sm(self, message_id, source_addr, **kwargs):
+        if self.state in ['BOUND_TX', 'BOUND_TRX']:
+            sequence_number = self.getSeq()
+            pdu = QuerySM(sequence_number,
+                    message_id,
+                    source_addr,
+                    **dict(self.defaults, **kwargs))
+            self.incSeq()
+            #print "QUERY_SM", pdu.get_obj()
+            self.sendPDU(pdu)
+            return sequence_number
+        return 0
+
+
+    def query_sm_group(self, **kwargs):
+        #self.__looping_query_sm_callback()
+        return 0
+
+
 class EsmeTransceiverFactory(ReconnectingClientFactory):
 
     def __init__(self, increment, offset):
@@ -218,6 +245,7 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
         self.__disconnect_callback = None
         self.__submit_sm_resp_callback = None
         self.__deliver_sm_callback = None
+        self.__looping_query_sm_callback = None
         self.seq = [offset]
         self.inc = increment
         self.offset = offset
@@ -264,6 +292,10 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
         self.__deliver_sm_callback = deliver_sm_callback
 
 
+    def setLoopingQuerySMCallback(self, looping_query_sm_callback):
+        self.__looping_query_sm_callback = looping_query_sm_callback
+
+
     def startedConnecting(self, connector):
         print 'Started to connect.'
 
@@ -279,6 +311,8 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
                 submit_sm_resp_callback = self.__submit_sm_resp_callback)
         self.esme.setDeliverSMCallback(
                 deliver_sm_callback = self.__deliver_sm_callback)
+        self.esme.setLoopingQuerySMCallback(
+                looping_query_sm_callback = self.__looping_query_sm_callback)
         self.resetDelay()
         return self.esme
 
