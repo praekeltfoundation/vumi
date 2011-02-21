@@ -5,7 +5,7 @@ from fabric.contrib.files import exists
 from datetime import datetime
 from os.path import join as _join
 
-from deploy import git, system, base, twistd
+from springfield.deploy.utils import git, system, base, twistd
 
 RELEASE_NAME_FORMAT = '%Y%m%d_%H%M%S' # timestamped
 # default for now
@@ -24,8 +24,6 @@ def _setup_env(fn):
 
 def _setup_env_for(branch):
     env.branch = branch
-    env.github_user = 'praekelt'
-    env.github_repo_name = 'vumi'
     env.github_repo = 'http://github.com/%(github_user)s/%(github_repo_name)s.git' % env
     
     env.deploy_to = '/var/praekelt/%(github_repo_name)s/%(branch)s' % env
@@ -217,84 +215,62 @@ def update(branch):
 
 
 @_setup_env
-def start_webapp(branch, **kwargs):
-    """
-    Start the webapp as a daemonized twistd plugin
-    
-        $ fab start_webapp:staging,port=8000
-    
-    The port is optional, it defaults to 8000. The port is also used to create
-    the pid and log files, it functions as the unique id for this webapp
-    instance.
-    
-    By default `environments.<branch>` is used but this can be overridden by 
-    specifying django-settings=environments.somethingelse as a 
-    keyword argument.
-    
-    """
+def supervisor(branch, command):
+    """Issue a supervisord command"""
     _virtualenv(
         _join(env.current, env.github_repo_name),
-        twistd.start_command('vumi_webapp', **kwargs)
+        "supervisorctl -c supervisord.%s.cfg %s" % (branch, command)
     )
 
-@_setup_env
-def start_webapp_cluster(branch, *ports, **kwargs):
-    """
-    Start the webapp cluster
-    
-        $ fab start_webapp_cluster:staging,8000,8001,8002,8003
-    
-    """
-    for port in ports:
-        start_webapp(branch,port=port, **kwargs)
+
+def cmd(app=None):
+    if app:
+        return "%s:*" % app
+    else:
+        return "all"
     
 
 @_setup_env
-def restart_webapp(branch, **kwargs):
+def start(branch,app=None):
     """
-    Restart the webapp
+    Start all or one supervisord process
     
-        $ fab restart_webapp:staging,port=8000
+        $ fab start:staging         # starts all
+        $ fab start:staging,webapp  # starts the webapp
+    
+    Where webapp can be any of the names of programs as defined 
+    in the supervisord config file's [program:...] sections
     
     """
-    _virtualenv(
-        _join(env.current, env.github_repo_name),
-        twistd.restart_command('vumi_webapp', **kwargs)
-    )
+    return supervisor(branch,"start %s" % cmd(app))
 
 @_setup_env
-def restart_webapp_cluster(branch, *ports, **kwargs):
+def stop(branch,app=None):
     """
-    Restart a cluster of webapp instances
+    Stop all or one supervisord process
     
-        $ fab restart_webapp_cluster:staging,8000,8001,8002,8003
+        $ fab stop:staging         # stops all
+        $ fab stop:staging,webapp  # stops the webapp
+    
+    Where webapp can be any of the names of programs as defined 
+    in the supervisord config file's [program:...] sections
+    
     """
-    for port in ports:
-        restart_webapp(branch, port=port, **kwargs)
+    return supervisor(branch,"stop %s" % cmd(app))
 
 @_setup_env
-def stop_webapp(branch, **kwargs):
+def restart(branch,app=None):
     """
-    Stop the webapp
+    Restart all or one supervisord process
     
-        $ fab stop_webapp:staging,port=8000
-    
-    """
-    _virtualenv(
-        _join(env.current, env.github_repo_name),
-        twistd.stop_command('vumi_webapp', **kwargs)
-    )
-
-@_setup_env
-def stop_webapp_cluster(branch, *ports, **kwargs):
-    """
-    Stop the webapp cluster
-    
-        $ fab stop_webapp_cluster:staging,8000,8001,8002,8003
+        $ fab restart:staging         # restarts all
+        $ fab restart:staging,webapp  # restarts the webapp
+        
+    Where webapp can be any of the names of programs as defined 
+    in the supervisord config file's [program:...] sections
     
     """
-    for port in ports:
-        stop_webapp(branch, port=port, **kwargs)
+    return supervisor(branch,"restart %s" % cmd(app))
 
 
 @_setup_env
@@ -312,92 +288,4 @@ def cleanup(branch,limit=5):
             'limit': limit
         }
     )
-
-def _get_screens(name_prefix):
-    original_warn_only = env.warn_only
-    env.warn_only = True
-    screens = [line.strip() for line in \
-                run("screen -ls | grep %s" % name_prefix).split('\n')]
-    env.warn_only = original_warn_only
-    if not screens:
-        return []
-    screen_names = [screen.split()[0] for screen in screens]
-    pid_names = [screen_name.split(".") for screen_name in screen_names]
-    return [(pid_name[0], pid_name[1].split("_")[-1]) for pid_name in pid_names]
-
-@_setup_env
-def start_celery_worker(branch, uuid):
-    """
-    Start a celery worker
-    
-        $ fab start_celery:staging,1
-        
-    """
-    with cd(_join(env.current, env.github_repo_name)):
-        run("screen -dmS celery_%(uuid)s ./start-celery.sh %(settings)s %(uuid)s" % {
-            'uuid': uuid,
-            'settings': env.django_settings_file
-        })
-        
-@_setup_env
-def list_celery_workers(branch):
-    """
-    List all running celery workers
-    
-        $ fab list_celery_workers:staging
-    
-    """
-    with cd(_join(env.current, env.github_repo_name)):
-        sessions = _get_screens("celery_")
-        for pid,uuid in sessions:
-            print "Celery Worker => pid:%s, uuid:%s" % (pid, uuid)
-        
-
-@_setup_env
-def stop_celery_worker(branch, uuid):
-    """
-    Stop a celery worker
-    
-        $ fab stop_celery:staging,1
-    
-    """
-    with cd(_join(env.current, env.github_repo_name)):
-        sessions = _get_screens("celery_")
-        for pid,uuid_ in sessions:
-            if uuid_ == uuid:
-                run("kill %s" % pid)
-
-
-@_setup_env
-def start(branch):
-    """
-    Start the webapp
-    
-        $ fab start:staging
-        
-    """
-    return execute(branch, "supervisord -c supervisord.%s.cfg -j %s/supervisord.pid " % (env.branch, env.pids_path))
-
-
-@_setup_env
-def stop(branch):
-    """
-    Stop the webapp
-    
-        $ fab stop:staging
-    
-    """
-    return run("kill `cat %s/supervisord.pid`" % env.pids_path) or True
-
-
-@_setup_env
-def restart(branch):
-    """
-    Restart the webapp
-    
-        $ fab restart:staging
-    
-    """
-    if stop(branch):
-        start(branch)
 
