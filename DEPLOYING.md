@@ -20,6 +20,9 @@ Fabric!
 
 For deploying, updating, starting & stopping of services we use [Fabric][fabric].
 
+
+    $ pip install -r config/deploying.pip
+
 Fabric provides a command line tool using SSH for application deployment and/or administration tasks.
 
 The `-l` and the `-d <command name>` provide some insights into the available commands, their arguments and example usage.
