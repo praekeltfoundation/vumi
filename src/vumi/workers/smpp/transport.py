@@ -20,6 +20,8 @@ from vumi.utils import *
 import urllib
 import urllib2
 
+from datetime import datetime, timedelta
+
 
 class SmppConsumer(Consumer):
     """
@@ -144,18 +146,20 @@ class SmppTransport(Worker):
                 self.second_counter = 0
         except:
             self.second_counter = 0
+        fromdate = datetime.now() - timedelta(days=1)
         smppRespList = models.SMPPResp.objects \
+                .filter(created_at__gte=fromdate) \
                 .extra(where=['ROUND(EXTRACT(SECOND FROM created_at)) = %d' % (self.second_counter)]) \
                 .order_by('-created_at')
-        print len(smppRespList), [r.message_id for r in smppRespList]
-        #route = get_operator_number(to_msisdn,
-                #self.config['COUNTRY_CODE'],
-                #self.config.get('OPERATOR_PREFIX',{}),
-                #self.config.get('OPERATOR_NUMBER',{}))
         for r in smppRespList:
+            route = get_operator_number(
+                    r.sent_sms.to_msisdn,
+                    self.config['COUNTRY_CODE'],
+                    self.config.get('OPERATOR_PREFIX',{}),
+                    self.config.get('OPERATOR_NUMBER',{}))
             sequence_number = self.esme_client.query_sm(
                     message_id = r.message_id,
-                    source_addr = ''
+                    source_addr = route
                     )
         yield log.msg("LOOPING QUERY SM" % (kwargs))
 
