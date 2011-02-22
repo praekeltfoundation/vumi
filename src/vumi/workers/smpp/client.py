@@ -216,8 +216,8 @@ class EsmeTransceiver(Protocol):
         if self.state in ['BOUND_TX', 'BOUND_TRX']:
             sequence_number = self.getSeq()
             pdu = QuerySM(sequence_number,
-                    message_id,
-                    source_addr,
+                    message_id = message_id,
+                    source_addr = source_addr,
                     **dict(self.defaults, **kwargs))
             self.incSeq()
             self.sendPDU(pdu)
@@ -226,7 +226,7 @@ class EsmeTransceiver(Protocol):
 
 
     def query_sm_group(self, **kwargs):
-        #self.__looping_query_sm_callback()
+        self.__looping_query_sm_callback()
         return 0
 
 
