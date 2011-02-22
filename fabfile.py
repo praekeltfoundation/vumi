@@ -25,7 +25,6 @@ def _setup_env(fn):
 def _setup_env_for(branch):
     env.branch = branch
     env.github_repo = 'http://github.com/%(github_user)s/%(github_repo_name)s.git' % env
-    
     env.deploy_to = '/var/praekelt/%(github_repo_name)s/%(branch)s' % env
     env.releases_path = "%(deploy_to)s/releases" % env
     env.current = "%(deploy_to)s/current" % env
@@ -217,6 +216,14 @@ def update(branch):
 @_setup_env
 def supervisor(branch, command):
     """Issue a supervisord command"""
+    app_path = _join(env.current, env.github_repo_name)
+    pid_path = _join(app_path,"tmp","pids","supervisord.pid")
+    if not exists(pid_path):
+        _virtualenv(
+            app_path,
+            "supervisord -c supervisord.%s.cfg -j %s" % (branch,pid_path)
+        )
+    
     _virtualenv(
         _join(env.current, env.github_repo_name),
         "supervisorctl -c supervisord.%s.cfg %s" % (branch, command)
