@@ -1,4 +1,5 @@
 import pycurl
+from urlparse import urlparse
 import logging
 from decorator import decorator
 from django.http import HttpResponse
@@ -45,19 +46,16 @@ def model_to_tuples(instance, exclude=[]):
 def model_to_dict(instance, exclude=[]):
     return dict(model_to_tuples(instance, exclude))
 
-def callback(url, list_of_tuples):
+def _build_curl_object(url):
     """
-    HTTP POST a list of key value tuples to the given URL and 
-    return the response
+    Helper function to set up a curl request object that does SSL
+    verification & authentication.    
     """
+    # parse the URL to get the username & password
+    pr = urlparse(url)
+    username = pr.username
+    password = pr.password or '' # default to blank password, not None
     
-    if any([(isinstance(key, unicode) or \
-                isinstance(value, unicode)) \
-            for key,value in list_of_tuples]):
-        raise RuntimeError, "PyCURL will trip on unicode objects. " \
-                            "Make sure you only pass plain string objects."
-    
-    data = StringIO()
     ch = pycurl.Curl()
     ch.setopt(pycurl.URL, str(url))
     ch.setopt(pycurl.VERBOSE, 0)
@@ -68,9 +66,35 @@ def callback(url, list_of_tuples):
             "User-Agent: Vumi Callback Client",
             "Accept:"
         ])
+    ch.setopt(pycurl.FOLLOWLOCATION, 1)
+    
+    # if we're given a username, pass it along and let pycurl figure
+    # out which Auth mechanism we're using, it'll automatically select
+    # one pycurl thinks is most secure.
+    if username:
+        ch.setopt(pycurl.USERPWD, '%s:%s' % (username,password))
+        ch.setopt(pycurl.HTTPAUTH, pycurl.HTTPAUTH_ANY)
+    
+    return ch
+    
+
+def callback(url, list_of_tuples):
+    """
+    HTTP POST a list of key value tuples to the given URL and 
+    return the response
+    """
+    
+    ch = _build_curl_object(url)
+    
+    if any([(isinstance(key, unicode) or \
+                isinstance(value, unicode)) \
+            for key,value in list_of_tuples]):
+        raise RuntimeError, "PyCURL will trip on unicode objects. " \
+                            "Make sure you only pass plain string objects."
+    
+    data = StringIO()
     ch.setopt(pycurl.WRITEFUNCTION, data.write)
     ch.setopt(pycurl.HTTPPOST, list(list_of_tuples))
-    ch.setopt(pycurl.FOLLOWLOCATION, 1)
     
     try:
         result = ch.perform()
@@ -85,22 +109,10 @@ def post_data_to_url(url,payload,content_type):
     """
     HTTP POST the data to the given URL with the correct content-type
     """
-    data = StringIO()
-    ch = pycurl.Curl()
-    ch.setopt(pycurl.URL, str(url))
-    ch.setopt(pycurl.VERBOSE, 0)
-    ch.setopt(pycurl.SSLVERSION, 3)
-    ch.setopt(pycurl.SSL_VERIFYPEER, 1)
-    ch.setopt(pycurl.SSL_VERIFYHOST, 2)
-    ch.setopt(pycurl.HTTPHEADER, [
-            "User-Agent: Vumi Callback Client",
-            "Accept:",
-            "Content-Type: %s" % content_type,
-        ])
+    ch = _build_curl_object(url)
     ch.setopt(pycurl.WRITEFUNCTION, data.write)
-    ch.setopt(ch.POSTFIELDS, payload)
+    ch.setopt(pycurl.POSTFIELDS, payload)
     ch.setopt(pycurl.POSTFIELDSIZE, len(payload))
-    ch.setopt(pycurl.FOLLOWLOCATION, 1)
     
     try:
         result = ch.perform()
