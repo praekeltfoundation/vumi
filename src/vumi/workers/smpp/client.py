@@ -98,12 +98,12 @@ class EsmeTransceiver(Protocol):
             print self.name, 'stop & del enquire link looping call'
         except:
             pass
-        try:
-            self.lc_query.stop()
-            del self.lc_query
-            print self.name, 'stop & del query sm looping call'
-        except:
-            pass
+        #try:
+            #self.lc_query.stop()
+            #del self.lc_query
+            #print self.name, 'stop & del query sm looping call'
+        #except:
+            #pass
 
 
     def dataReceived(self, data):
@@ -125,8 +125,8 @@ class EsmeTransceiver(Protocol):
             self.state = 'BOUND_TRX'
             self.lc_enquire = LoopingCall(self.enquire_link)
             self.lc_enquire.start(55.0)
-            self.lc_query = LoopingCall(self.query_sm_group)
-            self.lc_query.start(1.0)
+            #self.lc_query = LoopingCall(self.query_sm_group)
+            #self.lc_query.start(1.0)
             self.__connect_callback(self)
         print self.name, 'STATE :', self.state
 
