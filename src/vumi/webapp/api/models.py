@@ -209,7 +209,7 @@ class URLCallback(models.Model):
     """A URL to with to post data for an event"""
     profile = models.ForeignKey(Profile)
     name = models.CharField(blank=True, max_length=255, choices=CALLBACK_CHOICES)
-    url = models.CharField(blank=True, max_length=255)
+    url = models.CharField(blank=True, max_length=200)
     created_at = models.DateTimeField(blank=True, auto_now_add=True)
     updated_at = models.DateTimeField(blank=True, auto_now=True)
     
