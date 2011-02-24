@@ -60,6 +60,7 @@ class CellCSMSKeywordConsumer(SMSKeywordConsumer):
 class FallbackSMSKeywordConsumer(SMSKeywordConsumer):
     routing_key = 'sms.fallback'
 
+
 class SMSKeywordWorker(Worker):
     """
     A worker that fires off URLCallback's for incoming SMSs
