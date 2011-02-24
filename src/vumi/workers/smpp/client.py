@@ -1,3 +1,4 @@
+import re
 
 from twisted.internet import reactor, defer
 from twisted.internet.protocol import Protocol, ReconnectingClientFactory
@@ -19,6 +20,7 @@ class EsmeTransceiver(Protocol):
         self.datastream = ''
         self.__connect_callback = None
         self.__submit_sm_resp_callback = None
+        self.__delivery_report_callback = None
         self.__deliver_sm_callback = None
 
 
@@ -70,6 +72,10 @@ class EsmeTransceiver(Protocol):
 
     def setSubmitSMRespCallback(self, submit_sm_resp_callback):
         self.__submit_sm_resp_callback = submit_sm_resp_callback
+
+
+    def setDeliveryReportCallback(self, delivery_report_callback):
+        self.__delivery_report_callback = delivery_report_callback
 
 
     def setDeliverSMCallback(self, deliver_sm_callback):
@@ -152,11 +158,29 @@ class EsmeTransceiver(Protocol):
             sequence_number = pdu['header']['sequence_number']
             pdu_resp = DeliverSMResp(sequence_number, **self.defaults)
             self.sendPDU(pdu_resp)
-            self.__deliver_sm_callback(
-                    destination_addr = pdu['body']['mandatory_parameters']['destination_addr'],
-                    source_addr = pdu['body']['mandatory_parameters']['source_addr'],
-                    short_message = pdu['body']['mandatory_parameters']['short_message']
+            delivery_report = re.search(
+                       'id:(?P<id>\S*) +sub:(?P<sub>...)'
+                    +' +dlvrd:(?P<dlvrd>...)'
+                    +' +submit date:(?P<submit_date>\d*)'
+                    +' +done date:(?P<done_date>\d*)'
+                    +' +stat:(?P<stat>[A-Z]{7})'
+                    +' +err:(?P<err>...)'
+                    +' +text:(?P<text>.{,20})'
+                    +'.*',
+                    pdu['body']['mandatory_parameters']['short_message']
                     )
+            if delivery_report:
+                self.__delivery_report_callback(
+                        destination_addr = pdu['body']['mandatory_parameters']['destination_addr'],
+                        source_addr = pdu['body']['mandatory_parameters']['source_addr'],
+                        delivery_report = delivery_report.groupdict()
+                        )
+            else:
+                self.__deliver_sm_callback(
+                        destination_addr = pdu['body']['mandatory_parameters']['destination_addr'],
+                        source_addr = pdu['body']['mandatory_parameters']['source_addr'],
+                        short_message = pdu['body']['mandatory_parameters']['short_message']
+                        )
 
 
     def handle_enquire_link_resp(self, pdu):
@@ -243,6 +267,7 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
         self.__connect_callback = None
         self.__disconnect_callback = None
         self.__submit_sm_resp_callback = None
+        self.__delivery_report_callback = None
         self.__deliver_sm_callback = None
         self.__looping_query_sm_callback = None
         self.seq = [offset]
@@ -287,6 +312,10 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
         self.__submit_sm_resp_callback = submit_sm_resp_callback
 
 
+    def setDeliveryReportCallback(self, delivery_report_callback):
+        self.__delivery_report_callback = delivery_report_callback
+
+
     def setDeliverSMCallback(self, deliver_sm_callback):
         self.__deliver_sm_callback = deliver_sm_callback
 
@@ -308,6 +337,8 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
                 connect_callback = self.__connect_callback)
         self.esme.setSubmitSMRespCallback(
                 submit_sm_resp_callback = self.__submit_sm_resp_callback)
+        self.esme.setDeliveryReportCallback(
+                delivery_report_callback = self.__delivery_report_callback)
         self.esme.setDeliverSMCallback(
                 deliver_sm_callback = self.__deliver_sm_callback)
         self.esme.setLoopingQuerySMCallback(
