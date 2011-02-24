@@ -187,7 +187,9 @@ class SmppTransport(Worker):
                     log.msg('URL: %s' % urlcallback.url)
                     params = [
                             ("route", kwargs.get('destination_addr')),
+                            ("to_msisdn", kwargs.get('destination_addr')),
                             ("msisdn", kwargs.get('source_addr')),
+                            ("from_msisdn", kwargs.get('source_addr')),
                             ("message", kwargs.get('short_message')),
                             ("json",
                                 '{"route":"%s", "msisdn":"%s", "message":"%s"}' % (
