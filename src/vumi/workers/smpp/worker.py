@@ -13,7 +13,9 @@ class SMSKeywordConsumer(Consumer):
     exchange_type = "direct"
     durable = True
     delivery_mode = 2
-    queue_name = "sms.clickatell.keywords"
+    queue_name = "" # overwritten by subclass
+    routing_key = "" # overwritten by subclass
+    
     
     def consume_json(self, dictionary):
         message = dictionary.get('short_message')
@@ -44,22 +46,14 @@ class SMSKeywordConsumer(Consumer):
         
         except User.DoesNotExist:
             log.msg("Couldn't find user for message: %s" % message)
-        log.msg("DELIVER SM %s" % (json.dumps(dictionary)))
+        log.msg("DELIVER SM %s consumed by %s" % (json.dumps(dictionary),self.__class__.__name__))
     
-
-class VodacomSMSKeywordConsumer(SMSKeywordConsumer):
-    routing_key = "sms.278200702230015"
-    
-
-class MTNSMSKeywordConsumer(SMSKeywordConsumer):
-    routing_key = 'sms.278326451590115'
-
-class CellCSMSKeywordConsumer(SMSKeywordConsumer):
-    routing_key = 'sms.278400317700115'
 
 class FallbackSMSKeywordConsumer(SMSKeywordConsumer):
     routing_key = 'sms.fallback'
 
+def dynamically_create_consumer(name,**kwargs):
+    return type("%s_SMSKeywordConsumer" % name, (SMSKeywordConsumer,), kwargs)
 
 class SMSKeywordWorker(Worker):
     """
@@ -69,13 +63,13 @@ class SMSKeywordWorker(Worker):
     
     @inlineCallbacks
     def startWorker(self):
-        log.msg("Starting the SMSKeywordWorker, config: %s" % self.config)
-        for consumer_class in [
-            VodacomSMSKeywordConsumer, 
-            MTNSMSKeywordConsumer, 
-            CellCSMSKeywordConsumer,
-            FallbackSMSKeywordConsumer]:
-            yield self.start_consumer(consumer_class)
+        log.msg("Starting the SMSKeywordWorkers for: %s" % self.config.get('networks'))
+        for network,msisdn in self.config.get('networks').items():
+            yield self.start_consumer(dynamically_create_consumer(network, 
+                routing_key='sms.%s' % msisdn,
+                queue_name='sms.keywords.%s' % network.lower()
+            ))
+        yield self.start_consumer(FallbackSMSKeywordConsumer)
     
     def stopWorker(self):
         log.msg("Stopping the SMSKeywordWorker")
