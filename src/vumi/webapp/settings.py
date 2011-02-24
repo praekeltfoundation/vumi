@@ -85,6 +85,7 @@ INSTALLED_APPS = (
     'django.contrib.sites',
     'vumi.webapp.api',
     'celery',
+    'south',
 )
 
 # link our profile to the django.contrib.auth.models.User
@@ -126,6 +127,10 @@ CELERY_QUEUES = {
         "exchange": "vumi",
         "binding_key": "vumi.webapp.sms.receipt",
     },
+    "job_queue": {
+        "exchange": "vumi",
+        "binding_key": "vumi.jobs",
+    }
 }
 CELERY_DEFAULT_QUEUE = "default"
 CELERY_DEFAULT_EXCHANGE_TYPE = "direct"
