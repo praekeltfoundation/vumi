@@ -2,12 +2,11 @@ from django.db import models
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.contrib import admin
-from django.core.validators import URLValidator
-from urlparse import urlparse
+from django.core import serializers
 from datetime import datetime
 import logging
 from utils import model_to_tuples, model_to_dict
-from django.core import serializers
+import fields
 
 CLICKATELL_ERROR_CODES = (
     (001, 'Authentication failed'),
@@ -205,11 +204,12 @@ CALLBACK_CHOICES = (
     ('sms_receipt', 'SMS Receipt'),
 )
 
+
 class URLCallback(models.Model):
     """A URL to with to post data for an event"""
     profile = models.ForeignKey(Profile)
     name = models.CharField(blank=True, max_length=255, choices=CALLBACK_CHOICES)
-    url = models.CharField(blank=True, max_length=200)
+    url = fields.AuthenticatedURLField(blank=True, verify_exists=False)
     created_at = models.DateTimeField(blank=True, auto_now_add=True)
     updated_at = models.DateTimeField(blank=True, auto_now=True)
     
