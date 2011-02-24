@@ -89,6 +89,7 @@ class SmppTransport(Worker):
         factory.setConnectCallback(self.esme_connected)
         factory.setDisconnectCallback(self.esme_disconnected)
         factory.setSubmitSMRespCallback(self.submit_sm_resp)
+        factory.setDeliveryReportCallback(self.delivery_report)
         factory.setDeliverSMCallback(self.deliver_sm)
         factory.setLoopingQuerySMCallback(self.query_sm_group)
         print factory.defaults
@@ -162,6 +163,11 @@ class SmppTransport(Worker):
                     source_addr = route
                     )
         yield log.msg("LOOPING QUERY SM" % (kwargs))
+
+
+    @inlineCallbacks
+    def delivery_report(self, *args, **kwargs):
+        yield log.msg("DELIVERY REPORT %s" % (json.dumps(kwargs)))
 
 
     @inlineCallbacks
