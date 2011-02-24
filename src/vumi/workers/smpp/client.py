@@ -158,8 +158,8 @@ class EsmeTransceiver(Protocol):
             sequence_number = pdu['header']['sequence_number']
             pdu_resp = DeliverSMResp(sequence_number, **self.defaults)
             self.sendPDU(pdu_resp)
-            delivery_report = re.search(
-                       'id:(?P<id>\S*) +sub:(?P<sub>...)'
+            delivery_report = re.search( # SMPP v3.4 Issue 1.2 pg. 167 is wrong on id length
+                       'id:(?P<id>\S{,65}) +sub:(?P<sub>...)'
                     +' +dlvrd:(?P<dlvrd>...)'
                     +' +submit date:(?P<submit_date>\d*)'
                     +' +done date:(?P<done_date>\d*)'
