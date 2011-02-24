@@ -2,6 +2,8 @@ from django.db import models
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.contrib import admin
+from django.core.validators import URLValidator
+from urlparse import urlparse
 from datetime import datetime
 import logging
 from utils import model_to_tuples, model_to_dict
@@ -207,7 +209,7 @@ class URLCallback(models.Model):
     """A URL to with to post data for an event"""
     profile = models.ForeignKey(Profile)
     name = models.CharField(blank=True, max_length=255, choices=CALLBACK_CHOICES)
-    url = models.URLField(blank=True, verify_exists=False)
+    url = models.CharField(blank=True, max_length=255)
     created_at = models.DateTimeField(blank=True, auto_now_add=True)
     updated_at = models.DateTimeField(blank=True, auto_now=True)
     
