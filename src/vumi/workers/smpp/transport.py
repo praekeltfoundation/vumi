@@ -61,12 +61,12 @@ class SmppPublisher(Publisher):
     This publisher publishes all incoming SMPP messages to the
     `vumi.smpp` exchange, its default routing key is `smpp.fallback`
     """
-    exchange_name = "vumi.smpp"
+    exchange_name = "vumi"
     exchange_type = "topic"             # -> route based on pattern matching
     routing_key = 'smpp.fallback'       # -> overriden in publish method
     durable = False                     # -> not created at boot
     auto_delete = False                 # -> auto delete if no consumers bound
-    delivery_mode = 2                   # -> do not save to disk
+    delivery_mode = 2                   # -> save to disk
 
     def publish_json(self, dictionary, **kwargs):
         log.msg("Publishing JSON %s with extra args: %s" % (dictionary, kwargs))
@@ -172,38 +172,9 @@ class SmppTransport(Worker):
 
     @inlineCallbacks
     def deliver_sm(self, *args, **kwargs):
-        message = kwargs.get('short_message')
-        head = message.split(' ')[0]
-        try:
-            user = models.User.objects.get(username=head)
-        except:
-            user= None
-        if user:
-            profile = user.get_profile()
-            urlcallback_set = profile.urlcallback_set.filter(name='sms_received')
-            for urlcallback in urlcallback_set:
-                try:
-                    url = urlcallback.url
-                    log.msg('URL: %s' % urlcallback.url)
-                    params = [
-                            ("route", kwargs.get('destination_addr')),
-                            ("msisdn", kwargs.get('source_addr')),
-                            ("message", kwargs.get('short_message')),
-                            ("json",
-                                '{"route":"%s", "msisdn":"%s", "message":"%s"}' % (
-                                kwargs.get('destination_addr'),
-                                kwargs.get('source_addr'),
-                                kwargs.get('short_message')))
-                            ]
-                    url, resp = utils.callback(url, params)
-                    log.msg('RESP: %s' % resp)
-                except Exception, e:
-                    log.err(e)
-        else:
-            log.msg("Couldn't find user for message: %s" % message)
-        yield log.msg("DELIVER SM %s" % (json.dumps(kwargs)))
-
-
+        yield self.publisher.publish_json(kwargs, 
+            routing_key='sms.%s' % kwargs.get('destination_addr','fallback'))
+    
     @inlineCallbacks
     def deliver_sm__(self, *args, **kwargs):
         groupdict = {'title':'reply', 'user':1}
