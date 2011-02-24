@@ -173,7 +173,7 @@ class SmppTransport(Worker):
     @inlineCallbacks
     def deliver_sm(self, *args, **kwargs):
         yield self.publisher.publish_json(kwargs, 
-            routing_key='sms.%s' % kwargs.get('destination_addr','fallback'))
+            routing_key='sms.%s' % (kwargs.get('destination_addr') or 'fallback',))
     
     @inlineCallbacks
     def deliver_sm__(self, *args, **kwargs):

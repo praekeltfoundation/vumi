@@ -1,8 +1,12 @@
 from twisted.python import log
 from twisted.python.log import logging
 from twisted.internet.defer import inlineCallbacks, returnValue
+from django.contrib.auth.models import User
 
 from vumi.service import Worker, Consumer, Publisher
+from vumi.webapp.api import utils
+
+import json
 
 class SMSKeywordConsumer(Consumer):
     exchange_name = "vumi"
@@ -14,11 +18,9 @@ class SMSKeywordConsumer(Consumer):
     def consume_json(self, dictionary):
         message = dictionary.get('short_message')
         head = message.split(' ')[0]
+        
         try:
-            user = models.User.objects.get(username=head)
-        except:
-            user= None
-        if user:
+            user = User.objects.get(username=head)
             profile = user.get_profile()
             urlcallback_set = profile.urlcallback_set.filter(name='sms_received')
             for urlcallback in urlcallback_set:
@@ -26,32 +28,37 @@ class SMSKeywordConsumer(Consumer):
                     url = urlcallback.url
                     log.msg('URL: %s' % urlcallback.url)
                     params = [
-                            ("route", dictionary.get('destination_addr')),
-                            ("msisdn", dictionary.get('source_addr')),
-                            ("message", dictionary.get('short_message')),
+                            ("route", str(dictionary.get('destination_addr'))),
+                            ("msisdn", str(dictionary.get('source_addr'))),
+                            ("message", str(dictionary.get('short_message'))),
                             ("json",
                                 '{"route":"%s", "msisdn":"%s", "message":"%s"}' % (
-                                dictionary.get('destination_addr'),
-                                dictionary.get('source_addr'),
-                                dictionary.get('short_message')))
+                                str(dictionary.get('destination_addr')),
+                                str(dictionary.get('source_addr')),
+                                str(dictionary.get('short_message'))))
                             ]
                     url, resp = utils.callback(url, params)
                     log.msg('RESP: %s' % resp)
                 except Exception, e:
                     log.err(e)
-        else:
+        
+        except User.DoesNotExist:
             log.msg("Couldn't find user for message: %s" % message)
         log.msg("DELIVER SM %s" % (json.dumps(dictionary)))
-
+    
 
 class VodacomSMSKeywordConsumer(SMSKeywordConsumer):
     routing_key = "sms.278200702230015"
     
+
 class MTNSMSKeywordConsumer(SMSKeywordConsumer):
     routing_key = 'sms.278326451590115'
 
 class CellCSMSKeywordConsumer(SMSKeywordConsumer):
     routing_key = 'sms.278400317700115'
+
+class FallbackSMSKeywordConsumer(SMSKeywordConsumer):
+    routing_key = 'sms.fallback'
 
 class SMSKeywordWorker(Worker):
     """
@@ -65,7 +72,8 @@ class SMSKeywordWorker(Worker):
         for consumer_class in [
             VodacomSMSKeywordConsumer, 
             MTNSMSKeywordConsumer, 
-            CellCSMSKeywordConsumer]:
+            CellCSMSKeywordConsumer,
+            FallbackSMSKeywordConsumer]:
             yield self.start_consumer(consumer_class)
     
     def stopWorker(self):
