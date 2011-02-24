@@ -3,6 +3,10 @@ from django.db import models
 from django.core.validators import URLValidator
 from django.utils.translation import ugettext_lazy as _
 
+# Allow south to introspect our custom fields
+from south.modelsinspector import add_introspection_rules
+add_introspection_rules([], ['vumi\.webapp\.api\.fields\.AuthenticatedURLField'])
+
 class AuthenticatedURLValidator(URLValidator):
     
     def __call__(self, value):

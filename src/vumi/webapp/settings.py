@@ -85,6 +85,7 @@ INSTALLED_APPS = (
     'django.contrib.sites',
     'vumi.webapp.api',
     'celery',
+    'south',
 )
 
 # link our profile to the django.contrib.auth.models.User
