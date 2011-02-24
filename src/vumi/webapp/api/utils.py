@@ -72,7 +72,7 @@ def _build_curl_object(url):
     # out which Auth mechanism we're using, it'll automatically select
     # one pycurl thinks is most secure.
     if username:
-        ch.setopt(pycurl.USERPWD, '%s:%s' % (username,password))
+        ch.setopt(pycurl.USERPWD, str('%s:%s' % (username,password)))
         ch.setopt(pycurl.HTTPAUTH, pycurl.HTTPAUTH_ANY)
     
     return ch
