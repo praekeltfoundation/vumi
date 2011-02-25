@@ -171,7 +171,7 @@ class SmppTransport(Worker):
         if len(_id):
             resp = models.SMPPResp.objects \
                     .filter(message_id=_id) \
-                    .order_by('-created_at')[:1]
+                    .order_by('-created_at')[0]
             print "ORIG_ID", resp.sent_sms
         yield log.msg("DELIVERY REPORT %s" % (json.dumps(kwargs)))
 
