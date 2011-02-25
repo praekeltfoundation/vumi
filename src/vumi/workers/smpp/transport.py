@@ -172,7 +172,7 @@ class SmppTransport(Worker):
             resp = models.SMPPResp.objects \
                     .filter(message_id=_id) \
                     .order_by('-created_at')[:1]
-            print "ORIG_ID", resp.sent_sms_id
+            print "ORIG_ID", resp.sent_sms
         yield log.msg("DELIVERY REPORT %s" % (json.dumps(kwargs)))
 
 
