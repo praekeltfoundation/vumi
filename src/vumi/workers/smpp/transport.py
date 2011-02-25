@@ -170,7 +170,7 @@ class SmppTransport(Worker):
         _id = kwargs['delivery_report']['id']
         if len(_id):
             resp = models.SMPPResp.objects.get(message_id=_id)
-            print "ORIG_ID", resp.sent_sms.id
+            log.msg("ORIG_ID %s" % (resp.sent_sms.id))
         yield log.msg("DELIVERY REPORT %s" % (json.dumps(kwargs)))
 
 
