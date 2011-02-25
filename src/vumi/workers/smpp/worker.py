@@ -30,14 +30,9 @@ class SMSKeywordConsumer(Consumer):
                     url = urlcallback.url
                     log.msg('URL: %s' % urlcallback.url)
                     params = [
-                            ("route", str(dictionary.get('destination_addr'))),
-                            ("msisdn", str(dictionary.get('source_addr'))),
-                            ("message", str(dictionary.get('short_message'))),
-                            ("json",
-                                '{"route":"%s", "msisdn":"%s", "message":"%s"}' % (
-                                str(dictionary.get('destination_addr')),
-                                str(dictionary.get('source_addr')),
-                                str(dictionary.get('short_message'))))
+                            ("to_msisdn", str(dictionary.get('destination_addr'))),
+                            ("from_msisdn", str(dictionary.get('source_addr'))),
+                            ("message", str(dictionary.get('short_message')))
                             ]
                     url, resp = utils.callback(url, params)
                     log.msg('RESP: %s' % resp)
