@@ -167,9 +167,10 @@ class SmppTransport(Worker):
 
     @inlineCallbacks
     def delivery_report(self, *args, **kwargs):
-        if len(kwargs['id']):
+        _id = kwargs['delivery_report']['id']
+        if len(_id):
             resp = models.SMPPResp.objects \
-                    .filter(message_id=kwargs['id']) \
+                    .filter(message_id=_id) \
                     .order_by('-created_at')[:1]
             print "ORIG_ID", resp.sent_sms_id
         yield log.msg("DELIVERY REPORT %s" % (json.dumps(kwargs)))
