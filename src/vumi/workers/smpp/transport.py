@@ -21,6 +21,7 @@ import urllib
 import urllib2
 
 from datetime import datetime, timedelta
+import time
 
 
 class SmppConsumer(Consumer):
