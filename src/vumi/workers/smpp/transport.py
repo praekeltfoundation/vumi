@@ -187,7 +187,13 @@ class SmppTransport(Worker):
                         kwargs['delivery_report']['stat'],
                         sent.created_at,
                         sent.updated_at,
-                        kwargs['delivery_report']['done_date'],
+                        time.strftime(
+                            "%Y-%m-%d %H:%M:%S",
+                            time.strptime(
+                                "20"+kwargs['delivery_report']['done_date'],
+                                "%Y%m%d%H%M%S"
+                                )
+                            ),
                         kwargs['destination_addr'],
                         sent.to_msisdn,
                         sent.message
