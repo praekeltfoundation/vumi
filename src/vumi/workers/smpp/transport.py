@@ -180,7 +180,7 @@ class SmppTransport(Worker):
                     delivered_at: %s
                     from_msisdn: %s
                     to_msisdn: %s
-                    message: %
+                    message: %s
                     """ % (
                         sent.id,
                         kwargs['delivery_report']['stat'],
