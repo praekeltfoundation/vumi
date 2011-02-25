@@ -188,7 +188,7 @@ class SmppTransport(Worker):
                         sent.created_at,
                         sent.updated_at,
                         kwargs['delivery_report']['done_date'],
-                        sent.from_msisdn,
+                        kwargs['destination_addr'],
                         sent.to_msisdn,
                         sent.message
                         ))
