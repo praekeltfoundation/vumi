@@ -15,8 +15,11 @@ iso8601==0.1.4
 supervisor
 psycopg2
 South==0.7.3
+oauth
+simplejson
 -e git+git://github.com/praekelt/python-ssmi.git#egg=python-ssmi
 -e git+git://github.com/smn/bellville.git#egg=smn-bellville
 -e git+git://github.com/smn/alexandria.git#egg=smn-alexandria
 -e git+git://github.com/inoi/nosedjango.git#egg=nosedjango
 -e git+git://github.com/dmaclay/python-smpp.git#egg=python-smpp
+-e git+git://github.com/dustin/twitty-twister#egg=twitty-twister
