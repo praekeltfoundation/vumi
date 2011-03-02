@@ -293,12 +293,12 @@ def reload(branch):
     """
     return supervisor(branch,"reload")
 
-@_setup_env
-def reread(branch):
-    """
-    Reload the supervisord daemon's configuration files (NAMING ?! :P)
-    """
-    return supervisor(branch,"reread")
+#@_setup_env
+#def reread(branch):
+    #"""
+    #Reload the supervisord daemon's configuration files (NAMING ?! :P)
+    #"""
+    #return supervisor(branch,"reread")
 
 @_setup_env
 def cleanup(branch,limit=5):
