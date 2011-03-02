@@ -277,6 +277,8 @@ def restart(branch,app=None):
     in the supervisord config file's [program:...] sections
     
     """
+    if not app:
+        return supervisor(branch,"reload") # restart the daemon
     return supervisor(branch,"restart %s" % cmd(app))
 
 @_setup_env
