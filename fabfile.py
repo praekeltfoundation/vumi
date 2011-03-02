@@ -279,6 +279,17 @@ def restart(branch,app=None):
     """
     return supervisor(branch,"restart %s" % cmd(app))
 
+@_setup_env
+def shutdown(branch):
+    """
+    Shutdown the supervisord daemon
+    
+    Needed after a deploy, otherwise the supervisord continues to
+    run from the release dir it was launched in, not the new current dir
+    
+    """
+    return supervisor(branch,"shutdown")
+
 
 @_setup_env
 def cleanup(branch,limit=5):
