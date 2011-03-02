@@ -8,6 +8,9 @@ from vumi.webapp.api import utils
 
 import json
 
+from vumi.webapp.api import models
+
+
 class SMSKeywordConsumer(Consumer):
     exchange_name = "vumi"
     exchange_type = "direct"
@@ -126,17 +129,54 @@ class SMSBatchConsumer(Consumer):
     queue_name = "" # overwritten by subclass
     routing_key = "" # overwritten by subclass
 
+    def __init__(self, publisher):
+        self.publisher = publisher
 
     def consume_json(self, dictionary):
         log.msg("SM BATCH %s consumed by %s" % (json.dumps(dictionary),self.__class__.__name__))
+        payload = []
+        kwargs = dictionary.get('kwargs')
+        if kwargs:
+            pk = kwargs.get('pk')
+            for o in models.SentSMS.objects.filter(send_group=pk):
+                mess = {
+                        'transport_name':o.transport_name,
+                        'send_group':o.send_group_id,
+                        'from_msisdn':o.from_msisdn,
+                        'user':o.user_id,
+                        'to_msisdn':o.to_msisdn,
+                        'message':o.message,
+                        'id':o.id
+                        }
+                print ">>>>", json.dumps(mess)
+                self.publisher.publish_json(mess)
+                #reactor.callLater(0, self.publisher.publish_json, mess)
+        return True
+
+    def consume(self, message):
+        if self.consume_json(json.loads(message.content.body)):
+            self.ack(message)
 
 
 class FallbackSMSBatchConsumer(SMSBatchConsumer):
     routing_key = 'batch.fallback'
 
 
-def dynamically_create_batch_consumer(name,**kwargs):
-    return type("SMSBatchConsumer", (SMSBatchConsumer,), kwargs)
+class IndivPublisher(Publisher):
+    """
+    This publisher publishes all incoming SMPP messages to the
+    `vumi.smpp` exchange, its default routing key is `smpp.fallback`
+    """
+    exchange_name = "vumi"
+    exchange_type = "direct"
+    routing_key = "sms.indiv"
+    durable = True
+    auto_delete = False
+    delivery_mode = 2
+
+    def publish_json(self, dictionary, **kwargs):
+        log.msg("Publishing JSON %s with extra args: %s" % (dictionary, kwargs))
+        super(IndivPublisher, self).publish_json(dictionary, **kwargs)
 
 
 class SMSBatchWorker(Worker):
@@ -147,10 +187,8 @@ class SMSBatchWorker(Worker):
     @inlineCallbacks
     def startWorker(self):
         log.msg("Starting the SMSBatchWorker")
-        yield self.start_consumer(dynamically_create_consumer(
-                    routing_key='sms.batch',
-                    queue_name='sms.batch'
-                ))
+        self.publisher = yield self.start_publisher(IndivPublisher)
+        yield self.start_consumer(SMSBatchConsumer, self.publisher)
         yield self.start_consumer(FallbackSMSBatchConsumer)
 
     def stopWorker(self):
