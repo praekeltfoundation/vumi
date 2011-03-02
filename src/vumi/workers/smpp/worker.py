@@ -68,4 +68,42 @@ class SMSKeywordWorker(Worker):
     
     def stopWorker(self):
         log.msg("Stopping the SMSKeywordWorker")
+
+
+class SMSReceiptConsumer(Consumer):
+    exchange_name = "vumi"
+    exchange_type = "direct"
+    durable = True
+    delivery_mode = 2
+    queue_name = "" # overwritten by subclass
+    routing_key = "" # overwritten by subclass
+    
+    
+    def consume_json(self, dictionary):
+        log.msg("RECEIPT SM %s consumed by %s" % (json.dumps(dictionary),self.__class__.__name__))
+    
+
+class FallbackSMSReceiptConsumer(SMSReceiptConsumer):
+    routing_key = 'receipt.fallback'
+
+def dynamically_create_consumer(name,**kwargs):
+    return type("%s_SMSReceiptConsumer" % name, (SMSReceiptConsumer,), kwargs)
+
+class SMSReceiptWorker(Worker):
+    """
+    A worker that fires off URLCallback's for incoming Receipts
+    """
+    
+    @inlineCallbacks
+    def startWorker(self):
+        log.msg("Starting the SMSReceiptWorkers for: %s" % self.config.get('OPERATOR_NUMBER'))
+        for network,msisdn in self.config.get('OPERATOR_NUMBER').items():
+            yield self.start_consumer(dynamically_create_consumer(network, 
+                routing_key='receipt.%s' % msisdn,
+                queue_name='receipt.%s' % network.lower()
+            ))
+        yield self.start_consumer(FallbackSMSReceiptConsumer)
+    
+    def stopWorker(self):
+        log.msg("Stopping the SMSReceiptWorker")
     
