@@ -15,12 +15,12 @@ class SMSKeywordConsumer(Consumer):
     delivery_mode = 2
     queue_name = "" # overwritten by subclass
     routing_key = "" # overwritten by subclass
-    
-    
+
+
     def consume_json(self, dictionary):
         message = dictionary.get('short_message')
         head = message.split(' ')[0]
-        
+
         try:
             user = User.objects.get(username=head)
             profile = user.get_profile()
@@ -38,38 +38,42 @@ class SMSKeywordConsumer(Consumer):
                     log.msg('RESP: %s' % resp)
                 except Exception, e:
                     log.err(e)
-        
+
         except User.DoesNotExist:
             log.msg("Couldn't find user for message: %s" % message)
         log.msg("DELIVER SM %s consumed by %s" % (json.dumps(dictionary),self.__class__.__name__))
-    
+
 
 class FallbackSMSKeywordConsumer(SMSKeywordConsumer):
     routing_key = 'sms.fallback'
 
-def dynamically_create_consumer(name,**kwargs):
+
+def dynamically_create_keyword_consumer(name,**kwargs):
     return type("%s_SMSKeywordConsumer" % name, (SMSKeywordConsumer,), kwargs)
+
 
 class SMSKeywordWorker(Worker):
     """
     A worker that fires off URLCallback's for incoming SMSs
     with keywords
     """
-    
+
     @inlineCallbacks
     def startWorker(self):
         log.msg("Starting the SMSKeywordWorkers for: %s" % self.config.get('OPERATOR_NUMBER'))
         for network,msisdn in self.config.get('OPERATOR_NUMBER').items():
             if len(msisdn):
-                yield self.start_consumer(dynamically_create_consumer(network, 
+                yield self.start_consumer(dynamically_create_keyword_consumer(network,
                     routing_key='sms.%s' % msisdn,
                     queue_name='sms.keywords.%s' % network.lower()
                 ))
         yield self.start_consumer(FallbackSMSKeywordConsumer)
-    
+
     def stopWorker(self):
         log.msg("Stopping the SMSKeywordWorker")
 
+
+#==================================================================================================
 
 class SMSReceiptConsumer(Consumer):
     exchange_name = "vumi"
@@ -78,34 +82,77 @@ class SMSReceiptConsumer(Consumer):
     delivery_mode = 2
     queue_name = "" # overwritten by subclass
     routing_key = "" # overwritten by subclass
-    
-    
+
+
     def consume_json(self, dictionary):
         log.msg("RECEIPT SM %s consumed by %s" % (json.dumps(dictionary),self.__class__.__name__))
-    
+
 
 class FallbackSMSReceiptConsumer(SMSReceiptConsumer):
     routing_key = 'receipt.fallback'
 
-def dynamically_create_consumer(name,**kwargs):
+
+def dynamically_create_reciept_consumer(name,**kwargs):
     return type("%s_SMSReceiptConsumer" % name, (SMSReceiptConsumer,), kwargs)
+
 
 class SMSReceiptWorker(Worker):
     """
     A worker that fires off URLCallback's for incoming Receipts
     """
-    
+
     @inlineCallbacks
     def startWorker(self):
         log.msg("Starting the SMSReceiptWorkers for: %s" % self.config.get('OPERATOR_NUMBER'))
         for network,msisdn in self.config.get('OPERATOR_NUMBER').items():
             if len(msisdn):
-                yield self.start_consumer(dynamically_create_consumer(network, 
+                yield self.start_consumer(dynamically_create_receipt_consumer(network,
                     routing_key='receipt.%s' % msisdn,
                     queue_name='receipt.%s' % network.lower()
                 ))
         yield self.start_consumer(FallbackSMSReceiptConsumer)
-    
+
     def stopWorker(self):
         log.msg("Stopping the SMSReceiptWorker")
-    
+
+
+#==================================================================================================
+
+class SMSBatchConsumer(Consumer):
+    exchange_name = "vumi"
+    exchange_type = "direct"
+    durable = True
+    delivery_mode = 2
+    queue_name = "" # overwritten by subclass
+    routing_key = "" # overwritten by subclass
+
+
+    def consume_json(self, dictionary):
+        log.msg("SM BATCH %s consumed by %s" % (json.dumps(dictionary),self.__class__.__name__))
+
+
+class FallbackSMSBatchConsumer(SMSBatchConsumer):
+    routing_key = 'batch.fallback'
+
+
+def dynamically_create_batch_consumer(name,**kwargs):
+    return type("SMSBatchConsumer", (SMSBatchConsumer,), kwargs)
+
+
+class SMSBatchWorker(Worker):
+    """
+    A worker that breaks up batches of sms's into individual sms's
+    """
+
+    @inlineCallbacks
+    def startWorker(self):
+        log.msg("Starting the SMSBatchWorker")
+        yield self.start_consumer(dynamically_create_consumer(
+                    routing_key='sms.batch',
+                    queue_name='sms.batch'
+                ))
+        yield self.start_consumer(FallbackSMSBatchConsumer)
+
+    def stopWorker(self):
+        log.msg("Stopping the SMSBatchWorker")
+
