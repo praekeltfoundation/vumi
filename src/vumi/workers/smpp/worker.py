@@ -58,12 +58,13 @@ class SMSKeywordWorker(Worker):
     
     @inlineCallbacks
     def startWorker(self):
-        log.msg("Starting the SMSKeywordWorkers for: %s" % self.config.get('networks'))
-        for network,msisdn in self.config.get('networks').items():
-            yield self.start_consumer(dynamically_create_consumer(network, 
-                routing_key='sms.%s' % msisdn,
-                queue_name='sms.keywords.%s' % network.lower()
-            ))
+        log.msg("Starting the SMSKeywordWorkers for: %s" % self.config.get('OPERATOR_NUMBER'))
+        for network,msisdn in self.config.get('OPERATOR_NUMBER').items():
+            if len(msisdn):
+                yield self.start_consumer(dynamically_create_consumer(network, 
+                    routing_key='sms.%s' % msisdn,
+                    queue_name='sms.keywords.%s' % network.lower()
+                ))
         yield self.start_consumer(FallbackSMSKeywordConsumer)
     
     def stopWorker(self):
