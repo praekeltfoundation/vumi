@@ -98,10 +98,11 @@ class SMSReceiptWorker(Worker):
     def startWorker(self):
         log.msg("Starting the SMSReceiptWorkers for: %s" % self.config.get('OPERATOR_NUMBER'))
         for network,msisdn in self.config.get('OPERATOR_NUMBER').items():
-            yield self.start_consumer(dynamically_create_consumer(network, 
-                routing_key='receipt.%s' % msisdn,
-                queue_name='receipt.%s' % network.lower()
-            ))
+            if len(msisdn):
+                yield self.start_consumer(dynamically_create_consumer(network, 
+                    routing_key='receipt.%s' % msisdn,
+                    queue_name='receipt.%s' % network.lower()
+                ))
         yield self.start_consumer(FallbackSMSReceiptConsumer)
     
     def stopWorker(self):
