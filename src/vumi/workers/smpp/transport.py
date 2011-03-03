@@ -200,6 +200,8 @@ class SmppTransport(Worker):
                         sent.message
                         ))
         yield log.msg("DELIVERY REPORT %s" % (json.dumps(kwargs)))
+        yield self.publisher.publish_json(kwargs, 
+            routing_key='receipt.%s' % (kwargs.get('destination_addr') or 'fallback',))
 
 
     @inlineCallbacks
