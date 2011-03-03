@@ -33,6 +33,7 @@ class SMSKeywordConsumer(Consumer):
                     url = urlcallback.url
                     log.msg('URL: %s' % urlcallback.url)
                     params = [
+                            ("callback_name", "sms_received"),
                             ("to_msisdn", str(dictionary.get('destination_addr'))),
                             ("from_msisdn", str(dictionary.get('source_addr'))),
                             ("message", str(dictionary.get('short_message')))
