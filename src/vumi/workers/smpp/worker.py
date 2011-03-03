@@ -126,8 +126,8 @@ class SMSBatchConsumer(Consumer):
     exchange_type = "direct"
     durable = True
     delivery_mode = 2
-    queue_name = "" # overwritten by subclass
-    routing_key = "" # overwritten by subclass
+    queue_name = "batch"
+    routing_key = "batch"
 
     def __init__(self, publisher):
         self.publisher = publisher
