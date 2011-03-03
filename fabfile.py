@@ -137,6 +137,21 @@ def copy_settings_file(branch, release=None):
         _join(directory, "environments/%(branch)s.py" % env)
     )
 
+
+@_setup_env
+def fabdir(branch, release=None):
+    """
+    Copy everything in fab/<branch>/ to the server
+    i.e.
+    vumi/fab/staging/config/test_smpp.yaml on your local machine
+    would be copied to:
+    vumi/config/test_smpp.yaml on the server
+    """
+    release = base.current_release()
+    directory = _join(env.releases_path, release, env.github_repo_name)
+
+
+
 @_setup_env
 def managepy(branch, command, release=None):
     """
