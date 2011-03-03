@@ -89,6 +89,37 @@ class SMSReceiptConsumer(Consumer):
 
 
     def consume_json(self, dictionary):
+        _id = kwargs['delivery_report']['id']
+        if len(_id):
+            resp = models.SMPPResp.objects.get(message_id=_id)
+            sent = resp.sent_sms
+            log.msg("""
+                    id: %s
+                    transport_status: %s
+                    transport_status_display: %s
+                    created_at: %s
+                    updated_at: %s
+                    delivered_at: %s
+                    from_msisdn: %s
+                    to_msisdn: %s
+                    message: %s
+                    """ % (
+                        sent.id,
+                        kwargs['delivery_report']['stat'],
+                        kwargs['delivery_report']['stat'],
+                        sent.created_at,
+                        sent.updated_at,
+                        time.strftime(
+                            "%Y-%m-%d %H:%M:%S",
+                            time.strptime(
+                                "20"+kwargs['delivery_report']['done_date'],
+                                "%Y%m%d%H%M%S"
+                                )
+                            ),
+                        kwargs['destination_addr'],
+                        sent.to_msisdn,
+                        sent.message
+                        ))
         log.msg("RECEIPT SM %s consumed by %s" % (json.dumps(dictionary),self.__class__.__name__))
 
 
