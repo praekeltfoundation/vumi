@@ -148,6 +148,7 @@ def fabdir(branch, release=None):
     vumi/fab/staging/config/test_smpp.yaml on your local machine
     would be copied to:
     vumi/config/test_smpp.yaml on the server
+
     *** ALL REQUIRED DIRECTORIES MUST ALREADY EXIST ON THE SERVER ***
     """
     release = base.current_release()
