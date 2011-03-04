@@ -157,7 +157,7 @@ def fabdir(branch, release=None):
         for name in files:
             put(
                 _join(root, name),
-                _join(directory, re.sub("^fab/%(branch)s/" % env,'',root), name)
+                _join(directory, re.sub("^fab/%(branch)s/?" % env,'',root), name)
             )
 
 
