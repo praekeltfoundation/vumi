@@ -4,6 +4,8 @@ from fabric.contrib.console import confirm
 from fabric.contrib.files import exists
 from datetime import datetime
 from os.path import join as _join
+from os import walk
+import re
 
 from springfield.deploy.utils import git, system, base, twistd
 
@@ -146,10 +148,16 @@ def fabdir(branch, release=None):
     vumi/fab/staging/config/test_smpp.yaml on your local machine
     would be copied to:
     vumi/config/test_smpp.yaml on the server
+    *** ALL REQUIRED DIRECTORIES MUST ALREADY EXIST ON THE SERVER ***
     """
     release = base.current_release()
     directory = _join(env.releases_path, release, env.github_repo_name)
-
+    for root, dirs, files in walk("fab/%(branch)s" % env):
+        for name in files:
+            put(
+                _join(root, name),
+                _join(directory, re.sub("^fab/%(branch)s/" % env,'',root), name)
+            )
 
 
 @_setup_env
