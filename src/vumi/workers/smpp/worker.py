@@ -127,7 +127,7 @@ class FallbackSMSReceiptConsumer(SMSReceiptConsumer):
     routing_key = 'receipt.fallback'
 
 
-def dynamically_create_reciept_consumer(name,**kwargs):
+def dynamically_create_receipt_consumer(name,**kwargs):
     return type("%s_SMSReceiptConsumer" % name, (SMSReceiptConsumer,), kwargs)
 
 
