@@ -176,7 +176,8 @@ class SmppTransport(Worker):
     def deliver_sm(self, *args, **kwargs):
         yield self.publisher.publish_json(kwargs, 
             routing_key='sms.%s' % (kwargs.get('destination_addr') or 'fallback',))
-    
+
+
     @inlineCallbacks
     def deliver_sm__(self, *args, **kwargs):
         groupdict = {'title':'reply', 'user':1}
