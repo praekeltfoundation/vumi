@@ -101,11 +101,12 @@ class SMSReceiptConsumer(Consumer):
                     url = urlcallback.url
                     log.msg('URL: %s' % urlcallback.url)
                     params = [
+                            ("callback_name", "sms_receipt"),
                             ("id", sent.id),
-                            ("transport_status", dictionary['delivery_report']['stat']),
-                            ("transport_status_display", dictionary['delivery_report']['stat']),
-                            ("created_at", sent.created_at),
-                            ("updated_at", sent.updated_at),
+                            ("transport_status", str(dictionary['delivery_report']['stat'])),
+                            ("transport_status_display", str(dictionary['delivery_report']['stat'])),
+                            ("created_at", str(sent.created_at)),
+                            ("updated_at", str(sent.updated_at)),
                             ("delivered_at", time.strftime(
                                     "%Y-%m-%d %H:%M:%S",
                                     time.strptime(
@@ -113,11 +114,10 @@ class SMSReceiptConsumer(Consumer):
                                         "%Y%m%d%H%M%S"
                                         )
                                     )),
-                            ("from_msisdn", dictionary['destination_addr']),
-                            ("to_msisdn", sent.to_msisdn),
-                            ("message", sent.message),
+                            ("from_msisdn", str(dictionary['destination_addr'])),
+                            ("to_msisdn", str(sent.to_msisdn)),
+                            ("message", str(sent.message)),
                             ]
-                    print repr(params)
                     url, resp = utils.callback(url, params)
                     log.msg('RESP: %s' % resp)
                 except Exception, e:
