@@ -24,7 +24,6 @@ class SMSKeywordConsumer(Consumer):
     def consume_json(self, dictionary):
         message = dictionary.get('short_message')
         head = message.split(' ')[0]
-
         try:
             user = User.objects.get(username=head)
             profile = user.get_profile()
@@ -94,33 +93,34 @@ class SMSReceiptConsumer(Consumer):
         if len(_id):
             resp = models.SMPPResp.objects.get(message_id=_id)
             sent = resp.sent_sms
-            log.msg("""
-                    id: %s
-                    transport_status: %s
-                    transport_status_display: %s
-                    created_at: %s
-                    updated_at: %s
-                    delivered_at: %s
-                    from_msisdn: %s
-                    to_msisdn: %s
-                    message: %s
-                    """ % (
-                        sent.id,
-                        dictionary['delivery_report']['stat'],
-                        dictionary['delivery_report']['stat'],
-                        sent.created_at,
-                        sent.updated_at,
-                        time.strftime(
-                            "%Y-%m-%d %H:%M:%S",
-                            time.strptime(
-                                "20"+dictionary['delivery_report']['done_date'],
-                                "%Y%m%d%H%M%S"
-                                )
-                            ),
-                        dictionary['destination_addr'],
-                        sent.to_msisdn,
-                        sent.message
-                        ))
+            user = sent.user
+            profile = user.get_profile()
+            urlcallback_set = profile.urlcallback_set.filter(name='sms_receipt')
+            for urlcallback in urlcallback_set:
+                try:
+                    url = urlcallback.url
+                    log.msg('URL: %s' % urlcallback.url)
+                    params = [
+                            ("id", sent.id),
+                            ("transport_status", dictionary['delivery_report']['stat']),
+                            ("transport_status_display", dictionary['delivery_report']['stat']),
+                            ("created_at", sent.created_at),
+                            ("updated_at", sent.updated_at),
+                            ("delivered_at", time.strftime(
+                                    "%Y-%m-%d %H:%M:%S",
+                                    time.strptime(
+                                        "20"+dictionary['delivery_report']['done_date'],
+                                        "%Y%m%d%H%M%S"
+                                        )
+                                    )),
+                            ("from_msisdn", dictionary['destination_addr']),
+                            ("to_msisdn", sent.to_msisdn),
+                            ("message", sent.message),
+                            ]
+                    url, resp = utils.callback(url, params)
+                    log.msg('RESP: %s' % resp)
+                except Exception, e:
+                    log.err(e)
         log.msg("RECEIPT SM %s consumed by %s" % (json.dumps(dictionary),self.__class__.__name__))
 
 
