@@ -89,7 +89,7 @@ class SMSReceiptConsumer(Consumer):
 
 
     def consume_json(self, dictionary):
-        _id = kwargs['delivery_report']['id']
+        _id = dictionary['delivery_report']['id']
         if len(_id):
             resp = models.SMPPResp.objects.get(message_id=_id)
             sent = resp.sent_sms
@@ -105,18 +105,18 @@ class SMSReceiptConsumer(Consumer):
                     message: %s
                     """ % (
                         sent.id,
-                        kwargs['delivery_report']['stat'],
-                        kwargs['delivery_report']['stat'],
+                        dictionary['delivery_report']['stat'],
+                        dictionary['delivery_report']['stat'],
                         sent.created_at,
                         sent.updated_at,
                         time.strftime(
                             "%Y-%m-%d %H:%M:%S",
                             time.strptime(
-                                "20"+kwargs['delivery_report']['done_date'],
+                                "20"+dictionary['delivery_report']['done_date'],
                                 "%Y%m%d%H%M%S"
                                 )
                             ),
-                        kwargs['destination_addr'],
+                        dictionary['destination_addr'],
                         sent.to_msisdn,
                         sent.message
                         ))
