@@ -117,6 +117,7 @@ class SMSReceiptConsumer(Consumer):
                             ("to_msisdn", sent.to_msisdn),
                             ("message", sent.message),
                             ]
+                    print repr(params)
                     url, resp = utils.callback(url, params)
                     log.msg('RESP: %s' % resp)
                 except Exception, e:
