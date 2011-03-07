@@ -94,9 +94,11 @@ class SMSReceiptConsumer(Consumer):
             resp = models.SMPPResp.objects.get(message_id=_id)
             sent = resp.sent_sms
             sent.transport_status = dictionary['delivery_report']['stat']
-            sent.delivered_at = time.strptime(
-                    "20"+dictionary['delivery_report']['done_date'],
-                    "%Y%m%d%H%M%S")
+            sent.delivered_at = time.strftime(
+                    "%Y-%m-%d %H:%M:%S",
+                    time.strptime(
+                        "20"+dictionary['delivery_report']['done_date'],
+                        "%Y%m%d%H%M%S"))
             sent.save()
             user = sent.user
             profile = user.get_profile()
