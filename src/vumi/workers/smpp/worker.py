@@ -97,7 +97,7 @@ class SMSReceiptConsumer(Consumer):
             sent.delivered_at = time.strptime(
                     "20"+dictionary['delivery_report']['done_date'],
                     "%Y%m%d%H%M%S")
-            sent_sms.save()
+            sent.save()
             user = sent.user
             profile = user.get_profile()
             urlcallback_set = profile.urlcallback_set.filter(name='sms_receipt')
