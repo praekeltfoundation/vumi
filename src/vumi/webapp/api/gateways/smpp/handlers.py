@@ -48,6 +48,5 @@ class SendSMPPHandler(BaseHandler):
                     for msisdn in request.POST.getlist('to_msisdn')]
         signals.sms_scheduled.send(sender=SentSMS, instance=send_group,
                 pk=send_group.pk)
-        #return send_group.sentsms_set.all()
-        return {"send_group_id":send_group.id}
+        return [{"send_group_id":send_group.id}] + send_group.sentsms_set.all()
 
