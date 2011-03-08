@@ -156,7 +156,7 @@ def fabdir(branch, release=None):
 
 
 @_setup_env
-def __fabdir(branch, filepath, release=None):
+def __fabdir(branch, filepath='', release=None):
     """
     Copy everything in fab/<branch>/ to the server
     or everything with a path matching fab/<branch>/<filepath>.*
