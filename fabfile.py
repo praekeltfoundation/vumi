@@ -329,6 +329,7 @@ def restart(branch,app=None):
 def shutdown(branch):
     """
     Shutdown the supervisord daemon
+    *** Needed after a redeploy ***
     """
     return supervisor(branch,"shutdown")
 
@@ -336,6 +337,7 @@ def shutdown(branch):
 def reload(branch):
     """
     Restart the supervisord daemon
+    *** Needed if the supervisord config file is changed ***
     """
     return supervisor(branch,"reload")
 
