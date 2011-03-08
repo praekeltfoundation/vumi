@@ -170,7 +170,9 @@ def __fabdir(branch, filepath='', release=None):
     for root, dirs, files in walk("fab/%(branch)s" % env):
         subdir = re.sub("^fab/%(branch)s/?" % env,'',root)
         for name in dirs:
-            run("mkdir -p %s" %  _join(directory, subdir, name))
+            if re.match(re.escape(filepath), re.escape(_join(subdir, name))) \
+            or re.match(re.escape(_join(subdir, name)), re.escape(filepath)):
+                run("mkdir -p %s" %  _join(directory, subdir, name))
         for name in files:
             if filepath == '' or re.match(re.escape(filepath), _join(subdir, name)):
                 put(
