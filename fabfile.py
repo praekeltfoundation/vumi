@@ -167,8 +167,8 @@ def __fabdir(branch, filepath='', release=None):
     """
     release = base.current_release()
     directory = _join(env.releases_path, release, env.github_repo_name)
-    for root, dirs, files in walk("fab/%(branch)s" % env):
-        subdir = re.sub("^fab/%(branch)s/?" % env,'',root)
+    for root, dirs, files in walk("fab/%s" % branch):
+        subdir = re.sub("^fab/%s/?" % branch,'',root)
         for name in dirs:
             if re.match(re.escape(filepath), _join(subdir, name)) \
             or re.match(re.escape(_join(subdir, name)), filepath):
