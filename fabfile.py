@@ -140,8 +140,15 @@ def copy_settings_file(branch, release=None):
     )
 
 
+@_setup_env
 def fabdir(branch, release=None):
     """
+    Copy everything in fab/<branch>/ to the server
+    i.e.
+    vumi/fab/staging/config/test_smpp.yaml on your local machine
+    would be copied to:
+    vumi/config/test_smpp.yaml on the server
+
     Optionally specify a partial filepath in addition to the branch
     i.e.
     $ fab -c fabric.config fabdir:staging/con
@@ -151,22 +158,13 @@ def fabdir(branch, release=None):
     $ fab -c fabric.config fabdir:staging/config/test.txt
     would only copy that file
     """
-    paths = re.match('(?P<branch>[^/]*)/?(?P<filepath>.*)',branch).groupdict()
-    __fabdir(paths['branch'], paths['filepath'], release)
-
-
-@_setup_env
-def __fabdir(branch, filepath='', release=None):
-    """
-    Copy everything in fab/<branch>/ to the server
-    or everything with a path matching fab/<branch>/<filepath>.*
-    i.e.
-    vumi/fab/staging/config/test_smpp.yaml on your local machine
-    would be copied to:
-    vumi/config/test_smpp.yaml on the server
-    """
     release = release or base.current_release()
     directory = _join(env.releases_path, release, env.github_repo_name)
+
+    paths = re.match('(?P<branch>[^/]*)/?(?P<filepath>.*)',branch).groupdict()
+    branch = paths['branch']
+    filepath = paths['filepath']
+
     for root, dirs, files in walk("fab/%s" % branch):
         subdir = re.sub("^fab/%s/?" % branch,'',root)
         for name in dirs:
@@ -175,10 +173,8 @@ def __fabdir(branch, filepath='', release=None):
                 run("mkdir -p %s" %  _join(directory, subdir, name))
         for name in files:
             if filepath == '' or re.match(re.escape(filepath), _join(subdir, name)):
-                put(
-                    _join(root, name),
-                    _join(directory, subdir, name)
-                )
+                put(_join(root, name),
+                    _join(directory, subdir, name))
 
 
 @_setup_env
