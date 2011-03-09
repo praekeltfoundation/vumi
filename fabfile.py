@@ -174,7 +174,7 @@ def __fabdir(branch, filepath='', release=None):
         for name in dirs:
             # only make the dirs you need
             if re.match(re.escape(filepath), _join(subdir, name)) \
-            or re.match(re.escape(_join(subdir, name))+'[/$]', filepath):
+            or re.match(re.escape(_join(subdir, name))+'/', filepath):
                 run("mkdir -p %s" %  _join(directory, subdir, name))
         for name in files:
             if filepath == '' or re.match(re.escape(filepath), _join(subdir, name)):
