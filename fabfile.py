@@ -140,36 +140,41 @@ def copy_settings_file(branch, release=None):
     )
 
 
-@_setup_env
 def fabdir(branch, release=None):
     """
     Copy everything in fab/<branch>/ to the server
     i.e.
-    vumi/fab/staging/config/test_smpp.yaml on your local machine
-    would be copied to:
-    vumi/config/test_smpp.yaml on the server
+        local:  vumi/fab/staging/config/test_smpp.yaml
+        would be copied to
+        remote: vumi/config/test_smpp.yaml
 
     Optionally specify a partial filepath in addition to the branch
     i.e.
-    $ fab -c fabric.config fabdir:staging/con
-    might only copy fab/staging/config/test.txt and fab/staging/confidential/pass.cfg
-    not the rest of fab/staging
-    and
-    $ fab -c fabric.config fabdir:staging/config/test.txt
-    would only copy that file
+        $ fab -c fabric.config fabdir:staging/con
+        might only copy:
+            fab/staging/config/test.txt
+            and
+            fab/staging/confidential/pass.cfg
+            not the rest of fab/staging
+        and
+        $ fab -c fabric.config fabdir:staging/config/test.txt
+        would only copy that file
     """
+    paths = re.match('(?P<branch>[^/]*)/?(?P<filepath>.*)',branch).groupdict()
+    __fabdir(paths['branch'], paths['filepath'], release)
+
+@_setup_env
+def __fabdir(branch, filepath='', release=None):
+    # only a function taking the split up branch/filepath can be decorated
     release = release or base.current_release()
     directory = _join(env.releases_path, release, env.github_repo_name)
-
-    paths = re.match('(?P<branch>[^/]*)/?(?P<filepath>.*)',branch).groupdict()
-    branch = paths['branch']
-    filepath = paths['filepath']
 
     for root, dirs, files in walk("fab/%s" % branch):
         subdir = re.sub("^fab/%s/?" % branch,'',root)
         for name in dirs:
+            # only make the dirs you need
             if re.match(re.escape(filepath), _join(subdir, name)) \
-            or re.match(re.escape(_join(subdir, name)), filepath):
+            or re.match(re.escape(_join(subdir, name))+'[/$]', filepath):
                 run("mkdir -p %s" %  _join(directory, subdir, name))
         for name in files:
             if filepath == '' or re.match(re.escape(filepath), _join(subdir, name)):
