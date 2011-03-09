@@ -71,6 +71,7 @@ def deploy(branch):
     
     Internally this does the following:
     
+        * shuts down the current supervisord daemon if it is running
         * `git pull` if a cached repository already exists
         * `git clone` if it's the first deploy ever
         * Checkout the current selected branch
@@ -81,6 +82,7 @@ def deploy(branch):
         * Symlink `<branch>/current` to `<branch>/releases/<timestamped release directory>`
     
     """
+    shutdown(branch)
     if not git.is_repository(_repo_path(env.github_repo_name)):
         # repository doesn't exist, do a fresh clone
         with cd(env.repo_path):
