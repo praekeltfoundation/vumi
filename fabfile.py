@@ -82,7 +82,9 @@ def deploy(branch):
         * Symlink `<branch>/current` to `<branch>/releases/<timestamped release directory>`
     
     """
+    # shutdown supervisord daemon
     shutdown(branch)
+
     if not git.is_repository(_repo_path(env.github_repo_name)):
         # repository doesn't exist, do a fresh clone
         with cd(env.repo_path):
@@ -161,6 +163,29 @@ def fabdir(branch, release=None):
         and
         $ fab -c fabric.config fabdir:staging/config/test.txt
         would only copy that file
+
+    'Hidden' diretories (prefixed with a dot like .mydir)
+    will be ignored when they are immediately within fab/<branch>/
+    unless the full 'hidden' directory name is included after <branch>
+    when invoking fabdir, in which case the 'hidden' dir will be trimmed off
+    along with fab/<branch>/ before copying to the remote directory.
+    i.e.
+        $ fab -c fabric.config fabdir:staging
+        will ignore fab/staging/.mydir
+        but
+        $ fab -c fabric.config fabdir:staging/.mydir
+        would copy
+        local: vumi/fab/staging/.mydir/tests/test.txt
+        to
+        remote: vumi/tests/test.txt
+
+    This makes it easy to maintain multiple config directories
+    each with files of the same name for a given branch
+    i.e.
+        fab/staging/.clickatell/config/smpp.yaml
+        vs
+        fab/staging/.safaricom/config/smpp.yaml
+    so files in github like supervisord.staging.cfg can remain unchanged
     """
     paths = re.match('(?P<branch>[^/]*)/?(?P<filepath>.*)',branch).groupdict()
     __fabdir(paths['branch'], paths['filepath'], release)
@@ -174,14 +199,23 @@ def __fabdir(branch, filepath='', release=None):
     for root, dirs, files in walk("fab/%s" % branch):
         subdir = re.sub("^fab/%s/?" % branch,'',root)
         for name in dirs:
+            joinpath = _join(subdir, name)
             # only make the dirs you need
-            if re.match(re.escape(filepath), _join(subdir, name)) \
-            or re.match(re.escape(_join(subdir, name))+'/', filepath):
-                run("mkdir -p %s" %  _join(directory, subdir, name))
+            if re.match(re.escape(filepath), joinpath) \
+            or re.match(re.escape(joinpath)+'/', filepath):
+                if joinpath[0:1]!='.' \
+                or joinpath.split('/')[0] == filepath.split('/')[0]:
+                    # ignore or trim 'hidden' dirs in fab/<branch>/
+                    run("mkdir -p %s" %  _join(directory, re.sub('^\.[^/]*/?', '', joinpath)))
         for name in files:
-            if filepath == '' or re.match(re.escape(filepath), _join(subdir, name)):
-                put(_join(root, name),
-                    _join(directory, subdir, name))
+            joinpath = _join(subdir, name)
+            if filepath == '' or re.match(re.escape(filepath), joinpath):
+                if joinpath[0:1]!='.' \
+                or joinpath.split('/')[0] == filepath.split('/')[0] \
+                or subdir == '':
+                    # ignore or trim filepaths within 'hidden' dirs in fab/<branch>/
+                    put(_join(root, name),
+                        _join(directory, re.sub('^\.[^/]*/', '', joinpath)))
 
 
 @_setup_env
