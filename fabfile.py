@@ -171,9 +171,14 @@ def fabdir(branch, release=None):
     along with fab/<branch>/ before copying to the remote directory.
     i.e.
         $ fab -c fabric.config fabdir:staging
-        will ignore fab/staging/.mydir
+        or
+        $ fab -c fabric.config fabdir:staging/.myd
+        will both ignore:
+            fab/staging/.mydir
         but
         $ fab -c fabric.config fabdir:staging/.mydir
+        or
+        $ fab -c fabric.config fabdir:staging/.mydir/te
         would copy
         local: vumi/fab/staging/.mydir/tests/test.txt
         to
