@@ -14,3 +14,4 @@ environments/*
 config/*
 .DS_Store
 fabric.config
+fab/*
