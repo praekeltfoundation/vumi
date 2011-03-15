@@ -1,3 +1,0 @@
-[submodule "puppet/modules/postgresql"]
-	path = puppet/modules/postgresql
-	url = https://github.com/camptocamp/puppet-postgresql.git
