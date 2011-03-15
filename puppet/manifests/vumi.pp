@@ -1,5 +1,6 @@
 Exec {
-    path => ["/bin", "/usr/bin", "/usr/local/bin"]
+    path => ["/bin", "/usr/bin", "/usr/local/bin"],
+    cwd => "/var/praekelt/vumi",
 }
 
 class vumi::apt_get_update {
@@ -72,14 +73,11 @@ class vumi::clone_repo {
                     git submodule update --init
                     ",
         cwd => "/var/praekelt",
-        user => "vagrant",
         require => Class["vumi::layout"],
         onlyif => "test ! -d /var/praekelt/vumi/.git"
     }
     exec { "pull repo":
         command => "pwd && git pull && git submodule update --init",
-        cwd => "/var/praekelt/vumi",
-        user => "vagrant",
         require => Class["vumi::layout"],
         onlyif => "test -d /var/praekelt/vumi/.git"
     }
@@ -92,8 +90,6 @@ class vumi::virtualenv {
                         pip install -r config/requirements.pip && \
                         python setup.py develop && \
                     deactivate",
-        cwd => "/var/praekelt/vumi",
-        user => "vagrant",
         require => Class["vumi::clone_repo"],
         timeout => "-1", # disable timeout
         onlyif => "test ! -d ve"
@@ -103,8 +99,6 @@ class vumi::virtualenv {
                         pip install -r config/requirements.pip && \
                         python setup.py develop && \
                     deactivate",
-        cwd => "/var/praekelt/vumi",
-        user => "vagrant",
         require => Class["vumi::clone_repo"],
         timeout => "-1", # disable timeout
         onlyif => "test -d ve"
@@ -114,16 +108,12 @@ class vumi::virtualenv {
 class vumi::install_smpp_simulator {
     exec { "install_smpp":
         command => "sh install_smpp_simulator.sh",
-        cwd => "/var/praekelt/vumi",
-        user => "vagrant",
         require => Class["vumi::virtualenv"],
         timeout => "-1",
         onlyif => "test ! -d /var/praekelt/vumi/smppsim"
     }
     exec { "pass":
         command => "pwd",
-        cwd => "/var/praekelt/vumi",
-        user => "vagrant",
         require => Class["vumi::virtualenv"],
         onlyif => "test -d /var/praekelt/vumi/smppsim"
     }
@@ -136,8 +126,6 @@ class vumi::syncdb {
                         ./manage.py migrate --all && \
                     deactivate
                     ",
-        cwd => "/var/praekelt/vumi",
-        user => "vagrant",
         require => Class["vumi::virtualenv"],
     }
 }
@@ -147,8 +135,6 @@ class vumi::createadmin {
         command => ". ve/bin/activate && \
             echo \"from django.contrib.auth.models import *; u, created = User.objects.get_or_create(username='vumi', is_superuser=True, is_staff=True); u.set_password('vumi'); u.save()\" | ./manage.py shell && \
         deactivate",
-        cwd => "/var/praekelt/vumi",
-        user => "vagrant",
         require => Class["vumi::syncdb"],
     }
 }
@@ -159,8 +145,6 @@ class vumi::startup {
                         supervisorctl reread && \
                         supervisorctl reload && \
                     deactivate",
-        cwd => "/var/praekelt/vumi/",
-        user => "vagrant",
         require => Class["vumi::createadmin"],
         onlyif => "ps -p `cat tmp/pids/supervisord.pid`"
     }
@@ -168,8 +152,6 @@ class vumi::startup {
         command => ". ve/bin/activate && \
                         supervisord && \
                     deactivate",
-        cwd => "/var/praekelt/vumi/",
-        user => "vagrant",
         require => Class["vumi::createadmin"],
         unless => "ps -p `cat tmp/pids/supervisord.pid`"
     }
