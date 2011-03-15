@@ -1,8 +1,11 @@
+Exec {
+    path => ["/bin", "/usr/bin", "/usr/local/bin"]
+}
+
 class vumi::apt_get_update {
     exec { "update apt-get":
         command => "apt-get update",
         user => "root",
-        path => ["/usr/bin"]
     }
 }
 class vumi::dependencies {
@@ -30,24 +33,20 @@ class vumi::dependencies {
             ",
         user => "root",
         require => Package["rabbitmq-server"],
-        path => ["/usr/sbin","/usr/bin"],
     }
-    exec { "postgres_user":
-        command => "createuser --superuser vumi
-            createdb -W -U vumi -h localhost -E UNICODE staging
-            createdb -W -U vumi -h localhost -E UNICODE production
-            true
-            ",
-        user => "postgres",
-        require => Package["postgresql-8.4"],
-        path => ["/usr/sbin","/usr/bin"],
+    postgres::role { "vumi":
+        ensure => present,
+        password => "vumi",
+    }
+    postgres::database { "vumi":
+        ensure => present,
+        owner => vumi
     }
 }
 
 class vumi::python_tools {
     exec { "easy_install pip":
         command => "easy_install pip",
-        path => ["/usr/bin"],  
         refreshonly => true, 
         require => Class["vumi::dependencies"], 
         subscribe => Class["vumi::dependencies"],
@@ -72,7 +71,6 @@ class vumi::clone_repo {
                     git checkout -b develop origin/develop && \
                     git submodule update --init
                     ",
-        path => ["/usr/bin", "/usr/local/bin"],
         cwd => "/var/praekelt",
         user => "vagrant",
         require => Class["vumi::layout"],
@@ -80,7 +78,6 @@ class vumi::clone_repo {
     }
     exec { "pull repo":
         command => "pwd && git pull && git submodule update --init",
-        path => ["/bin","/usr/bin", "/usr/local/bin"],
         cwd => "/var/praekelt/vumi",
         user => "vagrant",
         require => Class["vumi::layout"],
@@ -95,7 +92,6 @@ class vumi::virtualenv {
                         pip install -r config/requirements.pip && \
                         python setup.py develop && \
                     deactivate",
-        path => ["/usr/bin","/usr/local/bin"],
         cwd => "/var/praekelt/vumi",
         user => "vagrant",
         require => Class["vumi::clone_repo"],
@@ -107,7 +103,6 @@ class vumi::virtualenv {
                         pip install -r config/requirements.pip && \
                         python setup.py develop && \
                     deactivate",
-        path => ["/usr/bin","/usr/local/bin"],
         cwd => "/var/praekelt/vumi",
         user => "vagrant",
         require => Class["vumi::clone_repo"],
@@ -120,7 +115,6 @@ class vumi::install_smpp_simulator {
     exec { "install_smpp":
         command => "sh install_smpp_simulator.sh",
         cwd => "/var/praekelt/vumi",
-        path => ["/usr/bin", "/bin", "/usr/local/bin"],
         user => "vagrant",
         require => Class["vumi::virtualenv"],
         timeout => "-1",
@@ -129,10 +123,33 @@ class vumi::install_smpp_simulator {
     exec { "pass":
         command => "pwd",
         cwd => "/var/praekelt/vumi",
-        path => ["/usr/bin", "/bin", "/usr/local/bin"],
         user => "vagrant",
         require => Class["vumi::virtualenv"],
         onlyif => "test -d /var/praekelt/vumi/smppsim"
+    }
+}
+
+class vumi::syncdb {
+    exec { "syncdb":
+        command => ". ve/bin/activate && \
+                        ./manage.py syncdb --noinput && \
+                        ./manage.py migrate --all && \
+                    deactivate
+                    ",
+        cwd => "/var/praekelt/vumi",
+        user => "vagrant",
+        require => Class["vumi::virtualenv"],
+    }
+}
+
+class vumi::createadmin {
+    exec { "createadmin":
+        command => ". ve/bin/activate && \
+            echo \"from django.contrib.auth.models import *; u, created = User.objects.get_or_create(username='vumi', is_superuser=True, is_staff=True); u.set_password('vumi'); u.save()\" | ./manage.py shell && \
+        deactivate",
+        cwd => "/var/praekelt/vumi",
+        user => "vagrant",
+        require => Class["vumi::syncdb"],
     }
 }
 
@@ -142,29 +159,19 @@ class vumi::startup {
                         supervisorctl reread && \
                         supervisorctl reload && \
                     deactivate",
-        path => ["/usr/bin", "/bin"],
         cwd => "/var/praekelt/vumi/",
         user => "vagrant",
-        require => Class["vumi::install_smpp_simulator"],
+        require => Class["vumi::createadmin"],
         onlyif => "ps -p `cat tmp/pids/supervisord.pid`"
     }
     exec { "start_vumi":
         command => ". ve/bin/activate && \
                         supervisord && \
                     deactivate",
-        path => ["/usr/bin", "/bin"],
         cwd => "/var/praekelt/vumi/",
         user => "vagrant",
-        require => Class["vumi::install_smpp_simulator"],
+        require => Class["vumi::createadmin"],
         unless => "ps -p `cat tmp/pids/supervisord.pid`"
-    }
-    exec { "doing nothing?":
-        command => "pwd",
-        cwd => "/var/praekelt/vumi",
-        path => ["/usr/bin", "/bin", "/usr/local/bin"],
-        user => "vagrant",
-        require => Class["vumi::install_smpp_simulator"],
-        onlyif => "true"
     }
 }
 
@@ -175,6 +182,8 @@ class vumi {
                 vumi::layout, 
                 vumi::clone_repo, 
                 vumi::virtualenv, 
+                vumi::syncdb,
+                vumi::createadmin,
                 vumi::install_smpp_simulator, 
                 vumi::startup
 }
