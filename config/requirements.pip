@@ -15,7 +15,6 @@ iso8601==0.1.4
 supervisor
 psycopg2
 South==0.7.3
-fabric==0.9.4
 -e git+git://github.com/praekelt/python-ssmi.git#egg=python-ssmi
 -e git+git://github.com/smn/bellville.git#egg=smn-bellville
 -e git+git://github.com/smn/alexandria.git#egg=smn-alexandria
