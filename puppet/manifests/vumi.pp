@@ -88,14 +88,6 @@ class vumi::clone_repo {
     }
 }
 
-class vumi::environments_file {
-    file { "/var/praekelt/vumi/environments/staging.py":
-        content => "from vumi.webapp.settings import *",
-        ensure => file,
-        require => Class["vumi::clone_repo"],
-    }
-}
-
 class vumi::virtualenv {
     exec { "create_virtualenv":
         command => "virtualenv --no-site-packages ve && \
@@ -106,13 +98,14 @@ class vumi::virtualenv {
         path => ["/usr/bin","/usr/local/bin"],
         cwd => "/var/praekelt/vumi",
         user => "vagrant",
-        require => Class["vumi::environments_file"],
+        require => Class["vumi::clone_repo"],
         timeout => "-1", # disable timeout
         onlyif => "test ! -d ve"
     }
     exec { "update_virtualenv":
         command => ". ve/bin/activate && \
                         pip install -r config/requirements.pip && \
+                        python setup.py develop && \
                     deactivate",
         path => ["/usr/bin","/usr/local/bin"],
         cwd => "/var/praekelt/vumi",
@@ -133,20 +126,45 @@ class vumi::install_smpp_simulator {
         timeout => "-1",
         onlyif => "test ! -d /var/praekelt/vumi/smppsim"
     }
+    exec { "pass":
+        command => "pwd",
+        cwd => "/var/praekelt/vumi",
+        path => ["/usr/bin", "/bin", "/usr/local/bin"],
+        user => "vagrant",
+        require => Class["vumi::virtualenv"],
+        onlyif => "test -d /var/praekelt/vumi/smppsim"
+    }
 }
 
 class vumi::startup {
-    exec { "start_vumi":
-        command => ". ve/bin/activate
-                    supervisorctl shutdown
-                    sleep 5
-                    supervisord
-                    deactivate
-                    ",
-        path => ["/usr/bin"],
+    exec { "restart_vumi":
+        command => ". ve/bin/activate && \
+                        supervisorctl reread && \
+                        supervisorctl reload && \
+                    deactivate",
+        path => ["/usr/bin", "/bin"],
         cwd => "/var/praekelt/vumi/",
         user => "vagrant",
         require => Class["vumi::install_smpp_simulator"],
+        onlyif => "ps -p `cat tmp/pids/supervisord.pid`"
+    }
+    exec { "start_vumi":
+        command => ". ve/bin/activate && \
+                        supervisord && \
+                    deactivate",
+        path => ["/usr/bin", "/bin"],
+        cwd => "/var/praekelt/vumi/",
+        user => "vagrant",
+        require => Class["vumi::install_smpp_simulator"],
+        unless => "ps -p `cat tmp/pids/supervisord.pid`"
+    }
+    exec { "doing nothing?":
+        command => "pwd",
+        cwd => "/var/praekelt/vumi",
+        path => ["/usr/bin", "/bin", "/usr/local/bin"],
+        user => "vagrant",
+        require => Class["vumi::install_smpp_simulator"],
+        onlyif => "true"
     }
 }
 
@@ -156,7 +174,6 @@ class vumi {
                 vumi::python_tools, 
                 vumi::layout, 
                 vumi::clone_repo, 
-                vumi::environments_file,
                 vumi::virtualenv, 
                 vumi::install_smpp_simulator, 
                 vumi::startup
