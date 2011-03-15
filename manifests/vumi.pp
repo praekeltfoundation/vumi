@@ -18,6 +18,7 @@ class vumi::dependencies {
         "rabbitmq-server": ensure => "1.7.2-1ubuntu1", require => Class["vumi::apt_get_update"];
         "git-core": ensure => "1:1.7.0.4-1ubuntu0.2", require => Class["vumi::apt_get_update"];
         "openjdk-6-jre-headless": ensure => "6b20-1.9.7-0ubuntu1~10.04.1", require => Class["vumi::apt_get_update"];
+        "libcurl4-openssl-dev": ensure => "7.19.7-1ubuntu1", require => Class["vumi::apt_get_update"];
     }
     exec { "rabbitmq_user":
         command => "sudo rabbitmqctl add_user vumi vumi
@@ -69,8 +70,7 @@ class vumi::clone_repo {
         command => "git clone http://github.com/praekelt/vumi.git && \
                     cd vumi && \
                     git checkout -b develop origin/develop && \
-                    mkdir -p logs && \
-                    mkdir -p tmp/pids
+                    git submodule update --init
                     ",
         path => ["/usr/bin", "/usr/local/bin"],
         cwd => "/var/praekelt",
@@ -79,7 +79,7 @@ class vumi::clone_repo {
         onlyif => "test ! -d /var/praekelt/vumi/.git"
     }
     exec { "pull repo":
-        command => "pwd && git pull",
+        command => "pwd && git pull && git submodule update --init",
         path => ["/bin","/usr/bin", "/usr/local/bin"],
         cwd => "/var/praekelt/vumi",
         user => "vagrant",
