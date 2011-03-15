@@ -1,5 +1,5 @@
-system_id: test id
-password: abc 123
+system_id: smppclient1
+password: password
 host: localhost
 port: 2775
 

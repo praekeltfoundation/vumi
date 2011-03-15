@@ -405,3 +405,12 @@ def cleanup(branch,limit=5):
         }
     )
 
+def install_smpp_simulator():
+    local("""mkdir -p smppsim && \
+                cd smppsim && \
+                wget http://www.seleniumsoftware.com/downloads/SMPPSim.tar.gz && \
+                tar zxf SMPPSim.tar.gz && \
+                cd SMPPSim && \
+                sed -i.original -e s/HTTP_PORT=88/HTTP_PORT=8080/ conf/smppsim.props && \
+                chmod +x startsmppsim.sh
+    """)
