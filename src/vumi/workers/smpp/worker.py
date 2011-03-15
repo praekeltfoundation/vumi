@@ -71,7 +71,7 @@ class SMSKeywordWorker(Worker):
                     routing_key='sms.%s' % msisdn,
                     queue_name='sms.keywords.%s' % network.lower()
                 ))
-        yield self.start_consumer(FallbackSMSKeywordConsumer)
+        #yield self.start_consumer(FallbackSMSKeywordConsumer)
 
     def stopWorker(self):
         log.msg("Stopping the SMSKeywordWorker")
@@ -154,7 +154,7 @@ class SMSReceiptWorker(Worker):
                     routing_key='receipt.%s' % msisdn,
                     queue_name='receipt.%s' % network.lower()
                 ))
-        yield self.start_consumer(FallbackSMSReceiptConsumer)
+        #yield self.start_consumer(FallbackSMSReceiptConsumer)
 
     def stopWorker(self):
         log.msg("Stopping the SMSReceiptWorker")
@@ -230,7 +230,7 @@ class SMSBatchWorker(Worker):
         log.msg("Starting the SMSBatchWorker")
         self.publisher = yield self.start_publisher(IndivPublisher)
         yield self.start_consumer(SMSBatchConsumer, self.publisher)
-        yield self.start_consumer(FallbackSMSBatchConsumer)
+        #yield self.start_consumer(FallbackSMSBatchConsumer)
 
     def stopWorker(self):
         log.msg("Stopping the SMSBatchWorker")
