@@ -1,5 +1,6 @@
 Exec {
     path => ["/bin", "/usr/bin", "/usr/local/bin"],
+    user => 'vagrant',
 }
 
 class vumi::apt_get_update {
@@ -54,6 +55,7 @@ class vumi::python_tools {
     exec { "easy_install pip":
         command => "easy_install pip",
         refreshonly => true, 
+        user => "root",
         require => Class["vumi::accounts"], 
     }
 }
