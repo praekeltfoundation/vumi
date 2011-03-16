@@ -209,7 +209,7 @@ class IndivPublisher(Publisher):
     """
     exchange_name = "vumi"
     exchange_type = "direct"
-    routing_key = "sms.indiv"
+    routing_key = "sms.outbound.clickatell"
     durable = True
     auto_delete = False
     delivery_mode = 2
