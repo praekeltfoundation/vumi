@@ -168,8 +168,8 @@ class SmppTransport(Worker):
 
     @inlineCallbacks
     def delivery_report(self, *args, **kwargs):
-        yield self.publisher.publish_json(kwargs, 
-            routing_key='receipt.%s' % (kwargs.get('destination_addr') or 'fallback',))
+        yield self.publisher.publish_json(kwargs,
+            routing_key='sms.receipt.%s' % self.config.get('UPSTREAM', '')
 
 
     @inlineCallbacks
