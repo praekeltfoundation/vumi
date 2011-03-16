@@ -167,8 +167,8 @@ class SMSBatchConsumer(Consumer):
     exchange_type = "direct"
     durable = True
     delivery_mode = 2
-    queue_name = "batch"
-    routing_key = "batch"
+    queue_name = "sms_send"
+    routing_key = "vumi.*"
 
     def __init__(self, publisher):
         self.publisher = publisher
