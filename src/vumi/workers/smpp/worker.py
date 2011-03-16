@@ -90,6 +90,7 @@ class SMSReceiptConsumer(Consumer):
 
     def consume_json(self, dictionary):
         _id = dictionary['delivery_report']['id']
+        print dictionary
         if len(_id):
             resp = models.SMPPResp.objects.get(message_id=_id)
             sent = resp.sent_sms
