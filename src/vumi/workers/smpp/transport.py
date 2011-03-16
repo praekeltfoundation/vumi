@@ -34,8 +34,8 @@ class SmppConsumer(Consumer):
     exchange_type = "direct"
     durable = True
     auto_delete = False
-    queue_name = "sms_receipt"
-    routing_key = "vumi.*"
+    queue_name = "sms.outbound.clickatell"
+    routing_key = "sms.outbound.clickatell"
 
     def __init__(self, send_callback):
         self.send = send_callback
