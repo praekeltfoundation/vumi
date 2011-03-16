@@ -152,7 +152,7 @@ class SMSReceiptWorker(Worker):
         yield self.start_consumer(dynamically_create_receipt_consumer(upstream,
                     routing_key='sms.receipt.%s' % upstream,
                     queue_name='sms.receipt.%s' % upstream
-                )
+                ))
         #yield self.start_consumer(FallbackSMSReceiptConsumer)
 
     def stopWorker(self):
