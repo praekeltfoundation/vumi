@@ -169,7 +169,7 @@ class SmppTransport(Worker):
     @inlineCallbacks
     def delivery_report(self, *args, **kwargs):
         yield self.publisher.publish_json(kwargs,
-            routing_key='sms.receipt.%s' % self.config.get('UPSTREAM', '')
+            routing_key='sms.receipt.%s' % self.config.get('UPSTREAM', ''))
 
 
     @inlineCallbacks
