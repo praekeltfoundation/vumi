@@ -132,7 +132,7 @@ class vumi::syncdb {
                     deactivate
                     ",
         cwd => "/var/praekelt/vumi",
-        require => Class["vumi::virtualenv"],
+        require => Class["vumi::install_smpp_simulator"],
     }
 }
 
