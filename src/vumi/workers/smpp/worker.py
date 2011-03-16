@@ -48,8 +48,8 @@ class SMSKeywordConsumer(Consumer):
         log.msg("DELIVER SM %s consumed by %s" % (json.dumps(dictionary),self.__class__.__name__))
 
 
-class FallbackSMSKeywordConsumer(SMSKeywordConsumer):
-    routing_key = 'sms.fallback'
+#class FallbackSMSKeywordConsumer(SMSKeywordConsumer):
+    #routing_key = 'sms.fallback'
 
 
 def dynamically_create_keyword_consumer(name,**kwargs):
@@ -132,8 +132,8 @@ class SMSReceiptConsumer(Consumer):
         log.msg("RECEIPT SM %s consumed by %s" % (json.dumps(dictionary),self.__class__.__name__))
 
 
-class FallbackSMSReceiptConsumer(SMSReceiptConsumer):
-    routing_key = 'receipt.fallback'
+#class FallbackSMSReceiptConsumer(SMSReceiptConsumer):
+    #routing_key = 'receipt.fallback'
 
 
 def dynamically_create_receipt_consumer(name,**kwargs):
@@ -149,7 +149,7 @@ class SMSReceiptWorker(Worker):
     def startWorker(self):
         log.msg("Starting the SMSReceiptWorkers for: %s" % self.config.get('OPERATOR_NUMBER'))
         upstream = self.config.get('UPSTREAM', '')
-        yield self.start_consumer(SMSReceiptConsumer,
+        yield self.start_consumer(dynamically_create_receipt_consumer(upstream,
                     routing_key='sms.receipt.%s' % upstream,
                     queue_name='sms.receipt.%s' % upstream
                 )
@@ -198,8 +198,8 @@ class SMSBatchConsumer(Consumer):
             self.ack(message)
 
 
-class FallbackSMSBatchConsumer(SMSBatchConsumer):
-    routing_key = 'batch.fallback'
+#class FallbackSMSBatchConsumer(SMSBatchConsumer):
+    #routing_key = 'batch.fallback'
 
 
 class IndivPublisher(Publisher):
