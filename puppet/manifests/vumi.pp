@@ -45,6 +45,7 @@ class vumi::accounts {
     postgres::database { "vumi":
         ensure => present,
         owner => vumi,
+        template => "template0",
         require => Class["vumi::dependencies"],
     }
 }
