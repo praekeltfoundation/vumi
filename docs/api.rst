@@ -1,96 +1,17 @@
-Vumi
-====
-
-PubSub platform for connecting online messaging services such as SMS and USSD to a horizontally scalable backend of workers.
-
-Getting started
----------------
-
-Make sure you have your AMQP broker running. I've only tested it with RabbitMQ, in theory, it should work with any other AMQP 0.8 spec based broker.
-
-    $ rabbitmq-server
-
-RabbitMQ will automatically assign a node name for you. For my network that doesn't work too well because the rest of the clients are unable to connect. If you run into the same problem, try the following:
-
-    $ RABBITMQ_NODENAME=rabbit@localhost rabbitmq-server
-
-Make sure you have configured your login credentials & virtual host stuff in RabbitMQ. This is the minimal stuff for this to work 'out of the box':
-
-    $ rabbitmqctl -n rabbit@localhost add_user vumi vumi
-    Creating user "vumi" ...
-    ...done.
-    $ rabbitmqctl -n rabbit@localhost add_vhost /vumi
-    Creating vhost "vumi" ...
-    ...done.
-    $ rabbitmqctl -n rabbit@localhost set_permissions -p /vumi vumi \
-        '.*' '.*' '.*'
-    Setting permissions for user "vumi" in vhost "vumi" ...
-    ...done.
- 
-That last line gives the user 'vumi' on virtual host 'vumi' configure, read & write access to all resources that match those three regular expressions. Which, in this case, matches all resources in the vhost.
-
-This project uses [virtualenv][virtualenv] and [pip][pip] to to create a sandbox and manage the required libraries at the required versions. Make sure you have both installed.
-
-Setup a virtual python environment in the directory `ve`. The `--no-site-packages` makes sure that all required dependencies are installed your the virtual environments `site-packages` directory even if they exist in Python's global `site-packages` directory.
-
-    $ virtualenv --no-site-packages ./ve/ 
-
-Start the environment by sourcing `activate`. This'll prepend the name of the virtual environment to your shell prompt, informing you that the virtual environment is active.
-
-        $ source ve/bin/activate
-
-When you're done run `deactivate` to exit the virtual environment.
-
-Install the required libraries with pip into the virtual environment. They're pulled in from both [pypi][pypi] and [GitHub][github]. Make sure you have the development package for python (python-dev or python-devel or something of that sort) installed, Twisted needs it when it's being built.
-
-    $ pip -E ./ve/ install -r config/requirements.pip
- 
-Running Vumi
-------------
-
-Vumi is implemented using a [Pub/Sub][pubsub] design using the [Competing Consumer pattern][competing consumers]. 
-
-Vumi transports and workers are both started with the `start_worker` Twisted plugin.
-
-Vumi currently has a TruTeq transport that allows for receiving and sending of USSD messages over TruTeq's SSMI protocol. The TruTeq service connects to the SSMI service and connects to RabbitMQ. It publishes all incoming messages over SSMI as JSON to the receive queue in RabbitMQ and it publishes all incoming messages over the send queue back to TruTeq over SSMI.
-
-The worker reads all incoming JSON objects on the receive queue and publishes a response back to the send queue for the TruTeq service to publish over SSMI.
-
-Make sure you update the configuration file in `config/truteq.cfg` and start the broker:
-
-    $ source ve/bin/activate
-    (ve)$ twistd -n \
-            --pidfile=./tmp/pids/ussd_transport.pid \
-            --logfile=./logs/ussd_transport.log \
-            start_worker \ 
-            --worker_class=richmond.workers.truteq.transport.USSDTransport \
-            --config=environments/truteq.yaml
-    ...
- 
-    $ source ve/bin/activate
-    (ve)$ twistd -n \
-            --pidfile=./tmp/pids/default_demo_worker.pid \
-            --logfile=./logs/default_demo_worker.log \
-            start_worker \
-            --worker_class=richmond.campaigns.default_demo.USSDWorker
-    ...
-
-The worker's `--worker_class` option allows you to specify a class that subclasses `vumi.service.Worker`.
-
-Remove the `-n` option to have `twistd` run in the background. The `--pidfile` option isn't necessary, `twistd` will use 'twistd.pid' by default. However, since we could have multiple brokers and workers running at the same time on the same machine it is good to be explicit since `twistd` will assume an instance is already running if 'twistd.pid' already exists.
-
 Running the Webapp / API
 ------------------------
 
 The webapp is a regular Django application. Before you start make sure the `DATABASE` settings in `src/vumi/webapp/settings.py` are up to date. `Vumi` is being developed with `PostgreSQL` as the default backend for the Django ORM but this isn't a requirement.
 
-To setup PostgeSQL:
+To setup PostgreSQL::
+
     $ sudo -u postgres createuser --superuser --pwprompt vumi
     ... // snip, default password is `vumi` // ...
     $ createdb -W -U vumi -h localhost -E UNICODE vumi
+    $ virtualenv --no-site-packages ve
     $ pip -E ve install psycopg2
 
-For development start it within the virtual environment:
+For development start it within the virtual environment::
 
     $ source ve/bin/activate
     (ve)$ python setup.py develop
@@ -98,18 +19,7 @@ For development start it within the virtual environment:
     (ve)$ ./manage.py runserver
     ...
 
-For development it sometimes is handy to have Celery run in eager mode. In eager mode, tasks avoids the queue entirely and are processed immediately in the main process. Do this by settings the environment variable 'VUMI_SKIP_QUEUE'
-
-    (ve)$ VUMI_SKIP_QUEUE=True ./manage.py runserver
-
-This is specified in the `settings.py` file, if so desired, you can also default it to `DEBUG` so that when `DEBUG=True` the queue will always be skipped.
-
-When running in production start it with the `twistd` plugin `vumi_webapp`
- 
-    $ source ve/bin/activate
-    (ve)$ twistd --pidfile=tmp/pids/vumi.webapp.pid -n vumi_webapp
-
-Run the tests for the webapp API with `./manage.py` as well:
+Run the tests for the webapp API with `./manage.py` as well::
 
     $ source ve/bin/activate
     (ve)$ ./manage.py test api
@@ -119,18 +29,20 @@ Scheduling SMS for delivery via the API
 
 The API is HTTP with concepts borrowed from REST. All URLs have rate limiting and require HTTP Basic Authentication.
 
-There are currently a number of SMS transports available. [Clickatell][clickatell], [Opera][opera], [E-Scape][e-scape] and [Techsys][Techsys]. The API for both is exactly the same, just replace '/clickatell/' with '/opera/' or any of the others in the URL.
+There are currently a number of SMS transports available. Clickatell_, Opera_, `E-Scape`_ and Techsys_. The API for both is exactly the same, just replace '/clickatell/' with '/opera/' or any of the others in the URL.
 
-Sending via Clickatell:
+Sending via Clickatell::
 
     http://localhost:8000/api/v1/sms/clickatell/send.json
 
-Sending via Opera:
+Sending via Opera::
 
     http://localhost:8000/api/v1/sms/opera/send.json
 
 
 **Sending SMSs**
+
+::
 
     $ curl -u 'username:password' -X POST \
     >   http://localhost:8000/api/v1/sms/clickatell/send.json \
@@ -151,6 +63,8 @@ Sending via Opera:
 **Sending Batched SMSs**
 
 Sending multiple SMSs is as simple as sending a simple SMS. Just specify multiple values for `to_msisdn`.
+
+::
 
     $ curl -u 'username:password' -X POST \
     >   http://localhost:8000/api/v1/sms/clickatell/send.json \
@@ -190,7 +104,9 @@ Sending multiple SMSs is as simple as sending a simple SMS. Just specify multipl
 
 Personalized SMSs can be sent by specifying a template and the accompanying variables.
 
-All template variables should be prefixed with 'template_'. In the template you can refer to the values without their prefix.
+All template variables should be prefixed with 'template\_'. In the template you can refer to the values without their prefix.
+
+::
 
     $ curl -u 'username:password' -X POST \
     > http://localhost:8000/api/v1/sms/clickatell/template_send.json \
@@ -239,6 +155,8 @@ Once an SMS has been scheduled for sending you can check it's status via the API
 
 **Retrieving one specific SMS**
 
+::
+
     $ curl -u 'username:password' -X GET \
     > http://localhost:8000/api/v1/sms/clickatell/status/1.json \
     {
@@ -254,6 +172,8 @@ Once an SMS has been scheduled for sending you can check it's status via the API
     }
 
 **Retrieving SMSs sent since a specific date**
+
+::
 
     $ curl -u 'username:password' -X GET \
     > http://localhost:8000/api/v1/sms/clickatell/status.json?since=2009-01-01
@@ -275,6 +195,8 @@ Once an SMS has been scheduled for sending you can check it's status via the API
     ]
 
 **Retrieving SMSs by specifying their IDs**
+
+::
 
     $ curl -u 'username:password' -X GET \
     > "http://localhost:8000/api/v1/sms/clickatell/status.json?id=3&id=4"
@@ -308,6 +230,7 @@ Specifying Callbacks
 
 There are two types of callbacks defined. These are `sms_received` and `sms_receipt`. Each trigger an HTTP POST to the given URLs.
 
+::
 
     $ curl -u 'username:password' -X POST \
     > http://localhost:8000/api/v1/account/callbacks.json \
@@ -379,14 +302,7 @@ For a complete listing of the command line options available, use the help comma
     (ve)$ ./manage.py help celeryd
 
 
-[virtualenv]: http://pypi.python.org/pypi/virtualenv
-[pip]: http://pypi.python.org/pypi/pip
-[pypi]: http://pypi.python.org/pypi/
-[GitHub]: http://www.github.com/
-[pubsub]: http://en.wikipedia.org/wiki/Publish/subscribe
-[competing consumers]: http://www.eaipatterns.com/CompetingConsumers.html
-[celery]: http://ask.github.com/celery
-[clickatell]: http://clickatell.com
-[opera]: http://operainteractive.co.za/
-[Techsys]: http://www.techsys.co.za/
-[E-Scape]: http://www.escapetech.net/
+.. _Clickatell: http://clickatell.com
+.. _Opera: http://operainteractive.co.za/
+.. _Techsys: http://www.techsys.co.za/
+.. _E-Scape: http://www.escapetech.net/
