@@ -1,3 +1,12 @@
+The HTTP API
+============
+
+.. note::
+    This documentation is in need of a update. While the features are still
+    correct the underlying implementation of the transports has changed
+    significantly recently. Work is underway to get the docs and the actual
+    code in sync.
+
 Running the Webapp / API
 ------------------------
 
@@ -40,7 +49,8 @@ Sending via Opera::
     http://localhost:8000/api/v1/sms/opera/send.json
 
 
-**Sending SMSs**
+Sending SMSs
+~~~~~~~~~~~~
 
 ::
 
@@ -60,7 +70,8 @@ Sending via Opera::
         }
     ]
 
-**Sending Batched SMSs**
+Sending Batched SMSs
+~~~~~~~~~~~~~~~~~~~~
 
 Sending multiple SMSs is as simple as sending a simple SMS. Just specify multiple values for `to_msisdn`.
 
@@ -100,7 +111,8 @@ Sending multiple SMSs is as simple as sending a simple SMS. Just specify multipl
         }
     ]
 
-**Sending Personalized SMSs**
+Sending Personalized SMSs
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Personalized SMSs can be sent by specifying a template and the accompanying variables.
 
@@ -153,7 +165,8 @@ Checking the status of sent SMSs
 
 Once an SMS has been scheduled for sending you can check it's status via the API. There are 3 options of retrieving previously sent SMSs.
 
-**Retrieving one specific SMS**
+Retrieving one specific SMS
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ::
 
@@ -171,7 +184,8 @@ Once an SMS has been scheduled for sending you can check it's status via the API
         "transport_status": 0
     }
 
-**Retrieving SMSs sent since a specific date**
+Retrieving SMSs sent since a specific date
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ::
 
@@ -194,7 +208,8 @@ Once an SMS has been scheduled for sending you can check it's status via the API
         ...
     ]
 
-**Retrieving SMSs by specifying their IDs**
+Retrieving SMSs by specifying their IDs
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ::
 
@@ -261,22 +276,22 @@ The next time an SMS is received or a SMS receipt is delivered, Vumi will post t
 Accepting delivery receipts from the transports
 -----------------------------------------------
 
-Both [Clickatell][clickatell] and [Opera][opera] support notification of an SMS being delivered. In the general configuration areas of both sites there is an option where a URL callback can be specified. Clickatell or Opera will then post the delivery report to that URL.
+Both Clickatell_ and Opera_ support notification of an SMS being delivered. In the general configuration areas of both sites there is an option where a URL callback can be specified. Clickatell or Opera will then post the delivery report to that URL.
 
 Vumi will accept delivery reports from both:
 
-For [Clickatell][clickatell]:
+For Clickatell_:
 
     http://localhost:8000/api/v1/sms/clickatell/receipt.json
 
-For [Opera][opera]:
+For Opera_:
 
     http://localhost:8000/api/v1/sms/opera/receipt.json
 
 Accepting inbound SMS from the transports
 -----------------------------------------
 
-Like the SMS delivery reports, both [Opera][opera] and [Clickatell][clickatell] will forward incoming SMSs to Vumi. 
+Like the SMS delivery reports, both Opera_ and Clickatell_ will forward incoming SMSs to Vumi. 
 
 For Clickatell the URL is:
 
@@ -287,20 +302,6 @@ For Opera the URL is:
     http://localhost:8000/api/v1/sms/opera/receive.xml
 
 Note the XML suffix on the URL. The resource returns XML whereas Clickatell returns JSON. This is important! Opera can forward our response to further callbacks in their application and it needs to be formatted as XML for upstream callbacks to make sense of it.
-
-Webapp Workers
---------------
-
-Vumi uses [Celery][celery], the distributed task queue. The main Django process only registers when an SMS is received,sent or when a delivery report is received. The real work is done by the Celery workers.
-
-Start the Celery worker via `manage.py`:
-
-    (ve)$ ./manage.py celeryd
-    
-For a complete listing of the command line options available, use the help command:
-
-    (ve)$ ./manage.py help celeryd
-
 
 .. _Clickatell: http://clickatell.com
 .. _Opera: http://operainteractive.co.za/
