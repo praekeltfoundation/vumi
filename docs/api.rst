@@ -6,6 +6,8 @@ The HTTP API
     correct the underlying implementation of the transports has changed
     significantly recently. Work is underway to get the docs and the actual
     code in sync.
+    
+    Specifically all the SMPP and Supervisord stuff is missing from these docs.
 
 Running the Webapp / API
 ------------------------
