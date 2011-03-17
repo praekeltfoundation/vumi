@@ -17,3 +17,4 @@ fabric.config
 fab/*
 .vagrant
 smppsim/
+docs/_build/*
