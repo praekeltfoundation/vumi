@@ -117,10 +117,10 @@ class vumi::virtualenv {
 class vumi::install_smpp_simulator {
     exec { "install_smpp":
         command => "sh install_smpp_simulator.sh",
-        cwd => "/var/praekelt/vumi",
+        cwd => "/var/praekelt/vumi/utils",
         require => Class["vumi::virtualenv"],
         timeout => "-1",
-        onlyif => "test ! -d /var/praekelt/vumi/smppsim"
+        onlyif => "test ! -d /var/praekelt/vumi/utils/smppsim"
     }
 }
 
