@@ -1,0 +1,3 @@
+[submodule "puppet/modules/postgres"]
+	path = puppet/modules/postgres
+	url = https://github.com/smn/puppet-postgres.git
