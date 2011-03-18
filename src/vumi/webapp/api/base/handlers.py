@@ -19,7 +19,7 @@ class SendSMSHandler(BaseHandler):
     allowed_methods = ('GET', 'POST',)
     exclude, fields = specify_fields(SentSMS, 
         include=['transport_status_display'],
-        exclude=['user'])
+        exclude=['user', 'batch'])
     
     def _send_one(self, **kwargs):
         # get the user's profile

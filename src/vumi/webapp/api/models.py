@@ -204,6 +204,10 @@ class URLCallback(models.Model):
 
 class Transport(models.Model):
     name = models.CharField(blank=True, max_length=255)
+    
+    def __unicode__(self):
+        return u"Transport: %s" % self.name
+    
 
 admin.site.register(SentSMS)
 admin.site.register(SentSMSBatch)
@@ -212,3 +216,4 @@ admin.site.register(Profile)
 admin.site.register(URLCallback)
 admin.site.register(SMPPLink)
 admin.site.register(SMPPResp)
+admin.site.register(Transport)
