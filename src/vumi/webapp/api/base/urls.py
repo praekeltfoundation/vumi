@@ -1,7 +1,7 @@
 from django.conf.urls.defaults import *
 from piston.resource import Resource
 from piston.authentication import HttpBasicAuthentication
-from vumi.webapp.api.gateways.clickatell import handlers
+from vumi.webapp.api.base import handlers
 
 ad = {'authentication': HttpBasicAuthentication(realm="Vumi")}
 
