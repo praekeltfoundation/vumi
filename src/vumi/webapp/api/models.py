@@ -58,23 +58,21 @@ CLICKATELL_MESSAGE_STATUSES = (
     (12, 'Out of credit'),
 )
 
-class SendGroup(models.Model):
+class SentSMSBatch(models.Model):
     """A set of Messages to be sent through Vumi"""
     user = models.ForeignKey(User)
     title = models.CharField(blank=False, max_length=100)
     created_at = models.DateTimeField(blank=True, auto_now_add=True)
     updated_at = models.DateTimeField(blank=True, auto_now=True)
     
-    class Admin:
-        list_display = ('',)
-        search_fields = ('',)
-    
     class Meta:
         ordering = ['-created_at']
         get_latest_by = 'created_at'
+        verbose_name = 'Sent SMS Batch'
+        verbose_name_plural = 'Sent SMS Batches'
     
     def __unicode__(self):
-        return u"SendGroup %s: %s (%s) @ %s" % (self.id,
+        return u"SentSMSBatch %s: %s (%s) @ %s" % (self.id,
                                             self.title,
                                             self.user, 
                                             self.created_at)
@@ -83,7 +81,7 @@ class SendGroup(models.Model):
 class SentSMS(models.Model):
     """An Message to be sent through Vumi"""
     user = models.ForeignKey(User)
-    send_group = models.ForeignKey(SendGroup, blank=True, null=True)
+    batch = models.ForeignKey(SentSMSBatch, blank=True, null=True)
     to_msisdn = models.CharField(blank=False, max_length=100)
     from_msisdn = models.CharField(blank=False, max_length=100)
     charset = models.CharField(blank=True, default='utf8', max_length=32)
@@ -95,13 +93,10 @@ class SentSMS(models.Model):
     updated_at = models.DateTimeField(blank=True, auto_now=True)
     delivered_at = models.DateTimeField(blank=True, null=True)
     
-    class Admin:
-        list_display = ('',)
-        search_fields = ('',)
-    
     class Meta:
         ordering = ['-created_at']
         get_latest_by = 'created_at'
+        verbose_name = 'Sent SMS'
     
     def __unicode__(self):
         return u"SentSMS %s -> %s, %s:%s @ %s" % (self.from_msisdn, 
@@ -116,13 +111,10 @@ class SMPPLink(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    class Admin:
-        list_display = ('',)
-        search_fields = ('',)
-    
     class Meta:
         ordering = ['-created_at']
         get_latest_by = 'created_at'
+        verbose_name = 'SMPP Link'
 
     def __unicode__(self):
         return u"SMPPLink %s -> %s @ %s" % (self.sent_sms, 
@@ -138,13 +130,10 @@ class SMPPResp(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    class Admin:
-        list_display = ('',)
-        search_fields = ('',)
-    
     class Meta:
         ordering = ['-created_at']
         get_latest_by = 'created_at'
+        verbose_name = 'SMPP Response'
 
     def __unicode__(self):
         return u"SMPPLink %s : %s = %s @ %s" % (self.sent_sms, 
@@ -164,13 +153,10 @@ class ReceivedSMS(models.Model):
     created_at = models.DateTimeField(blank=True, auto_now_add=True)
     updated_at = models.DateTimeField(blank=True, auto_now=True)
     
-    class Admin:
-        list_display = ('',)
-        search_fields = ('',)
-    
     class Meta:
         ordering = ['-created_at']
         get_latest_by = 'created_at'
+        verbose_name = 'Received SMS'
     
     def as_dict(self):
         """Return variables ready made for a URL callback"""
@@ -190,11 +176,8 @@ class Profile(models.Model):
     user = models.ForeignKey(User, unique=True)
     created_at = models.DateTimeField(blank=True, auto_now_add=True)
     updated_at = models.DateTimeField(blank=True, auto_now=True)
+    transport = models.ForeignKey('Transport', null=True, blank=False)
     
-    class Admin:
-        list_display = ('',)
-        search_fields = ('',)
-
     def __unicode__(self):
         return u"Profile for %s" % self.user
     
@@ -213,13 +196,24 @@ class URLCallback(models.Model):
     created_at = models.DateTimeField(blank=True, auto_now_add=True)
     updated_at = models.DateTimeField(blank=True, auto_now=True)
     
+    class Meta:
+        verbose_name = 'Callback URL'
+    
     def __unicode__(self):
         return u"URLCallback %s - %s" % (self.name, self.url)
 
+class Transport(models.Model):
+    name = models.CharField(blank=True, max_length=255)
+    
+    def __unicode__(self):
+        return u"Transport: %s" % self.name
+    
+
 admin.site.register(SentSMS)
+admin.site.register(SentSMSBatch)
 admin.site.register(ReceivedSMS)
 admin.site.register(Profile)
 admin.site.register(URLCallback)
 admin.site.register(SMPPLink)
 admin.site.register(SMPPResp)
-admin.site.register(SendGroup)
+admin.site.register(Transport)

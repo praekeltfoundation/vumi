@@ -5,7 +5,7 @@ from piston.handler import BaseHandler
 from piston.utils import rc, throttle, require_mime, validate
 from piston.utils import Mimer, FormValidationError
 
-from vumi.webapp.api.models import SentSMS, ReceivedSMS, URLCallback
+from vumi.webapp.api.models import SentSMS, ReceivedSMS, URLCallback, SentSMSBatch
 from vumi.webapp.api import forms
 from vumi.webapp.api import signals
 from vumi.webapp.api.utils import specify_fields
@@ -15,40 +15,50 @@ from alexandria.dsl.utils import dump_menu
 
 import pystache
 
-class SMSReceiptHandler(BaseHandler):
-    # not implemented, gateway doesn't support it
-    allowed_methods = ()
-
-
 class SendSMSHandler(BaseHandler):
     allowed_methods = ('GET', 'POST',)
     exclude, fields = specify_fields(SentSMS, 
         include=['transport_status_display'],
-        exclude=['user'])
+        exclude=['user', 'batch'])
     
     def _send_one(self, **kwargs):
+        # get the user's profile
+        batch = kwargs.get('batch')
+        user = kwargs.get('user')
+        profile = user.get_profile()
+        
         kwargs.update({
-            'transport_name': 'E-scape'
+            'transport_name': profile.transport.name,
+            'user': user.pk,
+            'batch': batch.pk,
         })
+        
         form = forms.SentSMSForm(kwargs)
         if not form.is_valid():
             raise FormValidationError(form)
-        send_sms = form.save()
-        logging.debug('Scheduling an SMS to: %s' % kwargs['to_msisdn'])
-        signals.sms_scheduled.send(sender=SentSMS, instance=send_sms,
-                                    pk=send_sms.pk)
-        return send_sms
+        return form.save()
     
-    @throttle(60, 60) # allow for 1 a second
+    @throttle(6000, 60) # allow for 100 a second
     def create(self, request):
-        return [self._send_one(user=request.user.pk, 
-                                to_msisdn=msisdn,
-                                from_msisdn=request.POST.get('from_msisdn'),
-                                message=request.POST.get('message'))
-                    for msisdn in request.POST.getlist('to_msisdn')]
+        batch = SentSMSBatch.objects.create(title='', user=request.user)
+        
+        for msisdn in request.POST.getlist('to_msisdn'):
+            self._send_one(user=request.user, 
+                            batch = batch,
+                            to_msisdn=msisdn,
+                            from_msisdn=request.POST.get('from_msisdn'),
+                            message=request.POST.get('message'),
+                        )
+        
+        signals.sms_batch_scheduled.send(sender=SentSMSBatch, instance=batch,
+                                            pk=batch.pk)
+        return batch.sentsms_set.all()
     
     @classmethod
     def transport_status_display(kls, instance):
+        """
+        helper method to for human readable transport status display.
+        """
         return instance.transport_status
     
     @throttle(60, 60)
@@ -63,12 +73,15 @@ class SendSMSHandler(BaseHandler):
             return self._read_from_point_in_time(request, start, since)
         
     def _read_one(self, request, sms_id):
+        """Return a single SMS"""
         return request.user.sentsms_set.get(pk=sms_id)
-    
+
     def _read_filtered(self, request, ids):
-        return request.user.sentsms_set.filter(pk__in=map(int, ids))
-    
+        """Return a list of SMSs with the given ids, maximum of 100 at a time"""
+        return request.user.sentsms_set.filter(pk__in=map(int, ids[:100]))
+
     def _read_from_point_in_time(self, request, start, since):
+        """Return 100 records starting at point `start` since timestamp `since`"""
         qs = request.user.sentsms_set.filter(updated_at__gte=since)
         return qs[start:start+100]
     
@@ -79,27 +92,34 @@ class SendTemplateSMSHandler(BaseHandler):
     """
     allowed_methods = ('POST',)
     exclude, fields = specify_fields(SentSMS, 
-        include=['transport_status_display'],
-        exclude=['user', re.compile(r'^_user_cache')])
+        include=['transport_status_display',],
+        exclude=['user','batch', 'transport_msg_id'],
+    )
     
-    def _render_and_send_one(self, to_msisdn, from_msisdn, user_id, \
+    @classmethod
+    def transport_status_display(kls, instance):
+        """
+        helper method to for human readable transport status display.
+        """
+        return instance.transport_status
+    
+    def _render_and_send_one(self, batch, to_msisdn, from_msisdn, user, \
                                 template, context):
         logging.debug('Scheduling an SMS to: %s' % to_msisdn)
+        profile = user.get_profile()
         form = forms.SentSMSForm({
+            'batch': batch.pk,
             'to_msisdn': to_msisdn,
             'from_msisdn': from_msisdn,
             'message': template.render(context=context),
-            'user': user_id,
-            'transport_name': 'Clickatell'
+            'user': user.pk,
+            'transport_name': profile.transport.name
         })
         if not form.is_valid():
             raise FormValidationError(form)
-        send_sms = form.save()
-        signals.sms_scheduled.send(sender=SentSMS, instance=send_sms, 
-                                    pk=send_sms.pk)
-        return send_sms
+        return form.save()
     
-    @throttle(60, 60)
+    @throttle(6000, 60) # allow for 100 a second
     def create(self, request):
         template_string = request.POST.get('template')
         template = pystache.Template(template_string)
@@ -116,47 +136,20 @@ class SendTemplateSMSHandler(BaseHandler):
             response.content = "Number of to_msisdns and template variables" \
                                 " do not match"
             return response
-        responses = []
+        
+        batch = SentSMSBatch.objects.create(title='', user=request.user)
         for msisdn in msisdn_list:
             context = dict([(var_name, var_value_list.pop())
                                 for var_name, var_value_list 
                                 in context_list])
             send_sms = self._render_and_send_one(
+                batch=batch,
                 to_msisdn=msisdn, 
                 from_msisdn=request.POST.get('from_msisdn'), 
-                user_id=request.user.pk,
+                user=request.user,
                 template=template,
                 context=context)
-            responses.append(send_sms)
-        return responses
-
-class ReceiveSMSHandler(BaseHandler):
-    """
-    NOTE: This gateway sends the variables to us via GET instead of POST.
-    """
-    allowed_methods = ('GET',)
-    exclude = ('user',)
-    
-    @throttle(60, 60)
-    def read(self, request):
-        form = forms.ReceivedSMSForm({
-            'user': request.user.pk,
-            'to_msisdn': request.GET.get('r'),
-            'from_msisdn': request.GET.get('s'),
-            'message': request.GET.get('text'),
-            'transport_name': 'E-scape',
-            'transport_msg_id': request.GET.get('smsc'),
-            'received_at': datetime.utcnow()
-        })
-        if not form.is_valid():
-            raise FormValidationError(form)
-        
-        receive_sms = form.save()
-        logging.debug('Receiving an SMS from: %s' % receive_sms.from_msisdn)
-        signals.sms_received.send(sender=ReceivedSMS, instance=receive_sms, 
-                                    pk=receive_sms.pk)
-        response = rc.ALL_OK
-        response.content = ''
-        return response
-
+        signals.sms_batch_scheduled.send(sender=SentSMSBatch, instance=batch,
+                                            pk=batch.pk)
+        return batch.sentsms_set.all()
 

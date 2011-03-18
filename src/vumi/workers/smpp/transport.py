@@ -177,41 +177,6 @@ class SmppTransport(Worker):
         yield self.publisher.publish_json(kwargs, 
             routing_key='sms.%s' % (kwargs.get('destination_addr') or 'fallback',))
 
-
-    @inlineCallbacks
-    def deliver_sm__(self, *args, **kwargs):
-        groupdict = {'title':'reply', 'user':1}
-        groupform = forms.SendGroupForm(groupdict)
-        if not groupform.is_valid():
-            raise FormValidationError(groupform)
-        send_group = groupform.save()
-        sentdict = {
-                'transport_name': 'smpp',
-                'from_msisdn': u'27123456789',
-                'send_group': send_group.id,
-                'user': 1,
-                'to_msisdn': kwargs['source_addr'],
-                'message': 'You said: "'+kwargs['short_message']+'"'
-                }
-        sentform = forms.SentSMSForm(sentdict)
-        if not sentform.is_valid():
-            raise FormValidationError(sentform)
-        sent_sms = sentform.save()
-        sequence_number = self.send_smpp(
-                sent_sms.id,
-                sent_sms.to_msisdn,
-                sent_sms.message
-                )
-        linkdict = {
-                "sent_sms":sent_sms.id,
-                "sequence_number": sequence_number,
-                }
-        log.msg("SMPPLinkForm <- %s" % linkdict)
-        linkform = forms.SMPPLinkForm(linkdict)
-        linkform.save()
-        yield log.msg("DELIVER SM %s" % (sentdict))
-
-
     def send_smpp(self, id, to_msisdn, message, *args, **kwargs):
         print "Sending SMPP, to: %s, message: %s" % (to_msisdn, message)
         route = get_operator_number(to_msisdn,

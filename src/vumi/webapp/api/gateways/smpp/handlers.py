@@ -20,7 +20,7 @@ class SendSMPPHandler(BaseHandler):
     allowed_methods = ('GET', 'POST',)
     exclude, fields = specify_fields(SentSMS,
         include=['transport_status_display'],
-        exclude=['user','send_group'])
+        exclude=['user','batch'])
 
     def _send_one(self, **kwargs):
         kwargs.update({
@@ -35,19 +35,16 @@ class SendSMPPHandler(BaseHandler):
 
     @throttle(6000, 60) # allow for 100 a second
     def create(self, request):
-        form = forms.SendGroupForm({'title':'test group', 'user':request.user.pk})
-        if not form.is_valid():
-            raise FormValidationError(form)
-        send_group = form.save()
+        batch = SentSMSBatch.objects.create(title='', user=request.user)
         returnable = [self._send_one(
-                                send_group=send_group.id,
+                                batch=batch.pk,
                                 user=request.user.pk,
                                 to_msisdn=msisdn,
                                 from_msisdn=request.POST.get('from_msisdn'),
                                 message=request.POST.get('message'))
                     for msisdn in request.POST.getlist('to_msisdn')]
-        signals.sms_scheduled.send(sender=SentSMS, instance=send_group,
-                pk=send_group.pk)
-        return {"send_group":send_group.id,
-                "group_list":send_group.sentsms_set.all()}
+        signals.sms_batch_scheduled.send(sender=SentSMSBatch, instance=batch,
+                pk=batch.pk)
+        return {"send_group":batch.pk,
+                "group_list":batch.sentsms_set.all()}
 

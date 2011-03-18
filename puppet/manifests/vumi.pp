@@ -29,10 +29,8 @@ class vumi::dependencies {
 class vumi::accounts {
     exec { "rabbitmq_user":
         command => "sudo rabbitmqctl add_user vumi vumi
-            sudo rabbitmqctl add_vhost /staging && \
-            sudo rabbitmqctl set_permissions -p /staging vumi '.*' '.*' '.*'
-            sudo rabbitmqctl add_vhost /production && \
-            sudo rabbitmqctl set_permissions -p /production vumi '.*' '.*' '.*'
+            sudo rabbitmqctl add_vhost /development && \
+            sudo rabbitmqctl set_permissions -p /development vumi '.*' '.*' '.*'
             true
             ",
         user => "root",

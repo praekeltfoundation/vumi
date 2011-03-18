@@ -15,22 +15,22 @@ class Command(BaseCommand):
         if len(args) > 0:
             count = int(args[0])
         print "COUNT:", count
-        send_group = self.by_orm(count)
-        self.by_custom_sql(count, send_group)
+        batch = self.by_orm(count)
+        self.by_custom_sql(count, batch)
 
 
     def by_orm(self, count):
         start = datetime.now()
 
-        form1 = forms.SendGroupForm({'title':'writetest', 'user':1})
+        form1 = forms.SentSMSBatchForm({'title':'writetest', 'user':1})
         if not form1.is_valid():
             raise FormValidationError(form1)
-        send_group = form1.save()
+        batch = form1.save()
         for x in range(count):
             dictionary = {
                     'transport_name': 'smpp',
                     'from_msisdn': u'27123456789',
-                    'send_group': send_group.id,
+                    'batch': batch.pk,
                     'user': 1,
                     'to_msisdn': u'27123456789',
                     'message': u'hello world',
@@ -44,9 +44,9 @@ class Command(BaseCommand):
 
         delta = datetime.now() - start
         print 'time to write messages =', delta
-        return send_group
+        return batch
 
-    def by_custom_sql(self, count, send_group):
+    def by_custom_sql(self, count, batch):
         start = datetime.now()
 
         cursor = connection.cursor()
@@ -54,7 +54,7 @@ class Command(BaseCommand):
             cursor.execute("""
             INSERT INTO "api_sentsms" (
                 "user_id",
-                "send_group_id",
+                "batch_id",
                 "to_msisdn",
                 "from_msisdn",
                 "charset",
@@ -80,7 +80,7 @@ class Command(BaseCommand):
                 %s,
                 NULL
             )
-            """, [send_group.id, send_group.created_at, send_group.updated_at])
+            """, [batch.id, batch.created_at, batch.updated_at])
         transaction.commit_unless_managed()
 
         delta = datetime.now() - start
