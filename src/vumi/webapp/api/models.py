@@ -65,10 +65,6 @@ class SendGroup(models.Model):
     created_at = models.DateTimeField(blank=True, auto_now_add=True)
     updated_at = models.DateTimeField(blank=True, auto_now=True)
     
-    class Admin:
-        list_display = ('',)
-        search_fields = ('',)
-    
     class Meta:
         ordering = ['-created_at']
         get_latest_by = 'created_at'
