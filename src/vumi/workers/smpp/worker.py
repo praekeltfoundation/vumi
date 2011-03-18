@@ -8,6 +8,7 @@ from vumi.webapp.api import utils
 
 import json
 import time
+from datetime import datetime
 
 from vumi.webapp.api import models
 
@@ -26,6 +27,24 @@ class SMSKeywordConsumer(Consumer):
         head = message.split(' ')[0]
         try:
             user = User.objects.get(username=head)
+            
+            received_sms = models.ReceivedSMS()
+            received_sms.user = user
+            received_sms.to_msisdn = dictionary.get('destination_addr')
+            received_sms.from_msisdn = dictionary.get('source_addr')
+            received_sms.message = dictionary.get('short_message')
+            
+            # FIXME: this is hacky
+            received_sms.transport_name = self.queue_name.split('.')[-1]
+            # FIXME: EsmeTransceiver doesn't publish these over JSON / AMQP
+            # received_sms.transport_msg_id = ...
+            # FIXME: this isn't accurate, we might receive it much earlier than
+            #        we save it because it could be queued / backlogged.
+            received_sms.received_at = datetime.now()
+            # FIXME: this is where the fun begins, guessing charsets.
+            # received_sms.charset = ...
+            received_sms.save()
+            
             profile = user.get_profile()
             urlcallback_set = profile.urlcallback_set.filter(name='sms_received')
             for urlcallback in urlcallback_set:
@@ -42,14 +61,10 @@ class SMSKeywordConsumer(Consumer):
                     log.msg('RESP: %s' % resp)
                 except Exception, e:
                     log.err(e)
-
+            
         except User.DoesNotExist:
             log.msg("Couldn't find user for message: %s" % message)
         log.msg("DELIVER SM %s consumed by %s" % (json.dumps(dictionary),self.__class__.__name__))
-
-
-#class FallbackSMSKeywordConsumer(SMSKeywordConsumer):
-    #routing_key = 'sms.fallback'
 
 
 def dynamically_create_keyword_consumer(name,**kwargs):
@@ -71,7 +86,6 @@ class SMSKeywordWorker(Worker):
                     routing_key='sms.%s' % msisdn,
                     queue_name='sms.keywords.%s' % network.lower()
                 ))
-        #yield self.start_consumer(FallbackSMSKeywordConsumer)
 
     def stopWorker(self):
         log.msg("Stopping the SMSKeywordWorker")
@@ -167,7 +181,8 @@ class SMSBatchConsumer(Consumer):
     durable = True
     delivery_mode = 2
     queue_name = "sms_send"
-    routing_key = "vumi.*"
+    # FIXME: topical routing key for direct exchange type?
+    routing_key = "vumi.webapp.sms.send"
 
     def __init__(self, publisher):
         self.publisher = publisher
@@ -178,10 +193,10 @@ class SMSBatchConsumer(Consumer):
         kwargs = dictionary.get('kwargs')
         if kwargs:
             pk = kwargs.get('pk')
-            for o in models.SentSMS.objects.filter(send_group=pk):
+            for o in models.SentSMS.objects.filter(batch=pk):
                 mess = {
                         'transport_name':o.transport_name,
-                        'send_group':o.send_group_id,
+                        'batch':o.batch_id,
                         'from_msisdn':o.from_msisdn,
                         'user':o.user_id,
                         'to_msisdn':o.to_msisdn,
