@@ -91,10 +91,6 @@ class SentSMS(models.Model):
     updated_at = models.DateTimeField(blank=True, auto_now=True)
     delivered_at = models.DateTimeField(blank=True, null=True)
     
-    class Admin:
-        list_display = ('',)
-        search_fields = ('',)
-    
     class Meta:
         ordering = ['-created_at']
         get_latest_by = 'created_at'
@@ -112,10 +108,6 @@ class SMPPLink(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    class Admin:
-        list_display = ('',)
-        search_fields = ('',)
-    
     class Meta:
         ordering = ['-created_at']
         get_latest_by = 'created_at'
@@ -134,10 +126,6 @@ class SMPPResp(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    class Admin:
-        list_display = ('',)
-        search_fields = ('',)
-    
     class Meta:
         ordering = ['-created_at']
         get_latest_by = 'created_at'
@@ -159,10 +147,6 @@ class ReceivedSMS(models.Model):
     received_at = models.DateTimeField(blank=False)
     created_at = models.DateTimeField(blank=True, auto_now_add=True)
     updated_at = models.DateTimeField(blank=True, auto_now=True)
-    
-    class Admin:
-        list_display = ('',)
-        search_fields = ('',)
     
     class Meta:
         ordering = ['-created_at']
@@ -188,10 +172,6 @@ class Profile(models.Model):
     updated_at = models.DateTimeField(blank=True, auto_now=True)
     transport = models.ForeignKey('Transport', null=True, blank=False)
     
-    class Admin:
-        list_display = ('',)
-        search_fields = ('',)
-
     def __unicode__(self):
         return u"Profile for %s" % self.user
     
