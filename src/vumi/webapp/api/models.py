@@ -190,6 +190,7 @@ class Profile(models.Model):
     user = models.ForeignKey(User, unique=True)
     created_at = models.DateTimeField(blank=True, auto_now_add=True)
     updated_at = models.DateTimeField(blank=True, auto_now=True)
+    transport = models.ForeignKey('Transport', null=True, blank=False)
     
     class Admin:
         list_display = ('',)
@@ -215,6 +216,9 @@ class URLCallback(models.Model):
     
     def __unicode__(self):
         return u"URLCallback %s - %s" % (self.name, self.url)
+
+class Transport(models.Model):
+    name = models.CharField(blank=True, max_length=255)
 
 admin.site.register(SentSMS)
 admin.site.register(ReceivedSMS)

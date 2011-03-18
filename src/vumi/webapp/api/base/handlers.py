@@ -26,10 +26,10 @@ class SendSMSHandler(BaseHandler):
         # get the user's profile
         user = kwargs.get('user')
         profile = user.get_profile()
-        transport = profile.transport_set.latest()
         
         kwargs.update({
-            'transport_name': transport.name
+            'transport_name': profile.transport.name,
+            'user': user.pk,
         })
         
         form = forms.SentSMSForm(kwargs)
@@ -89,20 +89,27 @@ class SendTemplateSMSHandler(BaseHandler):
     """
     allowed_methods = ('POST',)
     exclude, fields = specify_fields(SentSMS, 
-        include=['transport_status_display'],
-        exclude=['user', re.compile(r'^_user_cache')])
+        include=['transport_status_display',],
+        exclude=['user','send_group', 'transport_msg_id'],
+    )
+    
+    @classmethod
+    def transport_status_display(kls, instance):
+        """
+        helper method to for human readable transport status display.
+        """
+        return instance.transport_status
     
     def _render_and_send_one(self, to_msisdn, from_msisdn, user, \
                                 template, context):
         logging.debug('Scheduling an SMS to: %s' % to_msisdn)
-        profile = uset.get_profile()
-        transport = profile.transport_set.latest()
+        profile = user.get_profile()
         form = forms.SentSMSForm({
             'to_msisdn': to_msisdn,
             'from_msisdn': from_msisdn,
             'message': template.render(context=context),
-            'user': user_id,
-            'transport_name': transport.name
+            'user': user.pk,
+            'transport_name': profile.transport.name
         })
         if not form.is_valid():
             raise FormValidationError(form)
@@ -140,5 +147,5 @@ class SendTemplateSMSHandler(BaseHandler):
                 template=template,
                 context=context)
             responses.append(send_sms)
-        return responses
+        return SentSMS.objects.filter(pk__in=map(lambda r: r.pk, responses))
 
