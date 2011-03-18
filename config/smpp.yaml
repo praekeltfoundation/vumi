@@ -8,6 +8,9 @@ interface_version: "34"
 dest_addr_ton: 1
 dest_addr_npi: 1
 
+# Number Recognition
+COUNTRY_CODE: "27"
+
 OPERATOR_NUMBER:
     NETWORK1: "27761234561"
     NETWORK2: "27761234562"
