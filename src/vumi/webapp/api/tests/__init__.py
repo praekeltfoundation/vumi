@@ -4,4 +4,3 @@
 from api import *
 from clickatell import *
 from opera import *
-from e_scape import *
