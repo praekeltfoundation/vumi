@@ -404,4 +404,3 @@ def cleanup(branch,limit=5):
             'limit': limit
         }
     )
-
