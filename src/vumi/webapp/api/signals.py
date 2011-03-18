@@ -1,7 +1,7 @@
 import logging
 from django.dispatch import Signal
 from vumi.webapp.api.models import Profile
-from vumi.webapp.api.tasks import SendSMSTask, ReceiveSMSTask, DeliveryReportTask, SendGroupSMSTask
+from vumi.webapp.api.tasks import SendSMSTask, ReceiveSMSTask, DeliveryReportTask, SendSMSBatchTask
 
 # custom signals for the api
 sms_batch_scheduled = Signal(providing_args=['instance', 'pk'])
@@ -20,9 +20,9 @@ def sms_scheduled_worker(sent_sms):
 def sms_batch_scheduled_handler(*args, **kwargs):
     sms_batch_scheduled_worker(kwargs['instance'])
 
-def sms_batch_scheduled_worker(send_group):
+def sms_batch_scheduled_worker(batch):
     """Responsible for scheduling jobs for the debatcher"""
-    SendGroupSMSTask.delay(pk=send_group.pk)
+    SendSMSBatchTask.delay(pk=batch.pk)
 
 def sms_received_handler(*args, **kwargs):
     sms_received_worker(kwargs['instance'])
@@ -47,8 +47,8 @@ def create_profile_worker(user):
     Profile.objects.create(user=user)
 
 
-from vumi.webapp.api.models import SentSMS, ReceivedSMS, SendGroup
-sms_batch_scheduled.connect(sms_batch_scheduled_handler, sender=SendGroup)
+from vumi.webapp.api.models import SentSMS, ReceivedSMS, SentSMSBatch
+sms_batch_scheduled.connect(sms_batch_scheduled_handler, sender=SentSMSBatch)
 sms_scheduled.connect(sms_scheduled_handler, sender=SentSMS)
 sms_received.connect(sms_received_handler, sender=ReceivedSMS)
 sms_receipt.connect(sms_receipt_handler, sender=SentSMS)

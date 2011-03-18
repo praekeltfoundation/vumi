@@ -1,9 +1,9 @@
 from django import forms
-from vumi.webapp.api.models import SentSMS, URLCallback, ReceivedSMS, SMPPLink, SMPPResp, SendGroup
+from vumi.webapp.api.models import SentSMS, URLCallback, ReceivedSMS, SMPPLink, SMPPResp, SentSMSBatch
 
-class SendGroupForm(forms.ModelForm):
+class SentSMSBatchForm(forms.ModelForm):
     class Meta:
-        model = SendGroup
+        model = SentSMSBatch
 
 class SentSMSForm(forms.ModelForm):
     class Meta:
