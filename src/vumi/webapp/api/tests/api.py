@@ -47,9 +47,9 @@ class BaseSMSHandlerTestCase(TestCase):
         })
         self.assertEquals(resp.status_code, 200)
         self.assertEquals(SentSMS.objects.count(), 1)
-        self.assertEquals(SendGroup.objects.count(), 1)
-        group = SendGroup.objects.all()[0]
-        self.assertEquals(group.sentsms_set.count(), 1)
+        self.assertEquals(SentSMSBatch.objects.count(), 1)
+        batch = SentSMSBatch.objects.all()[0]
+        self.assertEquals(batch.sentsms_set.count(), 1)
 
     def test_batch_sms_sending(self):
         self.assertEquals(SentSMS.objects.count(), 0)
@@ -60,9 +60,9 @@ class BaseSMSHandlerTestCase(TestCase):
         })
         self.assertEquals(resp.status_code, 200)
         self.assertEquals(SentSMS.objects.count(), 3)
-        self.assertEquals(SendGroup.objects.count(), 1)
-        group = SendGroup.objects.all()[0]
-        self.assertEquals(group.sentsms_set.count(), 3)
+        self.assertEquals(SentSMSBatch.objects.count(), 1)
+        batch = SentSMSBatch.objects.all()[0]
+        self.assertEquals(batch.sentsms_set.count(), 3)
 
     def test_template_sms_sending(self):
         self.assertEquals(SentSMS.objects.count(), 0)
@@ -75,9 +75,9 @@ class BaseSMSHandlerTestCase(TestCase):
         })
         self.assertEquals(resp.status_code, 200)
         self.assertEquals(SentSMS.objects.count(), 3)
-        self.assertEquals(SendGroup.objects.count(), 1)
-        group = SendGroup.objects.all()[0]
-        self.assertEquals(group.sentsms_set.count(), 3)
+        self.assertEquals(SentSMSBatch.objects.count(), 1)
+        batch = SentSMSBatch.objects.all()[0]
+        self.assertEquals(batch.sentsms_set.count(), 3)
     
 
 
