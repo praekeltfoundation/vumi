@@ -26,6 +26,22 @@ class SMSKeywordConsumer(Consumer):
         head = message.split(' ')[0]
         try:
             user = User.objects.get(username=head)
+            
+            sms_received = models.SMSReceived()
+            sms_received.user = user
+            sms_received.to_msisdn = dictionary.get('destination_addr')
+            sms_received.from_msisdn = dictionary.get('source_addr')
+            sms_received.message = dictionary.get('short_message')
+            
+            # FIXME: this is hacky
+            sms_received.transport_name = self.queue_name.split('.')[-1]
+            # FIXME: EsmeTransceiver doesn't publish these over JSON / AMQP
+            # sms_received.transport_msg_id = ...
+            # sms_received.received_at = ...
+            # FIXME: this is where the fun begins, guessing charsets.
+            # sms_received.charset = ...
+            sms_received.save()
+            
             profile = user.get_profile()
             urlcallback_set = profile.urlcallback_set.filter(name='sms_received')
             for urlcallback in urlcallback_set:
@@ -42,14 +58,10 @@ class SMSKeywordConsumer(Consumer):
                     log.msg('RESP: %s' % resp)
                 except Exception, e:
                     log.err(e)
-
+            
         except User.DoesNotExist:
             log.msg("Couldn't find user for message: %s" % message)
         log.msg("DELIVER SM %s consumed by %s" % (json.dumps(dictionary),self.__class__.__name__))
-
-
-#class FallbackSMSKeywordConsumer(SMSKeywordConsumer):
-    #routing_key = 'sms.fallback'
 
 
 def dynamically_create_keyword_consumer(name,**kwargs):
@@ -71,7 +83,6 @@ class SMSKeywordWorker(Worker):
                     routing_key='sms.%s' % msisdn,
                     queue_name='sms.keywords.%s' % network.lower()
                 ))
-        #yield self.start_consumer(FallbackSMSKeywordConsumer)
 
     def stopWorker(self):
         log.msg("Stopping the SMSKeywordWorker")

@@ -68,6 +68,8 @@ class SentSMSBatch(models.Model):
     class Meta:
         ordering = ['-created_at']
         get_latest_by = 'created_at'
+        verbose_name = 'Sent SMS Batch'
+        verbose_name_plural = 'Sent SMS Batches'
     
     def __unicode__(self):
         return u"SentSMSBatch %s: %s (%s) @ %s" % (self.id,
@@ -94,6 +96,7 @@ class SentSMS(models.Model):
     class Meta:
         ordering = ['-created_at']
         get_latest_by = 'created_at'
+        verbose_name = 'Sent SMS'
     
     def __unicode__(self):
         return u"SentSMS %s -> %s, %s:%s @ %s" % (self.from_msisdn, 
@@ -111,6 +114,7 @@ class SMPPLink(models.Model):
     class Meta:
         ordering = ['-created_at']
         get_latest_by = 'created_at'
+        verbose_name = 'SMPP Link'
 
     def __unicode__(self):
         return u"SMPPLink %s -> %s @ %s" % (self.sent_sms, 
@@ -129,6 +133,7 @@ class SMPPResp(models.Model):
     class Meta:
         ordering = ['-created_at']
         get_latest_by = 'created_at'
+        verbose_name = 'SMPP Response'
 
     def __unicode__(self):
         return u"SMPPLink %s : %s = %s @ %s" % (self.sent_sms, 
@@ -151,6 +156,7 @@ class ReceivedSMS(models.Model):
     class Meta:
         ordering = ['-created_at']
         get_latest_by = 'created_at'
+        verbose_name = 'Received SMS'
     
     def as_dict(self):
         """Return variables ready made for a URL callback"""
@@ -189,6 +195,9 @@ class URLCallback(models.Model):
     url = fields.AuthenticatedURLField(blank=True, verify_exists=False)
     created_at = models.DateTimeField(blank=True, auto_now_add=True)
     updated_at = models.DateTimeField(blank=True, auto_now=True)
+    
+    class Meta:
+        verbose_name = 'Callback URL'
     
     def __unicode__(self):
         return u"URLCallback %s - %s" % (self.name, self.url)
