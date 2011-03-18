@@ -5,7 +5,7 @@ from piston.handler import BaseHandler
 from piston.utils import rc, throttle, require_mime, validate
 from piston.utils import Mimer, FormValidationError
 
-from vumi.webapp.api.models import SentSMS, ReceivedSMS, URLCallback
+from vumi.webapp.api.models import SentSMS, ReceivedSMS, URLCallback, SendGroup
 from vumi.webapp.api import forms
 from vumi.webapp.api import signals
 from vumi.webapp.api.utils import specify_fields
@@ -22,34 +22,37 @@ class SendSMSHandler(BaseHandler):
         exclude=['user'])
     
     def _send_one(self, **kwargs):
-        
         # get the user's profile
+        send_group = kwargs.get('send_group')
         user = kwargs.get('user')
         profile = user.get_profile()
         
         kwargs.update({
             'transport_name': profile.transport.name,
             'user': user.pk,
+            'send_group': send_group.pk,
         })
         
         form = forms.SentSMSForm(kwargs)
         if not form.is_valid():
             raise FormValidationError(form)
-        
-        send_sms = form.save()
-        logging.debug('Scheduling an SMS to: %s' % kwargs['to_msisdn'])
-        signals.sms_scheduled.send(sender=SentSMS, instance=send_sms,
-                                    pk=send_sms.pk)
-        return send_sms
+        return form.save()
     
     @throttle(6000, 60) # allow for 100 a second
     def create(self, request):
-        return [self._send_one(user=request.user, 
-                                to_msisdn=msisdn,
-                                from_msisdn=request.POST.get('from_msisdn'),
-                                message=request.POST.get('message'),
-                                )
-                    for msisdn in request.POST.getlist('to_msisdn')]
+        send_group = SendGroup.objects.create(title='', user=request.user)
+        
+        for msisdn in request.POST.getlist('to_msisdn'):
+            self._send_one(user=request.user, 
+                            send_group = send_group,
+                            to_msisdn=msisdn,
+                            from_msisdn=request.POST.get('from_msisdn'),
+                            message=request.POST.get('message'),
+                        )
+        
+        signals.sms_batch_scheduled.send(sender=SendGroup, instance=send_group,
+                                            pk=send_group.pk)
+        return send_group.sentsms_set.all()
     
     @classmethod
     def transport_status_display(kls, instance):
@@ -100,11 +103,12 @@ class SendTemplateSMSHandler(BaseHandler):
         """
         return instance.transport_status
     
-    def _render_and_send_one(self, to_msisdn, from_msisdn, user, \
+    def _render_and_send_one(self, send_group, to_msisdn, from_msisdn, user, \
                                 template, context):
         logging.debug('Scheduling an SMS to: %s' % to_msisdn)
         profile = user.get_profile()
         form = forms.SentSMSForm({
+            'send_group': send_group.pk,
             'to_msisdn': to_msisdn,
             'from_msisdn': from_msisdn,
             'message': template.render(context=context),
@@ -113,10 +117,7 @@ class SendTemplateSMSHandler(BaseHandler):
         })
         if not form.is_valid():
             raise FormValidationError(form)
-        send_sms = form.save()
-        signals.sms_scheduled.send(sender=SentSMS, instance=send_sms, 
-                                    pk=send_sms.pk)
-        return send_sms
+        return form.save()
     
     @throttle(6000, 60) # allow for 100 a second
     def create(self, request):
@@ -135,17 +136,20 @@ class SendTemplateSMSHandler(BaseHandler):
             response.content = "Number of to_msisdns and template variables" \
                                 " do not match"
             return response
-        responses = []
+        
+        send_group = SendGroup.objects.create(title='', user=request.user)
         for msisdn in msisdn_list:
             context = dict([(var_name, var_value_list.pop())
                                 for var_name, var_value_list 
                                 in context_list])
             send_sms = self._render_and_send_one(
+                send_group=send_group,
                 to_msisdn=msisdn, 
                 from_msisdn=request.POST.get('from_msisdn'), 
                 user=request.user,
                 template=template,
                 context=context)
-            responses.append(send_sms)
-        return SentSMS.objects.filter(pk__in=map(lambda r: r.pk, responses))
+        signals.sms_batch_scheduled.send(sender=SendGroup, instance=send_group,
+                                            pk=send_group.pk)
+        return send_group.sentsms_set.all()
 
