@@ -19,6 +19,7 @@ urlpatterns = patterns('',
 
 # gateways
 urlpatterns += patterns('',
+    (r'^sms/', include('vumi.webapp.api.base.urls')),
     (r'^sms/clickatell/', 
         include('vumi.webapp.api.gateways.clickatell.urls', 
                     namespace='clickatell')),
