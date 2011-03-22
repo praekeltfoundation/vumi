@@ -160,16 +160,25 @@ class vumi {
                 vumi::database
 }
 
-Exec["Resynchronize apt package index"] ~> Class["vumi::packages"] ~> Class["vumi::accounts"]
+Exec["Resynchronize apt package index"] 
+    -> Class["vumi::packages"] 
+    -> Class["vumi::accounts"]
 
-File["/var/praekelt"] ~> Exec["Clone git repository"] ~> Exec["Checkout development branch"] ~> Exec["Create virtualenv"] ~> Exec["Install requirements"] ~> Class["vumi::database"]
-File["/var/praekelt"] ~> Exec["Update git repository"] ~> Exec["Install requirements"] ~> Class["vumi::database"]
+File["/var/praekelt"] 
+    -> Exec["Clone git repository"]
+    -> Exec["Update git repository"]
+    -> Exec["Checkout development branch"] 
+    -> Exec["Create virtualenv"] 
+    -> Exec["Install requirements"] 
+    -> Class["vumi::database"]
 
-Exec["Install requirements"] ~> Exec["Install Vumi package"]
-Exec["Install requirements"] ~> Exec["Install Selenium SMPPSim"]
+Exec["Install requirements"]
+    -> Exec["Install Vumi package"]
+    -> Exec["Install Selenium SMPPSim"]
 
-Class["vumi::database"] ~> Exec["Create Vumi Django user"]
-Exec["Create Vumi Django user"] ~> Exec["Start Vumi"]
-Exec["Create Vumi Django user"] ~> Exec["Restart Vumi"]
+Exec["Install Vumi package"] 
+    -> Exec["Create Vumi Django user"]
+    -> Exec["Restart Vumi"]
+    -> Exec["Start Vumi"]
 
 include vumi
