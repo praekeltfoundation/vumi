@@ -161,22 +161,17 @@ class vumi {
 }
 
 Exec["Resynchronize apt package index"] 
+    -> File["/var/praekelt"] 
     -> Class["vumi::packages"] 
     -> Class["vumi::accounts"]
-
-File["/var/praekelt"] 
     -> Exec["Clone git repository"]
     -> Exec["Update git repository"]
     -> Exec["Checkout development branch"] 
     -> Exec["Create virtualenv"] 
+    -> Exec["Install Selenium SMPPSim"]
     -> Exec["Install requirements"] 
     -> Class["vumi::database"]
-
-Exec["Install requirements"]
     -> Exec["Install Vumi package"]
-    -> Exec["Install Selenium SMPPSim"]
-
-Exec["Install Vumi package"] 
     -> Exec["Create Vumi Django user"]
     -> Exec["Restart Vumi"]
     -> Exec["Start Vumi"]
