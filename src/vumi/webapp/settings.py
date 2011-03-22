@@ -141,20 +141,6 @@ import os
 CELERY_ALWAYS_EAGER = os.environ.get('VUMI_SKIP_QUEUE', False)
 CELERY_TASK_SERIALIZER = "json"
 
-# for Clickatell
-from clickatell import constants as cc
-CLICKATELL_USERNAME = ''
-CLICKATELL_PASSWORD = ''
-CLICKATELL_API_ID = ''
-CLICKATELL_DEFAULTS = {
-    'sendmsg': {
-        'callback': cc.CALLBACK_ALL,
-        'deliv_ack': cc.YES,
-        'req_feat': cc.FEAT_ALPHA + cc.FEAT_NUMER + cc.FEAT_DELIVACK,
-        'msg_type': cc.SMS_DEFAULT,
-    }
-}
-
 # for Opera
 OPERA_SERVICE_ID = ''
 OPERA_PASSWORD = ''
