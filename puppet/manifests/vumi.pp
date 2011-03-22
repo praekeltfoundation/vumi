@@ -27,15 +27,17 @@ class vumi::dependencies {
 }
 
 class vumi::accounts {
-    exec { "rabbitmq_user":
-        command => "sudo rabbitmqctl add_user vumi vumi
-            sudo rabbitmqctl add_vhost /development && \
-            sudo rabbitmqctl set_permissions -p /development vumi '.*' '.*' '.*'
-            true
-            ",
-        user => "root",
-        require => Class["vumi::dependencies"],
+    
+    rabbitmq::vhost { "/development":
+        ensure => present
     }
+    
+    rabbitmq::user { "vumi":
+        ensure => present,
+        password => "vumi",
+        vhost => '/development'
+    }
+    
     postgres::role { "vumi":
         ensure => present,
         password => "vumi",
