@@ -72,18 +72,20 @@ class vumi::layout {
 }
 
 class vumi::clone_repo {
-    exec { "clone_repo":
-        command => "git clone http://github.com/praekelt/vumi.git && \
-                    cd vumi && \
-                    git checkout -b develop origin/develop && \
-                    git submodule update --init
-                    ",
+    exec { "Clone git repository":
+        command => "git clone http://github.com/praekelt/vumi.git",
         cwd => "/var/praekelt",
         require => Class["vumi::layout"],
-        onlyif => "test ! -d /var/praekelt/vumi/.git"
+        unless => "test -d /var/praekelt/vumi/.git"
     }
-    exec { "pull repo":
-        command => "pwd && git pull && git submodule update --init",
+    exec { "Checkout development branch":
+        command => "git checkout -b develop origin/develop",
+        cwd => "/var/praekelt/vumi",
+        require => Class["vumi::layout"],
+        unless => "git branch | grep '* develop'"
+    }
+    exec { "Update git repository":
+        command => "git pull",
         cwd => "/var/praekelt/vumi",
         require => Class["vumi::layout"],
         onlyif => "test -d /var/praekelt/vumi/.git"
@@ -91,43 +93,52 @@ class vumi::clone_repo {
 }
 
 class vumi::virtualenv {
-    exec { "create_virtualenv":
-        command => "virtualenv --no-site-packages ve && \
-                        . ve/bin/activate && \
-                        pip install -r config/requirements.pip && \
-                        python setup.py develop && \
-                    deactivate",
+    exec { "Create virtualenv":
+        command => "virtualenv --no-site-packages ve",
         cwd => "/var/praekelt/vumi",
         require => Class["vumi::clone_repo"],
-        timeout => "-1", # disable timeout
-        onlyif => "test ! -d ve"
+        unless => "test -d ve"
     }
-    exec { "update_virtualenv":
+    exec { "Install requirements":
         command => ". ve/bin/activate && \
                         pip install -r config/requirements.pip && \
-                        python setup.py develop && \
                     deactivate",
         cwd => "/var/praekelt/vumi",
         require => Class["vumi::clone_repo"],
         timeout => "-1", # disable timeout
         onlyif => "test -d ve"
     }
+    exec { "Install Vumi package":
+        command => ". ve/bin/activate && \
+                        python setup.py develop && \
+                    deactivate",
+        cwd => "/var/praekelt/vumi",
+        require => Class["vumi::clone_repo"],
+        onlyif => "test -d ve"
+    }
 }
 
 class vumi::install_smpp_simulator {
-    exec { "install_smpp":
+    exec { "Install Selenium SMPPSim":
         command => "sh install_smpp_simulator.sh",
         cwd => "/var/praekelt/vumi/utils",
         require => Class["vumi::virtualenv"],
         timeout => "-1",
-        onlyif => "test ! -d /var/praekelt/vumi/utils/smppsim"
+        unless => "test -d /var/praekelt/vumi/utils/smppsim"
     }
 }
 
 class vumi::syncdb {
-    exec { "syncdb":
+    exec { "Syncdb":
         command => ". ve/bin/activate && \
                         ./manage.py syncdb --noinput && \
+                    deactivate
+                    ",
+        cwd => "/var/praekelt/vumi",
+        require => Class["vumi::install_smpp_simulator"],
+    }
+    exec { "Migrate":
+        command => ". ve/bin/activate && \
                         ./manage.py migrate --all && \
                     deactivate
                     ",
@@ -137,7 +148,7 @@ class vumi::syncdb {
 }
 
 class vumi::createadmin {
-    exec { "createadmin":
+    exec { "Create Vumi Django user":
         command => ". ve/bin/activate && \
             echo \"from django.contrib.auth.models import *; u, created = User.objects.get_or_create(username='vumi', is_superuser=True, is_staff=True); u.set_password('vumi'); u.save()\" | ./manage.py shell && \
         deactivate",
@@ -147,16 +158,15 @@ class vumi::createadmin {
 }
 
 class vumi::startup {
-    exec { "restart_vumi":
+    exec { "Restart Vumi":
         command => ". ve/bin/activate && \
-                        supervisorctl reread && \
                         supervisorctl reload && \
                     deactivate",
         cwd => "/var/praekelt/vumi",
         require => Class["vumi::createadmin"],
         onlyif => "ps -p `cat tmp/pids/supervisord.pid`"
     }
-    exec { "start_vumi":
+    exec { "Start Vumi":
         command => ". ve/bin/activate && \
                         supervisord && \
                     deactivate",
