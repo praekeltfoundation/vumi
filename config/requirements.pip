@@ -15,7 +15,7 @@ iso8601==0.1.4
 supervisor
 psycopg2
 South==0.7.3
+smn-alexandria==0.1
 -e git+git://github.com/praekelt/python-ssmi.git#egg=python-ssmi
--e git+git://github.com/smn/alexandria.git#egg=smn-alexandria
 -e git+git://github.com/inoi/nosedjango.git#egg=nosedjango
 -e git+git://github.com/dmaclay/python-smpp.git#egg=python-smpp
