@@ -28,14 +28,14 @@ class vumi::dependencies {
 
 class vumi::accounts {
     
-    rabbitmq::vhost { "/development":
+    rabbitmq::vhost { "/develop":
         ensure => present
     }
     
     rabbitmq::user { "vumi":
         ensure => present,
         password => "vumi",
-        vhost => '/development'
+        vhost => '/develop'
     }
     
     postgres::role { "vumi":
