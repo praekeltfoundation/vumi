@@ -71,6 +71,7 @@ def deploy(branch):
     
     Internally this does the following:
     
+        * Shut down the current supervisord daemon if it is running
         * `git pull` if a cached repository already exists
         * `git clone` if it's the first deploy ever
         * Checkout the current selected branch
@@ -79,9 +80,14 @@ def deploy(branch):
         * Setup the virtualenv
         * Install PIP's requirements, downloading new ones if not already cached
         * Symlink `<branch>/current` to `<branch>/releases/<timestamped release directory>`
-        * Shut down the current supervisord daemon if it is running
     
     """
+    # shutdown supervisord daemon if it exists
+    try:
+        shutdown(branch)
+    except Exception, e:
+        print e
+
     if not git.is_repository(_repo_path(env.github_repo_name)):
         # repository doesn't exist, do a fresh clone
         with cd(env.repo_path):
@@ -120,8 +126,6 @@ def deploy(branch):
     create_virtualenv(branch)
     # ensure we're deploying the exact revision as we locally have
     base.set_current(new_release_name)
-    # shutdown supervisord daemon
-    shutdown(branch)
 
 
 @_setup_env
