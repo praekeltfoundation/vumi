@@ -102,7 +102,7 @@ BROKER_HOST = "localhost"
 BROKER_PORT = 5672
 BROKER_USER = "vumi"
 BROKER_PASSWORD = "vumi"
-BROKER_VHOST = "/development"
+BROKER_VHOST = "/develop"
 
 if DEBUG:
     CELERYD_LOG_LEVEL = 'DEBUG'
