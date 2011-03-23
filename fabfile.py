@@ -291,12 +291,14 @@ def update(branch):
         $ fab update:staging
         
     Only to be used for small fixed, typos etc..
-    
+
+    Wraps this in a git stash/apply operation
     """
     current_release = base.releases(env.releases_path)[-1]
     with cd(_join(env.current, env.github_repo_name)):
+        run("git stash")
         git.pull(branch)
-
+        run("git stash apply")
 
 @_setup_env
 def supervisor(branch, command):
