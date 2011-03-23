@@ -365,7 +365,7 @@ def restart(branch,app=None):
     
     """
     if not app:
-        return supervisor(branch,"reload") # restart the daemon
+        return reload(branch) # restart the daemon
     return supervisor(branch,"restart %s" % cmd(app))
 
 @_setup_env
