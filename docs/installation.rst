@@ -7,14 +7,13 @@ The easiest way to get Vumi up & running is by using VirtualBox_ and Vagrant_:
     2. Install Vagrant_, make sure you follow the `OS specific instructions`_.
     3. Clone Vumi with `git clone https://github.com/praekelt/vumi.git`
     4. Execute `cd vumi`
-    5. Execute `git submodule update --init` to pull in the submodules.
-    6. Execute `vagrant up`, this will take some time to complete as it:
+    5. Execute `vagrant up`, this will take some time to complete as it:
         1. Downloads a 480MB Ubuntu 10.04 server VM
         2. Downloads ~ 40MB worth of Python packages
         3. Downloads ~ 100MB worth of packages with `apt-get`
-    7. Go to http://localhost:9000/admin and log in with username `vumi` and password `vumi` for the Django based webapp.
-    8. Go to http://localhost:9001 for the SMSC simulator
-    9. Go to http://localhost:9010 for the Supervisord web based management console.
+    6. Go to http://localhost:9000/admin and log in with username `vumi` and password `vumi` for the Django based webapp.
+    7. Go to http://localhost:9001 for the SMSC simulator
+    8. Go to http://localhost:9010 for the Supervisord web based management console.
 
 
 

@@ -12,6 +12,10 @@ The HTTP API
 Running the Webapp / API
 ------------------------
 
+.. note::
+    If you're running the Vumi VM all of this database setup stuff is done
+    for you already and you can skip straight ahead to `Scheduling SMS for delivery via the API`.
+
 The webapp is a regular Django application. Before you start make sure the `DATABASE` settings in `src/vumi/webapp/settings.py` are up to date. `Vumi` is being developed with `PostgreSQL` as the default backend for the Django ORM but this isn't a requirement.
 
 To setup PostgreSQL::
@@ -40,16 +44,8 @@ Scheduling SMS for delivery via the API
 
 The API is HTTP with concepts borrowed from REST. All URLs have rate limiting and require HTTP Basic Authentication.
 
-There are currently a number of SMS transports available. Clickatell_, Opera_, `E-Scape`_ and Techsys_. The API for both is exactly the same, just replace '/clickatell/' with '/opera/' or any of the others in the URL.
-
-Sending via Clickatell::
-
-    http://localhost:8000/api/v1/sms/clickatell/send.json
-
-Sending via Opera::
-
-    http://localhost:8000/api/v1/sms/opera/send.json
-
+First of all create a user account in Vumi and assign it a transport. In the Vumi VM, create a transport with the name 'Clickatell' and assign it to your
+newly created user.
 
 Sending SMSs
 ~~~~~~~~~~~~
@@ -57,7 +53,7 @@ Sending SMSs
 ::
 
     $ curl -u 'username:password' -X POST \
-    >   http://localhost:8000/api/v1/sms/clickatell/send.json \
+    >   http://localhost:8000/api/v1/sms/send.json \
     >   -d 'to_msisdn=27123456789' \
     >   -d 'from_msisdn=27123456789' \
     >   -d 'message=hello world'
@@ -80,7 +76,7 @@ Sending multiple SMSs is as simple as sending a simple SMS. Just specify multipl
 ::
 
     $ curl -u 'username:password' -X POST \
-    >   http://localhost:8000/api/v1/sms/clickatell/send.json \
+    >   http://localhost:8000/api/v1/sms/send.json \
     >   -d 'to_msisdn=27123456780' \
     >   -d 'to_msisdn=27123456781' \
     >   -d 'to_msisdn=27123456782' \
@@ -123,7 +119,7 @@ All template variables should be prefixed with 'template\_'. In the template you
 ::
 
     $ curl -u 'username:password' -X POST \
-    > http://localhost:8000/api/v1/sms/clickatell/template_send.json \
+    > http://localhost:8000/api/v1/sms/template_send.json \
     > -d 'to_msisdn=27123456789' \
     > -d 'to_msisdn=27123456789' \
     > -d 'to_msisdn=27123456789' \
@@ -173,7 +169,7 @@ Retrieving one specific SMS
 ::
 
     $ curl -u 'username:password' -X GET \
-    > http://localhost:8000/api/v1/sms/clickatell/status/1.json \
+    > http://localhost:8000/api/v1/sms/status/1.json \
     {
         "delivered_at": null, 
         "created_at": "2010-05-14 16:31:01", 
@@ -192,7 +188,7 @@ Retrieving SMSs sent since a specific date
 ::
 
     $ curl -u 'username:password' -X GET \
-    > http://localhost:8000/api/v1/sms/clickatell/status.json?since=2009-01-01
+    > http://localhost:8000/api/v1/sms/status.json?since=2009-01-01
     [
         {
             "delivered_at": null, 
@@ -216,7 +212,7 @@ Retrieving SMSs by specifying their IDs
 ::
 
     $ curl -u 'username:password' -X GET \
-    > "http://localhost:8000/api/v1/sms/clickatell/status.json?id=3&id=4"
+    > "http://localhost:8000/api/v1/sms/status.json?id=3&id=4"
     [
         {
             "delivered_at": null, 
@@ -252,10 +248,10 @@ There are two types of callbacks defined. These are `sms_received` and `sms_rece
     $ curl -u 'username:password' -X POST \
     > http://localhost:8000/api/v1/account/callbacks.json \
     > -d 'name=sms_received' \
-    > -d 'url=http://localhost/sms/clickatell/received/callback'
+    > -d 'url=http://localhost/sms/received/callback'
     {
         "name": "sms_received", 
-        "url": "http://localhost/sms/clickatell/received/callback", 
+        "url": "http://localhost/sms/received/callback", 
         "created_at": "2010-07-22 21:27:24", 
         "updated_at": "2010-07-22 21:27:24", 
         "id": 3
@@ -264,10 +260,10 @@ There are two types of callbacks defined. These are `sms_received` and `sms_rece
     $ curl -u 'username:password' -X POST \
     > http://localhost:8000/api/v1/account/callbacks.json \
     > -d 'name=sms_receipt' \
-    > -d 'url=http://localhost/sms/clickatell/receipt/callback'
+    > -d 'url=http://localhost/sms/receipt/callback'
     {
         "name": "sms_receipt", 
-        "url": "http://localhost/sms/clickatell/receipt/callback", 
+        "url": "http://localhost/sms/receipt/callback", 
         "created_at": "2010-07-22 21:32:33", 
         "updated_at": "2010-07-22 21:32:33", 
         "id": 4
@@ -278,7 +274,7 @@ The next time an SMS is received or a SMS receipt is delivered, Vumi will post t
 Accepting delivery receipts from the transports
 -----------------------------------------------
 
-Both Clickatell_ and Opera_ support notification of an SMS being delivered. In the general configuration areas of both sites there is an option where a URL callback can be specified. Clickatell or Opera will then post the delivery report to that URL.
+Both Clickatell_'s HTTP API and Opera_ support notification of an SMS being delivered. In the general configuration areas of both sites there is an option where a URL callback can be specified. Clickatell or Opera will then post the delivery report to that URL. If you're using the Vumi VM then the Clickatell delivery receipt URL will not be used as the delivery reports are received and processed over the SMPP Transport.
 
 Vumi will accept delivery reports from both:
 
@@ -293,7 +289,7 @@ For Opera_:
 Accepting inbound SMS from the transports
 -----------------------------------------
 
-Like the SMS delivery reports, both Opera_ and Clickatell_ will forward incoming SMSs to Vumi. 
+Like the SMS delivery reports, both Opera_ and Clickatell_ will forward incoming SMSs to Vumi (if using their HTTP APIs).
 
 For Clickatell the URL is:
 
