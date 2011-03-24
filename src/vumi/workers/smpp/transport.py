@@ -175,7 +175,9 @@ class SmppTransport(Worker):
     @inlineCallbacks
     def deliver_sm(self, *args, **kwargs):
         yield self.publisher.publish_json(kwargs, 
-            routing_key='sms.%s' % (kwargs.get('destination_addr') or 'fallback',))
+            routing_key='sms.inbound.%s.%s' % (
+                self.config.get('UPSTREAM', ''),
+                kwargs.get('destination_addr')))
 
     def send_smpp(self, id, to_msisdn, message, *args, **kwargs):
         print "Sending SMPP, to: %s, message: %s" % (to_msisdn, message)

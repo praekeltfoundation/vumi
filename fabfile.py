@@ -120,8 +120,12 @@ def deploy(branch):
     create_virtualenv(branch)
     # ensure we're deploying the exact revision as we locally have
     base.set_current(new_release_name)
-    # shutdown supervisord daemon
-    shutdown(branch)
+
+    # shutdown supervisord daemon if it exists
+    try:
+        shutdown(branch)
+    except Exception, e:
+        print e
 
 
 @_setup_env
@@ -291,10 +295,12 @@ def update(branch):
         $ fab update:staging
         
     Only to be used for small fixed, typos etc..
-    
+
+    Runs git stash first to undo fabdir effects
     """
     current_release = base.releases(env.releases_path)[-1]
     with cd(_join(env.current, env.github_repo_name)):
+        run("git stash")
         git.pull(branch)
 
 
@@ -363,7 +369,7 @@ def restart(branch,app=None):
     
     """
     if not app:
-        return supervisor(branch,"reload") # restart the daemon
+        return reload(branch) # restart the daemon
     return supervisor(branch,"restart %s" % cmd(app))
 
 @_setup_env

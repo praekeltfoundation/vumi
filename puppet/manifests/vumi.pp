@@ -39,14 +39,14 @@ class vumi::packages {
 # Create these accounts
 class vumi::accounts {
     
-    rabbitmq::vhost { "/development":
-        ensure => present,
+    rabbitmq::vhost { "/develop":
+        ensure => present
     }
     
     rabbitmq::user { "vumi":
         ensure => present,
         password => "vumi",
-        vhost => '/development',
+        vhost => '/develop'
     }
     
     postgres::role { "vumi":
