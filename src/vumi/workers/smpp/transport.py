@@ -179,7 +179,6 @@ class SmppTransport(Worker):
                 self.config.get('UPSTREAM', ''),
                 kwargs.get('destination_addr')))
 
-
     def send_smpp(self, id, to_msisdn, message, *args, **kwargs):
         print "Sending SMPP, to: %s, message: %s" % (to_msisdn, message)
         route = get_operator_number(to_msisdn,
