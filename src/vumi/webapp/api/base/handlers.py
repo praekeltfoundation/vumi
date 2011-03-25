@@ -41,7 +41,6 @@ class SendSMSHandler(BaseHandler):
     @throttle(6000, 60) # allow for 100 a second
     def create(self, request):
         batch = SentSMSBatch.objects.create(title='', user=request.user)
-        
         for msisdn in request.POST.getlist('to_msisdn'):
             self._send_one(user=request.user, 
                             batch = batch,
