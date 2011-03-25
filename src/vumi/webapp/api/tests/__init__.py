@@ -2,5 +2,6 @@
 # class with the same name only the last one imported will actually get
 # tested
 from api import *
+from client import *
 from clickatell import *
 from opera import *
