@@ -39,7 +39,7 @@ class SendSMPPHandler(BaseHandler):
     def create(self, request):
         batch = SentSMSBatch.objects.create(title='', user=request.user)
         user = User.objects.get(username=request.user)
-        transport = user.profile.transport.name
+        transport = user.get_profile().transport.name
         returnable = [self._send_one(
                                 transport_name=transport,
                                 batch=batch.pk,
