@@ -38,21 +38,21 @@ class vumi::packages {
 
 # Create these accounts
 class vumi::accounts {
-    
     rabbitmq::vhost { "/develop":
         ensure => present
     }
-    
     rabbitmq::user { "vumi":
         ensure => present,
         password => "vumi",
         vhost => '/develop'
     }
-    
     postgres::role { "vumi":
         ensure => present,
         password => "vumi",
     }
+}
+
+class vumi::database {
     postgres::database { "vumi":
         ensure => present,
         owner => vumi,
@@ -114,21 +114,19 @@ exec { "Install Selenium SMPPSim":
     unless => "test -d /var/praekelt/vumi/utils/smppsim"
 }
 
-class vumi::database {
-    exec { "Syncdb":
-        command => ". ve/bin/activate && \
-                        ./manage.py syncdb --noinput && \
-                    deactivate
-                    ",
-        cwd => "/var/praekelt/vumi",
-    }
-    exec { "Migrate":
-        command => ". ve/bin/activate && \
-                        ./manage.py migrate --all && \
-                    deactivate
-                    ",
-        cwd => "/var/praekelt/vumi",
-    }
+exec { "Syncdb":
+    command => ". ve/bin/activate && \
+                    ./manage.py syncdb --noinput && \
+                deactivate
+                ",
+    cwd => "/var/praekelt/vumi",
+}
+exec { "Migrate":
+    command => ". ve/bin/activate && \
+                    ./manage.py migrate --all && \
+                deactivate
+                ",
+    cwd => "/var/praekelt/vumi",
 }
 
 exec { "Create Vumi Django user":
@@ -164,14 +162,16 @@ Exec["Resynchronize apt package index"]
     -> File["/var/praekelt"] 
     -> Class["vumi::packages"] 
     -> Class["vumi::accounts"]
+    -> Class["vumi::database"]
     -> Exec["Clone git repository"]
     -> Exec["Update git repository"]
     -> Exec["Checkout development branch"] 
     -> Exec["Create virtualenv"] 
     -> Exec["Install Selenium SMPPSim"]
     -> Exec["Install requirements"] 
-    -> Class["vumi::database"]
     -> Exec["Install Vumi package"]
+    -> Exec['Syncdb']
+    -> Exec['Migrate']
     -> Exec["Create Vumi Django user"]
     -> Exec["Restart Vumi"]
     -> Exec["Start Vumi"]
