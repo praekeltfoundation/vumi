@@ -231,7 +231,7 @@ class IndivPublisher(Publisher):
     delivery_mode = 2
 
     def publish_json(self, dictionary, **kwargs):
-        print i"@@@@@@@@@@@@@@@@@@@@", dictionary['transport_name']
+        print "@@@@@@@@@@@@@@@@@@@@", dictionary['transport_name']
         log.msg("Publishing JSON %s with extra args: %s" % (dictionary, kwargs))
         super(IndivPublisher, self).publish_json(dictionary, **kwargs)
 
