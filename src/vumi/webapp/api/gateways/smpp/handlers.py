@@ -13,6 +13,8 @@ from vumi.webapp.api.utils import specify_fields
 from alexandria.loader.base import YAMLLoader
 from alexandria.dsl.utils import dump_menu
 
+from django.contrib.auth.models import User
+
 import pystache
 
 
@@ -23,9 +25,9 @@ class SendSMPPHandler(BaseHandler):
         exclude=['user','batch'])
 
     def _send_one(self, **kwargs):
-        kwargs.update({
-            'transport_name': 'smpp'
-        })
+        #kwargs.update({
+            #'transport_name': 'smpp'
+        #})
         form = forms.SentSMSForm(kwargs)
         if not form.is_valid():
             raise FormValidationError(form)
@@ -36,7 +38,10 @@ class SendSMPPHandler(BaseHandler):
     @throttle(6000, 60) # allow for 100 a second
     def create(self, request):
         batch = SentSMSBatch.objects.create(title='', user=request.user)
+        user = User.objects.get(username=request.user)
+        transport = user.profile.transport.name
         returnable = [self._send_one(
+                                transport_name=transport,
                                 batch=batch.pk,
                                 user=request.user.pk,
                                 to_msisdn=msisdn,
