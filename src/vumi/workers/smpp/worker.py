@@ -232,6 +232,10 @@ class IndivPublisher(Publisher):
 
     def publish_json(self, dictionary, **kwargs):
         print "@@@@@@@@@@@@@@@@@@@@", dictionary['transport_name']
+        print kwargs
+        tranport = str(dictionary.get('transport_name', 'fallback')).lower()
+        key = 'sms.outbound.' + transport
+        print key
         log.msg("Publishing JSON %s with extra args: %s" % (dictionary, kwargs))
         super(IndivPublisher, self).publish_json(dictionary, **kwargs)
 
