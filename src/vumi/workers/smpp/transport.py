@@ -39,6 +39,7 @@ class SmppConsumer(Consumer):
 
     def __init__(self, send_callback):
         self.send = send_callback
+        log.msg("Consuming on %s -> %s" % (self.routing_key, self.queue_name))
 
     def consume_json(self, dictionary):
         log.msg("Consumed JSON %s" % dictionary)
