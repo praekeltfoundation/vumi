@@ -1,4 +1,4 @@
-import json, re
+import json, re, urllib, urllib2, base64
 from functools import wraps
 from collections import namedtuple
 from datetime import datetime
@@ -104,13 +104,63 @@ def auto_response(function):
             raise ClientException, 'Bad Response: %s' % response.status_code
     return decorator
 
+
+class RequestWithMethod(urllib2.Request):
+    def __init__(self, url, method, data=None, headers={},\
+                    origin_req_host=None, unverifiable=False):
+        self._method = method
+        urllib2.Request.__init__(self, url, data, headers,\
+                                    origin_req_host, unverifiable)
+    
+    def get_method(self):
+        if self._method:
+            return self._method.upper()
+        else:
+            return urllib2.Request.get_method(self)
+
+class ApiResponse(object):
+    
+    def __init__(self, url_response):
+        self.status_code = url_response.code
+        self.content = url_response.read()
+    
+
+class Connection(object):
+    
+    def __init__(self, username, password, base_url):
+        self.username = username
+        self.password = password
+        self.credentials = base64.encodestring("%s:%s" % (self.username, self.password)).strip()
+        self.base_url = base_url
+    
+    def request(self, method, path, data):
+        url = self.base_url + path
+        data = urllib.urlencode(data)
+        request = RequestWithMethod(url, method, data=data)
+        request.add_header('User-Agent', 'Vumi API Client/0.1')
+        request.add_header('Authorization', 'Basic %s' % self.credentials)
+        return ApiResponse(urllib2.urlopen(request))
+    
+    def get(self, *args, **kwargs):
+        return self.request('get', *args, **kwargs)
+    
+    def post(self, *args, **kwargs):
+        return self.request('post', *args, **kwargs)
+    
+    def put(self, *args, **kwargs):
+        return self.request('put', *args, **kwargs)
+    
+    def delete(self, *args, **kwargs):
+        return self.request('delete', *args, **kwargs)
+        
+
 class Client(object):
     """
     A client for Vumi's HTTP API.
     """
     
-    def __init__(self, connection):
-        self.connection = connection
+    def __init__(self, username, password, connection=None):
+        self.connection = connection or Connection(username, password, base_url='http://vumi.praekeltfoundation.org')
     
     @auto_response
     def send_sms(self, **kwargs):
