@@ -167,7 +167,7 @@ class Client(object):
         """
         Send one or more SMS messages::
         
-            >>> client = Client()
+            >>> client = Client(username, password)
             >>> client.send_sms(to_msisdn='27123456789', from_msisdn='27123456789', message='hello world')
             [SendSmsResponse(...), ...]
             >>>
@@ -184,7 +184,7 @@ class Client(object):
         """
         Send one or more personalized SMS messages::
         
-            >>> client = Client()
+            >>> client = Client(username, password)
             >>> client.send_template_sms(template = 'Hello {{ name }} {{ surname }}',
             ...        from_msisdn = '27123456789',
             ...        to_msisdns = {
@@ -226,7 +226,7 @@ class Client(object):
         """
         Get the status of a sent sms batch::
         
-            >>> client = Client()
+            >>> client = Client(username, password)
             >>> client.get_status(1)
             GetStatusResponse(...)
             >>>
@@ -241,7 +241,7 @@ class Client(object):
         """
         Get the status of SMSs sent since a specific date::
         
-            >>> client = Client()
+            >>> client = Client(username, password)
             >>> client.get_status_since(datetime.now() - timedelta(days=1))
             [GetStatusSinceResponse(...), ...]
             >>>
@@ -255,7 +255,7 @@ class Client(object):
         """
         Get the status of SMSs sent by their ids::
         
-            >>> client = Client()
+            >>> client = Client(username, password)
             >>> client.get_status_by_id(id=[1,2])
             [GetStatusByIdResponse(...), ...]
             >>>
@@ -269,7 +269,7 @@ class Client(object):
         """
         Specify a URL callback for an event type::
         
-            >>> client = Client()
+            >>> client = Client(username, password)
             >>> client.set_callback('sms_received', 'http://localhost/...')
             SetCallbackResponse(...)
             >>>
@@ -288,7 +288,7 @@ class Client(object):
         """
         Update a URL callback::
         
-            >>> client = Client()
+            >>> client = Client(username, password)
             >>> client.update_callback(1, 'http://localhost/update/...')
             UpdateCallbackResponse(...)
             >>>
@@ -305,7 +305,7 @@ class Client(object):
         """
         Delete a URL callback::
         
-            >>> client = Client()
+            >>> client = Client(username, password)
             >>> client.delete_callback(1)
             DeleteCallBackResponse(success=True)
             >>>

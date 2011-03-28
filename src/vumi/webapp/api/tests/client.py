@@ -25,7 +25,7 @@ class APIClientTestCase(TestCase):
         
         auth_creds = base64.encodestring('vumi:vumi').strip()
         self.http_client = HTTPClient(HTTP_AUTHORIZATION='Basic %s' % auth_creds)
-        self.client = Client(connection=self.http_client)
+        self.client = Client('vumi','vumi', connection=self.http_client)
     
     def teardown(self):
         pass
