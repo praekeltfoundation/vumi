@@ -12,8 +12,8 @@ Contents:
    :maxdepth: 2
    
    installation.rst
-   
    api.rst
+   client.rst
    
 
 Indices and tables
