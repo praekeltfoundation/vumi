@@ -187,7 +187,7 @@ class SmppTransport(Worker):
     def deliver_sm(self, *args, **kwargs):
         yield self.publisher.publish_json(kwargs, 
             routing_key='sms.inbound.%s.%s' % (
-                self.config.get('UPSTREAM', ''),
+                self.config.get('UPSTREAM', '').lower(),
                 kwargs.get('destination_addr')))
 
     def send_smpp(self, id, to_msisdn, message, *args, **kwargs):
