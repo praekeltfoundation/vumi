@@ -127,8 +127,8 @@ class SmppTransport(Worker):
         #self.consumer = yield self.start_consumer(SmppConsumer, self.send_smpp)
         upstream = self.config.get('UPSTREAM', '')
         yield self.start_consumer(dynamically_create_smpp_consumer(upstream,
-                    routing_key='sms.outbound.%s' % upstream,
-                    queue_name='sms.outbound.%s' % upstream
+                    #routing_key='sms.outbound.%s' % upstream,
+                    #queue_name='sms.outbound.%s' % upstream
                 ), self.send_smpp)
 
 
