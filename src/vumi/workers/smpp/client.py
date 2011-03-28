@@ -165,7 +165,7 @@ class EsmeTransceiver(Protocol):
                     +' +done date:(?P<done_date>\d*)'
                     +' +stat:(?P<stat>[A-Z]{7})'
                     +' +err:(?P<err>...)'
-                    +' +text:(?P<text>.{,20})'
+                    +' +[Tt]ext:(?P<text>.{,20})'
                     +'.*',
                     pdu['body']['mandatory_parameters']['short_message']
                     )
