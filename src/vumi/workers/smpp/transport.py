@@ -34,11 +34,12 @@ class SmppConsumer(Consumer):
     exchange_type = "direct"
     durable = True
     auto_delete = False
-    queue_name = "sms.outbound.clickatell"
-    routing_key = "sms.outbound.clickatell"
+    queue_name = "sms.outbound.fallback"
+    routing_key = "sms.outbound.fallback"
 
     def __init__(self, send_callback):
         self.send = send_callback
+        log.msg("Consuming on %s -> %s" % (self.routing_key, self.queue_name))
 
     def consume_json(self, dictionary):
         log.msg("Consumed JSON %s" % dictionary)
@@ -55,6 +56,10 @@ class SmppConsumer(Consumer):
     def consume(self, message):
         if self.consume_json(json.loads(message.content.body)):
             self.ack(message)
+
+
+def dynamically_create_smpp_consumer(name, **kwargs):
+    return type("%s_SmppConsumer" % name, (SmppConsumer,), kwargs)
 
 
 class SmppPublisher(Publisher):
@@ -119,7 +124,13 @@ class SmppTransport(Worker):
         self.publisher = yield self.start_publisher(SmppPublisher)
         # Start the consumer, pass along the send_smpp callback for sending
         # back consumed AMQP messages over SMPP.
-        self.consumer = yield self.start_consumer(SmppConsumer, self.send_smpp)
+        #self.consumer = yield self.start_consumer(SmppConsumer, self.send_smpp)
+        upstream = self.config.get('UPSTREAM', 'fallback').lower()
+        print "UPSTREAM >>>>", upstream
+        yield self.start_consumer(dynamically_create_smpp_consumer(upstream,
+                    routing_key='sms.outbound.%s' % upstream,
+                    queue_name='sms.outbound.%s' % upstream
+                ), self.send_smpp)
 
 
     @inlineCallbacks
@@ -176,7 +187,7 @@ class SmppTransport(Worker):
     def deliver_sm(self, *args, **kwargs):
         yield self.publisher.publish_json(kwargs, 
             routing_key='sms.inbound.%s.%s' % (
-                self.config.get('UPSTREAM', ''),
+                self.config.get('UPSTREAM', '').lower(),
                 kwargs.get('destination_addr')))
 
     def send_smpp(self, id, to_msisdn, message, *args, **kwargs):

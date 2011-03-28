@@ -163,7 +163,7 @@ class SMSReceiptWorker(Worker):
     @inlineCallbacks
     def startWorker(self):
         log.msg("Starting the SMSReceiptWorkers for: %s" % self.config.get('OPERATOR_NUMBER'))
-        upstream = self.config.get('UPSTREAM', '')
+        upstream = self.config.get('UPSTREAM', '').lower()
         yield self.start_consumer(dynamically_create_receipt_consumer(upstream,
                     routing_key='sms.receipt.%s' % upstream,
                     queue_name='sms.receipt.%s' % upstream
@@ -225,12 +225,15 @@ class IndivPublisher(Publisher):
     """
     exchange_name = "vumi"
     exchange_type = "direct"
-    routing_key = "sms.outbound.clickatell"
+    routing_key = "sms.outbound.fallback"
     durable = True
     auto_delete = False
     delivery_mode = 2
 
     def publish_json(self, dictionary, **kwargs):
+        transport = str(dictionary.get('transport_name', 'fallback')).lower()
+        routing_key = 'sms.outbound.' + transport
+        kwargs.update({'routing_key':routing_key})
         log.msg("Publishing JSON %s with extra args: %s" % (dictionary, kwargs))
         super(IndivPublisher, self).publish_json(dictionary, **kwargs)
 
