@@ -5,6 +5,7 @@ from piston.utils import Mimer, FormValidationError, rc
 
 from vumi.webapp.api.models import URLCallback
 from vumi.webapp.api.forms import URLCallbackForm
+from vumi.webapp.api.utils import specify_fields
 
 from alexandria.loader.base import YAMLLoader
 from alexandria.dsl.utils import dump_menu
@@ -36,7 +37,9 @@ class ConversationHandler(BaseHandler):
 
 class URLCallbackHandler(BaseHandler):
     allowed_methods = ('POST', 'PUT', 'GET', 'DELETE')
-    exclude = ('profile','id')
+    exclude, fields = specify_fields(URLCallback, 
+        include=['name', 'url'],
+        exclude=['user','profile',])
     
     @throttle(60, 60)
     def update(self, request, callback_id=None):

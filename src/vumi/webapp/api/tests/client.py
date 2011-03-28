@@ -1,10 +1,10 @@
 from django.test import TestCase
 from django.test.client import Client as HTTPClient
 from django.contrib.auth.models import User
-from vumi.webapp.api.models import Transport
+from vumi.webapp.api.models import Transport, SentSMS, SentSMSBatch
 from vumi.webapp.api.client import Client
 import base64
-from datetime import datetime
+from datetime import datetime, timedelta
 
 class APIClientTestCase(TestCase):
     
@@ -47,7 +47,7 @@ class APIClientTestCase(TestCase):
     
     def test_send_multiple_sms(self):
         resp = self.client.send_sms(
-            to_msisdns = ['27123456788', '27123456789'],
+            to_msisdn = ['27123456788', '27123456789'],
             from_msisdn = '27123456789',
             message = 'hello world')
         self.assertTrue(len(resp), 2)
@@ -82,5 +82,76 @@ class APIClientTestCase(TestCase):
         self.assertTrue(all(o.from_msisdn == '27123456789' for o in resp))
         self.assertEquals(set(o.message for o in resp), 
                             set([u'Hello Foo Bar', u'Hello Boo Far']))
+    
+    def test_sms_status(self):
+        send_resp = self.client.send_sms(
+            to_msisdn = ['27123456788',],
+            from_msisdn = '27123456789',
+            message = 'hello world')
+        sent_sms = send_resp[0]
+        status = self.client.get_status(sent_sms.id)
+        self.assertEquals(status.to_msisdn, u'27123456788')
+        self.assertEquals(status.from_msisdn, u'27123456789')
+        self.assertEquals(status.message, u'hello world')
+        self.assertEquals(status.transport_status, u'')
+        self.assertEquals(status.transport_status_display, u'')
+        self.assertEquals(status.batch_id, sent_sms.batch_id)
+    
+    def test_sms_status_since(self):
+        # prime the db with old SMSs sent
+        user = User.objects.get(username='vumi')
+        batch = SentSMSBatch.objects.create(user=user, title='batch')
+        # create the sent_sms
+        sent_sms = SentSMS.objects.create(
+            user = user,
+            batch = batch,
+            to_msisdn = '27123456789',
+            from_msisdn = '27123456789',
+            transport_name = 'Clickatell',
+            message = 'hello world'
+        )
+        # reset the date to 1 month back, django automatically timestamps
+        # for now() at creation
+        SentSMS.objects.filter(pk=sent_sms.pk).update(
+            created_at = datetime.now() - timedelta(days=20),
+            updated_at = datetime.now() - timedelta(days=20),
+        )
         
+        # 10 days before
+        self.assertEquals(len(self.client.get_status_since(
+            since = datetime.now() - timedelta(days=30))), 1)
+        # 10 days after
+        self.assertEquals(len(self.client.get_status_since(
+            since = datetime.now() - timedelta(days=10))), 0)
+        
+    def test_sms_status_by_id(self):
+        send_resp = self.client.send_sms(
+            to_msisdn = ['27123456787','27123456788','27123456789'],
+            from_msisdn = '27123456789',
+            message = 'hello world')
+        
+        ids = [sent_sms.id for sent_sms in send_resp[:-1]]
+        statuses = self.client.get_status_by_id(id=ids)
+        self.assertEquals(len(statuses), 2)
+        self.assertTrue(all((status.id in ids) for status in statuses))
+    
+    def test_sms_received_callback(self):
+        url = 'http://username:password@localhost/received'
+        # create
+        callback_resp = self.client.set_callback(
+            event='sms_received',
+            url=url
+        )
+        self.assertTrue(callback_resp.url, url)
+        # update
+        callback_resp = self.client.update_callback(
+            id=callback_resp.id,
+            url=url + '/update'
+        )
+        self.assertTrue(callback_resp.url, url + '/update')
+        # delete
+        callback_resp = self.client.delete_callback(
+            id=callback_resp.id
+        )
+        self.assertTrue(callback_resp.success)
     

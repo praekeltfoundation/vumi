@@ -18,7 +18,7 @@ import pystache
 class SendSMSHandler(BaseHandler):
     allowed_methods = ('GET', 'POST',)
     exclude, fields = specify_fields(SentSMS, 
-        include=['transport_status_display'],
+        include=['transport_status_display', 'batch_id'],
         exclude=['user', 'batch'])
     
     def _send_one(self, **kwargs):
@@ -91,7 +91,7 @@ class SendTemplateSMSHandler(BaseHandler):
     """
     allowed_methods = ('POST',)
     exclude, fields = specify_fields(SentSMS, 
-        include=['transport_status_display',],
+        include=['transport_status_display', 'batch_id'],
         exclude=['user','batch', 'transport_msg_id'],
     )
     
