@@ -80,7 +80,7 @@ class SMSKeywordWorker(Worker):
     @inlineCallbacks
     def startWorker(self):
         log.msg("Starting the SMSKeywordWorkers for: %s" % self.config.get('OPERATOR_NUMBER'))
-        upstream = self.config.get('UPSTREAM')
+        upstream = self.config.get('TRANSPORT_NAME')
         for network,msisdn in self.config.get('OPERATOR_NUMBER').items():
             if len(msisdn):
                 yield self.start_consumer(dynamically_create_keyword_consumer(network,
@@ -163,7 +163,7 @@ class SMSReceiptWorker(Worker):
     @inlineCallbacks
     def startWorker(self):
         log.msg("Starting the SMSReceiptWorkers for: %s" % self.config.get('OPERATOR_NUMBER'))
-        upstream = self.config.get('UPSTREAM', '').lower()
+        upstream = self.config.get('TRANSPORT_NAME', '').lower()
         yield self.start_consumer(dynamically_create_receipt_consumer(upstream,
                     routing_key='sms.receipt.%s' % upstream,
                     queue_name='sms.receipt.%s' % upstream
