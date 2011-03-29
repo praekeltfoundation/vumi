@@ -115,15 +115,15 @@ if DEBUG:
 else:
     CELERYD_LOG_FILE = 'logs/vumi.celeryd.log'
 
-#CELERY_QUEUES = {
-    #"default": {
-        #"exchange": "vumi",
-        #"binding_key": "vumi.webapp",
-    #}
-#}
-#CELERY_DEFAULT_QUEUE = "default"
-#CELERY_DEFAULT_EXCHANGE_TYPE = "direct"
-#CELERY_DEFAULT_ROUTING_KEY = "vumi.webapp"
+CELERY_QUEUES = {
+    "default": {
+        "exchange": "vumi",
+        "binding_key": "vumi.webapp",
+    }
+}
+CELERY_DEFAULT_QUEUE = "default"
+CELERY_DEFAULT_EXCHANGE_TYPE = "direct"
+CELERY_DEFAULT_ROUTING_KEY = "vumi.webapp"
 # set the environment VUMI_SKIP_QUEUE to have the Celery tasks evaluated
 # immediately, skipping the queue.
 import os
