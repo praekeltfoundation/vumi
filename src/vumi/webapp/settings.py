@@ -116,10 +116,11 @@ else:
     CELERYD_LOG_FILE = 'logs/vumi.celeryd.log'
 
 CELERY_QUEUES = {
-    #"default": {
-        #"exchange": "vumi",
-        #"binding_key": "vumi.webapp",
-    #},
+    "default": {
+        "exchange": "vumi",
+        "binding_key": "vumi.webapp",
+    }
+    #,
     #"sms_send": {
         #"exchange": "vumi",
         #"binding_key": "vumi.webapp.sms.send",
