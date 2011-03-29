@@ -120,24 +120,6 @@ CELERY_QUEUES = {
         "exchange": "vumi",
         "binding_key": "vumi.webapp",
     }
-    #,
-    #"sms_send": {
-        #"exchange": "vumi",
-        #"binding_key": "vumi.webapp.sms.send",
-    #}
-    #,
-    #"sms_receive": {
-        #"exchange": "vumi",
-        #"binding_key": "vumi.webapp.sms.receive",
-    #},
-    #"sms_receipt": {
-        #"exchange": "vumi",
-        #"binding_key": "vumi.webapp.sms.receipt",
-    #},
-    #"job_queue": {
-        #"exchange": "vumi",
-        #"binding_key": "vumi.jobs",
-    #}
 }
 CELERY_DEFAULT_QUEUE = "default"
 CELERY_DEFAULT_EXCHANGE_TYPE = "direct"
