@@ -1,10 +1,10 @@
 from twisted.python import log
 from twisted.python.log import logging
 from twisted.internet.defer import inlineCallbacks, returnValue
-from django.contrib.auth.models import User
 
 from vumi.service import Worker, Consumer, Publisher
 from vumi.webapp.api import utils
+from vumi.webapp.api.models import Keyword
 
 import json
 import time
@@ -26,7 +26,8 @@ class SMSKeywordConsumer(Consumer):
         message = dictionary.get('short_message')
         head = message.split(' ')[0]
         try:
-            user = User.objects.get(username=head)
+            keyword = Keyword.objects.get(keyword=head.lower())
+            user = keyword.user
             
             received_sms = models.ReceivedSMS()
             received_sms.user = user
@@ -62,8 +63,8 @@ class SMSKeywordConsumer(Consumer):
                 except Exception, e:
                     log.err(e)
             
-        except User.DoesNotExist:
-            log.msg("Couldn't find user for message: %s" % message)
+        except Keyword.DoesNotExist:
+            log.msg("Couldn't find keyword for message: %s" % message)
         log.msg("DELIVER SM %s consumed by %s" % (json.dumps(dictionary),self.__class__.__name__))
 
 

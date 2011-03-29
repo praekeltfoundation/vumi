@@ -209,6 +209,19 @@ class Transport(models.Model):
         return u"Transport: %s" % self.name
     
 
+class Keyword(models.Model):
+    """An SMS keyword"""
+    keyword = models.CharField(blank=True, max_length=255)
+    user = models.ForeignKey('auth.User')
+    
+    def __unicode__(self):
+        return u"Keyword: %s for %s" % (self.keyword, self.user)
+    
+    def save(self, *args, **kwargs):
+        self.keyword = self.keyword.lower()
+        super(Keyword, self).save(*args, **kwargs)
+    
+
 admin.site.register(SentSMS)
 admin.site.register(SentSMSBatch)
 admin.site.register(ReceivedSMS)
@@ -217,3 +230,4 @@ admin.site.register(URLCallback)
 admin.site.register(SMPPLink)
 admin.site.register(SMPPResp)
 admin.site.register(Transport)
+admin.site.register(Keyword)
