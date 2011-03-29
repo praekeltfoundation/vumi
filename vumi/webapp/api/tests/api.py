@@ -158,7 +158,7 @@ class ConversationHandlerTestCase(TestCase):
         # create the user we need to be authorized
         self.user = User.objects.get(username='api')
         # load the yaml data
-        fp = open('src/vumi/webapp/api/test_data/devquiz.yaml', 'r')
+        fp = open('vumi/webapp/api/test_data/devquiz.yaml', 'r')
         self.yaml_conversation = ''.join(fp.readlines())
     
     def tearDown(self):
