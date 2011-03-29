@@ -11,9 +11,10 @@ The easiest way to get Vumi up & running is by using VirtualBox_ and Vagrant_:
         1. Downloads a 480MB Ubuntu 10.04 server VM
         2. Downloads ~ 40MB worth of Python packages
         3. Downloads ~ 100MB worth of packages with `apt-get`
-    6. Go to http://localhost:9000/admin and log in with username `vumi` and password `vumi` for the Django based webapp.
-    7. Go to http://localhost:9001 for the SMSC simulator
-    8. Go to http://localhost:9010 for the Supervisord web based management console.
+    6. Go to http://localhost:7000/admin and log in with username `vumi` and password `vumi` for the Django based webapp.
+    7. Go to http://localhost:7010 for the Supervisord web based management
+    8. Go to http://localhost:7011 for the SMSC simulator
+console.
 
 
 

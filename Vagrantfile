@@ -10,7 +10,7 @@ Vagrant::Config.run do |config|
     puppet.manifest_file = "vumi.pp"
   end
   
-  config.vm.forward_port "web", 9000, 9000
-  config.vm.forward_port "smsc", 9001, 9001
-  config.vm.forward_port "supervisord", 9010, 9010
+  config.vm.forward_port "web", 7000, 7000
+  config.vm.forward_port "smsc", 7011, 7011
+  config.vm.forward_port "supervisord", 7010, 7010
 end
