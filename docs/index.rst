@@ -14,7 +14,7 @@ Contents:
    installation.rst
    api.rst
    client.rst
-   
+   deploying.rst
 
 Indices and tables
 ==================

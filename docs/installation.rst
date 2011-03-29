@@ -13,10 +13,7 @@ The easiest way to get Vumi up & running is by using VirtualBox_ and Vagrant_:
         3. Downloads ~ 100MB worth of packages with `apt-get`
     6. Go to http://localhost:7000/admin and log in with username `vumi` and password `vumi` for the Django based webapp.
     7. Go to http://localhost:7010 for the Supervisord web based management
-    8. Go to http://localhost:7011 for the SMSC simulator
-console.
-
-
+    8. Go to http://localhost:7011 for the SMSC simulator console.
 
 .. note::
     Ubuntu 10.04 only provides version 1.3.5 of RubyGems while Vagrant requires version 1.3.6. You'll need to get an upstream version or install from source as per the `OS specific instructions`_.

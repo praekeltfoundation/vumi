@@ -1,15 +1,15 @@
 Deploying Vumi
-------------------
+==============
 
-The deploment of Vumi ties directly into how it is being developed with Git.
+.. note:: This documentation is for an older version of Vumi. It requires updating.
 
-  1.  All development of Vumi occurs in topical branches. Topical branches 
-      are all named `topics/...`. For example `topics/smn-fabric-deploys`.
-  2.  When the new development is finished, `master` is rebased into the
-      `topics/...` branch. If all tests pass then the `topics/...` branch is 
-      merged into `master`.
-  3.  When `master` is ready for testing then it is promoted to the `staging`
-      branch with `git push origin master:staging`.
+
+The deploment of Vumi ties directly into how it is being developed with Git_ and `Git Flow`_
+
+  1.  All development of Vumi occurs in feature branches. Feature branches 
+      are all named `feature/...`. For example `feature/smn-fabric-deploys`.
+  2.  When the new development is finished the feature is merged into the `develop` branch. 
+  3.  When `develop` is ready for testing it is pushed to the `staging` branch with `git push origin master:staging` and deployed to the `staging` environment.
   4.  If the `staging` code is ready for a release then push the `staging` to 
       `production` with `git push origin master:production`
 
@@ -18,26 +18,25 @@ The `staging` and `production` branches do not to be tracked locally for you to 
 Fabric!
 -------
 
-For deploying, updating, starting & stopping of services we use [Fabric][fabric].
-
+For deploying, updating, starting & stopping of services we use Fabric_::
 
     $ pip install -r config/deploying.pip
 
 Fabric provides a command line tool using SSH for application deployment and/or administration tasks.
 
-The `-l` and the `-d <command name>` provide some insights into the available commands, their arguments and example usage.
+The `-l` and the `-d <command name>` provide some insights into the available commands, their arguments and example usage::
 
     $ fab -l
     $ fab -d <command> 
 
-Start the virtualenv & make sure all the requirements are installed:
+Start the virtualenv & make sure all the requirements are installed::
 
     $ source ve/bin/activate
     (ve) $ pip install -r config/requirements.pip
 
 There isn't a limit on the number of environments. Every branch in git can be a deployable environment. All environments will be installed in `/var/praekelt/vumi/`. For this example we'll walk through installing a `staging` environment.
 
-Before we start, update the `fabfile.py` and change `env.hosts` to point to the machine you're deploying to. You can also manually specify the hosts variable with the `-H` command line option or create a `~/.fabricrc` as specified in the [documentation](http://docs.fabfile.org/0.9.0/usage/fab.html#settings-files).
+Before we start, update the `fabfile.py` and change `env.hosts` to point to the machine you're deploying to. You can also manually specify the hosts variable with the `-H` command line option or create a `~/.fabricrc` as specified in the `fabric documentation`_.
 
 To start the deploy execute the following command:
 
@@ -46,7 +45,7 @@ To start the deploy execute the following command:
 
 Fabric has the convention of "command:args,keyword=args". Here we're telling fabric to start the `deploy` command with `staging` as it's first argument.
 
-Internally this first calls `fab layout:staging` to create the following  layout directory:
+Internally this first calls `fab layout:staging` to create the following  layout directory::
 
     .
     └── vumi
@@ -94,4 +93,7 @@ Other environments work exactly the same:
 
 Will deploy to `/var/praekelt/vumi/production` with the same directory layout. It'll switch to the `production` branch in the git repository.
 
-[fabric]: http://www.fabfile.org
+.. _fabric: http://www.fabfile.org
+.. _fabric documentation: http://docs.fabfile.org/0.9.0/usage/fab.html#settings-files
+.. _git: http://www.git-scm.org
+.. _git flow: https://github.com/nvie/gitflow
