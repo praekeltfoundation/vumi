@@ -102,15 +102,7 @@ exec { "Install requirements":
 exec { "Copy template.py to develop.py":
     command => "cp template.py develop.py",
     cwd => "/var/praekelt/vumi/environments",
-    unless => "test -f template.py"
-}
-
-exec { "Install Vumi package":
-    command => ". ve/bin/activate && \
-                    python setup.py develop && \
-                deactivate",
-    cwd => "/var/praekelt/vumi",
-    onlyif => "test -d ve"
+    unless => "test -f develop.py"
 }
 
 exec { "Install Selenium SMPPSim":
@@ -173,7 +165,6 @@ Exec["Resynchronize apt package index"]
     -> Exec["Update git repository"]
     -> Exec["Checkout development branch"] 
     -> Exec["Create virtualenv"] 
-    -> Exec["Install Selenium SMPPSim"]
     -> Exec["Install requirements"] 
     -> Exec["Copy template.py to develop.py"]
     -> Exec["Install Vumi package"]
