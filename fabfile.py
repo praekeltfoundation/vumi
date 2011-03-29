@@ -299,6 +299,7 @@ def update(branch):
     Runs git stash first to undo fabdir effects
     """
     current_release = base.releases(env.releases_path)[-1]
+    copy_settings_file(branch, release=current_release)
     with cd(_join(env.current, env.github_repo_name)):
         run("git stash")
         git.pull(branch)
@@ -368,8 +369,6 @@ def restart(branch,app=None):
     in the supervisord config file's [program:...] sections
     
     """
-    if not app:
-        return reload(branch) # restart the daemon
     return supervisor(branch,"restart %s" % cmd(app))
 
 @_setup_env
