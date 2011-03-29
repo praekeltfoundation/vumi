@@ -138,14 +138,14 @@ exec { "Create Vumi Django user":
 
 exec { "Restart Vumi":
     command => ". ve/bin/activate && \
-                    supervisorctl reload && \
+                    supervisorctl -c supervisord.develop.conf reload && \
                 deactivate",
     cwd => "/var/praekelt/vumi",
     onlyif => "ps -p `cat tmp/pids/supervisord.pid`"
 }
 exec { "Start Vumi":
     command => ". ve/bin/activate && \
-                    supervisord && \
+                    supervisord -c supervisord.develop.conf && \
                 deactivate",
     cwd => "/var/praekelt/vumi",
     unless => "ps -p `cat tmp/pids/supervisord.pid`"
