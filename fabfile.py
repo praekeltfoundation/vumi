@@ -193,7 +193,7 @@ def fabdir(branch, release=None):
         fab/staging/.clickatell/config/smpp.yaml
         vs
         fab/staging/.safaricom/config/smpp.yaml
-    so files in github like supervisord.staging.cfg can remain unchanged
+    so files in github like supervisord.staging.conf can remain unchanged
     """
     paths = re.match('(?P<branch>[^/]*)/?(?P<filepath>.*)',branch).groupdict()
     __fabdir(paths['branch'], paths['filepath'], release)
@@ -313,12 +313,12 @@ def supervisor(branch, command):
     if not exists(pid_path):
         _virtualenv(
             app_path,
-            "supervisord -c supervisord.%s.cfg -j %s" % (branch,pid_path)
+            "supervisord -c supervisord.%s.conf -j %s" % (branch,pid_path)
         )
     
     _virtualenv(
         _join(env.current, env.github_repo_name),
-        "supervisorctl -c supervisord.%s.cfg %s" % (branch, command)
+        "supervisorctl -c supervisord.%s.conf %s" % (branch, command)
     )
 
 
