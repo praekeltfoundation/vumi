@@ -122,7 +122,7 @@ CELERY_QUEUES = {
     },
     "sms_send": {
         "exchange": "vumi",
-        "binding_key": "sms.internal.debatcher",
+        "binding_key": "vumi.webapp.sms.send",
     }
     #,
     #"sms_receive": {
