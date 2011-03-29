@@ -99,6 +99,12 @@ exec { "Install requirements":
     onlyif => "test -d ve"
 }
 
+exec { "Copy template.py to develop.py":
+    command => "cp template.py develop.py",
+    cwd => "/var/praekelt/vumi/environments",
+    unless => "test -f template.py"
+}
+
 exec { "Install Vumi package":
     command => ". ve/bin/activate && \
                     python setup.py develop && \
@@ -169,6 +175,7 @@ Exec["Resynchronize apt package index"]
     -> Exec["Create virtualenv"] 
     -> Exec["Install Selenium SMPPSim"]
     -> Exec["Install requirements"] 
+    -> Exec["Copy template.py to develop.py"]
     -> Exec["Install Vumi package"]
     -> Exec['Syncdb']
     -> Exec['Migrate']
