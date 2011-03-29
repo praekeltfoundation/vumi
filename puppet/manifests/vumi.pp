@@ -99,6 +99,12 @@ exec { "Install requirements":
     onlyif => "test -d ve"
 }
 
+exec { "Copy template.py to develop.py":
+    command => "cp template.py develop.py",
+    cwd => "/var/praekelt/vumi/environments",
+    unless => "test -f template.py"
+}
+
 exec { "Install Vumi package":
     command => ". ve/bin/activate && \
                     python setup.py develop && \
@@ -138,14 +144,14 @@ exec { "Create Vumi Django user":
 
 exec { "Restart Vumi":
     command => ". ve/bin/activate && \
-                    supervisorctl reload && \
+                    supervisorctl -c supervisord.develop.conf reload && \
                 deactivate",
     cwd => "/var/praekelt/vumi",
     onlyif => "ps -p `cat tmp/pids/supervisord.pid`"
 }
 exec { "Start Vumi":
     command => ". ve/bin/activate && \
-                    supervisord && \
+                    supervisord -c supervisord.develop.conf && \
                 deactivate",
     cwd => "/var/praekelt/vumi",
     unless => "ps -p `cat tmp/pids/supervisord.pid`"
@@ -169,6 +175,7 @@ Exec["Resynchronize apt package index"]
     -> Exec["Create virtualenv"] 
     -> Exec["Install Selenium SMPPSim"]
     -> Exec["Install requirements"] 
+    -> Exec["Copy template.py to develop.py"]
     -> Exec["Install Vumi package"]
     -> Exec['Syncdb']
     -> Exec['Migrate']
