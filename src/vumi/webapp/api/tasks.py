@@ -6,7 +6,7 @@ class SendSMSTask(Task):
     routing_key = 'vumi.webapp.sms.send'
 
 class SendSMSBatchTask(Task):
-    routing_key = 'vumi.webapp.sms.send'
+    routing_key = 'sms.internal.debatcher'
 
 class ReceiveSMSTask(Task):
     routing_key = 'vumi.webapp.sms.receive'

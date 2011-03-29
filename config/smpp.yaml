@@ -10,8 +10,8 @@ dest_addr_ton: 1
 dest_addr_npi: 1
 registered_delivery: 1
 
-# UPSTREAM: clickatell
-UPSTREAM: smppclient1
+# TRANSPORT_NAME: Clickatell
+TRANSPORT_NAME: SmppClient1
 
 # Number Recognition
 COUNTRY_CODE: "27"

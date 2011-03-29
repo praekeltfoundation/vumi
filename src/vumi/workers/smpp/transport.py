@@ -125,11 +125,10 @@ class SmppTransport(Worker):
         # Start the consumer, pass along the send_smpp callback for sending
         # back consumed AMQP messages over SMPP.
         #self.consumer = yield self.start_consumer(SmppConsumer, self.send_smpp)
-        upstream = self.config.get('UPSTREAM', 'fallback').lower()
-        print "UPSTREAM >>>>", upstream
-        yield self.start_consumer(dynamically_create_smpp_consumer(upstream,
-                    routing_key='sms.outbound.%s' % upstream,
-                    queue_name='sms.outbound.%s' % upstream
+        transport = self.config.get('TRANSPORT_NAME', 'fallback').lower()
+        yield self.start_consumer(dynamically_create_smpp_consumer(transport,
+                    routing_key='sms.outbound.%s' % transport,
+                    queue_name='sms.outbound.%s' % transport
                 ), self.send_smpp)
 
 
@@ -180,15 +179,17 @@ class SmppTransport(Worker):
     @inlineCallbacks
     def delivery_report(self, *args, **kwargs):
         yield self.publisher.publish_json(kwargs,
-            routing_key='sms.receipt.%s' % self.config.get('UPSTREAM', ''))
+            routing_key='sms.receipt.%s' % (
+                self.config.get('TRANSPORT_NAME', 'fallback').lower()))
 
 
     @inlineCallbacks
     def deliver_sm(self, *args, **kwargs):
         yield self.publisher.publish_json(kwargs, 
             routing_key='sms.inbound.%s.%s' % (
-                self.config.get('UPSTREAM', '').lower(),
+                self.config.get('TRANSPORT_NAME', 'fallback').lower(),
                 kwargs.get('destination_addr')))
+
 
     def send_smpp(self, id, to_msisdn, message, *args, **kwargs):
         print "Sending SMPP, to: %s, message: %s" % (to_msisdn, message)
