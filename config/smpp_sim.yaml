@@ -1,0 +1,65 @@
+system_id: smppclient1
+password: password
+host: localhost
+port: 2775
+# system_type: "3266548"
+
+# Clickatell required defaults
+interface_version: "34"
+dest_addr_ton: 1
+dest_addr_npi: 1
+registered_delivery: 1
+
+TRANSPORT_NAME: SMPPSim
+
+# Number Recognition
+COUNTRY_CODE: "27"
+
+OPERATOR_NUMBER:
+    VODACOM: "278200702230180"
+    MTN: ""
+    CELLC: ""
+    VIRGIN: ""
+    8TA: ""
+    UNKNOWN: ""
+
+OPERATOR_PREFIX:
+    2771:
+        27710: MTN
+        27711: VODACOM
+        27712: VODACOM
+        27713: VODACOM
+        27714: VODACOM
+        27715: VODACOM
+        27716: VODACOM
+        27717: MTN
+        27719: MTN
+
+    2772: VODACOM
+    2773: MTN
+    2774:
+        27740: CELLC
+        27741: VIRGIN
+        27742: CELLC
+        27743: CELLC
+        27744: CELLC
+        27745: CELLC
+        27746: CELLC
+        27747: CELLC
+        27748: CELLC
+        27749: CELLC
+
+    2776: VODACOM
+    2778: MTN
+    2779: VODACOM
+    2781:
+        27811: 8TA
+        27812: 8TA
+        27813: 8TA
+        27814: 8TA
+
+    2782: VODACOM
+    2783: MTN
+    2784: CELLC
+
+
