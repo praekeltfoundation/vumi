@@ -7,9 +7,7 @@ dropin.cache
 *.swp
 *.pid
 _trial_temp/*
-src/*.egg-info/*
 *.log
-db/*.db
 environments/*
 config/*
 .DS_Store
@@ -18,3 +16,6 @@ fab/*
 .vagrant
 smppsim/
 docs/_build/*
+build/*
+dist/*
+*.egg-info
