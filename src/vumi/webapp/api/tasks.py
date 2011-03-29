@@ -3,7 +3,7 @@ from django.conf import settings
 from celery.task import Task
 
 class SendSMSTask(Task):
-    routing_key = 'vumi.webapp.sms.send'
+    routing_key = 'sms.internal.debatcher'
 
 class SendSMSBatchTask(Task):
     routing_key = 'sms.internal.debatcher'
