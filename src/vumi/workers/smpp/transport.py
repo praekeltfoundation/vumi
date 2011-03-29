@@ -126,7 +126,7 @@ class SmppTransport(Worker):
         # back consumed AMQP messages over SMPP.
         #self.consumer = yield self.start_consumer(SmppConsumer, self.send_smpp)
         transport = self.config.get('TRANSPORT_NAME', 'fallback').lower()
-        yield self.start_consumer(dynamically_create_smpp_consumer(upstream,
+        yield self.start_consumer(dynamically_create_smpp_consumer(transport,
                     routing_key='sms.outbound.%s' % transport,
                     queue_name='sms.outbound.%s' % transport
                 ), self.send_smpp)
