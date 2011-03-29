@@ -183,7 +183,7 @@ class SMSBatchConsumer(Consumer):
     delivery_mode = 2
     queue_name = "sms_send"
     # FIXME: topical routing key for direct exchange type? 
-    routing_key = "vumi.webapp.sms.send"
+    routing_key = "sms.internal.debatcher"
 
     def __init__(self, publisher):
         self.publisher = publisher
