@@ -181,8 +181,7 @@ class SMSBatchConsumer(Consumer):
     exchange_type = "direct"
     durable = True
     delivery_mode = 2
-    queue_name = "sms_send"
-    # FIXME: topical routing key for direct exchange type? 
+    queue_name = "sms.internal.debatcher"
     routing_key = "sms.internal.debatcher"
 
     def __init__(self, publisher):
