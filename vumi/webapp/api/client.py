@@ -104,6 +104,23 @@ def auto_response(function):
             raise ClientException, 'Bad Response: %s' % response.status_code
     return decorator
 
+def dict_to_tuple(dictionary):
+    """
+    
+    >>> dict_to_tuple({'id':[1,2,3,4],'testing':1,'bla':'three'})
+    [('testing', 1), ('bla', 'three'), ('id', 1), ('id', 2), ('id', 3), ('id', 4)]
+    >>> 
+    
+    
+    """
+    return_list = []
+    for key, value in dictionary.items():
+        if isinstance(value, list):
+            for entry in value:
+                return_list.append((key, entry))
+        else:
+            return_list.append((key, value))
+    return return_list
 
 class RequestWithMethod(urllib2.Request):
     def __init__(self, url, method, data=None, headers={},\
@@ -123,6 +140,7 @@ class ApiResponse(object):
     def __init__(self, url_response):
         self.status_code = url_response.code
         self.content = url_response.read()
+        self.url_response = url_response
     
 
 class Connection(object):
@@ -132,14 +150,34 @@ class Connection(object):
         self.password = password
         self.credentials = base64.encodestring("%s:%s" % (self.username, self.password)).strip()
         self.base_url = base_url
+        self.debug = False
     
-    def request(self, method, path, data):
+    def request(self, method, path, data={}):
         url = self.base_url + path
-        data = urllib.urlencode(data)
-        request = RequestWithMethod(url, method, data=data)
+        url_data = urllib.urlencode(dict_to_tuple(data))
+        request = RequestWithMethod(url, method, data=url_data)
         request.add_header('User-Agent', 'Vumi API Client/0.1')
         request.add_header('Authorization', 'Basic %s' % self.credentials)
-        return ApiResponse(urllib2.urlopen(request))
+        
+        if self.debug:
+            print 'REQUEST'
+            print '\theaders:', request.headers
+            print '\tmethod:', method
+            print '\tpath:', path
+            print '\tdata:', data
+            print '\turl_data', url_data
+            print 
+        
+        response = ApiResponse(urllib2.urlopen(request))
+        
+        if self.debug:
+            print 'RESPONSE'
+            print '\tstatus_code:', response.status_code
+            print '\theaders:', response.url_response.info()
+            print '\tcontent:', response.content
+            print
+        
+        return response
     
     def get(self, *args, **kwargs):
         return self.request('get', *args, **kwargs)
@@ -242,13 +280,14 @@ class Client(object):
         Get the status of SMSs sent since a specific date::
         
             >>> client = Client(username, password)
-            >>> client.get_status_since(datetime.now() - timedelta(days=1))
+            >>> client.get_status_since(since=datetime.now() - timedelta(days=1))
             [GetStatusSinceResponse(...), ...]
             >>>
         
         :keyword since: timestamp for since when to query for messages sent
         """
-        return self.connection.get('/api/v1/sms/status.json', kwargs)
+        url_qs = urllib.urlencode(dict_to_tuple(kwargs))
+        return self.connection.get('/api/v1/sms/status.json?%s' % url_qs)
     
     @auto_response
     def get_status_by_id(self, **kwargs):
@@ -262,7 +301,8 @@ class Client(object):
         
         :keyword ids: list of IDs to query
         """
-        return self.connection.get('/api/v1/sms/status.json', kwargs)
+        url_qs = urllib.urlencode(dict_to_tuple(kwargs))
+        return self.connection.get('/api/v1/sms/status.json?%s' % url_qs)
     
     @auto_response
     def set_callback(self, event, url):
