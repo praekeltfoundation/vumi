@@ -78,6 +78,10 @@ def _build_curl_object(url):
     return ch
     
 
+def utf8encode(tuples):
+    return [(key.encode('utf-8'), value.encode('utf-8'))
+        for key, value in tuples]
+
 def callback(url, list_of_tuples):
     """
     HTTP POST a list of key value tuples to the given URL and 
@@ -85,16 +89,9 @@ def callback(url, list_of_tuples):
     """
     
     ch = _build_curl_object(url)
-    
-    if any([(isinstance(key, unicode) or \
-                isinstance(value, unicode)) \
-            for key,value in list_of_tuples]):
-        raise RuntimeError, "PyCURL will trip on unicode objects. " \
-                            "Make sure you only pass plain string objects."
-    
     data = StringIO()
     ch.setopt(pycurl.WRITEFUNCTION, data.write)
-    ch.setopt(pycurl.HTTPPOST, list(list_of_tuples))
+    ch.setopt(pycurl.HTTPPOST, utf8encode(list_of_tuples))
     
     try:
         result = ch.perform()
@@ -109,6 +106,7 @@ def post_data_to_url(url,payload,content_type):
     """
     HTTP POST the data to the given URL with the correct content-type
     """
+    data = StringIO()
     ch = _build_curl_object(url)
     ch.setopt(pycurl.WRITEFUNCTION, data.write)
     ch.setopt(pycurl.POSTFIELDS, payload)
