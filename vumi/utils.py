@@ -6,8 +6,8 @@ def load_class(module_name, class_name):
     """
     Load a class when given its module and its class name
     
-    >>> load_class('vumi.workers.base','VumiWorker')
-    <class 'base.VumiWorker'>
+    >>> load_class('vumi.workers.example','ExampleWorker') # doctest: +ELLIPSIS
+    <class vumi.workers.example.ExampleWorker at ...>
     >>> 
     
     """
@@ -19,8 +19,8 @@ def load_class_by_string(class_path):
     Load a class when given it's full name, including modules in python
     dot notation
     
-    >>> load_class_by_string('vumi.workers.base.VumiWorker')
-    <class 'base.VumiWorker'>
+    >>> load_class_by_string('vumi.workers.example.ExampleWorker') # doctest: +ELLIPSIS
+    <class vumi.workers.example.ExampleWorker at ...>
     >>> 
     
     """

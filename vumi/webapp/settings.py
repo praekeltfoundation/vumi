@@ -91,13 +91,11 @@ INSTALLED_APPS = (
     'vumi.webapp.api',
     'celery',
     'south',
+    'django_nose',
 )
 
 # link our profile to the django.contrib.auth.models.User
 AUTH_PROFILE_MODULE = 'api.Profile'
-
-# we want our workers to be async
-VUMI_WORKERS_ASYNC = False
 
 # for Piston
 PISTON_DISPLAY_ERRORS = True
@@ -109,12 +107,6 @@ BROKER_USER = "vumi"
 BROKER_PASSWORD = "vumi"
 BROKER_VHOST = "/develop"
 
-if DEBUG:
-    CELERYD_LOG_LEVEL = 'DEBUG'
-    CELERYD_LOG_FILE = None
-else:
-    CELERYD_LOG_FILE = 'logs/vumi.celeryd.log'
-
 CELERY_QUEUES = {
     "default": {
         "exchange": "vumi",
@@ -124,21 +116,11 @@ CELERY_QUEUES = {
 CELERY_DEFAULT_QUEUE = "default"
 CELERY_DEFAULT_EXCHANGE_TYPE = "direct"
 CELERY_DEFAULT_ROUTING_KEY = "vumi.webapp"
+
 # set the environment VUMI_SKIP_QUEUE to have the Celery tasks evaluated
 # immediately, skipping the queue.
 import os
 CELERY_ALWAYS_EAGER = os.environ.get('VUMI_SKIP_QUEUE', False)
 CELERY_TASK_SERIALIZER = "json"
 
-# for Opera
-OPERA_SERVICE_ID = ''
-OPERA_PASSWORD = ''
-OPERA_CHANNEL = ''
-
-# for E-Scape
-E_SCAPE_API_ID = ''
-E_SCAPE_SMSC = ''
-
-# for Techsys
-TECH_SYS_SMS_GATEWAY_URL = ''
-TECH_SYS_SMS_GATEWAY_BIND = ''
+TEST_RUNNER = 'django_nose.NoseTestSuiteRunner'

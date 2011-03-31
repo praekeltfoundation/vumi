@@ -9,21 +9,6 @@ from vumi.webapp.api.signals import *
 from vumi.webapp.api.models import *
 from vumi.webapp.api.tests.utils import APIClient, mock_sent_messages
 
-import logging
-LOG_FILENAME = 'logs/vumi.testing.log'
-logging.basicConfig(filename=LOG_FILENAME,level=logging.DEBUG)
-
-class PyCurlBugTestCase(TestCase):
-    
-    def test_callback_unicode_warning(self):
-        from vumi.webapp.api.utils import callback
-        self.assertRaises(RuntimeError, callback, 'http://localhost/', (
-            (u'key', 'value'), # unicode keys or values aren't allowed
-        ))
-        self.assertRaises(RuntimeError, callback, 'http://localhost/', (
-            ('key', u'value'), # unicode keys or values aren't allowed
-        ))
-
 class BaseSMSHandlerTestCase(TestCase):
     
     fixtures = ['user_set']

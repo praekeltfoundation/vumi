@@ -47,7 +47,7 @@ def make_response(name, dictionary):
     
     >>> resp = make_response('SentSMSResponse', {'created_at':'2011-3-28 14:04:00', 'message':u'hello world'})
     >>> resp
-    SentSMSResponse(created_at=datetime.datetime(2011, 3, 28, 14, 4), message='hello world')
+    SentSMSResponse(created_at=datetime.datetime(2011, 3, 28, 14, 4), message=u'hello world')
     >>> resp.created_at
     datetime.datetime(2011, 3, 28, 14, 4)
     >>> resp.message
@@ -205,8 +205,8 @@ class Client(object):
         """
         Send one or more SMS messages::
         
-            >>> client = Client(username, password)
-            >>> client.send_sms(to_msisdn='27123456789', from_msisdn='27123456789', message='hello world')
+            >>> client = Client('username', 'password')
+            >>> client.send_sms(to_msisdn='27123456789', from_msisdn='27123456789', message='hello world') # doctest: +SKIP
             [SendSmsResponse(...), ...]
             >>>
         
@@ -222,7 +222,7 @@ class Client(object):
         """
         Send one or more personalized SMS messages::
         
-            >>> client = Client(username, password)
+            >>> client = Client('username', 'password')
             >>> client.send_template_sms(template = 'Hello {{ name }} {{ surname }}',
             ...        from_msisdn = '27123456789',
             ...        to_msisdns = {
@@ -234,7 +234,7 @@ class Client(object):
             ...                'name': 'Boo',
             ...                'surname': 'Far'
             ...            }
-            ...        })
+            ...        }) # doctest: +SKIP
             [SendTemplateSmsResponse(...), ...]
             >>>
         
@@ -264,8 +264,8 @@ class Client(object):
         """
         Get the status of a sent sms batch::
         
-            >>> client = Client(username, password)
-            >>> client.get_status(1)
+            >>> client = Client('username', 'password')
+            >>> client.get_status(1) # doctest: +SKIP
             GetStatusResponse(...)
             >>>
         
@@ -279,8 +279,8 @@ class Client(object):
         """
         Get the status of SMSs sent since a specific date::
         
-            >>> client = Client(username, password)
-            >>> client.get_status_since(since=datetime.now() - timedelta(days=1))
+            >>> client = Client('username', 'password')
+            >>> client.get_status_since(since=datetime.now() - timedelta(days=1)) # doctest: +SKIP
             [GetStatusSinceResponse(...), ...]
             >>>
         
@@ -294,8 +294,8 @@ class Client(object):
         """
         Get the status of SMSs sent by their ids::
         
-            >>> client = Client(username, password)
-            >>> client.get_status_by_id(id=[1,2])
+            >>> client = Client('username', 'password')
+            >>> client.get_status_by_id(id=[1,2]) # doctest: +SKIP
             [GetStatusByIdResponse(...), ...]
             >>>
         
@@ -309,8 +309,8 @@ class Client(object):
         """
         Specify a URL callback for an event type::
         
-            >>> client = Client(username, password)
-            >>> client.set_callback('sms_received', 'http://localhost/...')
+            >>> client = Client('username', 'password')
+            >>> client.set_callback('sms_received', 'http://localhost/...') # doctest: +SKIP
             SetCallbackResponse(...)
             >>>
         
@@ -328,8 +328,8 @@ class Client(object):
         """
         Update a URL callback::
         
-            >>> client = Client(username, password)
-            >>> client.update_callback(1, 'http://localhost/update/...')
+            >>> client = Client('username', 'password')
+            >>> client.update_callback(1, 'http://localhost/update/...') # doctest: +SKIP
             UpdateCallbackResponse(...)
             >>>
         
@@ -345,8 +345,8 @@ class Client(object):
         """
         Delete a URL callback::
         
-            >>> client = Client(username, password)
-            >>> client.delete_callback(1)
+            >>> client = Client('username', 'password')
+            >>> client.delete_callback(1) # doctest: +SKIP
             DeleteCallBackResponse(success=True)
             >>>
         
