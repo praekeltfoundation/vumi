@@ -4,7 +4,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet import reactor
 from datetime import datetime
 
-from houston.client import Client, TwistedConnection
+from foneworx.client import Client, TwistedConnection
 from vumi.service import Worker, Consumer, Publisher
 
 class FoneworxConsumer(Consumer):
