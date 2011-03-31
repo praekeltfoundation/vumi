@@ -62,6 +62,17 @@ def layout(branch):
     require('layout', provided_by=['_setup_env_for'])
     system.create_dirs(env.layout)
 
+
+@_setup_env
+def redeploy(branch):
+    """
+    Shutdown then deploy
+    Don't use this on initial deploy
+    """
+    shutdown(branch)
+    deploy(branch)
+
+
 @_setup_env
 def deploy(branch):
     """
@@ -79,7 +90,6 @@ def deploy(branch):
         * Setup the virtualenv
         * Install PIP's requirements, downloading new ones if not already cached
         * Symlink `<branch>/current` to `<branch>/releases/<timestamped release directory>`
-        * Shut down the current supervisord daemon if it is running
     
     """
     if not git.is_repository(_repo_path(env.github_repo_name)):
@@ -120,12 +130,6 @@ def deploy(branch):
     create_virtualenv(branch)
     # ensure we're deploying the exact revision as we locally have
     base.set_current(new_release_name)
-
-    # shutdown supervisord daemon if it exists
-    try:
-        shutdown(branch)
-    except Exception, e:
-        print e
 
 
 @_setup_env
