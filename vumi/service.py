@@ -1,6 +1,8 @@
 from twisted.python import log, usage
 from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
 from twisted.internet import protocol, reactor
+from twisted.web.server import Site
+from twisted.web.resource import Resource
 from txamqp.client import TwistedDelegate
 from txamqp.content import Content
 from txamqp.protocol import AMQClient
@@ -103,6 +105,25 @@ class Worker(AMQClient):
         yield publisher.start(channel)
         # return the publisher
         returnValue(publisher)
+    
+    @inlineCallbacks
+    def start_web_resource(self, resource, path, port):
+        # start the HTTP server for receiving the receipts
+        root = Resource()
+        request_path = filter(None, path.split('/'))
+        nodes, leaf = request_path[0:-1], request_path[-1]
+        
+        def create_node(node, path):
+            new_node = Resource()
+            node.putChild(path, new_node)
+            return new_node
+        
+        parent = reduce(create_node, nodes, root)
+        parent.putChild(leaf, resource)
+        
+        site_factory = Site(root)
+        yield reactor.listenTCP(port, site_factory)
+        returnValue(root)
     
 
 class Consumer(object):
@@ -227,3 +248,4 @@ class WorkerCreator(object):
     def connectTCP(self, host, port, timeout=30, bindAddress=None):
         factory = AmqpFactory(*self.args, **self.kwargs)
         reactor.connectTCP(host, port, factory, timeout=timeout, bindAddress=bindAddress)
+

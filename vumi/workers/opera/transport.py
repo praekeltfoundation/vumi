@@ -1,11 +1,53 @@
 from twisted.python import log
 from twisted.web import xmlrpc
+from twisted.web.resource import Resource
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet import reactor
 from datetime import datetime, timedelta
 from vumi.webapp.api.models import SentSMS
-
+from vumi.webapp.api.gateways.opera import utils
 from vumi.service import Worker, Consumer, Publisher
+import cgi, simplejson
+
+class OperaReceiptResource(Resource):
+    
+    def __init__(self, publisher):
+        self.publisher = publisher
+        Resource.__init__(self)
+    
+    def render_POST(self, request):
+        receipts = utils.parse_receipts_xml(request.content.read())
+        success, fail = [], []
+        for receipt in receipts:
+            try:
+                # internally we store MSISDNs without a leading plus, strip that
+                # from the msisdn
+                sms = SentSMS.objects.get(
+                                        transport_name = "Opera",
+                                        transport_msg_id=receipt.reference, 
+                                        to_msisdn=receipt.msisdn.replace("+",""))
+                sms.transport_status = receipt.status
+                sms.delivery_timestamp = datetime.strptime(receipt.timestamp, 
+                                                        utils.OPERA_TIMESTAMP_FORMAT)
+                sms.save()
+                
+                # FIXME: this no longer works, would publish to vumi.webapp.sms.receipt
+                # losing any transport info.
+                # signals.sms_receipt.send(sender=SentSMS, instance=sms, 
+                #                             pk=sms.pk, 
+                #                             receipt=receipt._asdict())
+                success.append(receipt)
+            except SentSMS.DoesNotExist, error:
+                log.err()
+                fail.append(receipt)
+                
+        
+        request.setResponseCode(201)
+        request.setHeader('Content-Type', 'application/json; charset-utf-8')
+        return simplejson.dumps({
+            'success': map(lambda rcpt: rcpt._asdict(), success),
+            'fail': map(lambda rcpt: rcpt._asdict(), fail)
+        })
 
 class OperaConsumer(Consumer):
     exchange_name = "vumi"
@@ -74,6 +116,13 @@ class OperaTransport(Worker):
         self.publisher = yield self.start_publisher(OperaPublisher)
         # when it's done, create the consumer and pass it the publisher
         self.consumer = yield self.start_consumer(OperaConsumer, self.publisher, self.config)
+        
+        # start receipt web resource
+        self.receipt_resource = yield self.start_web_resource(
+            OperaReceiptResource(self.publisher), 
+            self.config['receipt_path'],
+            self.config['receipt_port']
+        )
     
     def stopWorker(self):
         log.msg("Stopping the OperaTransport")
