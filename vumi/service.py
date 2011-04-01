@@ -107,19 +107,26 @@ class Worker(AMQClient):
         returnValue(publisher)
     
     @inlineCallbacks
-    def start_web_resource(self, resource, path, port):
+    def start_web_resources(self, resources, port):
         # start the HTTP server for receiving the receipts
         root = Resource()
-        request_path = filter(None, path.split('/'))
-        nodes, leaf = request_path[0:-1], request_path[-1]
-        
-        def create_node(node, path):
-            new_node = Resource()
-            node.putChild(path, new_node)
-            return new_node
-        
-        parent = reduce(create_node, nodes, root)
-        parent.putChild(leaf, resource)
+        # sort by ascending path length to make sure we create
+        # resources lower down in the path earlier
+        resource = sorted(resources, key=lambda r: len(r[1]))
+        for resource, path in resources:
+            request_path = filter(None, path.split('/'))
+            nodes, leaf = request_path[0:-1], request_path[-1]
+            
+            def create_node(node, path):
+                if path in node.children:
+                    return node.children.get(path)
+                else:
+                    new_node = Resource()
+                    node.putChild(path, new_node)
+                    return new_node
+            
+            parent = reduce(create_node, nodes, root)
+            parent.putChild(leaf, resource)
         
         site_factory = Site(root)
         yield reactor.listenTCP(port, site_factory)

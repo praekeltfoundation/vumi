@@ -4,10 +4,12 @@ from twisted.web.resource import Resource
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet import reactor
 from datetime import datetime, timedelta
-from vumi.webapp.api.models import SentSMS
+from vumi.webapp.api.models import SentSMS, ReceivedSMS, Keyword
 from vumi.webapp.api.gateways.opera import utils
+from vumi.webapp.api import forms
 from vumi.service import Worker, Consumer, Publisher
-import cgi, simplejson
+import cgi, simplejson, iso8601
+
 
 class OperaReceiptResource(Resource):
     
@@ -20,6 +22,10 @@ class OperaReceiptResource(Resource):
         success, fail = [], []
         for receipt in receipts:
             try:
+                
+                # FIXME: instead of doing this here we should really
+                # publish this over AMQP with the publisher.
+                
                 # internally we store MSISDNs without a leading plus, strip that
                 # from the msisdn
                 sms = SentSMS.objects.get(
@@ -48,6 +54,54 @@ class OperaReceiptResource(Resource):
             'success': map(lambda rcpt: rcpt._asdict(), success),
             'fail': map(lambda rcpt: rcpt._asdict(), fail)
         })
+
+class OperaReceiveResource(Resource):
+    
+    def __init__(self, publisher):
+        self.publisher = publisher
+        Resource.__init__(self)
+    
+    def render_POST(self, request):
+        content = request.content.read()
+        sms = utils.parse_post_event_xml(content)
+        # FIXME: this really shouldn't be in the transport
+        #
+        # update the POST to have the `_from` key copied from `from`. 
+        # The model has `_from` defined because `from` is a protected python
+        # statement
+        
+        try:
+            head = sms['Text'].split()[0]
+            keyword = Keyword.objects.get(keyword=head.lower())
+            form = forms.ReceivedSMSForm({
+                'user': keyword.user.pk,
+                'to_msisdn': sms['Local'],
+                'from_msisdn': sms['Remote'],
+                'message': sms['Text'],
+                'transport_name': 'Opera',
+                'received_at': iso8601.parse_date(sms['ReceiveDate'])
+            })
+            if not form.is_valid():
+                raise FormValidationError(form)
+            
+            receive_sms = form.save()
+            log.msg('Receiving an SMS from: %s' % receive_sms.from_msisdn)
+            
+            # FIXME: signals are going to break things here, all this 
+            # shouldn't be in the transport
+            # signals.sms_received.send(sender=ReceivedSMS, instance=receive_sms, 
+            #                             pk=receive_sms.pk)
+            
+            # return the response we got back to Opera, it could be re-routed
+            # to other services in a callback chain.
+            request.setResponseCode(200)
+            request.setHeader('Content-Type', 'text/xml; charset=utf8')
+            return content
+        except Keyword.DoesNotExist, e:
+            log.msg("SMS delivered by Opera: %s" % content)
+            log.msg("Couldn't find keyword for message: %s" % sms['Text'])
+            log.err()
+            
 
 class OperaConsumer(Consumer):
     exchange_name = "vumi"
@@ -118,10 +172,12 @@ class OperaTransport(Worker):
         self.consumer = yield self.start_consumer(OperaConsumer, self.publisher, self.config)
         
         # start receipt web resource
-        self.receipt_resource = yield self.start_web_resource(
-            OperaReceiptResource(self.publisher), 
-            self.config['receipt_path'],
-            self.config['receipt_port']
+        self.receipt_resource = yield self.start_web_resources(
+            [
+                (OperaReceiptResource(self.publisher), self.config['web_receipt_path']),
+                (OperaReceiveResource(self.publisher), self.config['web_receive_path']),
+            ],
+            self.config['web_port']
         )
     
     def stopWorker(self):
