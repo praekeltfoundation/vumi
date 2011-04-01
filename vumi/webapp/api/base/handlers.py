@@ -138,7 +138,7 @@ class SendTemplateSMSHandler(BaseHandler):
         
         batch = SentSMSBatch.objects.create(title='', user=request.user)
         for msisdn in msisdn_list:
-            context = dict([(var_name, var_value_list.pop())
+            context = dict([(var_name, var_value_list.pop(0)) # NOTE: pop the first off, maintain the right order
                                 for var_name, var_value_list 
                                 in context_list])
             send_sms = self._render_and_send_one(

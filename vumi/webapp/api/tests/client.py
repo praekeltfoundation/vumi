@@ -83,6 +83,39 @@ class APIClientTestCase(TestCase):
         self.assertEquals(set(o.message for o in resp), 
                             set([u'Hello Foo Bar', u'Hello Boo Far']))
     
+    def test_send_template_sms_batch(self):
+        """The order of arguments should be kept"""
+        resp = self.client.send_template_sms(
+            template='{{name}} {{number}} {{transport_name}}', 
+            from_msisdn='0', 
+            to_msisdns = {
+                '1': {
+                    'name':'David',
+                    'number': 1,
+                    'transport_name':'Transport 1',
+                },
+                '2': {
+                    'name': 'Simon',
+                    'number': 2,
+                    'transport_name': 'Transport 2',
+                },
+                '3': {
+                    'name': 'Morgan',
+                    'number': 3,
+                    'transport_name': 'Transport 3',
+                }
+            })
+        self.assertTrue(len(resp), 3)
+        for sms in resp:
+            if sms.to_msisdn == '1':
+                self.assertEquals(sms.message, 'David 1 Transport 1')
+            elif sms.to_msisdn == '2':
+                self.assertEquals(sms.message, 'Simon 2 Transport 2')
+            elif sms.to_msisdn == '3':
+                self.assertEquals(sms.message, 'Morgan 3 Transport 3')
+            else:
+                raise Exception, 'Do not know whats going on here'
+    
     def test_sms_status(self):
         send_resp = self.client.send_sms(
             to_msisdn = ['27123456788',],

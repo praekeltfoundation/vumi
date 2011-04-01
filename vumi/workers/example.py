@@ -5,6 +5,11 @@ from twisted.internet import reactor
 from vumi.service import Worker, Consumer, Publisher
 
 class ExampleConsumer(Consumer):
+    exchange_name = "vumi"
+    exchange_type = "direct"
+    durable = False
+    queue_name = "queue"
+    routing_key = "routing_key"
     
     def __init__(self, publisher):
         self.publisher = publisher
@@ -15,6 +20,12 @@ class ExampleConsumer(Consumer):
     
 
 class ExamplePublisher(Publisher):
+    exchange_name = "vumi"
+    exchange_type = "direct"
+    routing_key = "routing_key"
+    durable = False
+    auto_delete = False
+    delivery_mode = 2 # save to disk
     
     def publish_json(self, dictionary):
         log.msg("Publishing JSON %s" % dictionary)
