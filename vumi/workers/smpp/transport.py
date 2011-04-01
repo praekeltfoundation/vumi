@@ -198,7 +198,7 @@ class SmppTransport(Worker):
                 self.config.get('OPERATOR_PREFIX',{}),
                 self.config.get('OPERATOR_NUMBER',{}))
         sequence_number = self.esme_client.submit_sm(
-                short_message = message,
+                short_message = message.encode('utf-8'),
                 destination_addr = str(to_msisdn),
                 source_addr = route,
                 )
