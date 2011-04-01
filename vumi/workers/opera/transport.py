@@ -2,6 +2,7 @@ from twisted.python import log
 from twisted.web import xmlrpc
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet import reactor
+from datetime import datetime, timedelta
 from vumi.webapp.api.models import SentSMS
 
 from vumi.service import Worker, Consumer, Publisher
@@ -21,8 +22,11 @@ class OperaConsumer(Consumer):
             'Channel': config.get('channel'),
         }
     
-    def consume_json(self, dictionary):
+    @inlineCallbacks
+    def consume_json(self, json):
         dictionary = self.default_values.copy()
+        dictionary.update(json)
+        
         delivery = dictionary.get('deliver_at', datetime.utcnow())
         expiry = dictionary.get('expire_at', (delivery + timedelta(days=1)))
         
@@ -37,10 +41,11 @@ class OperaConsumer(Consumer):
         dictionary['Priority'] = dictionary.get('priority', 'standard')
         dictionary['Receipt'] = dictionary.get('receipt', 'Y')
         
-        proxy_response = self.proxy.EAPIGateway.SendSMS(dictionary)
+        proxy_response = yield self.proxy.callRemote('EAPIGateway.SendSMS', dictionary)
         
         sent_sms.transport_msg_id = proxy_response.get('Identifier')
         sent_sms.save()
+        returnValue(sent_sms)
     
 
 class OperaPublisher(Publisher):
