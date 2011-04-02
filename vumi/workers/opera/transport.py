@@ -1,14 +1,14 @@
 from twisted.python import log
-from twisted.web import xmlrpc
+from twisted.web import xmlrpc, http
 from twisted.web.resource import Resource
-from twisted.web import http
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet import reactor
 from datetime import datetime, timedelta
 from vumi.webapp.api.models import SentSMS, ReceivedSMS, Keyword
 from vumi.webapp.api.gateways.opera import utils
+from vumi.utils import safe_routing_key
 from vumi.webapp.api import forms
-from vumi.service import Worker, Consumer, Publisher
+from vumi.service import Worker, Consumer, Publisher, JSONEncoder
 import cgi, json, iso8601
 
 class OperaHealthResource(Resource):
@@ -25,41 +25,24 @@ class OperaReceiptResource(Resource):
     
     def render_POST(self, request):
         receipts = utils.parse_receipts_xml(request.content.read())
-        success, fail = [], []
+        data = []
         for receipt in receipts:
-            try:
-                
-                # FIXME: instead of doing this here we should really
-                # publish this over AMQP with the publisher.
-                
-                # internally we store MSISDNs without a leading plus, strip that
-                # from the msisdn
-                sms = SentSMS.objects.get(
-                                        transport_name = "Opera",
-                                        transport_msg_id=receipt.reference, 
-                                        to_msisdn=receipt.msisdn.replace("+",""))
-                sms.transport_status = receipt.status
-                sms.delivery_timestamp = datetime.strptime(receipt.timestamp, 
-                                                        utils.OPERA_TIMESTAMP_FORMAT)
-                sms.save()
-                
-                # FIXME: this no longer works, would publish to vumi.webapp.sms.receipt
-                # losing any transport info.
-                # signals.sms_receipt.send(sender=SentSMS, instance=sms, 
-                #                             pk=sms.pk, 
-                #                             receipt=receipt._asdict())
-                success.append(receipt)
-            except SentSMS.DoesNotExist, error:
-                log.err()
-                fail.append(receipt)
-                
+            dictionary = {
+                'transport_name': 'Opera',
+                'transport_msg_id': receipt.reference,
+                'transport_status': receipt.status,
+                'transport_delivered_at': datetime.strptime(
+                    receipt.timestamp, 
+                    utils.OPERA_TIMESTAMP_FORMAT
+                )
+            }
+            self.publisher.publish_json(dictionary, 
+                                        routing_key='sms.receipt.opera')
+            data.append(dictionary)
         
-        request.setResponseCode(http.CREATED)
+        request.setResponseCode(http.ACCEPTED)
         request.setHeader('Content-Type', 'application/json; charset-utf-8')
-        return json.dumps({
-            'success': map(lambda rcpt: rcpt._asdict(), success),
-            'fail': map(lambda rcpt: rcpt._asdict(), fail)
-        })
+        return json.dumps(data, cls=JSONEncoder)
 
 class OperaReceiveResource(Resource):
     
@@ -70,44 +53,17 @@ class OperaReceiveResource(Resource):
     def render_POST(self, request):
         content = request.content.read()
         sms = utils.parse_post_event_xml(content)
-        # FIXME: this really shouldn't be in the transport
-        #
-        # update the POST to have the `_from` key copied from `from`. 
-        # The model has `_from` defined because `from` is a protected python
-        # statement
-        
-        try:
-            head = sms['Text'].split()[0]
-            keyword = Keyword.objects.get(keyword=head.lower())
-            form = forms.ReceivedSMSForm({
-                'user': keyword.user.pk,
-                'to_msisdn': sms['Local'],
-                'from_msisdn': sms['Remote'],
-                'message': sms['Text'],
-                'transport_name': 'Opera',
-                'received_at': iso8601.parse_date(sms['ReceiveDate'])
-            })
-            if not form.is_valid():
-                raise FormValidationError(form)
-            
-            receive_sms = form.save()
-            log.msg('Receiving an SMS from: %s' % receive_sms.from_msisdn)
-            
-            # FIXME: signals are going to break things here, all this 
-            # shouldn't be in the transport
-            # signals.sms_received.send(sender=ReceivedSMS, instance=receive_sms, 
-            #                             pk=receive_sms.pk)
-            
-            # return the response we got back to Opera, it could be re-routed
-            # to other services in a callback chain.
-            request.setResponseCode(http.OK)
-            request.setHeader('Content-Type', 'text/xml; charset=utf8')
-            return content
-        except Keyword.DoesNotExist, e:
-            log.msg("SMS delivered by Opera: %s" % content)
-            log.msg("Couldn't find keyword for message: %s" % sms['Text'])
-            log.err()
-            
+        self.publisher.publish_json({
+            'to_msisdn': sms['Local'],
+            'from_msisdn': sms['Remote'],
+            'message': sms['Text'],
+            'transport_name': 'Opera',
+            'received_at': iso8601.parse_date(sms['ReceiveDate'])
+        }, routing_key = 'sms.inbound.opera.%s' % safe_routing_key(sms['Local']))
+        request.setResponseCode(http.ACCEPTED)
+        request.setHeader('Content-Type', 'text/xml; charset=utf8')
+        return content
+    
 
 class OperaConsumer(Consumer):
     exchange_name = "vumi"

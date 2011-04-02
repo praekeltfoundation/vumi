@@ -141,3 +141,4 @@ def require_content_type(*content_types):
                     status="400")
         return f(self, request, *args, **kwargs)
     return wrap
+
