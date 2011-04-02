@@ -8,8 +8,7 @@ from txamqp.content import Content
 from txamqp.protocol import AMQClient
 from vumi.errors import VumiError
 import txamqp
-import json
-import sys
+import json, datetime, sys
 
 class Options(usage.Options):
     """
@@ -24,6 +23,21 @@ class Options(usage.Options):
         ["specfile", None, "config/amqp-spec-0-8.xml", "AMQP spec file"],
     ]
 
+
+class JSONDecoder(json.JSONDecoder):
+    def decode(self, s):
+        try:
+            d = datetime.datetime.strptime(d, '%Y-%m-%dT%H:%M:%S.%f')
+        except ValueError, e:
+            pass
+    
+
+class JSONEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, datetime.datetime):
+            return obj.isoformat()
+        return super(JSONEncoder, self).default(obj)
+    
 
 class Worker(AMQClient):
     """
@@ -161,7 +175,7 @@ class Consumer(object):
         returnValue(self)
     
     def consume(self, message):
-        self.consume_json(json.loads(message.content.body))
+        self.consume_json(json.loads(message.content.body, cls=JSONDecoder))
         self.ack(message)
     
     def consume_json(self, dictionary):
@@ -203,7 +217,7 @@ class Publisher(object):
     
     def publish_json(self, data, **kwargs):
         """helper method"""
-        message = Content(json.dumps(data))
+        message = Content(json.dumps(data, cls=JSONEncoder))
         message['delivery mode'] = kwargs.pop('delivery_mode', self.delivery_mode)
         return self.publish(message, **kwargs)
 

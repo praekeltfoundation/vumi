@@ -64,6 +64,16 @@ def get_operator_number(msisdn, country_code, mapping, numbers):
     number = numbers.get(operator, '')
     return number
 
+def safe_routing_key(routing_key):
+    """
+    >>> safe_routing_key(u'*32323#')
+    u's32323h'
+    >>>
+    
+    """
+    return reduce(lambda r_key, kv: r_key.replace(*kv), 
+                    [('*','s'), ('#','h')], routing_key)
+
 ### SAMPLE CONFIG PARAMETERS - REPLACE 'x's IN OPERATOR_NUMBER
 
 """
