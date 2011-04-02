@@ -178,9 +178,17 @@ class SmppTransport(Worker):
 
     @inlineCallbacks
     def delivery_report(self, *args, **kwargs):
-        yield self.publisher.publish_json(kwargs,
-            routing_key='sms.receipt.%s' % (
-                self.config.get('TRANSPORT_NAME', 'fallback').lower()))
+        transport_name = self.config.get('TRANSPORT_NAME', 'fallback').lower()
+        dictionary = {
+            'transport_name': transport_name,
+            'transport_msg_id': kwargs['delivery_report']['id'],
+            'transport_status': kwargs['delivery_report']['stat'],
+            'transport_delivered_at': datetime.strptime(
+                dictionary['delivery_report']['done_date'],
+                "%y%m%d%H%M%S")
+        }
+        yield self.publisher.publish_json(dictionary,
+            routing_key='sms.receipt.%s' % (transport_name,))
 
 
     @inlineCallbacks

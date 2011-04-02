@@ -148,10 +148,6 @@ class SMSReceiptConsumer(Consumer):
         log.msg("RECEIPT SM %s consumed by %s" % (json.dumps(dictionary),self.__class__.__name__))
 
 
-#class FallbackSMSReceiptConsumer(SMSReceiptConsumer):
-    #routing_key = 'receipt.fallback'
-
-
 def dynamically_create_receipt_consumer(name,**kwargs):
     return type("%s_SMSReceiptConsumer" % name, (SMSReceiptConsumer,), kwargs)
 
@@ -169,7 +165,7 @@ class SMSReceiptWorker(Worker):
                     routing_key='sms.receipt.%s' % transport,
                     queue_name='sms.receipt.%s' % transport
                 ))
-        #yield self.start_consumer(FallbackSMSReceiptConsumer)
+    
 
     def stopWorker(self):
         log.msg("Stopping the SMSReceiptWorker")
