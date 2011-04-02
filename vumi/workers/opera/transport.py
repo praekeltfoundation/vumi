@@ -1,15 +1,14 @@
 from twisted.python import log
-from twisted.web import xmlrpc
+from twisted.web import xmlrpc, http
 from twisted.web.resource import Resource
-from twisted.web import http
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet import reactor
 from datetime import datetime, timedelta
 from vumi.webapp.api.models import SentSMS, ReceivedSMS, Keyword
 from vumi.webapp.api.gateways.opera import utils
+from vumi.utils import safe_routing_key
 from vumi.webapp.api import forms
-from vumi.webapp.api.utils import callback
-from vumi.service import Worker, Consumer, Publisher
+from vumi.service import Worker, Consumer, Publisher, JSONEncoder
 import cgi, json, iso8601
 
 class OperaHealthResource(Resource):
@@ -26,56 +25,24 @@ class OperaReceiptResource(Resource):
     
     def render_POST(self, request):
         receipts = utils.parse_receipts_xml(request.content.read())
-        success, fail = [], []
+        data = []
         for receipt in receipts:
-            try:
-                
-                # FIXME: instead of doing this here we should really
-                # publish this over AMQP with the publisher.
-                
-                # internally we store MSISDNs without a leading plus, strip that
-                # from the msisdn
-                sms = SentSMS.objects.get(
-                                        transport_name = "Opera",
-                                        transport_msg_id=receipt.reference, 
-                                        to_msisdn=receipt.msisdn.replace("+",""))
-                sms.transport_status = receipt.status
-                sms.delivered_at = datetime.strptime(receipt.timestamp, 
-                                                        utils.OPERA_TIMESTAMP_FORMAT)
-                sms.save()
-                
-                params = [
-                        ('id', str(sms.pk)),
-                        ('transport_status', str(sms.transport_status)),
-                        ('delivered_at',
-                            sms.delivered_at.strftime('%Y-%m-%d %H:%M:%S.%f')),
-                        ]
-                
-                profile = sms.user.get_profile()
-                for url in profile.urlcallback_set.filter(name='sms_receipt'):
-                    try:
-                        url, resp = callback(url.url, params)
-                        log.msg("SMS Receipt callback",url,resp)
-                    except Exception, e:
-                        log.err()
-
-                # FIXME: this no longer works, would publish to vumi.webapp.sms.receipt
-                # losing any transport info.
-                # signals.sms_receipt.send(sender=SentSMS, instance=sms, 
-                #                             pk=sms.pk, 
-                #                             receipt=receipt._asdict())
-                success.append(receipt)
-            except SentSMS.DoesNotExist, error:
-                log.err()
-                fail.append(receipt)
-                
+            dictionary = {
+                'transport_name': 'Opera',
+                'transport_msg_id': receipt.reference,
+                'transport_status': receipt.status,
+                'transport_delivered_at': datetime.strptime(
+                    receipt.timestamp, 
+                    utils.OPERA_TIMESTAMP_FORMAT
+                )
+            }
+            self.publisher.publish_json(dictionary, 
+                                        routing_key='sms.receipt.opera')
+            data.append(dictionary)
         
-        request.setResponseCode(http.CREATED)
+        request.setResponseCode(http.ACCEPTED)
         request.setHeader('Content-Type', 'application/json; charset-utf-8')
-        return json.dumps({
-            'success': map(lambda rcpt: rcpt._asdict(), success),
-            'fail': map(lambda rcpt: rcpt._asdict(), fail)
-        })
+        return json.dumps(data, cls=JSONEncoder)
 
 class OperaReceiveResource(Resource):
     
