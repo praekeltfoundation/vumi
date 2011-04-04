@@ -5,7 +5,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from vumi.service import Worker, Consumer, Publisher
 from vumi.message import Message
 from vumi.webapp.api import utils
-from vumi.webapp.api.models import Keyword, SentSMS
+from vumi.webapp.api.models import Keyword, SentSMS, SMPPResp
 
 import json
 import time
@@ -108,6 +108,7 @@ class SMSReceiptConsumer(Consumer):
 
     def consume_message(self, message):
         dictionary = message.payload
+        log.msg("Consuming message:", message)
         status = dictionary['transport_status']
         transport_name = dictionary['transport_name']
         delivered_at = dictionary['transport_delivered_at']
@@ -115,9 +116,11 @@ class SMSReceiptConsumer(Consumer):
         
         try:
             # update sent sms objects
-            sent_sms = SentSMS.objects.get(transport_name=transport_name,
-                    transport_msg_id=message_id)
+            smpp_link = SMPPResp.objects.filter(message_id=message_id,
+                    sent_sms__transport_name=transport_name).latest('created_at')
+            sent_sms = smpp_link.sent_sms
             sent_sms.transport_status=status
+            sent_sms.transport_msg_id=message_id
             sent_sms.delivered_at=delivered_at
             sent_sms.save() 
             user = sent_sms.user
@@ -145,12 +148,17 @@ class SMSReceiptConsumer(Consumer):
                     log.msg('RESP: %s' % resp)
                 except Exception, e:
                     log.err(e)
-        except SentSMS.DoesNotExist, e:
+        except SMPPResp.DoesNotExist, e:
+            log.err()
+        except Exception, e:
             log.err()
         log.msg("RECEIPT SM %s consumed by %s" % (repr(dictionary),self.__class__.__name__))
+        return True
  
 
 def dynamically_create_receipt_consumer(name,**kwargs):
+    log.msg("Dynamically creating consumer for %s with %s" % (name,
+        repr(kwargs)))
     return type("%s_SMSReceiptConsumer" % name, (SMSReceiptConsumer,), kwargs)
 
 
@@ -161,8 +169,8 @@ class SMSReceiptWorker(Worker):
 
     @inlineCallbacks
     def startWorker(self):
-        log.msg("Starting the SMSReceiptWorkers for: %s" % self.config.get('OPERATOR_NUMBER'))
         transport = self.config.get('TRANSPORT_NAME', 'fallback').lower()
+        log.msg("Starting the SMSReceiptWorkers for: %s" % transport) 
         yield self.start_consumer(dynamically_create_receipt_consumer(transport,
                     routing_key='sms.receipt.%s' % transport,
                     queue_name='sms.receipt.%s' % transport
