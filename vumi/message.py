@@ -1,3 +1,4 @@
+from twisted.python import log
 import json, datetime
 
 class Message(object):
@@ -18,20 +19,27 @@ class Message(object):
     
     @classmethod
     def from_json(klass, json_string):
-        dictionary = json.loads(json_string, cls=JSONMessageDecoder)
+        dictionary = json.loads(json_string, object_hook=date_time_decoder)
         return klass(**dictionary)
 
     def __str__(self):
         return u"<Message payload=\"%s\">" % self.payload
 
-class JSONMessageDecoder(json.JSONDecoder):
-    """A JSON decoder that is ablo to read datetime values"""
-    def decode(self, s):
-        try:
-            return datetime.datetime.strptime(s, '%Y-%m-%dT%H:%M:%S.%f')
-        except ValueError, e:
-            return super(JSONMessageDecoder, self).decode(s)
-    
+def date_time_decoder(json_object):
+    for key,value in json_object.items():
+        iso_valid_formats = [
+                '%Y-%m-%dT%H:%M:%S.%f',
+                '%Y-%m-%dT%H:%M:%S'
+                ]
+        for format in iso_valid_formats:
+            try:
+                json_object[key] = datetime.datetime.strptime(value, format)
+            except ValueError, e:
+                continue
+            except TypeError, e:
+                continue
+    return json_object 
+
 
 class JSONMessageEncoder(json.JSONEncoder):
     """A JSON encoder that is able to serialize datetime"""
