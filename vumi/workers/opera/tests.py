@@ -8,6 +8,7 @@ from twisted.python import log
 from twisted.web.test.test_web import DummyRequest
 from twisted.web import http
 
+from vumi.message import Message
 from vumi.workers.opera import transport
 from vumi.webapp.api.models import *
 
@@ -21,8 +22,8 @@ class TestPublisher(object):
     def __init__(self):
         self.queue = []
     
-    def publish_json(self, dictionary, **kwargs):
-        self.queue.append((dictionary, kwargs))
+    def publish_message(self, message, **kwargs):
+        self.queue.append((message, kwargs))
     
 
 class OperaTransportTestCase(unittest.TestCase):
@@ -47,12 +48,12 @@ class OperaTransportTestCase(unittest.TestCase):
         </receipts>
         """.strip())
         response = resource.render_POST(request)
-        self.assertEquals(publisher.queue.pop(), ({
+        self.assertEquals(publisher.queue.pop(), (Message(**{
                 'transport_name': 'Opera',
                 'transport_msg_id': '001efc31',
                 'transport_status': 'D', # OK / delivered, opera specific
                 'transport_delivered_at': datetime(2008,8,31,15,59,24),
-            }, {
+            }), {
                 'routing_key': 'sms.receipt.opera'
             })
         )
@@ -98,13 +99,13 @@ class OperaTransportTestCase(unittest.TestCase):
         </bspostevent>
         """.strip())
         response = resource.render_POST(request)
-        self.assertEquals(publisher.queue.pop(), ({
+        self.assertEquals(publisher.queue.pop(), (Message(**{
                 'to_msisdn': '*32323',
                 'from_msisdn': '+27831234567',
                 'message': 'Hello World',
                 'transport_name': 'Opera',
                 'received_at': iso8601.parse_date('2010-06-04 15:51:25 +0000'),
-            }, {
+            }), {
                 'routing_key': 'sms.inbound.opera.s32323' # * -> s
             }))
     

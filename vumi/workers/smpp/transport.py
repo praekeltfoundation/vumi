@@ -5,6 +5,7 @@ from twisted.internet.task import LoopingCall
 from twisted.internet import reactor
 
 from vumi.service import Worker, Consumer, Publisher
+from vumi.message import Message
 from vumi.workers.smpp.client import EsmeTransceiverFactory, EsmeTransceiver
 
 import json
@@ -41,11 +42,11 @@ class SmppConsumer(Consumer):
         self.send = send_callback
         log.msg("Consuming on %s -> %s" % (self.routing_key, self.queue_name))
 
-    def consume_json(self, dictionary):
-        log.msg("Consumed JSON %s" % dictionary)
-        sequence_number = self.send(**dictionary)
+    def consume_message(self, message):
+        log.msg("Consumed JSON %s" % message)
+        sequence_number = self.send(**message)
         formdict = {
-                "sent_sms":dictionary.get("id"),
+                "sent_sms":message.payload.get("id"),
                 "sequence_number": sequence_number,
                 }
         log.msg("SMPPLinkForm <- %s" % formdict)
@@ -54,7 +55,7 @@ class SmppConsumer(Consumer):
         return True
 
     def consume(self, message):
-        if self.consume_json(json.loads(message.content.body)):
+        if self.consume_message(Message.from_json(message.content.body)):
             self.ack(message)
 
 
@@ -74,9 +75,9 @@ class SmppPublisher(Publisher):
     auto_delete = False                 # -> auto delete if no consumers bound
     delivery_mode = 2                   # -> save to disk
 
-    def publish_json(self, dictionary, **kwargs):
-        log.msg("Publishing JSON %s with extra args: %s" % (dictionary, kwargs))
-        super(SmppPublisher, self).publish_json(dictionary, **kwargs)
+    def publish_message(self, message, **kwargs):
+        log.msg("Publishing Message %s with extra args: %s" % (message, kwargs))
+        super(SmppPublisher, self).publish_message(message, **kwargs)
 
 
 class SmppTransport(Worker):
@@ -187,13 +188,13 @@ class SmppTransport(Worker):
                 dictionary['delivery_report']['done_date'],
                 "%y%m%d%H%M%S")
         }
-        yield self.publisher.publish_json(dictionary,
+        yield self.publisher.publish_message(Message(**dictionary),
             routing_key='sms.receipt.%s' % (transport_name,))
 
 
     @inlineCallbacks
     def deliver_sm(self, *args, **kwargs):
-        yield self.publisher.publish_json(kwargs, 
+        yield self.publisher.publish_message(Message(**kwargs), 
             routing_key='sms.inbound.%s.%s' % (
                 self.config.get('TRANSPORT_NAME', 'fallback').lower(),
                 kwargs.get('destination_addr')))
