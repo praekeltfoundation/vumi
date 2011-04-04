@@ -17,9 +17,9 @@ class FoneworxConsumer(Consumer):
     def __init__(self):
         queue = []
     
-    def consume_json(self, dictionary):
-        log.msg("Consumed JSON %s" % dictionary)
-        self.queue.append(dictionary)
+    def consume_message(self, message):
+        log.msg("Consumed Message %s" % message)
+        self.queue.append(message)
     
 
 class FoneworxPublisher(Publisher):
@@ -30,9 +30,9 @@ class FoneworxPublisher(Publisher):
     auto_delete = False                 # -> auto delete if no consumers bound
     delivery_mode = 2                   # -> do not save to disk
     
-    def publish_json(self, dictionary, **kwargs):
-        log.msg("Publishing JSON %s with extra args: %s" % (dictionary, kwargs))
-        super(TruTeqPublisher, self).publish_json(dictionary, **kwargs)
+    def publish_message(self, message, **kwargs):
+        log.msg("Publishing Message %s with extra args: %s" % (message, kwargs))
+        super(FoneworxPublisher, self).publish_message(message, **kwargs)
     
 
 class SMSTransport(Worker):
@@ -66,7 +66,7 @@ class SMSTransport(Worker):
         new_messages = self.receive(self.last_polled_at)
         self.last_polled_at = datetime.now() # this is inaccurate
         for inbound in new_messages:
-            self.publisher.publish_json(inboud)
+            self.publisher.publish_message(inboud)
             self.delete(inboud)
         for outbound in self.consumer.queue:
             sent_messages = self.send(**outbound)

@@ -3,6 +3,7 @@ from twisted.python.log import logging
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.service import Worker, Consumer, Publisher
+from vumi.message import Message
 from vumi.webapp.api import utils
 from vumi.webapp.api.models import Keyword
 
@@ -22,7 +23,8 @@ class SMSKeywordConsumer(Consumer):
     routing_key = "" # overwritten by subclass
 
 
-    def consume_json(self, dictionary):
+    def consume_message(self, message):
+        dictionary = message.payload
         message = dictionary.get('short_message')
         head = message.split(' ')[0]
         try:
@@ -104,7 +106,8 @@ class SMSReceiptConsumer(Consumer):
     routing_key = "" # overwritten by subclass
 
 
-    def consume_json(self, dictionary):
+    def consume_message(self, message):
+        dictionary = message.payload
         _id = dictionary['delivery_report']['id']
         if len(_id):
             resp = models.SMPPResp.objects.get(message_id=_id)
@@ -184,7 +187,8 @@ class SMSBatchConsumer(Consumer):
     def __init__(self, publisher):
         self.publisher = publisher
 
-    def consume_json(self, dictionary):
+    def consume_message(self, message):
+        dictionary = message.payload
         log.msg("SM BATCH %s consumed by %s" % (json.dumps(dictionary),self.__class__.__name__))
         payload = []
         kwargs = dictionary.get('kwargs')
@@ -201,12 +205,12 @@ class SMSBatchConsumer(Consumer):
                         'id':o.id
                         }
                 print ">>>>", json.dumps(mess)
-                self.publisher.publish_json(mess)
+                self.publisher.publish_message(Message(**mess))
                 #reactor.callLater(0, self.publisher.publish_json, mess)
         return True
 
     def consume(self, message):
-        if self.consume_json(json.loads(message.content.body)):
+        if self.consume_message(Message.from_json(message.content.body)):
             self.ack(message)
 
 
@@ -226,12 +230,13 @@ class IndivPublisher(Publisher):
     auto_delete = False
     delivery_mode = 2
 
-    def publish_json(self, dictionary, **kwargs):
+    def publish_message(self, message, **kwargs):
+        dictionary = message.payload
         transport = str(dictionary.get('transport_name', 'fallback')).lower()
         routing_key = 'sms.outbound.' + transport
         kwargs.update({'routing_key':routing_key})
-        log.msg("Publishing JSON %s with extra args: %s" % (dictionary, kwargs))
-        super(IndivPublisher, self).publish_json(dictionary, **kwargs)
+        log.msg("Publishing Message %s with extra args: %s" % (message, kwargs))
+        super(IndivPublisher, self).publish_message(message, **kwargs)
 
 
 class SMSBatchWorker(Worker):
