@@ -108,6 +108,7 @@ class SMSReceiptConsumer(Consumer):
 
     def consume_message(self, message):
         dictionary = message.payload
+        log.msg("Consuming message:", message)
         status = dictionary['transport_status']
         transport_name = dictionary['transport_name']
         delivered_at = dictionary['transport_delivered_at']
@@ -115,9 +116,11 @@ class SMSReceiptConsumer(Consumer):
         
         try:
             # update sent sms objects
-            sent_sms = SentSMS.objects.get(transport_name=transport_name,
-                    transport_msg_id=message_id)
+            smpp_link = SMPPResp.objects.filter(message_id=message_id,
+                    sent_sms__transport_name=transport_name).latest('created_at')
+            sent_sms = smpp_link.sent_sms
             sent_sms.transport_status=status
+            sent_sms.transport_msg_id=message_id
             sent_sms.delivered_at=delivered_at
             sent_sms.save() 
             user = sent_sms.user
