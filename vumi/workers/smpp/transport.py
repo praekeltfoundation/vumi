@@ -43,8 +43,8 @@ class SmppConsumer(Consumer):
         log.msg("Consuming on %s -> %s" % (self.routing_key, self.queue_name))
 
     def consume_message(self, message):
-        log.msg("Consumed JSON %s" % message)
-        sequence_number = self.send(**message)
+        log.msg("Consumed JSON1", message)
+        sequence_number = self.send(**message.payload)
         formdict = {
                 "sent_sms":message.payload.get("id"),
                 "sequence_number": sequence_number,
@@ -185,7 +185,7 @@ class SmppTransport(Worker):
             'transport_msg_id': kwargs['delivery_report']['id'],
             'transport_status': kwargs['delivery_report']['stat'],
             'transport_delivered_at': datetime.strptime(
-                dictionary['delivery_report']['done_date'],
+                kwargs['delivery_report']['done_date'],
                 "%y%m%d%H%M%S")
         }
         yield self.publisher.publish_message(Message(**dictionary),

@@ -5,7 +5,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from vumi.service import Worker, Consumer, Publisher
 from vumi.message import Message
 from vumi.webapp.api import utils
-from vumi.webapp.api.models import Keyword
+from vumi.webapp.api.models import Keyword, SentSMS
 
 import json
 import time
@@ -108,18 +108,20 @@ class SMSReceiptConsumer(Consumer):
 
     def consume_message(self, message):
         dictionary = message.payload
-        _id = dictionary['delivery_report']['id']
-        if len(_id):
-            resp = models.SMPPResp.objects.get(message_id=_id)
-            sent = resp.sent_sms
-            sent.transport_status = dictionary['delivery_report']['stat']
-            sent.delivered_at = time.strftime(
-                    "%Y-%m-%d %H:%M:%S",
-                    time.strptime(
-                        "20"+dictionary['delivery_report']['done_date'],
-                        "%Y%m%d%H%M%S"))
-            sent.save()
-            user = sent.user
+        status = dictionary['transport_status']
+        transport_name = dictionary['transport_name']
+        delivered_at = dictionary['transport_delivered_at']
+        message_id = dictionary['transport_msg_id']
+        
+        try:
+            # update sent sms objects
+            sent_sms = SentSMS.objects.get(transport_name=transport_name,
+                    transport_msg_id=message_id)
+            sent_sms.transport_status=status
+            sent_sms.delivered_at=delivered_at
+            sent_sms.save() 
+            user = sent_sms.user
+            
             profile = user.get_profile()
             urlcallback_set = profile.urlcallback_set.filter(name='sms_receipt')
             for urlcallback in urlcallback_set:
@@ -128,28 +130,25 @@ class SMSReceiptConsumer(Consumer):
                     log.msg('URL: %s' % urlcallback.url)
                     params = [
                             ("callback_name", "sms_receipt"),
-                            ("id", sent.id),
-                            ("transport_status", dictionary['delivery_report']['stat']),
-                            ("transport_status_display", dictionary['delivery_report']['stat']),
-                            ("created_at", sent.created_at),
-                            ("updated_at", sent.updated_at),
-                            ("delivered_at", time.strftime(
-                                    "%Y-%m-%d %H:%M:%S",
-                                    time.strptime(
-                                        "20"+dictionary['delivery_report']['done_date'],
-                                        "%Y%m%d%H%M%S"
-                                        )
-                                    )),
-                            ("from_msisdn", dictionary['destination_addr']),
-                            ("to_msisdn", sent.to_msisdn),
-                            ("message", sent.message),
+                            ("id", sent_sms.pk),
+                            ("transport_status", sent_sms.transport_status),
+                            ("transport_status_display",
+                                sent_sms.transport_status_display()),
+                            ("created_at", sent_sms.created_at),
+                            ("updated_at", sent_sms.updated_at),
+                            ("delivered_at", sent_sms.delivered_at), 
+                            ("from_msisdn", sent_sms.from_msisdn),
+                            ("to_msisdn", sent_sms.to_msisdn),
+                            ("message", sent_sms.message),
                             ]
-                    url, resp = utils.callback(url, [(p[0],str(p[1])) for p in params])
+                    url, resp = utils.callback(url, params)
                     log.msg('RESP: %s' % resp)
                 except Exception, e:
                     log.err(e)
-        log.msg("RECEIPT SM %s consumed by %s" % (json.dumps(dictionary),self.__class__.__name__))
-
+        except SentSMS.DoesNotExist, e:
+            log.err()
+        log.msg("RECEIPT SM %s consumed by %s" % (repr(dictionary),self.__class__.__name__))
+ 
 
 def dynamically_create_receipt_consumer(name,**kwargs):
     return type("%s_SMSReceiptConsumer" % name, (SMSReceiptConsumer,), kwargs)
