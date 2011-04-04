@@ -43,13 +43,13 @@ class SmppConsumer(Consumer):
         log.msg("Consuming on %s -> %s" % (self.routing_key, self.queue_name))
 
     def consume_message(self, message):
-        log.msg("Consumed JSON1", message)
+        log.msg("Consumed JSON", message)
         sequence_number = self.send(**message.payload)
         formdict = {
                 "sent_sms":message.payload.get("id"),
                 "sequence_number": sequence_number,
                 }
-        log.msg("SMPPLinkForm <- %s" % formdict)
+        log.msg("SMPPLinkForm", repr(formdict))
         form = forms.SMPPLinkForm(formdict)
         form.save()
         return True
@@ -99,7 +99,7 @@ class SmppTransport(Worker):
         factory.setDeliveryReportCallback(self.delivery_report)
         factory.setDeliverSMCallback(self.deliver_sm)
         factory.setLoopingQuerySMCallback(self.query_sm_group)
-        print factory.defaults
+        log.msg(factory.defaults)
         reactor.connectTCP(
                 factory.defaults['host'],
                 factory.defaults['port'],
@@ -143,12 +143,12 @@ class SmppTransport(Worker):
     def submit_sm_resp(self, *args, **kwargs):
         smpplink = models.SMPPLink.objects \
                 .filter(sequence_number=kwargs['sequence_number']) \
-                .order_by('-created_at')[:1].get()
+                .latest('created_at')
         kwargs.update({'sent_sms':smpplink.sent_sms_id})
-        log.msg("SMPPRespForm <- %s" % kwargs)
+        log.msg("SMPPRespForm <- %s" % repr(kwargs))
         form = forms.SMPPRespForm(kwargs)
         form.save()
-        yield log.msg("SUBMIT SM RESP %s" % (kwargs))
+        yield log.msg("SUBMIT SM RESP %s" % repr(kwargs))
 
 
     @inlineCallbacks
@@ -174,12 +174,13 @@ class SmppTransport(Worker):
                     message_id = r.message_id,
                     source_addr = route
                     )
-        yield log.msg("LOOPING QUERY SM" % (kwargs))
+        yield log.msg("LOOPING QUERY SM" % repr(kwargs))
 
 
     @inlineCallbacks
     def delivery_report(self, *args, **kwargs):
         transport_name = self.config.get('TRANSPORT_NAME', 'fallback').lower()
+        log.msg("DELIVERY REPORT", kwargs)
         dictionary = {
             'transport_name': transport_name,
             'transport_msg_id': kwargs['delivery_report']['id'],
@@ -201,7 +202,7 @@ class SmppTransport(Worker):
 
 
     def send_smpp(self, id, to_msisdn, message, *args, **kwargs):
-        print "Sending SMPP, to: %s, message: %s" % (to_msisdn, message)
+        log.msg("Sending SMPP, to: %s, message: %s" % (to_msisdn, repr(message)))
         route = get_operator_number(to_msisdn,
                 self.config['COUNTRY_CODE'],
                 self.config.get('OPERATOR_PREFIX',{}),
@@ -217,12 +218,6 @@ class SmppTransport(Worker):
                 #source_addr=route)
         return sequence_number
 
-
-    def sms_callback(self, *args, **kwargs):
-        print "Got SMS:", args, kwargs
-
-    def errback(self, *args, **kwargs):
-        print "Got Error: ", args, kwargs
 
     def stopWorker(self):
         log.msg("Stopping the SMPPTransport")

@@ -1,5 +1,6 @@
 import re
 
+from twisted.python import log
 from twisted.internet import reactor, defer
 from twisted.internet.protocol import Protocol, ReconnectingClientFactory
 from twisted.internet.task import LoopingCall
@@ -11,10 +12,10 @@ class EsmeTransceiver(Protocol):
 
     def __init__(self, seq, inc):
         self.name = 'Proto' + str(seq)
-        print '__init__', self.name
+        log.msg('__init__', self.name)
         self.defaults = {}
         self.state = 'CLOSED'
-        print self.name, 'STATE :', self.state
+        log.msg(self.name, 'STATE :', self.state)
         self.seq = seq
         self.inc = inc
         self.datastream = ''
@@ -48,7 +49,7 @@ class EsmeTransceiver(Protocol):
 
     def handleData(self, data):
         pdu = unpack_pdu(data)
-        print 'INCOMING <<<<', pdu
+        log.msg('INCOMING <<<<', pdu)
         if pdu['header']['command_id'] == 'bind_transceiver_resp':
             self.handle_bind_transceiver_resp(pdu)
         if pdu['header']['command_id'] == 'submit_sm_resp':
@@ -59,7 +60,7 @@ class EsmeTransceiver(Protocol):
             self.handle_deliver_sm(pdu)
         if pdu['header']['command_id'] == 'enquire_link_resp':
             self.handle_enquire_link_resp(pdu)
-        print self.name, 'STATE :', self.state
+        log.msg(self.name, 'STATE :', self.state)
 
 
     def loadDefaults(self, defaults):
@@ -88,20 +89,20 @@ class EsmeTransceiver(Protocol):
 
     def connectionMade(self):
         self.state = 'OPEN'
-        print self.name, 'STATE :', self.state
+        log.msg(self.name, 'STATE :', self.state)
         pdu = BindTransceiver(self.getSeq(), **self.defaults)
-        print pdu.get_obj()
+        log.msg(pdu.get_obj())
         self.incSeq()
         self.sendPDU(pdu)
 
 
     def connectionLost(self, *args, **kwargs):
         self.state = 'CLOSED'
-        print self.name, 'STATE :', self.state
+        log.msg(self.name, 'STATE :', self.state)
         try:
             self.lc_enquire.stop()
             del self.lc_enquire
-            print self.name, 'stop & del enquire link looping call'
+            log.msg(self.name, 'stop & del enquire link looping call')
         except:
             pass
         #try:
@@ -122,7 +123,8 @@ class EsmeTransceiver(Protocol):
 
     def sendPDU(self, pdu):
         data = pdu.get_bin()
-        print 'OUTGOING >>>>', unpack_pdu(data)
+        log.msg('OUTGOING >>>>', unpack_pdu(data))
+
         self.transport.write(data)
 
 
@@ -134,7 +136,7 @@ class EsmeTransceiver(Protocol):
             #self.lc_query = LoopingCall(self.query_sm_group)
             #self.lc_query.start(1.0)
             self.__connect_callback(self)
-        print self.name, 'STATE :', self.state
+        log.msg(self.name, 'STATE :', self.state)
 
 
     def handle_submit_sm_resp(self, pdu):
