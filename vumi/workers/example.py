@@ -3,6 +3,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet import reactor
 
 from vumi.service import Worker, Consumer, Publisher
+from vumi.message  import Message
 
 class ExampleConsumer(Consumer):
     exchange_name = "vumi"
@@ -14,9 +15,9 @@ class ExampleConsumer(Consumer):
     def __init__(self, publisher):
         self.publisher = publisher
     
-    def consume_json(self, dictionary):
-        log.msg("Consumed JSON %s" % dictionary)
-        reactor.callLater(1, self.publisher.publish_json, dictionary)
+    def consume_message(self, message):
+        log.msg("Consumed Message %s" % message)
+        reactor.callLater(1, self.publisher.publish_message, message)
     
 
 class ExamplePublisher(Publisher):
@@ -27,9 +28,9 @@ class ExamplePublisher(Publisher):
     auto_delete = False
     delivery_mode = 2 # save to disk
     
-    def publish_json(self, dictionary):
-        log.msg("Publishing JSON %s" % dictionary)
-        super(ExamplePublisher, self).publish_json(dictionary)
+    def publish_message(self, message):
+        log.msg("Publishing Message %s" % message)
+        super(ExamplePublisher, self).publish_message(message)
     
 
 class ExampleWorker(Worker):
@@ -46,7 +47,8 @@ class ExampleWorker(Worker):
         # when it's done, create the consumer and pass it the publisher
         self.consumer = yield self.start_consumer(ExampleConsumer, self.publisher)
         # publish something into the queue for the consumer to pick up.
-        reactor.callLater(0, self.publisher.publish_json, {'hello': 'world'})
+        reactor.callLater(0, self.publisher.publish_message,
+            Message(hello='world'))
     
     def stopWorker(self):
         log.msg("Stopping the ExampleWorker")

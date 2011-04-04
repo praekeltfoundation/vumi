@@ -3,6 +3,7 @@ from twisted.python.log import logging
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet import reactor
 
+from vumi.message import Message
 from vumi.service import Worker, Consumer, Publisher
 from vumi.workers.truteq.util import VumiSSMIFactory, SessionType, ussd_code_to_routing_key
 
@@ -21,8 +22,9 @@ class TruTeqConsumer(Consumer):
     def __init__(self, publisher):
         self.publisher = publisher
     
-    def consume_json(self, dictionary):
-        log.msg("Consumed JSON %s" % dictionary)
+    def consume_message(self, message):
+        log.msg("Consumed Message %s" % message)
+        dictionary = message.payload
         ussd_type = dictionary.get('ussd_type')
         msisdn = dictionary.get('msisdn')
         message = dictionary.get('message')
@@ -38,7 +40,7 @@ class TruTeqConsumer(Consumer):
                 'msisdn': msisdn,
                 'message': 'You said: %s' % message
             }
-        self.publisher.publish_json(response)
+        self.publisher.publish_message(Message(**response))
     
 
 class TruTeqPublisher(Publisher):
@@ -49,9 +51,9 @@ class TruTeqPublisher(Publisher):
     auto_delete = False                 # -> auto delete if no consumers bound
     delivery_mode = 2                   # -> do not save to disk
     
-    def publish_json(self, dictionary, **kwargs):
-        log.msg("Publishing JSON %s with extra args: %s" % (dictionary, kwargs))
-        super(TruTeqPublisher, self).publish_json(dictionary, **kwargs)
+    def publish_message(self, message, **kwargs):
+        log.msg("Publishing Message %s with extra args: %s" % (message, kwargs))
+        super(TruTeqPublisher, self).publish_message(message, **kwargs)
     
 
 class USSDWorker(Worker):

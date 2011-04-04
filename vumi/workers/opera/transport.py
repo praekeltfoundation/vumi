@@ -8,7 +8,8 @@ from vumi.webapp.api.models import SentSMS, ReceivedSMS, Keyword
 from vumi.webapp.api.gateways.opera import utils
 from vumi.utils import safe_routing_key
 from vumi.webapp.api import forms
-from vumi.service import Worker, Consumer, Publisher, JSONEncoder
+from vumi.message import Message
+from vumi.service import Worker, Consumer, Publisher
 import cgi, json, iso8601
 
 class OperaHealthResource(Resource):
@@ -36,13 +37,13 @@ class OperaReceiptResource(Resource):
                     utils.OPERA_TIMESTAMP_FORMAT
                 )
             }
-            self.publisher.publish_json(dictionary, 
-                                        routing_key='sms.receipt.opera')
-            data.append(dictionary)
+            message = Message(**dictionary)
+            self.publisher.publish_message(message, routing_key='sms.receipt.opera')
+            data.append(message.to_json()
         
         request.setResponseCode(http.ACCEPTED)
         request.setHeader('Content-Type', 'application/json; charset-utf-8')
-        return json.dumps(data, cls=JSONEncoder)
+        return json.dumps(data)
 
 class OperaReceiveResource(Resource):
     
@@ -53,13 +54,13 @@ class OperaReceiveResource(Resource):
     def render_POST(self, request):
         content = request.content.read()
         sms = utils.parse_post_event_xml(content)
-        self.publisher.publish_json({
+        self.publisher.publish_message(Message(**{
             'to_msisdn': sms['Local'],
             'from_msisdn': sms['Remote'],
             'message': sms['Text'],
             'transport_name': 'Opera',
             'received_at': iso8601.parse_date(sms['ReceiveDate'])
-        }, routing_key = 'sms.inbound.opera.%s' % safe_routing_key(sms['Local']))
+        }), routing_key = 'sms.inbound.opera.%s' % safe_routing_key(sms['Local']))
         request.setResponseCode(http.ACCEPTED)
         request.setHeader('Content-Type', 'text/xml; charset=utf8')
         return content
@@ -81,14 +82,14 @@ class OperaConsumer(Consumer):
         }
     
     @inlineCallbacks
-    def consume_json(self, json):
+    def consume_message(self, message):
         dictionary = self.default_values.copy()
-        dictionary.update(json)
+        dictionary.update(message.payload)
         
         delivery = dictionary.get('deliver_at', datetime.utcnow())
         expiry = dictionary.get('expire_at', (delivery + timedelta(days=1)))
         
-        log.msg("Consumed JSON %s" % dictionary)
+        log.msg("Consumed Message %s" % message)
         
         sent_sms = SentSMS.objects.get(pk=dictionary['id'])
         
@@ -114,9 +115,9 @@ class OperaPublisher(Publisher):
     auto_delete = False
     delivery_mode = 2 # save to disk
     
-    def publish_json(self, dictionary, **kwargs):
-        log.msg("Publishing JSON %s" % dictionary)
-        super(OperaPublisher, self).publish_json(dictionary, **kwargs)
+    def publish_message(self, message, **kwargs):
+        log.msg("Publishing Message %s" % message)
+        super(OperaPublisher, self).publish_message(message, **kwargs)
     
 
 class OperaTransport(Worker):
