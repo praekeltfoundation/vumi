@@ -21,13 +21,16 @@ class Message(object):
         dictionary = json.loads(json_string, cls=JSONMessageDecoder)
         return klass(**dictionary)
 
+    def __str__(self):
+        return u"<Message payload=\"%s\">" % self.payload
+
 class JSONMessageDecoder(json.JSONDecoder):
     """A JSON decoder that is ablo to read datetime values"""
     def decode(self, s):
         try:
-            d = datetime.datetime.strptime(d, '%Y-%m-%dT%H:%M:%S.%f')
+            return datetime.datetime.strptime(s, '%Y-%m-%dT%H:%M:%S.%f')
         except ValueError, e:
-            pass
+            return super(JSONMessageDecoder, self).decode(s)
     
 
 class JSONMessageEncoder(json.JSONEncoder):
