@@ -8,7 +8,7 @@ from vumi.webapp.api.models import SentSMS, ReceivedSMS, Keyword
 from vumi.webapp.api.gateways.opera import utils
 from vumi.webapp.api import forms
 from vumi.service import Worker, Consumer, Publisher
-import cgi, simplejson, iso8601
+import cgi, json, iso8601
 
 
 class OperaReceiptResource(Resource):
@@ -50,7 +50,7 @@ class OperaReceiptResource(Resource):
         
         request.setResponseCode(201)
         request.setHeader('Content-Type', 'application/json; charset-utf-8')
-        return simplejson.dumps({
+        return json.dumps({
             'success': map(lambda rcpt: rcpt._asdict(), success),
             'fail': map(lambda rcpt: rcpt._asdict(), fail)
         })
