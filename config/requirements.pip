@@ -19,6 +19,7 @@ smn-alexandria==0.1
 Sphinx==1.0.7
 django-nose
 coverage
+pyOpenSSL==0.11
 -e git+git://github.com/praekelt/python-ssmi.git#egg=python-ssmi
 -e git+git://github.com/dmaclay/python-smpp.git#egg=python-smpp
 -e git+git://github.com/smn/python-foneworx.git#egg=python-foneworx
