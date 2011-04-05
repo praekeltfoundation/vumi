@@ -1,6 +1,7 @@
 from twisted.python import log
 from twisted.web import xmlrpc
 from twisted.web.resource import Resource
+from twisted.web import http
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet import reactor
 from datetime import datetime, timedelta
@@ -10,6 +11,11 @@ from vumi.webapp.api import forms
 from vumi.service import Worker, Consumer, Publisher
 import cgi, json, iso8601
 
+class OperaHealthResource(Resource):
+    isLeaf = True
+    def render_GET(self, request):
+        request.setResponseCode(http.OK)
+        return "OK"
 
 class OperaReceiptResource(Resource):
     
@@ -48,7 +54,7 @@ class OperaReceiptResource(Resource):
                 fail.append(receipt)
                 
         
-        request.setResponseCode(201)
+        request.setResponseCode(http.CREATED)
         request.setHeader('Content-Type', 'application/json; charset-utf-8')
         return json.dumps({
             'success': map(lambda rcpt: rcpt._asdict(), success),
@@ -94,7 +100,7 @@ class OperaReceiveResource(Resource):
             
             # return the response we got back to Opera, it could be re-routed
             # to other services in a callback chain.
-            request.setResponseCode(200)
+            request.setResponseCode(http.OK)
             request.setHeader('Content-Type', 'text/xml; charset=utf8')
             return content
         except Keyword.DoesNotExist, e:
@@ -176,6 +182,7 @@ class OperaTransport(Worker):
             [
                 (OperaReceiptResource(self.publisher), self.config['web_receipt_path']),
                 (OperaReceiveResource(self.publisher), self.config['web_receive_path']),
+                (OperaHealthResource(), 'health'),
             ],
             self.config['web_port']
         )
