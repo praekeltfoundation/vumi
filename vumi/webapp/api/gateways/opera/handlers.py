@@ -22,7 +22,6 @@ class SMSReceiptHandler(BaseHandler):
     
     # TODO: Add Form validation for XML input
     @throttle(6000, 60) # allow for 100 a second
-    @require_mime('xml')
     def create(self, request):
         receipts = parse_receipts_xml(request.raw_post_data)
         success, fail = [], []
