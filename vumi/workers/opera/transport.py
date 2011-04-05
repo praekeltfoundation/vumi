@@ -29,6 +29,7 @@ class OperaReceiptResource(Resource):
         receipts = utils.parse_receipts_xml(request.content.read())
         data = []
         for receipt in receipts:
+            log.msg('Received delivery receipt:',receipt)
             dictionary = {
                 'transport_name': 'Opera',
                 'transport_msg_id': receipt.reference,
