@@ -39,7 +39,7 @@ class OperaReceiptResource(Resource):
                                         transport_msg_id=receipt.reference, 
                                         to_msisdn=receipt.msisdn.replace("+",""))
                 sms.transport_status = receipt.status
-                sms.delivery_timestamp = datetime.strptime(receipt.timestamp, 
+                sms.delivered_at = datetime.strptime(receipt.timestamp, 
                                                         utils.OPERA_TIMESTAMP_FORMAT)
                 sms.save()
                 
