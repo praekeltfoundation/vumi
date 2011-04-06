@@ -134,10 +134,8 @@ class SMSReceiptConsumer(Consumer):
                     log.msg('URL: %s' % urlcallback.url)
                     params = [
                             ("callback_name", "sms_receipt"),
-                            ("id", sent_sms.pk),
+                            ("id", str(sent_sms.pk)),
                             ("transport_status", sent_sms.transport_status),
-                            ("transport_status_display",
-                                sent_sms.transport_status_display()),
                             ("created_at", sent_sms.created_at),
                             ("updated_at", sent_sms.updated_at),
                             ("delivered_at", sent_sms.delivered_at), 
