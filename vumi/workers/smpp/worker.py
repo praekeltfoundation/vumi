@@ -129,8 +129,8 @@ class SMSReceiptConsumer(Consumer):
         message_id = dictionary['transport_msg_id']
         
         try:
-            log.msg('Processing receipt for', sent_sms)
             sent_sms = self.find_sent_sms(transport_name, message_id)
+            log.msg('Processing receipt for', sent_sms)
             sent_sms.transport_status=status
             sent_sms.transport_msg_id=message_id
             sent_sms.delivered_at=delivered_at
