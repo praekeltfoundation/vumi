@@ -29,6 +29,9 @@ class Message(object):
     def __str__(self):
         return u"<Message payload=\"%s\">" % repr(self.payload)
 
+    def __eq__(self, other):
+        return self.payload == other.payload
+
 def date_time_decoder(json_object):
     for key,value in json_object.items():
         try:
@@ -45,7 +48,7 @@ class JSONMessageEncoder(json.JSONEncoder):
     """A JSON encoder that is able to serialize datetime"""
     def default(self, obj):
         if isinstance(obj, datetime.datetime):
-            return obj.stftime(VUMI_DATE_FORMAT)
+            return obj.strftime(VUMI_DATE_FORMAT)
         return super(JSONEncoder, self).default(obj)
     
 
