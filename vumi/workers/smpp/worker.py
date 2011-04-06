@@ -106,6 +106,19 @@ class SMSReceiptConsumer(Consumer):
     queue_name = "" # overwritten by subclass
     routing_key = "" # overwritten by subclass
 
+    
+    def find_sent_sms(self, transport_name, message_id):
+        try:
+            # update sent sms objects
+            smpp_resp = SMPPResp.objects.filter(message_id=message_id,
+                    sent_sms__transport_name__iexact=transport_name).latest('created_at')
+            return smpp_resp.sent_sms
+        except SMPPResp.DoesNotExist, e:
+            log.err()
+            return SentSMS.objects.get(
+                    transport_name__iexact=transport_name,
+                    transport_msg_id=message_id)
+
 
     def consume_message(self, message):
         dictionary = message.payload
@@ -116,10 +129,7 @@ class SMSReceiptConsumer(Consumer):
         message_id = dictionary['transport_msg_id']
         
         try:
-            # update sent sms objects
-            smpp_resp = SMPPResp.objects.filter(message_id=message_id,
-                    sent_sms__transport_name__iexact=transport_name).latest('created_at')
-            sent_sms = smpp_resp.sent_sms
+            sent_sms = self.find_sent_sms(transport_name, message_id)
             sent_sms.transport_status=status
             sent_sms.transport_msg_id=message_id
             sent_sms.delivered_at=delivered_at
@@ -147,12 +157,9 @@ class SMSReceiptConsumer(Consumer):
                     log.msg('RESP: %s' % resp)
                 except Exception, e:
                     log.err(e)
-        except SMPPResp.DoesNotExist, e:
-            log.err()
         except Exception, e:
             log.err()
         log.msg("RECEIPT SM %s consumed by %s" % (repr(dictionary),self.__class__.__name__))
-        return True
  
 
 def dynamically_create_receipt_consumer(name,**kwargs):
