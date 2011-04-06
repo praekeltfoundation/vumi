@@ -5,7 +5,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from vumi.service import Worker, Consumer, Publisher
 from vumi.message import Message
 from vumi.webapp.api import utils
-from vumi.webapp.api.models import Keyword, SentSMS, SMPPResp
+from vumi.webapp.api.models import Keyword, SentSMS, SMPPResp, Transport
 
 import json
 import time
@@ -168,13 +168,14 @@ class SMSReceiptWorker(Worker):
 
     @inlineCallbacks
     def startWorker(self):
-        transport = self.config.get('TRANSPORT_NAME', 'fallback').lower()
-        log.msg("Starting the SMSReceiptWorkers for: %s" % transport) 
-        yield self.start_consumer(dynamically_create_receipt_consumer(transport,
-                    routing_key='sms.receipt.%s' % transport,
-                    queue_name='sms.receipt.%s' % transport
-                ))
-    
+        for transport in Transport.objects.all():
+            log.msg("Starting the SMSReceiptWorkers for: %s" % transport.name) 
+            yield self.start_consumer(
+                    dynamically_create_receipt_consumer(str(transport.name),
+                            routing_key='sms.receipt.%s' % transport.name.lower(),
+                            queue_name='sms.receipt.%s' % transport.name.lower()
+                        ))
+        
 
     def stopWorker(self):
         log.msg("Stopping the SMSReceiptWorker")
