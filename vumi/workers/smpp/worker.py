@@ -118,7 +118,7 @@ class SMSReceiptConsumer(Consumer):
         try:
             # update sent sms objects
             smpp_resp = SMPPResp.objects.filter(message_id=message_id,
-                    sent_sms__transport_name_iexact=transport_name).latest('created_at')
+                    sent_sms__transport_name__iexact=transport_name).latest('created_at')
             sent_sms = smpp_resp.sent_sms
             sent_sms.transport_status=status
             sent_sms.transport_msg_id=message_id
