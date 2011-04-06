@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from vumi.webapp.api.models import SentSMS, ReceivedSMS, Keyword
 from vumi.webapp.api.gateways.opera import utils
 from vumi.webapp.api import forms
+from vumi.webapp.api.utils import callback
 from vumi.service import Worker, Consumer, Publisher
 import cgi, json, iso8601
 
@@ -43,6 +44,21 @@ class OperaReceiptResource(Resource):
                                                         utils.OPERA_TIMESTAMP_FORMAT)
                 sms.save()
                 
+                params = [
+                        ('id', str(sms.pk)),
+                        ('transport_status', str(sms.transport_status)),
+                        ('delivered_at',
+                            sms.delivered_at.strftime('%Y-%m-%d %H:%M:%S.%f')),
+                        ]
+                
+                profile = sms.user.get_profile()
+                for url in profile.urlcallback_set.filter(name='sms_receipt'):
+                    try:
+                        url, resp = callback(url.url, params)
+                        log.msg("SMS Receipt callback",url,resp)
+                    except Exception, e:
+                        log.err()
+
                 # FIXME: this no longer works, would publish to vumi.webapp.sms.receipt
                 # losing any transport info.
                 # signals.sms_receipt.send(sender=SentSMS, instance=sms, 
