@@ -3,7 +3,7 @@ from twisted.python.log import logging
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.service import Worker, Consumer, Publisher
-from vumi.message import Message
+from vumi.message import Message, VUMI_DATE_FORMAT
 from vumi.webapp.api import utils
 from vumi.webapp.api.models import Keyword, SentSMS, SMPPResp, Transport
 
@@ -147,9 +147,12 @@ class SMSReceiptConsumer(Consumer):
                             ("callback_name", "sms_receipt"),
                             ("id", str(sent_sms.pk)),
                             ("transport_status", sent_sms.transport_status),
-                            ("created_at", sent_sms.created_at),
-                            ("updated_at", sent_sms.updated_at),
-                            ("delivered_at", sent_sms.delivered_at), 
+                            ("created_at",
+                                sent_sms.created_at.strftime(VUMI_DATE_FORMAT)),
+                            ("updated_at",
+                                sent_sms.updated_at.strftime(VUMI_DATE_FORMAT)),
+                            ("delivered_at",
+                                sent_sms.delivered_at.strftime(VUMI_DATE_FORMAT)), 
                             ("from_msisdn", sent_sms.from_msisdn),
                             ("to_msisdn", sent_sms.to_msisdn),
                             ("message", sent_sms.message),
