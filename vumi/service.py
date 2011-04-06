@@ -1,4 +1,4 @@
-from twisted.python import log, usage
+from twisted.python import log, usage, failure
 from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
 from twisted.internet import protocol, reactor
 from twisted.web.server import Site
@@ -153,16 +153,17 @@ class Consumer(object):
             try:
                 while self.keep_consuming:
                     message = yield self.queue.get()
-                    self.consume(message)
+                    yield self.consume(message)
             except txamqp.queue.Closed, e:
                 log.err("Queue has closed", e)
         read_messages()
         yield None
         returnValue(self)
     
+    @inlineCallbacks
     def consume(self, message):
-        if self.consume_message(Message.from_json(message.content.body)):
-            self.ack(message)
+        yield self.consume_message(Message.from_json(message.content.body))
+        returnValue(self.ack(message))
     
     def consume_message(self, message):
         """helper method, override in implementation"""

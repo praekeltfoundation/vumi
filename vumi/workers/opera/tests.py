@@ -4,7 +4,8 @@ os.environ['DJANGO_SETTINGS_MODULE'] = 'vumi.webapp.settings'
 from django.test.simple import DjangoTestSuiteRunner
 
 from twisted.trial import unittest
-from twisted.python import log
+from twisted.python import log, failure
+from twisted.internet import defer, reactor
 from twisted.web.test.test_web import DummyRequest
 from twisted.web import http
 
@@ -108,4 +109,48 @@ class OperaTransportTestCase(unittest.TestCase):
             }), {
                 'routing_key': 'sms.inbound.opera.s32323' # * -> s
             }))
-    
+
+    # @defer.inlineCallbacks
+    def test_delivery_crash(self):
+        """
+        if for some reason the delivery of the SMS to opera crashes it
+        shouldn't ACK the message over AMQ but leave it for a retry later
+        """
+        
+        from collections import namedtuple
+        Message = namedtuple('Message', ['content'])
+        Content = namedtuple('Content', ['body'])
+
+        fake_amqp_message = Message(content=Content(body='{"sample":"json"}'))
+        
+        class ExpectedException(failure.DefaultException): pass
+        class UnexpectedException(failure.DefaultException): pass
+
+        def error_raiser(klass, message):
+            def raise_error(*args, **kwargs):
+                d = defer.Deferred()
+                d.errback(klass(message))
+                return d
+            return raise_error
+
+        def all_ok(message):
+            def all_ok_cb(*args, **kwargs):
+                d = defer.Deferred()
+                d.callback(message)
+                return d
+            return all_ok_cb
+
+        consumer = transport.OperaConsumer(publisher=TestPublisher(),
+                config={'url':'http://localhost'})
+        consumer.consume_message = error_raiser(ExpectedException, 'this is expected')
+        consumer.ack = error_raiser(UnexpectedException, 'this should not be called if consume ' \
+                                        'message raises an error')
+        d = consumer.consume(fake_amqp_message)
+        d.addErrback(lambda f: f.trap(ExpectedException))
+        
+        consumer.consume_message = all_ok("all is ok")
+        ack_history = []
+        consumer.ack = lambda *args, **kwargs: ack_history.append((args,
+            kwargs))
+        d = consumer.consume(fake_amqp_message)
+        d.addCallback(lambda f: self.assertTrue(ack_history))
