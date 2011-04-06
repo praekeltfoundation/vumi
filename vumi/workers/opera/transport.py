@@ -1,16 +1,17 @@
+# -*- coding: utf-8 -*-
 from twisted.python import log
-from twisted.web import xmlrpc
+from twisted.web import xmlrpc, http
 from twisted.web.resource import Resource
-from twisted.web import http
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet import reactor
 from datetime import datetime, timedelta
 from vumi.webapp.api.models import SentSMS, ReceivedSMS, Keyword
 from vumi.webapp.api.gateways.opera import utils
+from vumi.utils import safe_routing_key
 from vumi.webapp.api import forms
-from vumi.webapp.api.utils import callback
+from vumi.message import Message, JSONMessageEncoder
 from vumi.service import Worker, Consumer, Publisher
-import cgi, json, iso8601
+import cgi, json, iso8601, base64, xmlrpclib
 
 class OperaHealthResource(Resource):
     isLeaf = True
@@ -26,56 +27,25 @@ class OperaReceiptResource(Resource):
     
     def render_POST(self, request):
         receipts = utils.parse_receipts_xml(request.content.read())
-        success, fail = [], []
+        data = []
         for receipt in receipts:
-            try:
-                
-                # FIXME: instead of doing this here we should really
-                # publish this over AMQP with the publisher.
-                
-                # internally we store MSISDNs without a leading plus, strip that
-                # from the msisdn
-                sms = SentSMS.objects.get(
-                                        transport_name = "Opera",
-                                        transport_msg_id=receipt.reference, 
-                                        to_msisdn=receipt.msisdn.replace("+",""))
-                sms.transport_status = receipt.status
-                sms.delivered_at = datetime.strptime(receipt.timestamp, 
-                                                        utils.OPERA_TIMESTAMP_FORMAT)
-                sms.save()
-                
-                params = [
-                        ('id', str(sms.pk)),
-                        ('transport_status', str(sms.transport_status)),
-                        ('delivered_at',
-                            sms.delivered_at.strftime('%Y-%m-%d %H:%M:%S.%f')),
-                        ]
-                
-                profile = sms.user.get_profile()
-                for url in profile.urlcallback_set.filter(name='sms_receipt'):
-                    try:
-                        url, resp = callback(url.url, params)
-                        log.msg("SMS Receipt callback",url,resp)
-                    except Exception, e:
-                        log.err()
-
-                # FIXME: this no longer works, would publish to vumi.webapp.sms.receipt
-                # losing any transport info.
-                # signals.sms_receipt.send(sender=SentSMS, instance=sms, 
-                #                             pk=sms.pk, 
-                #                             receipt=receipt._asdict())
-                success.append(receipt)
-            except SentSMS.DoesNotExist, error:
-                log.err()
-                fail.append(receipt)
-                
+            log.msg('Received delivery receipt:',receipt)
+            dictionary = {
+                'transport_name': 'Opera',
+                'transport_msg_id': receipt.reference,
+                'transport_status': receipt.status,
+                'transport_delivered_at': datetime.strptime(
+                    receipt.timestamp, 
+                    utils.OPERA_TIMESTAMP_FORMAT
+                )
+            }
+            message = Message(**dictionary)
+            self.publisher.publish_message(message, routing_key='sms.receipt.opera')
+            data.append(dictionary)
         
-        request.setResponseCode(http.CREATED)
+        request.setResponseCode(http.ACCEPTED)
         request.setHeader('Content-Type', 'application/json; charset-utf-8')
-        return json.dumps({
-            'success': map(lambda rcpt: rcpt._asdict(), success),
-            'fail': map(lambda rcpt: rcpt._asdict(), fail)
-        })
+        return json.dumps(data, cls=JSONMessageEncoder)
 
 class OperaReceiveResource(Resource):
     
@@ -86,44 +56,17 @@ class OperaReceiveResource(Resource):
     def render_POST(self, request):
         content = request.content.read()
         sms = utils.parse_post_event_xml(content)
-        # FIXME: this really shouldn't be in the transport
-        #
-        # update the POST to have the `_from` key copied from `from`. 
-        # The model has `_from` defined because `from` is a protected python
-        # statement
-        
-        try:
-            head = sms['Text'].split()[0]
-            keyword = Keyword.objects.get(keyword=head.lower())
-            form = forms.ReceivedSMSForm({
-                'user': keyword.user.pk,
-                'to_msisdn': sms['Local'],
-                'from_msisdn': sms['Remote'],
-                'message': sms['Text'],
-                'transport_name': 'Opera',
-                'received_at': iso8601.parse_date(sms['ReceiveDate'])
-            })
-            if not form.is_valid():
-                raise FormValidationError(form)
-            
-            receive_sms = form.save()
-            log.msg('Receiving an SMS from: %s' % receive_sms.from_msisdn)
-            
-            # FIXME: signals are going to break things here, all this 
-            # shouldn't be in the transport
-            # signals.sms_received.send(sender=ReceivedSMS, instance=receive_sms, 
-            #                             pk=receive_sms.pk)
-            
-            # return the response we got back to Opera, it could be re-routed
-            # to other services in a callback chain.
-            request.setResponseCode(http.OK)
-            request.setHeader('Content-Type', 'text/xml; charset=utf8')
-            return content
-        except Keyword.DoesNotExist, e:
-            log.msg("SMS delivered by Opera: %s" % content)
-            log.msg("Couldn't find keyword for message: %s" % sms['Text'])
-            log.err()
-            
+        self.publisher.publish_message(Message(**{
+            'to_msisdn': sms['Local'],
+            'from_msisdn': sms['Remote'],
+            'message': sms['Text'],
+            'transport_name': 'Opera',
+            'received_at': iso8601.parse_date(sms['ReceiveDate'])
+        }), routing_key = 'sms.inbound.opera.%s' % safe_routing_key(sms['Local']))
+        request.setResponseCode(http.ACCEPTED)
+        request.setHeader('Content-Type', 'text/xml; charset=utf8')
+        return content
+    
 
 class OperaConsumer(Consumer):
     exchange_name = "vumi"
@@ -141,26 +84,34 @@ class OperaConsumer(Consumer):
         }
     
     @inlineCallbacks
-    def consume_json(self, json):
+    def consume_message(self, message):
         dictionary = self.default_values.copy()
-        dictionary.update(json)
+        payload = message.payload
+
+        delivery = payload.get('deliver_at', datetime.utcnow())
+        expiry = payload.get('expire_at', (delivery + timedelta(days=1)))
         
-        delivery = dictionary.get('deliver_at', datetime.utcnow())
-        expiry = dictionary.get('expire_at', (delivery + timedelta(days=1)))
+        log.msg("Consumed Message %s" % message)
         
-        log.msg("Consumed JSON %s" % dictionary)
+        sent_sms = SentSMS.objects.get(pk=payload['id'])
         
-        sent_sms = SentSMS.objects.get(pk=dictionary['id'])
-        
-        dictionary['Numbers'] = dictionary.get('to_msisdn')
-        dictionary['SMSText'] = dictionary.get('message')
+        # check for non-ascii chars
+        message = payload.get('message')
+        if any(ord(c) > 127 for c in message):
+            message = xmlrpclib.Binary(message.encode('utf-8'))
+
+        dictionary['Numbers'] = payload.get('to_msisdn')
+        dictionary['SMSText'] = message 
         dictionary['Delivery'] = delivery
         dictionary['Expiry'] = expiry
-        dictionary['Priority'] = dictionary.get('priority', 'standard')
-        dictionary['Receipt'] = dictionary.get('receipt', 'Y')
+        dictionary['Priority'] = payload.get('priority', 'standard')
+        dictionary['Receipt'] = payload.get('receipt', 'Y')
         
-        proxy_response = yield self.proxy.callRemote('EAPIGateway.SendSMS', dictionary)
-        
+        log.msg("Sending SMS via Opera: %s" % dictionary)
+
+        proxy_response = yield self.proxy.callRemote('EAPIGateway.SendSMS',
+                dictionary)
+        log.msg("Proxy response: %s" % proxy_response)
         sent_sms.transport_msg_id = proxy_response.get('Identifier')
         sent_sms.save()
         returnValue(sent_sms)
@@ -174,9 +125,9 @@ class OperaPublisher(Publisher):
     auto_delete = False
     delivery_mode = 2 # save to disk
     
-    def publish_json(self, dictionary, **kwargs):
-        log.msg("Publishing JSON %s" % dictionary)
-        super(OperaPublisher, self).publish_json(dictionary, **kwargs)
+    def publish_message(self, message, **kwargs):
+        log.msg("Publishing Message %s" % message)
+        super(OperaPublisher, self).publish_message(message, **kwargs)
     
 
 class OperaTransport(Worker):

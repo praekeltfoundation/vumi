@@ -5,6 +5,7 @@ from twisted.internet.task import LoopingCall
 from twisted.internet import reactor
 
 from vumi.service import Worker, Consumer, Publisher
+from vumi.message import Message
 from vumi.workers.smpp.client import EsmeTransceiverFactory, EsmeTransceiver
 
 import json
@@ -41,20 +42,20 @@ class SmppConsumer(Consumer):
         self.send = send_callback
         log.msg("Consuming on %s -> %s" % (self.routing_key, self.queue_name))
 
-    def consume_json(self, dictionary):
-        log.msg("Consumed JSON %s" % dictionary)
-        sequence_number = self.send(**dictionary)
+    def consume_message(self, message):
+        log.msg("Consumed JSON", message)
+        sequence_number = self.send(**message.payload)
         formdict = {
-                "sent_sms":dictionary.get("id"),
+                "sent_sms":message.payload.get("id"),
                 "sequence_number": sequence_number,
                 }
-        log.msg("SMPPLinkForm <- %s" % formdict)
+        log.msg("SMPPLinkForm", repr(formdict))
         form = forms.SMPPLinkForm(formdict)
         form.save()
         return True
 
     def consume(self, message):
-        if self.consume_json(json.loads(message.content.body)):
+        if self.consume_message(Message.from_json(message.content.body)):
             self.ack(message)
 
 
@@ -74,9 +75,9 @@ class SmppPublisher(Publisher):
     auto_delete = False                 # -> auto delete if no consumers bound
     delivery_mode = 2                   # -> save to disk
 
-    def publish_json(self, dictionary, **kwargs):
-        log.msg("Publishing JSON %s with extra args: %s" % (dictionary, kwargs))
-        super(SmppPublisher, self).publish_json(dictionary, **kwargs)
+    def publish_message(self, message, **kwargs):
+        log.msg("Publishing Message %s with extra args: %s" % (message, kwargs))
+        super(SmppPublisher, self).publish_message(message, **kwargs)
 
 
 class SmppTransport(Worker):
@@ -98,7 +99,7 @@ class SmppTransport(Worker):
         factory.setDeliveryReportCallback(self.delivery_report)
         factory.setDeliverSMCallback(self.deliver_sm)
         factory.setLoopingQuerySMCallback(self.query_sm_group)
-        print factory.defaults
+        log.msg(factory.defaults)
         reactor.connectTCP(
                 factory.defaults['host'],
                 factory.defaults['port'],
@@ -142,12 +143,12 @@ class SmppTransport(Worker):
     def submit_sm_resp(self, *args, **kwargs):
         smpplink = models.SMPPLink.objects \
                 .filter(sequence_number=kwargs['sequence_number']) \
-                .order_by('-created_at')[:1].get()
+                .latest('created_at')
         kwargs.update({'sent_sms':smpplink.sent_sms_id})
-        log.msg("SMPPRespForm <- %s" % kwargs)
+        log.msg("SMPPRespForm <- %s" % repr(kwargs))
         form = forms.SMPPRespForm(kwargs)
         form.save()
-        yield log.msg("SUBMIT SM RESP %s" % (kwargs))
+        yield log.msg("SUBMIT SM RESP %s" % repr(kwargs))
 
 
     @inlineCallbacks
@@ -173,26 +174,35 @@ class SmppTransport(Worker):
                     message_id = r.message_id,
                     source_addr = route
                     )
-        yield log.msg("LOOPING QUERY SM" % (kwargs))
+        yield log.msg("LOOPING QUERY SM" % repr(kwargs))
 
 
     @inlineCallbacks
     def delivery_report(self, *args, **kwargs):
-        yield self.publisher.publish_json(kwargs,
-            routing_key='sms.receipt.%s' % (
-                self.config.get('TRANSPORT_NAME', 'fallback').lower()))
+        transport_name = self.config.get('TRANSPORT_NAME', 'fallback').lower()
+        log.msg("DELIVERY REPORT", kwargs)
+        dictionary = {
+            'transport_name': transport_name,
+            'transport_msg_id': kwargs['delivery_report']['id'],
+            'transport_status': kwargs['delivery_report']['stat'],
+            'transport_delivered_at': datetime.strptime(
+                kwargs['delivery_report']['done_date'],
+                "%y%m%d%H%M%S")
+        }
+        yield self.publisher.publish_message(Message(**dictionary),
+            routing_key='sms.receipt.%s' % (transport_name,))
 
 
     @inlineCallbacks
     def deliver_sm(self, *args, **kwargs):
-        yield self.publisher.publish_json(kwargs, 
+        yield self.publisher.publish_message(Message(**kwargs), 
             routing_key='sms.inbound.%s.%s' % (
                 self.config.get('TRANSPORT_NAME', 'fallback').lower(),
                 kwargs.get('destination_addr')))
 
 
     def send_smpp(self, id, to_msisdn, message, *args, **kwargs):
-        print "Sending SMPP, to: %s, message: %s" % (to_msisdn, message)
+        log.msg("Sending SMPP, to: %s, message: %s" % (to_msisdn, repr(message)))
         route = get_operator_number(to_msisdn,
                 self.config['COUNTRY_CODE'],
                 self.config.get('OPERATOR_PREFIX',{}),
@@ -208,12 +218,6 @@ class SmppTransport(Worker):
                 #source_addr=route)
         return sequence_number
 
-
-    def sms_callback(self, *args, **kwargs):
-        print "Got SMS:", args, kwargs
-
-    def errback(self, *args, **kwargs):
-        print "Got Error: ", args, kwargs
 
     def stopWorker(self):
         log.msg("Stopping the SMPPTransport")

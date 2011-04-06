@@ -7,9 +7,9 @@ from txamqp.client import TwistedDelegate
 from txamqp.content import Content
 from txamqp.protocol import AMQClient
 from vumi.errors import VumiError
+from vumi.message import Message
 import txamqp
-import json
-import sys
+import json, datetime, sys
 
 class Options(usage.Options):
     """
@@ -161,13 +161,13 @@ class Consumer(object):
         returnValue(self)
     
     def consume(self, message):
-        self.consume_json(json.loads(message.content.body))
-        self.ack(message)
+        if self.consume_message(Message.from_json(message.content.body)):
+            self.ack(message)
     
-    def consume_json(self, dictionary):
-        "helper method"
-        log.msg("Received dict: %s" % dictionary)
-    
+    def consume_message(self, message):
+        """helper method, override in implementation"""
+        log.msg("Received message: %s" % message)
+
     def ack(self, message):
         self.channel.basic_ack(message.delivery_tag, True)
     
@@ -201,9 +201,15 @@ class Publisher(object):
                                         content=message, 
                                         routing_key=routing_key)
     
+    def publish_message(self, message, **kwargs):
+        amq_message = Content(message.to_json())
+        amq_message['delivery mode'] = kwargs.pop('delivery_mode',
+                self.delivery_mode)
+        return self.publish(amq_message, **kwargs)
+
     def publish_json(self, data, **kwargs):
         """helper method"""
-        message = Content(json.dumps(data))
+        message = Content(json.dumps(data, cls=JSONEncoder))
         message['delivery mode'] = kwargs.pop('delivery_mode', self.delivery_mode)
         return self.publish(message, **kwargs)
 

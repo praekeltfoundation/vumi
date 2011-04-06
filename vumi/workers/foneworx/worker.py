@@ -3,6 +3,7 @@ from twisted.python.log import logging
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet import reactor
 
+from vumi.message import Message
 from vumi.service import Worker, Consumer, Publisher
 
 
@@ -17,13 +18,13 @@ class FoneworxConsumer(Consumer):
         self.publisher = publisher
         self.storage = []
     
-    def consume_json(self, dictionary):
-        log.msg("Consumed JSON %s" % dictionary)
+    def consume_message(self, message):
+        log.msg("Consumed Message %s" % message)
         response = {
-            'msisdn': dictionary['msisdn'],
-            'message': "You said: %s" % dictionary['message']
+            'msisdn': message.payload['msisdn'],
+            'message': "You said: %s" % message.payload['message']
         }
-        self.publisher.publish_json(response)
+        self.publisher.publish_message(Message(**response))
     
 
 class FoneworxPublisher(Publisher):
@@ -34,9 +35,9 @@ class FoneworxPublisher(Publisher):
     auto_delete = False                 # -> auto delete if no consumers bound
     delivery_mode = 2                   # -> do not save to disk
     
-    def publish_json(self, dictionary, **kwargs):
-        log.msg("Publishing JSON %s with extra args: %s" % (dictionary, kwargs))
-        super(FoneworxPublisher, self).publish_json(dictionary, **kwargs)
+    def publish_message(self, message, **kwargs):
+        log.msg("Publishing Message %s with extra args: %s" % (message, kwargs))
+        super(FoneworxPublisher, self).publish_message(message, **kwargs)
     
 
 class SMSWorker(Worker):
