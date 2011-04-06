@@ -43,7 +43,7 @@ class OperaReceiptResource(Resource):
             self.publisher.publish_message(message, routing_key='sms.receipt.opera')
             data.append(dictionary)
         
-        request.setResponseCode(http.ACCEPTED)
+        request.setResponseCode(http.OK)
         request.setHeader('Content-Type', 'application/json; charset-utf-8')
         return json.dumps(data, cls=JSONMessageEncoder)
 
@@ -63,7 +63,7 @@ class OperaReceiveResource(Resource):
             'transport_name': 'Opera',
             'received_at': iso8601.parse_date(sms['ReceiveDate'])
         }), routing_key = 'sms.inbound.opera.%s' % safe_routing_key(sms['Local']))
-        request.setResponseCode(http.ACCEPTED)
+        request.setResponseCode(http.OK)
         request.setHeader('Content-Type', 'text/xml; charset=utf8')
         return content
     
