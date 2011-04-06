@@ -18,6 +18,7 @@ class ExampleConsumer(Consumer):
     def consume_message(self, message):
         log.msg("Consumed Message %s" % message)
         reactor.callLater(1, self.publisher.publish_message, message)
+        return True
     
 
 class ExamplePublisher(Publisher):

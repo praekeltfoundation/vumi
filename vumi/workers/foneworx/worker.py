@@ -25,6 +25,7 @@ class FoneworxConsumer(Consumer):
             'message': "You said: %s" % message.payload['message']
         }
         self.publisher.publish_message(Message(**response))
+        return True
     
 
 class FoneworxPublisher(Publisher):

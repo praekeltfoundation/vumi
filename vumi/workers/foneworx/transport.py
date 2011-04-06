@@ -20,6 +20,7 @@ class FoneworxConsumer(Consumer):
     def consume_message(self, message):
         log.msg("Consumed Message %s" % message)
         self.queue.append(message)
+        return True
     
 
 class FoneworxPublisher(Publisher):

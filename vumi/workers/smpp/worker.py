@@ -68,6 +68,7 @@ class SMSKeywordConsumer(Consumer):
         except Keyword.DoesNotExist:
             log.msg("Couldn't find keyword for message: %s" % message)
         log.msg("DELIVER SM %s consumed by %s" % (json.dumps(dictionary),self.__class__.__name__))
+        return True
 
 
 def dynamically_create_keyword_consumer(name,**kwargs):

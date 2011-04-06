@@ -41,6 +41,7 @@ class TruTeqConsumer(Consumer):
                 'message': 'You said: %s' % message
             }
         self.publisher.publish_message(Message(**response))
+        return True
     
 
 class TruTeqPublisher(Publisher):

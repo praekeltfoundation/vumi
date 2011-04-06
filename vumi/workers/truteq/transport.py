@@ -25,6 +25,7 @@ class TruTeqConsumer(Consumer):
     def consume_message(self, message):
         log.msg("Consumed Message %s" % message)
         self.send(**message.payload)
+        return True
     
 
 class TruTeqPublisher(Publisher):
