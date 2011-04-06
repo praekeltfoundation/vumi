@@ -1,6 +1,10 @@
 from twisted.python import log
 import json, datetime
 
+
+VUMI_DATE_FORMAT = "%Y-%m-%d %H:%M:%S.%f"
+"""This is the date format we work with internally"""
+
 class Message(object):
     """
     Start of a somewhat unified message object to be
@@ -23,21 +27,17 @@ class Message(object):
         return klass(**dictionary)
 
     def __str__(self):
-        return u"<Message payload=\"%s\">" % self.payload
+        return u"<Message payload=\"%s\">" % repr(self.payload)
 
 def date_time_decoder(json_object):
     for key,value in json_object.items():
-        iso_valid_formats = [
-                '%Y-%m-%dT%H:%M:%S.%f',
-                '%Y-%m-%dT%H:%M:%S'
-                ]
-        for format in iso_valid_formats:
-            try:
-                json_object[key] = datetime.datetime.strptime(value, format)
-            except ValueError, e:
-                continue
-            except TypeError, e:
-                continue
+        try:
+            json_object[key] = datetime.datetime.strptime(value,
+                    VUMI_DATE_FORMAT)
+        except ValueError, e:
+            continue
+        except TypeError, e:
+            continue
     return json_object 
 
 
@@ -45,7 +45,7 @@ class JSONMessageEncoder(json.JSONEncoder):
     """A JSON encoder that is able to serialize datetime"""
     def default(self, obj):
         if isinstance(obj, datetime.datetime):
-            return obj.isoformat()
+            return obj.stftime(VUMI_DATE_FORMAT)
         return super(JSONEncoder, self).default(obj)
     
 
