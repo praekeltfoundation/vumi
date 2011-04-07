@@ -99,8 +99,7 @@ def callback(url, list_of_tuples, auth_type='basic', debug=False, debug_callback
         ch.setopt(pycurl.HEADERFUNCTION, header)
 
     if username:
-        ch.setopt(pycurl.USERPWD, '%s:%s'.encode('utf-8') % (username,
-            password))
+        ch.setopt(pycurl.USERPWD, ('%s:%s' % (username,password)).encode('utf-8'))
         ch.setopt(pycurl.HTTPAUTH, getattr(pycurl, "HTTPAUTH_%s" %
             auth_type.upper()))
     
