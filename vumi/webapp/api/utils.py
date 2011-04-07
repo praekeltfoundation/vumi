@@ -94,12 +94,17 @@ def callback(url, list_of_tuples, debug=False, debug_callback = False):
     ch.setopt(pycurl.HTTPPOST, utf8encode(list_of_tuples))
     
     if debug:
-
+        
+        ## Callback function invoked when header data is ready
+        def header(buf):
+            logging.debug("header", buf)
+        
         def _debug_handler(debug_type, debug_msg):
             logging.debug("pycurl:debug(%d): %s" % (debug_type, debug_msg))
 
         ch.setopt(pycurl.VERBOSE, 1)
         ch.setopt(pycurl.DEBUGFUNCTION, debug_callback or _debug_handler)
+        ch.setopt(pycurl.HEADERFUNCTION, header)
 
     try:
         result = ch.perform()
