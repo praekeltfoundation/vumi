@@ -1,3 +1,4 @@
+import uuid
 
 from twisted.python import log
 from twisted.internet import reactor, defer
@@ -57,7 +58,7 @@ class SmscServer(Protocol):
     def handle_submit_sm(self, pdu):
         if pdu['header']['command_status'] == 'ESME_ROK':
             sequence_number = pdu['header']['sequence_number']
-            message_id = "1234"
+            message_id = str(uuid.uuid4())
             pdu_resp = SubmitSMResp(sequence_number, message_id)
             self.sendPDU(pdu_resp)
 
