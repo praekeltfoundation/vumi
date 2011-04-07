@@ -82,7 +82,7 @@ def utf8encode(tuples):
     return [(key.encode('utf-8'), value.encode('utf-8'))
         for key, value in tuples]
 
-def callback(url, list_of_tuples):
+def callback(url, list_of_tuples, debug=False, debug_callback = False):
     """
     HTTP POST a list of key value tuples to the given URL and 
     return the response
@@ -93,6 +93,14 @@ def callback(url, list_of_tuples):
     ch.setopt(pycurl.WRITEFUNCTION, data.write)
     ch.setopt(pycurl.HTTPPOST, utf8encode(list_of_tuples))
     
+    if debug:
+
+        def _debug_handler(debug_type, debug_msg):
+            logging.debug("pycurl:debug(%d): %s" % (debug_type, debug_msg))
+
+        ch.setopt(pycurl.VERBOSE, 1)
+        ch.setopt(pycurl.DEBUGFUNCTION, debug_callback or _debug_handler)
+
     try:
         result = ch.perform()
         resp = data.getvalue()
