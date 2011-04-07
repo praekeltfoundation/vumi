@@ -114,7 +114,6 @@ class SMSReceiptConsumer(Consumer):
                     sent_sms__transport_name__iexact=transport_name).latest('created_at')
             return smpp_resp.sent_sms
         except SMPPResp.DoesNotExist, e:
-            log.err()
             return SentSMS.objects.get(
                     transport_name__iexact=transport_name,
                     transport_msg_id=message_id)
@@ -130,7 +129,7 @@ class SMSReceiptConsumer(Consumer):
         
         try:
             sent_sms = self.find_sent_sms(transport_name, message_id)
-            log.msg('Processing receipt for', sent_sms)
+            log.msg('Processing receipt for', sent_sms, dictionary)
 
             if sent_sms.transport_status is status:
                 log.msg("Received duplicate receipt for", sent_sms, dictionary)
