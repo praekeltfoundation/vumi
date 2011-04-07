@@ -97,10 +97,10 @@ def callback(url, list_of_tuples, debug=False, debug_callback = False):
         
         ## Callback function invoked when header data is ready
         def header(buf):
-            logging.debug("header", buf)
+            print "header", buf
         
         def _debug_handler(debug_type, debug_msg):
-            logging.debug("pycurl:debug(%d): %s" % (debug_type, debug_msg))
+            print "pycurl:debug(%d): %s" % (debug_type, debug_msg)
 
         ch.setopt(pycurl.VERBOSE, 1)
         ch.setopt(pycurl.DEBUGFUNCTION, debug_callback or _debug_handler)
