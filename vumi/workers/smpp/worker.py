@@ -131,36 +131,40 @@ class SMSReceiptConsumer(Consumer):
         try:
             sent_sms = self.find_sent_sms(transport_name, message_id)
             log.msg('Processing receipt for', sent_sms)
-            sent_sms.transport_status=status
-            sent_sms.transport_msg_id=message_id
-            sent_sms.delivered_at=delivered_at
-            sent_sms.save() 
-            user = sent_sms.user
-            
-            profile = user.get_profile()
-            urlcallback_set = profile.urlcallback_set.filter(name='sms_receipt')
-            for urlcallback in urlcallback_set:
-                try:
-                    url = urlcallback.url
-                    log.msg('URL: %s' % urlcallback.url)
-                    params = [
-                            ("callback_name", "sms_receipt"),
-                            ("id", str(sent_sms.pk)),
-                            ("transport_status", sent_sms.transport_status),
-                            ("created_at",
-                                sent_sms.created_at.strftime(VUMI_DATE_FORMAT)),
-                            ("updated_at",
-                                sent_sms.updated_at.strftime(VUMI_DATE_FORMAT)),
-                            ("delivered_at",
-                                sent_sms.delivered_at.strftime(VUMI_DATE_FORMAT)), 
-                            ("from_msisdn", sent_sms.from_msisdn),
-                            ("to_msisdn", sent_sms.to_msisdn),
-                            ("message", sent_sms.message),
-                            ]
-                    url, resp = utils.callback(url, params)
-                    log.msg('RESP: %s' % resp)
-                except Exception, e:
-                    log.err(e)
+
+            if sent_sms.transport_status is status:
+                log.msg("Received duplicate receipt for", sent_sms, dictionary)
+            else:
+                sent_sms.transport_status=status
+                sent_sms.transport_msg_id=message_id
+                sent_sms.delivered_at=delivered_at
+                sent_sms.save() 
+                user = sent_sms.user
+                
+                profile = user.get_profile()
+                urlcallback_set = profile.urlcallback_set.filter(name='sms_receipt')
+                for urlcallback in urlcallback_set:
+                    try:
+                        url = urlcallback.url
+                        log.msg('URL: %s' % urlcallback.url)
+                        params = [
+                                ("callback_name", "sms_receipt"),
+                                ("id", str(sent_sms.pk)),
+                                ("transport_status", sent_sms.transport_status),
+                                ("created_at",
+                                    sent_sms.created_at.strftime(VUMI_DATE_FORMAT)),
+                                ("updated_at",
+                                    sent_sms.updated_at.strftime(VUMI_DATE_FORMAT)),
+                                ("delivered_at",
+                                    sent_sms.delivered_at.strftime(VUMI_DATE_FORMAT)), 
+                                ("from_msisdn", sent_sms.from_msisdn),
+                                ("to_msisdn", sent_sms.to_msisdn),
+                                ("message", sent_sms.message),
+                                ]
+                        url, resp = utils.callback(url, params)
+                        log.msg('RESP: %s' % resp)
+                    except Exception, e:
+                        log.err(e)
         except Exception, e:
             log.err()
         log.msg("RECEIPT SM %s consumed by %s" % (repr(dictionary),self.__class__.__name__))
