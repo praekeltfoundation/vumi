@@ -51,10 +51,6 @@ def _build_curl_object(url):
     Helper function to set up a curl request object that does SSL
     verification & authentication.    
     """
-    # parse the URL to get the username & password
-    pr = urlparse(url)
-    username = pr.username
-    password = pr.password or '' # default to blank password, not None
     
     ch = pycurl.Curl()
     ch.setopt(pycurl.URL, str(url))
@@ -67,14 +63,6 @@ def _build_curl_object(url):
             "Accept:"
         ])
     ch.setopt(pycurl.FOLLOWLOCATION, 1)
-    
-    # if we're given a username, pass it along and let pycurl figure
-    # out which Auth mechanism we're using, it'll automatically select
-    # one pycurl thinks is most secure.
-    if username:
-        ch.setopt(pycurl.USERPWD, str('%s:%s' % (username,password)))
-        ch.setopt(pycurl.HTTPAUTH, pycurl.HTTPAUTH_ANY)
-    
     return ch
     
 
@@ -82,7 +70,7 @@ def utf8encode(tuples):
     return [(key.encode('utf-8'), value.encode('utf-8'))
         for key, value in tuples]
 
-def callback(url, list_of_tuples, debug=False, debug_callback = False):
+def callback(url, list_of_tuples, auth_type='basic', debug=False, debug_callback = False):
     """
     HTTP POST a list of key value tuples to the given URL and 
     return the response
@@ -92,6 +80,10 @@ def callback(url, list_of_tuples, debug=False, debug_callback = False):
     data = StringIO()
     ch.setopt(pycurl.WRITEFUNCTION, data.write)
     ch.setopt(pycurl.HTTPPOST, utf8encode(list_of_tuples))
+    
+    pr = urlparse(url)
+    username = pr.username
+    password = pr.password or ''
     
     if debug:
         
@@ -106,6 +98,12 @@ def callback(url, list_of_tuples, debug=False, debug_callback = False):
         ch.setopt(pycurl.DEBUGFUNCTION, debug_callback or _debug_handler)
         ch.setopt(pycurl.HEADERFUNCTION, header)
 
+    if username:
+        ch.setopt(pycurl.USERPWD, '%s:%s'.encode('utf-8') % (username,
+            password))
+        ch.setopt(pycurl.HTTPAUTH, getattr(pycurl, "HTTPAUTH_%s" %
+            auth_type.upper()))
+    
     try:
         result = ch.perform()
         resp = data.getvalue()
