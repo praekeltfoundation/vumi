@@ -131,7 +131,7 @@ class SMSReceiptConsumer(Consumer):
             sent_sms = self.find_sent_sms(transport_name, message_id)
             log.msg('Processing receipt for', sent_sms, dictionary)
 
-            if sent_sms.transport_status is status:
+            if sent_sms.transport_status == status:
                 log.msg("Received duplicate receipt for", sent_sms, dictionary)
             else:
                 sent_sms.transport_status=status
