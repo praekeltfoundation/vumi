@@ -12,20 +12,9 @@ from twisted.web import http
 from vumi.message import Message
 from vumi.workers.opera import transport
 from vumi.webapp.api.models import *
+from vumi.utils import TestPublisher
 
 from StringIO import StringIO
-
-class TestPublisher(object):
-    """
-    A test publisher that caches outbound messages in an internal queue
-    for testing, instead of publishing over AMQP.
-    """
-    def __init__(self):
-        self.queue = []
-    
-    def publish_message(self, message, **kwargs):
-        self.queue.append((message, kwargs))
-    
 
 class OperaTransportTestCase(unittest.TestCase):
     

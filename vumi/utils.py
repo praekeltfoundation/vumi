@@ -74,6 +74,22 @@ def safe_routing_key(routing_key):
     return reduce(lambda r_key, kv: r_key.replace(*kv), 
                     [('*','s'), ('#','h')], routing_key)
 
+
+class TestPublisher(object):
+    """
+    A test publisher that caches outbound messages in an internal queue
+    for testing, instead of publishing over AMQP.
+
+    Useful for testing consumers
+    """
+    def __init__(self):
+        self.queue = []
+    
+    def publish_message(self, message, **kwargs):
+        self.queue.append((message, kwargs))
+    
+
+
 ### SAMPLE CONFIG PARAMETERS - REPLACE 'x's IN OPERATOR_NUMBER
 
 """
