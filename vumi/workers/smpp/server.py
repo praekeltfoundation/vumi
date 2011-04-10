@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 
 from twisted.python import log
 from twisted.internet import reactor, defer
@@ -34,7 +35,6 @@ class SmscServer(Protocol):
             #self.handle_deliver_sm(pdu)
         if pdu['header']['command_id'] == 'enquire_link':
             self.handle_enquire_link(pdu)
-        #log.msg(self.name, 'STATE :', self.state)
 
 
     def handle_bind_transceiver(self, pdu):
@@ -52,7 +52,6 @@ class SmscServer(Protocol):
             sequence_number = pdu['header']['sequence_number']
             pdu_resp = EnquireLinkResp(sequence_number)
             self.sendPDU(pdu_resp)
-            self.handle_submit_sm(pdu)
 
 
     def handle_submit_sm(self, pdu):
@@ -61,6 +60,15 @@ class SmscServer(Protocol):
             message_id = str(uuid.uuid4())
             pdu_resp = SubmitSMResp(sequence_number, message_id)
             self.sendPDU(pdu_resp)
+            self.delivery_report(message_id)
+
+
+    def delivery_report(self, message_id):
+        sequence_number = 1
+        short_message = 'id:%s sub:001 dlvrd:001 submit date:%s done date:%s stat:DELIVRD err:000 text:' % (
+                message_id, datetime.now().strftime("%y%m%d%H%M%S"), datetime.now().strftime("%y%m%d%H%M%S"))
+        pdu = DeliverSM(sequence_number, short_message = short_message)
+        self.sendPDU(pdu)
 
 
     def dataReceived(self, data):
@@ -78,9 +86,9 @@ class SmscServer(Protocol):
 
 
 class SmscServerFactory(ServerFactory):
-    protocol = SmscServer
-    #def buildProtocol(self, addr):
-        #smsc = SmscServer()
-        #return smsc
+    #protocol = SmscServer
+    def buildProtocol(self, addr):
+        smsc = SmscServer()
+        return smsc
 
 
