@@ -1,7 +1,7 @@
 system_id: smppclient1
 password: password
 host: localhost
-port: 2773
+port: 2772
 
 interface_version: "34"
 dest_addr_ton: 1
