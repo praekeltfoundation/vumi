@@ -1,8 +1,8 @@
 
 from twisted.trial import unittest
+from vumi.workers.smpp.service import *
 
-class TestTests(unittest.TestCase):
-    def test_passer(self):
+class DummySMSCTests(unittest.TestCase):
+    def test_launch(self):
         """A test that should always pass"""
         self.assertEqual(0, 0)
-
