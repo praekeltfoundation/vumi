@@ -1,21 +1,56 @@
-from twisted.unittest import TestCase
+import os
+os.environ['DJANGO_SETTINGS_MODULE'] = 'vumi.webapp.settings'
+
+
+from twisted.trial.unittest import TestCase
+from twisted.python import log
 from vumi.utils import TestPublisher
 from vumi.message import Message
+from vumi.workers.smpp.worker import SMSBatchConsumer
 
+from django.conf import settings
+
+from django.contrib.auth.models import User
+from vumi.webapp.api.models import SentSMSBatch
+from vumi.utils import setup_django_test_database, teardown_django_test_database
 
 class SMSBatchConsumerTestCase(TestCase):
 
     def setUp(self):
-        self.debatcher = SMSBatchConsumer()
         self.publisher = TestPublisher()
+        self.debatcher = SMSBatchConsumer(self.publisher)
+        self.runner, self.config = setup_django_test_database()
+        # self.runner = DjangoTestSuiteRunner(verbosity=1, failfast=False)
+        # patch_for_test_db_setup()
+        # setup_test_environment()
+        # self.old_config = self.runner.setup_databases()
     
     def tearDown(self):
-        pass
+        teardown_django_test_database(self.runner, self.config)
+        # self.runner.teardown_databases(self.old_config)
+        # teardown_test_environment()
     
     def test_debatching(self):
         """It should publish an incoming batch of 3 into separate
         individual messages"""
         
-        self.
+        user = User.objects.create(username='vumi')
+        batch = SentSMSBatch(user=user, title='test batch')
+        # create 3 test messages in this batch
+        recipients = [u'27123456789%s' % i for i in range(0,3)]
+        for recipient in recipients:
+            batch.sentsms_set.create(to_msisdn=recipient,
+                from_msisdn='27123456789', message='testing message',
+                transport_name='transport', user=user)
+            
+        message = Message(kwargs={
+            "id": batch.pk
+        })
+
+        self.debatcher.consume_message(message)
+        self.assertEquals(len(self.publisher.queue), 3)
+        self.assertEquals(set([m.payload['to_msisdn'] for m,routing_key in
+                self.publisher.queue]),
+                set(recipients))                
 
     

@@ -225,9 +225,7 @@ class SMSBatchConsumer(Consumer):
                         'message':o.message,
                         'id':o.id
                         }
-                print ">>>>", json.dumps(mess)
                 self.publisher.publish_message(Message(**mess))
-                #reactor.callLater(0, self.publisher.publish_json, mess)
         return True
 
     def consume(self, message):
