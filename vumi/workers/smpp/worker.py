@@ -226,7 +226,7 @@ class SMSBatchConsumer(Consumer):
                         'id':o.id
                         }
                 self.publisher.publish_message(Message(**mess),
-                        routing_key='sms.outbound.%s' % o.transport_name)
+                        routing_key='sms.outbound.%s' % o.transport_name.lower())
 
 class IndivPublisher(Publisher):
     """
