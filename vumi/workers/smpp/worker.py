@@ -225,19 +225,8 @@ class SMSBatchConsumer(Consumer):
                         'message':o.message,
                         'id':o.id
                         }
-                print ">>>>", json.dumps(mess)
-                self.publisher.publish_message(Message(**mess))
-                #reactor.callLater(0, self.publisher.publish_json, mess)
-        return True
-
-    def consume(self, message):
-        if self.consume_message(Message.from_json(message.content.body)):
-            self.ack(message)
-
-
-#class FallbackSMSBatchConsumer(SMSBatchConsumer):
-    #routing_key = 'batch.fallback'
-
+                self.publisher.publish_message(Message(**mess),
+                        routing_key='sms.outbound.%s' % o.transport_name.lower())
 
 class IndivPublisher(Publisher):
     """
@@ -252,10 +241,6 @@ class IndivPublisher(Publisher):
     delivery_mode = 2
 
     def publish_message(self, message, **kwargs):
-        dictionary = message.payload
-        transport = str(dictionary.get('transport_name', 'fallback')).lower()
-        routing_key = 'sms.outbound.' + transport
-        kwargs.update({'routing_key':routing_key})
         log.msg("Publishing Message %s with extra args: %s" % (message, kwargs))
         super(IndivPublisher, self).publish_message(message, **kwargs)
 

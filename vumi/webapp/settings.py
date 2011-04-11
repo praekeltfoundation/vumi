@@ -118,9 +118,11 @@ CELERY_DEFAULT_EXCHANGE_TYPE = "direct"
 CELERY_DEFAULT_ROUTING_KEY = "vumi.webapp"
 
 # set the environment VUMI_SKIP_QUEUE to have the Celery tasks evaluated
-# immediately, skipping the queue.
+# immediately, skipping the queue
 import os
 CELERY_ALWAYS_EAGER = os.environ.get('VUMI_SKIP_QUEUE', False)
 CELERY_TASK_SERIALIZER = "json"
+
+SOUTH_TEST_MIGRATE = False
 
 TEST_RUNNER = 'django_nose.NoseTestSuiteRunner'

@@ -2,6 +2,10 @@ import importlib
 import os.path
 import re
 
+from django.test.simple import DjangoTestSuiteRunner
+from django.test.utils import setup_test_environment, teardown_test_environment
+from south.management.commands import patch_for_test_db_setup
+
 def load_class(module_name, class_name):
     """
     Load a class when given its module and its class name
@@ -73,6 +77,35 @@ def safe_routing_key(routing_key):
     """
     return reduce(lambda r_key, kv: r_key.replace(*kv), 
                     [('*','s'), ('#','h')], routing_key)
+
+
+class TestPublisher(object):
+    """
+    A test publisher that caches outbound messages in an internal queue
+    for testing, instead of publishing over AMQP.
+
+    Useful for testing consumers
+    """
+    def __init__(self):
+        self.queue = []
+    
+    def publish_message(self, message, **kwargs):
+        self.queue.append((message, kwargs))
+    
+
+
+def setup_django_test_database():
+    runner = DjangoTestSuiteRunner(verbosity=0, failfast=False)
+    patch_for_test_db_setup()
+    setup_test_environment()
+    return runner, runner.setup_databases()
+
+def teardown_django_test_database(runner, config):
+    runner.teardown_databases(config)
+    teardown_test_environment()
+
+
+
 
 ### SAMPLE CONFIG PARAMETERS - REPLACE 'x's IN OPERATOR_NUMBER
 
