@@ -20,15 +20,9 @@ class SMSBatchConsumerTestCase(TestCase):
         self.publisher = TestPublisher()
         self.debatcher = SMSBatchConsumer(self.publisher)
         self.runner, self.config = setup_django_test_database()
-        # self.runner = DjangoTestSuiteRunner(verbosity=1, failfast=False)
-        # patch_for_test_db_setup()
-        # setup_test_environment()
-        # self.old_config = self.runner.setup_databases()
     
     def tearDown(self):
         teardown_django_test_database(self.runner, self.config)
-        # self.runner.teardown_databases(self.old_config)
-        # teardown_test_environment()
     
     def test_debatching(self):
         """It should publish an incoming batch of 3 into separate
