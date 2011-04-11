@@ -43,8 +43,10 @@ class SMSBatchConsumerTestCase(TestCase):
 
         self.debatcher.consume_message(message)
         self.assertEquals(len(self.publisher.queue), 3)
-        self.assertEquals(set([m.payload['to_msisdn'] for m,routing_key in
+        self.assertEquals(set([m.payload['to_msisdn'] for m,kwargs in
                 self.publisher.queue]),
-                set(recipients))                
+                set(recipients))
+        self.assertTrue(all(kwargs['routing_key'] == 'sms.outbound.transport'
+            for m,kwargs in self.publisher.queue))
 
     
