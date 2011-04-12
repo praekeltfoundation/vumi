@@ -21,3 +21,5 @@ dist/*
 *.egg-info
 .coverage
 coverage-html/
+.coverage-results/
+htmlcov/
