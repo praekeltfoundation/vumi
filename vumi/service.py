@@ -203,7 +203,8 @@ class Publisher(object):
         log.msg("Started the publisher")
         self.channel = channel
 
-    def check_routing_key(self, routing_key):
+    def check_routing_key(self, routing_key, require_bind):
+        print "ARGS", routing_key, require_bind
         if(routing_key != routing_key.lower()):
             raise RoutingKeyError("The routing_key: %s is not all lower case!" % (routing_key))
         # TODO More routing_key error checks to follow
@@ -211,7 +212,8 @@ class Publisher(object):
     def publish(self, message, **kwargs):
         exchange_name = kwargs.get('exchange_name') or self.exchange_name
         routing_key = kwargs.get('routing_key') or self.routing_key
-        self.check_routing_key(routing_key)
+        require_bind = kwargs.get('require_bind')
+        self.check_routing_key(routing_key, require_bind)
         self.channel.basic_publish(exchange=exchange_name, 
                                         content=message, 
                                         routing_key=routing_key)
