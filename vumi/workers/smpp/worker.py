@@ -145,7 +145,6 @@ class SMSReceiptConsumer(Consumer):
                 for urlcallback in urlcallback_set:
                     try:
                         url = urlcallback.url
-                        log.msg('URL: %s' % urlcallback.url)
                         params = [
                                 ("callback_name", "sms_receipt"),
                                 ("id", str(sent_sms.pk)),
@@ -160,6 +159,7 @@ class SMSReceiptConsumer(Consumer):
                                 ("to_msisdn", sent_sms.to_msisdn),
                                 ("message", sent_sms.message),
                                 ]
+                        log.msg(utils.callback)
                         url, resp = utils.callback(url, params)
                         log.msg('RESP: %s' % resp)
                     except Exception, e:

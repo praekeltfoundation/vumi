@@ -106,6 +106,37 @@ def teardown_django_test_database(runner, config):
 
 
 
+class mocking(object):
+    def __init__(self, function):
+        """Mock a function"""
+        self.function = function
+        self.called = 0
+        self.return_value = None
+    
+    def __enter__(self):
+        """Overwrite whatever module the function is part of"""
+        self.mod = importlib.import_module(self.function.__module__) 
+        setattr(self.mod, self.function.func_name, self)
+        return self
+    
+    def __exit__(self, *exc_info):
+        """Reset to whatever the function was originally when done"""
+        setattr(self.mod, self.function.func_name, self.function)
+    
+    def __call__(self, *args, **kwargs):
+        """Return the return value when called, store the args & kwargs
+        for testing later, called is a counter and evaluates to True
+        if ever called."""
+        self.args = args
+        self.kwargs = kwargs
+        self.called +=1 
+        return self.return_value
+    
+    def to_return(self, *args):
+        """Specify the return value"""
+        self.return_value = args if len(args) > 1 else list(args).pop()
+        return self
+    
 
 ### SAMPLE CONFIG PARAMETERS - REPLACE 'x's IN OPERATOR_NUMBER
 

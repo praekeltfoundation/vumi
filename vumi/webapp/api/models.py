@@ -231,3 +231,7 @@ admin.site.register(SMPPLink)
 admin.site.register(SMPPResp)
 admin.site.register(Transport)
 admin.site.register(Keyword)
+
+# import signals to make sure they're registered as soon 
+# as we start working with the models.
+import signals
