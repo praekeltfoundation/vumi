@@ -38,7 +38,7 @@ class SMSKeywordConsumer(Consumer):
             received_sms.message = dictionary.get('short_message')
             
             # FIXME: this is hacky
-            received_sms.transport_name = self.queue_name.split('.')[-1]
+            received_sms.transport_name = self.queue_name.split('.')[-2]
             # FIXME: EsmeTransceiver doesn't publish these over JSON / AMQP
             # received_sms.transport_msg_id = ...
             # FIXME: this isn't accurate, we might receive it much earlier than

@@ -6,12 +6,15 @@ from twisted.trial.unittest import TestCase
 from twisted.python import log
 from vumi.utils import TestPublisher, mocking
 from vumi.message import Message, VUMI_DATE_FORMAT
-from vumi.workers.smpp.worker import SMSBatchConsumer, SMSReceiptConsumer
+from vumi.workers.smpp.worker import SMSBatchConsumer, SMSReceiptConsumer, \
+                                        SMSKeywordConsumer, dynamically_create_keyword_consumer
 
 from django.conf import settings
 
 from django.contrib.auth.models import User
-from vumi.webapp.api.models import SentSMSBatch, SentSMS, SMPPResp
+from vumi.webapp.api.models import SentSMSBatch, SentSMS, SMPPResp, Keyword, \
+                                    ReceivedSMS
+from vumi.webapp.api import utils
 from vumi.utils import setup_django_test_database, teardown_django_test_database
 
 from datetime import datetime
@@ -108,9 +111,6 @@ class SMSReceiptConsumerTestCase(TestCase):
                     transport_name='Opera')
         sent_sms = SentSMS.objects.get(pk=sent_sms.pk)
 
-        from vumi.webapp.api import utils
-        original_callback = utils.callback
-        
         delivery_timestamp = datetime.now()
 
         # set the expectation
@@ -136,4 +136,59 @@ class SMSReceiptConsumerTestCase(TestCase):
             self.assertEquals(params['message'], sent_sms.message)
             
         
+class SMSKeywordConsumerTestCase(TestCase):
+    
+    def setUp(self):
+        self.test_db_args = setup_django_test_database()
+        consumer_class = dynamically_create_keyword_consumer('Testing', 
+                                    queue_name='sms.inbound.testing.27123456780',
+                                    routing_key='sms.inbound.testing.27123456780')
+        self.keyword_consumer = consumer_class()
+    
+    def tearDown(self):
+        teardown_django_test_database(*self.test_db_args)
+    
+    def test_callback_handling(self):
+        """If an SMS arrives with a keyword it should be forwarded to a 
+        specific url"""
         
+        user = User.objects.create(username='vumi')
+        profile = user.get_profile()
+        urlcallback = profile.urlcallback_set.create(url='http://test.domain', 
+                                                        name='sms_received')
+        keyword = Keyword.objects.create(keyword='keyword', user=user)
+        message = Message(
+                    short_message="keyword message", 
+                    destination_addr="27123456780",
+                    source_addr='27123456789') # prefixed
+        
+        # make sure db is empty
+        self.assertFalse(ReceivedSMS.objects.exists())
+        
+        with mocking(utils.callback).to_return(urlcallback.url,"OK") as mocked:
+            # consume the message with the callback mocked to return OK
+            self.keyword_consumer.consume_message(message)
+            
+            # check for creation of 1 received sms
+            all_received_sms = ReceivedSMS.objects.filter(to_msisdn='27123456780')
+            self.assertEquals(all_received_sms.count(), 1)
+            
+            # check the data of the received sms
+            received_sms = all_received_sms.latest()
+            self.assertEquals(received_sms.from_msisdn, '27123456789')
+            self.assertEquals(received_sms.user, user)
+            self.assertEquals(received_sms.message, 'keyword message')
+            self.assertEquals(received_sms.transport_name, 'testing')
+            
+            # check that the callback was actually fired
+            self.assertTrue(mocked.called)
+            
+            # check the vars posted to the url callback
+            url, paramlist = mocked.args
+            params = dict(paramlist)
+            self.assertEquals(params['callback_name'], 'sms_received')
+            self.assertEquals(params['to_msisdn'], '27123456780')
+            self.assertEquals(params['from_msisdn'], '27123456789')
+            self.assertEquals(params['message'], 'keyword message')
+            
+            
