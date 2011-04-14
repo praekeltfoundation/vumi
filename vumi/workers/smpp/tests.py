@@ -1,12 +1,14 @@
 import os
 os.environ['DJANGO_SETTINGS_MODULE'] = 'vumi.webapp.settings'
 
-
 from twisted.trial.unittest import TestCase
 from twisted.python import log
 from twisted.internet import defer
-from vumi.utils import TestPublisher, mocking
+from txamqp.content import Content
+from vumi.utils import TestPublisher, mocking, TestChannel, TestQueue, \
+    fake_amq_message
 from vumi.message import Message, VUMI_DATE_FORMAT
+from vumi.service import Consumer, Publisher, RoutingKeyError
 from vumi.workers.smpp.worker import SMSBatchConsumer, SMSReceiptConsumer, \
     SMSKeywordConsumer, dynamically_create_keyword_consumer, SMSKeywordWorker, \
     SMSReceiptWorker
@@ -279,4 +281,65 @@ class SMSKeywordTestCase(TestCase):
         self.assertEquals(network2_consumer.__name__, 'network2_SMSKeywordConsumer')
         self.assertEquals(network2_consumer.queue_name, 'sms.inbound.testing.27123456781')
         self.assertEquals(network2_consumer.routing_key, 'sms.inbound.testing.27123456781')
+    
+
+class ConsumerTestCase(TestCase):
+    
+    def setUp(self):
+        
+        class TestConsumer(Consumer):
+            def __init__(self):
+                self.log = []
+            
+            def consume_message(self, message):
+                self.log.append(message)
+            
+        
+        self.consumer = TestConsumer()
+        self.channel = TestChannel()
+    
+    def tearDown(self):
+        pass
+    
+    @defer.inlineCallbacks
+    def test_starting_consumer(self):
+        queue = TestQueue([fake_amq_message({
+            'key': 'value'
+        })])
+        self.consumer.start(self.channel, queue)
+        yield self.consumer.stop()
+        message = self.consumer.log.pop()
+        self.assertEquals(message.payload, {
+            'key': 'value'
+        })
+    
+class PublisherTestCase(TestCase):
+    
+    def setUp(self):
+        self.publisher = Publisher()
+        self.channel = TestChannel()
+    
+    def tearDown(self):
+        pass
+    
+    def test_publish(self):
+        self.publisher.start(self.channel)
+        self.publisher.publish_message(Message(testing="data"), 
+            exchange_name="custom_exchange", routing_key="custom_routing_key")
+        
+        published_msg = self.channel.publish_log.pop()
+        content = published_msg['content']
+        self.assertEquals(published_msg['exchange'], "custom_exchange")
+        self.assertEquals(published_msg['routing_key'], "custom_routing_key")
+        self.assertEquals(content.body, '{"testing": "data"}')
+        self.assertEquals(content.properties, {'delivery mode': 2})
+        
+    def test_upper_case_routing_keys_exception(self):
+        self.publisher.start(self.channel)
+        self.assertRaises(
+            RoutingKeyError, # exception
+            self.publisher.publish_message, # callback
+            Message(testing="data"), # args
+            routing_key="IN.UPPER.CASE"
+            )
     

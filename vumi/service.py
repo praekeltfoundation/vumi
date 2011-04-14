@@ -178,8 +178,8 @@ class Consumer(object):
         # This just marks the channel as closed on the client
         #self.channel.close(None)
         # This actually closes the channel on the server
-        d = self.channel.channel_close()
-        d.addCallback(self.channel.close)
+        yield self.channel.channel_close()
+        self.channel.close()
         returnValue(self.keep_consuming)
 
 
