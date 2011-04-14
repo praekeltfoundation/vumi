@@ -107,10 +107,17 @@ def teardown_django_test_database(runner, config):
 
 
 class mocking(object):
+    
+    class HistoryItem(object):
+        def __init__(self, args, kwargs):
+            self.args = args
+            self.kwargs = kwargs
+    
     def __init__(self, function):
         """Mock a function"""
         self.function = function
         self.called = 0
+        self.history = []
         self.return_value = None
     
     def __enter__(self):
@@ -130,6 +137,7 @@ class mocking(object):
         self.args = args
         self.kwargs = kwargs
         self.called +=1 
+        self.history.append(self.HistoryItem(args, kwargs))
         return self.return_value
     
     def to_return(self, *args):

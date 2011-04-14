@@ -198,6 +198,7 @@ class URLCallback(models.Model):
     
     class Meta:
         verbose_name = 'Callback URL'
+        ordering = ['created_at']
     
     def __unicode__(self):
         return u"URLCallback %s - %s" % (self.name, self.url)

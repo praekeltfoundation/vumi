@@ -154,7 +154,10 @@ class SMSKeywordConsumerTestCase(TestCase):
         
         user = User.objects.create(username='vumi')
         profile = user.get_profile()
-        urlcallback = profile.urlcallback_set.create(url='http://test.domain', 
+        # create two callbacks, each should be called
+        urlcallback = profile.urlcallback_set.create(url='http://test.domain/1', 
+                                                        name='sms_received')
+        urlcallback = profile.urlcallback_set.create(url='http://test.domain/2', 
                                                         name='sms_received')
         keyword = Keyword.objects.create(keyword='keyword', user=user)
         message = Message(
@@ -181,7 +184,10 @@ class SMSKeywordConsumerTestCase(TestCase):
             self.assertEquals(received_sms.transport_name, 'testing')
             
             # check that the callback was actually fired
-            self.assertTrue(mocked.called)
+            self.assertEquals(mocked.called, 2)
+            # test that both urlcallbacks where requested
+            self.assertEquals(mocked.history[0].args[0], 'http://test.domain/1')
+            self.assertEquals(mocked.history[1].args[0], 'http://test.domain/2')
             
             # check the vars posted to the url callback
             url, paramlist = mocked.args
