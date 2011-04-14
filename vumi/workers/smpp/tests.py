@@ -4,22 +4,25 @@ os.environ['DJANGO_SETTINGS_MODULE'] = 'vumi.webapp.settings'
 
 from twisted.trial.unittest import TestCase
 from twisted.python import log
+from twisted.internet import defer
 from vumi.utils import TestPublisher, mocking
 from vumi.message import Message, VUMI_DATE_FORMAT
 from vumi.workers.smpp.worker import SMSBatchConsumer, SMSReceiptConsumer, \
-                                        SMSKeywordConsumer, dynamically_create_keyword_consumer
+    SMSKeywordConsumer, dynamically_create_keyword_consumer, SMSKeywordWorker, \
+    SMSReceiptWorker
 
 from django.conf import settings
 
 from django.contrib.auth.models import User
 from vumi.webapp.api.models import SentSMSBatch, SentSMS, SMPPResp, Keyword, \
-                                    ReceivedSMS
+                                    ReceivedSMS, Transport
 from vumi.webapp.api import utils
 from vumi.utils import setup_django_test_database, teardown_django_test_database
 
 from datetime import datetime
+import re
 
-class SMSBatchConsumerTestCase(TestCase):
+class SMSBatchTestCase(TestCase):
 
     def setUp(self):
         self.publisher = TestPublisher()
@@ -55,7 +58,7 @@ class SMSBatchConsumerTestCase(TestCase):
         self.assertTrue(all(kwargs['routing_key'] == 'sms.outbound.transport'
             for m,kwargs in self.publisher.queue))
 
-class SMSReceiptConsumerTestCase(TestCase):
+class SMSReceiptTestCase(TestCase):
     
     def setUp(self):
         self.publisher = TestPublisher()
@@ -135,8 +138,46 @@ class SMSReceiptConsumerTestCase(TestCase):
             self.assertEquals(params['to_msisdn'], sent_sms.to_msisdn)
             self.assertEquals(params['message'], sent_sms.message)
             
+    @defer.inlineCallbacks
+    def test_dynamic_receipt_consumer_creation(self):
+        """
+        Receipt consumers should be automatically created based on
+        whatever transports are registered in the db
+        """
+        for transport_name in ['TransportName%s' % i for i in range(0,5)]:
+            Transport.objects.create(name=transport_name)
         
-class SMSKeywordConsumerTestCase(TestCase):
+        class TestingSMSReceiptWorker(SMSReceiptWorker):
+            def __init__(self):
+                self.log = []
+            
+            def start_consumer(self, consumer_class):
+                def _cb(result):
+                    self.log.append(result)
+                
+                d = defer.Deferred()
+                d.addCallback(_cb)
+                d.callback(consumer_class)
+                return d
+            
+        worker = TestingSMSReceiptWorker()
+        yield worker.startWorker()
+        
+        self.assertEquals(len(worker.log), 5)
+        # transport name should be the part of the class name
+        self.assertTrue(all([
+            re.match(r'TransportName[0-5]{1}_SMSReceiptConsumer', klass.__name__) 
+            for klass in worker.log]))
+        # queue_name & routing_key should include the lowercased transport name
+        self.assertTrue(all([
+            re.match(r'sms.receipt.transportname[0-5]{1}', klass.queue_name)
+            for klass in worker.log]))
+        self.assertTrue(all([
+            re.match(r'sms.receipt.transportname[0-5]{1}', klass.routing_key)
+            for klass in worker.log]))
+        
+    
+class SMSKeywordTestCase(TestCase):
     
     def setUp(self):
         self.test_db_args = setup_django_test_database()
@@ -196,5 +237,46 @@ class SMSKeywordConsumerTestCase(TestCase):
             self.assertEquals(params['to_msisdn'], '27123456780')
             self.assertEquals(params['from_msisdn'], '27123456789')
             self.assertEquals(params['message'], 'keyword message')
+    
+    @defer.inlineCallbacks
+    def test_dynamic_keyword_consumer_creation(self):
+        
+        class TestingSMSKeywordWorker(SMSKeywordWorker):
+            def __init__(self):
+                """skip init as it tries to connect to AMQP"""
+                self.log = []
             
-            
+            def start_consumer(self, consumer_class):
+                
+                def _cb(result):
+                    self.log.append(result)
+                    return result
+                
+                d = defer.Deferred()
+                d.addCallback(_cb)
+                d.callback(consumer_class)
+                return d
+        
+        # FIXME: start subclass to avoid AMQP connection
+        worker = TestingSMSKeywordWorker()
+        # mock the config
+        worker.config = {
+            'TRANSPORT_NAME': 'testing',
+            'OPERATOR_NUMBER': {
+                'network1': '27123456780',
+                'network2': '27123456781',
+            }
+        }
+        # yield is important, a deferred is returned
+        yield worker.startWorker()
+        network1_consumer = worker.log[0]
+        network2_consumer = worker.log[1]
+        
+        self.assertEquals(network1_consumer.__name__, 'network1_SMSKeywordConsumer')
+        self.assertEquals(network1_consumer.queue_name, 'sms.inbound.testing.27123456780')
+        self.assertEquals(network1_consumer.routing_key, 'sms.inbound.testing.27123456780')
+        
+        self.assertEquals(network2_consumer.__name__, 'network2_SMSKeywordConsumer')
+        self.assertEquals(network2_consumer.queue_name, 'sms.inbound.testing.27123456781')
+        self.assertEquals(network2_consumer.routing_key, 'sms.inbound.testing.27123456781')
+    

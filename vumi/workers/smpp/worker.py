@@ -85,7 +85,7 @@ class SMSKeywordWorker(Worker):
     def startWorker(self):
         log.msg("Starting the SMSKeywordWorkers for: %s" % self.config.get('OPERATOR_NUMBER'))
         transport = self.config.get('TRANSPORT_NAME', 'fallback').lower()
-        for network,msisdn in self.config.get('OPERATOR_NUMBER').items():
+        for network,msisdn in sorted(self.config.get('OPERATOR_NUMBER').items()):
             if len(msisdn):
                 yield self.start_consumer(dynamically_create_keyword_consumer(network,
                     routing_key='sms.inbound.%s.%s' % (transport, msisdn),
