@@ -21,7 +21,7 @@ class Options(usage.Options):
         ["port", None, 5672, "AMQP port", int],
         ["username", None, "vumi", "AMQP username"],
         ["password", None, "vumi", "AMQP password"],
-        ["vhost", None, "/vumi", "AMQP virtual host"],
+        ["vhost", None, "/develop", "AMQP virtual host"],
         ["specfile", None, "config/amqp-spec-0-8.xml", "AMQP spec file"],
     ]
 

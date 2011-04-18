@@ -5,8 +5,10 @@ from twisted.trial.unittest import TestCase
 from twisted.python import log
 from twisted.internet import defer
 from txamqp.content import Content
-from vumi.utils import TestPublisher, mocking, TestChannel, TestQueue, \
-    fake_amq_message
+from vumi.tests.utils import TestPublisher, TestChannel, TestQueue, \
+                            fake_amq_message, mocking, \
+                            setup_django_test_database, \
+                            teardown_django_test_database
 from vumi.message import Message, VUMI_DATE_FORMAT
 from vumi.service import Consumer, Publisher, RoutingKeyError
 from vumi.workers.smpp.worker import SMSBatchConsumer, SMSReceiptConsumer, \
@@ -19,7 +21,6 @@ from django.contrib.auth.models import User
 from vumi.webapp.api.models import SentSMSBatch, SentSMS, SMPPResp, Keyword, \
                                     ReceivedSMS, Transport
 from vumi.webapp.api import utils
-from vumi.utils import setup_django_test_database, teardown_django_test_database
 
 from datetime import datetime
 import re

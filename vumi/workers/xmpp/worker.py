@@ -3,6 +3,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet import reactor
 
 from vumi.service import Worker, Consumer, Publisher
+from vumi.message import Message
 
 class XMPPConsumer(Consumer):
     exchange_name = "vumi"
@@ -11,16 +12,15 @@ class XMPPConsumer(Consumer):
     routing_key = 'xmpp.gtalk.inbound'
     durable = True                     # -> not created at boot
     auto_delete = False                 # -> auto delete if no consumers bound
-    delivery_mode = 2                   # -> do not save to disk
+    delivery_mode = 2                   # -> do save to disk
     
     def __init__(self, publisher):
         self.publisher = publisher
     
-    def consume_json(self, dictionary):
-        self.publisher.publish_json({
-            'to': dictionary.get('from',''),
-            'message': "You said: %s" % dictionary['message'],
-        })
+    def consume_message(self, message):
+        recipient = message.payload['sender']
+        message = "You said: %s " % message.payload['message']
+        self.publisher.publish_message(Message(recipient=recipient, message=message))
     
 
 class XMPPPublisher(Publisher):
@@ -28,10 +28,6 @@ class XMPPPublisher(Publisher):
     exchange_type = "direct"
     durable = True
     routing_key = "xmpp.gtalk.outbound"
-    
-    def publish_json(self, dictionary):
-        log.msg("Publishing JSON %s" % dictionary)
-        super(XMPPPublisher, self).publish_json(dictionary)
     
 
 class XMPPWorker(Worker):
@@ -51,5 +47,4 @@ class XMPPWorker(Worker):
     def stopWorker(self):
         log.msg("Stopping the XMPPWorker")
     
-
 

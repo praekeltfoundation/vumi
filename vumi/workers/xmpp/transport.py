@@ -14,33 +14,38 @@ from wokkel.xmppim import RosterClientProtocol, MessageProtocol, PresenceClientP
 from datetime import datetime
 
 from vumi.service import Worker, Consumer, Publisher
+from vumi.message import Message
 
-class TransportPresenceClientProtocol(PresenceProtocol):
+class TransportRosterClientProtocol(RosterClientProtocol):
+    
+    def connectionMade(self):
+        reactor.callLater(2, self.getRoster)
+    
+class TransportPresenceClientProtocol(PresenceClientProtocol):
     """
     A custom presence protocol to automatically accept any subscription
     attempt.
     """
-    # def __init__(self, status, *args, **kwargs):
-    #     PresenceClientProtocol.__init__(self, *args, **kwargs)
-    #     self.status = status    
     
     def subscribeReceived(self, entity):
+        self.subscribe(entity)
         self.subscribed(entity)
-        self.available(statuses={None:'hello'})
-
+    
     def unsubscribeReceived(self, entity):
+        self.unsubscribe(entity)
         self.unsubscribed(entity)
-
+    
 class XMPPTransportProtocol(MessageProtocol):
     def __init__(self, jid, publisher):
-        MessageProtocol.__init__(self)
+        super(MessageProtocol, self).__init__()
         self.jid = jid
         self.publisher = publisher
-
+    
     def reply(self, jid, content):
         message = domish.Element((None, "message"))
+        # intentionally leaving from blank, leaving for XMPP server
+        # to figure out
         message['to'] = jid
-        # message['from'] = self.jid.full()
         message['type'] = 'chat'
         message.addUniqueId()
         message.addElement((None,'body'), content=content)
@@ -54,11 +59,7 @@ class XMPPTransportProtocol(MessageProtocol):
 
         sender = JID(message['from']).userhost()
         text = unicode(message.body).encode('utf-8').strip()
-        # self.reply(sender, u"You said: %s" % text)
-        self.publisher.publish_json({
-            'from': message['from'],
-            'message': text
-        })
+        self.publisher.publish_message(Message(sender=message['from'], message=text))
 
 
 class XMPPConsumer(Consumer):
@@ -71,9 +72,10 @@ class XMPPConsumer(Consumer):
     def __init__(self, transport):
         self.transport = transport
     
-    def consume_json(self, dictionary):
-        log.msg("Consumed JSON %s" % dictionary)
-        jid = JID(dictionary.get('to')).userhost()
+    def consume_message(self, message):
+        log.msg("Consumed Message %s" % message)
+        dictionary = message.payload
+        jid = JID(dictionary.get('recipient')).userhost()
         text = unicode(dictionary.get('message','')).encode('utf-8').strip()
         self.transport.reply(jid, text)
     
@@ -98,7 +100,7 @@ class XMPPTransport(Worker):
     
     @inlineCallbacks
     def startWorker(self):
-        log.msg("Starting the XMPPTransport")
+        log.msg("Starting the XMPPTransport for %s" % self.config['username'])
         
         username = self.config.pop('username')
         password = self.config.pop('password') or getpass('Password:')
@@ -112,14 +114,14 @@ class XMPPTransport(Worker):
         
         jid = JID(username)
         xmpp_client = client.XMPPClient(jid, password, host, port)
-        xmpp_client.logTraffic = True
+        xmpp_client.logTraffic = False
         xmpp_client.setServiceParent(s)
         
         presence = TransportPresenceClientProtocol()
         presence.setHandlerParent(xmpp_client)
         presence.available(statuses=status)
         
-        roster = RosterClientProtocol()
+        roster = TransportRosterClientProtocol()
         roster.setHandlerParent(xmpp_client)
         
         transport = XMPPTransportProtocol(jid, self.publisher)
@@ -129,6 +131,7 @@ class XMPPTransport(Worker):
         
         s.startService()
         
+        log.msg("XMPPTransport started.")
     
     def stopWorker(self):
         log.msg("Stopping the XMPPTransport")
