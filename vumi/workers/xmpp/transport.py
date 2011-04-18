@@ -13,7 +13,7 @@ from wokkel.xmppim import RosterClientProtocol, MessageProtocol, PresenceClientP
 
 from datetime import datetime
 
-from vumi.service import Worker, Consumer, Publisher
+from vumi.service import Worker, Publisher
 from vumi.message import Message
 
 class TransportRosterClientProtocol(RosterClientProtocol):
@@ -40,6 +40,8 @@ class XMPPTransportProtocol(MessageProtocol):
         super(MessageProtocol, self).__init__()
         self.jid = jid
         self.publisher = publisher
+        self.routing_key = "%s.%s" % (self.publisher.routing_key, 
+                                        self.jid.userhost())
     
     def reply(self, jid, content):
         message = domish.Element((None, "message"))
@@ -59,38 +61,17 @@ class XMPPTransportProtocol(MessageProtocol):
 
         sender = JID(message['from']).userhost()
         text = unicode(message.body).encode('utf-8').strip()
-        self.publisher.publish_message(Message(sender=message['from'], message=text))
+        self.publisher.publish_message(Message(sender=message['from'], 
+            message=text), routing_key=self.routing_key)
 
-
-class XMPPConsumer(Consumer):
-    exchange_name = "vumi"
-    exchange_type = "direct"
-    durable = True
-    queue_name = "xmpp.gtalk.outbound"
-    routing_key = "xmpp.gtalk.outbound"
-    
-    def __init__(self, transport):
-        self.transport = transport
-    
-    def consume_message(self, message):
-        log.msg("Consumed Message %s" % message)
-        dictionary = message.payload
-        jid = JID(dictionary.get('recipient')).userhost()
-        text = unicode(dictionary.get('message','')).encode('utf-8').strip()
-        self.transport.reply(jid, text)
-    
 
 class XMPPPublisher(Publisher):
     exchange_name = "vumi"
     exchange_type = "direct"             # -> route based on pattern matching
-    routing_key = 'xmpp.gtalk.inbound'
+    routing_key = 'xmpp.inbound.gtalk'
     durable = True                     # -> not created at boot
     auto_delete = False                 # -> auto delete if no consumers bound
     delivery_mode = 2                   # -> do not save to disk
-    
-    def publish_json(self, dictionary, **kwargs):
-        log.msg("Publishing JSON %s with extra args: %s" % (dictionary, kwargs))
-        super(XMPPPublisher, self).publish_json(dictionary, **kwargs)
     
 
 class XMPPTransport(Worker):
@@ -103,7 +84,7 @@ class XMPPTransport(Worker):
         log.msg("Starting the XMPPTransport for %s" % self.config['username'])
         
         username = self.config.pop('username')
-        password = self.config.pop('password') or getpass('Password:')
+        password = self.config.pop('password')
         status = {None: self.config.pop('status')}
         host = self.config.pop('host')
         port = self.config.pop('port')
@@ -114,7 +95,7 @@ class XMPPTransport(Worker):
         
         jid = JID(username)
         xmpp_client = client.XMPPClient(jid, password, host, port)
-        xmpp_client.logTraffic = False
+        xmpp_client.logTraffic = self.config.get('debug')
         xmpp_client.setServiceParent(s)
         
         presence = TransportPresenceClientProtocol()
@@ -124,14 +105,26 @@ class XMPPTransport(Worker):
         roster = TransportRosterClientProtocol()
         roster.setHandlerParent(xmpp_client)
         
-        transport = XMPPTransportProtocol(jid, self.publisher)
-        transport.setHandlerParent(xmpp_client)
+        self.xmpp_protocol = XMPPTransportProtocol(jid, self.publisher)
+        self.xmpp_protocol.setHandlerParent(xmpp_client)
         
-        self.consumer = yield self.start_consumer(XMPPConsumer, transport)
+        self.consume("xmpp.outbound.gtalk.%s" % jid.userhost(), 
+                                self.consume_message)
         
         s.startService()
         
         log.msg("XMPPTransport started.")
+    
+    def consume_message(self, message):
+        log.msg("Consumed Message %s" % message)
+        dictionary = message.payload
+        jid = JID(dictionary.get('recipient')).userhost()
+        text = unicode(dictionary.get('message','')).encode('utf-8').strip()
+        
+        if not self.xmpp_protocol.xmlstream:
+            log.msg("Outbound undeliverable, XMPP not initialized yet.")
+        else:
+            self.xmpp_protocol.reply(jid, text)
     
     def stopWorker(self):
         log.msg("Stopping the XMPPTransport")

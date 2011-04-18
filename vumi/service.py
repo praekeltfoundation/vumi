@@ -71,7 +71,8 @@ class Worker(AMQClient):
         
         # use the routing key to generate the name for the class
         # amq.routing.key -> AmqRoutingKey
-        name = ''.join(map(lambda s: s.capitalize(), routing_key.split('.')))
+        dynamic_name = ''.join(map(lambda s: s.capitalize(), routing_key.split('.')))
+        class_name = "%sDynamicConsumer" % str(dynamic_name)
         kwargs = {
             'routing_key': routing_key,
             'queue_name': queue_name or routing_key,
@@ -79,8 +80,8 @@ class Worker(AMQClient):
             'exchange_type': exchange_type,
             'durable': durable
         }
-        log.msg('Staring %s with %s' % (name, kwargs))
-        klass = type(str("%sDynamicConsumer" % name), (DynamicConsumer,), kwargs)
+        log.msg('Staring %s with %s' % (class_name, kwargs))
+        klass = type(class_name, (DynamicConsumer,), kwargs)
         return self.start_consumer(klass, callback)
     
     @inlineCallbacks
