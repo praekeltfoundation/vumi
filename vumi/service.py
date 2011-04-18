@@ -20,7 +20,7 @@ class Options(usage.Options):
         ["port", None, 5672, "AMQP port", int],
         ["username", None, "vumi", "AMQP username"],
         ["password", None, "vumi", "AMQP password"],
-        ["vhost", None, "/vumi", "AMQP virtual host"],
+        ["vhost", None, "/develop", "AMQP virtual host"],
         ["specfile", None, "config/amqp-spec-0-8.xml", "AMQP spec file"],
     ]
 
@@ -204,7 +204,6 @@ class Publisher(object):
         self.channel = channel
 
     def check_routing_key(self, routing_key, require_bind):
-        print "ARGS", routing_key, require_bind
         if(routing_key != routing_key.lower()):
             raise RoutingKeyError("The routing_key: %s is not all lower case!" % (routing_key))
         # TODO More routing_key error checks to follow
