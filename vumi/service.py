@@ -65,6 +65,23 @@ class Worker(AMQClient):
         """
         return (max(self.channels) + 1) if self.channels else 0
     
+    def consume(self, routing_key, callback, queue_name=None, exchange_name='vumi', 
+                        exchange_type='direct', durable=True):
+        
+        # use the routing key to generate the name for the class
+        # amq.routing.key -> AmqRoutingKey
+        name = ''.join(map(lambda s: s.capitalize(), routing_key.split('.')))
+        kwargs = {
+            'routing_key': routing_key,
+            'queue_name': queue_name or routing_key,
+            'exchange_name': exchange_name,
+            'exchange_type': exchange_type,
+            'durable': durable
+        }
+        log.msg('Staring %s with %s' % (name, kwargs))
+        klass = type(str("%sDynamicConsumer" % name), (DynamicConsumer,), kwargs)
+        return self.start_consumer(klass, callback)
+    
     @inlineCallbacks
     def start_consumer(self, klass, *args, **kwargs):
         channel = yield self.get_channel()
@@ -182,6 +199,12 @@ class Consumer(object):
         self.channel.close()
         returnValue(self.keep_consuming)
 
+class DynamicConsumer(Consumer):
+    def __init__(self, callback):
+        self.callback = callback
+    
+    def consume_message(self, message):
+        return self.callback(message)
 
 class RoutingKeyError(Exception):
     def __init__(self, value):
@@ -209,6 +232,7 @@ class Publisher(object):
         # TODO More routing_key error checks to follow
     
     def publish(self, message, **kwargs):
+        log.msg("Publishing", message, kwargs)
         exchange_name = kwargs.get('exchange_name') or self.exchange_name
         routing_key = kwargs.get('routing_key') or self.routing_key
         require_bind = kwargs.get('require_bind')
