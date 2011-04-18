@@ -18,8 +18,8 @@ from vumi.message import Message
 
 class TransportRosterClientProtocol(RosterClientProtocol):
     
-    def connectionMade(self):
-        reactor.callLater(2, self.getRoster)
+    def connectionInitialized(self):
+        self.getRoster()
     
 class TransportPresenceClientProtocol(PresenceClientProtocol):
     """
