@@ -227,13 +227,11 @@ class Publisher(object):
 
 
     def check_routing_key(self, routing_key, require_bind):
-        print self.bound_routing_keys
         if(routing_key != routing_key.lower()):
             raise RoutingKeyError("The routing_key: %s is not all lower case!" % (routing_key))
         if not self.routing_key_is_bound(routing_key):
             raise RoutingKeyError("The routing_key: %s is not bound to any queues in vhost: %s  exchange: %s" % (
                 routing_key, self.vhost, self.exchange_name))
-        print self.bound_routing_keys
 
 
     def publish(self, message, **kwargs):
