@@ -1,6 +1,8 @@
 from django.test import TestCase
 from django.core.urlresolvers import reverse
 from django.contrib.auth.models import User
+from django.conf import settings
+import os.path
 from time import time
 import json
 from datetime import datetime, timedelta
@@ -143,7 +145,7 @@ class ConversationHandlerTestCase(TestCase):
         # create the user we need to be authorized
         self.user = User.objects.get(username='api')
         # load the yaml data
-        fp = open('vumi/webapp/api/test_data/devquiz.yaml', 'r')
+        fp = open(os.path.join(settings.APP_ROOT, 'webapp', 'api', 'test_data', 'devquiz.yaml'), 'r')
         self.yaml_conversation = ''.join(fp.readlines())
     
     def tearDown(self):

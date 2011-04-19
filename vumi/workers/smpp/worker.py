@@ -38,7 +38,7 @@ class SMSKeywordConsumer(Consumer):
             received_sms.message = dictionary.get('short_message')
             
             # FIXME: this is hacky
-            received_sms.transport_name = self.queue_name.split('.')[-1]
+            received_sms.transport_name = self.queue_name.split('.')[-2]
             # FIXME: EsmeTransceiver doesn't publish these over JSON / AMQP
             # received_sms.transport_msg_id = ...
             # FIXME: this isn't accurate, we might receive it much earlier than
@@ -85,7 +85,7 @@ class SMSKeywordWorker(Worker):
     def startWorker(self):
         log.msg("Starting the SMSKeywordWorkers for: %s" % self.config.get('OPERATOR_NUMBER'))
         transport = self.config.get('TRANSPORT_NAME', 'fallback').lower()
-        for network,msisdn in self.config.get('OPERATOR_NUMBER').items():
+        for network,msisdn in sorted(self.config.get('OPERATOR_NUMBER').items()):
             if len(msisdn):
                 yield self.start_consumer(dynamically_create_keyword_consumer(network,
                     routing_key='sms.inbound.%s.%s' % (transport, msisdn),
@@ -145,7 +145,6 @@ class SMSReceiptConsumer(Consumer):
                 for urlcallback in urlcallback_set:
                     try:
                         url = urlcallback.url
-                        log.msg('URL: %s' % urlcallback.url)
                         params = [
                                 ("callback_name", "sms_receipt"),
                                 ("id", str(sent_sms.pk)),
@@ -160,6 +159,7 @@ class SMSReceiptConsumer(Consumer):
                                 ("to_msisdn", sent_sms.to_msisdn),
                                 ("message", sent_sms.message),
                                 ]
+                        log.msg(utils.callback)
                         url, resp = utils.callback(url, params)
                         log.msg('RESP: %s' % resp)
                     except Exception, e:
