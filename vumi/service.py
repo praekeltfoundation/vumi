@@ -8,6 +8,7 @@ from txamqp.content import Content
 from txamqp.protocol import AMQClient
 from vumi.errors import VumiError
 from vumi.message import Message
+from vumi.webapp.api import utils
 import txamqp
 import json, datetime, sys
 
@@ -192,6 +193,10 @@ class RoutingKeyError(Exception):
 
 
 class Publisher(object):
+    username = "vumi"
+    password = "vumi"
+    vhost = "/develop"
+    bound_routing_keys = {}
     exchange_name = "vumi"
     exchange_type = "direct"
     routing_key = "routing_key"
@@ -203,12 +208,34 @@ class Publisher(object):
         log.msg("Started the publisher")
         self.channel = channel
 
+    def list_bindings(self):
+        url, resp = utils.callback("http://%s:%s@localhost:55672/api/bindings" % (self.username, self.password), [])
+        bindings = json.loads(resp)
+
+        bound_routing_keys = {}
+        for b in bindings:
+            if b['vhost'] == self.vhost and b['source'] == self.exchange_name:
+                bound_routing_keys[b['routing_key']] = bound_routing_keys.get(b['routing_key'],[])+[b['destination']]
+        return bound_routing_keys
+
+
+    def routing_key_is_bound(self, key):
+        if key in self.bound_routing_keys.keys():
+            return True
+        self.bound_routing_keys = self.list_bindings()
+        return key in self.bound_routing_keys.keys()
+
+
     def check_routing_key(self, routing_key, require_bind):
-        print "ARGS", routing_key, require_bind
+        print self.bound_routing_keys
         if(routing_key != routing_key.lower()):
             raise RoutingKeyError("The routing_key: %s is not all lower case!" % (routing_key))
-        # TODO More routing_key error checks to follow
-    
+        if not self.routing_key_is_bound(routing_key):
+            raise RoutingKeyError("The routing_key: %s is not bound to any queues in vhost: %s  exchange: %s" % (
+                routing_key, self.vhost, self.exchange_name))
+        print self.bound_routing_keys
+
+
     def publish(self, message, **kwargs):
         exchange_name = kwargs.get('exchange_name') or self.exchange_name
         routing_key = kwargs.get('routing_key') or self.routing_key
