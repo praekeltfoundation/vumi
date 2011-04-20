@@ -248,6 +248,8 @@ class Publisher(object):
 
     def list_bindings(self):
         try:
+            # Note utils.callback() does a POST not a GET
+            # which may lead to errors if the RabbitMQ Management REST api changes
             url, resp = utils.callback("http://%s:%s@localhost:55672/api/bindings" % (self.username, self.password), [])
             bindings = json.loads(resp)
             bound_routing_keys = {}
@@ -260,6 +262,9 @@ class Publisher(object):
 
 
     def routing_key_is_bound(self, key):
+        # Only check on the vumi exchange
+        if self.exchange_name != "vumi":
+            return True
         if len(self.bound_routing_keys) == 1 and self.bound_routing_keys.get("bindings") == "undetected":
             log.msg("No bindings detected, is the RabbitMQ Management plugin installed?")
             return True
