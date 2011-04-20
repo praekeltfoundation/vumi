@@ -13,12 +13,17 @@ from wokkel.xmppim import RosterClientProtocol, MessageProtocol, PresenceClientP
 
 from datetime import datetime
 
-from vumi.service import Worker, Publisher
+from vumi.service import Worker
 from vumi.message import Message
 
 class TransportRosterClientProtocol(RosterClientProtocol):
     
     def connectionInitialized(self):
+        # get the roster as soon as the connection's been initialized, this
+        # allows us to see who's online but more importantly, allows us to see
+        # who's added us to their roster. This allows us to auto subscribe to
+        # anyone, automatically adding them to our roster, skips the "user ...
+        # wants to add you to their roster, allow? yes/no" hoopla.
         self.getRoster()
     
 class TransportPresenceClientProtocol(PresenceClientProtocol):
@@ -38,10 +43,7 @@ class TransportPresenceClientProtocol(PresenceClientProtocol):
 class XMPPTransportProtocol(MessageProtocol):
     def __init__(self, jid, publisher):
         super(MessageProtocol, self).__init__()
-        self.jid = jid
         self.publisher = publisher
-        self.routing_key = "%s.%s" % (self.publisher.routing_key, 
-                                        self.jid.userhost())
     
     def reply(self, jid, content):
         message = domish.Element((None, "message"))
@@ -61,18 +63,8 @@ class XMPPTransportProtocol(MessageProtocol):
 
         sender = JID(message['from']).userhost()
         text = unicode(message.body).encode('utf-8').strip()
-        self.publisher.publish_message(Message(sender=message['from'], 
-            message=text), routing_key=self.routing_key)
+        self.publisher.publish_message(Message(sender=message['from'], message=text))
 
-
-class XMPPPublisher(Publisher):
-    exchange_name = "vumi"
-    exchange_type = "direct"             # -> route based on pattern matching
-    routing_key = 'xmpp.inbound.gtalk'
-    durable = True                     # -> not created at boot
-    auto_delete = False                 # -> auto delete if no consumers bound
-    delivery_mode = 2                   # -> do not save to disk
-    
 
 class XMPPTransport(Worker):
     """
@@ -89,7 +81,7 @@ class XMPPTransport(Worker):
         host = self.config.pop('host')
         port = self.config.pop('port')
         
-        self.publisher = yield self.start_publisher(XMPPPublisher)
+        self.publisher = yield self.publish_to('xmpp.inbound.gtalk.%s' % username)
         
         s = MultiService()
         
