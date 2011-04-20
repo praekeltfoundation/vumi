@@ -247,20 +247,28 @@ class Publisher(object):
         self.channel = channel
 
     def list_bindings(self):
-        url, resp = utils.callback("http://%s:%s@localhost:55672/api/bindings" % (self.username, self.password), [])
-        bindings = json.loads(resp)
-
-        bound_routing_keys = {}
-        for b in bindings:
-            if b['vhost'] == self.vhost and b['source'] == self.exchange_name:
-                bound_routing_keys[b['routing_key']] = bound_routing_keys.get(b['routing_key'],[])+[b['destination']]
+        try:
+            url, resp = utils.callback("http://%s:%s@localhost:55672/api/bindings" % (self.username, self.password), [])
+            bindings = json.loads(resp)
+            bound_routing_keys = {}
+            for b in bindings:
+                if b['vhost'] == self.vhost and b['source'] == self.exchange_name:
+                    bound_routing_keys[b['routing_key']] = bound_routing_keys.get(b['routing_key'],[])+[b['destination']]
+        except:
+            bound_routing_keys = {"bindings":"undetected"}
         return bound_routing_keys
 
 
     def routing_key_is_bound(self, key):
+        if len(self.bound_routing_keys) == 1 and self.bound_routing_keys.get("bindings") == "undetected":
+            log.msg("No bindings detected, is the RabbitMQ Management plugin installed?")
+            return True
         if key in self.bound_routing_keys.keys():
             return True
         self.bound_routing_keys = self.list_bindings()
+        if len(self.bound_routing_keys) == 1 and self.bound_routing_keys.get("bindings") == "undetected":
+            log.msg("No bindings detected, is the RabbitMQ Management plugin installed?")
+            return True
         return key in self.bound_routing_keys.keys()
 
 
