@@ -66,12 +66,15 @@ class Worker(AMQClient):
         """
         return (max(self.channels) + 1) if self.channels else 0
     
+    def routing_key_to_class_name(self, routing_key):
+        return ''.join(map(lambda s: s.capitalize(), routing_key.split('.')))
+    
     def consume(self, routing_key, callback, queue_name=None, exchange_name='vumi', 
                         exchange_type='direct', durable=True):
         
         # use the routing key to generate the name for the class
         # amq.routing.key -> AmqRoutingKey
-        dynamic_name = ''.join(map(lambda s: s.capitalize(), routing_key.split('.')))
+        dynamic_name = self.routing_key_to_class_name(routing_key)
         class_name = "%sDynamicConsumer" % str(dynamic_name)
         kwargs = {
             'routing_key': routing_key,
@@ -112,6 +115,17 @@ class Worker(AMQClient):
         consumer.start(channel, queue)
         # return the newly created & consuming consumer
         returnValue(consumer)
+    
+    def publish_to(self, routing_key, exchange_name='vumi',
+                    exchange_type='direct', delivery_mode=2):
+        class_name = self.routing_key_to_class_name(routing_key)
+        publisher_class = type("%sDynamicPublisher" % class_name, (Publisher,), {
+                "routing_key": routing_key,
+                "exchange_name": exchange_name,
+                "exchange_type": exchange_type,
+                "delivery_mode": delivery_mode,
+            })
+        return self.start_publisher(publisher_class)
     
     @inlineCallbacks
     def start_publisher(self, klass, *args, **kwargs):

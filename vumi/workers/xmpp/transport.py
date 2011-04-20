@@ -119,10 +119,11 @@ class XMPPTransport(Worker):
         log.msg("Consumed Message %s" % message)
         dictionary = message.payload
         jid = JID(dictionary.get('recipient')).userhost()
-        text = unicode(dictionary.get('message','')).encode('utf-8').strip()
+        text = dictionary.get('message','')
         
         if not self.xmpp_protocol.xmlstream:
             log.msg("Outbound undeliverable, XMPP not initialized yet.")
+            raise Exception, 'Undeliverable, xmpp not ready. Sticking back on the queue.'
         else:
             self.xmpp_protocol.reply(jid, text)
     
