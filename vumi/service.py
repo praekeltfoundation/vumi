@@ -21,7 +21,7 @@ class Options(usage.Options):
         ["port", None, 5672, "AMQP port", int],
         ["username", None, "vumi", "AMQP username"],
         ["password", None, "vumi", "AMQP password"],
-        ["vhost", None, "/vumi", "AMQP virtual host"],
+        ["vhost", None, "/develop", "AMQP virtual host"],
         ["specfile", None, "config/amqp-spec-0-8.xml", "AMQP spec file"],
     ]
 
@@ -66,6 +66,27 @@ class Worker(AMQClient):
         """
         return (max(self.channels) + 1) if self.channels else 0
     
+    def routing_key_to_class_name(self, routing_key):
+        return ''.join(map(lambda s: s.capitalize(), routing_key.split('.')))
+    
+    def consume(self, routing_key, callback, queue_name=None, exchange_name='vumi', 
+                        exchange_type='direct', durable=True):
+        
+        # use the routing key to generate the name for the class
+        # amq.routing.key -> AmqRoutingKey
+        dynamic_name = self.routing_key_to_class_name(routing_key)
+        class_name = "%sDynamicConsumer" % str(dynamic_name)
+        kwargs = {
+            'routing_key': routing_key,
+            'queue_name': queue_name or routing_key,
+            'exchange_name': exchange_name,
+            'exchange_type': exchange_type,
+            'durable': durable
+        }
+        log.msg('Staring %s with %s' % (class_name, kwargs))
+        klass = type(class_name, (DynamicConsumer,), kwargs)
+        return self.start_consumer(klass, callback)
+    
     @inlineCallbacks
     def start_consumer(self, klass, *args, **kwargs):
         channel = yield self.get_channel()
@@ -94,6 +115,17 @@ class Worker(AMQClient):
         consumer.start(channel, queue)
         # return the newly created & consuming consumer
         returnValue(consumer)
+    
+    def publish_to(self, routing_key, exchange_name='vumi',
+                    exchange_type='direct', delivery_mode=2):
+        class_name = self.routing_key_to_class_name(routing_key)
+        publisher_class = type("%sDynamicPublisher" % class_name, (Publisher,), {
+                "routing_key": routing_key,
+                "exchange_name": exchange_name,
+                "exchange_type": exchange_type,
+                "delivery_mode": delivery_mode,
+            })
+        return self.start_publisher(publisher_class)
     
     @inlineCallbacks
     def start_publisher(self, klass, *args, **kwargs):
@@ -183,6 +215,12 @@ class Consumer(object):
         self.channel.close()
         returnValue(self.keep_consuming)
 
+class DynamicConsumer(Consumer):
+    def __init__(self, callback):
+        self.callback = callback
+    
+    def consume_message(self, message):
+        return self.callback(message)
 
 class RoutingKeyError(Exception):
     def __init__(self, value):
@@ -235,6 +273,7 @@ class Publisher(object):
 
 
     def publish(self, message, **kwargs):
+        log.msg("Publishing", message, kwargs)
         exchange_name = kwargs.get('exchange_name') or self.exchange_name
         routing_key = kwargs.get('routing_key') or self.routing_key
         require_bind = kwargs.get('require_bind')
