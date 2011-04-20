@@ -112,6 +112,19 @@ class TestChannel(object):
 
     def basic_publish(self, *args, **kwargs):
         self.publish_log.append(kwargs)
+    
+    def exchange_declare(self, *args, **kwargs):
+        pass
+
+    def queue_declare(self, *args, **kwargs):
+        pass
+
+    def queue_bind(self, *args, **kwargs):
+        pass
+
+    def basic_consume(self, *args, **kwargs):
+        klass = namedtuple('Reply', ['consumer_tag'])
+        return klass(consumer_tag=1)
 
     def close(self, *args, **kwargs):
         return True
