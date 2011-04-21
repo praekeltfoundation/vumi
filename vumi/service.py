@@ -231,10 +231,6 @@ class RoutingKeyError(Exception):
 
 
 class Publisher(object):
-    username = "vumi"
-    password = "vumi"
-    vhost = "/develop"
-    bound_routing_keys = {}
     exchange_name = "vumi"
     exchange_type = "direct"
     routing_key = "routing_key"
@@ -245,26 +241,35 @@ class Publisher(object):
     def start(self, channel):
         log.msg("Started the publisher")
         self.channel = channel
-        print reactor.get_vumi_options()
+        self.vumi_options = reactor.get_vumi_options()
+        self.bound_routing_keys = {}
+        self.routing_key_is_bound('f')
+        print self.bound_routing_keys
 
     def list_bindings(self):
         try:
             # Note utils.callback() does a POST not a GET
             # which may lead to errors if the RabbitMQ Management REST api changes
-            url, resp = utils.callback("http://%s:%s@localhost:55672/api/bindings" % (self.username, self.password), [])
+            url, resp = utils.callback("http://%s:%s@localhost:55672/api/bindings" % (
+                self.vumi_options['username'], self.vumi_options['password']), [])
             bindings = json.loads(resp)
             bound_routing_keys = {}
             for b in bindings:
-                if b['vhost'] == self.vhost and b['source'] == self.exchange_name:
-                    bound_routing_keys[b['routing_key']] = bound_routing_keys.get(b['routing_key'],[])+[b['destination']]
+                if b['vhost'] == self.vumi_options['vhost'] and b['source'] == self.exchange_name:
+                    bound_routing_keys[b['routing_key']] = \
+                            bound_routing_keys.get(b['routing_key'],[])+[b['destination']]
         except:
             bound_routing_keys = {"bindings":"undetected"}
         return bound_routing_keys
 
 
     def routing_key_is_bound(self, key):
-        # Only check on the vumi exchange
-        if self.exchange_name != "vumi":
+        # Don't check for bound routing keys on RPC reply exchanges
+        # The one-use queues are changing too frequently to cache efficiently,
+        # too many http calls to RabbitMQ Management will be required,
+        # and the auto-generated queues & routing_keys are unlikley to
+        # result in errors where routing keys are unbound
+        if self.exchange_name[-4:].lower() == '_rpc':
             return True
         if len(self.bound_routing_keys) == 1 and self.bound_routing_keys.get("bindings") == "undetected":
             log.msg("No bindings detected, is the RabbitMQ Management plugin installed?")
