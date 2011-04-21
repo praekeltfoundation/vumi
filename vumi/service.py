@@ -243,8 +243,6 @@ class Publisher(object):
         self.channel = channel
         self.vumi_options = reactor.get_vumi_options()
         self.bound_routing_keys = {}
-        self.routing_key_is_bound('f')
-        print self.bound_routing_keys
 
     def list_bindings(self):
         try:
