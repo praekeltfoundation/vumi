@@ -245,6 +245,7 @@ class Publisher(object):
     def start(self, channel):
         log.msg("Started the publisher")
         self.channel = channel
+        print reactor.get_vumi_options()
 
     def list_bindings(self):
         try:

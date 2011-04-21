@@ -7,7 +7,7 @@ from twisted.plugin import IPlugin
 from twisted.internet import reactor
 
 from vumi.service import Options, WorkerCreator
-from vumi.utils import load_class_by_string
+from vumi.utils import load_class_by_string, extend_with_vumi_options
 from vumi.errors import VumiError
 
 # This is the actual service that is started, this the thing that runs
@@ -42,6 +42,12 @@ class VumiService(Service):
         for k in self.options.keys():
             if re.match("config_", k):
                 self.options['config'].update({k[7:]: self.options[k]})
+
+        extend_with_vumi_options(reactor)
+        vopt = {}
+        for i in self.options.items():
+            vopt[i[0]] = i[1]
+        reactor.set_vumi_options(vopt)
 
         worker_class = load_class_by_string(worker_class_name)
         creator = WorkerCreator(worker_class, **self.options)
