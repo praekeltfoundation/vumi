@@ -29,19 +29,6 @@ def load_class_by_string(class_path):
     class_name = parts[-1]
     return load_class(module_name, class_name)
 
-
-def get_vumi_options(self):
-    return self.vumi_config
-
-def set_vumi_options(self, config):
-    self.vumi_config = config
-
-def extend_with_vumi_options(obj):
-    obj.__class__.set_vumi_options = set_vumi_options
-    obj.__class__.get_vumi_options = get_vumi_options
-    obj.set_vumi_options({})
-
-
 def filter_options_on_prefix(options, prefix, delimiter='-'):
     """
     splits an options dict based on key prefixes

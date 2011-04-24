@@ -11,6 +11,7 @@ from vumi.message import Message
 from vumi.webapp.api import utils
 import txamqp
 import json, datetime, sys
+import vumi.options
 
 class Options(usage.Options):
     """
@@ -241,7 +242,7 @@ class Publisher(object):
     def start(self, channel):
         log.msg("Started the publisher")
         self.channel = channel
-        self.vumi_options = reactor.get_vumi_options()
+        self.vumi_options = vumi.options.get()
         self.bound_routing_keys = {}
 
     def list_bindings(self):
