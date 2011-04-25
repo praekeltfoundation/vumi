@@ -7,7 +7,8 @@ __dictionary = None
 def set(dictionary):
     global __dictionary
     if __dictionary == None:
-        __dictionary = deepcopy(dictionary)
+        __dictionary = {}
+        __dictionary.update(deepcopy(dictionary))
     else:
         raise Exception(
                 "Warning, vumi.options have been set and may not be re-set!"
