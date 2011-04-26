@@ -7,7 +7,7 @@ from twisted.plugin import IPlugin
 from twisted.internet import reactor
 
 from vumi.service import Options, WorkerCreator
-from vumi.utils import load_class_by_string, extend_with_vumi_options
+from vumi.utils import load_class_by_string
 from vumi.errors import VumiError
 import vumi.options
 
