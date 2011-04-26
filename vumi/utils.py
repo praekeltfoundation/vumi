@@ -29,7 +29,6 @@ def load_class_by_string(class_path):
     class_name = parts[-1]
     return load_class(module_name, class_name)
 
-
 def filter_options_on_prefix(options, prefix, delimiter='-'):
     """
     splits an options dict based on key prefixes
