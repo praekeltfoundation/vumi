@@ -18,3 +18,8 @@ def get():
     global __dictionary
     return deepcopy(__dictionary) or {}
 
+
+def is_set():
+    global __dictionary
+    return __dictionary != None
+

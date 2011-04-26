@@ -44,10 +44,8 @@ class VumiService(Service):
             if re.match("config_", k):
                 self.options['config'].update({k[7:]: self.options[k]})
 
-        vumi_options = {}
-        for i in self.options.items():
-            vumi_options[i[0]] = i[1]
-        vumi.options.set(vumi_options)
+        # set the worker's launch configuration in an immutable global
+        vumi.options.set(self.options)
 
         worker_class = load_class_by_string(worker_class_name)
         creator = WorkerCreator(worker_class, **self.options)
