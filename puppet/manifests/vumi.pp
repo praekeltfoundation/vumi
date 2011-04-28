@@ -36,6 +36,35 @@ class vumi::packages {
     apt::package { "libcurl4-openssl-dev": ensure => "7.19.7-1ubuntu1" }
 }
 
+
+# Download plugins for RabbitMQ & possibly others
+class vumi::plugins {
+    rabbitmq::plugin {
+        "http://www.rabbitmq.com/releases/plugins/v2.3.1/mochiweb-2.3.1.ez"
+        ensure => present
+    }
+    rabbitmq::plugin {
+        "http://www.rabbitmq.com/releases/plugins/v2.3.1/webmachine-2.3.1.ez"
+        ensure => present
+    }
+    rabbitmq::plugin {
+        "http://www.rabbitmq.com/releases/plugins/v2.3.1/amqp_client-2.3.1.ez"
+        ensure => present
+    }
+    rabbitmq::plugin {
+        "http://www.rabbitmq.com/releases/plugins/v2.3.1/rabbitmq-mochiweb-2.3.1.ez"
+        ensure => present
+    }
+    rabbitmq::plugin {
+        "http://www.rabbitmq.com/releases/plugins/v2.3.1/rabbitmq-management-agent-2.3.1.ez"
+        ensure => present
+    }
+    rabbitmq::plugin {
+        "http://www.rabbitmq.com/releases/plugins/v2.3.1/rabbitmq-management-2.3.1.ez"
+        ensure => present
+    }
+
+
 # Create these accounts
 class vumi::accounts {
     rabbitmq::vhost { "/develop":
