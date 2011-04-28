@@ -37,32 +37,15 @@ class vumi::packages {
 }
 
 
-# Download plugins for RabbitMQ & possibly others
+# Download & install plugins for RabbitMQ & possibly others
 class vumi::plugins {
-    rabbitmq::plugin {
-        "http://www.rabbitmq.com/releases/plugins/v2.3.1/mochiweb-2.3.1.ez"
-        ensure => present
-    }
-    rabbitmq::plugin {
-        "http://www.rabbitmq.com/releases/plugins/v2.3.1/webmachine-2.3.1.ez"
-        ensure => present
-    }
-    rabbitmq::plugin {
-        "http://www.rabbitmq.com/releases/plugins/v2.3.1/amqp_client-2.3.1.ez"
-        ensure => present
-    }
-    rabbitmq::plugin {
-        "http://www.rabbitmq.com/releases/plugins/v2.3.1/rabbitmq-mochiweb-2.3.1.ez"
-        ensure => present
-    }
-    rabbitmq::plugin {
-        "http://www.rabbitmq.com/releases/plugins/v2.3.1/rabbitmq-management-agent-2.3.1.ez"
-        ensure => present
-    }
-    rabbitmq::plugin {
-        "http://www.rabbitmq.com/releases/plugins/v2.3.1/rabbitmq-management-2.3.1.ez"
-        ensure => present
-    }
+    rabbitmq::plugin { "mochiweb":                  ensure => "2.3.1" }
+    rabbitmq::plugin { "webmachine":                ensure => "2.3.1" }
+    rabbitmq::plugin { "amqp_client":               ensure => "2.3.1" }
+    rabbitmq::plugin { "rabbitmq-mochiweb":         ensure => "2.3.1" }
+    rabbitmq::plugin { "rabbitmq-management-agent": ensure => "2.3.1" }
+    rabbitmq::plugin { "rabbitmq-management":       ensure => "2.3.1" }
+    # http://www.rabbitmq.com/releases/plugins/v2.3.1/rabbitmq-management-2.3.1.ez
 
 
 # Create these accounts
