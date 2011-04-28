@@ -171,6 +171,7 @@ class vumi {
 Exec["Resynchronize apt package index"] 
     -> File["/var/praekelt"] 
     -> Class["vumi::packages"] 
+    -> Class["vumi::plugins"]
     -> Class["vumi::accounts"]
     -> Class["vumi::database"]
     -> Exec["Clone git repository"]
