@@ -29,7 +29,7 @@ class vumi::packages {
     apt::package { "python-pip": ensure => "0.3.1-1ubuntu2" }
     apt::package { "python-virtualenv": ensure => "1.4.5-1ubuntu1" }
     apt::package { "postgresql-8.4": ensure => "8.4.3-1" }
-    apt::package { "libpq-dev": ensure => "8.4.7-0ubuntu0.10.04" }
+    apt::package { "libpq-dev": ensure => "8.4.8-0ubuntu0.10.04" }
     apt::package { "rabbitmq-server": ensure => "1.7.2-1ubuntu1" }
     # apt::package { "rabbitmq-server": ensure => "2.3.1-1ubuntu1" }
     apt::package { "git-core": ensure => "1:1.7.0.4-1ubuntu0.2" }
