@@ -3,7 +3,6 @@ exclude environments/*.py
 include environments/template.py
 include logs/README
 include fab/README
-# include tmp/README
 include tmp/pids/README
 include config/amqp-spec-0-8.xml
 include config/deploying.pip
