@@ -8,7 +8,7 @@ importlib==1.0.2
 nose==0.11.3
 PyYAML==3.09
 pycurl==7.18.1
-decorator==3.1.2
+decorator
 pystache==0.3.1
 django-piston==0.2.2
 iso8601==0.1.4
@@ -20,7 +20,6 @@ Sphinx==1.0.7
 django-nose
 coverage
 pyOpenSSL==0.11
--e git+git://github.com/praekelt/python-ssmi.git#egg=python-ssmi
+python-ssmi
+python-foneworx
 -e git+git://github.com/dmaclay/python-smpp.git#egg=python-smpp
--e git+git://github.com/smn/python-foneworx.git#egg=python-foneworx
--e git+git://github.com/smn/trialcoverage#egg=trial-coverage
