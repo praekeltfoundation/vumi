@@ -36,6 +36,11 @@ class PopulatedDesicionTree(TemplatedDecisionTree):
 class TraversedDecisionTree(PopulatedDesicionTree):
     completed = False
 
+    def is_completed(self):
+        return self.completed
+
+
+
 
 
 
