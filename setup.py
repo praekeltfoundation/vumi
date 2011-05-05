@@ -15,7 +15,7 @@ setup(
     author = 'Praekelt Foundation',
     author_email = 'dev@praekeltfoundation.org',
     packages = find_packages(),
-    install_requires = ['setuptools'].extend(listify('config/requirements.pip')),
+    install_requires = ['setuptools'] + listify('config/requirements.pip'),
     classifiers = [
         'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',
