@@ -20,7 +20,6 @@ Sphinx==1.0.7
 django-nose
 coverage
 pyOpenSSL==0.11
--e git+git://github.com/praekelt/python-ssmi.git#egg=python-ssmi
+python-ssmi
+python-foneworx
 -e git+git://github.com/dmaclay/python-smpp.git#egg=python-smpp
--e git+git://github.com/smn/python-foneworx.git#egg=python-foneworx
--e git+git://github.com/smn/trialcoverage#egg=trial-coverage
