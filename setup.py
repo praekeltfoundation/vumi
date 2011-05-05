@@ -3,6 +3,10 @@ from setuptools import setup, find_packages
 def listify(filename):
     return filter(None, open(filename,'r').read().split('\n'))
 
+def remove_externals(requirements):
+    return filter(lambda e: e.startswith('-e'), requirements)
+print ['setuptools'] + remove_externals(listify('config/requirements.pip'))
+
 setup(
     name = "vumi",
     version = "0.1.0",
