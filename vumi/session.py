@@ -37,11 +37,5 @@ class TraversedDecisionTree(PopulatedDesicionTree):
     completed = False
 
 
-#a = VumiSession()
-#b = VumiSession()
-#a.set_decision_tree(TraversedDecisionTree())
-#b.set_decision_tree(PopulatedDesicionTree())
-#print a.get_decision_tree()
-#print b.get_decision_tree()
 
 
