@@ -26,13 +26,54 @@ class SessionTestCase(TestCase):
         # the new TraversedDecisionTree should not be completed
         self.assertFalse(dt3.is_completed())
 
-        test_yaml = """
-            dddd:
-                a:
-                b:
-        """
+        test_yaml = '''
+        dddd:
+            a:
+            b:
+        '''
 
-        dt1.load_yaml(test_yaml)
+        dt1.load_yaml_template(test_yaml)
         print "\n", repr(dt1.get_template())
+
+
+        test_json = '''
+        {
+            "users": [
+                {
+                    "name": "Simon",
+                    "items": [
+                        {
+                            "name": "alpha",
+                            "value": 0,
+                            "value2": 0,
+                            "timestamp": 0,
+                            "id": "1.1"
+                        },
+                        {
+                            "name": "beta",
+                            "value": 0,
+                            "value2": 0,
+                            "timestamp": 0,
+                            "id": "1.2"
+                        }
+                    ],
+                    "timestamp": "1234567890",
+                    "id": "1"
+                },
+                {
+                    "name": "David",
+                    "items": [],
+                    "timestamp": "1234567890",
+                    "id": "2"
+                }
+            ],
+            "msisdn": "12345"
+        }
+        '''
+
+        dt2.load_yaml_template(test_yaml)
+        print "\n", repr(dt2.get_template())
+        dt2.load_json_data(test_json)
+        print "\n", repr(dt2.get_data())
 
 

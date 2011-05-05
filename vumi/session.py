@@ -26,7 +26,7 @@ class DecisionTree():
 class TemplatedDecisionTree(DecisionTree):
     template = None
 
-    def load_yaml(self, yaml_string):
+    def load_yaml_template(self, yaml_string):
         self.template = yaml.load(yaml_string)
 
     def get_template(self):
@@ -34,9 +34,13 @@ class TemplatedDecisionTree(DecisionTree):
 
 
 class PopulatedDesicionTree(TemplatedDecisionTree):
+    data = None
 
-    def load_json(self, json):
-        pass
+    def load_json_data(self, json_string):
+        self.data = json.loads(json_string)
+
+    def get_data(self):
+        return self.data
 
 
 class TraversedDecisionTree(PopulatedDesicionTree):
