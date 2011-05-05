@@ -4,8 +4,7 @@ def listify(filename):
     return filter(None, open(filename,'r').read().split('\n'))
 
 def remove_externals(requirements):
-    return filter(lambda e: e.startswith('-e'), requirements)
-print ['setuptools'] + remove_externals(listify('config/requirements.pip'))
+    return filter(lambda e: not e.startswith('-e'), requirements)
 
 setup(
     name = "vumi",
@@ -19,7 +18,7 @@ setup(
     author = 'Praekelt Foundation',
     author_email = 'dev@praekeltfoundation.org',
     packages = find_packages(),
-    install_requires = ['setuptools'] + listify('config/requirements.pip'),
+    install_requires = ['setuptools'] + remove_externals(listify('config/requirements.pip')),
     classifiers = [
         'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',
