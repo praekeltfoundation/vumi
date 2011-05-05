@@ -26,4 +26,13 @@ class SessionTestCase(TestCase):
         # the new TraversedDecisionTree should not be completed
         self.assertFalse(dt3.is_completed())
 
+        test_yaml = """
+            dddd:
+                a:
+                b:
+        """
+
+        dt1.load_yaml(test_yaml)
+        print "\n", repr(dt1.get_template())
+
 

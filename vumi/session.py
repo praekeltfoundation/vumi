@@ -1,5 +1,7 @@
 # TODO definitly need a session object
 # with hist & expiry & to_str & to_json etc
+import yaml
+import json
 
 class VumiSession():
     key = None
@@ -22,9 +24,13 @@ class DecisionTree():
 
 
 class TemplatedDecisionTree(DecisionTree):
+    template = None
 
-    def load_yaml(self, yaml):
-        pass
+    def load_yaml(self, yaml_string):
+        self.template = yaml.load(yaml_string)
+
+    def get_template(self):
+        return self.template
 
 
 class PopulatedDesicionTree(TemplatedDecisionTree):
