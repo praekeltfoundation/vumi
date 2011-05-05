@@ -27,9 +27,55 @@ class SessionTestCase(TestCase):
         self.assertFalse(dt3.is_completed())
 
         test_yaml = '''
-        dddd:
-            a:
-            b:
+          - key: users
+            question:
+                english: "Which user are you?"
+            options: name
+            condition: match
+            next: items
+            else: repeat
+
+          - key: items
+            question:
+                english: "Which item?"
+            options: name
+            condition: match
+            next: value
+            else: repeat
+
+          - key: value
+            question:
+                english: "How much?"
+            condition: integer
+            action: save
+            next: value2
+            else: repeat
+
+          - key: value2
+            question:
+                english: "How many?"
+            condition: integer
+            action: save
+            next: timestamp
+            else: repeat
+
+          - key: timestamp
+            question:
+                english: "Today?"
+            options:
+                true:
+                    display:
+                        english: "yes"
+                    action: save_now
+                    next: finish
+                false:
+                    display:
+                        english: "no"
+                    question: "Date [YYYY/MM/DD] ?"
+                    condition: format \d\d\d\d/\d\d/\d\d
+                    action: save
+                    next: finish
+
         '''
 
         dt1.load_yaml_template(test_yaml)
