@@ -61,7 +61,7 @@ class SessionTestCase(TestCase):
 
           - key: timestamp
             question:
-                english: "Today?"
+                english: "Was it today?"
             options:
                 true:
                     display:
@@ -71,7 +71,7 @@ class SessionTestCase(TestCase):
                 false:
                     display:
                         english: "no"
-                    question: "Date [YYYY/MM/DD] ?"
+                    question: "Date [yyyy/mm/dd] ?"
                     condition: format \d\d\d\d/\d\d/\d\d
                     action: save
                     next: finish
