@@ -27,7 +27,9 @@ class SessionTestCase(TestCase):
         self.assertFalse(dt3.is_completed())
 
         test_yaml = '''
-          - key: users
+        __start__: users
+
+        users:
             question:
                 english: "Which user are you?"
             options: name
@@ -36,7 +38,7 @@ class SessionTestCase(TestCase):
             next: items
             fail: repeat
 
-          - key: items
+        items:
             question:
                 english: "Which item?"
             options: name
@@ -45,7 +47,7 @@ class SessionTestCase(TestCase):
             next: value
             fail: repeat
 
-          - key: value
+        value:
             question:
                 english: "How much?"
             condition: integer
@@ -53,7 +55,7 @@ class SessionTestCase(TestCase):
             next: value2
             fail: repeat
 
-          - key: value2
+        value2:
             question:
                 english: "How many?"
             condition: integer
@@ -61,7 +63,7 @@ class SessionTestCase(TestCase):
             next: timestamp
             fail: repeat
 
-          - key: timestamp
+        timestamp:
             question:
                 english: "Was it today?"
             options:
