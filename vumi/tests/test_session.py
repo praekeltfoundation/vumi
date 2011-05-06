@@ -127,6 +127,12 @@ class SessionTestCase(TestCase):
         self.assertEquals(dt3.load_yaml_template(test_yaml), None)
         self.assertEquals(dt3.load_json_data(test_json), None)
 
+        before = dt3.dumps()
         dt3.start()
+        # simple backtracking test
+        dt3.previous()
+        self.assertEquals(before, dt3.dumps())
+        dt3.start()
+        print dt3.dumps()
 
 

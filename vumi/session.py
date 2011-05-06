@@ -48,13 +48,31 @@ class PopulatedDesicionTree(TemplatedDecisionTree):
 class TraversedDecisionTree(PopulatedDesicionTree):
     completed = False
     language = "english"
-    current_template = None
-    history_template = []
-    current_data = None
-    history_data = []
+    template_current = None
+    template_history = []
+    data_current = None
+    data_history = []
 
     def is_completed(self):
         return self.completed
+
+
+    def dumps(self):
+        s = ""
+        s += "\nTEMPLATE:  "
+        s += repr(self.template)
+        s += "\nTEMPLATE_CURRENT:  "
+        s += repr(self.template_current)
+        s += "\nTEMPLATE_HISTORY:  "
+        s += repr(self.template_history)
+        s += "\nDATA:  "
+        s += repr(self.data)
+        s += "\nDATA_CURRENT:  "
+        s += repr(self.data_current)
+        s += "\nDATA_HISTORY:  "
+        s += repr(self.data_history)
+        return s
+
 
     def start(self):
         if not self.template:
@@ -63,26 +81,22 @@ class TraversedDecisionTree(PopulatedDesicionTree):
             raise VumiError("data must be loaded")
         t = self.template.get(self.template.get("__start__"))
         d = self.data.get(self.template.get("__start__"))
-        print self.template
-        print t
-        print self.data
-        print d
+        self.select(t, d)
 
 
     def select(self, template, data):
-        history_template.append(current_template)
-        history_data.append(current_data)
-        current_template = template
-        current_data = data
+        self.template_history.append(self.template_current)
+        self.data_history.append(self.data_current)
+        self.template_current = template
+        self.data_current = data
 
 
     def previous(self):
         try:
-            current_template = history_template.pop()
-            current_data = history_data.pop()
+            self.template_current = self.template_history.pop()
+            self.data_current = self.data_history.pop()
         except:
             pass
-
 
 
     def question(self):
