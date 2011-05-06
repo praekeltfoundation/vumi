@@ -77,7 +77,6 @@ class TraversedDecisionTree(PopulatedDesicionTree):
         if level >= 2:
             s += "\nDATA_HISTORY:  "
             s += repr(self.data_history)
-        s += "\n"
         return s
 
 
@@ -109,10 +108,11 @@ class TraversedDecisionTree(PopulatedDesicionTree):
     def question(self):
         que = ""
         que += self.template_current['question'][self.language]
-        count = 0
-        for opt in self.data_current:
-            count += 1
-            que += "\n" + str(count) + ". " + opt.get(self.template_current['options'])
+        if type(self.data_current) == list:
+            count = 0
+            for opt in self.data_current:
+                count += 1
+                que += "\n" + str(count) + ". " + opt.get(self.template_current['options'])
         return que
 
 

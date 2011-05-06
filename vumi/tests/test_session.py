@@ -134,12 +134,16 @@ class SessionTestCase(TestCase):
         dt3.previous()
         self.assertEquals(before, dt3.dumps())
         dt3.start()
+        print ""
         #print dt3.dumps()
-        print dt3.question()
+        print "\n", dt3.question()
         dt3.answer(1)
         print dt3.dumps()
-        print dt3.question()
+        print "\n", dt3.question()
         dt3.answer(1)
+        print dt3.dumps()
+        print "\n", dt3.question()
+        dt3.answer(42)
         print dt3.dumps()
 
 
