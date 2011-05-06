@@ -57,20 +57,27 @@ class TraversedDecisionTree(PopulatedDesicionTree):
         return self.completed
 
 
-    def dumps(self):
+    def dumps(self, level=1):
         s = ""
-        s += "\nTEMPLATE:  "
-        s += repr(self.template)
-        s += "\nTEMPLATE_CURRENT:  "
-        s += repr(self.template_current)
-        s += "\nTEMPLATE_HISTORY:  "
-        s += repr(self.template_history)
-        s += "\nDATA:  "
-        s += repr(self.data)
-        s += "\nDATA_CURRENT:  "
-        s += repr(self.data_current)
-        s += "\nDATA_HISTORY:  "
-        s += repr(self.data_history)
+        if level >= 1:
+            s += "\nTEMPLATE:  "
+            s += repr(self.template)
+        if level >= 0:
+            s += "\nTEMPLATE_CURRENT:  "
+            s += repr(self.template_current)
+        if level >= 2:
+            s += "\nTEMPLATE_HISTORY:  "
+            s += repr(self.template_history)
+        if level >= 1:
+            s += "\nDATA:  "
+            s += repr(self.data)
+        if level >= 0:
+            s += "\nDATA_CURRENT:  "
+            s += repr(self.data_current)
+        if level >= 2:
+            s += "\nDATA_HISTORY:  "
+            s += repr(self.data_history)
+        s += "\n"
         return s
 
 

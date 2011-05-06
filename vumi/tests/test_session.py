@@ -134,7 +134,7 @@ class SessionTestCase(TestCase):
         dt3.previous()
         self.assertEquals(before, dt3.dumps())
         dt3.start()
-        print dt3.dumps()
+        #print dt3.dumps()
         print dt3.question()
         dt3.answer(1)
         print dt3.dumps()
@@ -147,6 +147,5 @@ class SessionTestCase(TestCase):
 
 
 
-
-        print "\n\n\n"
-        time.sleep(3)
+        print "\n\n"
+        time.sleep(2)
