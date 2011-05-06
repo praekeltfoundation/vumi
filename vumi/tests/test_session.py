@@ -31,6 +31,7 @@ class SessionTestCase(TestCase):
             question:
                 english: "Which user are you?"
             options: name
+            action: select
             condition: match
             next: items
             else: repeat
@@ -39,6 +40,7 @@ class SessionTestCase(TestCase):
             question:
                 english: "Which item?"
             options: name
+            action: select
             condition: match
             next: value
             else: repeat
