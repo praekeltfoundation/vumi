@@ -135,5 +135,6 @@ class SessionTestCase(TestCase):
         dt3.start()
         print dt3.dumps()
         print dt3.question()
+        print dt3.answer(2)
 
 

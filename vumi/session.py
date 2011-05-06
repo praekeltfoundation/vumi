@@ -110,7 +110,7 @@ class TraversedDecisionTree(PopulatedDesicionTree):
 
 
     def answer(self, ans):
-        pass
+        return self.data_current[int(ans) -1]
 
 
 
