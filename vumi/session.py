@@ -110,7 +110,9 @@ class TraversedDecisionTree(PopulatedDesicionTree):
 
 
     def answer(self, ans):
-        return self.data_current[int(ans) -1]
+        t = self.template.get(self.template_current.get("next"))
+        d = self.data_current[int(ans)-1].get(self.template_current.get("next"))
+        self.select(t, d)
 
 
 

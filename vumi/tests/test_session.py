@@ -1,3 +1,4 @@
+import time
 from twisted.trial.unittest import TestCase
 from vumi.session import VumiSession, TemplatedDecisionTree, PopulatedDesicionTree, TraversedDecisionTree
 
@@ -135,6 +136,17 @@ class SessionTestCase(TestCase):
         dt3.start()
         print dt3.dumps()
         print dt3.question()
-        print dt3.answer(2)
+        dt3.answer(1)
+        print dt3.dumps()
+        print dt3.question()
+        dt3.answer(1)
+        print dt3.dumps()
 
 
+
+
+
+
+
+        print "\n\n\n"
+        time.sleep(3)
