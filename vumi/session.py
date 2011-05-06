@@ -63,11 +63,11 @@ class TraversedDecisionTree(PopulatedDesicionTree):
             raise VumiError("data must be loaded")
 
 
-    def __next(self, _template, _data):
+    def select(self, _template, _data):
         pass
 
 
-    def __back(self):
+    def previous(self):
         return (None, None)
 
 
