@@ -45,20 +45,20 @@ class SessionTestCase(TestCase):
             options: name
             check: match
             action: select
-            next: value
+            next: stuff
             fail: repeat
 
-        value:
+        stuff:
             question:
-                english: "How much?"
+                english: "How much stuff?"
             check: integer
             action: save
-            next: value2
+            next: things
             fail: repeat
 
-        value2:
+        things:
             question:
-                english: "How many?"
+                english: "How many things?"
             check: integer
             action: save
             next: timestamp
@@ -94,15 +94,15 @@ class SessionTestCase(TestCase):
                     "items": [
                         {
                             "name": "alpha",
-                            "value": 0,
-                            "value2": 0,
+                            "stuff": 0,
+                            "things": 0,
                             "timestamp": 0,
                             "id": "1.1"
                         },
                         {
                             "name": "beta",
-                            "value": 0,
-                            "value2": 0,
+                            "stuff": 0,
+                            "things": 0,
                             "timestamp": 0,
                             "id": "1.2"
                         }
@@ -143,8 +143,8 @@ class SessionTestCase(TestCase):
         dt3.answer(1)
         print dt3.dumps()
         print "\n", dt3.question()
-        dt3.answer(42)
-        print dt3.dumps()
+        #dt3.answer(42)
+        #print dt3.dumps()
 
 
 
