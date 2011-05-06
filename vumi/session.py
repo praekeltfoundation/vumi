@@ -100,7 +100,14 @@ class TraversedDecisionTree(PopulatedDesicionTree):
 
 
     def question(self):
-        pass
+        que = ""
+        que += self.template_current['question'][self.language]
+        count = 0
+        for opt in self.data_current:
+            count += 1
+            que += "\n" + str(count) + ". " + opt.get(self.template_current['options'])
+        return que
+
 
     def answer(self, ans):
         pass

@@ -134,5 +134,6 @@ class SessionTestCase(TestCase):
         self.assertEquals(before, dt3.dumps())
         dt3.start()
         print dt3.dumps()
+        print dt3.question()
 
 
