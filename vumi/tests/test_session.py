@@ -32,57 +32,55 @@ class SessionTestCase(TestCase):
 
         users:
             question:
-                english: "Which user are you?"
+                english: "Which user are you ?"
             options: name
-            check: match
             action: select
             next: items
-            fail: repeat
 
         items:
             question:
-                english: "Which item?"
+                english: "Which item ?"
             options: name
-            check: match
             action: select
             next: stuff
-            fail: repeat
 
         stuff:
             question:
-                english: "How much stuff?"
-            check: integer
+                english: "How much stuff ?"
+            validate: integer
             action: save
             next: things
-            fail: repeat
 
         things:
             question:
-                english: "How many things?"
-            check: integer
+                english: "How many things ?"
+            validate: integer
             action: save
             next: timestamp
-            fail: repeat
 
         timestamp:
             question:
-                english: "Was it today?"
+                english: "Which day was it ?"
             options:
-                true:
-                    display:
-                        english: "yes"
-                    action: save_now
+                  - display:
+                        english: "Today"
+                    action: save_today
                     next: finish
-                false:
-                    display:
-                        english: "no"
-                    question: "Please enter the day [yyyy/mm/dd] ?"
-                    check: date
-                    action: save
+
+                  - display:
+                        english: "Yesterday"
+                    action: save_yesterday
                     next: finish
-                    fail: repeat
-            check: match
-            fail: repeat
+
+                  - display:
+                        english: "Earlier"
+                    action: question
+                    next:
+                        question:
+                            english: "Please enter the day [yyyy/mm/dd] ?"
+                        validate: date
+                        action: save
+                        next: finish
 
         '''
 
