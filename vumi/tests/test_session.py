@@ -85,10 +85,6 @@ class SessionTestCase(TestCase):
 
         '''
 
-        dt1.load_yaml_template(test_yaml)
-        print "\n", repr(dt1.get_template())
-
-
         test_json = '''
         {
             "users": [
@@ -124,14 +120,13 @@ class SessionTestCase(TestCase):
         }
         '''
 
-        dt2.load_yaml_template(test_yaml)
-        print "\n", repr(dt2.get_template())
-        dt2.load_json_data(test_json)
-        print "\n", repr(dt2.get_data())
+        # just check the load operations don't blow up
+        self.assertEquals(dt1.load_yaml_template(test_yaml), None)
+        self.assertEquals(dt2.load_yaml_template(test_yaml), None)
+        self.assertEquals(dt2.load_json_data(test_json), None)
+        self.assertEquals(dt3.load_yaml_template(test_yaml), None)
+        self.assertEquals(dt3.load_json_data(test_json), None)
 
-
-        dt3.load_yaml_template(test_yaml)
-        dt3.load_json_data(test_json)
         dt3.start()
 
 

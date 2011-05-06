@@ -61,15 +61,27 @@ class TraversedDecisionTree(PopulatedDesicionTree):
             raise VumiError("template must be loaded")
         if not self.data:
             raise VumiError("data must be loaded")
+        t = self.template.get(self.template.get("__start__"))
+        d = self.data.get(self.template.get("__start__"))
+        print self.template
+        print t
+        print self.data
+        print d
 
 
-    def select(self, _template, _data):
-        pass
+    def select(self, template, data):
+        history_template.append(current_template)
+        history_data.append(current_data)
+        current_template = template
+        current_data = data
 
 
     def previous(self):
-        return (None, None)
-
+        try:
+            current_template = history_template.pop()
+            current_data = history_data.pop()
+        except:
+            pass
 
 
 
