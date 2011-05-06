@@ -28,7 +28,8 @@ class SessionTestCase(TestCase):
         self.assertFalse(dt3.is_completed())
 
         test_yaml = '''
-        __start__: users
+        __start__:
+            next: users
 
         users:
             question:
@@ -65,12 +66,12 @@ class SessionTestCase(TestCase):
                   - display:
                         english: "Today"
                     action: save_today
-                    next: finish
+                    next: __finish__
 
                   - display:
                         english: "Yesterday"
                     action: save_yesterday
-                    next: finish
+                    next: __finish__
 
                   - display:
                         english: "Earlier"
@@ -80,8 +81,11 @@ class SessionTestCase(TestCase):
                             english: "Please enter the day [dd/mm/yyyy] ?"
                         validate: date
                         action: save
-                        next: finish
+                        next: __finish__
 
+        __finish__:
+            display:
+                english: "Thank you"
         '''
 
         test_json = '''
