@@ -33,8 +33,8 @@ class SessionTestCase(TestCase):
             question:
                 english: "Which user are you?"
             options: name
+            check: match
             action: select
-            condition: match
             next: items
             fail: repeat
 
@@ -42,15 +42,15 @@ class SessionTestCase(TestCase):
             question:
                 english: "Which item?"
             options: name
+            check: match
             action: select
-            condition: match
             next: value
             fail: repeat
 
         value:
             question:
                 english: "How much?"
-            condition: integer
+            check: integer
             action: save
             next: value2
             fail: repeat
@@ -58,7 +58,7 @@ class SessionTestCase(TestCase):
         value2:
             question:
                 english: "How many?"
-            condition: integer
+            check: integer
             action: save
             next: timestamp
             fail: repeat
@@ -75,11 +75,12 @@ class SessionTestCase(TestCase):
                 false:
                     display:
                         english: "no"
-                    question: "Date [yyyy/mm/dd] ?"
-                    condition: format \d\d\d\d/\d\d/\d\d
+                    question: "Please enter the day [yyyy/mm/dd] ?"
+                    check: date
                     action: save
                     next: finish
                     fail: repeat
+            check: match
             fail: repeat
 
         '''
@@ -127,5 +128,9 @@ class SessionTestCase(TestCase):
         print "\n", repr(dt2.get_template())
         dt2.load_json_data(test_json)
         print "\n", repr(dt2.get_data())
+
+
+        dt3.load_yaml_template(test_yaml)
+        dt3.load_json_data(test_json)
 
 
