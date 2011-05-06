@@ -45,6 +45,7 @@ class PopulatedDesicionTree(TemplatedDecisionTree):
 
 class TraversedDecisionTree(PopulatedDesicionTree):
     completed = False
+    language = "english"
 
     def is_completed(self):
         return self.completed
