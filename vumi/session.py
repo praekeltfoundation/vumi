@@ -49,6 +49,12 @@ class TraversedDecisionTree(PopulatedDesicionTree):
     def is_completed(self):
         return self.completed
 
+    def question():
+        pass
+
+    def answer(ans):
+        pass
+
 
 
 
