@@ -34,7 +34,7 @@ class SessionTestCase(TestCase):
             action: select
             condition: match
             next: items
-            else: repeat
+            fail: repeat
 
           - key: items
             question:
@@ -43,7 +43,7 @@ class SessionTestCase(TestCase):
             action: select
             condition: match
             next: value
-            else: repeat
+            fail: repeat
 
           - key: value
             question:
@@ -51,7 +51,7 @@ class SessionTestCase(TestCase):
             condition: integer
             action: save
             next: value2
-            else: repeat
+            fail: repeat
 
           - key: value2
             question:
@@ -59,7 +59,7 @@ class SessionTestCase(TestCase):
             condition: integer
             action: save
             next: timestamp
-            else: repeat
+            fail: repeat
 
           - key: timestamp
             question:
@@ -70,6 +70,7 @@ class SessionTestCase(TestCase):
                         english: "yes"
                     action: save_now
                     next: finish
+                    fail: repeat
                 false:
                     display:
                         english: "no"
@@ -77,6 +78,8 @@ class SessionTestCase(TestCase):
                     condition: format \d\d\d\d/\d\d/\d\d
                     action: save
                     next: finish
+                    fail: repeat
+            fail: repeat
 
         '''
 
