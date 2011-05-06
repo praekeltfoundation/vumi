@@ -77,7 +77,7 @@ class SessionTestCase(TestCase):
                     action: question
                     next:
                         question:
-                            english: "Please enter the day [yyyy/mm/dd] ?"
+                            english: "Please enter the day [dd/mm/yyyy] ?"
                         validate: date
                         action: save
                         next: finish
