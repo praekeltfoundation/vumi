@@ -70,7 +70,6 @@ class SessionTestCase(TestCase):
                         english: "yes"
                     action: save_now
                     next: finish
-                    fail: repeat
                 false:
                     display:
                         english: "no"
