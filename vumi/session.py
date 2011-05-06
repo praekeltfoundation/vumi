@@ -48,6 +48,10 @@ class PopulatedDesicionTree(TemplatedDecisionTree):
 class TraversedDecisionTree(PopulatedDesicionTree):
     completed = False
     language = "english"
+    current_template = None
+    history_template = []
+    current_data = None
+    history_data = []
 
     def is_completed(self):
         return self.completed
@@ -57,6 +61,16 @@ class TraversedDecisionTree(PopulatedDesicionTree):
             raise VumiError("template must be loaded")
         if not self.data:
             raise VumiError("data must be loaded")
+
+
+    def __next(self, _template, _data):
+        pass
+
+
+    def __back(self)
+        return (None, None)
+
+
 
 
     def question(self):
