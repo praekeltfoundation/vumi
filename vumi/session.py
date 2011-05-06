@@ -67,7 +67,7 @@ class TraversedDecisionTree(PopulatedDesicionTree):
         pass
 
 
-    def __back(self)
+    def __back(self):
         return (None, None)
 
 
