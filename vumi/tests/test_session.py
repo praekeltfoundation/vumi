@@ -132,5 +132,6 @@ class SessionTestCase(TestCase):
 
         dt3.load_yaml_template(test_yaml)
         dt3.load_json_data(test_json)
+        dt3.start()
 
 

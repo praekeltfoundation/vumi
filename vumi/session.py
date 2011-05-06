@@ -2,6 +2,8 @@
 # with hist & expiry & to_str & to_json etc
 import yaml
 import json
+from vumi.errors import VumiError
+
 
 class VumiSession():
     key = None
@@ -50,10 +52,17 @@ class TraversedDecisionTree(PopulatedDesicionTree):
     def is_completed(self):
         return self.completed
 
-    def question():
+    def start(self):
+        if not self.template:
+            raise VumiError("template must be loaded")
+        if not self.data:
+            raise VumiError("data must be loaded")
+
+
+    def question(self):
         pass
 
-    def answer(ans):
+    def answer(self, ans):
         pass
 
 
