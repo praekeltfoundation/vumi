@@ -90,26 +90,24 @@ class TraversedDecisionTree(PopulatedDesicionTree):
         self.language = language
 
 
-    def dumps(self, level=1):
+    def dumps(self, level=1, serialize=None):
+        def wrap(obj):
+            return obj
+        if serialize:
+            wrap = serialize
         s = ""
         if level >= 1:
-            s += "\nTEMPLATE:\n"
-            s += repr(self.template)
+            s += yaml.dump({"TEMPLATE":wrap(self.template)})
         if level >= 0:
-            s += "\nTEMPLATE_CURRENT:\n "
-            s += repr(self.template_current)
+            s += yaml.dump({"TEMPLATE_CURRENT":wrap(self.template_current)})
         if level >= 2:
-            s += "\nTEMPLATE_HISTORY:\n"
-            s += repr(self.template_history)
+            s += yaml.dump({"TEMPLATE_HISTORY":wrap(self.template_history)})
         if level >= 1:
-            s += "\nDATA:\n"
-            s += repr(self.data)
+            s += yaml.dump({"DATA":wrap(self.data)})
         if level >= 0:
-            s += "\nDATA_CURRENT:\n"
-            s += repr(self.data_current)
+            s += yaml.dump({"DATA_CURRENT":wrap(self.data_current)})
         if level >= 2:
-            s += "\nDATA_HISTORY:\n"
-            s += repr(self.data_history)
+            s += yaml.dump({"DATA_HISTORY":wrap(self.data_history)})
         return s
 
 
