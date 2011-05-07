@@ -147,6 +147,10 @@ class TraversedDecisionTree(PopulatedDesicionTree):
         self.select(t, d)
 
 
+    def finish(self):
+        self.completed = True
+
+
     def question(self):
         count = 0
         que = ""
@@ -187,6 +191,7 @@ class TraversedDecisionTree(PopulatedDesicionTree):
             d = (self.data_current[0], __next)
             t = self.template.get(__next)
         self.select(t, d)
+        
 
 
 

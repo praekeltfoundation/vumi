@@ -42,7 +42,7 @@ class SessionTestCase(TestCase):
         items:
             question:
                 english: "Which item?"
-                swahili: "ambayo bidhaa?"
+                swahili: "Ambayo kitu?"
             options: name
             next: stuff
 
@@ -159,6 +159,7 @@ class SessionTestCase(TestCase):
         dt3.question()
         dt3.answer(3)
         dt3.question()
+        dt3.answer(3)
         print dt3.dumps(level=2, serialize=yaml.dump)
 
 
