@@ -50,6 +50,8 @@ class TraversedDecisionTree(PopulatedDesicionTree):
     language = "english"
     template_current = None
     template_history = []
+    # So that I can modify the original data, data_current must
+    # be stored by reference as a list/dict, index/key pair
     data_current = ([None],0)
     data_history = []
     """
