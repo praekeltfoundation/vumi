@@ -45,6 +45,7 @@ class PopulatedDesicionTree(TemplatedDecisionTree):
         return self.data
 
 class TraversedDecisionTree(PopulatedDesicionTree):
+    echo = False
     completed = False
     language = "english"
     template_current = None
@@ -59,16 +60,26 @@ class TraversedDecisionTree(PopulatedDesicionTree):
         dict    -> in which case the template should auto-select the correct key
         list    -> in which case the user should be asked from displayed options
         boolean -> as for list, just yes/no questions only
-        number  -> In which case the user should be prompted for a value
-        string  -> In which case the user should be prompted for text
+        number  -> in which case the user should be prompted for a value
+        string  -> in which case the user should be prompted for text
 
     NB. User entered strings (which include things like dates),
         should be avoided where possible.
     """
 
+    def set_data_current(self, obj, index_key):
+        self.data_current = (obj, index_key)
+
+
+    def resolve_data_current(self):
+        return data_current[0][data_current[1]]
+
+
     def is_completed(self):
         return self.completed
 
+    def echo_on(self):
+        self.echo = True
 
     def set_language(self, language):
         self.language = language
@@ -77,22 +88,22 @@ class TraversedDecisionTree(PopulatedDesicionTree):
     def dumps(self, level=1):
         s = ""
         if level >= 1:
-            s += "\nTEMPLATE:  "
+            s += "\nTEMPLATE:\n"
             s += repr(self.template)
         if level >= 0:
-            s += "\nTEMPLATE_CURRENT:  "
+            s += "\nTEMPLATE_CURRENT:\n "
             s += repr(self.template_current)
         if level >= 2:
-            s += "\nTEMPLATE_HISTORY:  "
+            s += "\nTEMPLATE_HISTORY:\n"
             s += repr(self.template_history)
         if level >= 1:
-            s += "\nDATA:  "
+            s += "\nDATA:\n"
             s += repr(self.data)
         if level >= 0:
-            s += "\nDATA_CURRENT:  "
+            s += "\nDATA_CURRENT:\n"
             s += repr(self.data_current)
         if level >= 2:
-            s += "\nDATA_HISTORY:  "
+            s += "\nDATA_HISTORY:\n"
             s += repr(self.data_history)
         return s
 
@@ -130,13 +141,23 @@ class TraversedDecisionTree(PopulatedDesicionTree):
             for opt in self.data_current:
                 count += 1
                 que += "\n" + str(count) + ". " + opt.get(self.template_current['options'])
+        if self.echo:
+            print "\n", que
+        if type(self.data_current) == list:
+            print "######"
         return que
 
 
     def answer(self, ans):
+        if self.echo:
+            print ">", ans
         t = self.template.get(self.template_current.get("next"))
-        d = self.data_current[int(ans)-1].get(self.template_current.get("next"))
-        self.select(t, d)
+        if type(self.data_current) == list:
+            d = self.data_current[int(ans)-1].get(
+                    self.template_current.get("next"))
+            self.select(t, d)
+        else:
+            self.data_current = ans
 
 
 

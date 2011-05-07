@@ -140,24 +140,25 @@ class SessionTestCase(TestCase):
         self.assertEquals(dt3.load_yaml_template(test_yaml), None)
         self.assertEquals(dt3.load_json_data(test_json), None)
 
+        dt3.echo_on()
         before = dt3.dumps()
         dt3.start()
         # simple backtracking test
         dt3.previous()
         self.assertEquals(before, dt3.dumps())
         dt3.start()
-        dt3.set_language("swahili")
-        print ""
+        #dt3.set_language("swahili")
+        #print ""
         #print dt3.dumps()
-        print "\n", dt3.question()
+        dt3.question()
         dt3.answer(1)
-        print dt3.dumps()
-        print "\n", dt3.question()
-        dt3.answer(1)
-        print dt3.dumps()
-        print "\n", dt3.question()
-        #dt3.answer(42)
         #print dt3.dumps()
+        dt3.question()
+        dt3.answer(1)
+        #print dt3.dumps()
+        dt3.question()
+        dt3.answer(42)
+        print dt3.dumps(level=2)
 
 
 
