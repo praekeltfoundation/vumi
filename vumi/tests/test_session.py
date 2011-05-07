@@ -141,6 +141,7 @@ class SessionTestCase(TestCase):
         self.assertEquals(dt3.load_json_data(test_json), None)
 
         dt3.echo_on()
+        print dt3.resolve_dc()
         before = dt3.dumps()
         dt3.start()
         # simple backtracking test

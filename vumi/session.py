@@ -50,7 +50,7 @@ class TraversedDecisionTree(PopulatedDesicionTree):
     language = "english"
     template_current = None
     template_history = []
-    data_current = None
+    data_current = ([None],0)
     data_history = []
     """
     The data will be a nested data-structure of a sort that can
@@ -67,12 +67,12 @@ class TraversedDecisionTree(PopulatedDesicionTree):
         should be avoided where possible.
     """
 
-    def set_data_current(self, obj, index_key):
-        self.data_current = (obj, index_key)
+    def resolve_dc(self):
+        return self.data_current[0][self.data_current[1]]
 
 
-    def resolve_data_current(self):
-        return data_current[0][data_current[1]]
+    def select_dc(self, index_key):
+        return (self.resolve_dc(), index_key)
 
 
     def is_completed(self):
