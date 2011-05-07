@@ -54,20 +54,19 @@ class TraversedDecisionTree(PopulatedDesicionTree):
     # be stored by reference as a list/dict, index/key pair
     data_current = ([None],0)
     data_history = []
-    """
-    The data will be a nested data-structure of a sort that can
-    be deserialized from a JSON string.
 
-    This means that when traversing it the current object will be one of:
-        dict    -> in which case the template should auto-select the correct key
-        list    -> in which case the user should be asked from displayed options
-        boolean -> as for list, just yes/no questions only
-        number  -> in which case the user should be prompted for a value
-        string  -> in which case the user should be prompted for text
+    # The data will be a nested data-structure of a sort that can
+    # be deserialized from a JSON string.
 
-    NB. User entered strings (which include things like dates),
-        should be avoided where possible.
-    """
+    # This means that when traversing it the current object will be one of:
+    #     dict    -> in which case the template should auto-select the correct key
+    #     list    -> in which case the user should be asked from displayed options
+    #     boolean -> as for list, just yes/no questions only
+    #     number  -> in which case the user should be prompted for a value
+    #     string  -> in which case the user should be prompted for text
+
+    # NB. User entered strings (which include things like dates),
+        # should be avoided where possible.
 
     def resolve_dc(self):
         return self.data_current[0][self.data_current[1]]
