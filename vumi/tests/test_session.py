@@ -136,7 +136,7 @@ class SessionTestCase(TestCase):
         before = dt3.dumps()
         dt3.start()
         # simple backtracking test
-        dt3.previous()
+        dt3.go_back()
         self.assertEquals(before, dt3.dumps())
         dt3.start()
         #dt3.set_language("swahili")
@@ -148,8 +148,13 @@ class SessionTestCase(TestCase):
         dt3.answer(42)
         dt3.question()
         dt3.answer(23)
+        dt3.go_up()
         dt3.question()
-        #dt3.answer(2)
+        dt3.answer(2)
+        dt3.question()
+        dt3.answer(22)
+        dt3.question()
+        dt3.answer(222)
         print dt3.dumps(level=2)
 
 

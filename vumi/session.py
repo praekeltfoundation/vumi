@@ -120,12 +120,20 @@ class TraversedDecisionTree(PopulatedDesicionTree):
         self.data_current = data
 
 
-    def previous(self):
+    def go_back(self):
         try:
             self.template_current = self.template_history.pop()
             self.data_current = self.data_history.pop()
         except:
             pass
+
+
+    def go_up(self):
+        old_data_current_0 = self.data_current[0]
+        self.go_back()
+        while old_data_current_0 == self.data_current[0] \
+                and len(self.data_history) > 0:
+            self.go_back()
 
 
     def start(self):
