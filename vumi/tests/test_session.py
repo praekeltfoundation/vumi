@@ -33,56 +33,54 @@ class SessionTestCase(TestCase):
 
         users:
             question:
-                english: "Who are you ?"
-                swahili: "Ninyi ni nani ?"
+                english: "Who are you?"
+                swahili: "Ninyi ni nani?"
             options: name
             next: items
 
         items:
             question:
-                english: "Which item ?"
-                swahili: "ambayo bidhaa ?"
+                english: "Which item?"
+                swahili: "ambayo bidhaa?"
             options: name
             next: stuff
 
         stuff:
             question:
-                english: "How much stuff ?"
-                swahili: "Kiasi gani stuff ?"
+                english: "How much stuff?"
+                swahili: "Kiasi gani stuff?"
             validate: integer
             next: things
 
         things:
             question:
-                english: "How many things ?"
-                swahili: "Mambo mangapi ?"
+                english: "How many things?"
+                swahili: "Mambo mangapi?"
             validate: integer
             next: timestamp
 
         timestamp:
             question:
-                english: "Which day was it ?"
-                swahili: "Siku ambayo ilikuwa ni ?"
+                english: "Which day was it?"
+                swahili: "Siku ambayo ilikuwa ni?"
             options:
                   - display:
                         english: "Today"
                         swahili: "Leo"
                     default: today
                     next: __finish__
-
                   - display:
                         english: "Yesterday"
                         swahili: "Jana"
                     default: yesterday
                     next: __finish__
-
                   - display:
                         english: "An earlier day"
                         swahili: "Mapema siku ya"
                     next:
                         question:
-                            english: "Which day was it [dd/mm/yyyy] ?"
-                            swahili: "Kuwaambia ambayo siku [dd/mm/yyyy] ?"
+                            english: "Which day was it [dd/mm/yyyy]?"
+                            swahili: "Kuwaambia ambayo siku [dd/mm/yyyy]?"
                         validate: date
                         next: __finish__
 
