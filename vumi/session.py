@@ -145,7 +145,8 @@ class TraversedDecisionTree(PopulatedDesicionTree):
             count = 0
             for opt in self.resolve_dc():
                 count += 1
-                que += "\n" + str(count) + ". " + opt.get(self.template_current['options'])
+                que += "\n" + str(count) + ". "
+                que += str(opt.get(self.template_current['options']))
         if self.echo:
             print "\n", que
         return que
@@ -158,9 +159,11 @@ class TraversedDecisionTree(PopulatedDesicionTree):
         if type(self.resolve_dc()) == list:
             d = (self.resolve_dc()[int(ans)-1],
                     self.template_current.get("next"))
-            self.select(t, d)
         else:
             self.update_dc(ans)
+            d = (self.data_current[0],
+                    self.template_current.get("next"))
+        self.select(t, d)
 
 
 

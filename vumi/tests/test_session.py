@@ -36,7 +36,6 @@ class SessionTestCase(TestCase):
                 english: "Who are you ?"
                 swahili: "Ninyi ni nani ?"
             options: name
-            action: select
             next: items
 
         items:
@@ -44,7 +43,6 @@ class SessionTestCase(TestCase):
                 english: "Which item ?"
                 swahili: "ambayo bidhaa ?"
             options: name
-            action: select
             next: stuff
 
         stuff:
@@ -52,7 +50,6 @@ class SessionTestCase(TestCase):
                 english: "How much stuff ?"
                 swahili: "Kiasi gani stuff ?"
             validate: integer
-            action: save
             next: things
 
         things:
@@ -60,7 +57,6 @@ class SessionTestCase(TestCase):
                 english: "How many things ?"
                 swahili: "Mambo mangapi ?"
             validate: integer
-            action: save
             next: timestamp
 
         timestamp:
@@ -71,25 +67,23 @@ class SessionTestCase(TestCase):
                   - display:
                         english: "Today"
                         swahili: "Leo"
-                    action: save_today
+                    default: today
                     next: __finish__
 
                   - display:
                         english: "Yesterday"
                         swahili: "Jana"
-                    action: save_yesterday
+                    default: yesterday
                     next: __finish__
 
                   - display:
                         english: "Earlier day"
                         swahili: "Mapema siku"
-                    action: question
                     next:
                         question:
                             english: "Which day was it [dd/mm/yyyy] ?"
                             swahili: "Kuwaambia ambayo siku [dd/mm/yyyy] ?"
                         validate: date
-                        action: save
                         next: __finish__
 
         __finish__:
@@ -141,7 +135,6 @@ class SessionTestCase(TestCase):
         self.assertEquals(dt3.load_json_data(test_json), None)
 
         dt3.echo_on()
-        print dt3.resolve_dc()
         before = dt3.dumps()
         dt3.start()
         # simple backtracking test
@@ -149,16 +142,16 @@ class SessionTestCase(TestCase):
         self.assertEquals(before, dt3.dumps())
         dt3.start()
         #dt3.set_language("swahili")
-        #print ""
-        #print dt3.dumps()
         dt3.question()
         dt3.answer(1)
-        #print dt3.dumps()
         dt3.question()
         dt3.answer(1)
-        #print dt3.dumps()
         dt3.question()
         dt3.answer(42)
+        dt3.question()
+        dt3.answer(23)
+        dt3.question()
+        #dt3.answer(2)
         print dt3.dumps(level=2)
 
 
