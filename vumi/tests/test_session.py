@@ -33,7 +33,8 @@ class SessionTestCase(TestCase):
 
         users:
             question:
-                english: "Which user are you ?"
+                english: "Who are you ?"
+                swahili: "Ninyi ni nani ?"
             options: name
             action: select
             next: items
@@ -41,6 +42,7 @@ class SessionTestCase(TestCase):
         items:
             question:
                 english: "Which item ?"
+                swahili: "ambayo bidhaa ?"
             options: name
             action: select
             next: stuff
@@ -48,6 +50,7 @@ class SessionTestCase(TestCase):
         stuff:
             question:
                 english: "How much stuff ?"
+                swahili: "Kiasi gani stuff ?"
             validate: integer
             action: save
             next: things
@@ -55,6 +58,7 @@ class SessionTestCase(TestCase):
         things:
             question:
                 english: "How many things ?"
+                swahili: "Mambo mangapi ?"
             validate: integer
             action: save
             next: timestamp
@@ -62,23 +66,28 @@ class SessionTestCase(TestCase):
         timestamp:
             question:
                 english: "Which day was it ?"
+                swahili: "Siku ambayo ilikuwa ni ?"
             options:
                   - display:
                         english: "Today"
+                        swahili: "Leo"
                     action: save_today
                     next: __finish__
 
                   - display:
                         english: "Yesterday"
+                        swahili: "Jana"
                     action: save_yesterday
                     next: __finish__
 
                   - display:
-                        english: "Earlier"
+                        english: "Earlier day"
+                        swahili: "Mapema siku"
                     action: question
                     next:
                         question:
-                            english: "Please enter the day [dd/mm/yyyy] ?"
+                            english: "Which day was it [dd/mm/yyyy] ?"
+                            swahili: "Kuwaambia ambayo siku [dd/mm/yyyy] ?"
                         validate: date
                         action: save
                         next: __finish__
@@ -86,6 +95,7 @@ class SessionTestCase(TestCase):
         __finish__:
             display:
                 english: "Thank you"
+                swahili: "Asante"
         '''
 
         test_json = '''
@@ -136,6 +146,7 @@ class SessionTestCase(TestCase):
         dt3.previous()
         self.assertEquals(before, dt3.dumps())
         dt3.start()
+        dt3.set_language("swahili")
         print ""
         #print dt3.dumps()
         print "\n", dt3.question()

@@ -70,6 +70,10 @@ class TraversedDecisionTree(PopulatedDesicionTree):
         return self.completed
 
 
+    def set_language(self, language):
+        self.language = language
+
+
     def dumps(self, level=1):
         s = ""
         if level >= 1:
