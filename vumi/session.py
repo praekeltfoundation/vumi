@@ -52,13 +52,17 @@ class TraversedDecisionTree(PopulatedDesicionTree):
     data_current = None
     data_history = []
     """
-    The data will be a nested data structure of a sort that can
+    The data will be a nested data-structure of a sort that can
     be deserialized from a JSON string.
+
     This means that when traversing it the current object will be one of:
         dict    -> in which case the template should auto-select the correct key
         list    -> in which case the user should be asked from displayed options
         number  -> In which case the user should be prompted for a value
         string  -> In which case the user should be prompted for text
+
+    NB. User entered strings (which include things like dates),
+        should be avoided where possible.
     """
 
     def is_completed(self):
