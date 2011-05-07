@@ -133,20 +133,25 @@ class TraversedDecisionTree(PopulatedDesicionTree):
             raise VumiError("template must be loaded")
         if not self.data:
             raise VumiError("data must be loaded")
-        t = self.template.get(self.template.get("__start__")["next"])
-        d = (self.data, self.template.get("__start__")["next"])
+        t = self.template.get(self.template.get('__start__')['next'])
+        d = (self.data, self.template.get('__start__')['next'])
         self.select(t, d)
 
 
     def question(self):
+        count = 0
         que = ""
         que += self.template_current['question'][self.language]
         if type(self.resolve_dc()) == list:
-            count = 0
             for opt in self.resolve_dc():
                 count += 1
                 que += "\n" + str(count) + ". "
                 que += str(opt.get(self.template_current['options']))
+        elif type(self.template_current.get('options')) == list:
+            for opt in self.template_current.get('options'):
+                count += 1
+                que += "\n" + str(count) + ". "
+                que += str(opt.get('display').get(self.language))
         if self.echo:
             print "\n", que
         return que
@@ -155,14 +160,14 @@ class TraversedDecisionTree(PopulatedDesicionTree):
     def answer(self, ans):
         if self.echo:
             print ">", ans
-        t = self.template.get(self.template_current.get("next"))
+        t = self.template.get(self.template_current.get('next'))
         if type(self.resolve_dc()) == list:
             d = (self.resolve_dc()[int(ans)-1],
-                    self.template_current.get("next"))
+                    self.template_current.get('next'))
         else:
             self.update_dc(ans)
             d = (self.data_current[0],
-                    self.template_current.get("next"))
+                    self.template_current.get('next'))
         self.select(t, d)
 
 

@@ -77,8 +77,8 @@ class SessionTestCase(TestCase):
                     next: __finish__
 
                   - display:
-                        english: "Earlier day"
-                        swahili: "Mapema siku"
+                        english: "An earlier day"
+                        swahili: "Mapema siku ya"
                     next:
                         question:
                             english: "Which day was it [dd/mm/yyyy] ?"
