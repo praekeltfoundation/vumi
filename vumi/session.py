@@ -44,7 +44,6 @@ class PopulatedDesicionTree(TemplatedDecisionTree):
     def get_data(self):
         return self.data
 
-
 class TraversedDecisionTree(PopulatedDesicionTree):
     completed = False
     language = "english"
@@ -52,6 +51,15 @@ class TraversedDecisionTree(PopulatedDesicionTree):
     template_history = []
     data_current = None
     data_history = []
+    """
+    The data will be a nested data structure of a sort that can
+    be deserialized from a JSON string.
+    This means that when traversing it the current object will be one of:
+        dict    -> in which case the template should auto-select the correct key
+        list    -> in which case the user should be asked from displayed options
+        number  -> In which case the user should be prompted for a value
+        string  -> In which case the user should be prompted for text
+    """
 
     def is_completed(self):
         return self.completed
