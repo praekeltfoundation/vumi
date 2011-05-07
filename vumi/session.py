@@ -148,8 +148,6 @@ class TraversedDecisionTree(PopulatedDesicionTree):
                 que += "\n" + str(count) + ". " + opt.get(self.template_current['options'])
         if self.echo:
             print "\n", que
-        if type(self.resolve_dc()) == list:
-            print "######"
         return que
 
 

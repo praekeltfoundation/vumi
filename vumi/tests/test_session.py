@@ -143,10 +143,10 @@ class SessionTestCase(TestCase):
         dt3.echo_on()
         print dt3.resolve_dc()
         before = dt3.dumps()
-        #dt3.start()
+        dt3.start()
         # simple backtracking test
-        #dt3.previous()
-        #self.assertEquals(before, dt3.dumps())
+        dt3.previous()
+        self.assertEquals(before, dt3.dumps())
         dt3.start()
         #dt3.set_language("swahili")
         #print ""
