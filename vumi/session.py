@@ -19,17 +19,18 @@ class VumiSession():
         return self.decision_tree
 
 
-
-
 class DecisionTree():
     pass
 
 
 class TemplatedDecisionTree(DecisionTree):
     template = None
+    template_current = None
+    template_history = []
 
     def load_yaml_template(self, yaml_string):
         self.template = yaml.load(yaml_string)
+        self.template_current = self.template.get('__start__')
 
     def get_template(self):
         return self.template
@@ -37,6 +38,10 @@ class TemplatedDecisionTree(DecisionTree):
 
 class PopulatedDesicionTree(TemplatedDecisionTree):
     data = None
+    # So that I can modify the original data, data_current must
+    # be stored by reference as a list/dict, index/key pair
+    data_current = ([None],0)
+    data_history = []
 
     def load_json_data(self, json_string):
         self.data = json.loads(json_string)
@@ -44,16 +49,11 @@ class PopulatedDesicionTree(TemplatedDecisionTree):
     def get_data(self):
         return self.data
 
+
 class TraversedDecisionTree(PopulatedDesicionTree):
     echo = False
     completed = False
     language = "english"
-    template_current = None
-    template_history = []
-    # So that I can modify the original data, data_current must
-    # be stored by reference as a list/dict, index/key pair
-    data_current = ([None],0)
-    data_history = []
 
     # The data will be a nested data-structure of a sort that can
     # be deserialized from a JSON string.
@@ -79,6 +79,9 @@ class TraversedDecisionTree(PopulatedDesicionTree):
         self.data_current[0][self.data_current[1]] = new_value
 
 
+    def resolve_default(self, default):
+        return default
+
 
     def is_completed(self):
         return self.completed
@@ -90,24 +93,23 @@ class TraversedDecisionTree(PopulatedDesicionTree):
         self.language = language
 
 
-    def dumps(self, level=1, serialize=None):
-        def wrap(obj):
-            return obj
-        if serialize:
-            wrap = serialize
+    def dumps(self, level=1, serialize=repr):
+        def wrap(title, serialize, obj):
+            return "\n****"+str(title)+"****\n" \
+                    + serialize(obj)
         s = ""
         if level >= 1:
-            s += yaml.dump({"TEMPLATE":wrap(self.template)})
+            s += wrap("TEMPLATE", serialize, self.template)
         if level >= 0:
-            s += yaml.dump({"TEMPLATE_CURRENT":wrap(self.template_current)})
+            s += wrap("TEMPLATE_CURRENT", serialize, self.template_current)
         if level >= 2:
-            s += yaml.dump({"TEMPLATE_HISTORY":wrap(self.template_history)})
+            s += wrap("TEMPLATE_HISTORY", serialize, self.template_history)
         if level >= 1:
-            s += yaml.dump({"DATA":wrap(self.data)})
+            s += wrap("DATA", serialize, self.data)
         if level >= 0:
-            s += yaml.dump({"DATA_CURRENT":wrap(self.data_current)})
+            s += wrap("DATA_CURRENT", serialize, self.data_current)
         if level >= 2:
-            s += yaml.dump({"DATA_HISTORY":wrap(self.data_history)})
+            s += wrap("DATA_HISTORY", serialize, self.data_history)
         return s
 
 
@@ -139,8 +141,9 @@ class TraversedDecisionTree(PopulatedDesicionTree):
             raise VumiError("template must be loaded")
         if not self.data:
             raise VumiError("data must be loaded")
-        t = self.template.get(self.template.get('__start__')['next'])
-        d = (self.data, self.template.get('__start__')['next'])
+        __next = self.template_current.get('next')
+        t = self.template.get(__next)
+        d = (self.data, __next)
         self.select(t, d)
 
 
@@ -166,14 +169,23 @@ class TraversedDecisionTree(PopulatedDesicionTree):
     def answer(self, ans):
         if self.echo:
             print ">", ans
-        t = self.template.get(self.template_current.get('next'))
+        __next = self.template_current.get('next')
         if type(self.resolve_dc()) == list:
-            d = (self.resolve_dc()[int(ans)-1],
-                    self.template_current.get('next'))
+            d = (self.resolve_dc()[int(ans)-1], __next)
+            t = self.template.get(__next)
+        elif type(self.template_current.get('options')) == list:
+            opt = self.template_current.get('options')[int(ans)-1]
+            __next = opt.get('next')
+            if opt.get('default'):
+                self.update_dc(self.resolve_default(opt['default']))
+            else:
+                __next = self.data_current[1]
+            d = (self.data_current[0], __next)
+            t = opt.get('next')
         else:
             self.update_dc(ans)
-            d = (self.data_current[0],
-                    self.template_current.get('next'))
+            d = (self.data_current[0], __next)
+            t = self.template.get(__next)
         self.select(t, d)
 
 

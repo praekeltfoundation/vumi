@@ -1,4 +1,5 @@
 import time
+import yaml
 from twisted.trial.unittest import TestCase
 from vumi.session import VumiSession, TemplatedDecisionTree, PopulatedDesicionTree, TraversedDecisionTree
 
@@ -155,7 +156,10 @@ class SessionTestCase(TestCase):
         dt3.answer(22)
         dt3.question()
         dt3.answer(222)
-        print dt3.dumps(level=2)
+        dt3.question()
+        dt3.answer(3)
+        dt3.question()
+        print dt3.dumps(level=2, serialize=yaml.dump)
 
 
 
