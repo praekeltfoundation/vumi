@@ -58,6 +58,7 @@ class TraversedDecisionTree(PopulatedDesicionTree):
     This means that when traversing it the current object will be one of:
         dict    -> in which case the template should auto-select the correct key
         list    -> in which case the user should be asked from displayed options
+        boolean -> as for list, just yes/no questions only
         number  -> In which case the user should be prompted for a value
         string  -> In which case the user should be prompted for text
 
