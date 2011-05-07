@@ -68,12 +68,16 @@ class TraversedDecisionTree(PopulatedDesicionTree):
     # NB. User entered strings (which include things like dates),
         # should be avoided where possible.
 
+
     def resolve_dc(self):
         return self.data_current[0][self.data_current[1]]
 
-
     def select_dc(self, index_key):
         return (self.resolve_dc(), index_key)
+
+    def update_dc(self, new_value):
+        self.data_current[0][self.data_current[1]] = new_value
+
 
 
     def is_completed(self):
@@ -130,21 +134,21 @@ class TraversedDecisionTree(PopulatedDesicionTree):
         if not self.data:
             raise VumiError("data must be loaded")
         t = self.template.get(self.template.get("__start__")["next"])
-        d = self.data.get(self.template.get("__start__")["next"])
+        d = (self.data, self.template.get("__start__")["next"])
         self.select(t, d)
 
 
     def question(self):
         que = ""
         que += self.template_current['question'][self.language]
-        if type(self.data_current) == list:
+        if type(self.resolve_dc()) == list:
             count = 0
-            for opt in self.data_current:
+            for opt in self.resolve_dc():
                 count += 1
                 que += "\n" + str(count) + ". " + opt.get(self.template_current['options'])
         if self.echo:
             print "\n", que
-        if type(self.data_current) == list:
+        if type(self.resolve_dc()) == list:
             print "######"
         return que
 
@@ -153,12 +157,12 @@ class TraversedDecisionTree(PopulatedDesicionTree):
         if self.echo:
             print ">", ans
         t = self.template.get(self.template_current.get("next"))
-        if type(self.data_current) == list:
-            d = self.data_current[int(ans)-1].get(
+        if type(self.resolve_dc()) == list:
+            d = (self.resolve_dc()[int(ans)-1],
                     self.template_current.get("next"))
             self.select(t, d)
         else:
-            self.data_current = ans
+            self.update_dc(ans)
 
 
 
