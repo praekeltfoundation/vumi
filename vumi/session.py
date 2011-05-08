@@ -50,6 +50,16 @@ class PopulatedDecisionTree(TemplatedDecisionTree):
         return self.data
 
 
+    def resolve_dc(self):
+        return self.data_current[0][self.data_current[1]]
+
+    def select_dc(self, index_key):
+        return (self.resolve_dc(), index_key)
+
+    def update_dc(self, new_value):
+        self.data_current[0][self.data_current[1]] = new_value
+
+
 class TraversedDecisionTree(PopulatedDecisionTree):
     echo = False
     completed = False
@@ -67,16 +77,6 @@ class TraversedDecisionTree(PopulatedDecisionTree):
 
     # NB. User entered strings (which include things like dates),
         # should be avoided where possible.
-
-
-    def resolve_dc(self):
-        return self.data_current[0][self.data_current[1]]
-
-    def select_dc(self, index_key):
-        return (self.resolve_dc(), index_key)
-
-    def update_dc(self, new_value):
-        self.data_current[0][self.data_current[1]] = new_value
 
 
     def resolve_default(self, default):
