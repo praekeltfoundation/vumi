@@ -142,7 +142,7 @@ class SessionTestCase(TestCase):
         self.assertEquals(dt3.load_yaml_template(test_yaml), None)
         self.assertEquals(dt3.load_json_data(test_json), None)
 
-        dt3.echo_on()
+        #dt3.echo_on()
         before = dt3.dumps()
         dt3.start()
         # simple backtracking test
@@ -170,12 +170,12 @@ class SessionTestCase(TestCase):
         dt3.question()
         dt3.answer("03/03/2011")
         dt3.finish()
-        print dt3.dumps(level=2, serialize=yaml.dump)
+        #print dt3.dumps(level=2, serialize=yaml.dump)
 
 
 
 
 
 
-        print "\n\n"
-        time.sleep(2)
+        #print "\n\n"
+        #time.sleep(2)
