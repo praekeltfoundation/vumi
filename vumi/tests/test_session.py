@@ -48,6 +48,12 @@ class SessionTestCase(TestCase):
                 swahili: "Ambayo kitu?"
             options: name
             next: stuff
+            new:
+                name:
+                stuff: 0
+                things: 0
+                timestamp: 0
+                id:
 
         stuff:
             question:
