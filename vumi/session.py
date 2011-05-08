@@ -124,6 +124,7 @@ class TraversedDecisionTree(PopulatedDesicionTree):
         try:
             self.template_current = self.template_history.pop()
             self.data_current = self.data_history.pop()
+            self.completed = False
         except:
             pass
 
@@ -199,14 +200,12 @@ class TraversedDecisionTree(PopulatedDesicionTree):
             t = self.template.get(__next)
         elif type(self.template_current.get('options')) == list:
             opt = self.template_current.get('options')[int(ans)-1]
+            __next = opt.get('next')
             if opt.get('default'):
-                # if fin
                 self.update_dc(self.resolve_default(opt['default']))
-                __next = opt.get('next')
                 t = self.template.get(__next)
             else:
-                # if fin
-                t = opt.get('next')
+                t = __next
             d = self.data_current
         else:
             self.update_dc(ans)
