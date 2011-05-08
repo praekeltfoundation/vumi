@@ -151,10 +151,23 @@ class TraversedDecisionTree(PopulatedDesicionTree):
         t = self.template.get(__next)
         d = (self.data, __next)
         self.select(t, d)
+        return greeting
 
+
+    def __finish(self):
+        self.completed = True
 
     def finish(self):
-        self.completed = True
+        if self.completed:
+            goodbye = ''
+            if self.template_current.get('display'):
+                goodbye += self.template_current['display'].get(
+                        self.language, '')
+            if self.echo:
+                print goodbye
+            return goodbye
+        else:
+            return None
 
 
     def question(self):
@@ -177,6 +190,7 @@ class TraversedDecisionTree(PopulatedDesicionTree):
 
 
     def answer(self, ans):
+        ans = str(ans) # in reality we'll only get text
         if self.echo:
             print ">", ans, "\n"
         __next = self.template_current.get('next')
@@ -185,19 +199,22 @@ class TraversedDecisionTree(PopulatedDesicionTree):
             t = self.template.get(__next)
         elif type(self.template_current.get('options')) == list:
             opt = self.template_current.get('options')[int(ans)-1]
-            __next = opt.get('next')
             if opt.get('default'):
+                # if fin
                 self.update_dc(self.resolve_default(opt['default']))
+                __next = opt.get('next')
+                t = self.template.get(__next)
             else:
-                __next = self.data_current[1]
-            d = (self.data_current[0], __next)
-            t = opt.get('next')
+                # if fin
+                t = opt.get('next')
+            d = self.data_current
         else:
             self.update_dc(ans)
             d = (self.data_current[0], __next)
             t = self.template.get(__next)
         self.select(t, d)
-        
+        if __next == "__finish__":
+            self.__finish()
 
 
 
