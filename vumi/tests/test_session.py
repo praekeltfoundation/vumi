@@ -142,37 +142,70 @@ class SessionTestCase(TestCase):
         self.assertEquals(dt3.load_yaml_template(test_yaml), None)
         self.assertEquals(dt3.load_json_data(test_json), None)
 
-        #dt3.echo_on()
+        # simple backtracking test
         before = dt3.dumps()
         dt3.start()
-        # simple backtracking test
         dt3.go_back()
         self.assertEquals(before, dt3.dumps())
         #dt3.set_language("swahili")
-        dt3.start()
-        dt3.question()
+
+        # a fake interaction
+        self.assertEquals(dt3.start(),
+                'Hello.')
+        self.assertEquals(dt3.question(),
+                'Who are you?\n1. Simon\n2. David')
         dt3.answer(1)
-        dt3.question()
+        self.assertEquals(dt3.question(),
+                'Which item?\n1. alpha\n2. beta')
         dt3.answer(1)
-        dt3.question()
+        self.assertEquals(dt3.question(),
+                'How much stuff?')
         dt3.answer(42)
-        dt3.question()
+        self.assertEquals(dt3.question(),
+                'How many things?')
         dt3.answer(23)
         dt3.go_up()
-        dt3.question()
+        self.assertEquals(dt3.question(),
+                'Which item?\n1. alpha\n2. beta')
         dt3.answer(2)
-        dt3.question()
+        self.assertEquals(dt3.question(),
+                'How much stuff?')
         dt3.answer(22)
-        dt3.question()
+        self.assertEquals(dt3.question(),
+                'How many things?')
         dt3.answer(222)
-        dt3.question()
+        self.assertEquals(dt3.question(),
+                'Which day was it?\n1. Today\n2. Yesterday\n3. An earlier day')
         dt3.answer(3)
-        dt3.question()
+        self.assertEquals(dt3.question(),
+                'Which day was it [dd/mm/yyyy]?')
         dt3.answer("03/03/2011")
-        dt3.finish()
+        self.assertEquals(dt3.finish(),
+                'Thank you and goodbye.')
         #print dt3.dumps(level=2, serialize=yaml.dump)
 
 
+        sess4 = VumiSession()
+        dt4 = TraversedDecisionTree()
+        sess4.set_decision_tree(dt4)
+        self.assertEquals(dt4.load_yaml_template(test_yaml), None)
+        self.assertEquals(dt4.load_json_data(test_json), None)
+
+        dt4.echo_on()
+        repr(dt4.start())
+        repr(dt4.question())
+        dt4.answer(1)
+        repr(dt4.question())
+        dt4.answer(1)
+        repr(dt4.question())
+        dt4.answer(42)
+        repr(dt4.question())
+        dt4.answer(23)
+        repr(dt4.question())
+        dt4.answer(3)
+        repr(dt4.question())
+        dt4.answer("03/03/2011")
+        repr(dt4.finish())
 
 
 
