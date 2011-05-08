@@ -1,7 +1,7 @@
 import time
 import yaml
 from twisted.trial.unittest import TestCase
-from vumi.session import VumiSession, TemplatedDecisionTree, PopulatedDesicionTree, TraversedDecisionTree
+from vumi.session import VumiSession, TemplatedDecisionTree, PopulatedDecisionTree, TraversedDecisionTree
 
 class SessionTestCase(TestCase):
 
@@ -16,7 +16,7 @@ class SessionTestCase(TestCase):
         sess2 = VumiSession()
         sess3 = VumiSession()
         dt1 = TemplatedDecisionTree()
-        dt2 = PopulatedDesicionTree()
+        dt2 = PopulatedDecisionTree()
         dt3 = TraversedDecisionTree()
         sess1.set_decision_tree(dt1)
         sess2.set_decision_tree(dt2)

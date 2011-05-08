@@ -36,7 +36,7 @@ class TemplatedDecisionTree(DecisionTree):
         return self.template
 
 
-class PopulatedDesicionTree(TemplatedDecisionTree):
+class PopulatedDecisionTree(TemplatedDecisionTree):
     data = None
     # So that I can modify the original data, data_current must
     # be stored by reference as a list/dict, index/key pair
@@ -50,7 +50,7 @@ class PopulatedDesicionTree(TemplatedDecisionTree):
         return self.data
 
 
-class TraversedDecisionTree(PopulatedDesicionTree):
+class TraversedDecisionTree(PopulatedDecisionTree):
     echo = False
     completed = False
     language = "english"
