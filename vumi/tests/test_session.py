@@ -30,6 +30,9 @@ class SessionTestCase(TestCase):
 
         test_yaml = '''
         __start__:
+            display:
+                english: "Hello."
+                swahili: "Salamu."
             next: users
 
         users:
@@ -87,8 +90,8 @@ class SessionTestCase(TestCase):
 
         __finish__:
             display:
-                english: "Thank you"
-                swahili: "Asante"
+                english: "Thank you and goodbye."
+                swahili: "Asante na kwaheri."
         '''
 
         test_json = '''

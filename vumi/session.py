@@ -137,6 +137,12 @@ class TraversedDecisionTree(PopulatedDesicionTree):
 
 
     def start(self):
+        greeting = ''
+        if self.template_current.get('display'):
+            greeting += self.template_current['display'].get(
+                    self.language, '')
+        if self.echo:
+            print "\n", greeting
         if not self.template:
             raise VumiError("template must be loaded")
         if not self.data:
@@ -166,13 +172,13 @@ class TraversedDecisionTree(PopulatedDesicionTree):
                 que += "\n" + str(count) + ". "
                 que += str(opt.get('display').get(self.language))
         if self.echo:
-            print "\n", que
+            print que
         return que
 
 
     def answer(self, ans):
         if self.echo:
-            print ">", ans
+            print ">", ans, "\n"
         __next = self.template_current.get('next')
         if type(self.resolve_dc()) == list:
             d = (self.resolve_dc()[int(ans)-1], __next)
