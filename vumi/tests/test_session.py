@@ -67,7 +67,6 @@ class SessionTestCase(TestCase):
                     "msisdn": "12345"
                 }
 
-
         __start__:
             display:
                 english: "Hello."
