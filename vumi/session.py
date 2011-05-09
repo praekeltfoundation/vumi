@@ -202,6 +202,7 @@ class TraversedDecisionTree(PopulatedDecisionTree):
 
 
     def question(self):
+        self.try_auto_select()
         count = 0
         que = ""
         que += self.template_current['question'][self.language]
@@ -244,8 +245,6 @@ class TraversedDecisionTree(PopulatedDecisionTree):
         self.select(t, d)
         if __next == "__finish__":
             self.__finish()
-        else:
-            self.try_auto_select()
 
 
 
