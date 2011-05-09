@@ -10,7 +10,7 @@ from twisted.python import log
 from twisted.python.log import logging
 from twisted.internet.defer import inlineCallbacks, returnValue
 
-class MenuConsumer(Consumer):
+class SessionConsumer(Consumer):
     exchange_name = "vumi"
     exchange_type = "direct"
     durable = True
@@ -25,7 +25,7 @@ class MenuConsumer(Consumer):
 
 
     def consume_message(self, message):
-        log.msg("menu message %s consumed by %s" % (json.dumps(dictionary),self.__class__.__name__))
+        log.msg("session message %s consumed by %s" % (json.dumps(dictionary),self.__class__.__name__))
         #dictionary = message.get('short_message')
 
 
@@ -45,7 +45,7 @@ class MenuConsumer(Consumer):
         return session
 
 
-class MenuPublisher(Publisher):
+class SessionPublisher(Publisher):
     exchange_name = "vumi"
     exchange_type = "direct"
     routing_key = "vumi.outbound.session.fallback"
@@ -55,5 +55,20 @@ class MenuPublisher(Publisher):
 
     def publish_message(self, message, **kwargs):
         log.msg("Publishing Message %s with extra args: %s" % (message, kwargs))
-        super(MenuPublisher, self).publish_message(message, **kwargs)
+        super(SessionPublisher, self).publish_message(message, **kwargs)
+
+
+class SessionWorker(Worker):
+    """
+    A worker that breaks up batches of sms's into individual sms's
+    """
+
+    @inlineCallbacks
+    def startWorker(self):
+        log.msg("Starting the SessionWorker")
+        self.publisher = yield self.start_publisher(sessionPublisher)
+        yield self.start_consumer(SessionConsumer, self.publisher)
+
+    def stopWorker(self):
+        log.msg("Stopping the SessionWorker")
 
