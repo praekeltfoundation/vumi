@@ -90,6 +90,7 @@ class TraversedDecisionTree(PopulatedDecisionTree):
     # This means that when traversing it the current object will be one of:
     #     dict    -> in which case the template should auto-select the correct key
     #     list    -> in which case the user should be asked from displayed options
+    #                where there is only one list option it should be auto-selected
     #     boolean -> as for list, just yes/no questions only
     #     number  -> in which case the user should be prompted for a value
     #     string  -> in which case the user should be prompted for text
@@ -140,6 +141,12 @@ class TraversedDecisionTree(PopulatedDecisionTree):
 
 
     def try_auto_select(self):
+        if type(self.resolve_dc()) == list and len(self.resolve_dc())==1:
+            __next = self.template_current.get('next')
+            d = (self.resolve_dc()[0], __next)
+            t = self.template.get(__next)
+            self.select(t, d)
+            return True
         return False
 
 
@@ -237,6 +244,8 @@ class TraversedDecisionTree(PopulatedDecisionTree):
         self.select(t, d)
         if __next == "__finish__":
             self.__finish()
+        else:
+            self.try_auto_select()
 
 
 
