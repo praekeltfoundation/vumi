@@ -68,7 +68,8 @@ class SessionPublisher(Publisher):
 
 class SessionWorker(Worker):
     """
-    A worker that breaks up batches of sms's into individual sms's
+    A worker that runs a set statefull interactive sessions
+    with multiple MSISDN's
     """
 
     @inlineCallbacks
