@@ -35,6 +35,23 @@ class TemplatedDecisionTree(DecisionTree):
     def get_template(self):
         return self.template
 
+    def get_data_source(self):
+        if self.template:
+            if self.template.get('__data__'):
+                return {"url":self.template['__data__'].get('url'),
+                        "username":self.template['__data__'].get('username'),
+                        "password":self.template['__data__'].get('password')}
+        return {"username":None, "password":None, "url":None}
+
+    def get_dummy_data(self):
+        if self.template:
+            if self.template.get('__data__'):
+                return self.template['__data__'].get('json')
+        return None
+
+
+
+
 
 class PopulatedDecisionTree(TemplatedDecisionTree):
     data = None
@@ -46,8 +63,24 @@ class PopulatedDecisionTree(TemplatedDecisionTree):
     def load_json_data(self, json_string):
         self.data = json.loads(json_string)
 
+    def load_dummy_data(self):
+        self.load_json_data(self.get_dummy_data())
+
+    def dump_json_data(self):
+        return json.dumps(self.data)
+
     def get_data(self):
         return self.data
+
+
+    def resolve_dc(self):
+        return self.data_current[0][self.data_current[1]]
+
+    def select_dc(self, index_key):
+        return (self.resolve_dc(), index_key)
+
+    def update_dc(self, new_value):
+        self.data_current[0][self.data_current[1]] = new_value
 
 
 class TraversedDecisionTree(PopulatedDecisionTree):
@@ -67,16 +100,6 @@ class TraversedDecisionTree(PopulatedDecisionTree):
 
     # NB. User entered strings (which include things like dates),
         # should be avoided where possible.
-
-
-    def resolve_dc(self):
-        return self.data_current[0][self.data_current[1]]
-
-    def select_dc(self, index_key):
-        return (self.resolve_dc(), index_key)
-
-    def update_dc(self, new_value):
-        self.data_current[0][self.data_current[1]] = new_value
 
 
     def resolve_default(self, default):

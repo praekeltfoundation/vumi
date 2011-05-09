@@ -2,6 +2,7 @@ import time
 import yaml
 from twisted.trial.unittest import TestCase
 from vumi.session import VumiSession, TemplatedDecisionTree, PopulatedDecisionTree, TraversedDecisionTree
+from vumi.workers.session.worker import SessionConsumer, SessionPublisher, SessionWorker
 
 class SessionTestCase(TestCase):
 
@@ -29,6 +30,44 @@ class SessionTestCase(TestCase):
         self.assertFalse(dt3.is_completed())
 
         test_yaml = '''
+        __data__:
+            url:
+            username:
+            password:
+            json: >
+                {
+                    "users": [
+                        {
+                            "name": "Simon",
+                            "items": [
+                                {
+                                    "name": "alpha",
+                                    "stuff": 0,
+                                    "things": 0,
+                                    "timestamp": 0,
+                                    "id": "1.1"
+                                },
+                                {
+                                    "name": "beta",
+                                    "stuff": 0,
+                                    "things": 0,
+                                    "timestamp": 0,
+                                    "id": "1.2"
+                                }
+                            ],
+                            "timestamp": "1234567890",
+                            "id": "1"
+                        },
+                        {
+                            "name": "David",
+                            "items": [],
+                            "timestamp": "1234567890",
+                            "id": "2"
+                        }
+                    ],
+                    "msisdn": "12345"
+                }
+
         __start__:
             display:
                 english: "Hello."
@@ -100,47 +139,13 @@ class SessionTestCase(TestCase):
                 swahili: "Asante na kwaheri."
         '''
 
-        test_json = '''
-        {
-            "users": [
-                {
-                    "name": "Simon",
-                    "items": [
-                        {
-                            "name": "alpha",
-                            "stuff": 0,
-                            "things": 0,
-                            "timestamp": 0,
-                            "id": "1.1"
-                        },
-                        {
-                            "name": "beta",
-                            "stuff": 0,
-                            "things": 0,
-                            "timestamp": 0,
-                            "id": "1.2"
-                        }
-                    ],
-                    "timestamp": "1234567890",
-                    "id": "1"
-                },
-                {
-                    "name": "David",
-                    "items": [],
-                    "timestamp": "1234567890",
-                    "id": "2"
-                }
-            ],
-            "msisdn": "12345"
-        }
-        '''
 
         # just check the load operations don't blow up
         self.assertEquals(dt1.load_yaml_template(test_yaml), None)
         self.assertEquals(dt2.load_yaml_template(test_yaml), None)
-        self.assertEquals(dt2.load_json_data(test_json), None)
+        self.assertEquals(dt2.load_dummy_data(), None)
         self.assertEquals(dt3.load_yaml_template(test_yaml), None)
-        self.assertEquals(dt3.load_json_data(test_json), None)
+        self.assertEquals(dt3.load_dummy_data(), None)
 
         # simple backtracking test
         before = dt3.dumps()
@@ -185,11 +190,10 @@ class SessionTestCase(TestCase):
         #print dt3.dumps(level=2, serialize=yaml.dump)
 
 
-        sess4 = VumiSession()
-        dt4 = TraversedDecisionTree()
-        sess4.set_decision_tree(dt4)
-        self.assertEquals(dt4.load_yaml_template(test_yaml), None)
-        self.assertEquals(dt4.load_json_data(test_json), None)
+        sess_cons = SessionConsumer(None)
+        sess_cons.set_yaml_template(test_yaml)
+        sess4 = sess_cons.get_session("12345")
+        dt4 = sess4.get_decision_tree()
 
         dt4.echo_on()
         repr(dt4.start())
@@ -206,6 +210,9 @@ class SessionTestCase(TestCase):
         repr(dt4.question())
         dt4.answer("03/03/2011")
         repr(dt4.finish())
+
+        print repr(dt4.get_data_source())
+        print sess4.get_decision_tree().dump_json_data()
 
 
 
