@@ -61,9 +61,11 @@ class SessionConsumer(Consumer):
         yaml_template = self.yaml_template
         decision_tree.load_yaml_template(yaml_template)
         self.set_url_for_data(decision_tree.get_data_source())
-        #json_data = self.call_for_json(MSISDN)
-        #decision_tree.load_json_data(json_data)
-        decision_tree.load_dummy_data()
+        if self.url_for_data.get('url'):
+            json_data = self.call_for_json(MSISDN)
+            decision_tree.load_json_data(json_data)
+        else:
+            decision_tree.load_dummy_data()
         return session
 
 
