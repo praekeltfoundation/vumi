@@ -18,11 +18,18 @@ class SessionConsumer(Consumer):
     queue_name = "vumi.inbound.session.default" #TODO revise name
     routing_key = "vumi.inbound.session.default" #TODO revise name
     sessions = {}
-    yaml_template
+    yaml_template = None
+    url_for_data = {"username":None, "password":None, "url":None}
 
 
     def __init__(self, publisher):
         self.publisher = publisher
+
+    def set_yaml_template(self, yaml_template):
+        self.yaml_template = yaml_template
+
+    def set_url_for_data(self, data_source):
+        self.url_for_data = data_source
 
 
     def consume_message(self, message):
@@ -47,7 +54,8 @@ class SessionConsumer(Consumer):
             session.set_decision_tree(decision_tree)
             yaml_template = self.yaml_template
             decision_tree.load_yaml_template(yaml_template)
-            json_data = call_for_json(MSISDN)
+            self.set_url_for_data(decision_tree.get_data_source())
+            json_data = self.call_for_json(MSISDN)
             decision_tree.load_json_data(json_data)
             return session
 
