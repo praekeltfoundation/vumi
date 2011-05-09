@@ -35,6 +35,12 @@ class TemplatedDecisionTree(DecisionTree):
     def get_template(self):
         return self.template
 
+    def get_data_source(self):
+        if self.template:
+            if self.template.get('__data__'):
+                return self.template['__data__']
+        return None
+
 
 class PopulatedDecisionTree(TemplatedDecisionTree):
     data = None

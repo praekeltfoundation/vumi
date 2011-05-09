@@ -31,8 +31,8 @@ class SessionTestCase(TestCase):
         test_yaml = '''
         __data__:
             url:
-            user:
-            pass:
+            username:
+            password:
 
         __start__:
             display:
@@ -212,6 +212,7 @@ class SessionTestCase(TestCase):
         dt4.answer("03/03/2011")
         repr(dt4.finish())
 
+        print repr(dt4.get_data_source())
         print sess4.get_decision_tree().dump_json_data()
 
 
