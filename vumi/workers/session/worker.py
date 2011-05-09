@@ -40,10 +40,18 @@ class SessionConsumer(Consumer):
 
 
     def call_for_json(self, MSISDN):
-        params = [("telNo", str(MSISDN))]
-        auth_url = ''
-        resp_url, resp = utils.callback(auth_url, params)
-        return resp
+        if url_for_data['url']:
+            params = [("telNo", str(MSISDN))]
+            url = url_for_data['url']
+            auth_string = ''
+            if url_for_data['username']:
+                auth_string += url_for_data['username']
+                if url_for_data['password']:
+                    auth_string += ":"+url_for_data['password']
+                auth_string += "@"
+            resp_url, resp = utils.callback(auth_string+url, params)
+            return resp
+        return None
 
 
     def get_session(self, MSISDN):
