@@ -29,6 +29,11 @@ class SessionTestCase(TestCase):
         self.assertFalse(dt3.is_completed())
 
         test_yaml = '''
+        __data__:
+            url:
+            user:
+            pass:
+
         __start__:
             display:
                 english: "Hello."
@@ -206,6 +211,8 @@ class SessionTestCase(TestCase):
         repr(dt4.question())
         dt4.answer("03/03/2011")
         repr(dt4.finish())
+
+        print sess4.get_decision_tree().dump_json_data()
 
 
 

@@ -46,6 +46,9 @@ class PopulatedDecisionTree(TemplatedDecisionTree):
     def load_json_data(self, json_string):
         self.data = json.loads(json_string)
 
+    def dump_json_data(self):
+        return json.dumps(self.data)
+
     def get_data(self):
         return self.data
 
