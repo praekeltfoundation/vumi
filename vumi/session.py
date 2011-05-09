@@ -38,7 +38,9 @@ class TemplatedDecisionTree(DecisionTree):
     def get_data_source(self):
         if self.template:
             if self.template.get('__data__'):
-                return self.template['__data__']
+                return {"url":self.template['__data__'].get('url'),
+                        "username":self.template['__data__'].get('username'),
+                        "password":self.template['__data__'].get('password')}
         return None
 
     def get_dummy_data(self):
