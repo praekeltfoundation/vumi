@@ -3,7 +3,7 @@ from twisted.python.log import logging
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.service import Worker, Consumer, Publisher
-from vumi.session import VumiSession
+from vumi.session import VumiSession, TraversedDecisionTree
 from vumi.message import Message, VUMI_DATE_FORMAT
 
 from twisted.python import log
@@ -18,6 +18,7 @@ class SessionConsumer(Consumer):
     queue_name = "vumi.inbound.session.default" #TODO revise name
     routing_key = "vumi.inbound.session.default" #TODO revise name
     sessions = {}
+    yaml_template
 
 
     def __init__(self, publisher):
@@ -29,20 +30,27 @@ class SessionConsumer(Consumer):
         #dictionary = message.get('short_message')
 
 
-    def call_for_json(self, MSISDN, user_name):
-        if 1 == 2:
-            pass
-        else:
-            log.msg("OMG the interwebs are broken!")
-            return None
+    def call_for_json(self, MSISDN):
+        return None
 
 
     def get_session(self, MSISDN):
         session = self.sessions.get(MSISDN)
         if not session:
-            session = VumiSession()
-            self.sessions[MSISDN] = session
+            self.sessions[MSISDN] = self.create_new_session(MSISDN)
         return session
+
+
+    def create_new_session(self, MSISDN, **kwargs):
+            session = VumiSession()
+            decision_tree = TraversedDecisionTree()
+            session.set_decision_tree(decision_tree)
+            yaml_template = self.yaml_template
+            decision_tree.load_yaml_template(yaml_template)
+            json_data = call_for_json(MSISDN)
+            decision_tree.load_json_data(json_data)
+            return session
+
 
 
 class SessionPublisher(Publisher):
