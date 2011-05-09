@@ -33,7 +33,8 @@ class SessionConsumer(Consumer):
 
 
     def consume_message(self, message):
-        log.msg("session message %s consumed by %s" % (json.dumps(dictionary),self.__class__.__name__))
+        log.msg("session message %s consumed by %s" % (
+            json.dumps(dictionary),self.__class__.__name__))
         #dictionary = message.get('short_message')
 
 
@@ -49,15 +50,15 @@ class SessionConsumer(Consumer):
 
 
     def create_new_session(self, MSISDN, **kwargs):
-            session = VumiSession()
-            decision_tree = TraversedDecisionTree()
-            session.set_decision_tree(decision_tree)
-            yaml_template = self.yaml_template
-            decision_tree.load_yaml_template(yaml_template)
-            self.set_url_for_data(decision_tree.get_data_source())
-            json_data = self.call_for_json(MSISDN)
-            decision_tree.load_json_data(json_data)
-            return session
+        session = VumiSession()
+        decision_tree = TraversedDecisionTree()
+        session.set_decision_tree(decision_tree)
+        yaml_template = self.yaml_template
+        decision_tree.load_yaml_template(yaml_template)
+        self.set_url_for_data(decision_tree.get_data_source())
+        json_data = self.call_for_json(MSISDN)
+        decision_tree.load_json_data(json_data)
+        return session
 
 
 
