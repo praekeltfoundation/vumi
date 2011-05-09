@@ -5,6 +5,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from vumi.service import Worker, Consumer, Publisher
 from vumi.session import VumiSession, TraversedDecisionTree
 from vumi.message import Message, VUMI_DATE_FORMAT
+from vumi.webapp.api import utils
 
 from twisted.python import log
 from twisted.python.log import logging
@@ -39,13 +40,17 @@ class SessionConsumer(Consumer):
 
 
     def call_for_json(self, MSISDN):
-        return None
+        params = [("telNo", str(MSISDN))]
+        auth_url = ''
+        resp_url, resp = utils.callback(auth_url, params)
+        return resp
 
 
     def get_session(self, MSISDN):
         session = self.sessions.get(MSISDN)
         if not session:
             self.sessions[MSISDN] = self.create_new_session(MSISDN)
+            session = self.sessions.get(MSISDN)
         return session
 
 
@@ -56,8 +61,9 @@ class SessionConsumer(Consumer):
         yaml_template = self.yaml_template
         decision_tree.load_yaml_template(yaml_template)
         self.set_url_for_data(decision_tree.get_data_source())
-        json_data = self.call_for_json(MSISDN)
-        decision_tree.load_json_data(json_data)
+        #json_data = self.call_for_json(MSISDN)
+        #decision_tree.load_json_data(json_data)
+        decision_tree.load_dummy_data()
         return session
 
 

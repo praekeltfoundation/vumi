@@ -2,6 +2,7 @@ import time
 import yaml
 from twisted.trial.unittest import TestCase
 from vumi.session import VumiSession, TemplatedDecisionTree, PopulatedDecisionTree, TraversedDecisionTree
+from vumi.workers.session.worker import SessionConsumer, SessionPublisher, SessionWorker
 
 class SessionTestCase(TestCase):
 
@@ -189,11 +190,10 @@ class SessionTestCase(TestCase):
         #print dt3.dumps(level=2, serialize=yaml.dump)
 
 
-        sess4 = VumiSession()
-        dt4 = TraversedDecisionTree()
-        sess4.set_decision_tree(dt4)
-        self.assertEquals(dt4.load_yaml_template(test_yaml), None)
-        self.assertEquals(dt4.load_dummy_data(), None)
+        sess_cons = SessionConsumer(None)
+        sess_cons.set_yaml_template(test_yaml)
+        sess4 = sess_cons.get_session("12345")
+        dt4 = sess4.get_decision_tree()
 
         dt4.echo_on()
         repr(dt4.start())
