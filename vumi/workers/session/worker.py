@@ -40,14 +40,14 @@ class SessionConsumer(Consumer):
 
 
     def call_for_json(self, MSISDN):
-        if url_for_data['url']:
+        if self.url_for_data['url']:
             params = [("telNo", str(MSISDN))]
-            url = url_for_data['url']
+            url = self.url_for_data['url']
             auth_string = ''
-            if url_for_data['username']:
-                auth_string += url_for_data['username']
-                if url_for_data['password']:
-                    auth_string += ":"+url_for_data['password']
+            if self.url_for_data['username']:
+                auth_string += self.url_for_data['username']
+                if self.url_for_data['password']:
+                    auth_string += ":" + self.url_for_data['password']
                 auth_string += "@"
             resp_url, resp = utils.callback("http://"+auth_string+url, params)
             print "RESP", resp
