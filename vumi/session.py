@@ -72,12 +72,8 @@ class PopulatedDecisionTree(TemplatedDecisionTree):
     def get_data(self):
         return self.data
 
-
     def resolve_dc(self):
         return self.data_current[0][self.data_current[1]]
-
-    def select_dc(self, index_key):
-        return (self.resolve_dc(), index_key)
 
     def update_dc(self, new_value):
         self.data_current[0][self.data_current[1]] = new_value
@@ -141,6 +137,10 @@ class TraversedDecisionTree(PopulatedDecisionTree):
         self.data_history.append(self.data_current)
         self.template_current = template
         self.data_current = data
+
+
+    def try_auto_select(self):
+        return False
 
 
     def go_back(self):
