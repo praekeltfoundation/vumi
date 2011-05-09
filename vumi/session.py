@@ -41,6 +41,15 @@ class TemplatedDecisionTree(DecisionTree):
                 return self.template['__data__']
         return None
 
+    def get_dummy_data(self):
+        if self.template:
+            if self.template.get('__data__'):
+                return self.template['__data__'].get('json')
+        return None
+
+
+
+
 
 class PopulatedDecisionTree(TemplatedDecisionTree):
     data = None
@@ -51,6 +60,9 @@ class PopulatedDecisionTree(TemplatedDecisionTree):
 
     def load_json_data(self, json_string):
         self.data = json.loads(json_string)
+
+    def load_dummy_data(self):
+        self.load_json_data(self.get_dummy_data())
 
     def dump_json_data(self):
         return json.dumps(self.data)

@@ -33,6 +33,40 @@ class SessionTestCase(TestCase):
             url:
             username:
             password:
+            json: >
+                {
+                    "users": [
+                        {
+                            "name": "Simon",
+                            "items": [
+                                {
+                                    "name": "alpha",
+                                    "stuff": 0,
+                                    "things": 0,
+                                    "timestamp": 0,
+                                    "id": "1.1"
+                                },
+                                {
+                                    "name": "beta",
+                                    "stuff": 0,
+                                    "things": 0,
+                                    "timestamp": 0,
+                                    "id": "1.2"
+                                }
+                            ],
+                            "timestamp": "1234567890",
+                            "id": "1"
+                        },
+                        {
+                            "name": "David",
+                            "items": [],
+                            "timestamp": "1234567890",
+                            "id": "2"
+                        }
+                    ],
+                    "msisdn": "12345"
+                }
+
 
         __start__:
             display:
@@ -105,47 +139,13 @@ class SessionTestCase(TestCase):
                 swahili: "Asante na kwaheri."
         '''
 
-        test_json = '''
-        {
-            "users": [
-                {
-                    "name": "Simon",
-                    "items": [
-                        {
-                            "name": "alpha",
-                            "stuff": 0,
-                            "things": 0,
-                            "timestamp": 0,
-                            "id": "1.1"
-                        },
-                        {
-                            "name": "beta",
-                            "stuff": 0,
-                            "things": 0,
-                            "timestamp": 0,
-                            "id": "1.2"
-                        }
-                    ],
-                    "timestamp": "1234567890",
-                    "id": "1"
-                },
-                {
-                    "name": "David",
-                    "items": [],
-                    "timestamp": "1234567890",
-                    "id": "2"
-                }
-            ],
-            "msisdn": "12345"
-        }
-        '''
 
         # just check the load operations don't blow up
         self.assertEquals(dt1.load_yaml_template(test_yaml), None)
         self.assertEquals(dt2.load_yaml_template(test_yaml), None)
-        self.assertEquals(dt2.load_json_data(test_json), None)
+        self.assertEquals(dt2.load_dummy_data(), None)
         self.assertEquals(dt3.load_yaml_template(test_yaml), None)
-        self.assertEquals(dt3.load_json_data(test_json), None)
+        self.assertEquals(dt3.load_dummy_data(), None)
 
         # simple backtracking test
         before = dt3.dumps()
@@ -194,7 +194,7 @@ class SessionTestCase(TestCase):
         dt4 = TraversedDecisionTree()
         sess4.set_decision_tree(dt4)
         self.assertEquals(dt4.load_yaml_template(test_yaml), None)
-        self.assertEquals(dt4.load_json_data(test_json), None)
+        self.assertEquals(dt4.load_dummy_data(), None)
 
         dt4.echo_on()
         repr(dt4.start())
