@@ -38,10 +38,20 @@ class TemplatedDecisionTree(DecisionTree):
     def get_data_source(self):
         if self.template:
             if self.template.get('__data__'):
-                return {"url":self.template['__data__'].get('url'),
+                return {"url"     :self.template['__data__'].get('url'),
                         "username":self.template['__data__'].get('username'),
-                        "password":self.template['__data__'].get('password')}
-        return {"username":None, "password":None, "url":None}
+                        "password":self.template['__data__'].get('password'),
+                        "params"  :self.template['__data__'].get('params',[])}
+        return {"username":None, "password":None, "url":None, "params":[]}
+
+    def get_post_source(self):
+        if self.template:
+            if self.template.get('__post__'):
+                return {"url"     :self.template['__post__'].get('url'),
+                        "username":self.template['__post__'].get('username'),
+                        "password":self.template['__post__'].get('password'),
+                        "params"  :self.template['__post__'].get('params',[])}
+        return {"username":None, "password":None, "url":None, "params":[]}
 
     def get_dummy_data(self):
         if self.template:

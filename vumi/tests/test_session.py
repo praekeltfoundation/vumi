@@ -208,6 +208,7 @@ class SessionTestCase(TestCase):
         sc.gsdt("12345").answer(3)
         repr(sc.gsdt("12345").question())
         sc.gsdt("12345").answer("03/03/2011")
+        print repr(sc.post_back_json("12345"))
         repr(sc.gsdt("12345").finish())
 
         print ''
