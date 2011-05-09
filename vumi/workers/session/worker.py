@@ -49,7 +49,7 @@ class SessionConsumer(Consumer):
                 if url_for_data['password']:
                     auth_string += ":"+url_for_data['password']
                 auth_string += "@"
-            resp_url, resp = utils.callback(auth_string+url, params)
+            resp_url, resp = utils.callback("http://"+auth_string+url, params)
             return resp
         return None
 
