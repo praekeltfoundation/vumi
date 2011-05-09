@@ -55,7 +55,7 @@ class SessionConsumer(Consumer):
 
 
     def gsdt(self, MSISDN): # shorthand for get_session_decision_tree
-        return get_session(MSISDN).get_decision_tree()
+        return self.get_session(MSISDN).get_decision_tree()
 
 
     def create_new_session(self, MSISDN, **kwargs):
