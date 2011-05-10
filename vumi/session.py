@@ -92,6 +92,7 @@ class PopulatedDecisionTree(TemplatedDecisionTree):
 
 class TraversedDecisionTree(PopulatedDecisionTree):
     echo = False
+    started = False
     completed = False
     language = "english"
 
@@ -116,6 +117,9 @@ class TraversedDecisionTree(PopulatedDecisionTree):
 
     def is_completed(self):
         return self.completed
+
+    def is_started(self):
+        return self.started
 
     def echo_on(self):
         self.echo = True
@@ -179,6 +183,7 @@ class TraversedDecisionTree(PopulatedDecisionTree):
 
 
     def start(self):
+        self.started = True
         greeting = ''
         if self.template_current.get('display'):
             greeting += self.template_current['display'].get(
