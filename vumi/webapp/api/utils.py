@@ -106,10 +106,10 @@ def callback(url, list_of_tuples, auth_type='basic', debug=False, debug_callback
     try:
         result = ch.perform()
         resp = data.getvalue()
-        logging.debug("Posting to %s which returned %s" % (url, resp))
+        logging.debug("Posting to %s which returned %s" % (repr(url), repr(resp)))
         return (url, resp)
     except pycurl.error, e:
-        logging.debug("Posting to %s resulted in error: %s" % (url, e))
+        logging.debug("Posting to %s resulted in error: %s" % (repr(url), repr(e)))
         return (url, e)
 
 def post_data_to_url(url,payload,content_type):

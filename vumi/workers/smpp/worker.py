@@ -61,7 +61,7 @@ class SMSKeywordConsumer(Consumer):
                             ("message", str(dictionary.get('short_message')))
                             ]
                     url, resp = utils.callback(url, params)
-                    log.msg('RESP: %s' % resp)
+                    log.msg('RESP: %s' % repr(resp))
                 except Exception, e:
                     log.err(e)
             
