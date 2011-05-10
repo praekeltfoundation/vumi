@@ -234,10 +234,10 @@ class TraversedDecisionTree(PopulatedDecisionTree):
 
     def answer(self, ans):
         try:
-            ans = str(ans) # in reality we'll only get text
-            ans = self.validate(ans, self.template_current.get('validate'))
             if self.echo:
                 print ">", ans, "\n"
+            ans = str(ans) # in reality we'll only get text
+            ans = self.validate(ans, self.template_current.get('validate'))
             __next = self.template_current.get('next')
             if type(self.resolve_dc()) == list:
                 d = (self.resolve_dc()[int(ans)-1], __next)
