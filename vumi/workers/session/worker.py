@@ -1,3 +1,5 @@
+import json
+
 from twisted.python import log
 from twisted.python.log import logging
 from twisted.internet.defer import inlineCallbacks, returnValue
@@ -20,7 +22,8 @@ class SessionConsumer(Consumer):
     routing_key = "vumi.inbound.session.default" #TODO revise name
     sessions = {}
     yaml_template = None
-    url_for_data = {"username":None, "password":None, "url":None}
+    data_url = {"username":None, "password":None, "url":None, "params":[]}
+    post_url = {"username":None, "password":None, "url":None, "params":[]}
 
 
     def __init__(self, publisher):
@@ -29,8 +32,11 @@ class SessionConsumer(Consumer):
     def set_yaml_template(self, yaml_template):
         self.yaml_template = yaml_template
 
-    def set_url_for_data(self, data_source):
-        self.url_for_data = data_source
+    def set_data_url(self, data_source):
+        self.data_url = data_source
+
+    def set_post_url(self, post_source):
+        self.post_url = post_source
 
 
     def consume_message(self, message):
@@ -40,10 +46,36 @@ class SessionConsumer(Consumer):
 
 
     def call_for_json(self, MSISDN):
-        params = [("telNo", str(MSISDN))]
-        auth_url = ''
-        resp_url, resp = utils.callback(auth_url, params)
-        return resp
+        if self.data_url['url']:
+            params = [(self.data_url['params'][0], str(MSISDN))]
+            url = self.data_url['url']
+            auth_string = ''
+            if self.data_url['username']:
+                auth_string += self.data_url['username']
+                if self.data_url['password']:
+                    auth_string += ":" + self.data_url['password']
+                auth_string += "@"
+            resp_url, resp = utils.callback("http://"+auth_string+url, params)
+            return resp
+        return None
+
+
+    def post_back_json(self, MSISDN):
+        session = self.sessions.get(MSISDN)
+        if session:
+            json_string = json.dumps(session.get_decision_tree().get_data())
+            if self.post_url['url']:
+                params = [(self.post_url['params'][0], json_string)]
+                url = self.post_url['url']
+                auth_string = ''
+                if self.post_url['username']:
+                    auth_string += self.post_url['username']
+                    if self.post_url['password']:
+                        auth_string += ":" + self.post_url['password']
+                    auth_string += "@"
+                resp_url, resp = utils.callback("http://"+auth_string+url, params)
+                return resp
+        return None
 
 
     def get_session(self, MSISDN):
@@ -55,7 +87,7 @@ class SessionConsumer(Consumer):
 
 
     def gsdt(self, MSISDN): # shorthand for get_session_decision_tree
-        return get_session(MSISDN).get_decision_tree()
+        return self.get_session(MSISDN).get_decision_tree()
 
 
     def create_new_session(self, MSISDN, **kwargs):
@@ -64,8 +96,9 @@ class SessionConsumer(Consumer):
         session.set_decision_tree(decision_tree)
         yaml_template = self.yaml_template
         decision_tree.load_yaml_template(yaml_template)
-        self.set_url_for_data(decision_tree.get_data_source())
-        if self.url_for_data.get('url'):
+        self.set_data_url(decision_tree.get_data_source())
+        self.set_post_url(decision_tree.get_post_source())
+        if self.data_url.get('url'):
             json_data = self.call_for_json(MSISDN)
             decision_tree.load_json_data(json_data)
         else:
@@ -96,7 +129,7 @@ class SessionWorker(Worker):
     @inlineCallbacks
     def startWorker(self):
         log.msg("Starting the SessionWorker")
-        self.publisher = yield self.start_publisher(sessionPublisher)
+        self.publisher = yield self.start_publisher(SessionPublisher)
         yield self.start_consumer(SessionConsumer, self.publisher)
 
     def stopWorker(self):

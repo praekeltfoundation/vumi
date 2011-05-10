@@ -22,4 +22,5 @@ coverage
 pyOpenSSL==0.11
 python-ssmi
 python-foneworx
+wokkel
 -e git+git://github.com/dmaclay/python-smpp.git#egg=python-smpp
