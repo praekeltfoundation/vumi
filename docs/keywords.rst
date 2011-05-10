@@ -18,7 +18,7 @@ Setting up a Keyword SMS trigger in Vumi
 
 
 What's happening here?
-======================
+----------------------
 
 1. We're manually sending an SMS from the SMSC to Vumi, MO stands for "mobile originated".
 2. Vumi is configured to expect keyword based SMS messages on the numbers specified in the `config/smpp.yaml` file, one of which is "27761234567"
