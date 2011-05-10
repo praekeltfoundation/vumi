@@ -1,7 +1,8 @@
-# TODO definitly need a session object
-# with hist & expiry & to_str & to_json etc
 import yaml
 import json
+import time
+import datetime
+
 from vumi.errors import VumiError
 
 
@@ -232,31 +233,42 @@ class TraversedDecisionTree(PopulatedDecisionTree):
 
 
     def answer(self, ans):
-        ans = str(ans) # in reality we'll only get text
-        if self.echo:
-            print ">", ans, "\n"
-        __next = self.template_current.get('next')
-        if type(self.resolve_dc()) == list:
-            d = (self.resolve_dc()[int(ans)-1], __next)
-            t = self.template.get(__next)
-        elif type(self.template_current.get('options')) == list:
-            opt = self.template_current.get('options')[int(ans)-1]
-            __next = opt.get('next')
-            if opt.get('default'):
-                self.update_dc(self.resolve_default(opt['default']))
+        try:
+            ans = str(ans) # in reality we'll only get text
+            ans = self.validate(ans, self.template_current.get('validate'))
+            if self.echo:
+                print ">", ans, "\n"
+            __next = self.template_current.get('next')
+            if type(self.resolve_dc()) == list:
+                d = (self.resolve_dc()[int(ans)-1], __next)
                 t = self.template.get(__next)
+            elif type(self.template_current.get('options')) == list:
+                opt = self.template_current.get('options')[int(ans)-1]
+                __next = opt.get('next')
+                if opt.get('default'):
+                    self.update_dc(self.resolve_default(opt['default']))
+                    t = self.template.get(__next)
+                else:
+                    t = __next
+                d = self.data_current
             else:
-                t = __next
-            d = self.data_current
-        else:
-            self.update_dc(ans)
-            d = (self.data_current[0], __next)
-            t = self.template.get(__next)
-        self.select(t, d)
-        if __next == "__finish__":
-            self.__finish()
+                self.update_dc(ans)
+                d = (self.data_current[0], __next)
+                t = self.template.get(__next)
+            self.select(t, d)
+            if __next == "__finish__":
+                self.__finish()
+        except:
+            pass
 
 
+    def validate(self, ans, validate):
+        if validate == 'date':
+            return str(int(time.mktime(
+                datetime.datetime.strptime(ans, '%d/%m/%Y').timetuple())))
+        if validate == 'integer':
+            return str(int(ans))
+        return ans
 
 
 

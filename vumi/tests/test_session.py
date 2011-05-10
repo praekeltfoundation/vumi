@@ -197,6 +197,8 @@ class SessionTestCase(TestCase):
         sc.gsdt("12345").echo_on()
         repr(sc.gsdt("12345").start())
         repr(sc.gsdt("12345").question())
+        sc.gsdt("12345").answer(4)
+        repr(sc.gsdt("12345").question())
         sc.gsdt("12345").answer(1)
         repr(sc.gsdt("12345").question())
         sc.gsdt("12345").answer(1)
@@ -205,10 +207,12 @@ class SessionTestCase(TestCase):
         repr(sc.gsdt("12345").question())
         sc.gsdt("12345").answer(23)
         repr(sc.gsdt("12345").question())
+        sc.gsdt("12345").answer('earlier')
+        repr(sc.gsdt("12345").question())
         sc.gsdt("12345").answer(3)
         repr(sc.gsdt("12345").question())
         sc.gsdt("12345").answer("03/03/2011")
-        print repr(sc.post_back_json("12345"))
+        print repr(sc.post_back_json("12345") or '')
         repr(sc.gsdt("12345").finish())
 
         print ''
