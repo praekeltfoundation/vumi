@@ -15,6 +15,7 @@ Contents:
    api.rst
    client.rst
    deploying.rst
+   keywords.rst
 
 Indices and tables
 ==================
