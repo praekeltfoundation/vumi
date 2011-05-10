@@ -129,7 +129,7 @@ class SessionWorker(Worker):
     @inlineCallbacks
     def startWorker(self):
         log.msg("Starting the SessionWorker")
-        self.publisher = yield self.start_publisher(sessionPublisher)
+        self.publisher = yield self.start_publisher(SessionPublisher)
         yield self.start_consumer(SessionConsumer, self.publisher)
 
     def stopWorker(self):
