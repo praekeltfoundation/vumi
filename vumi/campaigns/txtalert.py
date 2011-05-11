@@ -1,4 +1,5 @@
 from twisted.internet.defer import inlineCallbacks, Deferred
+from generator_tools import picklegenerators
 from twisted.internet import stdio
 from twisted.python import log
 from twisted.protocols import basic
@@ -83,14 +84,14 @@ class Menu(object):
                 visit.reschedule_later_time()
             elif answer == '4':
                 visit.reschedule_later_date()
-            yield self.close("Thanks! Your change request has been registered." \
+            yield self.close("Thanks! Your change request has been registered. " \
                         "You'll receive an SMS with your appointment information")
         elif answer == '2':
-            yield self.close("Welcome to txtAlert. " \
+            yield self.close("Welcome to txtAlert.\n" \
                         "You have attended %s of your appointments, "\
-                        "%s out of %s." \
-                        "%s appointments have been rescheduled" \
-                        "%s appointments missed" % (patient.attendance, 
+                        "%s out of %s.\n" \
+                        "%s appointments have been rescheduled.\n" \
+                        "%s appointments missed.\n" % (patient.attendance, 
                             patient.attended,
                             patient.total,
                             patient.rescheduled,
@@ -111,6 +112,14 @@ class BookingTool(Worker):
                         self.consume_message)
         self.sessions = {}
         
+    def session_exists(self, uuid):
+        return uuid in self.sessions
+        
+    def save_session(self, uuid, menu, coroutine):
+        self.sessions[uuid] = picklegenerators.dumps((menu, coroutine))
+    
+    def get_session(self, uuid):
+        return picklegenerators.loads(self.sessions[uuid])
     
     def start_new_session(self, uuid, message):
         # assume the first message is the announcement
@@ -118,23 +127,23 @@ class BookingTool(Worker):
         coroutine = menu.run()
         resp = coroutine.next()
         # store in memory, this is going to suck
-        self.sessions[uuid] = (menu, coroutine)
+        self.save_session(uuid, menu, coroutine)
         return resp
     
     def resume_existing_session(self, uuid, message):
         # grab from memory
-        menu, coroutine = self.sessions[uuid]
+        menu, coroutine = self.get_session(uuid)
         if menu.finished:
             return self.start_new_session(uuid, message)
         else:
+            coroutine.next()
             return coroutine.send(message)
         
-    
     def consume_message(self, message):
         sender = message.payload['sender']
         message = message.payload['message']
         # it's a new session
-        if sender not in self.sessions:
+        if not self.session_exists(sender):
             response = self.start_new_session(sender, message)
         else:
             response = self.resume_existing_session(sender, message)
