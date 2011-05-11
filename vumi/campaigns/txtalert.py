@@ -142,4 +142,4 @@ class BookingTool(Worker):
     
     @inlineCallbacks
     def stopWorker(self):
-        pass
+        yield None
