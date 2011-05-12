@@ -91,6 +91,8 @@ class PopulatedDecisionTree(TemplatedDecisionTree):
 
 
 class TraversedDecisionTree(PopulatedDecisionTree):
+    max_chars = 140
+    list_pos = {'offset':0, 'length':0, 'remainder':0}
     echo = False
     started = False
     completed = False
@@ -109,10 +111,6 @@ class TraversedDecisionTree(PopulatedDecisionTree):
 
     # NB. User entered strings (which include things like dates),
         # should be avoided where possible.
-
-
-    def resolve_default(self, default):
-        return default
 
 
     def is_completed(self):
@@ -149,6 +147,7 @@ class TraversedDecisionTree(PopulatedDecisionTree):
 
 
     def select(self, template, data):
+        self.list_pos = {'offset':0, 'length':0, 'remainder':0}
         self.template_history.append(self.template_current)
         self.data_history.append(self.data_current)
         self.template_current = template
@@ -219,14 +218,26 @@ class TraversedDecisionTree(PopulatedDecisionTree):
 
     def question(self):
         self.try_auto_select()
+        offset = self.list_pos['offset']
         count = 0
+        index = 0
         que = ""
         que += self.template_current['question'][self.language]
         if type(self.resolve_dc()) == list:
             for opt in self.resolve_dc():
-                count += 1
-                que += "\n" + str(count) + ". "
-                que += str(opt.get(self.template_current['options']))
+                index += 1
+                if index > offset and count < 9:
+                    option_str = "\n" + str(count+1) + ". "
+                    option_str += str(opt.get(self.template_current['options']))
+                    if len(que + option_str) < self.max_chars:
+                        count += 1
+                        que += option_str
+                    else:
+                        index = -1
+            remainder = len(self.resolve_dc()) - count
+            if remainder:
+                que += "\n0. ..."
+            self.list_pos = {'offset':offset, 'length':count, 'remainder':remainder}
         elif type(self.template_current.get('options')) == list:
             for opt in self.template_current.get('options'):
                 count += 1
@@ -238,14 +249,24 @@ class TraversedDecisionTree(PopulatedDecisionTree):
 
 
     def answer(self, ans):
+        if self.echo:
+            print ">", ans, "\n"
+        ans = str(ans) # in reality we'll only get text
         try:
-            if self.echo:
-                print ">", ans, "\n"
-            ans = str(ans) # in reality we'll only get text
+            if type(self.resolve_dc()) == list:
+                if int(ans) == 0 and self.list_pos['remainder'] > 0:
+                    self.list_pos = {
+                            'offset':self.list_pos['offset']+self.list_pos['length'],
+                            'length':0,
+                            'remainder':0}
+                    return None
+        except:
+            pass
+        try:
             ans = self.validate(ans, self.template_current.get('validate'))
             __next = self.template_current.get('next')
             if type(self.resolve_dc()) == list:
-                d = (self.resolve_dc()[int(ans)-1], __next)
+                d = (self.resolve_dc()[int(ans)-1 + self.list_pos['offset']], __next)
                 t = self.template.get(__next)
             elif type(self.template_current.get('options')) == list:
                 opt = self.template_current.get('options')[int(ans)-1]
@@ -274,6 +295,16 @@ class TraversedDecisionTree(PopulatedDecisionTree):
         if validate == 'integer':
             return str(int(ans))
         return ans
+
+
+    def resolve_default(self, default):
+        if default == 'today':
+            return str(int(time.mktime(
+                datetime.date.today().timetuple())))
+        if default == 'yesterday':
+            return str(int(time.mktime(
+                (datetime.date.today()-datetime.timedelta(days=1)).timetuple())))
+        return default
 
 
 
