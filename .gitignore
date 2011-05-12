@@ -20,4 +20,6 @@ build/*
 dist/*
 *.egg-info
 .coverage
+.coverage-results/
+htmlcov/
 coverage-html/

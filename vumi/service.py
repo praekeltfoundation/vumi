@@ -8,8 +8,10 @@ from txamqp.content import Content
 from txamqp.protocol import AMQClient
 from vumi.errors import VumiError
 from vumi.message import Message
+from vumi.webapp.api import utils
 import txamqp
 import json, datetime, sys
+import vumi.options
 
 class Options(usage.Options):
     """
@@ -20,7 +22,7 @@ class Options(usage.Options):
         ["port", None, 5672, "AMQP port", int],
         ["username", None, "vumi", "AMQP username"],
         ["password", None, "vumi", "AMQP password"],
-        ["vhost", None, "/vumi", "AMQP virtual host"],
+        ["vhost", None, "/develop", "AMQP virtual host"],
         ["specfile", None, "config/amqp-spec-0-8.xml", "AMQP spec file"],
     ]
 
@@ -65,6 +67,27 @@ class Worker(AMQClient):
         """
         return (max(self.channels) + 1) if self.channels else 0
     
+    def routing_key_to_class_name(self, routing_key):
+        return ''.join(map(lambda s: s.capitalize(), routing_key.split('.')))
+    
+    def consume(self, routing_key, callback, queue_name=None, exchange_name='vumi', 
+                        exchange_type='direct', durable=True):
+        
+        # use the routing key to generate the name for the class
+        # amq.routing.key -> AmqRoutingKey
+        dynamic_name = self.routing_key_to_class_name(routing_key)
+        class_name = "%sDynamicConsumer" % str(dynamic_name)
+        kwargs = {
+            'routing_key': routing_key,
+            'queue_name': queue_name or routing_key,
+            'exchange_name': exchange_name,
+            'exchange_type': exchange_type,
+            'durable': durable
+        }
+        log.msg('Staring %s with %s' % (class_name, kwargs))
+        klass = type(class_name, (DynamicConsumer,), kwargs)
+        return self.start_consumer(klass, callback)
+    
     @inlineCallbacks
     def start_consumer(self, klass, *args, **kwargs):
         channel = yield self.get_channel()
@@ -93,6 +116,17 @@ class Worker(AMQClient):
         consumer.start(channel, queue)
         # return the newly created & consuming consumer
         returnValue(consumer)
+    
+    def publish_to(self, routing_key, exchange_name='vumi',
+                    exchange_type='direct', delivery_mode=2):
+        class_name = self.routing_key_to_class_name(routing_key)
+        publisher_class = type("%sDynamicPublisher" % class_name, (Publisher,), {
+                "routing_key": routing_key,
+                "exchange_name": exchange_name,
+                "exchange_type": exchange_type,
+                "delivery_mode": delivery_mode,
+            })
+        return self.start_publisher(publisher_class)
     
     @inlineCallbacks
     def start_publisher(self, klass, *args, **kwargs):
@@ -178,10 +212,24 @@ class Consumer(object):
         # This just marks the channel as closed on the client
         #self.channel.close(None)
         # This actually closes the channel on the server
-        d = self.channel.channel_close()
-        d.addCallback(self.channel.close)
+        yield self.channel.channel_close()
+        self.channel.close()
         returnValue(self.keep_consuming)
+
+class DynamicConsumer(Consumer):
+    def __init__(self, callback):
+        self.callback = callback
     
+    def consume_message(self, message):
+        return self.callback(message)
+
+class RoutingKeyError(Exception):
+    def __init__(self, value):
+        self.value = value
+
+    def __str__(self):
+        return repr(self.value)
+
 
 class Publisher(object):
     exchange_name = "vumi"
@@ -194,10 +242,60 @@ class Publisher(object):
     def start(self, channel):
         log.msg("Started the publisher")
         self.channel = channel
-    
+        self.vumi_options = vumi.options.get()
+        self.bound_routing_keys = {}
+
+    def list_bindings(self):
+        try:
+            # Note utils.callback() does a POST not a GET
+            # which may lead to errors if the RabbitMQ Management REST api changes
+            url, resp = utils.callback("http://%s:%s@localhost:55672/api/bindings" % (
+                self.vumi_options['username'], self.vumi_options['password']), [])
+            bindings = json.loads(resp)
+            bound_routing_keys = {}
+            for b in bindings:
+                if b['vhost'] == self.vumi_options['vhost'] and b['source'] == self.exchange_name:
+                    bound_routing_keys[b['routing_key']] = \
+                            bound_routing_keys.get(b['routing_key'],[])+[b['destination']]
+        except:
+            bound_routing_keys = {"bindings":"undetected"}
+        return bound_routing_keys
+
+
+    def routing_key_is_bound(self, key):
+        # Don't check for bound routing keys on RPC reply exchanges
+        # The one-use queues are changing too frequently to cache efficiently,
+        # too many http calls to RabbitMQ Management will be required,
+        # and the auto-generated queues & routing_keys are unlikley to
+        # result in errors where routing keys are unbound
+        if self.exchange_name[-4:].lower() == '_rpc':
+            return True
+        if len(self.bound_routing_keys) == 1 and self.bound_routing_keys.get("bindings") == "undetected":
+            log.msg("No bindings detected, is the RabbitMQ Management plugin installed?")
+            return True
+        if key in self.bound_routing_keys.keys():
+            return True
+        self.bound_routing_keys = self.list_bindings()
+        if len(self.bound_routing_keys) == 1 and self.bound_routing_keys.get("bindings") == "undetected":
+            log.msg("No bindings detected, is the RabbitMQ Management plugin installed?")
+            return True
+        return key in self.bound_routing_keys.keys()
+
+
+    def check_routing_key(self, routing_key, require_bind):
+        if(routing_key != routing_key.lower()):
+            raise RoutingKeyError("The routing_key: %s is not all lower case!" % (routing_key))
+        if not self.routing_key_is_bound(routing_key):
+            raise RoutingKeyError("The routing_key: %s is not bound to any queues in vhost: %s  exchange: %s" % (
+                routing_key, self.vhost, self.exchange_name))
+
+
     def publish(self, message, **kwargs):
+        log.msg("Publishing", message, kwargs)
         exchange_name = kwargs.get('exchange_name') or self.exchange_name
         routing_key = kwargs.get('routing_key') or self.routing_key
+        require_bind = kwargs.get('require_bind')
+        self.check_routing_key(routing_key, require_bind)
         self.channel.basic_publish(exchange=exchange_name, 
                                         content=message, 
                                         routing_key=routing_key)

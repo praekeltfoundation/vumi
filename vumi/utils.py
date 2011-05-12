@@ -29,7 +29,6 @@ def load_class_by_string(class_path):
     class_name = parts[-1]
     return load_class(module_name, class_name)
 
-
 def filter_options_on_prefix(options, prefix, delimiter='-'):
     """
     splits an options dict based on key prefixes
@@ -73,6 +72,7 @@ def safe_routing_key(routing_key):
     """
     return reduce(lambda r_key, kv: r_key.replace(*kv), 
                     [('*','s'), ('#','h')], routing_key)
+
 
 ### SAMPLE CONFIG PARAMETERS - REPLACE 'x's IN OPERATOR_NUMBER
 

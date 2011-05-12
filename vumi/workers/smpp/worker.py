@@ -38,7 +38,7 @@ class SMSKeywordConsumer(Consumer):
             received_sms.message = dictionary.get('short_message')
             
             # FIXME: this is hacky
-            received_sms.transport_name = self.queue_name.split('.')[-1]
+            received_sms.transport_name = self.queue_name.split('.')[-2]
             # FIXME: EsmeTransceiver doesn't publish these over JSON / AMQP
             # received_sms.transport_msg_id = ...
             # FIXME: this isn't accurate, we might receive it much earlier than
@@ -61,7 +61,7 @@ class SMSKeywordConsumer(Consumer):
                             ("message", str(dictionary.get('short_message')))
                             ]
                     url, resp = utils.callback(url, params)
-                    log.msg('RESP: %s' % resp)
+                    log.msg('RESP: %s' % repr(resp))
                 except Exception, e:
                     log.err(e)
             
@@ -85,7 +85,7 @@ class SMSKeywordWorker(Worker):
     def startWorker(self):
         log.msg("Starting the SMSKeywordWorkers for: %s" % self.config.get('OPERATOR_NUMBER'))
         transport = self.config.get('TRANSPORT_NAME', 'fallback').lower()
-        for network,msisdn in self.config.get('OPERATOR_NUMBER').items():
+        for network,msisdn in sorted(self.config.get('OPERATOR_NUMBER').items()):
             if len(msisdn):
                 yield self.start_consumer(dynamically_create_keyword_consumer(network,
                     routing_key='sms.inbound.%s.%s' % (transport, msisdn),
@@ -145,7 +145,6 @@ class SMSReceiptConsumer(Consumer):
                 for urlcallback in urlcallback_set:
                     try:
                         url = urlcallback.url
-                        log.msg('URL: %s' % urlcallback.url)
                         params = [
                                 ("callback_name", "sms_receipt"),
                                 ("id", str(sent_sms.pk)),
@@ -160,6 +159,7 @@ class SMSReceiptConsumer(Consumer):
                                 ("to_msisdn", sent_sms.to_msisdn),
                                 ("message", sent_sms.message),
                                 ]
+                        log.msg(utils.callback)
                         url, resp = utils.callback(url, params)
                         log.msg('RESP: %s' % resp)
                     except Exception, e:
@@ -225,19 +225,9 @@ class SMSBatchConsumer(Consumer):
                         'message':o.message,
                         'id':o.id
                         }
-                print ">>>>", json.dumps(mess)
-                self.publisher.publish_message(Message(**mess))
-                #reactor.callLater(0, self.publisher.publish_json, mess)
-        return True
-
-    def consume(self, message):
-        if self.consume_message(Message.from_json(message.content.body)):
-            self.ack(message)
-
-
-#class FallbackSMSBatchConsumer(SMSBatchConsumer):
-    #routing_key = 'batch.fallback'
-
+                self.publisher.publish_message(Message(**mess),
+                        routing_key='sms.outbound.%s' % o.transport_name.lower(),
+                        require_bind='ANY')
 
 class IndivPublisher(Publisher):
     """
@@ -252,10 +242,6 @@ class IndivPublisher(Publisher):
     delivery_mode = 2
 
     def publish_message(self, message, **kwargs):
-        dictionary = message.payload
-        transport = str(dictionary.get('transport_name', 'fallback')).lower()
-        routing_key = 'sms.outbound.' + transport
-        kwargs.update({'routing_key':routing_key})
         log.msg("Publishing Message %s with extra args: %s" % (message, kwargs))
         super(IndivPublisher, self).publish_message(message, **kwargs)
 

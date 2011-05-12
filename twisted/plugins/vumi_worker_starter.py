@@ -9,6 +9,7 @@ from twisted.internet import reactor
 from vumi.service import Options, WorkerCreator
 from vumi.utils import load_class_by_string
 from vumi.errors import VumiError
+import vumi.options
 
 # This is the actual service that is started, this the thing that runs
 # in the background and starts a worker.
@@ -42,6 +43,9 @@ class VumiService(Service):
         for k in self.options.keys():
             if re.match("config_", k):
                 self.options['config'].update({k[7:]: self.options[k]})
+
+        # set the worker's launch configuration in an immutable global
+        vumi.options.set(self.options)
 
         worker_class = load_class_by_string(worker_class_name)
         creator = WorkerCreator(worker_class, **self.options)

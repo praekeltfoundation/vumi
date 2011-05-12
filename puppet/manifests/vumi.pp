@@ -29,12 +29,25 @@ class vumi::packages {
     apt::package { "python-pip": ensure => "0.3.1-1ubuntu2" }
     apt::package { "python-virtualenv": ensure => "1.4.5-1ubuntu1" }
     apt::package { "postgresql-8.4": ensure => "8.4.3-1" }
-    apt::package { "libpq-dev": ensure => "8.4.7-0ubuntu0.10.04" }
+    apt::package { "libpq-dev": ensure => "8.4.8-0ubuntu0.10.04" }
     apt::package { "rabbitmq-server": ensure => "1.7.2-1ubuntu1" }
+    # apt::package { "rabbitmq-server": ensure => "2.3.1-1ubuntu1" }
     apt::package { "git-core": ensure => "1:1.7.0.4-1ubuntu0.2" }
     apt::package { "openjdk-6-jre-headless": ensure => "6b20-1.9.7-0ubuntu1~10.04.1" }
     apt::package { "libcurl4-openssl-dev": ensure => "7.19.7-1ubuntu1" }
 }
+
+
+# Download & install plugins for RabbitMQ & possibly others
+# class vumi::plugins {
+    # rabbitmq::plugin { "mochiweb":                  ensure => "2.3.1" }
+    # rabbitmq::plugin { "webmachine":                ensure => "2.3.1" }
+    # rabbitmq::plugin { "amqp_client":               ensure => "2.3.1" }
+    # rabbitmq::plugin { "rabbitmq-mochiweb":         ensure => "2.3.1" }
+    # rabbitmq::plugin { "rabbitmq-management-agent": ensure => "2.3.1" }
+    # rabbitmq::plugin { "rabbitmq-management":       ensure => "2.3.1" }
+# }
+
 
 # Create these accounts
 class vumi::accounts {
@@ -153,12 +166,14 @@ class vumi {
     include apt::update,
                 vumi::accounts,
                 vumi::packages, 
+                # vumi::plugins, 
                 vumi::database
 }
 
 Exec["Resynchronize apt package index"] 
     -> File["/var/praekelt"] 
     -> Class["vumi::packages"] 
+    # -> Class["vumi::plugins"]
     -> Class["vumi::accounts"]
     -> Class["vumi::database"]
     -> Exec["Clone git repository"]
