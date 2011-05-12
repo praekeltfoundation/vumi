@@ -7,36 +7,8 @@ from vumi.service import Worker
 from vumi.message import Message
 from datetime import datetime
 
-"""Mocking classes for getting txtAlert USSD to work"""
-class Visit(object):
-    def __init__(self):
-        self.date = datetime.now()
-        self.clinic = 'Clinic A'
-    
-    def reschedule_earlier_date(self):
-        return True
-    def reschedule_earlier_time(self):
-        return True
-    def reschedule_later_time(self):
-        return True
-    def reschedule_later_date(self):
-        return True
-    
-
-class Patient(object):
-    def __init__(self):
-        self.attendance = '85%'
-        self.attended = 60
-        self.total = 85
-        self.rescheduled = 5
-        self.missed = 15
-    
-    def next_visit(self):
-        return Visit()
-
 class Menu(object):
-    def __init__(self, announce):
-        self.msisdn = announce
+    def __init__(self):
         self.finished = False
     
     def ask(self, q):
@@ -51,10 +23,18 @@ class Menu(object):
         return s
     
     def run(self):
+        from vumi.campaigns import txtalert_mocking
+        from twisted.python import log
+        # we're expecting the client to initiate
+        print 'yielding for announce'
+        announce = yield
+        print 'announce', announce
         patient_id = yield self.ask('Welcome to txtAlert. ' \
                                 'Please respond with your patient id.')
         # patient = Patient.objects.get(te_id=patient_id)
-        patient = Patient()
+        print 'patient_id', patient_id
+        patient = txtalert_mocking.Patient()
+        print 'patient ->', patient
         visit = patient.next_visit()
         answer = yield self.choice( \
             'Welcome to txtAlert. ' \
@@ -64,7 +44,7 @@ class Menu(object):
                 ('2', 'See attendance barometer'),
                 ('3', 'Request call from clinic')
             ))
-        
+        print 'first choice: ', answer
         if answer == '1':
             answer = yield self.choice( \
                 'Welcome to txtAlert. ' \
@@ -100,6 +80,8 @@ class Menu(object):
             yield self.close("Welcome to txtAlert. " \
                         "You have requested a call from the clinic. " \
                         "You will be called as soon as possible.")
+        else:
+            log.msg('DEAD END!')
         
 
 class BookingTool(Worker):
@@ -123,21 +105,32 @@ class BookingTool(Worker):
     
     def start_new_session(self, uuid, message):
         # assume the first message is the announcement
-        menu = Menu(message)
+        menu = Menu()
         coroutine = menu.run()
-        resp = coroutine.next()
-        # store in memory, this is going to suck
+        coroutine.next()
         self.save_session(uuid, menu, coroutine)
-        return resp
+        start_of_conversation = coroutine.send(message) # announcement
+        return start_of_conversation
     
     def resume_existing_session(self, uuid, message):
         # grab from memory
         menu, coroutine = self.get_session(uuid)
+        print 'menu finished?', menu.finished
         if menu.finished:
             return self.start_new_session(uuid, message)
         else:
-            coroutine.next()
-            return coroutine.send(message)
+            print 'answer:', message
+            try:
+                print 'continuing'
+                response = coroutine.send(message)
+                self.save_session(uuid, menu, coroutine)
+            except TypeError, e:
+                print 'restarting'
+                self.save_session(uuid, menu, coroutine)
+                restart = coroutine.next()
+                response = coroutine.send(message)
+            print 'response:', response
+            return response
         
     def consume_message(self, message):
         sender = message.payload['sender']

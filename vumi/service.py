@@ -196,8 +196,12 @@ class Consumer(object):
     
     @inlineCallbacks
     def consume(self, message):
-        yield self.consume_message(Message.from_json(message.content.body))
-        returnValue(self.ack(message))
+        result = yield self.consume_message(Message.from_json(message.content.body))
+        if result is not False:
+            returnValue(self.ack(message))
+        else:
+            log.msg('Received %s as a return value consume_message. '\
+                        'Not acknowledging AMQ message' % result)
     
     def consume_message(self, message):
         """helper method, override in implementation"""
@@ -271,13 +275,13 @@ class Publisher(object):
         if self.exchange_name[-4:].lower() == '_rpc':
             return True
         if len(self.bound_routing_keys) == 1 and self.bound_routing_keys.get("bindings") == "undetected":
-            log.msg("No bindings detected, is the RabbitMQ Management plugin installed?")
+            # log.msg("No bindings detected, is the RabbitMQ Management plugin installed?")
             return True
         if key in self.bound_routing_keys.keys():
             return True
         self.bound_routing_keys = self.list_bindings()
         if len(self.bound_routing_keys) == 1 and self.bound_routing_keys.get("bindings") == "undetected":
-            log.msg("No bindings detected, is the RabbitMQ Management plugin installed?")
+            # log.msg("No bindings detected, is the RabbitMQ Management plugin installed?")
             return True
         return key in self.bound_routing_keys.keys()
 
@@ -291,7 +295,7 @@ class Publisher(object):
 
 
     def publish(self, message, **kwargs):
-        log.msg("Publishing", message, kwargs)
+        # log.msg("Publishing", message, kwargs)
         exchange_name = kwargs.get('exchange_name') or self.exchange_name
         routing_key = kwargs.get('routing_key') or self.routing_key
         require_bind = kwargs.get('require_bind')
