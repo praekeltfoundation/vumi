@@ -91,6 +91,8 @@ class PopulatedDecisionTree(TemplatedDecisionTree):
 
 
 class TraversedDecisionTree(PopulatedDecisionTree):
+    max_length = 140
+    last_options = {'offset':0, 'length':0}
     echo = False
     started = False
     completed = False
@@ -109,10 +111,6 @@ class TraversedDecisionTree(PopulatedDecisionTree):
 
     # NB. User entered strings (which include things like dates),
         # should be avoided where possible.
-
-
-    def resolve_default(self, default):
-        return default
 
 
     def is_completed(self):
@@ -219,14 +217,19 @@ class TraversedDecisionTree(PopulatedDecisionTree):
 
     def question(self):
         self.try_auto_select()
+        offset = self.last_options['offset']
         count = 0
         que = ""
         que += self.template_current['question'][self.language]
         if type(self.resolve_dc()) == list:
             for opt in self.resolve_dc():
-                count += 1
-                que += "\n" + str(count) + ". "
-                que += str(opt.get(self.template_current['options']))
+                if count < 9 and len(que) < 50:
+                    count += 1
+                    que += "\n" + str(offset + count) + ". "
+                    que += str(opt.get(self.template_current['options']))
+            remainder = len(self.resolve_dc()) - count
+            self.last_options = {'offset':offset, 'length':count, 'remainder':remainder}
+            print self.last_options
         elif type(self.template_current.get('options')) == list:
             for opt in self.template_current.get('options'):
                 count += 1
@@ -274,6 +277,16 @@ class TraversedDecisionTree(PopulatedDecisionTree):
         if validate == 'integer':
             return str(int(ans))
         return ans
+
+
+    def resolve_default(self, default):
+        if default == 'today':
+            return str(int(time.mktime(
+                datetime.date.today().timetuple())))
+        if default == 'yesterday':
+            return str(int(time.mktime(
+                (datetime.date.today()-datetime.timedelta(days=1)).timetuple())))
+        return default
 
 
 
