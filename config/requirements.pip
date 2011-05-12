@@ -3,7 +3,7 @@ carrot==0.10.4
 celery==1.0.6
 twisted==10.0.0
 txamqp==0.3
-Django==1.2
+Django==1.3
 importlib==1.0.2
 nose==0.11.3
 PyYAML==3.09
@@ -15,11 +15,12 @@ iso8601==0.1.4
 supervisor
 psycopg2
 South==0.7.3
-oauth
-simplejson
+smn-alexandria==0.1
+Sphinx==1.0.7
+django-nose
+coverage
+pyOpenSSL==0.11
 -e git+git://github.com/praekelt/python-ssmi.git#egg=python-ssmi
--e git+git://github.com/smn/bellville.git#egg=smn-bellville
--e git+git://github.com/smn/alexandria.git#egg=smn-alexandria
--e git+git://github.com/inoi/nosedjango.git#egg=nosedjango
 -e git+git://github.com/dmaclay/python-smpp.git#egg=python-smpp
+-e git+git://github.com/smn/python-foneworx.git#egg=python-foneworx
 -e git+git://github.com/dustin/twitty-twister#egg=twitty-twister

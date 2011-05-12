@@ -4,6 +4,8 @@ from fabric.contrib.console import confirm
 from fabric.contrib.files import exists
 from datetime import datetime
 from os.path import join as _join
+from os import walk
+import re
 
 from springfield.deploy.utils import git, system, base, twistd
 
@@ -59,6 +61,17 @@ def layout(branch):
     _setup_env_for(branch)
     require('layout', provided_by=['_setup_env_for'])
     system.create_dirs(env.layout)
+
+
+@_setup_env
+def redeploy(branch):
+    """
+    Shutdown then deploy
+    Don't use this on initial deploy
+    """
+    shutdown(branch)
+    deploy(branch)
+
 
 @_setup_env
 def deploy(branch):
@@ -137,6 +150,86 @@ def copy_settings_file(branch, release=None):
         _join(directory, "environments/%(branch)s.py" % env)
     )
 
+
+def fabdir(branch, release=None):
+    """
+    Copy everything in fab/<branch>/ to the server
+    i.e.
+        local:  vumi/fab/staging/config/test_smpp.yaml
+        would be copied to
+        remote: vumi/config/test_smpp.yaml
+
+    Optionally specify a partial filepath in addition to the branch
+    i.e.
+        $ fab -c fabric.config fabdir:staging/con
+        might only copy:
+            fab/staging/config/test.txt
+            and
+            fab/staging/confidential/pass.cfg
+            not the rest of fab/staging
+        and
+        $ fab -c fabric.config fabdir:staging/config/test.txt
+        would only copy that file
+
+    'Hidden' diretories (prefixed with a dot like .mydir)
+    will be ignored when they are immediately within fab/<branch>/
+    unless the full 'hidden' directory name is included after <branch>
+    when invoking fabdir, in which case the 'hidden' dir will be trimmed off
+    along with fab/<branch>/ before copying to the remote directory.
+    i.e.
+        $ fab -c fabric.config fabdir:staging
+        or
+        $ fab -c fabric.config fabdir:staging/.myd
+        will both ignore:
+            fab/staging/.mydir
+        but
+        $ fab -c fabric.config fabdir:staging/.mydir
+        or
+        $ fab -c fabric.config fabdir:staging/.mydir/te
+        would copy
+        local: vumi/fab/staging/.mydir/tests/test.txt
+        to
+        remote: vumi/tests/test.txt
+
+    This makes it easy to maintain multiple config directories
+    each with files of the same name for a given branch
+    i.e.
+        fab/staging/.clickatell/config/smpp.yaml
+        vs
+        fab/staging/.safaricom/config/smpp.yaml
+    so files in github like supervisord.staging.conf can remain unchanged
+    """
+    paths = re.match('(?P<branch>[^/]*)/?(?P<filepath>.*)',branch).groupdict()
+    __fabdir(paths['branch'], paths['filepath'], release)
+
+@_setup_env
+def __fabdir(branch, filepath='', release=None):
+    # only a function taking the split up branch/filepath can be decorated
+    release = release or base.current_release()
+    directory = _join(env.releases_path, release, env.github_repo_name)
+
+    for root, dirs, files in walk("fab/%s" % branch):
+        subdir = re.sub("^fab/%s/?" % branch,'',root)
+        for name in dirs:
+            joinpath = _join(subdir, name)
+            # only make the dirs you need
+            if re.match(re.escape(filepath), joinpath) \
+            or re.match(re.escape(joinpath)+'/', filepath):
+                if joinpath[0:1]!='.' \
+                or joinpath.split('/')[0] == filepath.split('/')[0]:
+                    # ignore or trim 'hidden' dirs in fab/<branch>/
+                    run("mkdir -p %s" %  _join(directory, re.sub('^\.[^/]*/?', '', joinpath)))
+        for name in files:
+            joinpath = _join(subdir, name)
+            if filepath == '' or re.match(re.escape(filepath), joinpath):
+                if joinpath[0:1]!='.' \
+                or joinpath.split('/')[0] == filepath.split('/')[0] \
+                or subdir == '':
+                    # ignore or trim filepaths within 'hidden' dirs in fab/<branch>/
+                    put(_join(root, name),
+                        _join(directory, re.sub('^\.[^/]*/', '', joinpath)))
+
+
 @_setup_env
 def managepy(branch, command, release=None):
     """
@@ -206,10 +299,13 @@ def update(branch):
         $ fab update:staging
         
     Only to be used for small fixed, typos etc..
-    
+
+    Runs git stash first to undo fabdir effects
     """
     current_release = base.releases(env.releases_path)[-1]
+    copy_settings_file(branch, release=current_release)
     with cd(_join(env.current, env.github_repo_name)):
+        run("git stash")
         git.pull(branch)
 
 
@@ -221,12 +317,12 @@ def supervisor(branch, command):
     if not exists(pid_path):
         _virtualenv(
             app_path,
-            "supervisord -c supervisord.%s.cfg -j %s" % (branch,pid_path)
+            "supervisord -c supervisord.%s.conf -j %s" % (branch,pid_path)
         )
     
     _virtualenv(
         _join(env.current, env.github_repo_name),
-        "supervisorctl -c supervisord.%s.cfg %s" % (branch, command)
+        "supervisorctl -c supervisord.%s.conf %s" % (branch, command)
     )
 
 
@@ -279,6 +375,28 @@ def restart(branch,app=None):
     """
     return supervisor(branch,"restart %s" % cmd(app))
 
+@_setup_env
+def shutdown(branch):
+    """
+    Shutdown the supervisord daemon
+    *** Needed after a redeploy ***
+    """
+    return supervisor(branch,"shutdown")
+
+@_setup_env
+def reload(branch):
+    """
+    Restart the supervisord daemon
+    *** Needed if the supervisord config file is changed ***
+    """
+    return supervisor(branch,"reload")
+
+#@_setup_env
+#def reread(branch):
+    #"""
+    #Reload the supervisord daemon's configuration files (NAMING ?! :P)
+    #"""
+    #return supervisor(branch,"reread")
 
 @_setup_env
 def cleanup(branch,limit=5):
@@ -295,4 +413,3 @@ def cleanup(branch,limit=5):
             'limit': limit
         }
     )
-
