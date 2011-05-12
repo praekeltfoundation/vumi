@@ -105,7 +105,7 @@ class TwitterXMPPBridgeWorker(Worker):
     def consume_xmpp_message(self, message):
         text = message.payload["message"].strip()
         sender = message.payload["sender"].strip()
-        if text.strip() == "stop":
+        if text.lower().strip() == "stop":
             stop_user(sender)
             self.publisher.publish_message(Message(recipient=sender, 
                                             message='Ok, tweets have stopped'))
@@ -115,7 +115,8 @@ class TwitterXMPPBridgeWorker(Worker):
                 start_user(sender)
                 self.publisher.publish_message(Message(recipient=sender, 
                     message="Hi! You you'll start receiving live tweets " \
-                                "from netprophet as soon as they become available."))
+                                "from netprophet as soon as they become available. "\
+                                "Type STOP to stop receiving tweets."))
     
     def consume_twitter_message(self, message):
         data = message.payload.get('data')
