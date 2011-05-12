@@ -53,17 +53,7 @@ class SessionTestCase(TestCase):
                                     "things": 0,
                                     "timestamp": 0,
                                     "id": "1.2"
-                                },
-                                {   "name": "three"},
-                                {   "name": "four"},
-                                {   "name": "five"},
-                                {   "name": "six"},
-                                {   "name": "seven"},
-                                {   "name": "eight"},
-                                {   "name": "nine"},
-                                {   "name": "ten"},
-                                {   "name": "eleven"},
-                                {   "name": "twelve"}
+                                }
                             ],
                             "timestamp": "1234567890",
                             "id": "1"
@@ -202,6 +192,128 @@ class SessionTestCase(TestCase):
         #print dt3.dumps(level=2, serialize=yaml.dump)
 
 
+        test_yaml = '''
+        __data__:
+            url:
+            username:
+            password:
+            json: >
+                {
+                    "users": [
+                        {
+                            "name": "Simon",
+                            "items": [
+                                {   "name": "one"},
+                                {   "name": "two"},
+                                {   "name": "three"},
+                                {   "name": "four"},
+                                {   "name": "five"},
+                                {   "name": "six"},
+                                {   "name": "seven"},
+                                {   "name": "eight"},
+                                {   "name": "nine"},
+                                {   "name": "ten"},
+                                {   "name": "eleven"},
+                                {   "name": "twelve"},
+                                {
+                                    "name": "alpha",
+                                    "stuff": 0,
+                                    "things": 0,
+                                    "timestamp": 0,
+                                    "id": "1.1"
+                                },
+                                {
+                                    "name": "beta",
+                                    "stuff": 0,
+                                    "things": 0,
+                                    "timestamp": 0,
+                                    "id": "1.2"
+                                }
+                            ],
+                            "timestamp": "1234567890",
+                            "id": "1"
+                        },
+                        {
+                            "name": "David",
+                            "items": [],
+                            "timestamp": "1234567890",
+                            "id": "2"
+                        }
+                    ],
+                    "msisdn": "12345"
+                }
+
+        __start__:
+            display:
+                english: "Hello."
+                swahili: "Salamu."
+            next: users
+
+        users:
+            question:
+                english: "Who are you?"
+                swahili: "Ninyi ni nani?"
+            options: name
+            next: items
+
+        items:
+            question:
+                english: "Which item?"
+                swahili: "Ambayo kitu?"
+            options: name
+            next: stuff
+            new:
+                name:
+                stuff: 0
+                things: 0
+                timestamp: 0
+                id:
+
+        stuff:
+            question:
+                english: "How much stuff?"
+                swahili: "Kiasi gani stuff?"
+            validate: integer
+            next: things
+
+        things:
+            question:
+                english: "How many things?"
+                swahili: "Mambo mangapi?"
+            validate: integer
+            next: timestamp
+
+        timestamp:
+            question:
+                english: "Which day was it?"
+                swahili: "Siku ambayo ilikuwa ni?"
+            options:
+                  - display:
+                        english: "Today"
+                        swahili: "Leo"
+                    default: today
+                    next: __finish__
+                  - display:
+                        english: "Yesterday"
+                        swahili: "Jana"
+                    default: yesterday
+                    next: __finish__
+                  - display:
+                        english: "An earlier day"
+                        swahili: "Mapema siku ya"
+                    next:
+                        question:
+                            english: "Which day was it [dd/mm/yyyy]?"
+                            swahili: "Kuwaambia ambayo siku [dd/mm/yyyy]?"
+                        validate: date
+                        next: __finish__
+
+        __finish__:
+            display:
+                english: "Thank you and goodbye."
+                swahili: "Asante na kwaheri."
+        '''
+
         sc = SessionConsumer(None)
         sc.set_yaml_template(test_yaml)
         sess4 = sc.get_session("12345")
@@ -213,7 +325,11 @@ class SessionTestCase(TestCase):
         repr(sc.gsdt("12345").question())
         sc.gsdt("12345").answer(1)
         repr(sc.gsdt("12345").question())
-        sc.gsdt("12345").answer(1)
+        sc.gsdt("12345").answer(0)
+        repr(sc.gsdt("12345").question())
+        sc.gsdt("12345").answer(0)
+        repr(sc.gsdt("12345").question())
+        sc.gsdt("12345").answer(3)
         repr(sc.gsdt("12345").question())
         sc.gsdt("12345").answer(42)
         repr(sc.gsdt("12345").question())
