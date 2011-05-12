@@ -91,7 +91,7 @@ class PopulatedDecisionTree(TemplatedDecisionTree):
 
 
 class TraversedDecisionTree(PopulatedDecisionTree):
-    max_length = 140
+    max_chars = 140
     list_pos = {'offset':0, 'length':0, 'remainder':0}
     echo = False
     started = False
@@ -226,10 +226,14 @@ class TraversedDecisionTree(PopulatedDecisionTree):
         if type(self.resolve_dc()) == list:
             for opt in self.resolve_dc():
                 index += 1
-                if index > offset and count < 9 and len(que) < 50:
-                    count += 1
-                    que += "\n" + str(count) + ". "
-                    que += str(opt.get(self.template_current['options']))
+                if index > offset and count < 9:
+                    option_str = "\n" + str(count+1) + ". "
+                    option_str += str(opt.get(self.template_current['options']))
+                    if len(que + option_str) < self.max_chars:
+                        count += 1
+                        que += option_str
+                    else:
+                        index = -1
             remainder = len(self.resolve_dc()) - count
             if remainder:
                 que += "\n0. ..."
@@ -262,7 +266,7 @@ class TraversedDecisionTree(PopulatedDecisionTree):
             ans = self.validate(ans, self.template_current.get('validate'))
             __next = self.template_current.get('next')
             if type(self.resolve_dc()) == list:
-                d = (self.resolve_dc()[int(ans)-1+self.list_pos['offset']], __next)
+                d = (self.resolve_dc()[int(ans)-1 + self.list_pos['offset']], __next)
                 t = self.template.get(__next)
             elif type(self.template_current.get('options')) == list:
                 opt = self.template_current.get('options')[int(ans)-1]

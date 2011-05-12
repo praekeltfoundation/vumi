@@ -215,6 +215,9 @@ class SessionTestCase(TestCase):
                                 {   "name": "ten"},
                                 {   "name": "eleven"},
                                 {   "name": "twelve"},
+                                {   "name": "something that uses up lots of characters"},
+                                {   "name": "something that uses up even more characters"},
+                                {   "name": "some"},
                                 {
                                     "name": "alpha",
                                     "stuff": 0,
@@ -329,7 +332,7 @@ class SessionTestCase(TestCase):
         repr(sc.gsdt("12345").question())
         sc.gsdt("12345").answer(0)
         repr(sc.gsdt("12345").question())
-        sc.gsdt("12345").answer(3)
+        sc.gsdt("12345").answer(1)
         repr(sc.gsdt("12345").question())
         sc.gsdt("12345").answer(42)
         repr(sc.gsdt("12345").question())
