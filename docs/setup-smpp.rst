@@ -51,7 +51,7 @@ We're assuming that all messages being sent back to an SMSC can be delivered by 
 
 Vumi's SMPP transport can be configured by a YAML file, `./config/example_smpp.yaml`. For this example, this is what our SMPP configuration looks like:
 
-.. literalinclude: /config/example_smpp.yaml
+.. literalinclude:: ../config/example_smpp.yaml
 
 We've configured the details of the SMPP server but also we've told Vumi to send and receive messages via `topic` exchange called `vumi.topic`.
 
@@ -61,14 +61,14 @@ Configure an SMPP Transport
 To get the desired behaviour we need to subclass the standard SMPP transport
 that Vumi ships with since we want to publish to a `topic` exchange.
 
-..literalinclude: /vumi/workers/smpp/topic_transport.py
+.. literalinclude:: ../vumi/workers/smpp/topic_transport.py
 
 Configure a Worker
 ------------------
 
 Now that we've got a Vumi transport setup that accepts incoming messages over an SMPP bind let's setup a worker to forward the messages to a URL via HTTP POST.
 
-..literalinclude: /vumi/workers/smpp/topic_worker.py
+.. literalinclude:: ../vumi/workers/smpp/topic_worker.py
 
 Supervisord!
 ------------
@@ -76,13 +76,15 @@ Supervisord!
 Let's use Supervisord to ensure all the different parts keep running.
 Here is the configuration file `supervisord.example.conf`:
 
-..literalinclude: /supervisord.example.conf
+.. literalinclude:: ../supervisord.example.conf
 
-Ensure you're in your python `virtualenv` and start it with the following command:
+Ensure you're in your python `virtualenv` and start it with the following command::
 
     $ supervisord -c supervisord.example.conf
 
-You'll be able to see the HTTP management console at http://localhost:9010/ or at the command line with `supervisorctl -c supervisord.example.conf`.
+You'll be able to see the HTTP management console at http://localhost:9010/ or at the command line with::
+
+    $ supervisorctl -c supervisord.example.conf
 
 Let's give it a try:
 --------------------
