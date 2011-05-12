@@ -147,49 +147,47 @@ class SessionTestCase(TestCase):
         self.assertEquals(dt3.load_yaml_template(test_yaml), None)
         self.assertEquals(dt3.load_dummy_data(), None)
 
-        ## simple backtracking test
-        #before = dt3.dumps()
-        #dt3.start()
-        #dt3.go_back()
-        #self.assertEquals(before, dt3.dumps())
-        ##dt3.set_language("swahili")
+        # simple backtracking test
+        before = dt3.dumps()
+        dt3.start()
+        dt3.go_back()
+        self.assertEquals(before, dt3.dumps())
+        #dt3.set_language("swahili")
 
-        ## a fake interaction
-        #self.assertEquals(dt3.start(),
-                #'Hello.')
-        #self.assertEquals(dt3.question(),
-                #'Who are you?\n1. Simon\n2. David')
-        #dt3.answer(1)
-        #self.assertEquals(dt3.question(),
-                #dt3.question())
-                ##'Which item?\n1. alpha\n2. beta')
-        #dt3.answer(1)
-        #self.assertEquals(dt3.question(),
-                #'How much stuff?')
-        #dt3.answer(42)
-        #self.assertEquals(dt3.question(),
-                #'How many things?')
-        #dt3.answer(23)
-        #dt3.go_up()
-        #self.assertEquals(dt3.question(),
-                #dt3.question())
-                ##'Which item?\n1. alpha\n2. beta')
-        #dt3.answer(2)
-        #self.assertEquals(dt3.question(),
-                #'How much stuff?')
-        #dt3.answer(22)
-        #self.assertEquals(dt3.question(),
-                #'How many things?')
-        #dt3.answer(222)
-        #self.assertEquals(dt3.question(),
-                #'Which day was it?\n1. Today\n2. Yesterday\n3. An earlier day')
-        #dt3.answer(3)
-        #self.assertEquals(dt3.question(),
-                #'Which day was it [dd/mm/yyyy]?')
-        #dt3.answer("03/03/2011")
-        #self.assertEquals(dt3.finish(),
-                #'Thank you and goodbye.')
-        ##print dt3.dumps(level=2, serialize=yaml.dump)
+        # a fake interaction
+        self.assertEquals(dt3.start(),
+                'Hello.')
+        self.assertEquals(dt3.question(),
+                'Who are you?\n1. Simon\n2. David')
+        dt3.answer(1)
+        self.assertEquals(dt3.question(),
+                'Which item?\n1. alpha\n2. beta')
+        dt3.answer(1)
+        self.assertEquals(dt3.question(),
+                'How much stuff?')
+        dt3.answer(42)
+        self.assertEquals(dt3.question(),
+                'How many things?')
+        dt3.answer(23)
+        dt3.go_up()
+        self.assertEquals(dt3.question(),
+                'Which item?\n1. alpha\n2. beta')
+        dt3.answer(2)
+        self.assertEquals(dt3.question(),
+                'How much stuff?')
+        dt3.answer(22)
+        self.assertEquals(dt3.question(),
+                'How many things?')
+        dt3.answer(222)
+        self.assertEquals(dt3.question(),
+                'Which day was it?\n1. Today\n2. Yesterday\n3. An earlier day')
+        dt3.answer(3)
+        self.assertEquals(dt3.question(),
+                'Which day was it [dd/mm/yyyy]?')
+        dt3.answer("03/03/2011")
+        self.assertEquals(dt3.finish(),
+                'Thank you and goodbye.')
+        #print dt3.dumps(level=2, serialize=yaml.dump)
 
 
         test_yaml = '''
