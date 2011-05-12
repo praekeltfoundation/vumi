@@ -234,10 +234,10 @@ class TraversedDecisionTree(PopulatedDecisionTree):
                         que += option_str
                     else:
                         index = -1
-            remainder = len(self.resolve_dc()) - count
+            remainder = (self.list_pos['remainder'] or len(self.resolve_dc())) - count
+            self.list_pos = {'offset':offset, 'length':count, 'remainder':remainder}
             if remainder:
                 que += "\n0. ..."
-            self.list_pos = {'offset':offset, 'length':count, 'remainder':remainder}
         elif type(self.template_current.get('options')) == list:
             for opt in self.template_current.get('options'):
                 count += 1
@@ -255,10 +255,8 @@ class TraversedDecisionTree(PopulatedDecisionTree):
         try:
             if type(self.resolve_dc()) == list:
                 if int(ans) == 0 and self.list_pos['remainder'] > 0:
-                    self.list_pos = {
-                            'offset':self.list_pos['offset']+self.list_pos['length'],
-                            'length':0,
-                            'remainder':0}
+                    self.list_pos.update({
+                            'offset': self.list_pos['offset'] + self.list_pos['length']})
                     return None
         except:
             pass
