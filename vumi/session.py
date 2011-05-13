@@ -29,12 +29,15 @@ class TemplatedDecisionTree(DecisionTree):
     template_current = None
     template_history = []
 
+
     def load_yaml_template(self, yaml_string):
         self.template = yaml.load(yaml_string)
         self.template_current = self.template.get('__start__')
 
+
     def get_template(self):
         return self.template
+
 
     def get_data_source(self):
         if self.template:
@@ -45,6 +48,7 @@ class TemplatedDecisionTree(DecisionTree):
                         "params"  :self.template['__data__'].get('params',[])}
         return {"username":None, "password":None, "url":None, "params":[]}
 
+
     def get_post_source(self):
         if self.template:
             if self.template.get('__post__'):
@@ -54,12 +58,12 @@ class TemplatedDecisionTree(DecisionTree):
                         "params"  :self.template['__post__'].get('params',[])}
         return {"username":None, "password":None, "url":None, "params":[]}
 
+
     def get_dummy_data(self):
         if self.template:
             if self.template.get('__data__'):
                 return self.template['__data__'].get('json')
         return None
-
 
 
 class PopulatedDecisionTree(TemplatedDecisionTree):
