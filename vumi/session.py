@@ -29,12 +29,15 @@ class TemplatedDecisionTree(DecisionTree):
     template_current = None
     template_history = []
 
+
     def load_yaml_template(self, yaml_string):
         self.template = yaml.load(yaml_string)
         self.template_current = self.template.get('__start__')
 
+
     def get_template(self):
         return self.template
+
 
     def get_data_source(self):
         if self.template:
@@ -45,6 +48,7 @@ class TemplatedDecisionTree(DecisionTree):
                         "params"  :self.template['__data__'].get('params',[])}
         return {"username":None, "password":None, "url":None, "params":[]}
 
+
     def get_post_source(self):
         if self.template:
             if self.template.get('__post__'):
@@ -54,14 +58,12 @@ class TemplatedDecisionTree(DecisionTree):
                         "params"  :self.template['__post__'].get('params',[])}
         return {"username":None, "password":None, "url":None, "params":[]}
 
+
     def get_dummy_data(self):
         if self.template:
             if self.template.get('__data__'):
                 return self.template['__data__'].get('json')
         return None
-
-
-
 
 
 class PopulatedDecisionTree(TemplatedDecisionTree):
@@ -223,22 +225,32 @@ class TraversedDecisionTree(PopulatedDecisionTree):
         count = 0
         index = 0
         que = ""
+        try:
+            more_option = "\n0. " + self.template_current['more'][self.language]
+        except:
+            more_option = "\n0. ..."
         que += self.template_current['question'][self.language]
         if type(self.resolve_dc()) == list:
+            list_length = len(self.resolve_dc())
+            last_index = 0
             for opt in self.resolve_dc():
                 index += 1
+                more_length = len(more_option)
+                if index == list_length:
+                    more_length = 0
                 if index > offset and count < 9:
                     option_str = "\n" + str(count+1) + ". "
                     option_str += str(opt.get(self.template_current['options']))
-                    if len(que + option_str) < self.max_chars:
+                    if len(que + option_str) + more_length < self.max_chars:
                         count += 1
+                        last_index = index
                         que += option_str
                     else:
                         index = -1
-            remainder = (self.list_pos['remainder'] or len(self.resolve_dc())) - count
+            remainder = list_length - last_index
             self.list_pos = {'offset':offset, 'length':count, 'remainder':remainder}
             if remainder:
-                que += "\n0. ..."
+                que += more_option
         elif type(self.template_current.get('options')) == list:
             for opt in self.template_current.get('options'):
                 count += 1
