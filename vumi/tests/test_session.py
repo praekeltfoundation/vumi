@@ -215,7 +215,6 @@ class SessionTestCase(TestCase):
                                 {   "name": "twelve"},
                                 {   "name": "something that uses up lots of characters"},
                                 {   "name": "something that uses up even more characters"},
-                                {   "name": "some"},
                                 {
                                     "name": "alpha",
                                     "stuff": 0,

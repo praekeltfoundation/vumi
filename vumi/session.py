@@ -223,6 +223,7 @@ class TraversedDecisionTree(PopulatedDecisionTree):
         count = 0
         index = 0
         que = ""
+        more_option = "\n0. ..."
         que += self.template_current['question'][self.language]
         if type(self.resolve_dc()) == list:
             for opt in self.resolve_dc():
@@ -230,7 +231,7 @@ class TraversedDecisionTree(PopulatedDecisionTree):
                 if index > offset and count < 9:
                     option_str = "\n" + str(count+1) + ". "
                     option_str += str(opt.get(self.template_current['options']))
-                    if len(que + option_str) < self.max_chars:
+                    if len(que + option_str + more_option) < self.max_chars:
                         count += 1
                         que += option_str
                     else:
@@ -238,7 +239,7 @@ class TraversedDecisionTree(PopulatedDecisionTree):
             remainder = (self.list_pos['remainder'] or len(self.resolve_dc())) - count
             self.list_pos = {'offset':offset, 'length':count, 'remainder':remainder}
             if remainder:
-                que += "\n0. ..."
+                que += more_option
         elif type(self.template_current.get('options')) == list:
             for opt in self.template_current.get('options'):
                 count += 1
