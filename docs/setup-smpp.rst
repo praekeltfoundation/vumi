@@ -37,11 +37,11 @@ Change this to::
 
     HTTP_PORT=8080
 
-Another change we need to make is on line 83:
+Another change we need to make is on line 83::
 
     ESME_TO_ESME=TRUE
     
-Needs to be changed to, FALSE:
+Needs to be changed to, FALSE::
 
     ESME_TO_ESME=FALSE
 
