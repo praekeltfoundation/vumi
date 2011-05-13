@@ -226,12 +226,16 @@ class TraversedDecisionTree(PopulatedDecisionTree):
         more_option = "\n0. ..."
         que += self.template_current['question'][self.language]
         if type(self.resolve_dc()) == list:
+            list_length = len(self.resolve_dc())
             for opt in self.resolve_dc():
                 index += 1
+                more_length = len(more_option)
+                if index == list_length:
+                    more_length = 0
                 if index > offset and count < 9:
                     option_str = "\n" + str(count+1) + ". "
                     option_str += str(opt.get(self.template_current['options']))
-                    if len(que + option_str + more_option) < self.max_chars:
+                    if len(que + option_str) + more_length < self.max_chars:
                         count += 1
                         que += option_str
                     else:
