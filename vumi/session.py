@@ -62,8 +62,6 @@ class TemplatedDecisionTree(DecisionTree):
 
 
 
-
-
 class PopulatedDecisionTree(TemplatedDecisionTree):
     data = None
     # So that I can modify the original data, data_current must
@@ -230,6 +228,7 @@ class TraversedDecisionTree(PopulatedDecisionTree):
         que += self.template_current['question'][self.language]
         if type(self.resolve_dc()) == list:
             list_length = len(self.resolve_dc())
+            last_index = 0
             for opt in self.resolve_dc():
                 index += 1
                 more_length = len(more_option)
@@ -240,10 +239,11 @@ class TraversedDecisionTree(PopulatedDecisionTree):
                     option_str += str(opt.get(self.template_current['options']))
                     if len(que + option_str) + more_length < self.max_chars:
                         count += 1
+                        last_index = index
                         que += option_str
                     else:
                         index = -1
-            remainder = (self.list_pos['remainder'] or len(self.resolve_dc())) - count
+            remainder = list_length - last_index
             self.list_pos = {'offset':offset, 'length':count, 'remainder':remainder}
             if remainder:
                 que += more_option
