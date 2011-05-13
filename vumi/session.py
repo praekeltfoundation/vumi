@@ -166,6 +166,7 @@ class TraversedDecisionTree(PopulatedDecisionTree):
 
     def go_back(self):
         try:
+            self.list_pos = {'offset':0, 'length':0, 'remainder':0}
             self.template_current = self.template_history.pop()
             self.data_current = self.data_history.pop()
             self.completed = False
