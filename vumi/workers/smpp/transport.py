@@ -203,10 +203,13 @@ class SmppTransport(Worker):
 
     def send_smpp(self, id, to_msisdn, message, *args, **kwargs):
         log.msg("Sending SMPP, to: %s, message: %s" % (to_msisdn, repr(message)))
+        # first do a lookup in our YAML to see if we've got a source_addr
+        # defined for the given MT number, if not, trust the from_msisdn 
+        # in the message
         route = get_operator_number(to_msisdn,
-                self.config['COUNTRY_CODE'],
+                self.config.get('COUNTRY_CODE',''),
                 self.config.get('OPERATOR_PREFIX',{}),
-                self.config.get('OPERATOR_NUMBER',{}))
+                self.config.get('OPERATOR_NUMBER',{})) or kwargs.get('from_msisdn', '')
         sequence_number = self.esme_client.submit_sm(
                 short_message = message.encode('utf-8'),
                 destination_addr = str(to_msisdn),

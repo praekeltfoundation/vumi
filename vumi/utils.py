@@ -60,7 +60,7 @@ def get_operator_name(msisdn, mapping):
 def get_operator_number(msisdn, country_code, mapping, numbers):
     msisdn = cleanup_msisdn(msisdn, country_code)
     operator = get_operator_name(msisdn, mapping)
-    number = numbers.get(operator, '')
+    number = numbers.get(operator)
     return number
 
 def safe_routing_key(routing_key):

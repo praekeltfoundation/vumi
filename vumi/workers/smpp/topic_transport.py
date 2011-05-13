@@ -3,6 +3,7 @@ from twisted.python import log
 from datetime import datetime
 
 from vumi.workers.smpp.transport import SmppTransport
+from vumi.webapp.api import forms
 
 class TopicSmppTransport(SmppTransport):
     
