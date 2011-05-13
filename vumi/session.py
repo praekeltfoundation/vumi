@@ -223,7 +223,10 @@ class TraversedDecisionTree(PopulatedDecisionTree):
         count = 0
         index = 0
         que = ""
-        more_option = "\n0. ..."
+        try:
+            more_option = "\n0. " + self.template_current['more'][self.language]
+        except:
+            more_option = "\n0. ..."
         que += self.template_current['question'][self.language]
         if type(self.resolve_dc()) == list:
             list_length = len(self.resolve_dc())

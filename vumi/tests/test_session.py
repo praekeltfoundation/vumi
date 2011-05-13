@@ -214,7 +214,7 @@ class SessionTestCase(TestCase):
                                 {   "name": "eleven"},
                                 {   "name": "twelve"},
                                 {   "name": "something that uses up lots of characters"},
-                                {   "name": "something that uses up even more characters"},
+                                {   "name": "and use up even more characters"},
                                 {
                                     "name": "alpha",
                                     "stuff": 0,
@@ -261,6 +261,8 @@ class SessionTestCase(TestCase):
                 english: "Which item?"
                 swahili: "Ambayo kitu?"
             options: name
+            more:
+                english: "more items ..."
             next: stuff
             new:
                 name:
