@@ -214,7 +214,7 @@ class SessionTestCase(TestCase):
                                 {   "name": "eleven"},
                                 {   "name": "twelve"},
                                 {   "name": "something that uses up lots of characters"},
-                                {   "name": "and use up even more characters"},
+                                {   "name": "and use up more characters"},
                                 {
                                     "name": "alpha",
                                     "stuff": 0,
@@ -263,6 +263,7 @@ class SessionTestCase(TestCase):
             options: name
             more:
                 english: "more items ..."
+                swahili: "zaidi ya vitu ..."
             next: stuff
             new:
                 name:
@@ -321,6 +322,7 @@ class SessionTestCase(TestCase):
         sess4 = sc.get_session("12345")
         dt4 = sess4.get_decision_tree()
         sc.gsdt("12345").echo_on()
+        sc.gsdt("12345").set_language("swahili")
         repr(sc.gsdt("12345").start())
         repr(sc.gsdt("12345").question())
         sc.gsdt("12345").answer(4)
