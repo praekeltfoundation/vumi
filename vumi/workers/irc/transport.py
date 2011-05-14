@@ -23,17 +23,15 @@ class MessageLogger:
 class LogBot(irc.IRCClient):
     """A logging IRC bot."""
     
-    nickname = "twistedbot"
-    
     def connectionMade(self):
         irc.IRCClient.connectionMade(self)
         self.logger = MessageLogger(self.factory.publisher)
-        self.logger.log(msg="[%s connected at %s]" % (self.nickname, 
+        self.logger.log(msg="[%s connected at %s]" % (self.factory.nickname, 
                         time.asctime(datetime.utcnow().timetuple())))
 
     def connectionLost(self, reason):
         irc.IRCClient.connectionLost(self, reason)
-        self.logger.log(msg="[%s disconnected at %s]" % (self.nickname, 
+        self.logger.log(msg="[%s disconnected at %s]" % (self.factory.nickname, 
                         time.asctime(datetime.utcnow().timetuple())))
 
     # callbacks for events
@@ -45,14 +43,14 @@ class LogBot(irc.IRCClient):
 
     def joined(self, channel):
         """This will get called when the bot joins the channel."""
-        self.logger.log(msg="[%s has joined %s]" % (self.nickname, channel))
+        self.logger.log(msg="[%s has joined %s]" % (self.factory.nickname, channel))
 
     def privmsg(self, user, channel, msg):
         """This will get called when the bot receives a message."""
         user = user.split('!', 1)[0]
         
         # Check to see if they're sending me a private message
-        if channel == self.nickname:
+        if channel == self.factory.nickname:
             msg = "It isn't nice to whisper!  Play nice with the group."
             self.msg(user, msg)
             return
@@ -83,7 +81,7 @@ class LogBot(irc.IRCClient):
         return nickname + '^'
 
 
-class LogBotFactory(protocol.ClientFactory):
+class LogBotFactory(protocol.ReconnectingClientFactory):
     """A factory for LogBots.
 
     A new protocol instance will be created each time we connect to the server.
@@ -92,17 +90,16 @@ class LogBotFactory(protocol.ClientFactory):
     # the class of the protocol to build when new connection is made
     protocol = LogBot
 
-    def __init__(self, channels, publisher):
+    def __init__(self, nickname, channels, publisher):
+        self.nickname = nickname
         self.channels = channels
         self.publisher = publisher
-
-    def clientConnectionLost(self, connector, reason):
-        """If we get disconnected, reconnect to server."""
-        connector.connect()
-
-    def clientConnectionFailed(self, connector, reason):
-        log.err("connection failed:", reason)
-        log.err()
+        
+    def buildProtocol(self, addr):
+        self.resetDelay()
+        p = self.protocol()
+        p.factory = self
+        return p
 
 class IrcTransport(Worker):
     
@@ -110,6 +107,7 @@ class IrcTransport(Worker):
     def startWorker(self):
         network = self.config.get('network', 'irc.freenode.net')
         channels = self.config.get('channels', [])
+        nickname = self.config.get('nickname', 'vumibot')
         port = self.config.get('port', 6667)
         self.publisher = yield self.publish_to('irc.inbound.%s.%s' % (
             network, ''.join(channels)))
@@ -117,7 +115,7 @@ class IrcTransport(Worker):
             network, ''.join(channels)), self.consume_message)
         
         # create factory protocol and application
-        f = LogBotFactory(channels, self.publisher)
+        f = LogBotFactory(nickname, channels, self.publisher)
         
         # connect factory to this host and port
         reactor.connectTCP(network, port, f)
