@@ -22,16 +22,18 @@ class MessageLogger:
 
 class LogBot(irc.IRCClient):
     """A logging IRC bot."""
+    nickname = 'twistedbot'
     
     def connectionMade(self):
+        self.nickname = self.factory.nickname
         irc.IRCClient.connectionMade(self)
         self.logger = MessageLogger(self.factory.publisher)
-        self.logger.log(msg="[%s connected at %s]" % (self.factory.nickname, 
+        self.logger.log(msg="[%s connected at %s]" % (self.nickname, 
                         time.asctime(datetime.utcnow().timetuple())))
 
     def connectionLost(self, reason):
         irc.IRCClient.connectionLost(self, reason)
-        self.logger.log(msg="[%s disconnected at %s]" % (self.factory.nickname, 
+        self.logger.log(msg="[%s disconnected at %s]" % (self.nickname, 
                         time.asctime(datetime.utcnow().timetuple())))
 
     # callbacks for events
@@ -43,14 +45,14 @@ class LogBot(irc.IRCClient):
 
     def joined(self, channel):
         """This will get called when the bot joins the channel."""
-        self.logger.log(msg="[%s has joined %s]" % (self.factory.nickname, channel))
+        self.logger.log(msg="[%s has joined %s]" % (self.nickname, channel))
 
     def privmsg(self, user, channel, msg):
         """This will get called when the bot receives a message."""
         user = user.split('!', 1)[0]
         
         # Check to see if they're sending me a private message
-        if channel == self.factory.nickname:
+        if channel == self.nickname:
             msg = "It isn't nice to whisper!  Play nice with the group."
             self.msg(user, msg)
             return
