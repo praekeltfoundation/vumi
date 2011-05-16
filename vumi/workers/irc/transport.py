@@ -31,8 +31,6 @@ class MessageLogger:
         
         self.publisher.publish_message(Message(
             recipient='ircarchive@appspot.com', message=json.dumps(payload)))
-        self.publisher.publish_message(Message(
-            recipient='simon@praekeltfoundation.org', message=json.dumps(payload)))
 
 class LogBot(irc.IRCClient):
     """A logging IRC bot."""
