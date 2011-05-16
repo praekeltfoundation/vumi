@@ -105,7 +105,8 @@ class LogBotFactory(protocol.ReconnectingClientFactory):
     # the class of the protocol to build when new connection is made
     protocol = LogBot
 
-    def __init__(self, nickname, channels, publisher):
+    def __init__(self, network, nickname, channels, publisher):
+        self.network = network
         self.nickname = nickname
         self.channels = channels
         self.publisher = publisher
@@ -127,7 +128,7 @@ class IrcTransport(Worker):
         self.publisher = yield self.publish_to('xmpp.outbound.gtalk.%s' % self.config.get('gtalk'))
         
         # create factory protocol and application
-        f = LogBotFactory(nickname, channels, self.publisher)
+        f = LogBotFactory(network, nickname, channels, self.publisher)
         
         # connect factory to this host and port
         reactor.connectTCP(network, port, f)
