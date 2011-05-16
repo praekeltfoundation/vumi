@@ -9,8 +9,6 @@ from vumi.webapp.api.models import SentSMS, SentSMSBatch
 
 class TopicSmppWorker(Worker):
     
-    POST_TO_URL = 'http://localhost/sms/receiver'
-    
     @inlineCallbacks
     def startWorker(self):
         # create the publisher
@@ -41,7 +39,7 @@ class TopicSmppWorker(Worker):
                 ("from_msisdn", str(from_msisdn)),
                 ("message", str(message))
             ]
-            url, resp = utils.callback(self.POST_TO_URL, params)
+            url, resp = utils.callback(self.config.get('POST_TO_URL'), params)
             log.msg('RESP: %s' % repr(resp))
             
             # create a new message to be sent out, it needs to be linked
@@ -52,7 +50,7 @@ class TopicSmppWorker(Worker):
                 to_msisdn=from_msisdn, 
                 from_msisdn=to_msisdn,
                 transport_name=self.config.get('TRANSPORT_NAME'),
-                message="hello world from %s to %s!" % (to_msisdn, from_msisdn)
+                message=resp
             )
             
             self.publisher.publish_message(
