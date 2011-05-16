@@ -26,7 +26,7 @@ class MessageLogger:
             "channel": kwargs.get('channel', 'unknown'),
             "message_type": kwargs.get('message_type', 'message'),
             "message_content": kwargs.get('msg', ''),
-            "timestamp": str(timestamp)
+            "timestamp": timestamp.isoformat()
         }
         
         self.publisher.publish_message(Message(
