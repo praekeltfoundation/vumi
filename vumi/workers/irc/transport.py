@@ -5,6 +5,7 @@ from twisted.python import log
 from vumi.service import Worker
 from vumi.message import Message
 from datetime import datetime
+from vumi.webapp.api import utils
 import time, json
 
 class MessageLogger:
@@ -29,8 +30,10 @@ class MessageLogger:
             "timestamp": timestamp.isoformat()
         }
         
-        self.publisher.publish_message(Message(
-            recipient='ircarchive@appspot.com', message=json.dumps(payload)))
+        # self.publisher.publish_message(Message(
+        #     recipient='ircarchive@appspot.com', message=json.dumps(payload)))
+        utils.post_data_to_url('http://ircarchive.appspot.com/', 
+                                json.dumps(payload), 'application/json')
 
 class LogBot(irc.IRCClient):
     """A logging IRC bot."""
