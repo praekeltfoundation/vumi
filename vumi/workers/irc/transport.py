@@ -5,20 +5,32 @@ from twisted.python import log
 from vumi.service import Worker
 from vumi.message import Message
 from datetime import datetime
-import time
+import time, json
+
 class MessageLogger:
     """
     An independent logger class (because separation of application
     and protocol logic is a good thing).
     """
-    def __init__(self, publisher):
+    def __init__(self, server, publisher):
+        self.server = server
         self.publisher = publisher
 
     def log(self, **kwargs):
         """Write a message to the file."""
         timestamp = datetime.utcnow()
-        log.msg('%s %s' % (timestamp, kwargs))
-        # self.publisher.publish_message(Message(time=timestamp, **kwargs))
+        
+        payload = {
+            "nickname": kwargs.get('nickname', 'system'),
+            "server": self.server,
+            "channel": kwargs.get('channel', 'unknown'),
+            "message_type": kwargs.get('message_type', 'message'),
+            "message_content": kwags.get('msg', ''),
+            "timestamp": str(timestamp)
+        }
+        
+        self.publisher.publish_message(Message(
+            recipient='ircarchive@appspot.com', message=json.dumps(payload)))
 
 class LogBot(irc.IRCClient):
     """A logging IRC bot."""
@@ -27,13 +39,13 @@ class LogBot(irc.IRCClient):
     def connectionMade(self):
         self.nickname = self.factory.nickname
         irc.IRCClient.connectionMade(self)
-        self.logger = MessageLogger(self.factory.publisher)
-        self.logger.log(msg="[%s connected at %s]" % (self.nickname, 
+        self.logger = MessageLogger(self.factory.network, self.factory.publisher)
+        self.logger.log(message_type='system', msg="[%s connected at %s]" % (self.nickname, 
                         time.asctime(datetime.utcnow().timetuple())))
 
     def connectionLost(self, reason):
         irc.IRCClient.connectionLost(self, reason)
-        self.logger.log(msg="[%s disconnected at %s]" % (self.nickname, 
+        self.logger.log(message_type='system', msg="[%s disconnected at %s]" % (self.nickname, 
                         time.asctime(datetime.utcnow().timetuple())))
 
     # callbacks for events
@@ -45,7 +57,7 @@ class LogBot(irc.IRCClient):
 
     def joined(self, channel):
         """This will get called when the bot joins the channel."""
-        self.logger.log(msg="[%s has joined %s]" % (self.nickname, channel))
+        self.logger.log(message_type='system', msg="[%s has joined %s]" % (self.nickname, channel))
 
     def privmsg(self, user, channel, msg):
         """This will get called when the bot receives a message."""
@@ -62,7 +74,7 @@ class LogBot(irc.IRCClient):
     def action(self, user, channel, msg):
         """This will get called when the bot sees someone do an action."""
         user = user.split('!', 1)[0]
-        self.logger.log(channel=channel, msg="* %s %s" % (user, msg))
+        self.logger.log(message_type='action', channel=channel, msg="* %s %s" % (user, msg))
 
     # irc callbacks
 
@@ -70,7 +82,7 @@ class LogBot(irc.IRCClient):
         """Called when an IRC user changes their nickname."""
         old_nick = prefix.split('!')[0]
         new_nick = params[0]
-        self.logger.log(msg="%s is now known as %s" % (old_nick, new_nick))
+        self.logger.log(message_type='system', msg="%s is now known as %s" % (old_nick, new_nick))
 
 
     # For fun, override the method that determines how a nickname is changed on
@@ -111,10 +123,7 @@ class IrcTransport(Worker):
         channels = self.config.get('channels', [])
         nickname = self.config.get('nickname', 'vumibot')
         port = self.config.get('port', 6667)
-        self.publisher = yield self.publish_to('irc.inbound.%s.%s' % (
-            network, ''.join(channels)))
-        self.consumer = yield self.consume('irc.outbound.%s.%s' % (
-            network, ''.join(channels)), self.consume_message)
+        self.publisher = yield self.publish_to('xmpp.outbound.gtalk.%s' % self.config.get('gtalk'))
         
         # create factory protocol and application
         f = LogBotFactory(nickname, channels, self.publisher)
