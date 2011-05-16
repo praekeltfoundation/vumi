@@ -53,7 +53,7 @@ class XMPPTransportProtocol(MessageProtocol):
         message['type'] = 'chat'
         message.addUniqueId()
         message.addElement((None,'body'), content=content)
-        log.msg('sending message "%s" to "%s"' % (content, jid.userhost()))
+        log.msg('sending message "%s" to "%s"' % (content, jid))
         self.xmlstream.send(message)
 
     def onMessage(self, message):
