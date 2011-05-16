@@ -45,7 +45,8 @@ class LogBot(irc.IRCClient):
 
     def connectionLost(self, reason):
         irc.IRCClient.connectionLost(self, reason)
-        self.logger.log(message_type='system', msg="[%s disconnected at %s]" % (self.nickname, 
+        if hasattr(self, 'logger'):
+            self.logger.log(message_type='system', msg="[%s disconnected at %s]" % (self.nickname, 
                         time.asctime(datetime.utcnow().timetuple())))
 
     # callbacks for events
