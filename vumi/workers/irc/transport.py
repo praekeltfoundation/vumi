@@ -25,7 +25,7 @@ class MessageLogger:
             "server": self.server,
             "channel": kwargs.get('channel', 'unknown'),
             "message_type": kwargs.get('message_type', 'message'),
-            "message_content": kwags.get('msg', ''),
+            "message_content": kwargs.get('msg', ''),
             "timestamp": str(timestamp)
         }
         
