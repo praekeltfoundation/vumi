@@ -30,7 +30,13 @@ class XMPPtoCellulantUSSDWorker(Worker):
                 MSISDN,
                 MESSAGE,
                 OPERATION)
-        self.publisher.publish_message(Message(message=message))
+        _message = Message(message=message)
+        try:
+            self.publisher.publish_message(_message)
+        except:
+            pass
+        return _message
+
 
     def stopWorker(self):
         log.msg("Stopping the XMPPtoCellulantUSSDWorker")
@@ -50,16 +56,22 @@ class CellulantUSSDtoXMPPWorker(Worker):
 
     def consume_message(self, message):
         mess = re.search(
-                  '(?P<SESSIONID>^[^|]*)'
-                +'|(?P<NETWORKID>[^|]*)'
-                +'|(?P<MSISDN>[^|]*)'
-                +'|(?P<MESSAGE>[^|]*)'
-                +'|(?P<OPERATION>[^|]*$)',
-                message.payload['short_message'])
-        self.publisher.publish_message(Message(
-            recipient=mess.groupdict()['MSISDN'],
-            message=mess.groupdict()['MESSAGE']))
+                  '^(?P<SESSIONID>[^|]*)'
+                +'\|(?P<NETWORKID>[^|]*)'
+                +'\|(?P<MSISDN>[^|]*)'
+                +'\|(?P<MESSAGE>[^|]*)'
+                +'\|(?P<OPERATION>[^|]*)$',
+                message.payload['message'])
+        _message = Message(recipient=mess.groupdict()['MSISDN'],
+                            message=mess.groupdict()['MESSAGE'])
+        try:
+            self.publisher.publish_message(_message)
+        except:
+            pass
+        return _message
+
 
     def stopWorker(self):
         log.msg("Stopping the CellulantUSSDtoXMPPWorker")
+
 
