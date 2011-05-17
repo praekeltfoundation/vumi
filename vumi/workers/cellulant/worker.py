@@ -19,8 +19,8 @@ class XMPPtoCellulantUSSDWorker(Worker):
                         self.consume_message)
 
     def consume_message(self, message):
-        SESSIONID = 'sessionID'
-        NETWORKID = 'networkID'
+        SESSIONID = '1A3E55B'
+        NETWORKID = '3'
         MSISDN = message.payload['sender']
         MESSAGE = message.payload['message']
         OPERATION = 'INVA'

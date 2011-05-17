@@ -23,16 +23,16 @@ class CellulantTestCase(TestCase):
         x_to_u = _XMPPtoCellulantUSSDWorker()
         u_to_x = _CellulantUSSDtoXMPPWorker()
 
-        kwargs = {"message":"hello", "recipient":"*123#", "sender":"12345"}
+        kwargs = {"message":"hello", "recipient":"*360#", "sender":"254788111110"}
         m1 = Message(**kwargs)
         m2 = x_to_u.consume_message(m1)
         m3 = u_to_x.consume_message(m2)
 
         self.assertEquals(m1.payload,
-            {'message': 'hello', 'recipient': '*123#', 'sender': '12345'})
+            {'message': 'hello', 'recipient': '*360#', 'sender': '254788111110'})
         self.assertEquals(m2.payload,
-            {'message': 'sessionID|networkID|12345|hello|INVA'})
+            {'message': '1A3E55B|3|254788111110|hello|INVA'})
         self.assertEquals(m3.payload,
-            {'message': 'hello', 'recipient': '12345'})
+            {'message': 'hello', 'recipient': '254788111110'})
 
 
