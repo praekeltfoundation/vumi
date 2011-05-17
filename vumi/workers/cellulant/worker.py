@@ -8,7 +8,7 @@ from vumi.message import Message
 class XMPPtoCellulantUSSDWorker(Worker):
     @inlineCallbacks
     def startWorker(self):
-        log.msg("Starting the XMPPWorker config: %s" % self.config)
+        log.msg("Starting the XMPPtoCellulantUSSDWorker config: %s" % self.config)
         # create the publisher
         self.publisher = yield self.publish_to('xmpp.inbound.cellulant.%s' %
                                                 self.config['username'])
@@ -17,12 +17,21 @@ class XMPPtoCellulantUSSDWorker(Worker):
                         self.consume_message)
 
     def consume_message(self, message):
-        recipient = message.payload['sender']
-        message = "You said: %s " % message.payload['message']
-        self.publisher.publish_message(Message(recipient=recipient, message=message))
+        SESSIONID = 'sessionID'
+        NETWORKID = 'networkID'
+        MSISDN = message.payload['sender']
+        MESSAGE = message.payload['message']
+        OPERATION = 'INVA'
+        message = "%s|%s|%s|%s|%s" % (
+                SESSIONID,
+                NETWORKID,
+                MSISDN,
+                MESSAGE,
+                OPERATION)
+        self.publisher.publish_message(Message(message=message))
 
     def stopWorker(self):
-        log.msg("Stopping the XMPPWorker")
+        log.msg("Stopping the XMPPtoCellulantUSSDWorker")
 
 
 
@@ -38,7 +47,7 @@ class CellulantUSSDtoXMPPWorker(Worker):
                         self.consume_message)
 
     def consume_message(self, message):
-        recipient = message.payload['sender']
+        recipient = message.payload['recipient']
         message = "You said: %s " % message.payload['message']
         self.publisher.publish_message(Message(recipient=recipient, message=message))
 
