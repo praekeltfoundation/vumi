@@ -1,3 +1,5 @@
+import re
+
 from twisted.python import log
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet import reactor
@@ -38,7 +40,7 @@ class XMPPtoCellulantUSSDWorker(Worker):
 class CellulantUSSDtoXMPPWorker(Worker):
     @inlineCallbacks
     def startWorker(self):
-        log.msg("Starting the XMPPWorker config: %s" % self.config)
+        log.msg("Starting the CellulantUSSDtoXMPPWorker config: %s" % self.config)
         # create the publisher
         self.publisher = yield self.publish_to('xmpp.outbound.gtalk.%s' %
                                                 self.config['username'])
@@ -47,10 +49,17 @@ class CellulantUSSDtoXMPPWorker(Worker):
                         self.consume_message)
 
     def consume_message(self, message):
-        recipient = message.payload['recipient']
-        message = "You said: %s " % message.payload['message']
-        self.publisher.publish_message(Message(recipient=recipient, message=message))
+        mess = re.search(
+                  '(?P<SESSIONID>^[^|]*)'
+                +'|(?P<NETWORKID>[^|]*)'
+                +'|(?P<MSISDN>[^|]*)'
+                +'|(?P<MESSAGE>[^|]*)'
+                +'|(?P<OPERATION>[^|]*$)',
+                message.payload['short_message'])
+        self.publisher.publish_message(Message(
+            recipient=mess.groupdict()['MSISDN'],
+            message=mess.groupdict()['MESSAGE']))
 
     def stopWorker(self):
-        log.msg("Stopping the XMPPWorker")
+        log.msg("Stopping the CellulantUSSDtoXMPPWorker")
 
