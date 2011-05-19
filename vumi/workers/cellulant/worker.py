@@ -7,6 +7,34 @@ from twisted.internet import reactor
 from vumi.service import Worker
 from vumi.message import Message
 
+
+def packCellulantUSSDMessage(message):
+    SESSIONID = '1A3E55B'
+    NETWORKID = '3'
+    MSISDN = message.payload['sender']
+    MESSAGE = message.payload['message']
+    OPERATION = 'INVA'
+    mess = "%s|%s|%s|%s|%s" % (
+            SESSIONID,
+            NETWORKID,
+            MSISDN,
+            MESSAGE,
+            OPERATION)
+    return Message(message=mess)
+
+
+def unpackCellulantUSSDMessage(message):
+    mess = re.search(
+              '^(?P<SESSIONID>[^|]*)'
+            +'\|(?P<NETWORKID>[^|]*)'
+            +'\|(?P<MSISDN>[^|]*)'
+            +'\|(?P<MESSAGE>[^|]*)'
+            +'\|(?P<OPERATION>[^|]*)$',
+            message.payload['message'])
+    return Message(recipient=mess.groupdict()['MSISDN'],
+                    message=mess.groupdict()['MESSAGE'])
+
+
 class XMPPtoCellulantUSSDWorker(Worker):
     @inlineCallbacks
     def startWorker(self):
@@ -19,18 +47,7 @@ class XMPPtoCellulantUSSDWorker(Worker):
                         self.consume_message)
 
     def consume_message(self, message):
-        SESSIONID = '1A3E55B'
-        NETWORKID = '3'
-        MSISDN = message.payload['sender']
-        MESSAGE = message.payload['message']
-        OPERATION = 'INVA'
-        message = "%s|%s|%s|%s|%s" % (
-                SESSIONID,
-                NETWORKID,
-                MSISDN,
-                MESSAGE,
-                OPERATION)
-        _message = Message(message=message)
+        _message = packCellulantUSSDMessage(message)
         try:
             self.publisher.publish_message(_message)
         except:
@@ -55,15 +72,7 @@ class CellulantUSSDtoXMPPWorker(Worker):
                         self.consume_message)
 
     def consume_message(self, message):
-        mess = re.search(
-                  '^(?P<SESSIONID>[^|]*)'
-                +'\|(?P<NETWORKID>[^|]*)'
-                +'\|(?P<MSISDN>[^|]*)'
-                +'\|(?P<MESSAGE>[^|]*)'
-                +'\|(?P<OPERATION>[^|]*)$',
-                message.payload['message'])
-        _message = Message(recipient=mess.groupdict()['MSISDN'],
-                            message=mess.groupdict()['MESSAGE'])
+        _message = unpackCellulantUSSDMessage(message)
         try:
             self.publisher.publish_message(_message)
         except:

@@ -1,7 +1,7 @@
 import time
 import yaml
 from twisted.trial.unittest import TestCase
-from vumi.workers.cellulant.worker import XMPPtoCellulantUSSDWorker, CellulantUSSDtoXMPPWorker
+from vumi.workers.cellulant.worker import XMPPtoCellulantUSSDWorker, CellulantUSSDtoXMPPWorker, unpackCellulantUSSDMessage, packCellulantUSSDMessage
 from vumi.message import Message
 
 class _XMPPtoCellulantUSSDWorker(XMPPtoCellulantUSSDWorker):
@@ -22,6 +22,7 @@ class CellulantTestCase(TestCase):
 
         x_to_u = _XMPPtoCellulantUSSDWorker()
         u_to_x = _CellulantUSSDtoXMPPWorker()
+        print _XMPPtoCellulantUSSDWorker.__dict__
 
         kwargs = {"message":"hello", "recipient":"*360#", "sender":"254788111110"}
         m1 = Message(**kwargs)
@@ -36,3 +37,13 @@ class CellulantTestCase(TestCase):
             {'message': 'hello', 'recipient': '254788111110'})
 
 
+        M1 = Message(**kwargs)
+        M2 = packCellulantUSSDMessage(M1)
+        M3 = unpackCellulantUSSDMessage(M2)
+
+        self.assertEquals(M1.payload,
+            {'message': 'hello', 'recipient': '*360#', 'sender': '254788111110'})
+        self.assertEquals(M2.payload,
+            {'message': '1A3E55B|3|254788111110|hello|INVA'})
+        self.assertEquals(M3.payload,
+            {'message': 'hello', 'recipient': '254788111110'})
