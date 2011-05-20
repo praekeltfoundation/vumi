@@ -22,19 +22,24 @@ class Menu(object):
         self.finished = True
         return s
     
+    def log(self, msg):
+        if hasattr(self, 'session_id'):
+            log.msg("[%s] %s" % (self.session_id, msg))
+        else:
+            log.msg(msg)
+    
     def run(self):
         from vumi.campaigns import txtalert_mocking
         from twisted.python import log
         # we're expecting the client to initiate
-        print 'yielding for announce'
-        announce = yield
-        print 'announce', announce
+        self.session_id = yield
+        self.log('Starting new session for %s' % self.session_id)
         patient_id = yield self.ask('Welcome to txtAlert. ' \
                                 'Please respond with your patient id.')
         # patient = Patient.objects.get(te_id=patient_id)
-        print 'patient_id', patient_id
+        self.log('patient_id: %s' % patient_id)
         patient = txtalert_mocking.Patient()
-        print 'patient ->', patient
+        self.log('patient: %s' % patient)
         visit = patient.next_visit()
         answer = yield self.choice( \
             'Welcome to txtAlert. ' \
@@ -44,7 +49,7 @@ class Menu(object):
                 ('2', 'See attendance barometer'),
                 ('3', 'Request call from clinic')
             ))
-        print 'first choice: ', answer
+        self.log('first choice: %s' % answer)
         if answer == '1':
             answer = yield self.choice( \
                 'Welcome to txtAlert. ' \
@@ -81,7 +86,7 @@ class Menu(object):
                         "You have requested a call from the clinic. " \
                         "You will be called as soon as possible.")
         else:
-            log.msg('DEAD END!')
+            self.log('DEAD END!')
         
 
 class BookingTool(Worker):
@@ -97,11 +102,25 @@ class BookingTool(Worker):
     def session_exists(self, uuid):
         return uuid in self.sessions
         
+    def serialize(self, obj):
+        # return picklegenerators.dumps(obj)
+        return obj
+    
+    def deserialize(self, obj):
+        # menu, gen = picklegenerators.loads(obj)
+        # gen.next()
+        # return (menu, gen)
+        return obj
+    
+    def end_session(self, uuid):
+        log.msg('Ending session %s' % uuid)
+        return self.sessions.pop(uuid, None)
+    
     def save_session(self, uuid, menu, coroutine):
-        self.sessions[uuid] = picklegenerators.dumps((menu, coroutine))
+        self.sessions[uuid] = self.serialize((menu, coroutine))
     
     def get_session(self, uuid):
-        return picklegenerators.loads(self.sessions[uuid])
+        return self.deserialize(self.sessions[uuid])
     
     def start_new_session(self, uuid, message):
         # assume the first message is the announcement
@@ -115,31 +134,23 @@ class BookingTool(Worker):
     def resume_existing_session(self, uuid, message):
         # grab from memory
         menu, coroutine = self.get_session(uuid)
-        print 'menu finished?', menu.finished
+        response = coroutine.send(message)
         if menu.finished:
-            return self.start_new_session(uuid, message)
+            menu, coroutine = self.end_session(uuid)
         else:
-            print 'answer:', message
-            try:
-                print 'continuing'
-                response = coroutine.send(message)
-                self.save_session(uuid, menu, coroutine)
-            except TypeError, e:
-                print 'restarting'
-                self.save_session(uuid, menu, coroutine)
-                restart = coroutine.next()
-                response = coroutine.send(message)
-            print 'response:', response
-            return response
+            self.save_session(uuid, menu, coroutine)
+        return response
         
     def consume_message(self, message):
+        log.msg('Active sessions:', self.sessions.keys())
         sender = message.payload['sender']
         message = message.payload['message']
         # it's a new session
-        if not self.session_exists(sender):
-            response = self.start_new_session(sender, message)
-        else:
+        if self.session_exists(sender):
             response = self.resume_existing_session(sender, message)
+        else:
+            response = self.start_new_session(sender, message)
+        log.msg('sending response: %s' % response)
         self.publisher.publish_message(Message(recipient=sender, message=response))
     
     @inlineCallbacks
