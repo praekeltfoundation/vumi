@@ -1,11 +1,11 @@
 from twisted.internet.defer import inlineCallbacks, Deferred
 from generator_tools import picklegenerators
-from twisted.internet import stdio
+from twisted.internet import task
 from twisted.python import log
 from twisted.protocols import basic
 from vumi.service import Worker
 from vumi.message import Message
-from datetime import datetime
+from datetime import datetime, timedelta
 
 class Menu(object):
     def __init__(self):
@@ -23,10 +23,7 @@ class Menu(object):
         return s
     
     def log(self, msg):
-        if hasattr(self, 'session_id'):
-            log.msg("[%s] %s" % (self.session_id, msg))
-        else:
-            log.msg(msg)
+        log.msg("[%s] %s" % (getattr(self, 'session_id', 'unknown'), msg))
     
     def run(self):
         from vumi.campaigns import txtalert_mocking
@@ -91,6 +88,8 @@ class Menu(object):
 
 class BookingTool(Worker):
     
+    TIMEOUT_PERIOD = timedelta(minutes=1)
+    
     @inlineCallbacks
     def startWorker(self):
         self.publisher = yield self.publish_to('xmpp.outbound.gtalk.%s' 
@@ -99,12 +98,20 @@ class BookingTool(Worker):
                         self.consume_message)
         self.sessions = {}
         
+        self.gc = task.LoopingCall(self.garbage_collect)
+        self.gc.start(1)
+        
+    def garbage_collect(self):
+        for uuid, (timestamp, coroutine) in self.sessions.items():
+            if timestamp < datetime.utcnow() - self.TIMEOUT_PERIOD:
+                self.end_session(uuid)
+    
     def session_exists(self, uuid):
         return uuid in self.sessions
         
     def serialize(self, obj):
         # return picklegenerators.dumps(obj)
-        return obj
+        return (datetime.utcnow(), obj)
     
     def deserialize(self, obj):
         # menu, gen = picklegenerators.loads(obj)
@@ -120,7 +127,8 @@ class BookingTool(Worker):
         self.sessions[uuid] = self.serialize((menu, coroutine))
     
     def get_session(self, uuid):
-        return self.deserialize(self.sessions[uuid])
+        dt, session = self.deserialize(self.sessions[uuid])
+        return session
     
     def start_new_session(self, uuid, message):
         # assume the first message is the announcement
