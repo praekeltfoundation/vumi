@@ -322,13 +322,6 @@ class SessionTestCase(TestCase):
         '''
 
         r_server = redis.Redis("localhost")
-        print "DDDDDDDDDDDDDDDDDDDDD"
-        print r_server.get("FFFFFFF")
-        print getVumiSession(r_server, "d")
-        print r_server.exists("d")
-        print delVumiSession(r_server, "d")
-        print delVumiSession(r_server, "d")
-        print "DDDDDDDDDDDDDDDDDDDDD"
         sc = SessionConsumer(None)
         sc.set_yaml_template(test_yaml)
         sc.del_session("12345")
@@ -337,7 +330,6 @@ class SessionTestCase(TestCase):
         dt4.echo_on()
         #sc.gsdt("12345").set_language("swahili")
         dt4.start()
-        sc.save("12345")
         repr(sc.gsdt("12345").question())
         sc.gsdt("12345").answer(4)
         repr(sc.gsdt("12345").question())

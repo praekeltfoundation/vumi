@@ -7,7 +7,7 @@ from twisted.python.log import logging
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.service import Worker, Consumer, Publisher
-from vumi.session import VumiSession, TraversedDecisionTree
+from vumi.session import getVumiSession, delVumiSession, TraversedDecisionTree
 from vumi.message import Message, VUMI_DATE_FORMAT
 from vumi.webapp.api import utils
 
@@ -81,11 +81,13 @@ class SessionConsumer(Consumer):
 
 
     def get_session(self, MSISDN):
-        sess = session.getVumiSession(self.r_server, MSISDN)
+        sess = getVumiSession(self.r_server, MSISDN)
         if not sess.get_decision_tree():
-            sess.set_decision_tree(setup_new_decision_tree)
-        return session
+            sess.set_decision_tree(self.setup_new_decision_tree(MSISDN))
+        return sess
 
+    def del_session(self, MSISDN):
+        return delVumiSession(self.r_server, MSISDN)
 
     def setup_new_decision_tree(self, MSISDN, **kwargs):
         decision_tree = TraversedDecisionTree()
