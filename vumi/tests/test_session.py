@@ -322,7 +322,7 @@ class SessionTestCase(TestCase):
         sc.set_yaml_template(test_yaml)
         sess4 = sc.get_session("12345")
         dt4 = sess4.get_decision_tree()
-        sc.gsdt("12345").echo_on()
+        #sc.gsdt("12345").echo_on()
         #sc.gsdt("12345").set_language("swahili")
         repr(sc.gsdt("12345").start())
         repr(sc.gsdt("12345").question())

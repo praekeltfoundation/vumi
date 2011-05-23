@@ -86,6 +86,11 @@ class SessionConsumer(Consumer):
         return session
 
 
+    def set_session(self, MSISDN, sess):
+        self.sessions[MSISDN] = sess
+        return sess
+
+
     def gsdt(self, MSISDN): # shorthand for get_session_decision_tree
         return self.get_session(MSISDN).get_decision_tree()
 
