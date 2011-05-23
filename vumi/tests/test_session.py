@@ -322,7 +322,7 @@ class SessionTestCase(TestCase):
         sc.set_yaml_template(test_yaml)
         sess4 = sc.get_session("12345")
         dt4 = sess4.get_decision_tree()
-        #sc.gsdt("12345").echo_on()
+        sc.gsdt("12345").echo_on()
         #sc.gsdt("12345").set_language("swahili")
         repr(sc.gsdt("12345").start())
         repr(sc.gsdt("12345").question())
@@ -330,8 +330,8 @@ class SessionTestCase(TestCase):
         repr(sc.gsdt("12345").question())
         sc.gsdt("12345").answer(1)
         # serialize & reload from string
-        stash = dt4.serialize_to_json()
-        dt4.deserialize_from_json(stash)
+        stash = yaml.dump(sc.get_session("12345"))
+        sc.set_session("12345", yaml.load(stash))
         repr(sc.gsdt("12345").question())
         sc.gsdt("12345").answer(0)
         repr(sc.gsdt("12345").question())
@@ -341,7 +341,7 @@ class SessionTestCase(TestCase):
         repr(sc.gsdt("12345").question())
         sc.gsdt("12345").answer(42)
         # reload from earlier string
-        dt4.deserialize_from_json(stash)
+        sc.set_session("12345", yaml.load(stash))
         repr(sc.gsdt("12345").question())
         sc.gsdt("12345").answer(0)
         repr(sc.gsdt("12345").question())
@@ -365,17 +365,11 @@ class SessionTestCase(TestCase):
         #print repr(dt4.get_data_source())
         #print sess4.get_decision_tree().dump_json_data()
 
-        #print ""
-        #print sess4.__dict__
-        #print repr(dt4)
-        #print ""
-        #print dt4.serialize_to_json()
-        #print ""
-        for k in dt4.__dict__.keys():
-            print k
 
-
-
+        #sess_d = yaml.dump(sc.get_session("12345"))
+        #sess_l = yaml.load(sess_d)
+        #self.assertEquals(sess_d, yaml.dump(sess_l))
+        #print sess_d
 
 
 
