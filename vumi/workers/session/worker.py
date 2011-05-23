@@ -7,7 +7,7 @@ from twisted.python.log import logging
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.service import Worker, Consumer, Publisher
-from vumi.session import getVumiSession, delVumiSession, TraversedDecisionTree
+from vumi.session import getVumiSession, delVumiSession, VumiSession, TraversedDecisionTree
 from vumi.message import Message, VUMI_DATE_FORMAT
 from vumi.webapp.api import utils
 
@@ -63,7 +63,9 @@ class SessionConsumer(Consumer):
 
 
     def post_back_json(self, MSISDN):
-        session = self.getVumiSession(self.r_server, MSISDN)
+        session = getVumiSession(self.r_server, MSISDN)
+        print session
+        print session.get_decision_tree()
         if session and session.get_decision_tree():
             json_string = json.dumps(session.get_decision_tree().get_data())
             if self.post_url['url']:
