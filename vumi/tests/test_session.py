@@ -1,9 +1,12 @@
 import time
 import json
 import yaml
+import redis
+
 from twisted.trial.unittest import TestCase
 from vumi.session import VumiSession, TemplatedDecisionTree, PopulatedDecisionTree, TraversedDecisionTree
 from vumi.workers.session.worker import SessionConsumer, SessionPublisher, SessionWorker
+from vumi.session import *
 
 class SessionTestCase(TestCase):
 
@@ -318,30 +321,41 @@ class SessionTestCase(TestCase):
                 swahili: "Asante na kwaheri."
         '''
 
+        r_server = redis.Redis("localhost")
+        print "DDDDDDDDDDDDDDDDDDDDD"
+        print r_server.get("FFFFFFF")
+        print getVumiSession(r_server, "d")
+        print r_server.exists("d")
+        print delVumiSession(r_server, "d")
+        print delVumiSession(r_server, "d")
+        print "DDDDDDDDDDDDDDDDDDDDD"
         sc = SessionConsumer(None)
         sc.set_yaml_template(test_yaml)
+        sc.del_session("12345")
         sess4 = sc.get_session("12345")
         dt4 = sess4.get_decision_tree()
-        #sc.gsdt("12345").echo_on()
+        dt4.echo_on()
         #sc.gsdt("12345").set_language("swahili")
-        repr(sc.gsdt("12345").start())
+        dt4.start()
+        sc.save("12345")
         repr(sc.gsdt("12345").question())
         sc.gsdt("12345").answer(4)
         repr(sc.gsdt("12345").question())
         sc.gsdt("12345").answer(1)
         # serialize & reload from string
-        stash = yaml.dump(sc.get_session("12345"))
-        sc.set_session("12345", yaml.load(stash))
-        repr(sc.gsdt("12345").question())
-        sc.gsdt("12345").answer(0)
-        repr(sc.gsdt("12345").question())
-        sc.gsdt("12345").answer(0)
-        repr(sc.gsdt("12345").question())
-        sc.gsdt("12345").answer(1)
-        repr(sc.gsdt("12345").question())
-        sc.gsdt("12345").answer(42)
+        #r_server.set("12345", yaml.dump(sc.get_session("12345")))
+        #r_server.set("12345", "fff")
+        #sc.set_session("12345", yaml.load(r_server.get("12345")))
+        #repr(sc.gsdt("12345").question())
+        #sc.gsdt("12345").answer(0)
+        #repr(sc.gsdt("12345").question())
+        #sc.gsdt("12345").answer(0)
+        #repr(sc.gsdt("12345").question())
+        #sc.gsdt("12345").answer(1)
+        #repr(sc.gsdt("12345").question())
+        #sc.gsdt("12345").answer(42)
         # reload from earlier string
-        sc.set_session("12345", yaml.load(stash))
+        #sc.set_session("12345", yaml.load(r_server.get("12345")))
         repr(sc.gsdt("12345").question())
         sc.gsdt("12345").answer(0)
         repr(sc.gsdt("12345").question())

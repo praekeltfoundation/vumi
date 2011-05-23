@@ -1,14 +1,30 @@
 import yaml
 import json
+import redis
 import time
 import datetime
 
 from vumi.errors import VumiError
 
 
+def getVumiSession(r_server, key):
+    sess = r_server.get(key)
+    if sess:
+        return yaml.load(sess)
+    else:
+        session = VumiSession()
+        session.r_server = r_server
+        session.key = key
+        session.save()
+        return session
+
+def delVumiSession(r_server, key):
+    return r_server.delete(key)
+
 class VumiSession():
     key = None
     decision_tree = None
+    r_server = None
 
     def __init__(self, **kwargs):
         pass
@@ -19,6 +35,20 @@ class VumiSession():
     def get_decision_tree(self):
         return self.decision_tree
 
+    def set_key(self, key):
+        self.key = key
+
+    def get_key(self):
+        return self.key
+
+    def set_r_server(self, r_server):
+        self.r_server = r_server
+
+    def save(self):
+        self.r_server.set(self.get_key(), self)
+
+    def delete(self):
+        self.r_server.delete(self.get_key())
 
 
 class DecisionTree():

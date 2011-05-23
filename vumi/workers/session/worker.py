@@ -1,4 +1,6 @@
 import json
+import redis
+import yaml
 
 from twisted.python import log
 from twisted.python.log import logging
@@ -20,7 +22,6 @@ class SessionConsumer(Consumer):
     delivery_mode = 2
     queue_name = "vumi.inbound.session.default" #TODO revise name
     routing_key = "vumi.inbound.session.default" #TODO revise name
-    sessions = {}
     yaml_template = None
     data_url = {"username":None, "password":None, "url":None, "params":[]}
     post_url = {"username":None, "password":None, "url":None, "params":[]}
@@ -28,6 +29,7 @@ class SessionConsumer(Consumer):
 
     def __init__(self, publisher):
         self.publisher = publisher
+        self.r_server = redis.Redis("localhost")
 
     def set_yaml_template(self, yaml_template):
         self.yaml_template = yaml_template
@@ -61,8 +63,8 @@ class SessionConsumer(Consumer):
 
 
     def post_back_json(self, MSISDN):
-        session = self.sessions.get(MSISDN)
-        if session:
+        session = self.getVumiSession(self.r_server, MSISDN)
+        if session and session.get_decision_tree():
             json_string = json.dumps(session.get_decision_tree().get_data())
             if self.post_url['url']:
                 params = [(self.post_url['params'][0], json_string)]
@@ -79,26 +81,14 @@ class SessionConsumer(Consumer):
 
 
     def get_session(self, MSISDN):
-        session = self.sessions.get(MSISDN)
-        if not session:
-            self.sessions[MSISDN] = self.create_new_session(MSISDN)
-            session = self.sessions.get(MSISDN)
+        sess = session.getVumiSession(self.r_server, MSISDN)
+        if not sess.get_decision_tree():
+            sess.set_decision_tree(setup_new_decision_tree)
         return session
 
 
-    def set_session(self, MSISDN, sess):
-        self.sessions[MSISDN] = sess
-        return sess
-
-
-    def gsdt(self, MSISDN): # shorthand for get_session_decision_tree
-        return self.get_session(MSISDN).get_decision_tree()
-
-
-    def create_new_session(self, MSISDN, **kwargs):
-        session = VumiSession()
+    def setup_new_decision_tree(self, MSISDN, **kwargs):
         decision_tree = TraversedDecisionTree()
-        session.set_decision_tree(decision_tree)
         yaml_template = self.yaml_template
         decision_tree.load_yaml_template(yaml_template)
         self.set_data_url(decision_tree.get_data_source())
@@ -108,7 +98,7 @@ class SessionConsumer(Consumer):
             decision_tree.load_json_data(json_data)
         else:
             decision_tree.load_dummy_data()
-        return session
+        return decision_tree
 
 
 
