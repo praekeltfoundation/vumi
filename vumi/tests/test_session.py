@@ -326,73 +326,86 @@ class SessionTestCase(TestCase):
         sc.del_session("12345")
         sess4 = sc.get_session("12345")
         dt4 = sess4.get_decision_tree()
-        dt4.echo_on()
+        #dt4.echo_on()
         #sc.gsdt("12345").set_language("swahili")
-        dt4.start()
-        dt4.question()
+        self.assertEquals(dt4.start(),
+                "Hello.")
+        self.assertEquals(dt4.question(),
+                "Who are you?\n1. Simon\n2. David")
         sess4.save()
         sess4 = None
         # after persisting to redis, retrieve afresh
         sess4 = sc.get_session("12345")
         dt4 = sess4.get_decision_tree()
         dt4.answer(4)
-        dt4.question()
+        self.assertEquals(dt4.question(),
+                "Who are you?\n1. Simon\n2. David")
         sess4.save()
         sess4 = None
         # after persisting to redis, retrieve afresh
         sess4 = sc.get_session("12345")
         dt4 = sess4.get_decision_tree()
         dt4.answer(1)
-        dt4.question()
+        self.assertEquals(dt4.question(),
+                "Which item?\n1. one\n2. two\n3. three\n4. four\n5. five\n6. six\n7. seven\n8. eight\n9. nine\n0. more items ...")
         sess4.save()
         sess4 = None
         # after persisting to redis, retrieve afresh
         sess4 = sc.get_session("12345")
         dt4 = sess4.get_decision_tree()
         dt4.answer(0)
-        dt4.question()
+        self.assertEquals(dt4.question(),
+                "Which item?\n1. ten\n2. eleven\n3. twelve\n4. something that uses up lots of characters\n5. and use up more characters\n0. more items ...")
         sess4.save()
         sess4 = None
         # after persisting to redis, retrieve afresh
         sess4 = sc.get_session("12345")
         dt4 = sess4.get_decision_tree()
         dt4.answer(0)
-        dt4.question()
+        self.assertEquals(dt4.question(),
+                "Which item?\n1. alpha\n2. beta")
         sess4.save()
         sess4 = None
         # after persisting to redis, retrieve afresh
         sess4 = sc.get_session("12345")
         dt4 = sess4.get_decision_tree()
         dt4.answer(1)
-        dt4.question()
+        self.assertEquals(dt4.question(),
+                "How much stuff?")
         sess4.save()
         sess4 = None
         # after persisting to redis, retrieve afresh
         sess4 = sc.get_session("12345")
         dt4 = sess4.get_decision_tree()
         dt4.answer(42)
-        dt4.question()
+        self.assertEquals(dt4.question(),
+                "How many things?")
         sess4.save()
         sess4 = None
         # after persisting to redis, retrieve afresh
         sess4 = sc.get_session("12345")
         dt4 = sess4.get_decision_tree()
         dt4.answer(23)
-        dt4.question()
+
+
+        self.assertEquals(dt4.question(),
+                "Which day was it?\n1. Today\n2. Yesterday\n3. An earlier day")
         sess4.save()
         sess4 = None
         # after persisting to redis, retrieve afresh
         sess4 = sc.get_session("12345")
         dt4 = sess4.get_decision_tree()
         dt4.answer('earlier')
-        dt4.question()
+        self.assertEquals(dt4.question(),
+                "Which day was it?\n1. Today\n2. Yesterday\n3. An earlier day")
         sess4.save()
         sess4 = None
         # after persisting to redis, retrieve afresh
         sess4 = sc.get_session("12345")
         dt4 = sess4.get_decision_tree()
         dt4.answer(3)
-        dt4.question()
+        self.assertEquals(dt4.question(),
+                "Which day was it [dd/mm/yyyy]?")
         sess4.save()
         sess4 = None
         # after persisting to redis, retrieve afresh
@@ -400,11 +413,9 @@ class SessionTestCase(TestCase):
         dt4 = sess4.get_decision_tree()
         dt4.answer("03/03/2011")
         sess4.save()
-        print repr(sc.post_back_json("12345") or '')
-        dt4.finish()
-
-        print ''
-
+        #print repr(sc.post_back_json("12345") or '')
+        self.assertEquals(dt4.finish(),
+                "Thank you and goodbye.")
 
 
 
