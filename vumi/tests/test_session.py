@@ -321,7 +321,6 @@ class SessionTestCase(TestCase):
                 swahili: "Asante na kwaheri."
         '''
 
-        r_server = redis.Redis("localhost")
         sc = SessionConsumer(None)
         sc.set_yaml_template(test_yaml)
         sc.del_session("12345")
@@ -331,38 +330,81 @@ class SessionTestCase(TestCase):
         #sc.gsdt("12345").set_language("swahili")
         dt4.start()
         dt4.question()
+        sess4.save()
+        sess4 = None
+        # after persisting to redis, retrieve afresh
+        sess4 = sc.get_session("12345")
+        dt4 = sess4.get_decision_tree()
         dt4.answer(4)
         dt4.question()
+        sess4.save()
+        sess4 = None
+        # after persisting to redis, retrieve afresh
+        sess4 = sc.get_session("12345")
+        dt4 = sess4.get_decision_tree()
         dt4.answer(1)
         dt4.question()
+        sess4.save()
+        sess4 = None
+        # after persisting to redis, retrieve afresh
+        sess4 = sc.get_session("12345")
+        dt4 = sess4.get_decision_tree()
         dt4.answer(0)
         dt4.question()
+        sess4.save()
+        sess4 = None
+        # after persisting to redis, retrieve afresh
+        sess4 = sc.get_session("12345")
+        dt4 = sess4.get_decision_tree()
         dt4.answer(0)
         dt4.question()
+        sess4.save()
+        sess4 = None
+        # after persisting to redis, retrieve afresh
+        sess4 = sc.get_session("12345")
+        dt4 = sess4.get_decision_tree()
         dt4.answer(1)
         dt4.question()
+        sess4.save()
+        sess4 = None
+        # after persisting to redis, retrieve afresh
+        sess4 = sc.get_session("12345")
+        dt4 = sess4.get_decision_tree()
         dt4.answer(42)
         dt4.question()
+        sess4.save()
+        sess4 = None
+        # after persisting to redis, retrieve afresh
+        sess4 = sc.get_session("12345")
+        dt4 = sess4.get_decision_tree()
         dt4.answer(23)
         dt4.question()
+        sess4.save()
+        sess4 = None
+        # after persisting to redis, retrieve afresh
+        sess4 = sc.get_session("12345")
+        dt4 = sess4.get_decision_tree()
         dt4.answer('earlier')
         dt4.question()
+        sess4.save()
+        sess4 = None
+        # after persisting to redis, retrieve afresh
+        sess4 = sc.get_session("12345")
+        dt4 = sess4.get_decision_tree()
         dt4.answer(3)
         dt4.question()
+        sess4.save()
+        sess4 = None
+        # after persisting to redis, retrieve afresh
+        sess4 = sc.get_session("12345")
+        dt4 = sess4.get_decision_tree()
         dt4.answer("03/03/2011")
         sess4.save()
         print repr(sc.post_back_json("12345") or '')
         dt4.finish()
 
         print ''
-        #print repr(dt4.get_data_source())
-        #print sess4.get_decision_tree().dump_json_data()
 
-
-        #sess_d = yaml.dump(sc.get_session("12345"))
-        #sess_l = yaml.load(sess_d)
-        #self.assertEquals(sess_d, yaml.dump(sess_l))
-        #print sess_d
 
 
 
