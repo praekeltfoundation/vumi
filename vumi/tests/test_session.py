@@ -351,7 +351,6 @@ class SessionTestCase(TestCase):
         dt4.question()
         dt4.answer("03/03/2011")
         sess4.save()
-        print r_server.get("12345")
         print repr(sc.post_back_json("12345") or '')
         dt4.finish()
 

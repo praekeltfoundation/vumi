@@ -12,6 +12,7 @@ def getVumiSession(r_server, key):
     if sess:
         session = yaml.load(sess)
         session.set_r_server(r_server)
+        return session
     else:
         session = VumiSession()
         session.set_r_server(r_server)
