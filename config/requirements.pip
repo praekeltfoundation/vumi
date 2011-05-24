@@ -23,6 +23,7 @@ pyOpenSSL==0.11
 python-ssmi
 python-foneworx
 wokkel
+redis
 -e git+git://github.com/dmaclay/python-smpp.git#egg=python-smpp
 -e git+git://github.com/smn/python-foneworx.git#egg=python-foneworx
 -e git+git://github.com/dustin/twitty-twister#egg=twitty-twister
