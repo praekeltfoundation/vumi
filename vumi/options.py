@@ -28,6 +28,8 @@ def get_deploy_int(deployment):
     lookup = {
         "develop": 7,
         "/develop": 7,
+        "development": 7,
+        "/development": 7,
         "production": 8,
         "/production": 8,
         "staging": 9,
