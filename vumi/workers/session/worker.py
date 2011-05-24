@@ -64,8 +64,6 @@ class SessionConsumer(Consumer):
 
     def post_back_json(self, MSISDN):
         session = getVumiSession(self.r_server, MSISDN)
-        print session
-        print session.get_decision_tree()
         if session and session.get_decision_tree():
             json_string = json.dumps(session.get_decision_tree().get_data())
             if self.post_url['url']:
