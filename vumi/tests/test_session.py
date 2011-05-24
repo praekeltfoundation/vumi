@@ -321,11 +321,11 @@ class SessionTestCase(TestCase):
                 swahili: "Asante na kwaheri."
         '''
 
+        sc = SessionConsumer(None)
 
-        r_server = redis.Redis("localhost")
+        r_server = sc.r_server
         r_server.flushall()
 
-        sc = SessionConsumer(None)
         sc.set_yaml_template(test_yaml)
         sc.del_session("12345")
         sess4 = sc.get_session("12345")
@@ -424,6 +424,24 @@ class SessionTestCase(TestCase):
         #print r_server.info()
         #print r_server.keys()
 
+        #r0 = redis.Redis("localhost", db=0)
+        #r7 = redis.Redis("localhost", db=7)
+        #r9 = redis.Redis("localhost", db=9)
+        #r0.flushall()
+        #r7.flushall()
+        #r9.flushall()
+        #r0.set('a','a')
+        #r7.set('a','a')
+        #r9.set('c','c')
+        #print r0.info()
+        #print r0.keys()
+        #print r7.info()
+        #print r7.keys()
+        #print r9.info()
+        #print r9.keys()
+        #r0.flushall()
+        #r7.flushall()
+        #r9.flushall()
 
         #print "\n\n"
         #time.sleep(2)

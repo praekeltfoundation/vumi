@@ -10,12 +10,15 @@ from vumi.service import Worker, Consumer, Publisher
 from vumi.session import getVumiSession, delVumiSession, VumiSession, TraversedDecisionTree
 from vumi.message import Message, VUMI_DATE_FORMAT
 from vumi.webapp.api import utils
+import vumi.options
 
 from twisted.python import log
 from twisted.python.log import logging
 from twisted.internet.defer import inlineCallbacks, returnValue
 
+
 class SessionConsumer(Consumer):
+    vhost = "/develop"
     exchange_name = "vumi"
     exchange_type = "direct"
     durable = True
@@ -29,7 +32,8 @@ class SessionConsumer(Consumer):
 
     def __init__(self, publisher):
         self.publisher = publisher
-        self.r_server = redis.Redis("localhost")
+        self.vhost = vumi.options.get().get('vhost', self.vhost)
+        self.r_server = redis.Redis("localhost", db=vumi.options.get_deploy_int(self.vhost))
 
     def set_yaml_template(self, yaml_template):
         self.yaml_template = yaml_template
