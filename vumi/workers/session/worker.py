@@ -63,7 +63,7 @@ class SessionConsumer(Consumer):
 
 
     def post_back_json(self, MSISDN):
-        session = getVumiSession(self.r_server, MSISDN)
+        session = getVumiSession(self.r_server, self.routing_key+'.'+MSISDN)
         if session and session.get_decision_tree():
             json_string = json.dumps(session.get_decision_tree().get_data())
             if self.post_url['url']:
@@ -81,7 +81,7 @@ class SessionConsumer(Consumer):
 
 
     def get_session(self, MSISDN):
-        sess = getVumiSession(self.r_server, MSISDN)
+        sess = getVumiSession(self.r_server, self.routing_key+'.'+MSISDN)
         if not sess.get_decision_tree():
             sess.set_decision_tree(self.setup_new_decision_tree(MSISDN))
         return sess

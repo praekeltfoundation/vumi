@@ -321,6 +321,10 @@ class SessionTestCase(TestCase):
                 swahili: "Asante na kwaheri."
         '''
 
+
+        r_server = redis.Redis("localhost")
+        r_server.flushall()
+
         sc = SessionConsumer(None)
         sc.set_yaml_template(test_yaml)
         sc.del_session("12345")
@@ -417,6 +421,8 @@ class SessionTestCase(TestCase):
         self.assertEquals(dt4.finish(),
                 "Thank you and goodbye.")
 
+        #print r_server.info()
+        #print r_server.keys()
 
 
         #print "\n\n"
