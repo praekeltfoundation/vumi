@@ -420,6 +420,7 @@ class SessionTestCase(TestCase):
         #print repr(sc.post_back_json("12345") or '')
         self.assertEquals(dt4.finish(),
                 "Thank you and goodbye.")
+        sess4.delete()
 
         #print r_server.info()
         #print r_server.keys()
