@@ -101,7 +101,11 @@ class SessionConsumer(Consumer):
         self.set_post_url(decision_tree.get_post_source())
         if self.data_url.get('url'):
             json_data = self.call_for_json(MSISDN)
-            decision_tree.load_json_data(json_data)
+            try:
+                decision_tree.load_json_data(json_data)
+            except Exception, e:
+                log.msg(e)
+                log.err(e)
         else:
             decision_tree.load_dummy_data()
         return decision_tree
