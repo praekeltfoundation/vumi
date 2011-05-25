@@ -421,6 +421,7 @@ class SessionTestCase(TestCase):
         self.assertEquals(dt4.finish(),
                 "Thank you and goodbye.")
         sess4.delete()
+        sess4.save()
 
         #print r_server.info()
         #print r_server.keys()

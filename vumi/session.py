@@ -47,13 +47,15 @@ class VumiSession():
         self.r_server = r_server
 
     def save(self):
-        r_server = self.r_server
-        self.r_server = None
-        r_server.set(self.get_key(), yaml.dump(self))
-        self.r_server = r_server
+        if self.r_server:
+            r_server = self.r_server
+            self.r_server = None
+            r_server.set(self.get_key(), yaml.dump(self))
+            self.r_server = r_server
 
     def delete(self):
         self.r_server.delete(self.get_key())
+        self.r_server = None
 
 
 class DecisionTree():
