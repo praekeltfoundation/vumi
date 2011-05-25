@@ -5,7 +5,26 @@ from twisted.python import log
 from twisted.protocols import basic
 from vumi.service import Worker
 from vumi.message import Message
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
+from urllib import urlopen, urlencode
+import json
+
+PATIENT_API_URL = 'http://qa.txtalert.praekeltfoundation.org/api/v1/patient.json'
+
+def get_patient(msisdn, patient_id):
+    """get the patient info from txtalert & parse the JSON response"""
+    url = '%s?%s' % (
+        PATIENT_API_URL,
+        urlencode({'msisdn': msisdn, 'patient_id': patient_id})
+    )
+    return json.loads(urlopen(url).read())
+
+def reschedule_earlier_date(*args, **kwargs):
+    log.msg("Rescheduling earlier date", args, kwargs)
+
+def reschedule_later_date(*args, **kwargs):
+    log.msg("Rescheduling later date", args, kwargs)
+
 
 class Menu(object):
     def __init__(self):
@@ -29,61 +48,74 @@ class Menu(object):
         from vumi.campaigns import txtalert_mocking
         from twisted.python import log
         # we're expecting the client to initiate
-        self.session_id = yield
-        self.log('Starting new session for %s' % self.session_id)
+        msisdn = yield
+        self.log('Starting new session for %s' % msisdn)
         patient_id = yield self.ask('Welcome to txtAlert. ' \
-                                'Please respond with your patient id.')
-        # patient = Patient.objects.get(te_id=patient_id)
+                                    'Please respond with your patient id.')
         self.log('patient_id: %s' % patient_id)
-        patient = txtalert_mocking.Patient()
+        patient = get_patient(msisdn, patient_id)
         self.log('patient: %s' % patient)
-        visit = patient.next_visit()
+        
+        # check for a known patient
+        if not patient:
+            yield self.close('Sorry, cannot find your records. ' \
+                                'Please contact your clinic.')
+        
+        # check for an appointment
+        next_appointment_triplet = patient.get('next_appointment')
+        if next_appointment_triplet == []:
+            yield self.close('Sorry, there are no appointment scheduled. ' \
+                                'Contact your clinic if you believe this ' \
+                                'to be wrong')
+        
+        # construct the date from the JSON triplet
+        next_date = date(*next_appointment_triplet)
+        clinic = patient.get('clinic')
+        
+        # pop the questions
         answer = yield self.choice( \
             'Welcome to txtAlert. ' \
-            'Your next visit is on %s at %s' % (visit.date, visit.clinic),
+            'Your next visit is on %s at %s' % (next_date, clinic),
             choices = (
                 ('1', 'Change next appointment'),
                 ('2', 'See attendance barometer'),
                 ('3', 'Request call from clinic')
             ))
         self.log('first choice: %s' % answer)
+        
         if answer == '1':
             answer = yield self.choice( \
                 'Welcome to txtAlert. ' \
-                'Appointment %s at %s' % (visit.date, visit.clinic),
+                'Appointment %s at %s' % (next_date, clinic),
                 choices = (
                     ('1', 'Request earlier date'),
-                    ('2', 'Request earlier time on %s' % visit.date),
-                    ('3', 'Request later time on %s' % visit.date),
-                    ('4', 'Request later date'),
+                    ('2', 'Request later date'),
                 )
             )
             if answer == '1':
-                visit.reschedule_earlier_date()
+                reschedule_earlier_date()
+                yield self.close("Thanks! Your change request has been registered. " \
+                            "You'll receive an SMS with your appointment information")
             elif answer == '2':
-                visit.reschedule_earlier_time()
-            elif answer == '3':
-                visit.reschedule_later_time()
-            elif answer == '4':
-                visit.reschedule_later_date()
-            yield self.close("Thanks! Your change request has been registered. " \
-                        "You'll receive an SMS with your appointment information")
+                reschedule_later_date()
+                yield self.close("Thanks! Your change request has been registered. " \
+                            "You'll receive an SMS with your appointment information")
         elif answer == '2':
             yield self.close("Welcome to txtAlert.\n" \
-                        "You have attended %s of your appointments, "\
-                        "%s out of %s.\n" \
+                        "You have attended %s%% of your appointments. \n"\
                         "%s appointments have been rescheduled.\n" \
-                        "%s appointments missed.\n" % (patient.attendance, 
-                            patient.attended,
-                            patient.total,
-                            patient.rescheduled,
-                            patient.missed))
+                        "%s appointments missed.\n" % (patient.get('attendance',0), 
+                            patient.get('rescheduled',0),
+                            patient.get('missed',0)))
         elif answer == '3':
             yield self.close("Welcome to txtAlert. " \
                         "You have requested a call from the clinic. " \
                         "You will be called as soon as possible.")
-        else:
-            self.log('DEAD END!')
+        
+        # always close with this when this is reached, under normal conditions
+        # it should never get here.
+        yield self.close('Sorry, that wasn\'t what I expected. ' \
+                            'Please reconnect and try again')
         
 
 class BookingTool(Worker):
