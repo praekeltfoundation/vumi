@@ -45,7 +45,6 @@ class Menu(object):
         log.msg("[%s] %s" % (getattr(self, 'session_id', 'unknown'), msg))
     
     def run(self):
-        from vumi.campaigns import txtalert_mocking
         from twisted.python import log
         # we're expecting the client to initiate
         msisdn = yield
