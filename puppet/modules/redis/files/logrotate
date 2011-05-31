@@ -1,0 +1,10 @@
+# Managed by puppet
+
+/var/log/redis/*.log {
+        daily
+        dateext
+        missingok
+        rotate 5
+        compress
+        copytruncate
+}
