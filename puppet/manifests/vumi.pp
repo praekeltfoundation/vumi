@@ -1,3 +1,5 @@
+include vumi
+
 # defaults for Exec
 Exec {
     path => ["/bin", "/usr/bin", "/usr/local/bin"],
@@ -35,7 +37,13 @@ class vumi::packages {
     apt::package { "git-core": ensure => "1:1.7.0.4-1ubuntu0.2" }
     apt::package { "openjdk-6-jre-headless": ensure => "6b20-1.9.7-0ubuntu1~10.04.1" }
     apt::package { "libcurl4-openssl-dev": ensure => "7.19.7-1ubuntu1" }
+    redis::server { redis: version => "2.2.8" }
 }
+
+# # Download make & install Redis
+# class vumi::redis {
+    # redis::version { "redis": ensure => "2.2.8" }
+# }
 
 
 # Download & install plugins for RabbitMQ & possibly others
@@ -166,6 +174,7 @@ class vumi {
     include apt::update,
                 vumi::accounts,
                 vumi::packages, 
+                # vumi::redis,
                 # vumi::plugins, 
                 vumi::database
 }
@@ -173,6 +182,7 @@ class vumi {
 Exec["Resynchronize apt package index"] 
     -> File["/var/praekelt"] 
     -> Class["vumi::packages"] 
+    # -> Class["vumi::redis"]
     # -> Class["vumi::plugins"]
     -> Class["vumi::accounts"]
     -> Class["vumi::database"]
@@ -189,4 +199,3 @@ Exec["Resynchronize apt package index"]
     -> Exec["Restart Vumi"]
     -> Exec["Start Vumi"]
 
-include vumi
