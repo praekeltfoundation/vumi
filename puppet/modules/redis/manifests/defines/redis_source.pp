@@ -31,7 +31,8 @@ define redis_source(
     $path = '/usr/local/src',
     $bin = '/usr/local/bin',
     $owner = 'redis',
-    $group = 'redis'
+    $group = 'redis',
+    $user = 'root'
 ) {
     case $version {
         default: {
@@ -46,7 +47,8 @@ define redis_source(
                   cwd => "${path}/redis_${version}",
                   creates => "${path}/redis_${version}/redis.c",
                   require => File["redis_folder"],
-                  before => Exec["make ${version}"]
+                  before => Exec["make ${version}"],
+                  user => "${user}"
              }
              file { "${path}/redis_${version}/redis_${version}.tar.gz":
                   ensure => absent,
@@ -63,9 +65,10 @@ define redis_source(
         }
     }
     exec { "make ${version}":
-         command => "make && mv redis-server ${bin}/ && mv redis-cli ${bin}/ && mv redis-benchmark ${bin}/ && mv redis-check-dump ${bin}/",
+         command => "make && mv src/redis-server ${bin}/ && mv src/redis-cli ${bin}/ && mv src/redis-benchmark ${bin}/ && mv src/redis-check-dump ${bin}/",
          cwd => "${path}/redis_${version}",
          creates => "${bin}/redis-server",
+         user => "${user}"
     }
     file { db_folder:
         path => "/var/lib/redis",
