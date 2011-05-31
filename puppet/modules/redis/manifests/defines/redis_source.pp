@@ -42,7 +42,7 @@ define redis_source(
                  group => root
              }
              exec { redis_code: 
-                  command =>"wget --no-check-certificate http://github.com/antirez/redis/tarball/${version} -O redis_${version}.tar.gz && tar --strip-components 1 -xzvf redis_${version}.tar.gz",
+                  command =>"curl -C - -k http://github.com/antirez/redis/tarball/${version} -o redis_${version}.tar.gz && tar --strip-components 1 -xzvf redis_${version}.tar.gz",
                   cwd => "${path}/redis_${version}",
                   creates => "${path}/redis_${version}/redis.c",
                   require => File["redis_folder"],
