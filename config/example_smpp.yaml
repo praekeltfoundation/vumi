@@ -1,6 +1,7 @@
 # The unique name of this transport
 TRANSPORT_NAME: smpp_transport_1
 USER_ACCOUNT: smpp_transport1_user
+POST_TO_URL: http://localhost/sms/receiver
 
 system_id: smppclient1  # username
 password: password      # password

@@ -114,8 +114,8 @@ class XMPPTransport(Worker):
         text = dictionary.get('message','')
         
         if not self.xmpp_protocol.xmlstream:
-            log.msg("Outbound undeliverable, XMPP not initialized yet.")
-            raise Exception, 'Undeliverable, xmpp not ready. Sticking back on the queue.'
+            log.err("Outbound undeliverable, XMPP not initialized yet.")
+            return False
         else:
             self.xmpp_protocol.reply(jid, text)
     
