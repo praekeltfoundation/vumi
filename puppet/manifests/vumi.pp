@@ -40,11 +40,6 @@ class vumi::packages {
     redis::server { redis: version => "2.2.8" }
 }
 
-# # Download make & install Redis
-# class vumi::redis {
-    # redis::version { "redis": ensure => "2.2.8" }
-# }
-
 
 # Download & install plugins for RabbitMQ & possibly others
 # class vumi::plugins {
@@ -170,11 +165,16 @@ exec { "Start Vumi":
     unless => "ps -p `cat tmp/pids/supervisord.pid`"
 }
 
+exec { "Start Redis":
+    command => "redis-server",
+    cwd => "/var/praekelt/vumi",
+    user => "root"
+}
+
 class vumi {
     include apt::update,
                 vumi::accounts,
                 vumi::packages, 
-                # vumi::redis,
                 # vumi::plugins, 
                 vumi::database
 }
@@ -182,7 +182,6 @@ class vumi {
 Exec["Resynchronize apt package index"] 
     -> File["/var/praekelt"] 
     -> Class["vumi::packages"] 
-    # -> Class["vumi::redis"]
     # -> Class["vumi::plugins"]
     -> Class["vumi::accounts"]
     -> Class["vumi::database"]
@@ -192,6 +191,7 @@ Exec["Resynchronize apt package index"]
     -> Exec["Create virtualenv"] 
     -> Exec["Install Selenium SMPPSim"]
     -> Exec["Install requirements"] 
+    # -> EXec["Start Redis"]
     -> Exec["Copy template.py to develop.py"]
     -> Exec['Syncdb']
     -> Exec['Migrate']
