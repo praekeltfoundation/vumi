@@ -22,7 +22,6 @@ class CellulantTestCase(TestCase):
 
         x_to_u = _XMPPtoCellulantUSSDWorker()
         u_to_x = _CellulantUSSDtoXMPPWorker()
-        print _XMPPtoCellulantUSSDWorker.__dict__
 
         kwargs = {"message":"hello", "recipient":"*360#", "sender":"254788111110"}
         m1 = Message(**kwargs)
