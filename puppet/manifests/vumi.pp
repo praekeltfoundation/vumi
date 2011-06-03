@@ -1,3 +1,5 @@
+include vumi
+
 # defaults for Exec
 Exec {
     path => ["/bin", "/usr/bin", "/usr/local/bin"],
@@ -35,6 +37,7 @@ class vumi::packages {
     apt::package { "git-core": ensure => "1:1.7.0.4-1ubuntu0.2" }
     apt::package { "openjdk-6-jre-headless": ensure => "6b20-1.9.7-0ubuntu1~10.04.1" }
     apt::package { "libcurl4-openssl-dev": ensure => "7.19.7-1ubuntu1" }
+    redis::server { redis: version => "2.2.8" }
 }
 
 
@@ -162,6 +165,12 @@ exec { "Start Vumi":
     unless => "ps -p `cat tmp/pids/supervisord.pid`"
 }
 
+exec { "Start Redis":
+    command => "redis-server",
+    cwd => "/var/praekelt/vumi",
+    user => "root"
+}
+
 class vumi {
     include apt::update,
                 vumi::accounts,
@@ -182,6 +191,7 @@ Exec["Resynchronize apt package index"]
     -> Exec["Create virtualenv"] 
     -> Exec["Install Selenium SMPPSim"]
     -> Exec["Install requirements"] 
+    # -> EXec["Start Redis"]
     -> Exec["Copy template.py to develop.py"]
     -> Exec['Syncdb']
     -> Exec['Migrate']
@@ -189,4 +199,3 @@ Exec["Resynchronize apt package index"]
     -> Exec["Restart Vumi"]
     -> Exec["Start Vumi"]
 
-include vumi

@@ -1,8 +1,12 @@
 import time
+import json
 import yaml
+import redis
+
 from twisted.trial.unittest import TestCase
 from vumi.session import VumiSession, TemplatedDecisionTree, PopulatedDecisionTree, TraversedDecisionTree
 from vumi.workers.session.worker import SessionConsumer, SessionPublisher, SessionWorker
+from vumi.session import *
 
 class SessionTestCase(TestCase):
 
@@ -318,42 +322,128 @@ class SessionTestCase(TestCase):
         '''
 
         sc = SessionConsumer(None)
+
+        r_server = sc.r_server
+        r_server.flushall()
+
         sc.set_yaml_template(test_yaml)
+        sc.del_session("12345")
         sess4 = sc.get_session("12345")
         dt4 = sess4.get_decision_tree()
-        sc.gsdt("12345").echo_on()
+        #dt4.echo_on()
         #sc.gsdt("12345").set_language("swahili")
-        repr(sc.gsdt("12345").start())
-        repr(sc.gsdt("12345").question())
-        sc.gsdt("12345").answer(4)
-        repr(sc.gsdt("12345").question())
-        sc.gsdt("12345").answer(1)
-        repr(sc.gsdt("12345").question())
-        sc.gsdt("12345").answer(0)
-        repr(sc.gsdt("12345").question())
-        sc.gsdt("12345").answer(0)
-        repr(sc.gsdt("12345").question())
-        sc.gsdt("12345").answer(1)
-        repr(sc.gsdt("12345").question())
-        sc.gsdt("12345").answer(42)
-        repr(sc.gsdt("12345").question())
-        sc.gsdt("12345").answer(23)
-        repr(sc.gsdt("12345").question())
-        sc.gsdt("12345").answer('earlier')
-        repr(sc.gsdt("12345").question())
-        sc.gsdt("12345").answer(3)
-        repr(sc.gsdt("12345").question())
-        sc.gsdt("12345").answer("03/03/2011")
-        print repr(sc.post_back_json("12345") or '')
-        repr(sc.gsdt("12345").finish())
+        self.assertEquals(dt4.start(),
+                "Hello.")
+        self.assertEquals(dt4.question(),
+                "Who are you?\n1. Simon\n2. David")
+        sess4.save()
+        sess4 = None
+        # after persisting to redis, retrieve afresh
+        sess4 = sc.get_session("12345")
+        dt4 = sess4.get_decision_tree()
+        dt4.answer(4)
+        self.assertEquals(dt4.question(),
+                "Who are you?\n1. Simon\n2. David")
+        sess4.save()
+        sess4 = None
+        # after persisting to redis, retrieve afresh
+        sess4 = sc.get_session("12345")
+        dt4 = sess4.get_decision_tree()
+        dt4.answer(1)
+        self.assertEquals(dt4.question(),
+                "Which item?\n1. one\n2. two\n3. three\n4. four\n5. five\n6. six\n7. seven\n8. eight\n9. nine\n0. more items ...")
+        sess4.save()
+        sess4 = None
+        # after persisting to redis, retrieve afresh
+        sess4 = sc.get_session("12345")
+        dt4 = sess4.get_decision_tree()
+        dt4.answer(0)
+        self.assertEquals(dt4.question(),
+                "Which item?\n1. ten\n2. eleven\n3. twelve\n4. something that uses up lots of characters\n5. and use up more characters\n0. more items ...")
+        sess4.save()
+        sess4 = None
+        # after persisting to redis, retrieve afresh
+        sess4 = sc.get_session("12345")
+        dt4 = sess4.get_decision_tree()
+        dt4.answer(0)
+        self.assertEquals(dt4.question(),
+                "Which item?\n1. alpha\n2. beta")
+        sess4.save()
+        sess4 = None
+        # after persisting to redis, retrieve afresh
+        sess4 = sc.get_session("12345")
+        dt4 = sess4.get_decision_tree()
+        dt4.answer(1)
+        self.assertEquals(dt4.question(),
+                "How much stuff?")
+        sess4.save()
+        sess4 = None
+        # after persisting to redis, retrieve afresh
+        sess4 = sc.get_session("12345")
+        dt4 = sess4.get_decision_tree()
+        dt4.answer(42)
+        self.assertEquals(dt4.question(),
+                "How many things?")
+        sess4.save()
+        sess4 = None
+        # after persisting to redis, retrieve afresh
+        sess4 = sc.get_session("12345")
+        dt4 = sess4.get_decision_tree()
+        dt4.answer(23)
 
-        print ''
-        print repr(dt4.get_data_source())
-        print sess4.get_decision_tree().dump_json_data()
 
+        self.assertEquals(dt4.question(),
+                "Which day was it?\n1. Today\n2. Yesterday\n3. An earlier day")
+        sess4.save()
+        sess4 = None
+        # after persisting to redis, retrieve afresh
+        sess4 = sc.get_session("12345")
+        dt4 = sess4.get_decision_tree()
+        dt4.answer('earlier')
+        self.assertEquals(dt4.question(),
+                "Which day was it?\n1. Today\n2. Yesterday\n3. An earlier day")
+        sess4.save()
+        sess4 = None
+        # after persisting to redis, retrieve afresh
+        sess4 = sc.get_session("12345")
+        dt4 = sess4.get_decision_tree()
+        dt4.answer(3)
+        self.assertEquals(dt4.question(),
+                "Which day was it [dd/mm/yyyy]?")
+        sess4.save()
+        sess4 = None
+        # after persisting to redis, retrieve afresh
+        sess4 = sc.get_session("12345")
+        dt4 = sess4.get_decision_tree()
+        dt4.answer("03/03/2011")
+        sess4.save()
+        #print repr(sc.post_back_json("12345") or '')
+        self.assertEquals(dt4.finish(),
+                "Thank you and goodbye.")
+        sess4.delete()
+        sess4.save()
 
+        #print r_server.info()
+        #print r_server.keys()
 
-
+        #r0 = redis.Redis("localhost", db=0)
+        #r7 = redis.Redis("localhost", db=7)
+        #r9 = redis.Redis("localhost", db=9)
+        #r0.flushall()
+        #r7.flushall()
+        #r9.flushall()
+        #r0.set('a','a')
+        #r7.set('a','a')
+        #r9.set('c','c')
+        #print r0.info()
+        #print r0.keys()
+        #print r7.info()
+        #print r7.keys()
+        #print r9.info()
+        #print r9.keys()
+        #r0.flushall()
+        #r7.flushall()
+        #r9.flushall()
 
         #print "\n\n"
         #time.sleep(2)

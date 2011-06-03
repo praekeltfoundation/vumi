@@ -1,14 +1,32 @@
 import yaml
 import json
+import redis
 import time
 import datetime
 
 from vumi.errors import VumiError
 
 
+def getVumiSession(r_server, key):
+    sess = r_server.get(key)
+    if sess:
+        session = yaml.load(sess)
+        session.set_r_server(r_server)
+        return session
+    else:
+        session = VumiSession()
+        session.set_r_server(r_server)
+        session.set_key(key)
+        session.save()
+        return session
+
+def delVumiSession(r_server, key):
+    return r_server.delete(key)
+
 class VumiSession():
     key = None
     decision_tree = None
+    r_server = None
 
     def __init__(self, **kwargs):
         pass
@@ -19,15 +37,46 @@ class VumiSession():
     def get_decision_tree(self):
         return self.decision_tree
 
+    def set_key(self, key):
+        self.key = key
+
+    def get_key(self):
+        return self.key
+
+    def set_r_server(self, r_server):
+        self.r_server = r_server
+
+    def save(self):
+        if self.r_server:
+            r_server = self.r_server
+            self.r_server = None
+            r_server.set(self.get_key(), yaml.dump(self))
+            self.r_server = r_server
+
+    def delete(self):
+        self.r_server.delete(self.get_key())
+        self.r_server = None
+
 
 class DecisionTree():
-    pass
+
+    def __init__(self):
+        pass
+
+    def serialize_to_json(self):
+        return json.dumps(self.__dict__)
+
+    def deserialize_from_json(self, string):
+        self.__dict__ = json.loads(string)
 
 
 class TemplatedDecisionTree(DecisionTree):
-    template = None
-    template_current = None
-    template_history = []
+
+    def __init__(self):
+        DecisionTree.__init__(self)
+        self.template = None
+        self.template_current = None
+        self.template_history = []
 
 
     def load_yaml_template(self, yaml_string):
@@ -67,11 +116,14 @@ class TemplatedDecisionTree(DecisionTree):
 
 
 class PopulatedDecisionTree(TemplatedDecisionTree):
-    data = None
-    # So that I can modify the original data, data_current must
-    # be stored by reference as a list/dict, index/key pair
-    data_current = ([None],0)
-    data_history = []
+
+    def __init__(self):
+        TemplatedDecisionTree.__init__(self)
+        self.data = None
+        # So that I can modify the original data, data_current must
+        # be stored by reference as a list/dict, index/key pair
+        self.data_current = ([None],0)
+        self.data_history = []
 
     def load_json_data(self, json_string):
         self.data = json.loads(json_string)
@@ -93,12 +145,15 @@ class PopulatedDecisionTree(TemplatedDecisionTree):
 
 
 class TraversedDecisionTree(PopulatedDecisionTree):
-    max_chars = 140
-    list_pos = {'offset':0, 'length':0, 'remainder':0}
-    echo = False
-    started = False
-    completed = False
-    language = "english"
+
+    def __init__(self):
+        PopulatedDecisionTree.__init__(self)
+        self.max_chars = 140
+        self.list_pos = {'offset':0, 'length':0, 'remainder':0}
+        self.echo = False
+        self.started = False
+        self.completed = False
+        self.language = "english"
 
     # The data will be a nested data-structure of a sort that can
     # be deserialized from a JSON string.
