@@ -34,7 +34,8 @@ class HttpRpcResource(Resource):
         uu = str(uuid.uuid4())
         self.transport.requests[uu] = request
         mess = Message(message=content,
-                uuid=uu)
+                uuid=uu,
+                transport_key=self.transport.consume_key)
         self.transport.publisher.publish_message(mess, routing_key=self.transport.consume_key)
         return NOT_DONE_YET
 
@@ -74,11 +75,12 @@ class HttpRpcTransport(Worker):
 
     def finishRequest(self, uuid, data):
         log.msg("finishRequest data:", repr(data))
+        #log.msg(repr(self.requests))
         request = self.requests.get(uuid)
         if request:
             request.write(str(data))
             request.finish()
-            self.requests[uuid] = None
+            del self.requests[uuid]
 
     def stopWorker(self):
         log.msg("Stopping the HttpRpcTransport")
