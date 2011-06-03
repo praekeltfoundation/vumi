@@ -31,34 +31,13 @@ class HttpRpcResource(Resource):
 
     def render_POST(self, request):
         content = request.content.read()
-        log.msg(self.transport, ">>>>", repr(content))
-        uu = uuid.uuid4()
+        uu = str(uuid.uuid4())
         self.transport.requests[uu] = request
-        mess = 
-        self.transport.publisher.publish_message(
-        d = deferLater(reactor, 2, lambda: uu)
-        d.addCallback(self.transport.finishRequest)
+        mess = Message(message=content,
+                uuid=uu)
+        self.transport.publisher.publish_message(mess, routing_key=self.transport.consume_key)
         return NOT_DONE_YET
 
-
-#class HttpRpcConsumer(Consumer):
-    #exchange_name = "vumi"
-    #exchange_type = "direct"
-    #durable = True
-    #queue_name = routing_key = "ussd.outbound.cellulant" #TODO fix in config
-
-    #def __init__(self, transport):
-        #self.transport = transport
-        #self.publisher = transport.publisher
-
-
-#class HttpRpcPublisher(Publisher):
-    #exchange_name = "vumi"
-    #exchange_type = "direct"
-    #routing_key = "ussd.inbound.cellulant.fallback" #TODO fix in config
-    #durable = True
-    #auto_delete = False
-    #delivery_mode = 2 # save to disk
 
 
 class HttpRpcTransport(Worker):
@@ -75,11 +54,6 @@ class HttpRpcTransport(Worker):
         self.publisher = yield self.publish_to(self.publish_key)
         self.consume(self.consume_key, self.consume_message)
 
-        ## create the publisher
-        #self.publisher = yield self.start_publisher(HttpRpcPublisher)
-        ## when it's done, create the consumer and pass it the transport
-        #self.consumer = yield self.start_consumer(HttpRpcConsumer, self)
-
         # start receipt web resource
         self.receipt_resource = yield self.start_web_resources(
             [
@@ -89,18 +63,20 @@ class HttpRpcTransport(Worker):
         )
 
     def consume_message(self, message):
-        pass
-        #_message = packCellulantUSSDMessage(message)
-        #try:
-            #self.publisher.publish_message(_message)
-        #except:
-            #pass
-        #return _message
+        log.msg("HttpRpcTransport consuming on %s: %s" % (
+            self.consume_key,
+            repr(message.payload)))
+        if message.payload.get('uuid') and message.payload.get('message'):
+            self.finishRequest(
+                    message.payload['uuid'],
+                    message.payload['message'])
 
-    def finishRequest(self, uuid, data='No data\n'):
+
+    def finishRequest(self, uuid, data):
+        log.msg("finishRequest data:", repr(data))
         request = self.requests.get(uuid)
         if request:
-            request.write(data)
+            request.write(str(data))
             request.finish()
             self.requests[uuid] = None
 
