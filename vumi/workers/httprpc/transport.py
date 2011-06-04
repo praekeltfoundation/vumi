@@ -2,6 +2,7 @@ import uuid
 
 from twisted.internet.defer import inlineCallbacks
 from twisted.python import log
+from twisted.web import http
 from twisted.web.resource import Resource
 from twisted.web.server import NOT_DONE_YET
 from vumi.message import Message
@@ -10,9 +11,14 @@ from vumi.service import Worker
 
 class HttpRpcHealthResource(Resource):
     isLeaf = True
+
+    def __init__(self, transport):
+        self.transport = transport
+        Resource.__init__(self)
+
     def render_GET(self, request):
         request.setResponseCode(http.OK)
-        return "OK"
+        return "pReq:%s" % len(self.transport.requests)
 
 
 class HttpRpcResource(Resource):
@@ -62,7 +68,7 @@ class HttpRpcTransport(Worker):
         self.receipt_resource = yield self.start_web_resources(
             [
                 (HttpRpcResource(self), self.config['web_path']),
-                (HttpRpcHealthResource(), 'health'),
+                (HttpRpcHealthResource(self), 'health'),
             ],
             self.config['web_port'])
 
