@@ -10,14 +10,9 @@ from vumi.service import Worker
 
 class HttpRpcHealthResource(Resource):
     isLeaf = True
-
-    def __init__(self, transport):
-        self.transport = transport
-        Resource.__init__(self)
-
     def render_GET(self, request):
         request.setResponseCode(http.OK)
-        return "pReq:%s" % len(self.transport.requests)
+        return "OK"
 
 
 class HttpRpcResource(Resource):
@@ -67,7 +62,7 @@ class HttpRpcTransport(Worker):
         self.receipt_resource = yield self.start_web_resources(
             [
                 (HttpRpcResource(self), self.config['web_path']),
-                (HttpRpcHealthResource(self), 'health'),
+                (HttpRpcHealthResource(), 'health'),
             ],
             self.config['web_port'])
 
