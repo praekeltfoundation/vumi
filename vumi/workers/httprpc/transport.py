@@ -8,6 +8,13 @@ from vumi.message import Message
 from vumi.service import Worker
 
 
+class HttpRpcHealthResource(Resource):
+    isLeaf = True
+    def render_GET(self, request):
+        request.setResponseCode(http.OK)
+        return "OK"
+
+
 class HttpRpcResource(Resource):
     isLeaf = True
 
@@ -30,7 +37,6 @@ class HttpRpcResource(Resource):
         return NOT_DONE_YET
 
 
-
 class HttpRpcTransport(Worker):
 
     @inlineCallbacks
@@ -47,7 +53,10 @@ class HttpRpcTransport(Worker):
 
         # start receipt web resource
         self.receipt_resource = yield self.start_web_resources(
-            [(HttpRpcResource(self), self.config['web_path']),],
+            [
+                (HttpRpcResource(self), self.config['web_path']),
+                (HttpRpcHealthResource(), 'health'),
+            ],
             self.config['web_port'])
 
     def consume_message(self, message):
