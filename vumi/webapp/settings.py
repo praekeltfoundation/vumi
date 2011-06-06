@@ -99,6 +99,7 @@ INSTALLED_APPS = (
     'celery',
     'south',
     'django_nose',
+    'gunicorn',
 )
 
 # link our profile to the django.contrib.auth.models.User
