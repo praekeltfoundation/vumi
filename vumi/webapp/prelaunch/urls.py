@@ -11,5 +11,6 @@ urlpatterns = patterns('',
     (r'^feature\.html$', TemplateView.as_view(template_name='feature.html')),
     (r'^open-source\.html$', TemplateView.as_view(template_name='open-source.html')),
     (r'^terms\.html$', TemplateView.as_view(template_name='terms.html')),
+    (r'^process\.html$', views.process),
     (r'^qr', TemplateView.as_view(template_name='qr/index.html')),
 )

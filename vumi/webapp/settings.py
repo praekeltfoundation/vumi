@@ -83,7 +83,7 @@ TEMPLATE_DIRS = (
     # Always use forward slashes, even on Windows.
     # Don't forget to use absolute paths, not relative paths.
     join(APP_ROOT, 'webapp', 'templates'),
-    join(APP_ROOT, 'webapp', 'prelaunch', 'templates', 'www-prelaunch'),
+    join(APP_ROOT, 'webapp', 'prelaunch', 'templates', 'm'),
 )
 
 INSTALLED_APPS = (

@@ -1,0 +1,21 @@
+.custom-page { background:#f0efea url(../pics/main-bg.jpg) 50% 0 no-repeat!important; margin:0; pading:0; }
+#logo { width: 100%; text-align: center }
+#strap-line { width: auto; text-align: center; font-size: 28px; color: #5e5b50; font-weight: bold; line-height: 28px; margin: 30px 0 20px 0 }
+#strap-line .lite { color: #9e9d98 }
+#strap-line .small { display: block; font-size: 14px; line-height: 14px; padding-top: 14px }
+#signup { width: auto; background-color: #fff; -webkit-border-radius: 5px;	-moz-border-radius: 5px; border-radius: 5px;  margin: 0 0 20px 0 }
+#signup .inner { padding: 10px }
+#signup label { padding-bottom: 5px; display: inline-block }
+#signup input.txtbox { display: block!important; padding: 0.4em 0!important; width: 100%!important; text-indent: 5px }
+#signup div.ui-btn { margin: 0.5em 0 }
+#signup span.ui-btn-inner { width: 100%; padding: 0.4em 0!important  }
+#contact { background-color: #fff; border-bottom: 1px solid #d2d1cd; padding: 15px 8px }
+#contact a { color: #f26568; text-decoration: none }
+.social { float: right; margin-left: 5px; margin-top: -1px }
+.social a img  { border: none }
+.ui-footer { border-top: 1px solid #d2d1cd; border-bottom: none; background-color: none!important }
+#developers { padding: 15px 8px;  background-color:#f0efea }
+span.smalltxt { display: block; font-size: 12px; margin-bottom: 2px; color: #a6a49b }
+h3 span.ui-btn-text { color: #f26568!important }
+h2.customh2 { font-size: 18px; text-align: center }
+h2.thanks { background-color: #fff; padding: 8px; -webkit-border-radius: 5px;	-moz-border-radius: 5px; border-radius: 5px }
