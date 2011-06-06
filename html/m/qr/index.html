@@ -1,0 +1,42 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Vumi</title>
+<link rel="shortcut icon" type="image/x-icon" href="../pics/ico/favicon.ico" />
+<link rel="icon" type="image/gif" href="../pics/ico/favicon.gif" />
+<style type="text/css">
+	body { margin: 0; padding: 0; font-size: 100%; font-family: Helvetica, Arial, sans-serif; line-height: 1; background-color:	#f2f1ec; color: #87847d }
+	#container { max-width: 480px; margin: 10px auto }
+	#logo { width: 124px; height: 63px; display: block; margin: 0 auto; background: transparent url(../pics/ui/sprite-map.png) no-repeat scroll 0 0 }
+	h1 { font-size: 1.4em; text-align: center; font-weight: normal; color: #5d5a50; margin:10px 0 }
+	#welcome { text-align: center }
+	#loading { margin: 20px auto; width: 50px }
+</style>
+</head>
+
+<body onLoad="setTimeout('delayedRedirect()', 2000)">
+<div id="container">
+	<div id="logo"><img src="../pics/logo.png"></div>
+    <h1>Welcome scan-savvy person</h1>
+    <div id="welcome">Wait just a sec while we direct you to the right spot</div>
+    <div id="loading"><img src="../pics/ui/creating.gif"></div>
+</div>
+<script type="text/javascript">
+
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-23127504-2']);
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+  
+  function delayedRedirect(){
+    window.location = "../index.html"
+	}
+</script>
+</body>
+</html>

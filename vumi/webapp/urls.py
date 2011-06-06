@@ -8,7 +8,7 @@ from vumi.webapp.api.signals import *
 
 urlpatterns = patterns('',
     # Example:
-    (r'^$', simple.redirect_to, {'url': 'http://www.praekeltfoundation.org/'}),
+    (r'^$', include('vumi.webapp.prelaunch.urls', namespace="prelaunch")),
     (r'^api/v1/', include('vumi.webapp.api.urls', namespace="api")),
     (r'^health', include('vumi.webapp.health.urls', namespace="health")),
     # Uncomment the admin/doc line below and add 'django.contrib.admindocs' 

@@ -44,7 +44,11 @@ USE_I18N = True
 
 # Absolute path to the directory that holds media.
 # Example: "/home/media/media.lawrence.com/"
-MEDIA_ROOT = ''
+MEDIA_URL = '/media/'
+MEDIA_ROOT = join(APP_ROOT, 'webroot', 'media')
+STATIC_URL = '/static/'
+STATIC_ROOT = join(APP_ROOT, 'webroot', 'static')
+
 
 # URL that handles the media served from MEDIA_ROOT. Make sure to use a
 # trailing slash if there is a path component (optional in other cases).
@@ -79,6 +83,7 @@ TEMPLATE_DIRS = (
     # Always use forward slashes, even on Windows.
     # Don't forget to use absolute paths, not relative paths.
     join(APP_ROOT, 'webapp', 'templates'),
+    join(APP_ROOT, 'webapp', 'prelaunch', 'templates', 'www-prelaunch'),
 )
 
 INSTALLED_APPS = (
@@ -88,7 +93,9 @@ INSTALLED_APPS = (
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.sites',
+    'django.contrib.staticfiles',
     'vumi.webapp.api',
+    'vumi.webapp.prelaunch',
     'celery',
     'south',
     'django_nose',
