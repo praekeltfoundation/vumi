@@ -29,6 +29,7 @@ class HttpRpcResource(Resource):
         Resource.__init__(self)
 
     def render_(self, request, logmsg=None):
+        request.setHeader("content-type", "text/plain")
         uu = str(uuid.uuid4())
         md = {}
         md['args'] = request.args
