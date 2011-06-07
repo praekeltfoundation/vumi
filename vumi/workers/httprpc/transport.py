@@ -81,12 +81,13 @@ class HttpRpcTransport(Worker):
                     message.payload['uuid'],
                     message.payload['message'])
 
-    def finishRequest(self, uuid, data=''):
+    def finishRequest(self, uuid, message=''):
+        data = str(message)
         log.msg("HttpRpcTransport.finishRequest with data:", repr(data))
         log.msg(repr(self.requests))
         request = self.requests.get(uuid)
         if request:
-            request.write(str(data))
+            request.write(data)
             request.finish()
             del self.requests[uuid]
 
