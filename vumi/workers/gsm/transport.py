@@ -1,78 +1,67 @@
 from twisted.python import log
 from twisted.internet.defer import inlineCallbacks, returnValue
-from twisted.internet import reactor
-
+from twisted.internet import reactor, task
+import pygsm
+import serial
 from vumi.service import Worker, Consumer, Publisher
 from vumi.message import Message
 
-class GsmConsumer(Consumer):
-    exchange_name = "vumi"
-    exchange_type = "direct"
-    durable = True
-    auto_delete = False
-    queue_name = "gsm.gammu.outbound"
-    routing_key = "gsm.gammu.outbound"
-    
-    def __init__(self, callback):
-        self.callback = callback
-    
-    def consume_json(self, dictionary):
-        log.msg("Consumed JSON %s" % dictionary)
-        self.callback(dictionary)
-
-    
-
-class GsmPublisher(Publisher):
-    exchange_name = "vumi"
-    exchange_type = "direct"
-    routing_key = 'gsm.gammu.inbound'
-    durable = True
-    auto_delete = False
-    delivery_mode = 2
-    
-    def publish_json(self, dictionary):
-        log.msg("Publishing JSON %s" % dictionary)
-        super(ExamplePublisher, self).publish_json(dictionary)
-    
-
 class GsmTransport(Worker):
     
-    # inlineCallbacks, TwistedMatrix's fancy way of allowing you to write
-    # asynchronous code as if it was synchronous by the nifty use of
-    # coroutines.
-    # See: http://twistedmatrix.com/documents/10.0.0/api/twisted.internet.defer.html#inlineCallbacks
     @inlineCallbacks
     def startWorker(self):
         log.msg("Starting the GsmTransport, config: %s" % self.config)
         # create the publisher
-        self.publisher = yield self.start_publisher(GsmPublisher)
+        self.publisher = yield self.publish_to('gsm.inbound.%(msisdn)s' % self.config)
+        # subscribe routing keys to callbacks
+        self.consume('gsm.outbound.%(msisdn)s' % self.config, self.handle_outbound_message)
         
-        """
-        INSERT MODEM MAGIC HERE
+        self.modem = pygsm.GsmModem(port=self.config.get('port'), logger=self.logger)
         
-        ...
-        
-        self.modem = SomeGammuModem()
-        self.modem.onMessageCallback = self.onInboundMessage
-        
-        # when it's done, create the consumer and pass it the publisher
-        self.consumer = yield self.start_consumer(GsmConsumer, self.onOutboundMessage)
-        """
+        self.looper = task.LoopingCall(self.check_for_inbound_message)
+        self.looper.start(self.config.get('interval'))
     
-    def onInboundMessage(self, sms):
-        self.publisher.publish_json({
-            'from': sms.get('from'),
-            'message': sms.get('text'),
-        })
+    def modem_is_connected(self):
+        return hasattr(self.modem, "device") and (self.modem.device is not None)
     
-    def onOutboundMessage(self, dictionary):
-        self.modem.send({
-            'to': dictionary.get('to'),
-            'message': dictionary.get('message')
-        })
+    @inlineCallbacks
+    def check_for_inbound_message(self):
+        try:
+            log.msg('checking for inbound message')
+            if self.modem_is_connected():
+                msg = self.modem.next_message()
+                if msg is not None:
+                    yield self.handle_inbound_message(msg)
+        except serial.SerialException, e:
+            yield self.modem.reboot()
+        
+    
+    def modem_logger(self, obj, msg, prefix):
+        self.logger('%s - %s: %s' % (obj.__class__.__name__, prefix, msg))
+    
+    def logger(self, *a):
+        if self.config.get('debug'):
+            log.msg(*a)
+    
+    def handle_inbound_message(self, sms):
+        log.msg("Received '%s' from '%s' at '%s'" % (sms.text, sms.sender, sms.received))
+        self.publisher.publish_message(Message(sender=sms.sender,
+            recipient=self.config.get('msisdn'),
+            content=sms.text,
+            received=sms.received))
+    
+    def handle_outbound_message(self, msg):
+        if not self.modem_is_connected():
+            return False
+        self.modem.send_sms(**msg.payload)
+    
+    def debug_inbound(self, message):
+        log.msg('Received an SMS: %s' % message.payload)
     
     def stopWorker(self):
-        log.msg("Stopping the ExampleWorker")
+        if self.modem_is_connected():
+            self.modem.disconnect()
+        log.msg("Stopping the GsmWorker")
     
 
 
