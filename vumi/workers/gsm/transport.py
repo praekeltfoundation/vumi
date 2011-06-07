@@ -10,6 +10,7 @@ class GsmTransport(Worker):
     
     @inlineCallbacks
     def startWorker(self):
+        
         log.msg("Starting the GsmTransport, config: %s" % self.config)
         # create the publisher
         self.publisher = yield self.publish_to('gsm.inbound.%(msisdn)s' % self.config)
