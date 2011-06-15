@@ -3,6 +3,9 @@ from smpp.pdu_builder import *
 from twisted.trial.unittest import TestCase
 
 tlv = DeliverSM(1, short_message='the first message part')
+tlv.set_sar_msg_ref_num(65017)
+tlv.set_sar_total_segments(2)
+tlv.set_sar_segment_seqnum(1)
 sar = DeliverSM(1, short_message='\x00\x03\xff\x02\x01the first message part')
 csm = DeliverSM(1, short_message='\x05\x00\x03\xff\x02\x01the first message part')
 csm16 = DeliverSM(1, short_message='\x06\x00\x04\xff\xff\x02\x01the first message part')
@@ -10,9 +13,22 @@ csm16 = DeliverSM(1, short_message='\x06\x00\x04\xff\xff\x02\x01the first messag
 
 
 def detect_multipart(pdu):
-    short_message = pdu.get_obj()['body']['mandatory_parameters']['short_message']
+    short_message = pdu['body']['mandatory_parameters']['short_message']
+    optional_parameters = {}
+    for d in pdu['body'].get('optional_parameters',[]):
+        optional_parameters[d['tag']] = d['value']
 
-    print repr(pdu.get_obj())
+    print repr(pdu)
+
+    try:
+        mdict = {'multipart_type':'TLV'}
+        mdict['reference_number'] = optional_parameters['sar_msg_ref_num']
+        mdict['total_number'] = optional_parameters['sar_total_segments']
+        mdict['part_number'] = optional_parameters['sar_segment_seqnum']
+        mdict['part_message'] = short_message
+        return mdict
+    except:
+        pass
 
     if (short_message[0:1] == '\x00'
     and short_message[1:2] == '\x03'
@@ -23,7 +39,6 @@ def detect_multipart(pdu):
         mdict['part_number'] = int(binascii.b2a_hex(short_message[4:5]), 16)
         mdict['part_message'] = short_message[5:]
         return mdict
-
 
     if (short_message[0:1] == '\x05'
     and short_message[1:2] == '\x00'
@@ -52,6 +67,7 @@ def detect_multipart(pdu):
 
 
 
-print '\n', detect_multipart(sar)
-print '\n', detect_multipart(csm)
-print '\n', detect_multipart(csm16)
+print '\n', detect_multipart(unpack_pdu(tlv.get_bin()))
+print '\n', detect_multipart(unpack_pdu(sar.get_bin()))
+print '\n', detect_multipart(unpack_pdu(csm.get_bin()))
+print '\n', detect_multipart(unpack_pdu(csm16.get_bin()))
