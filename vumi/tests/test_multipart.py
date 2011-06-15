@@ -4,8 +4,8 @@ from twisted.trial.unittest import TestCase
 
 tlv = DeliverSM(1, short_message='the first message part')
 tlv.set_sar_msg_ref_num(65017)
-tlv.set_sar_total_segments(2)
-tlv.set_sar_segment_seqnum(1)
+tlv.set_sar_total_segments(22)
+tlv.set_sar_segment_seqnum(21)
 sar = DeliverSM(1, short_message='\x00\x03\xff\x02\x01the first message part')
 csm = DeliverSM(1, short_message='\x05\x00\x03\xff\x02\x01the first message part')
 csm16 = DeliverSM(1, short_message='\x06\x00\x04\xff\xff\x02\x01the first message part')
