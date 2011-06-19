@@ -1,1 +1,2 @@
-class VumiError(Exception): pass
+class VumiError(Exception):
+    pass
