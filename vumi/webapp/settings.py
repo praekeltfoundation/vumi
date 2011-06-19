@@ -8,7 +8,7 @@ ADMINS = (
 )
 
 from os.path import abspath, join, dirname, basename
-APP_ROOT = abspath(join(dirname(__file__),'..'))
+APP_ROOT = abspath(join(dirname(__file__), '..'))
 PROJECT_NAME = basename(APP_ROOT)
 
 MANAGERS = ADMINS
