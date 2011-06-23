@@ -1,6 +1,5 @@
 import yaml
 import json
-import redis
 import time
 import datetime
 
@@ -20,10 +19,12 @@ def getVumiSession(r_server, key):
         session.save()
         return session
 
+
 def delVumiSession(r_server, key):
     return r_server.delete(key)
 
-class VumiSession():
+
+class VumiSession(object):
     key = None
     decision_tree = None
     r_server = None
@@ -58,7 +59,7 @@ class VumiSession():
         self.r_server = None
 
 
-class DecisionTree():
+class DecisionTree(object):
 
     def __init__(self):
         pass
@@ -78,35 +79,34 @@ class TemplatedDecisionTree(DecisionTree):
         self.template_current = None
         self.template_history = []
 
-
     def load_yaml_template(self, yaml_string):
         self.template = yaml.load(yaml_string)
         self.template_current = self.template.get('__start__')
 
-
     def get_template(self):
         return self.template
-
 
     def get_data_source(self):
         if self.template:
             if self.template.get('__data__'):
-                return {"url"     :self.template['__data__'].get('url'),
-                        "username":self.template['__data__'].get('username'),
-                        "password":self.template['__data__'].get('password'),
-                        "params"  :self.template['__data__'].get('params',[])}
-        return {"username":None, "password":None, "url":None, "params":[]}
-
+                return {
+                    "url": self.template['__data__'].get('url'),
+                    "username": self.template['__data__'].get('username'),
+                    "password": self.template['__data__'].get('password'),
+                    "params": self.template['__data__'].get('params', []),
+                    }
+        return {"url": None, "username": None, "password": None, "params": []}
 
     def get_post_source(self):
         if self.template:
             if self.template.get('__post__'):
-                return {"url"     :self.template['__post__'].get('url'),
-                        "username":self.template['__post__'].get('username'),
-                        "password":self.template['__post__'].get('password'),
-                        "params"  :self.template['__post__'].get('params',[])}
-        return {"username":None, "password":None, "url":None, "params":[]}
-
+                return {
+                    "url": self.template['__post__'].get('url'),
+                    "username": self.template['__post__'].get('username'),
+                    "password": self.template['__post__'].get('password'),
+                    "params": self.template['__post__'].get('params', []),
+                    }
+        return {"url": None, "username": None, "password": None, "params": []}
 
     def get_dummy_data(self):
         if self.template:
@@ -122,7 +122,7 @@ class PopulatedDecisionTree(TemplatedDecisionTree):
         self.data = None
         # So that I can modify the original data, data_current must
         # be stored by reference as a list/dict, index/key pair
-        self.data_current = ([None],0)
+        self.data_current = ([None], 0)
         self.data_history = []
 
     def load_json_data(self, json_string):
@@ -149,7 +149,7 @@ class TraversedDecisionTree(PopulatedDecisionTree):
     def __init__(self):
         PopulatedDecisionTree.__init__(self)
         self.max_chars = 140
-        self.list_pos = {'offset':0, 'length':0, 'remainder':0}
+        self.list_pos = {'offset': 0, 'length': 0, 'remainder': 0}
         self.echo = False
         self.started = False
         self.completed = False
@@ -159,16 +159,17 @@ class TraversedDecisionTree(PopulatedDecisionTree):
     # be deserialized from a JSON string.
 
     # This means that when traversing it the current object will be one of:
-    #     dict    -> in which case the template should auto-select the correct key
-    #     list    -> in which case the user should be asked from displayed options
-    #                where there is only one list option it should be auto-selected
+    #     dict    -> in which case the template should auto-select the
+    #                correct key
+    #     list    -> in which case the user should be asked from displayed
+    #                options where there is only one list option it should be
+    #                auto-selected
     #     boolean -> as for list, just yes/no questions only
     #     number  -> in which case the user should be prompted for a value
     #     string  -> in which case the user should be prompted for text
 
     # NB. User entered strings (which include things like dates),
-        # should be avoided where possible.
-
+    #     should be avoided where possible.
 
     def is_completed(self):
         return self.completed
@@ -182,10 +183,9 @@ class TraversedDecisionTree(PopulatedDecisionTree):
     def set_language(self, language):
         self.language = language
 
-
     def dumps(self, level=1, serialize=repr):
         def wrap(title, serialize, obj):
-            return "\n****"+str(title)+"****\n" \
+            return "\n****" + str(title) + "****\n" \
                     + serialize(obj)
         s = ""
         if level >= 1:
@@ -202,17 +202,15 @@ class TraversedDecisionTree(PopulatedDecisionTree):
             s += wrap("DATA_HISTORY", serialize, self.data_history)
         return s
 
-
     def select(self, template, data):
-        self.list_pos = {'offset':0, 'length':0, 'remainder':0}
+        self.list_pos = {'offset': 0, 'length': 0, 'remainder': 0}
         self.template_history.append(self.template_current)
         self.data_history.append(self.data_current)
         self.template_current = template
         self.data_current = data
 
-
     def try_auto_select(self):
-        if type(self.resolve_dc()) == list and len(self.resolve_dc())==1:
+        if type(self.resolve_dc()) == list and len(self.resolve_dc()) == 1:
             __next = self.template_current.get('next')
             d = (self.resolve_dc()[0], __next)
             t = self.template.get(__next)
@@ -220,16 +218,14 @@ class TraversedDecisionTree(PopulatedDecisionTree):
             return True
         return False
 
-
     def go_back(self):
         try:
-            self.list_pos = {'offset':0, 'length':0, 'remainder':0}
+            self.list_pos = {'offset': 0, 'length': 0, 'remainder': 0}
             self.template_current = self.template_history.pop()
             self.data_current = self.data_history.pop()
             self.completed = False
         except:
             pass
-
 
     def go_up(self):
         old_data_current_0 = self.data_current[0]
@@ -237,7 +233,6 @@ class TraversedDecisionTree(PopulatedDecisionTree):
         while old_data_current_0 == self.data_current[0] \
                 and len(self.data_history) > 0:
             self.go_back()
-
 
     def start(self):
         self.started = True
@@ -257,7 +252,6 @@ class TraversedDecisionTree(PopulatedDecisionTree):
         self.select(t, d)
         return greeting
 
-
     def __finish(self):
         self.completed = True
 
@@ -273,7 +267,6 @@ class TraversedDecisionTree(PopulatedDecisionTree):
         else:
             return None
 
-
     def question(self):
         self.try_auto_select()
         offset = self.list_pos['offset']
@@ -281,7 +274,8 @@ class TraversedDecisionTree(PopulatedDecisionTree):
         index = 0
         que = ""
         try:
-            more_option = "\n0. " + self.template_current['more'][self.language]
+            more_option = "\n0. " + \
+                          self.template_current['more'][self.language]
         except:
             more_option = "\n0. ..."
         que += self.template_current['question'][self.language]
@@ -294,8 +288,9 @@ class TraversedDecisionTree(PopulatedDecisionTree):
                 if index == list_length:
                     more_length = 0
                 if index > offset and count < 9:
-                    option_str = "\n" + str(count+1) + ". "
-                    option_str += str(opt.get(self.template_current['options']))
+                    option_str = "\n" + str(count + 1) + ". "
+                    option_str += str(opt.get(
+                                      self.template_current['options']))
                     if len(que + option_str) + more_length < self.max_chars:
                         count += 1
                         last_index = index
@@ -303,7 +298,8 @@ class TraversedDecisionTree(PopulatedDecisionTree):
                     else:
                         index = -1
             remainder = list_length - last_index
-            self.list_pos = {'offset':offset, 'length':count, 'remainder':remainder}
+            self.list_pos = {'offset': offset, 'length': count,
+                             'remainder': remainder}
             if remainder:
                 que += more_option
         elif type(self.template_current.get('options')) == list:
@@ -315,16 +311,15 @@ class TraversedDecisionTree(PopulatedDecisionTree):
             print que
         return que
 
-
     def answer(self, ans):
         if self.echo:
             print ">", ans, "\n"
-        ans = str(ans) # in reality we'll only get text
+        ans = str(ans)  # in reality we'll only get text
         try:
             if type(self.resolve_dc()) == list:
                 if int(ans) == 0 and self.list_pos['remainder'] > 0:
-                    self.list_pos.update({
-                            'offset': self.list_pos['offset'] + self.list_pos['length']})
+                    self.list_pos['offset'] = self.list_pos['offset'] + \
+                                              self.list_pos['length']
                     return None
         except:
             pass
@@ -332,10 +327,11 @@ class TraversedDecisionTree(PopulatedDecisionTree):
             ans = self.validate(ans, self.template_current.get('validate'))
             __next = self.template_current.get('next')
             if type(self.resolve_dc()) == list:
-                d = (self.resolve_dc()[int(ans)-1 + self.list_pos['offset']], __next)
+                d = (self.resolve_dc()[int(ans) - 1 + self.list_pos['offset']],
+                     __next)
                 t = self.template.get(__next)
             elif type(self.template_current.get('options')) == list:
-                opt = self.template_current.get('options')[int(ans)-1]
+                opt = self.template_current.get('options')[int(ans) - 1]
                 __next = opt.get('next')
                 if opt.get('default'):
                     self.update_dc(self.resolve_default(opt['default']))
@@ -353,7 +349,6 @@ class TraversedDecisionTree(PopulatedDecisionTree):
         except:
             pass
 
-
     def validate(self, ans, validate):
         if validate == 'date':
             return str(int(time.mktime(
@@ -362,16 +357,12 @@ class TraversedDecisionTree(PopulatedDecisionTree):
             return str(int(ans))
         return ans
 
-
     def resolve_default(self, default):
         if default == 'today':
             return str(int(time.mktime(
                 datetime.date.today().timetuple())))
         if default == 'yesterday':
             return str(int(time.mktime(
-                (datetime.date.today()-datetime.timedelta(days=1)).timetuple())))
+                (datetime.date.today() - datetime.timedelta(days=1))
+                .timetuple())))
         return default
-
-
-
-
