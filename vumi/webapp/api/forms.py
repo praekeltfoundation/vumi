@@ -1,25 +1,32 @@
 from django import forms
-from vumi.webapp.api.models import SentSMS, URLCallback, ReceivedSMS, SMPPLink, SMPPResp, SentSMSBatch
+from vumi.webapp.api.models import (SentSMS, URLCallback, ReceivedSMS,
+                                    SMPPLink, SMPPResp, SentSMSBatch)
+
 
 class SentSMSBatchForm(forms.ModelForm):
     class Meta:
         model = SentSMSBatch
 
+
 class SentSMSForm(forms.ModelForm):
     class Meta:
         model = SentSMS
+
 
 class SMPPLinkForm(forms.ModelForm):
     class Meta:
         model = SMPPLink
 
+
 class SMPPRespForm(forms.ModelForm):
     class Meta:
         model = SMPPResp
 
+
 class URLCallbackForm(forms.ModelForm):
     class Meta:
         model = URLCallback
+
 
 class ReceivedSMSForm(forms.ModelForm):
     class Meta:
@@ -37,4 +44,3 @@ class SMSReceiptForm(forms.Form):
     # in python, leaving it 'required=False' for now
     _from = forms.CharField(max_length=32, required=False)
     charge = forms.FloatField()
-

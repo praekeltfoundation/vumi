@@ -1,10 +1,6 @@
 from django.db import models
-from django.conf import settings
 from django.contrib.auth.models import User
 from django.contrib import admin
-from django.core import serializers
-from datetime import datetime
-import logging
 from utils import model_to_tuples, model_to_dict
 import fields
 
@@ -14,7 +10,10 @@ CLICKATELL_ERROR_CODES = (
     (003, 'Session ID expired'),
     (004, 'Account frozen'),
     (005, 'Missing session ID'),
-    (007, 'IP Lockdown violation'), # You have locked down the API instance to a specific IP address and then sent from an IP address different to the one you set.
+    (007, 'IP Lockdown violation'),  # You have locked down the API instance to
+                                     # a specific IP address and then sent from
+                                     # an IP address different to the one you
+                                     # set.
     (101, 'Invalid or missing parameters'),
     (102, 'Invalid user data header'),
     (103, 'Unknown API message ID'),
@@ -23,19 +22,35 @@ CLICKATELL_ERROR_CODES = (
     (106, 'Invalid source address'),
     (107, 'Empty message'),
     (108, 'Invalid or missing API ID'),
-    (109, 'Missing message ID'), # This can be either a client message ID or API message ID. For example when using the stop message command.
+    (109, 'Missing message ID'),  # This can be either a client message ID or
+                                  # API message ID. For example when using the
+                                  # stop message command.
     (110, 'Error with email message'),
     (111, 'Invalid protocol'),
     (112, 'Invalid message type'),
-    (113, 'Maximum message parts'), # The text message component of the message is greater than exceeded the permitted 160 characters (70 Unicode characters). Select concat equal to 1,2,3-N to overcome this by splitting the message across multiple messages.
-    (114, 'Cannot route message'), # This implies that the gateway is not currently routing messages to this network prefix. Please email support@clickatell.com with the mobile number in question.
+    (113, 'Maximum message parts'),  # The text message component of the
+                                     # message is greater than exceeded the
+                                     # permitted 160 characters (70 Unicode
+                                     # characters). Select concat equal to
+                                     # 1,2,3-N to overcome this by splitting
+                                     # the message across multiple messages.
+    (114, 'Cannot route message'),  # This implies that the gateway is not
+                                    # currently routing messages to this
+                                    # network prefix. Please email
+                                    # support@clickatell.com with the mobile
+                                    # number in question.
     (115, 'Message expired'),
     (116, 'Invalid Unicode data'),
     (120, 'Invalid delivery time'),
-    (121, 'Destination mobile number'), # This number is not allowed to receive messages from us and blocked has been put on our block list.
+    (121, 'Destination mobile number'),  # This number is not allowed to
+                                         # receive messages from us and blocked
+                                         # has been put on our block list.
     (122, 'Destination mobile opted out'),
-    (123, 'Invalid Sender ID'), # A sender ID needs to be registered and approved before it can be successfully used in message sending.
-    (128, 'Number delisted'), # This error may be returned when a number has been delisted.
+    (123, 'Invalid Sender ID'),  # A sender ID needs to be registered and
+                                 # approved before it can be successfully used
+                                 # in message sending.
+    (128, 'Number delisted'),  # This error may be returned when a number has
+                               # been delisted.
     (201, 'Invalid batch ID'),
     (202, 'No batch template'),
     (301, 'No credit left'),
@@ -43,8 +58,9 @@ CLICKATELL_ERROR_CODES = (
 )
 
 CLICKATELL_MESSAGE_STATUSES = (
-    (0, 'Pending locally'), # this is our own status
-    (1, 'Message unknown'), # everything above zero is clickatell's status codes
+    (0, 'Pending locally'),  # this is our own status
+    (1, 'Message unknown'),  # everything above zero is clickatell's status
+                             # codes
     (2, 'Message queued'),
     (3, 'Delivered to gateway'),
     (4, 'Received by recipient'),
@@ -58,23 +74,24 @@ CLICKATELL_MESSAGE_STATUSES = (
     (12, 'Out of credit'),
 )
 
+
 class SentSMSBatch(models.Model):
     """A set of Messages to be sent through Vumi"""
     user = models.ForeignKey(User)
     title = models.CharField(blank=False, max_length=100)
     created_at = models.DateTimeField(blank=True, auto_now_add=True)
     updated_at = models.DateTimeField(blank=True, auto_now=True)
-    
+
     class Meta:
         ordering = ['-created_at']
         get_latest_by = 'created_at'
         verbose_name = 'Sent SMS Batch'
         verbose_name_plural = 'Sent SMS Batches'
-    
+
     def __unicode__(self):
         return u"SentSMSBatch %s: %s (%s) @ %s" % (self.id,
                                             self.title,
-                                            self.user, 
+                                            self.user,
                                             self.created_at)
 
 
@@ -92,18 +109,19 @@ class SentSMS(models.Model):
     created_at = models.DateTimeField(blank=True, auto_now_add=True)
     updated_at = models.DateTimeField(blank=True, auto_now=True)
     delivered_at = models.DateTimeField(blank=True, null=True)
-    
+
     class Meta:
         ordering = ['-created_at']
         get_latest_by = 'created_at'
         verbose_name = 'Sent SMS'
-    
+
     def __unicode__(self):
-        return u"SentSMS %s -> %s, %s:%s @ %s" % (self.from_msisdn, 
-                                            self.to_msisdn, 
+        return u"SentSMS %s -> %s, %s:%s @ %s" % (self.from_msisdn,
+                                            self.to_msisdn,
                                             self.transport_name,
-                                            self.transport_status, 
+                                            self.transport_status,
                                             self.delivered_at)
+
 
 class SMPPLink(models.Model):
     sent_sms = models.ForeignKey(SentSMS, unique=True)
@@ -117,9 +135,10 @@ class SMPPLink(models.Model):
         verbose_name = 'SMPP Link'
 
     def __unicode__(self):
-        return u"SMPPLink %s -> %s @ %s" % (self.sent_sms, 
-                                            self.sequence_number, 
+        return u"SMPPLink %s -> %s @ %s" % (self.sent_sms,
+                                            self.sequence_number,
                                             self.created_at)
+
 
 class SMPPResp(models.Model):
     sent_sms = models.ForeignKey(SentSMS, unique=True)
@@ -136,10 +155,11 @@ class SMPPResp(models.Model):
         verbose_name = 'SMPP Response'
 
     def __unicode__(self):
-        return u"SMPPLink %s : %s = %s @ %s" % (self.sent_sms, 
-                                            self.command_id, 
-                                            self.command_status, 
+        return u"SMPPLink %s : %s = %s @ %s" % (self.sent_sms,
+                                            self.command_id,
+                                            self.command_status,
                                             self.created_at)
+
 
 class ReceivedSMS(models.Model):
     user = models.ForeignKey(User)
@@ -152,22 +172,22 @@ class ReceivedSMS(models.Model):
     received_at = models.DateTimeField(blank=False)
     created_at = models.DateTimeField(blank=True, auto_now_add=True)
     updated_at = models.DateTimeField(blank=True, auto_now=True)
-    
+
     class Meta:
         ordering = ['-created_at']
         get_latest_by = 'created_at'
         verbose_name = 'Received SMS'
-    
+
     def as_dict(self):
         """Return variables ready made for a URL callback"""
         return model_to_dict(self)
-    
+
     def as_tuples(self):
         return model_to_tuples(self)
-    
+
     def __unicode__(self):
-        return u"ReceivedSMS %s -> %s @ %s" % (self.from_msisdn, 
-                                                self.to_msisdn, 
+        return u"ReceivedSMS %s -> %s @ %s" % (self.from_msisdn,
+                                                self.to_msisdn,
                                                 self.received_at)
 
 
@@ -177,10 +197,10 @@ class Profile(models.Model):
     created_at = models.DateTimeField(blank=True, auto_now_add=True)
     updated_at = models.DateTimeField(blank=True, auto_now=True)
     transport = models.ForeignKey('Transport', null=True, blank=False)
-    
+
     def __unicode__(self):
         return u"Profile for %s" % self.user
-    
+
 
 CALLBACK_CHOICES = (
     ('sms_received', 'SMS Received'),
@@ -191,37 +211,39 @@ CALLBACK_CHOICES = (
 class URLCallback(models.Model):
     """A URL to with to post data for an event"""
     profile = models.ForeignKey(Profile)
-    name = models.CharField(blank=True, max_length=255, choices=CALLBACK_CHOICES)
+    name = models.CharField(blank=True, max_length=255,
+                            choices=CALLBACK_CHOICES)
     url = fields.AuthenticatedURLField(blank=True, verify_exists=False)
     created_at = models.DateTimeField(blank=True, auto_now_add=True)
     updated_at = models.DateTimeField(blank=True, auto_now=True)
-    
+
     class Meta:
         verbose_name = 'Callback URL'
         ordering = ['created_at']
-    
+
     def __unicode__(self):
         return u"URLCallback %s - %s" % (self.name, self.url)
 
+
 class Transport(models.Model):
     name = models.CharField(blank=True, max_length=255)
-    
+
     def __unicode__(self):
         return u"Transport: %s" % self.name
-    
+
 
 class Keyword(models.Model):
     """An SMS keyword"""
     keyword = models.CharField(blank=True, max_length=255)
     user = models.ForeignKey('auth.User')
-    
+
     def __unicode__(self):
         return u"Keyword: %s for %s" % (self.keyword, self.user)
-    
+
     def save(self, *args, **kwargs):
         self.keyword = self.keyword.lower()
         super(Keyword, self).save(*args, **kwargs)
-    
+
 
 admin.site.register(SentSMS)
 admin.site.register(SentSMSBatch)
@@ -233,6 +255,6 @@ admin.site.register(SMPPResp)
 admin.site.register(Transport)
 admin.site.register(Keyword)
 
-# import signals to make sure they're registered as soon 
+# import signals to make sure they're registered as soon
 # as we start working with the models.
 import signals
