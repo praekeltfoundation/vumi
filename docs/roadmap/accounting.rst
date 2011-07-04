@@ -1,6 +1,8 @@
 Accounting
 ==========
 
+.. note:: Accounting at this stage is the responsibility of the campaign specific logic, this however will change over time. 
+
 Initially Vumi takes a deliberately simple approach to accounting.
 
 What Vumi should do now:
