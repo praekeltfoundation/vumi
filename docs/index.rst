@@ -11,6 +11,7 @@ Contents:
 .. toctree::
    :maxdepth: 2
    
+   roadmap.rst
    installation.rst
    api.rst
    client.rst
