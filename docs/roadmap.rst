@@ -10,10 +10,10 @@ Milestones in order of descending priority:
     
     roadmap/blinkenlights.rst
     roadmap/dynamic-workers.rst
+    roadmap/identity-datastore.rst
     roadmap/conversation-datastore.rst
     roadmap/custom-app-logic.rst
     roadmap/accounting.rst
-    roadmap/identity-datastore.rst
     roadmap/datastore-access.rst
 
 Version 0.1 (**Current**)
@@ -48,9 +48,9 @@ Version 0.2 (**Upcoming**)
 * APIs for supporting frontend.
     * User account creation & authentication.
     * Group account creation & membership.
-    * Group membership importing from an Excel sheet and Google Docs. 
-    * Conversation creation.
-    * Engagement tracking of conversation per transport. (e.g. Converation X had 100 replies over Twitter and 300 replies via SMS)
+    * Group membership importing from an Excel sheet and Google Docs.
+    * Conversation creation & scheduling.
+    * Engagement tracking of conversation per transport. (e.g. Converation X had 100 replies over Transport A and 300 replies via Transport B)
 * System metrics as per :doc:`roadmap/blinkenlights`
 * Ability to dynamically start new instances of existing transport types as per :doc:`roadmap/dynamic-workers`
 * Ability to identify a single user across multiple transports as per :doc:`roadmap/identity-datastore`
