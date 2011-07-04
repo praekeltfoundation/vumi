@@ -1,7 +1,7 @@
 Vumi Roadmap
 ============
 
-This roadmap is tentative. The different milestones to be developed as part of the roadmap are described in more detail in the following:
+This roadmap is tentative. The different milestones to be developed as part of the roadmap are described in more detail in the sections.
 
 In order of descending priority:
 
