@@ -4,7 +4,7 @@ Vumi Roadmap
 This roadmap is tentative. The different milestones to be developed as part of the roadmap are described in more detail in the following:
 
 .. toctree::
-    :maxdepth: 2
+    :maxdepth: 1
     
     roadmap/accounting.rst
     roadmap/dynamic-workers.rst

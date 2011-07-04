@@ -25,5 +25,13 @@ The messages that Blinkenlights are JSON encoded dictionaries. An example Blinke
         "timestamp": [2011, 6, 29, 15, 3, 23]
     } 
 
-::name:: 
+:name:
+    The name of the component connected to AMQP. Preferably unique.
+:uuid:
+    An identifier for this component, must be unique.
+:timestamp:
+    A UTC timestamp as a list in the following format: [YYYY, MM, DD, HH, MM, SS]. We use a list as Javascript doesn't have a built-in date notation for JSON.
 
+The components should publish a status update in the form of a JSON dictionary every minute. If an update hasn't been received for two minutes then the component will be flagged as being in an error state.
+
+Any other keys and values can be added to the dictionary, they'll be published in a tabular format. Each transport is free to add whatever relevant key/value pairs. For example, for SMPP a relevant extra key/value pair could be messages per second processed.
