@@ -44,7 +44,7 @@ Version 0.2 (**Upcoming**)
 
 :Target: 31 July 2011
 
-* Connect `frontend <http://ux.vumi.org>` to backend.
+* Connect `frontend <http://ux.vumi.org>`_ to backend.
 * APIs for supporting frontend.
     * User account creation & authentication.
     * Group account creation & membership.
