@@ -39,10 +39,8 @@ Version 0.1 (**Current**)
     * Querying received SMS messages.
     * Querying the delivery status of sent SMS messages.
 
-Version 0.2 (**Upcoming**)
+Version 0.2 (31 July 2011)
 --------------------------
-
-:Target: 31 July 2011
 
 * Connect `frontend <http://ux.vumi.org>`_ to backend.
 * APIs for supporting frontend.
@@ -55,10 +53,8 @@ Version 0.2 (**Upcoming**)
 * Ability to dynamically start new instances of existing transport types as per :doc:`roadmap/dynamic-workers`
 * Ability to identify a single user across multiple transports as per :doc:`roadmap/identity-datastore`
 
-Version 0.3
------------
-
-:Tentative Target: Aug / Sept 2011
+Version 0.3 (Aug / Sept 2011)
+-----------------------------
 
 * :doc:`roadmap/conversation-datastore`.
 * :doc:`roadmap/datastore-access`.
