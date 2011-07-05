@@ -26,6 +26,9 @@ Version 0.1 (**Current**)
     * Graceful reconnecting of a failed SMPP bind.
     * Delivery reports of SMS messages
 * XMPP Transport
+    * Providing connectivity to Gtalk, Jabber and any other XMPP based service.
+* IRC Transport
+    * Currently used to log conversations going on in various IRC channels.
 * GSM Transport (currently uses `pygsm <http://pypi.python.org/pypi/pygsm>`_, looking at `gammu <http://wammu.eu>`_ as a replacement)
     * Interval based polling of new SMS messages that a GSM modem has received.
     * Immediate sending of outbound SMS messages.
