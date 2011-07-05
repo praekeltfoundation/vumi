@@ -1,0 +1,641 @@
+@charset "UTF-8";
+/* http://meyerweb.com/eric/tools/css/reset/ v2.0 | 20110126 License: none (public domain) */
+html, body, div, span, applet, object, iframe, h1, h2, h3, h4, h5, h6, p, blockquote, pre, a, abbr, acronym, address, big, cite, code, del, dfn, em, img, ins, kbd, q, s, samp, small, strike, strong, sub, sup, tt, var, b, u, i, center,
+dl, dt, dd, ol, ul, li, fieldset, form, label, legend, table, caption, tbody, tfoot, thead, tr, th, td, article, aside, canvas, details, embed, figure, figcaption, footer, header, hgroup, menu, nav, output, ruby, section, summary, time, mark, audio, video { 
+	margin: 			0; 
+	padding: 			0; 
+	border: 			0; 
+	font-size: 			100%; 
+	font: 				inherit; 
+	vertical-align: 	baseline; 
+	font-family: 		Helvetica, Arial, sans-serif;
+	outline:			none
+}
+/* HTML5 display-role reset for older browsers */
+article, aside, details, figcaption, figure, footer, header, hgroup, menu, nav, section { 
+	display: 			block 
+}
+body { 
+	line-height: 		1 
+}
+ol, ul { 
+	list-style: 		none 
+}
+blockquote, q { 
+	quotes: 			none 
+}
+blockquote:before, blockquote:after, q:before, q:after { 
+	content: 			''; 
+	content: 			none 
+}
+table { 
+	border-collapse: 	collapse; 
+	border-spacing: 	0 
+}
+/* START */
+body {
+	background-color:	#f2f1ec;
+	color:				#87847d
+}
+/* TYPOGRAPHY AND FORMS  */
+a:link,a:visited,a:active {
+	color:				#f26669;
+	text-decoration:	none	
+}
+a:hover {
+	color:				#5d5a50;
+	text-decoration:	none
+}
+input,select,textarea {
+	font-family: 		Helvetica, Arial, sans-serif;
+	outline:			none
+}
+.btn:hover {
+	background-color:	#5d5a50!important
+}
+strong {
+	font-weight:		bold
+}
+em {
+	font-style:			oblique
+}
+p {
+	color:				#a6a49b;
+	margin:				1em 0	
+}
+p.large {
+	font-size:			1.2em;
+	line-height:		1.1em
+}
+h3 {
+	color:				#5d5a50;	
+	font-size:			1.4em;
+	font-weight:		bold;
+	margin:				1.3em 0
+}
+pre, code {
+font: 					12px Monaco,"Courier New","DejaVu Sans Mono","Bitstream Vera Sans Mono",monospace;
+}
+pre {
+margin: 				1em 0;
+font-size: 				0.8em;
+background-color: 		#eee;
+border: 				1px solid #e5e3df;
+padding: 				30px;
+line-height: 			1.5em;
+overflow: 				auto;
+-webkit-border-radius: 	5px;
+-moz-border-radius: 	5px;
+border-radius: 			5px;
+}
+/* CONTAINER */	
+#container {
+	width: 				920px;
+	margin:				0 auto;	
+}
+/* HEADER */	
+#header {
+	width: 				auto;
+	margin:				12px 0 0 0;
+	height:				88px
+}
+#header #logo {
+	width:				124px;
+	height:				63px;
+	display:			block;
+	float:				left;
+	margin:				0 0 0 7px;
+	background: 		transparent url(../pics/ui/sprite-map.png) no-repeat scroll 0 0
+}
+ul#nav {
+	list-style:			none;
+	float: 				right
+}
+ul#nav li {
+	list-style:			none;
+	float:				left;
+	margin:				30px 0 0 25px;
+	padding-bottom:		5px;
+	border-bottom:		3px solid #f2f1ec
+}
+ul#nav li a {
+	color:				#646157;
+	font-weight:		500;
+	text-transform:		lowercase;
+	font-style:			oblique;
+	font-weight:		0.9em
+}
+ul#nav li:hover,ul#nav li.active {
+	border-bottom:		3px solid #6e6b64
+}
+ul#nav li#li-signin:hover {
+	border-bottom:		3px solid #f26669!important
+}
+ul#nav li a#top-nav-signin {
+	color:				#f26669
+}
+#signin {
+	display:			none;
+	height:				90px;
+	background-color:	#fff;
+	-webkit-border-radius: 	15px;
+	-moz-border-radius: 	15px;
+	border-radius: 			15px;	
+}
+form#signin-form {
+	position:			relative	
+	}
+#signin label {
+	position:			absolute;
+	z-index:			1;
+	color:				#9e9d98;
+	background-color:	#fff
+	}
+#signin label.error {
+	display:			none!important
+	}	
+#signin input.txtbox {
+	margin-right: 		5px;
+	color:				#000;
+	position:			absolute;
+	z-index:			2;
+	background:			transparent  url(../pics/ui/input-bg.png) repeat-x scroll 0 0;
+	border:				2px solid #edece8;
+	-webkit-border-radius: 				5px;	
+	-moz-border-radius:					5px;	
+	border-radius:						5px;
+	padding:			10px;
+	font-size:			0.9em;
+	width:				216px
+	}
+#signin input.txtbox:focus  {
+	background-position:	0 -75px
+}	
+.typed  {
+	background-image: 	none!important;
+	background-color:	#fff!important
+}	
+#signin-label-email, form#forgot-form #forgot-label-email {
+	top:				39px;
+	left:				33px;
+	font-size:			0.9em;
+	font-style:			oblique;
+	
+}
+#signin-input-email {
+	top:				25px;
+	left:				20px
+}
+#signin-label-password {
+	top:				39px;
+	left:				276px;
+	font-size:			0.9em;
+	font-style:			oblique;
+	color:				#5d5a50
+}
+#signin-input-password {
+	top:				25px;
+	left:				266px
+}		
+#signin input.error {
+	margin-right: 		5px;
+}	
+#signin input.txtbox:focus {
+	color:				#000
+}
+#signin input.btn {
+	background-color:	#f26568;
+	padding:			6px 20px;
+	color: 				#fff;
+	font-size: 			0.9em;
+	border:				none;
+	position:			absolute;
+	z-index:			1;
+	top:				30px;
+	left:				512px;
+	-webkit-border-radius: 				5px;	
+	-moz-border-radius:					5px;	
+	border-radius:						5px;
+}
+form#forgot-form #forgot-input-email {
+	top:				25px;
+	left:				20px;
+}
+form#forgot-form input.btn {
+	left:				266px;
+}
+#signin span {
+	position:			absolute;
+	z-index:			1;
+	top:				39px;
+	left:				615px;
+	font-size:			0.9em	
+}
+form#forgot-form span {
+	left:				430px;
+}
+#signin span a {
+	margin-right: 		10px
+	}
+#forgot-form { 
+	display:			none;
+	position: 			relative
+}
+.typed  {
+	background-image: 	none!important;
+	background-color:	#fff!important;
+	border:				2px solid #edece8!important
+}
+/* MAIN */
+#main {
+	clear:				both
+}
+.sub-main {
+	background:			transparent url(../pics/ui/main-bg.gif) no-repeat scroll 0 0	;
+	padding-top:		25px
+}
+#signup-box {
+	width:				920px;
+	height:				300px;
+	background:			transparent url(../pics/ui/signup-bg.png) no-repeat 0 0;
+	position:			relative
+}
+#signup-box input.txtbox {
+	position:			absolute;
+	z-index:			2;
+	width:				297px;
+	height:				18px;
+	left:				580px;
+	background:			transparent  url(../pics/ui/input-bg.png) repeat-x scroll 0 0;
+	border:				2px solid #fff;
+	-webkit-border-radius: 				5px;	
+	-moz-border-radius:					5px;	
+	border-radius:						5px;
+	padding:			10px;
+	font-size:			0.9em;
+	color:				#000
+}
+#signup-box input.txtbox:focus {
+	background-position:	0 -75px;
+	border:				2px solid #edece8;
+}
+
+input.error {
+	border:				2px solid #f26568!important;
+}
+#signup-box label {
+	position:			absolute;
+	z-index:			1;
+	width:				278px;
+	height:				30px;
+	left:				592px;
+	font-size:			0.9em;
+	color:				#9e9d98;
+	font-style:			oblique
+}
+#signup-box label.error {
+	display:			none!important
+}
+#signup-box label.types {
+	color:				#999
+}
+#signup-label-co {
+	top:				103px;
+}
+#signup-input-co {
+	top:				88px;
+}
+#signup-label-name {
+	top:				123px;
+}
+#signup-input-name {
+	top:				108px;
+}
+#signup-label-email {
+	top:				166px;
+}
+#signup-input-email {
+	top:				151px;
+}
+#signup-box input.btn {
+	background-color:	#f26568;
+	padding:			6px 20px;
+	color: 				#fff;
+	font-size: 			0.9em;
+	border:				none;
+	-webkit-border-radius: 				5px;	
+	-moz-border-radius:					5px;	
+	border-radius:						5px;
+	position:			absolute;
+	top:				205px;
+	left:				690px
+	}
+	
+.thanks { 
+	position:			absolute;
+	z-index:			2;
+	width:				297px;
+	top:				60px;
+	height:				18px;
+	left:				580px;
+	background:			#360;
+	border:				2px solid #fff;
+	-webkit-border-radius: 				5px;	
+	-moz-border-radius:					5px;	
+	border-radius:						5px;
+	padding:			10px 10px 9px 10px;
+	font-size:			1.0em;
+	color: #fff
+}
+	
+form#set-new-password {
+	position:			relative;
+	height:				90px;
+	background-color:	#fff;
+	-webkit-border-radius: 	15px;
+	-moz-border-radius: 	15px;
+	border-radius: 			15px;	
+}
+form#set-new-password label {
+	position:			absolute;
+	z-index:			1
+	}
+form#set-new-password label.error {
+	position:			relative;
+	top:				39px;
+	left:				700px;
+	color:				#c00;
+	font-size:			1em;
+	text-align:			right
+	}	
+form#set-new-password input.txtbox {
+	margin-right: 		5px;
+	color:				#000;
+	position:			absolute;
+	z-index:			2;
+	background:			transparent  url(../pics/ui/input-bg.png) repeat-x scroll 0 0;
+	border:				2px solid #edece8;
+	-webkit-border-radius: 				5px;	
+	-moz-border-radius:					5px;	
+	border-radius:						5px;
+	padding:			10px;
+	font-size:			0.9em;
+	width:				216px
+	}
+form#set-new-password input.txtbox:focus  {
+	background-position:	0 -75px
+}
+
+#new-label-password {
+	top:				39px;
+	left:				30px
+}
+#new-input-password {
+	top:				25px;
+	left:				20px
+}
+#new-label-confirm {
+	top:				39px;
+	left:				276px;
+}
+#new-input-confirm {
+	top:				25px;
+	left:				266px
+}
+
+form#set-new-password input.btn {
+	background-color:	#f26568;
+	padding:			6px 20px;
+	color: 				#fff;
+	font-size: 			0.9em;
+	border:				none;
+	position:			absolute;
+	z-index:			1;
+	top:				30px;
+	left:				512px;
+	-webkit-border-radius: 				5px;	
+	-moz-border-radius:					5px;	
+	border-radius:						5px;
+}
+
+#main h2 {
+	width:				920px;
+	text-align:			center;
+	height:				100px;
+	padding-top:		65px;
+	text-transform:		lowercase;
+	font-size:			2.4em;
+	font-weight:		bold;
+}
+#features {
+	background:			transparent url(../pics/ui/h2-bg.png) no-repeat 0 0;	
+}
+.feature {
+	width:				277px;
+	float:				left;
+	margin:				0 45px 45px 0	
+}
+.feature h3 {
+	margin:				0 0 0.5em 0;
+	line-height:		1.2em;
+	font-weight:		normal
+}			
+.feature p {
+	font-size:			0.9em;
+	line-height:		1.2em;
+	height:				86px;
+	overflow:			hidden
+}
+.feature img {
+	margin-top:			23px
+}
+.last-feature {
+	margin-right:		0px;
+	width:				275px;
+	margin-left:		1px
+}
+#dl_link {
+	background:			#f26568 url(../pics/ui/sprite-map.png) -149px -13px no-repeat;
+	padding:							20px 17px 20px 50px;
+	-webkit-border-radius: 				10px;	
+	-moz-border-radius:					10px;	
+	border-radius:						10px;
+	color:				#f2f1ed;
+	font-size:			1.2em;
+	display:			block;
+	width:				143px;
+	text-decoration:	none;
+	float:				right;
+	margin:				20px 0 0 40px
+}
+#dl_link:hover {
+	background-color:	#5d5a50!important;
+}
+#dl_link span {
+	font-size:			0.8em;
+	display:			block	
+}
+.os p { 
+	width:				650px
+}
+.sub-main p {
+	line-height:		1.2em	
+}
+p.intro {
+	font-weight: 		bold;
+	color: 				#5d5a50
+}	
+.sub-main h2 {
+	color:				#f26669;	
+	font-size:			2.4em;
+	font-weight:		bold;
+	margin:				0.7em 0 1.3em 0;
+	text-align:			left!important;
+	width:				auto!important;
+	height:				auto!important;
+	padding:			0!important;
+	text-transform:		capitalize!important
+}
+
+.sub-main h1 {
+	font-size:			2.8em;
+	color:				#5d5a50;
+	font-weight:		bold
+}
+.sub-main h4 {
+	color:				#9e9d98;
+	margin:				10px 0;	
+}
+
+.sub-main h3 {
+	font-style:			oblique	
+}
+
+.contact {
+	float:				right;
+	width:				160px;
+	margin-left:		20px
+}
+.contact h3 { 
+	margin-top:			0;
+	font-variant:		normal
+}
+.contact-narrow {
+	float:				right;
+	width:				135px;
+}
+#sub-nav {
+	background-color: 	#fff;
+	-webkit-border-radius: 	10px;
+	-moz-border-radius: 	10px;
+	border-radius: 			10px;
+	width:					230px;
+	float:					left;
+	margin:					0 60px 0 0;
+	padding:				0 0 25px 0
+}
+.step {
+	padding:				15px;
+	border-bottom:			1px solid #ecebea				
+}
+.step-cat {
+	border-bottom:			1px solid #cececa;
+	font-size:				1.2em;	
+	color:					#9e9d98;
+	font-weight:			bold;
+	padding-top:			40px
+}
+.last-step {
+	border:					none!important
+}
+.content-right {
+	float: 					left;
+	width: 					610px	
+}
+#how {
+	clear:					left	
+}
+#who {
+	float:					left;
+	width:					465px;
+	padding:				0 17px 35px 17px;
+	margin-right:			100px	
+}
+#cost {
+	text-align: center	
+}
+/* FOOTER */
+#footer {
+	clear:				both;
+	width:				auto;
+	height:				58px;
+	padding-top:		80px;
+	text-align:			center;
+	font-size:			0.9em;
+	background:			transparent url(../pics/ui/footer-bg.png) no-repeat 0 0
+}
+#footer a {
+	margin-left:		10px
+}
+/* ---- JQ MODAL ---- */
+/* jqModal base Styling courtesy of;
+	Brice Burgess <bhb@iceburg.net> */
+
+/* The Window's CSS z-index value is respected (takes priority). If none is supplied,
+	the Window's z-index value will be set to 3000 by default (via jqModal.js). */
+	
+.jqmWindow {
+    display: none;
+    
+    position: fixed;
+    top: 20%;
+    left: 50%;
+    
+    margin-left: -300px;
+    width: 700px;
+    
+    background-color: #f2f2f2;
+    color: #000;
+    border: none;
+    padding: 20px;
+	
+	
+	
+	-webkit-border-radius: 	10px; 
+	-moz-border-radius: 	10px; 
+	border-radius: 			10px;
+	
+	border: 1px solid #fff;
+	
+	/*border: 5px solid rgba(0, 0, 0, .7);*/
+	
+	-webkit-box-shadow: 	0px 0px 5px #000; 
+	-moz-box-shadow: 		0px 0px 5px #000; 
+	box-shadow: 			0px 0px 5px #000;
+	
+	}
+	
+.jqmWindow p {
+	text-shadow: 		1px 1px 1px white;
+	font-size:			14px;
+	line-height:		18px;
+	color:				#484848
+}
+
+.jqmOverlay { background-color: #000; }
+
+/* Background iframe styling for IE6. Prevents ActiveX bleed-through (<select> form elements, etc.) */
+* iframe.jqm {position:absolute;top:0;left:0;z-index:-1;
+	width: expression(this.parentNode.offsetWidth+'px');
+	height: expression(this.parentNode.offsetHeight+'px');
+}
+
+/* Fixed posistioning emulation for IE6
+     Star selector used to hide definition from browsers other than IE6
+     For valid CSS, use a conditional include instead */
+* html .jqmWindow {
+     position: absolute;
+     top: expression((document.documentElement.scrollTop || document.body.scrollTop) + Math.round(17 * (document.documentElement.offsetHeight || document.body.clientHeight) / 100) + 'px');
+}
+/* ---- END JQ MODAL ---- */
+#ie { display: none }
