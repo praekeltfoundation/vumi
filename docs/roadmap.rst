@@ -50,7 +50,7 @@ Version 0.2 (**Upcoming**)
     * Group account creation & membership.
     * Group membership importing from an Excel sheet and Google Docs.
     * Conversation creation & scheduling.
-    * Engagement tracking of conversation per transport. (e.g. Converation X had 100 replies over Transport A and 300 replies via Transport B)
+    * Engagement tracking of conversation per transport. (e.g. Conversation X had 100 replies over Transport A and 300 replies via Transport B)
 * System metrics as per :doc:`roadmap/blinkenlights`
 * Ability to dynamically start new instances of existing transport types as per :doc:`roadmap/dynamic-workers`
 * Ability to identify a single user across multiple transports as per :doc:`roadmap/identity-datastore`
