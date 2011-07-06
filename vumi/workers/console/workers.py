@@ -1,8 +1,10 @@
 from twisted.internet.defer import inlineCallbacks
 from twisted.python import log
 
-from vumi.service import Worker
+from vumi.service import Worker, WorkerCreator
 from vumi.message import Message
+from vumi.utils import load_class_by_string
+import vumi.options
 
 
 class TelnetConsoleWorker(Worker):
@@ -49,4 +51,21 @@ class TelnetConsoleCounts(TelnetConsoleWorker):
         words = len(data.split())
         chars = len(data)
         return "%s word%s, %s char%s" % (words, "s" * (words != 1), len(data), "s" * (chars != 1))
+
+
+class TelnetConsoleWorkerCreator(TelnetConsoleWorker):
+    name = 'workercreator'
+
+    def process_message(self, data):
+        if not data.startswith("!load "):
+            return None
+        data = data.split()[1]
+        try:
+            worker_class = load_class_by_string(data.strip())
+            creator = WorkerCreator(worker_class, **vumi.options.get_all())
+            # after that you connect it to the AMQP server
+            creator.connectTCP("127.0.0.1", 5672)
+            return "Created new worker."
+        except Exception, e:
+            return "Error loading new worker: %r" % (e,)
 
