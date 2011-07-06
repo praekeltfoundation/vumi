@@ -56,7 +56,7 @@ class SmppConsumer(Consumer):
         log.msg("SMPPLinkForm", repr(formdict))
         form = forms.SMPPLinkForm(formdict)
         form.save()
-        self.r_server.set("%s_%s#last_sequence_number" % (self.r_prefix, vumi.options.get_all()['config']['smpp_increment']),
+        self.r_server.set("%s_%s#last_sequence_number" % (self.r_prefix, vumi.options.get_all()['config']['smpp_offset']),
                 sequence_number)
         self.r_server.set("%s#%s" % (self.r_prefix, sequence_number),
                 message.payload.get("id"))
@@ -107,9 +107,9 @@ class SmppTransport(Worker):
                 int(self.config['smpp_increment']),
                 int(self.config['smpp_offset']))
         factory.loadDefaults(self.config)
-        self.sequence_key = "%s_%s#last_sequence_number" % (self.r_prefix, config['smpp_increment'])
-        log.msg("sequence_key = %s", self.sequence_key)
-        last_sequence_number = int(self.r_server.get(self.sequence_key) or 1551)
+        self.sequence_key = "%s_%s#last_sequence_number" % (self.r_prefix, config['smpp_offset'])
+        log.msg("sequence_key = %s" % (self.sequence_key))
+        last_sequence_number = int(self.r_server.get(self.sequence_key) or 0)
         factory.setLatestSequenceNumber(last_sequence_number)
         factory.setConnectCallback(self.esme_connected)
         factory.setDisconnectCallback(self.esme_disconnected)
