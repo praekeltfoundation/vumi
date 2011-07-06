@@ -1,9 +1,10 @@
-from twisted.python import log
-import json, datetime
+import json
+import datetime
 
 
 VUMI_DATE_FORMAT = "%Y-%m-%d %H:%M:%S.%f"
 """This is the date format we work with internally"""
+
 
 class Message(object):
     """
@@ -12,7 +13,7 @@ class Message(object):
     over AMQP
 
     scary transport format -> Vumi Tansport -> Unified Message -> Vumi Worker
-    
+
     """
 
     def __init__(self, **kwargs):
@@ -20,7 +21,7 @@ class Message(object):
 
     def to_json(self):
         return json.dumps(self.payload, cls=JSONMessageEncoder)
-    
+
     @classmethod
     def from_json(klass, json_string):
         dictionary = json.loads(json_string, object_hook=date_time_decoder)
@@ -32,16 +33,17 @@ class Message(object):
     def __eq__(self, other):
         return self.payload == other.payload
 
+
 def date_time_decoder(json_object):
-    for key,value in json_object.items():
+    for key, value in json_object.items():
         try:
             json_object[key] = datetime.datetime.strptime(value,
                     VUMI_DATE_FORMAT)
-        except ValueError, e:
+        except ValueError:
             continue
-        except TypeError, e:
+        except TypeError:
             continue
-    return json_object 
+    return json_object
 
 
 class JSONMessageEncoder(json.JSONEncoder):
@@ -49,6 +51,4 @@ class JSONMessageEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, datetime.datetime):
             return obj.strftime(VUMI_DATE_FORMAT)
-        return super(JSONEncoder, self).default(obj)
-    
-
+        return super(json.JSONEncoder, self).default(obj)

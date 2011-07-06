@@ -9,8 +9,9 @@ Welcome to Vumi's documentation!
 Contents:
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
    
+   roadmap.rst
    installation.rst
    api.rst
    client.rst

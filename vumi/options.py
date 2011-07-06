@@ -4,15 +4,16 @@ from copy import deepcopy
 
 __dictionary = None
 
+
 def set(dictionary):
     global __dictionary
     if __dictionary == None:
         __dictionary = {}
         __dictionary.update(deepcopy(dictionary))
     else:
-        raise Exception(
-                "Warning, vumi.options have been set and may not be re-set!"
-                )
+        raise Exception("Warning, vumi.options have been set and"
+                        " may not be re-set!")
+
 
 def get():
     global __dictionary
@@ -38,5 +39,3 @@ def get_deploy_int(deployment):
         "/qa": 9,
         }
     return lookup.get(deployment.lower(), 7)
-
-

@@ -57,8 +57,8 @@ class HttpRpcTransport(Worker):
     def startWorker(self):
         self.uuid = uuid.uuid4()
         log.msg("Starting HttpRpcTransport %s config: %s" % (self.uuid, self.config))
-        self.publish_key = 'ussd.inbound.cellulant.http'
-        self.consume_key = 'ussd.outbound.cellulant.http'
+        self.publish_key = self.config['publish_key']
+        self.consume_key = self.config['consume_key']
 
         self.requests = {}
 

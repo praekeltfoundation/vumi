@@ -8,7 +8,7 @@ ADMINS = (
 )
 
 from os.path import abspath, join, dirname, basename
-APP_ROOT = abspath(join(dirname(__file__),'..'))
+APP_ROOT = abspath(join(dirname(__file__), '..'))
 PROJECT_NAME = basename(APP_ROOT)
 
 MANAGERS = ADMINS
@@ -44,7 +44,11 @@ USE_I18N = True
 
 # Absolute path to the directory that holds media.
 # Example: "/home/media/media.lawrence.com/"
-MEDIA_ROOT = ''
+MEDIA_URL = '/media/'
+MEDIA_ROOT = join(APP_ROOT, 'webroot', 'media')
+STATIC_URL = '/static/'
+STATIC_ROOT = join(APP_ROOT, 'webroot', 'static')
+
 
 # URL that handles the media served from MEDIA_ROOT. Make sure to use a
 # trailing slash if there is a path component (optional in other cases).
@@ -54,7 +58,7 @@ MEDIA_URL = ''
 # URL prefix for admin media -- CSS, JavaScript and images. Make sure to use a
 # trailing slash.
 # Examples: "http://foo.com/media/", "/media/".
-ADMIN_MEDIA_PREFIX = '/media/'
+# ADMIN_MEDIA_PREFIX = '/static/media/'
 
 # Make this unique, and don't share it with anybody.
 SECRET_KEY = 'x-4ce&vmrq4i%rkzhd0j^%$-%t%l1%@g_9m4eyqdc%#s=74(dh'
@@ -79,6 +83,7 @@ TEMPLATE_DIRS = (
     # Always use forward slashes, even on Windows.
     # Don't forget to use absolute paths, not relative paths.
     join(APP_ROOT, 'webapp', 'templates'),
+    join(APP_ROOT, 'webapp', 'prelaunch', 'templates', 'www-prelaunch'),
 )
 
 INSTALLED_APPS = (
@@ -88,10 +93,13 @@ INSTALLED_APPS = (
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.sites',
+    'django.contrib.staticfiles',
     'vumi.webapp.api',
+    'vumi.webapp.prelaunch',
     'celery',
     'south',
     'django_nose',
+    'gunicorn',
 )
 
 # link our profile to the django.contrib.auth.models.User

@@ -1,0 +1,17 @@
+#signup-box input.btn, #signin input.btn {
+	padding:			6px 0!important;
+	width:				90px!important;
+	text-align:			center!important
+}
+
+#forgot-form input.btn {
+	padding:			6px 0!important;
+	width:				145px!important;
+	text-align:			center!important
+}
+
+#set-new-password input.btn {
+	padding:			6px 0!important;
+	width:				170px!important;
+	text-align:			center!important
+}
