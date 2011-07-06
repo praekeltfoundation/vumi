@@ -157,10 +157,11 @@ class SmppTransport(Worker):
         smpplink = models.SMPPLink.objects \
                 .filter(sequence_number=kwargs['sequence_number']) \
                 .latest('created_at')
-        sent_sms_id = self.r_server.get("%s#%s" % (self.r_prefix, kwargs['sequence_number']))
-        #self.r_server.delete("%s#%s" % (self.r_prefix, kwargs['sequence_number']))
-        print sent_sms_id, smpplink.sent_sms_id
-        kwargs.update({'sent_sms':smpplink.sent_sms_id})
+        redis_key = "%s#%s" % (self.r_prefix, kwargs['sequence_number'])
+        log.msg("redis_key = %s" % redis_key)
+        sent_sms_id = self.r_server.get(redis_key)
+        self.r_server.delete(redis_key)
+        kwargs.update({'sent_sms':sent_sms_id})
         log.msg("SMPPRespForm <- %s" % repr(kwargs))
         form = forms.SMPPRespForm(kwargs)
         form.save()

@@ -29,3 +29,4 @@ redis
 -e git+git://github.com/smn/pygsm.git#egg=smn-pygsm
 pyserial
 pytz
+gunicorn
