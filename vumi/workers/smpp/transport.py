@@ -56,6 +56,8 @@ class SmppConsumer(Consumer):
         log.msg("SMPPLinkForm", repr(formdict))
         form = forms.SMPPLinkForm(formdict)
         form.save()
+        self.r_server.set("%s_%s#last_sequence_number" % (self.r_prefix, vumi.options.get_all()['config']['smpp_increment']),
+                sequence_number)
         self.r_server.set("%s#%s" % (self.r_prefix, sequence_number),
                 message.payload.get("id"))
         return True
@@ -92,13 +94,23 @@ class SmppTransport(Worker):
     """
 
     def startWorker(self):
+        # Connect to Redis
+        self.r_server = redis.Redis("localhost", db=vumi.options.get_deploy_int(self.vhost))
+        log.msg("Connected to Redis")
+        config = vumi.options.get_all()['config']
+        self.r_prefix = "%s@%s:%s" % (config['system_id'], config['host'], config['port'])
+        log.msg("r_prefix = %s" % self.r_prefix)
+
         log.msg("Starting the SmppTransport")
         # start the Smpp transport
         factory = EsmeTransceiverFactory(
                 int(self.config['smpp_increment']),
                 int(self.config['smpp_offset']))
         factory.loadDefaults(self.config)
-        factory.setLatestSequenceNumber(self.getLatestSequenceNumber())
+        self.sequence_key = "%s_%s#last_sequence_number" % (self.r_prefix, config['smpp_increment'])
+        log.msg("sequence_key = %s", self.sequence_key)
+        last_sequence_number = int(self.r_server.get(self.sequence_key) or 1551)
+        factory.setLatestSequenceNumber(last_sequence_number)
         factory.setConnectCallback(self.esme_connected)
         factory.setDisconnectCallback(self.esme_disconnected)
         factory.setSubmitSMRespCallback(self.submit_sm_resp)
@@ -112,13 +124,13 @@ class SmppTransport(Worker):
                 factory)
 
 
-    def getLatestSequenceNumber(self):
-        sequence_number = 0
-        try:
-            sequence_number = models.SMPPLink.objects.latest().sequence_number
-        except Exception, e:
-            log.msg("No SMPPLink entries yet")
-        return sequence_number
+    #def getLatestSequenceNumber(self):
+        #sequence_number = 0
+        #try:
+            #sequence_number = models.SMPPLink.objects.latest().sequence_number
+        #except Exception, e:
+            #log.msg("No SMPPLink entries yet")
+        #return sequence_number
 
 
     @inlineCallbacks
@@ -126,13 +138,6 @@ class SmppTransport(Worker):
         log.msg("ESME Connected, adding handlers")
         self.esme_client = client
         self.esme_client.set_handler(self)
-
-        # Connect to Redis
-        self.r_server = redis.Redis("localhost", db=vumi.options.get_deploy_int(self.vhost))
-        log.msg("Connected to Redis")
-        config = vumi.options.get_all()['config']
-        self.r_prefix = "%s@%s:%s" % (config['system_id'], config['host'], config['port'])
-        log.msg("r_prefix = %s" % self.r_prefix)
 
         # Start the publisher
         self.publisher = yield self.start_publisher(SmppPublisher)
