@@ -17,12 +17,14 @@ from vumi.webapp.api import models
 from vumi.webapp.api import forms
 from vumi.webapp.api import utils
 from vumi.utils import *
+import vumi.options
 
 import urllib
 import urllib2
 
 from datetime import datetime, timedelta
 import time
+import redis
 
 
 class SmppConsumer(Consumer):
@@ -38,7 +40,9 @@ class SmppConsumer(Consumer):
     queue_name = "sms.outbound.fallback"
     routing_key = "sms.outbound.fallback"
 
-    def __init__(self, send_callback):
+    def __init__(self, r_server, r_prefix, send_callback):
+        self.r_server = r_server
+        self.r_prefix = r_prefix
         self.send = send_callback
         log.msg("Consuming on %s -> %s" % (self.routing_key, self.queue_name))
 
@@ -52,6 +56,8 @@ class SmppConsumer(Consumer):
         log.msg("SMPPLinkForm", repr(formdict))
         form = forms.SMPPLinkForm(formdict)
         form.save()
+        self.r_server.set("%s#%s" % (self.r_prefix, sequence_number),
+                message.payload.get("id"))
         return True
 
     def consume(self, message):
@@ -121,6 +127,13 @@ class SmppTransport(Worker):
         self.esme_client = client
         self.esme_client.set_handler(self)
 
+        # Connect to Redis
+        self.r_server = redis.Redis("localhost", db=vumi.options.get_deploy_int(self.vhost))
+        log.msg("Connected to Redis")
+        config = vumi.options.get_all()['config']
+        self.r_prefix = "%s@%s:%s" % (config['system_id'], config['host'], config['port'])
+        log.msg("r_prefix = %s" % self.r_prefix)
+
         # Start the publisher
         self.publisher = yield self.start_publisher(SmppPublisher)
         # Start the consumer, pass along the send_smpp callback for sending
@@ -130,7 +143,7 @@ class SmppTransport(Worker):
         yield self.start_consumer(dynamically_create_smpp_consumer(transport,
                     routing_key='sms.outbound.%s' % transport,
                     queue_name='sms.outbound.%s' % transport
-                ), self.send_smpp)
+                ), self.r_server, self.r_prefix, self.send_smpp)
 
 
     @inlineCallbacks
@@ -144,6 +157,9 @@ class SmppTransport(Worker):
         smpplink = models.SMPPLink.objects \
                 .filter(sequence_number=kwargs['sequence_number']) \
                 .latest('created_at')
+        sent_sms_id = self.r_server.get("%s#%s" % (self.r_prefix, kwargs['sequence_number']))
+        #self.r_server.delete("%s#%s" % (self.r_prefix, kwargs['sequence_number']))
+        print sent_sms_id, smpplink.sent_sms_id
         kwargs.update({'sent_sms':smpplink.sent_sms_id})
         log.msg("SMPPRespForm <- %s" % repr(kwargs))
         form = forms.SMPPRespForm(kwargs)
