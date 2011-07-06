@@ -9,6 +9,7 @@ class TestWorker(Worker):
 
     def __init__(self, queue):
         self._queue = queue
+        self.global_options = {}
 
     def get_channel(self):
         return TestChannel()
