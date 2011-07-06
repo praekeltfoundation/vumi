@@ -253,7 +253,7 @@ class Publisher(object):
     def start(self, channel):
         log.msg("Started the publisher")
         self.channel = channel
-        self.vumi_options = vumi.options.get()
+        self.vumi_options = vumi.options.get_all()
         self.bound_routing_keys = {}
 
     def list_bindings(self):

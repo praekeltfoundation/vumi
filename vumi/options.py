@@ -15,7 +15,7 @@ def set(dictionary):
                         " may not be re-set!")
 
 
-def get():
+def get_all():
     global __dictionary
     return deepcopy(__dictionary) or {}
 

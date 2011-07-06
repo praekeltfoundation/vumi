@@ -32,7 +32,7 @@ class SessionConsumer(Consumer):
 
     def __init__(self, publisher):
         self.publisher = publisher
-        self.vhost = vumi.options.get().get('vhost', self.vhost)
+        self.vhost = vumi.options.get_all().get('vhost', self.vhost)
         self.r_server = redis.Redis("localhost", db=vumi.options.get_deploy_int(self.vhost))
 
     def set_yaml_template(self, yaml_template):
