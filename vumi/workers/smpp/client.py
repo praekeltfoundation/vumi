@@ -1,4 +1,6 @@
 import re
+import json
+import redis
 
 from twisted.python import log
 from twisted.internet import reactor, defer
@@ -6,6 +8,9 @@ from twisted.internet.protocol import Protocol, ReconnectingClientFactory
 from twisted.internet.task import LoopingCall
 
 from smpp.pdu_builder import *
+from smpp.pdu_inspector import *
+
+import vumi.options
 
 
 class EsmeTransceiver(Protocol):
@@ -23,6 +28,13 @@ class EsmeTransceiver(Protocol):
         self.__submit_sm_resp_callback = None
         self.__delivery_report_callback = None
         self.__deliver_sm_callback = None
+
+        self.r_server = redis.Redis("localhost",
+                db=vumi.options.get_deploy_int(vumi.options.get_all()['vhost']))
+        log.msg("Connected to Redis")
+        config = vumi.options.get_all()['config']
+        self.r_prefix = "%s@%s:%s" % (config['system_id'], config['host'], config['port'])
+        log.msg("r_prefix = %s" % self.r_prefix)
 
 
     def set_handler(self, handler):
@@ -177,6 +189,26 @@ class EsmeTransceiver(Protocol):
                         source_addr = pdu['body']['mandatory_parameters']['source_addr'],
                         delivery_report = delivery_report.groupdict()
                         )
+            elif detect_multipart(pdu):
+                redis_key = "%s#multi_%s" % (self.r_prefix, multipart_key(detect_multipart(pdu)))
+                log.msg("Redis multipart key: %s" % (redis_key))
+                value = json.loads(self.r_server.get(redis_key) or 'null')
+                log.msg("Retrieved value: %s" % (repr(value)))
+                multi = MultipartMessage(value)
+                multi.add_pdu(pdu)
+                print multi.get_array()
+                completed = multi.get_completed()
+                if completed:
+                    self.r_server.delete(redis_key)
+                    log.msg("Re-assembled Message: %s" % (completed['message']))
+                    # and we can finally pass the whole message on
+                    self.__deliver_sm_callback(
+                            destination_addr = completed['to_msisdn'],
+                            source_addr = completed['from_msisdn'],
+                            short_message = completed['message']
+                            )
+                else:
+                    self.r_server.set(redis_key, json.dumps(multi.get_array()))
             else:
                 self.__deliver_sm_callback(
                         destination_addr = pdu['body']['mandatory_parameters']['destination_addr'],
