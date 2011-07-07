@@ -61,6 +61,7 @@ class SmscServer(Protocol):
             pdu_resp = SubmitSMResp(sequence_number, message_id)
             self.sendPDU(pdu_resp)
             self.delivery_report(message_id)
+            self.boomerang(pdu)
 
 
     def delivery_report(self, message_id):
@@ -69,6 +70,37 @@ class SmscServer(Protocol):
                 message_id, datetime.now().strftime("%y%m%d%H%M%S"), datetime.now().strftime("%y%m%d%H%M%S"))
         pdu = DeliverSM(sequence_number, short_message = short_message)
         self.sendPDU(pdu)
+
+
+    def boomerang(self, pdu):
+        if pdu['body']['mandatory_parameters']['short_message'] == "boomerang":
+            destination_addr = pdu['body']['mandatory_parameters']['source_addr']
+            source_addr = pdu['body']['mandatory_parameters']['destination_addr']
+
+            sequence_number = 1
+            short_message1 = "\x05\x00\x03\xff\x03\x01back"
+            pdu1 = DeliverSM(sequence_number,
+                    short_message = short_message1,
+                    destination_addr = destination_addr,
+                    source_addr = source_addr)
+
+            sequence_number = 2
+            short_message2 = "\x05\x00\x03\xff\x03\x02 at"
+            pdu2 = DeliverSM(sequence_number,
+                    short_message = short_message2,
+                    destination_addr = destination_addr,
+                    source_addr = source_addr)
+
+            sequence_number = 3
+            short_message3 = "\x05\x00\x03\xff\x03\x03 you"
+            pdu3 = DeliverSM(sequence_number,
+                    short_message = short_message3,
+                    destination_addr = destination_addr,
+                    source_addr = source_addr)
+
+            self.sendPDU(pdu2)
+            self.sendPDU(pdu3)
+            self.sendPDU(pdu1)
 
 
     def dataReceived(self, data):
