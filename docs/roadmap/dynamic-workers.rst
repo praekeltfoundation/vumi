@@ -1,56 +1,76 @@
 Dynamic Workers
 ===============
 
-Currently a transport is automatically bound to a single account, this is undesirable. We are going to split this up into:
+This has been completely rethought since the last version of this
+document. (This is still very much a work in progress, so please
+correct, update or argue as necessary.)
 
-1. A transport type factory
-2. A transport type instance
+In the old system, we have a separate ``twistd`` process for each
+worker, managed by supervisord. In the Brave New Dyanmic Workers
+World, we will be able to start and stop arbitrary workers in a
+``twistd`` process by sending a :doc:`blinkenlights` message to a
+supervisor worker in that process.
 
-Transport Type Factory
-**********************
+Advantages:
+ * We can manage Vumi workers separately from OS processes, which
+   gives us more flexibility.
+ * We can segregate workers for different projects/campaigns into
+   different processes, which can make accounting easier.
 
-A transport type factory listens for messages over AMQP that carry the configuration encoded as a JSON dictionary. Once a message is received and it has all the necessary required details it will start a new instance of its defined type using the given credentials. 
+Disadvantages:
+ * We have to manage Vumi workers separately from OS processes, which
+   requires more work and higher system complexity. (This is the basic
+   cost of the feature, though, and it's worth it for the
+   flexibility.)
+ * A badly-behaved worker can take down a bunch of other workers if it
+   manages to kill/block the process.
 
-This is typically implemented as a twistd plugin. Examples of this are an SMPP transport, a Twitter transport and an XMPP transport.
 
-There should be a maximum number of instances that a single factory can start to prevent a single instance becoming 
+Supervisor workers
+******************
 
-Transport Type Instance
-***********************
+.. note::
+   I have assumed that the supervisor will be a worker rather than a
+   static component of the process. I don't have any really compelling
+   reasons either way, but making it a worker lets us coexist easily
+   with the current one-worker-one-process model.
 
-This is a python object inside the twistd plugin process. Once a Factory receives a JSON configuration dictionary it'll start a new instance of the transport type using that configuration.
+A supervisor worker is nothing more than a standard worker that
+manages other workers within its process. Its responsibilites have not
+yet been completely defined, but will likely the following:
 
-In pseudocode, this is what it looks like::
-    
-    class SMPPTransport(Transport):
-        
-        def __init__(self, configuration):
-            self.connect(config.get('host'), config.get('port'))
-            self.authenticate(config.get('username'), config.get('password'),
-                                config.get('system_id'))
-        
-        def connect(self, host, port):
-            ...
-        
-        def authenticate(self, username, password, system_id):
-            ...
-        
-    
-    class SMPPTransportFactory(Factory):
-        def start(self, configuration):
-            return SMPPTransport(configuration)
-        
-    
-If given the following configuration JSON dictionaries it would start two connections to two SMPP gateways:
+ * Monitoring and reportng process-level metrics.
+ * Starting and stopping workers as required.
 
-example SMPP configuration message::
+Monitoring will use the usual :doc:`blinkenlights` mechanisms, and
+will work the same way as any other worker's monitoring. The
+supervisor will also provide a queryable status API to allow
+interrogation via Blinkenlights. (Format to be decided.)
+
+Starting and stopping workers will be done via Blinkenlights messages
+with a payload format similar to the following::
 
     {
-        "host": "smpp.host.com",
-        "port": "2773",
-        "username": "account1",
-        "password": "password",
-        "system_id": "abc"
+        "operation": "start_worker",
+        "worker_name": "SMPP Transport for account1",
+        "worker_class": "vumi.workers.smpp.transport.SMPPTransport",
+        "worker_config": {
+            "host": "smpp.host.com",
+            "port": "2773",
+            "username": "account1",
+            "password": "password",
+            "system_id": "abc",
+        },
     }
 
-The Factory would receive these messages from Blinkenlights over AMQP. Each instance would report back to Blinkenlights on its general health.
+We could potentially even have a hierarchy of supervisors, workers and
+hybrid workers::
+
+    process
+     +- supervisor
+         +- worker
+         +- worker
+         +- hybrid supervisor/worker
+         |   +- worker
+         |   +- worker
+         +- worker

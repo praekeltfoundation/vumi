@@ -26,6 +26,7 @@ Application developers could bundle (zip) their applications as follows:
 * application/index.html is the HTML5 application that we’ll host.
 * application/assets/ is the Javascript, CSS and images needed by the frontend application.
 * workers/worker.js has the workers that we’d fire up to run the applications workers for specific campaigns. These listen to messages arriving over AMQP as ‘events’ trigger specific pieces of logic for that campaign.
+
 The HTML5 application would have direct access to the Vumi JSON APIs, zero middleware would be needed.
 
 This application could then be uploaded to Vumi and we’d make it available in their account and link their logic to a specific SMS short/long code, twitter handle or USSD code.
