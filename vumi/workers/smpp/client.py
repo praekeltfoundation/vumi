@@ -196,7 +196,6 @@ class EsmeTransceiver(Protocol):
                 log.msg("Retrieved value: %s" % (repr(value)))
                 multi = MultipartMessage(value)
                 multi.add_pdu(pdu)
-                print multi.get_array()
                 completed = multi.get_completed()
                 if completed:
                     self.r_server.delete(redis_key)
