@@ -307,7 +307,7 @@ class Publisher(object):
         if not self.routing_key_is_bound(routing_key):
             raise RoutingKeyError("The routing_key: %s is not bound to any"
                                   " queues in vhost: %s  exchange: %s" % (
-                                  routing_key, self.vhost, self.exchange_name))
+                                  routing_key, self.vumi_options['vhost'], self.exchange_name))
 
     def publish(self, message, **kwargs):
         exchange_name = kwargs.get('exchange_name') or self.exchange_name
