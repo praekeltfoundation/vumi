@@ -1,17 +1,24 @@
+# -*- test-case-name: vumi.tests.test_service -*-
+
+from copy import deepcopy
+import json
+
 from twisted.python import log, usage
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet import protocol, reactor
 from twisted.web.server import Site
 from twisted.web.resource import Resource
+
+import txamqp
 from txamqp.client import TwistedDelegate
 from txamqp.content import Content
 from txamqp.protocol import AMQClient
+
 from vumi.errors import VumiError
 from vumi.message import Message
 from vumi.webapp.api import utils
-import txamqp
-import json
-import vumi.options
+
+from vumi.utils import load_class_by_string, make_vumi_path_abs
 
 
 class Options(usage.Options):
@@ -36,7 +43,8 @@ class Worker(AMQClient):
     @inlineCallbacks
     def connectionMade(self):
         AMQClient.connectionMade(self)
-        yield self.authenticate(self.factory.username, self.factory.password)
+        yield self.authenticate(self.global_options['username'],
+                                self.global_options['password'])
         # authentication was successful
         log.msg("Got an authenticated connection")
         yield self.startWorker()
@@ -93,6 +101,7 @@ class Worker(AMQClient):
     def start_consumer(self, klass, *args, **kwargs):
         channel = yield self.get_channel()
         consumer = klass(*args, **kwargs)
+        consumer.vumi_options = self.global_options
 
         # get the details for AMQP
         exchange_name = consumer.exchange_name
@@ -137,6 +146,7 @@ class Worker(AMQClient):
         channel = yield self.get_channel()
         # start the publisher
         publisher = klass(*args, **kwargs)
+        publisher.vumi_options = self.global_options
         # start!
         yield publisher.start(channel)
         # return the publisher
@@ -253,8 +263,11 @@ class Publisher(object):
     def start(self, channel):
         log.msg("Started the publisher")
         self.channel = channel
-        self.vumi_options = vumi.options.get_all()
         self.bound_routing_keys = {}
+
+        # There's probably a better way to do this.
+        if not hasattr(self, 'vumi_options'):
+            self.vumi_options = {}
 
     def list_bindings(self):
         try:
@@ -333,20 +346,18 @@ class Publisher(object):
 
 class AmqpFactory(protocol.ReconnectingClientFactory):
 
-    def __init__(self, specfile, vhost, username, password, worker_class,
-                 **options):
-        self.username = username
-        self.password = password
-        self.vhost = vhost
-        self.spec = txamqp.spec.load(specfile)
+    def __init__(self, worker_class, options, config):
+        self.options = options
+        self.config = config
+        self.spec = txamqp.spec.load(make_vumi_path_abs(options['specfile']))
         self.delegate = TwistedDelegate()
         self.worker_class = worker_class
-        self.options = options
 
     def buildProtocol(self, addr):
-        worker = self.worker_class(self.delegate, self.vhost, self.spec)
+        worker = self.worker_class(self.delegate, self.options['vhost'], self.spec)
         worker.factory = self
-        worker.config = self.options.get('config', {})
+        worker.global_options = self.options
+        worker.config = self.config
         self.worker = worker
         self.resetDelay()
         return worker
@@ -369,16 +380,14 @@ class WorkerCreator(object):
     Creates workers
     """
 
-    def __init__(self, worker_class, *args, **kwargs):
-        self.args = args
-        self.options = kwargs
-        self.kwargs = kwargs
-        # FIXME: shouldn't be needed
-        self.kwargs.update({
-            'worker_class': worker_class,
-        })
+    def __init__(self, global_options):
+        self.options = global_options
 
-    def connectTCP(self, host, port, timeout=30, bindAddress=None):
-        factory = AmqpFactory(*self.args, **self.kwargs)
-        reactor.connectTCP(host, port, factory, timeout=timeout,
-                           bindAddress=bindAddress)
+    def create_worker(self, worker_class, config, timeout=30, bindAddress=None):
+        worker_class = load_class_by_string(worker_class)
+        factory = AmqpFactory(worker_class, deepcopy(self.options), config)
+        self._connect(factory, timeout=timeout, bindAddress=bindAddress)
+
+    def _connect(self, factory, timeout, bindAddress):
+        reactor.connectTCP(self.options['hostname'], self.options['port'],
+                           factory, timeout, bindAddress)
