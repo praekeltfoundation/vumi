@@ -1,3 +1,5 @@
+# -*- test-case-name: vumi.tests.test_service -*-
+
 from copy import deepcopy
 import json
 
@@ -16,7 +18,7 @@ from vumi.errors import VumiError
 from vumi.message import Message
 from vumi.webapp.api import utils
 
-from vumi.utils import load_class_by_string
+from vumi.utils import load_class_by_string, make_vumi_path_abs
 
 
 class Options(usage.Options):
@@ -347,7 +349,7 @@ class AmqpFactory(protocol.ReconnectingClientFactory):
     def __init__(self, worker_class, options, config):
         self.options = options
         self.config = config
-        self.spec = txamqp.spec.load(options['specfile'])
+        self.spec = txamqp.spec.load(make_vumi_path_abs(options['specfile']))
         self.delegate = TwistedDelegate()
         self.worker_class = worker_class
 
@@ -384,5 +386,8 @@ class WorkerCreator(object):
     def create_worker(self, worker_class, config, timeout=30, bindAddress=None):
         worker_class = load_class_by_string(worker_class)
         factory = AmqpFactory(worker_class, deepcopy(self.options), config)
-        reactor.connectTCP(self.options['hostname'], self.options['port'], factory,
-                           timeout=timeout, bindAddress=bindAddress)
+        self._connect(factory, timeout=timeout, bindAddress=bindAddress)
+
+    def _connect(self, factory, timeout, bindAddress):
+        reactor.connectTCP(self.options['hostname'], self.options['port'],
+                           factory, timeout, bindAddress)

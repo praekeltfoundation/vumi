@@ -1,5 +1,20 @@
 import importlib
+import os.path
 import re
+
+
+def make_vumi_path_abs(path):
+    """
+    Return an absolute path by prepending the vumi "root" directory.
+
+    The "root" directory is the one containing the "vumi" package. If
+    the path is already absolute, it is returned as-is.
+    """
+    if os.path.isabs(path):
+        return path
+    # We know where this file is relative to the vumi "root"
+    this_path = os.path.dirname(os.path.dirname(__file__))
+    return os.path.join(this_path, path)
 
 
 def load_class(module_name, class_name):
