@@ -1,6 +1,6 @@
 # -*- test-case-name: vumi.blinkenlights.tests.test_message -*-
 
-class Message20110707(object):
+class Message(object):
     """
     Blinkenlights message object. This sits inside a Vumi message, and
     works with decoded JSON data.
@@ -52,7 +52,7 @@ class Message20110707(object):
         return cls(**message)
 
     def __str__(self):
-        return u"<Message%s:%s %s src=(%s, %s) payload=\"%s\">" % (
+        return u"<Message v%s:%s %s src=(%s, %s) payload=\"%s\">" % (
             self.VERSION, self.message_type, self.timestamp,
             self.source_name, self.source_id, repr(self.payload))
 
@@ -65,7 +65,7 @@ class Message20110707(object):
         return True
 
 
-class MetricsMessage(Message20110707):
+class MetricsMessage(Message):
     MESSAGE_TYPE = "metrics"
 
     def process_payload(self):

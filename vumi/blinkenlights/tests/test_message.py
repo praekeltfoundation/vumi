@@ -1,7 +1,7 @@
 from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
 
-from vumi.blinkenlights import message
+from vumi.blinkenlights import message20110707 as message
 
 def mkmsg(message_version, message_type, source_name, source_id, payload, timestamp):
     return {
@@ -14,10 +14,10 @@ def mkmsg(message_version, message_type, source_name, source_id, payload, timest
         }
 
 def mkmsgobj(message_type, source_name, source_id, payload, timestamp):
-    return message.Message20110707(message_type, source_name, source_id, payload, timestamp)
+    return message.Message(message_type, source_name, source_id, payload, timestamp)
 
 
-class Message20110707TestCase(TestCase):
+class MessageTestCase(TestCase):
 
     def setUp(self):
         pass
@@ -29,7 +29,7 @@ class Message20110707TestCase(TestCase):
         """A valid message dict should decode into an appropriate Message object.
         """
         msg_data = mkmsg("20110707", "custom", "myworker", "abc123", ["foo"], None)
-        msg = message.Message20110707.from_dict(msg_data)
+        msg = message.Message.from_dict(msg_data)
 
         self.assertEquals("custom", msg.message_type)
         self.assertEquals("myworker", msg.source_name)
@@ -41,7 +41,7 @@ class Message20110707TestCase(TestCase):
         """A Message object should encode into an appropriate message dict.
         """
         msg_data = mkmsg("20110707", "custom", "myworker", "abc123", ["foo"], None)
-        msg = message.Message20110707("custom", "myworker", "abc123", ["foo"], None)
+        msg = message.Message("custom", "myworker", "abc123", ["foo"], None)
 
         self.assertEquals(msg_data, msg.to_dict())
 
@@ -49,23 +49,23 @@ class Message20110707TestCase(TestCase):
         """Various kinds of invalid messages should fail to decode.
         """
         msg_data = mkmsg("19800902", "custom", "myworker", "abc123", ["foo"], None)
-        self.assertRaises(ValueError, message.Message20110707.from_dict, msg_data)
+        self.assertRaises(ValueError, message.Message.from_dict, msg_data)
 
         msg_data = mkmsg("20110707", "custom", "myworker", "abc123", ["foo"], None)
         msg_data.pop('payload')
-        self.assertRaises(ValueError, message.Message20110707.from_dict, msg_data)
+        self.assertRaises(ValueError, message.Message.from_dict, msg_data)
 
         msg_data = mkmsg("20110707", "custom", "myworker", "abc123", ["foo"], None)
         msg_data['foo'] = 'bar'
-        self.assertRaises(ValueError, message.Message20110707.from_dict, msg_data)
+        self.assertRaises(ValueError, message.Message.from_dict, msg_data)
 
     def test_message_equality(self):
         """Identical messages should compare equal. Different messages should not.
         """
         msg_data = mkmsg("20110707", "custom", "myworker", "abc123", ["foo"], None)
-        msg1 = message.Message20110707.from_dict(msg_data.copy())
-        msg2 = message.Message20110707.from_dict(msg_data.copy())
-        msg3 = message.Message20110707.from_dict(msg1.to_dict())
+        msg1 = message.Message.from_dict(msg_data.copy())
+        msg2 = message.Message.from_dict(msg_data.copy())
+        msg3 = message.Message.from_dict(msg1.to_dict())
         diff_msgs = [
             mkmsgobj("custom1", "myworker", "abc123", ["foo"], None),
             mkmsgobj("custom", "myworker1", "abc123", ["foo"], None),
