@@ -1,5 +1,8 @@
 # -*- test-case-name: vumi.blinkenlights.tests.test_message -*-
 
+from datetime import datetime
+
+
 class Message(object):
     """
     Blinkenlights message object. This sits inside a Vumi message, and
@@ -23,8 +26,10 @@ class Message(object):
         self.message_type = message_type
         self.payload = payload
         if timestamp is None:
-            # TODO: Get a timestamp.
-            pass
+            timestamp = datetime.utcnow()
+        if not isinstance(timestamp, datetime):
+            # Assume it's a list or tuple here
+            timestamp = datetime(*timestamp)
         self.timestamp = timestamp
         if self.MESSAGE_TYPE and self.MESSAGE_TYPE != self.message_type:
             raise ValueError("Incorrect message type. Expected '%s', got '%s'." % (self.MESSAGE_TYPE, self.message_type))
@@ -36,10 +41,13 @@ class Message(object):
     def to_dict(self):
         message = {'message_version': self.VERSION}
         message.update(dict((field, getattr(self, field)) for field in self.REQUIRED_FIELDS))
+        # Massage the timestamp into the serialised list we use
+        message['timestamp'] = list(self.timestamp.timetuple()[:6])
         return message
 
     @classmethod
     def from_dict(cls, message):
+        message = message.copy() # So we can modify it safely
         version = message.pop('message_version')
         if version != cls.VERSION:
             raise ValueError("Incorrect message version. Expected '%s', got '%s'." % (cls.VERSION, version))
@@ -49,6 +57,8 @@ class Message(object):
         for field in message:
             if field not in cls.REQUIRED_FIELDS:
                 raise ValueError("Found unexpected field '%s'." % (field,))
+        if not message['timestamp']:
+            raise ValueError("Missing timestamp in field 'timestamp'.")
         return cls(**message)
 
     def __str__(self):
@@ -77,3 +87,4 @@ class MetricsMessage(Message):
             time = metric.get('time', None)
             tags = dict(i for i in metric.items() if i[0] not in ('name', 'count', 'time'))
             self.metrics.setdefault(name, []).append((count, time, tags))
+
