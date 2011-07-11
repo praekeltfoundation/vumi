@@ -2,6 +2,7 @@
 
 from datetime import datetime
 
+from vumi import message as vumi_message
 
 class Message(object):
     """
@@ -45,6 +46,9 @@ class Message(object):
         message['timestamp'] = list(self.timestamp.timetuple()[:6])
         return message
 
+    def to_vumi_message(self):
+        return vumi_message.Message(**self.to_dict())
+
     @classmethod
     def from_dict(cls, message):
         message = message.copy() # So we can modify it safely
@@ -67,8 +71,10 @@ class Message(object):
             self.source_name, self.source_id, repr(self.payload))
 
     def __eq__(self, other):
-        if self.VERSION != other.VERSION: return False
-        if self.REQUIRED_FIELDS != other.REQUIRED_FIELDS: return False
+        if self.VERSION != other.VERSION:
+            return False
+        if self.REQUIRED_FIELDS != other.REQUIRED_FIELDS:
+            return False
         for field in self.REQUIRED_FIELDS:
             if getattr(self, field) != getattr(other, field):
                 return False

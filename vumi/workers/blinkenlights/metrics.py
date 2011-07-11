@@ -8,7 +8,6 @@ from twisted.python import log
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet import reactor
 
-from vumi.message import Message
 from vumi.service import Consumer, Publisher, Worker
 from vumi.blinkenlights.message20110707 import MetricsMessage
 
@@ -27,6 +26,12 @@ class MetricsConsumer(Consumer):
         return self.callback(message)
 
 
+def timedelta_millis(td):
+    millis = 1000*3600*24*td.days
+    millis += 1000*td.seconds
+    millis += td.microseconds/1000.0
+    return millis
+
 class MetricsPublisher(Publisher):
     exchange_name = "vumi.metrics"
     exchange_type = "direct"
@@ -36,18 +41,7 @@ class MetricsPublisher(Publisher):
     delivery_mode = 2
 
     def __init__(self):
-        self.reset_current_metrics()
-
-    def reset_current_metrics(self):
-        self.counters = {}
-        self.timers = {}
-
-    def send_metrics(self):
-        metrics = []
-        for name, value in self.counters.items():
-            metrics.append({'name': name, 'count': value})
-        self.publish_message(Message(**self.make_metrics_message(metrics).to_dict()))
-        self.reset_current_metrics()
+        self._reset_current_metrics()
 
     def add_counter(self, counter_name, value=1):
         """
@@ -57,13 +51,58 @@ class MetricsPublisher(Publisher):
         self.counters[counter_name] = current_value + value
 
     def start_timer(self, timer_name):
-        pass
+        """
+        Start a timer.
+        """
+        self._get_timer(timer_name)['start'].append(datetime.utcnow())
 
     def stop_timer(self, timer_name):
-        pass
+        """
+        Start a timer that was previously started with start_timer().
+        """
+        if timer_name not in self.timers:
+            # TODO: Find a way to dedup this
+            raise ValueError("Trying to stop timer that hasn't been started: %s" % (timer_name))
+        timer = self._get_timer(timer_name)
+        if not len(timer['stop']) < len(timer['start']):
+            raise ValueError("Trying to stop timer that hasn't been started: %s" % (timer_name))
+        timer['stop'].append(datetime.utcnow())
 
-    def make_metrics_message(self, metrics):
-        return MetricsMessage('metrics', 'metrics generator', '0', metrics)
+    def send_metrics(self):
+        """
+        Send metrics to Blinkenlights.
+
+        All metrics collected since the last call to send_metrics()
+        are sent and then cleared, ready for collecting the next set.
+        """
+        msg = self._make_message(self._build_metrics())
+        self.publish_message(msg)
+        self._reset_current_metrics()
+
+    def _reset_current_metrics(self):
+        self.counters = {}
+        self.timers = {}
+
+    def _build_metrics(self):
+        metrics = []
+        for name, value in self.counters.items():
+            metrics.append({'name': name, 'count': value})
+        for name, value in self.timers.items():
+            start, stop = value['start'], value['stop']
+            if len(start) != len(stop):
+                # TODO: Something appropriate
+                pass
+            times = zip(start, stop)
+            total_millis = sum(timedelta_millis(e-s) for s, e in times)
+            metrics.append({'name': name, 'count': len(times), 'time': total_millis})
+        return metrics
+
+    def _get_timer(self, timer_name):
+        return self.timers.setdefault(timer_name, {'start': [], 'stop': []})
+
+    def _make_message(self, metrics):
+        msg = MetricsMessage('metrics', 'metrics generator', '0', metrics)
+        return msg.to_vumi_message()
 
 
 

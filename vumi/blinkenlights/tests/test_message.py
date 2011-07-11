@@ -72,8 +72,8 @@ class MessageTestCase(TestCase):
         """Identical messages should compare equal. Different messages should not.
         """
         msg_data = mkmsg("20110707", "custom", "myworker", "abc123", ["foo"], TIMELIST)
-        msg1 = message.Message.from_dict(msg_data.copy())
-        msg2 = message.Message.from_dict(msg_data.copy())
+        msg1 = mkmsgobj("custom", "myworker", "abc123", ["foo"], TIMEOBJ)
+        msg2 = message.Message.from_dict(msg_data)
         msg3 = message.Message.from_dict(msg1.to_dict())
         diff_msgs = [
             mkmsgobj("custom1", "myworker", "abc123", ["foo"], TIMEOBJ),
