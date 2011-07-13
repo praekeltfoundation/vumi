@@ -130,20 +130,11 @@ class OperaPublisher(Publisher):
         super(OperaPublisher, self).publish_message(message, **kwargs)
     
 
-class OperaTransport(Worker):
-    
-    # inlineCallbacks, TwistedMatrix's fancy way of allowing you to write
-    # asynchronous code as if it was synchronous by the nifty use of
-    # coroutines.
-    # See: http://twistedmatrix.com/documents/10.0.0/api/twisted.internet.defer.html#inlineCallbacks
+class OperaReceiptTransport(Worker):
     @inlineCallbacks
     def startWorker(self):
-        log.msg("Starting the OperaTransport config: %s" % self.config)
-        # create the publisher
+        log.msg('Starting the OperaReceiptTransport config: %s' % self.config)
         self.publisher = yield self.start_publisher(OperaPublisher)
-        # when it's done, create the consumer and pass it the publisher
-        self.consumer = yield self.start_consumer(OperaConsumer, self.publisher, self.config)
-        
         # start receipt web resource
         self.receipt_resource = yield self.start_web_resources(
             [
@@ -153,9 +144,25 @@ class OperaTransport(Worker):
             ],
             self.config['web_port']
         )
+    def stopWorker(self):
+        log.msg('Stopping the OperaReceiptTransport')
+
+class OperaSMSTransport(Worker):
+    
+    # inlineCallbacks, TwistedMatrix's fancy way of allowing you to write
+    # asynchronous code as if it was synchronous by the nifty use of
+    # coroutines.
+    # See: http://twistedmatrix.com/documents/10.0.0/api/twisted.internet.defer.html#inlineCallbacks
+    @inlineCallbacks
+    def startWorker(self):
+        log.msg("Starting the OperaSMSTransport config: %s" % self.config)
+        # create the publisher
+        self.publisher = yield self.start_publisher(OperaPublisher)
+        # when it's done, create the consumer and pass it the publisher
+        self.consumer = yield self.start_consumer(OperaConsumer, self.publisher, self.config)
     
     def stopWorker(self):
-        log.msg("Stopping the OperaTransport")
+        log.msg("Stopping the OperaSMSTransport")
     
 
 
