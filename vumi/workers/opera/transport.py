@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# -*- test-case-name: vumi.workers.opera.test_opera -*-
 from twisted.python import log
 from twisted.web import xmlrpc, http
 from twisted.web.resource import Resource
@@ -83,7 +84,6 @@ class OperaConsumer(Consumer):
             'Channel': config.get('channel'),
         }
     
-    @inlineCallbacks
     def consume_message(self, message):
         dictionary = self.default_values.copy()
         payload = message.payload
@@ -108,13 +108,20 @@ class OperaConsumer(Consumer):
         dictionary['Receipt'] = payload.get('receipt', 'Y')
         
         log.msg("Sending SMS via Opera: %s" % dictionary)
-
-        proxy_response = yield self.proxy.callRemote('EAPIGateway.SendSMS',
-                dictionary)
-        log.msg("Proxy response: %s" % proxy_response)
-        sent_sms.transport_msg_id = proxy_response.get('Identifier')
-        sent_sms.save()
-        returnValue(sent_sms)
+        
+        def success(proxy_response):
+            log.msg("Proxy response: %s" % proxy_response)
+            sent_sms.transport_msg_id = proxy_response.get('Identifier')
+            sent_sms.save()
+            return sent_sms
+        
+        def errback(error):
+            log.err(error)
+            return error
+        
+        deferred = self.proxy.callRemote('EAPIGateway.SendSMS', dictionary)
+        deferred.addCallbacks(success, errback)
+        return deferred
     
 
 class OperaPublisher(Publisher):
