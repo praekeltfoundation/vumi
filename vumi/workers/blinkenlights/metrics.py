@@ -148,7 +148,7 @@ class GraphiteMetricsCollector(Worker):
         self.consumer = yield self.start_consumer(MetricsConsumer, self.consume_metrics)
 
     def process_timestamp(self, timestamp):
-        unix_timestamp = time.mktime(datetime(*timestamp).timetuple())
+        unix_timestamp = time.mktime(timestamp.timetuple())
         # Convert to local time for Graphite *vomit*
         unix_timestamp = unix_timestamp - time.timezone
         return unix_timestamp
