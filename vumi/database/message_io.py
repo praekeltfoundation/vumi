@@ -11,6 +11,7 @@ class ReceivedMessage(UglyModel):
         ('from_msisdn', 'varchar NOT NULL'),
         ('to_msisdn', 'varchar NOT NULL'),
         ('message', 'varchar NOT NULL'),
+        ('destination', 'varchar'),
         )
 
     @classmethod
@@ -33,8 +34,16 @@ class ReceivedMessage(UglyModel):
 
     @classmethod
     def count_messages(cls, txn):
-        txn.execute("SELECT count(1) FROM %s" % (cls.table_name,))
-        return txn.fetchone()[0]
+        return cls.count_rows(txn)
+
+    @classmethod
+    def dispatch_message(cls, txn, msg_id, destination):
+        msg = cls.get_message(txn, msg_id)
+        if not msg:
+            raise ValueError("Can't find message %s to dispatch" % (msg_id,))
+        query = "UPDATE %s SET destination=%%(destination)s WHERE id=%%(id)s" % (cls.table_name,)
+        txn.execute(query, {'id': msg_id, 'destination': destination})
+
 
 
 class SentMessage(UglyModel):

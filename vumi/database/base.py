@@ -66,3 +66,7 @@ class UglyModel(object):
         valuespecs = ", ".join(["%%(%s)s" % f for f in fields])
         return "INSERT INTO %s (%s) VALUES (%s)" % (cls.table_name, ", ".join(fields), valuespecs)
 
+    @classmethod
+    def count_rows(cls, txn, suffix='', values=None):
+        txn.execute("SELECT count(1) FROM %s %s" % (cls.table_name, suffix), values)
+        return txn.fetchone()[0]
