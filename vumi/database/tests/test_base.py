@@ -19,7 +19,7 @@ class UglyModelTestCase(TestCase):
         if getattr(self, 'db', None):
             close_db('test')
         # TODO: Pull this out into some kind of config?
-        setup_db('test', 'psycopg2', user='vumi', password='vumi', database='test')
+        setup_db('test', user='vumi', password='vumi', database='test')
         self.db = get_db('test')
         return succeed(None)
 
