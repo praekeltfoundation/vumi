@@ -30,6 +30,13 @@ The sequence_number parameter is a revolving set of integers used to pair outgoi
     submit_sm & submit_sm_resp
 Both submit_sm and the corresponding submit_sm_resp will share a single sequence_number, however, for long term storage and future reference, it is necessary to link the id of the message stored on the SMSC (message_id in the submit_sm_resp) back to the id of the sent message.  As the submit_sm_resp pdu's are received, the original id is looked up on redis via the sequence_number and associated with the message_id in the response.
 
+Followup pdu's from the SMSC (i.e. deleivery reports) will reference the original message by the message_id held by the SMSC which was returned in the submit_sm_resp.
+
+
+A second use of Redis is to cache sessions (i.e. for USSD) this means that in-progress sessions will be saved to disk (protecting against system shutdowns), and that a pool of genic workers may be used to handle sessions.  Each worker retreives the session state from redis as it gets the next message for a given session, meaning that:
+    a. single workers can easily handle multiple ongoing sessions
+    b. the session messages don't have to be routed to the exact same worker each time for a given session
+
 
 Installing the SMSC simulator
 -----------------------------
