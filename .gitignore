@@ -23,3 +23,5 @@ dist/*
 .coverage-results/
 htmlcov/
 coverage-html/
+env/
+trialscript
