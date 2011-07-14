@@ -146,3 +146,19 @@ OPERATOR_PREFIX:
     2784: CELLC
 
 """
+
+
+def get_deploy_int(deployment):
+    lookup = {
+        "develop": 7,
+        "/develop": 7,
+        "development": 7,
+        "/development": 7,
+        "production": 8,
+        "/production": 8,
+        "staging": 9,
+        "/staging": 9,
+        "qa": 9,
+        "/qa": 9,
+        }
+    return lookup.get(deployment.lower(), 7)
