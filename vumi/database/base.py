@@ -13,6 +13,12 @@ def get_db(name):
         return db
     raise ValueError("Database %s is not set up." % (name,))
 
+def close_db(name):
+    db = DATABASES.get(name, None)
+    if db:
+        db.close()
+        DATABASES[name] = None
+
 
 class UglyModel(object):
     table_name = None

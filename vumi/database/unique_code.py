@@ -6,7 +6,7 @@ from vumi.database.base import UglyModel
 class UniqueCode(UglyModel):
     table_name = 'unique_codes'
     fields = (
-        ('code', 'varchar(10) UNIQUE NOT NULL'),
+        ('code', 'varchar UNIQUE NOT NULL PRIMARY KEY'),
         ('used', 'boolean DEFAULT false'),
         ('created', 'timestamp DEFAULT current_timestamp'),
         ('modified', 'timestamp DEFAULT current_timestamp'),
