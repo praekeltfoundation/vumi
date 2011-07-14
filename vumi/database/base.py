@@ -32,12 +32,9 @@ class UglyModel(object):
         self.txn = txn
 
     @classmethod
-    def create_table(cls, db, if_not_exists=False):
-        ine = ""
-        if if_not_exists:
-            ine = "IF NOT EXISTS "
+    def create_table(cls, db):
         cols = ', '.join([' '.join(f) for f in cls.fields])
-        query = ''.join(['CREATE TABLE ', ine, cls.table_name, ' (', cols, ')'])
+        query = ''.join(['CREATE TABLE ', cls.table_name, ' (', cols, ')'])
         return db.runOperation(query)
 
     @classmethod

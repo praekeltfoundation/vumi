@@ -6,10 +6,10 @@ from vumi.database.base import UglyModel
 class UniqueCode(UglyModel):
     table_name = 'unique_codes'
     fields = (
-        ('code', 'varchar UNIQUE NOT NULL PRIMARY KEY'),
+        ('code', 'varchar PRIMARY KEY'),
         ('used', 'boolean DEFAULT false'),
-        ('created', 'timestamp DEFAULT current_timestamp'),
-        ('modified', 'timestamp DEFAULT current_timestamp'),
+        ('created', 'timestamp with time zone DEFAULT current_timestamp'),
+        ('modified', 'timestamp with time zone DEFAULT current_timestamp'),
         )
 
     @classmethod
@@ -60,15 +60,15 @@ class UniqueCode(UglyModel):
 
 
 
-class VendedCode(UglyModel):
-    table_name = 'vended_codes'
+class VoucherCode(UglyModel):
+    table_name = 'voucher_codes'
     fields = (
         ('id', 'SERIAL PRIMARY KEY'),
         ('code', 'varchar NOT NULL'),
         ('supplier', 'varchar'),
         ('used', 'boolean DEFAULT false'),
-        ('created', 'timestamp DEFAULT current_timestamp'),
-        ('modified', 'timestamp DEFAULT current_timestamp'),
+        ('created', 'timestamp with time zone DEFAULT current_timestamp'),
+        ('modified', 'timestamp with time zone DEFAULT current_timestamp'),
         )
 
     @classmethod
@@ -142,3 +142,50 @@ class VendedCode(UglyModel):
         query = "UPDATE %s SET used=%%(used)s WHERE id=%%(id)s" % (self.table_name)
         self.txn.execute(query, {'id': self.id, 'used': True})
         self.used = True
+
+
+class CampaignEntry(UglyModel):
+    table_name = 'campaign_entries'
+    fields = (
+        ('id', 'SERIAL PRIMARY KEY'),
+        ('received_message_id', 'integer NOT NULL REFERENCES received_message'),
+        ('created', 'timestamp with time zone DEFAULT current_timestamp'),
+        ('user_id', 'varchar NOT NULL'),
+        ('unique_code', 'varchar NOT NULL REFERENCES unique_codes'),
+        ('voucher_code_id', 'integer REFERENCES voucher_codes'),
+        )
+
+    @classmethod
+    def get_entry(cls, txn, entry_id):
+        entries = cls.run_select(txn, "WHERE id=%(id)s", {'id': entry_id})
+        if entries:
+            return cls(txn, *entries[0])
+        return None
+
+    @classmethod
+    def count_entries(cls, txn, user_id=None):
+        suffix = ""
+        if user_id:
+            suffix += "WHERE user_id=%(user_id)s"
+        return cls.count_rows(txn, suffix, {'user_id': user_id})
+
+    @classmethod
+    def count_entries_since(cls, txn, timestamp, user_id=None):
+        suffix = "WHERE "
+        if user_id:
+            suffix += "user_id=%(user_id)s AND"
+        suffix += " created>=%(timestamp)s"
+        return cls.count_rows(txn, suffix, {'user_id': user_id,
+                                            'timestamp': timestamp})
+
+    @classmethod
+    def enter(cls, txn, received_message_id, unique_code, user_id, voucher_code_id):
+        params = {
+            'unique_code': unique_code,
+            'received_message_id': received_message_id,
+            'user_id': user_id,
+            'voucher_code_id': voucher_code_id,
+            }
+        txn.execute(cls.insert_values_query(**params), params)
+        txn.execute("SELECT lastval()")
+        return txn.fetchone()[0]

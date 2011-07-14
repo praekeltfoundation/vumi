@@ -6,11 +6,7 @@ from vumi.database.message_io import ReceivedMessage
 class ReceivedMessageTestCase(UglyModelTestCase):
 
     def setUp(self):
-        @inlineCallbacks
-        def _cb(_):
-            yield ReceivedMessage.drop_table(self.db)
-            yield ReceivedMessage.create_table(self.db)
-        return self.setup_db(_cb)
+        return self.setup_db(ReceivedMessage)
 
     def tearDown(self):
         self.close_db()

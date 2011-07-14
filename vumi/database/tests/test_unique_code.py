@@ -1,16 +1,13 @@
-from twisted.internet.defer import inlineCallbacks
+from datetime import datetime, timedelta
 
 from vumi.database.tests.test_base import UglyModelTestCase
-from vumi.database.unique_code import UniqueCode, VendedCode
+from vumi.database.unique_code import UniqueCode, VoucherCode, CampaignEntry
+from vumi.database.message_io import ReceivedMessage
 
 class UniqueCodeTestCase(UglyModelTestCase):
 
     def setUp(self):
-        @inlineCallbacks
-        def _cb(_):
-            yield UniqueCode.drop_table(self.db)
-            yield UniqueCode.create_table(self.db)
-        return self.setup_db(_cb)
+        return self.setup_db(UniqueCode)
 
     def tearDown(self):
         self.close_db()
@@ -24,7 +21,7 @@ class UniqueCodeTestCase(UglyModelTestCase):
             self.assertEquals('used', UniqueCode.get_code_status(txn, '123'))
             self.assertEquals('invalid', UniqueCode.get_code_status(txn, 'xyz'))
 
-        d.addCallback(self.ricb, _check_status)
+        return d.addCallback(self.ricb, _check_status)
 
     def test_burn_code(self):
         d = self.ri(UniqueCode.load_codes, ['abc', '123', 'useme'])
@@ -50,14 +47,10 @@ class UniqueCodeTestCase(UglyModelTestCase):
         return d
 
 
-class VendedCodeTestCase(UglyModelTestCase):
+class VoucherCodeTestCase(UglyModelTestCase):
 
     def setUp(self):
-        @inlineCallbacks
-        def _cb(_):
-            yield VendedCode.drop_table(self.db)
-            yield VendedCode.create_table(self.db)
-        return self.setup_db(_cb)
+        return self.setup_db(VoucherCode)
 
     def tearDown(self):
         self.close_db()
@@ -66,18 +59,18 @@ class VendedCodeTestCase(UglyModelTestCase):
         codes = [('abc1', 's1'), ('abc2', 's1'), ('abc3', 's1'),
                  ('xyz1', 's2'), ('xyz2', 's2'), ('xyz3', 's2')]
         if with_suppliers:
-            d = self.ri(VendedCode.load_supplier_codes, codes)
+            d = self.ri(VoucherCode.load_supplier_codes, codes)
         else:
-            d = self.ri(VendedCode.load_codes, [c for c, _ in codes])
+            d = self.ri(VoucherCode.load_codes, [c for c, _ in codes])
         # FIXME: Avoid doing this based on insert order.
-        d.addCallback(self.ricb, VendedCode.modify_code, 1, used=True)
-        d.addCallback(self.ricb, VendedCode.modify_code, 4, used=True)
+        d.addCallback(self.ricb, VoucherCode.modify_code, 1, used=True)
+        d.addCallback(self.ricb, VoucherCode.modify_code, 4, used=True)
         return d
 
     def assert_counts(self, txn, used, unused, supplier=None):
-        self.assertEquals(used, VendedCode.count_used_codes(txn, supplier))
-        self.assertEquals(unused, VendedCode.count_unused_codes(txn, supplier))
-        self.assertEquals(used + unused, VendedCode.count_codes(txn, supplier))
+        self.assertEquals(used, VoucherCode.count_used_codes(txn, supplier))
+        self.assertEquals(unused, VoucherCode.count_unused_codes(txn, supplier))
+        self.assertEquals(used + unused, VoucherCode.count_codes(txn, supplier))
 
     def test_counts(self):
         """
@@ -108,7 +101,7 @@ class VendedCodeTestCase(UglyModelTestCase):
 
         def _txn(txn):
             self.assert_counts(txn, 2, 4)
-            used = [VendedCode.vend_code(txn).code for _ in [1,2,3,4]]
+            used = [VoucherCode.vend_code(txn).code for _ in [1,2,3,4]]
             self.assert_counts(txn, 6, 0)
             self.assertEquals(['abc2', 'abc3', 'xyz2', 'xyz3'], sorted(used))
         d.addCallback(self.ricb, _txn)
@@ -124,7 +117,7 @@ class VendedCodeTestCase(UglyModelTestCase):
 
         def _txn(txn, supplier, codes):
             self.assert_counts(txn, 1, 2, supplier)
-            used = [VendedCode.vend_code(txn, supplier).code for _ in [1,2]]
+            used = [VoucherCode.vend_code(txn, supplier).code for _ in [1,2]]
             self.assert_counts(txn, 3, 0, supplier)
             self.assertEquals(codes, sorted(used))
         d.addCallback(self.ricb, _txn, 's1', ['abc2', 'abc3'])
@@ -139,21 +132,21 @@ class VendedCodeTestCase(UglyModelTestCase):
         """
         codes = [('abc', 's1'), ('abc', 's1'), ('abc', 's1'),
                  ('abc', 's2'), ('abc', 's2'), ('abc', 's2')]
-        d = self.ri(VendedCode.load_supplier_codes, codes)
+        d = self.ri(VoucherCode.load_supplier_codes, codes)
 
         def _txn(txn):
             self.assert_counts(txn, 0, 6)
             self.assert_counts(txn, 0, 3, 's1')
             self.assert_counts(txn, 0, 3, 's2')
 
-            used = [VendedCode.vend_code(txn, 's1').code for _ in [1,2]]
+            used = [VoucherCode.vend_code(txn, 's1').code for _ in [1,2]]
 
             self.assert_counts(txn, 2, 4)
             self.assert_counts(txn, 2, 1, 's1')
             self.assert_counts(txn, 0, 3, 's2')
             self.assertEquals(['abc', 'abc'], used)
 
-            used = [VendedCode.vend_code(txn, 's2').code for _ in [1,2]]
+            used = [VoucherCode.vend_code(txn, 's2').code for _ in [1,2]]
 
             self.assert_counts(txn, 4, 2)
             self.assert_counts(txn, 2, 1, 's1')
@@ -162,3 +155,78 @@ class VendedCodeTestCase(UglyModelTestCase):
             self.assertEquals(['abc', 'abc'], used)
         d.addCallback(self.ricb, _txn)
         return d
+
+
+class CampaignEntryTestCase(UglyModelTestCase):
+
+    def setUp(self):
+        d = self.setup_db(ReceivedMessage, UniqueCode, VoucherCode, CampaignEntry)
+        return d.addCallback(lambda _: self.setup_data())
+
+    def tearDown(self):
+        d = CampaignEntry.drop_table(self.db)
+        d.addCallback(lambda _: VoucherCode.drop_table(self.db))
+        d.addCallback(lambda _: UniqueCode.drop_table(self.db))
+        d.addCallback(lambda _: ReceivedMessage.drop_table(self.db))
+        return d.addCallback(lambda _: self.close_db())
+
+    def mkmsg(self, content):
+        return {
+                'from_msisdn': '27831234567',
+                'to_msisdn': '90210',
+                'message': content,
+                }
+
+    def setup_data(self):
+        unique_codes = ['aaa', 'bbb', 'ccc', 'ddd']
+        voucher_codes = [('abc1', 's1'), ('abc2', 's1'), ('abc3', 's1'),
+                         ('xyz1', 's2'), ('xyz2', 's2'), ('xyz3', 's2')]
+        rmsgs = [self.mkmsg(m) for m in ['foo', 'aaa', 'bbb', 'ccc']]
+        d = self.ri(VoucherCode.load_supplier_codes, voucher_codes)
+        d.addCallback(self.ricb, UniqueCode.load_codes, unique_codes)
+        for msg in rmsgs:
+            d.addCallback(self.ricb, ReceivedMessage.receive_message, msg)
+        return d
+
+    def assert_counts(self, txn, used, unused, supplier=None):
+        self.assertEquals(used, VoucherCode.count_used_codes(txn, supplier))
+        self.assertEquals(unused, VoucherCode.count_unused_codes(txn, supplier))
+        self.assertEquals(used + unused, VoucherCode.count_codes(txn, supplier))
+
+    def test_campaign_entry(self):
+        """
+        A campaign entry should be pretty.
+        TODO: Write a useful test description.
+        """
+        def _txn(txn):
+            entry_id = CampaignEntry.enter(txn, 2, 'aaa', '27831234567', 1)
+            entry = CampaignEntry.get_entry(txn, entry_id)
+            self.assertEquals(2, entry.received_message_id)
+            self.assertEquals('aaa', entry.unique_code)
+            self.assertEquals('27831234567', entry.user_id)
+            self.assertEquals(1, entry.voucher_code_id)
+        return self.ri(_txn)
+
+    def test_campaign_entry_counts(self):
+        """
+        A campaign entry should be pretty.
+        TODO: Write a useful test description.
+        """
+        def _txn(txn):
+            recent = datetime.utcnow() - timedelta(100)
+            future = datetime.utcnow() + timedelta(100)
+            self.assertEquals(0, CampaignEntry.count_entries(txn))
+            self.assertEquals(0, CampaignEntry.count_entries_since(txn, recent))
+            self.assertEquals(0, CampaignEntry.count_entries_since(txn, future))
+            CampaignEntry.enter(txn, 2, 'aaa', '27831234567', 1)
+            self.assertEquals(1, CampaignEntry.count_entries(txn))
+            self.assertEquals(1, CampaignEntry.count_entries_since(txn, recent))
+            self.assertEquals(0, CampaignEntry.count_entries_since(txn, future))
+
+            self.assertEquals(0, CampaignEntry.count_entries(txn, 'foo'))
+            self.assertEquals(0, CampaignEntry.count_entries_since(txn, recent, 'foo'))
+
+            self.assertEquals(1, CampaignEntry.count_entries(txn, '27831234567'))
+            self.assertEquals(1, CampaignEntry.count_entries_since(txn, recent, '27831234567'))
+            self.assertEquals(0, CampaignEntry.count_entries_since(txn, future, '27831234567'))
+        return self.ri(_txn)

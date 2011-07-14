@@ -7,7 +7,7 @@ class ReceivedMessage(UglyModel):
     table_name = 'received_message'
     fields = (
         ('id', 'SERIAL PRIMARY KEY'),
-        ('received', 'timestamp DEFAULT current_timestamp'),
+        ('received', 'timestamp with time zone DEFAULT current_timestamp'),
         ('from_msisdn', 'varchar NOT NULL'),
         ('to_msisdn', 'varchar NOT NULL'),
         ('message', 'varchar NOT NULL'),
@@ -47,17 +47,17 @@ class ReceivedMessage(UglyModel):
 
 
 class SentMessage(UglyModel):
-    table_name = 'received_message'
+    table_name = 'sent_message'
     fields = (
         ('id', 'SERIAL PRIMARY KEY'),
-        ('sent', 'timestamp DEFAULT current_timestamp'),
+        ('sent', 'timestamp with time zone DEFAULT current_timestamp'),
         ('from_msisdn', 'varchar NOT NULL'),
         ('to_msisdn', 'varchar NOT NULL'),
         ('message', 'varchar NOT NULL'),
-        ('acknowledged', 'boolean DEFAULT false'),       #)
-        ('delivered', 'boolean DEFAULT false'),          #\ Do we want this?
-        ('acknowledged_time', 'timestamp DEFAULT NULL'), #/
-        ('delivered_time', 'timestamp DEFAULT NULL'),    #)
+        ('acknowledged', 'boolean DEFAULT false'),         #)
+        ('delivered', 'boolean DEFAULT false'),            #\ Do we want these?
+        ('acknowledged_time', 'timestamp with time zone'), #/
+        ('delivered_time', 'timestamp with time zone'),    #)
         )
 
     @classmethod
