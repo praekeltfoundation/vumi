@@ -148,7 +148,7 @@ class CampaignEntry(UglyModel):
     table_name = 'campaign_entries'
     fields = (
         ('id', 'SERIAL PRIMARY KEY'),
-        ('received_message_id', 'integer NOT NULL REFERENCES received_message'),
+        ('received_message_id', 'integer NOT NULL REFERENCES received_messages'),
         ('created', 'timestamp with time zone DEFAULT current_timestamp'),
         ('user_id', 'varchar NOT NULL'),
         ('unique_code', 'varchar NOT NULL REFERENCES unique_codes'),

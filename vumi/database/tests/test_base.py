@@ -1,9 +1,25 @@
+from datetime import datetime, timedelta
+
 from twisted.trial.unittest import TestCase, SkipTest
-from twisted.internet.defer import succeed, maybeDeferred
+from twisted.internet.defer import succeed
+import pytz
 
 from vumi.database.base import setup_db, get_db, close_db
 
+
+class UTCNearNow(object):
+    def __init__(self, offset=10):
+        self.now = datetime.utcnow().replace(tzinfo=pytz.UTC)
+        self.offset = timedelta(offset)
+
+    def __eq__(self, other):
+        return (self.now - self.offset) < other < (self.now + self.offset)
+
+
 class UglyModelTestCase(TestCase):
+    def assert_utc_near_now(self, other, offset=10):
+        self.assertEquals(UTCNearNow(offset), other)
+
     def ri(self, *args, **kw):
         return self.db.runInteraction(*args, **kw)
 

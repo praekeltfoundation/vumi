@@ -4,7 +4,7 @@ from vumi.database.base import UglyModel
 
 
 class ReceivedMessage(UglyModel):
-    table_name = 'received_message'
+    table_name = 'received_messages'
     fields = (
         ('id', 'SERIAL PRIMARY KEY'),
         ('received', 'timestamp with time zone DEFAULT current_timestamp'),
