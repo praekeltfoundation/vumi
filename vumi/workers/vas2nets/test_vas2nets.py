@@ -27,7 +27,9 @@ def create_request(dictionary={}, path='/', method='POST'):
         'provider': ['22801'],
         'keyword': [''],
         'header': [''],
-        'text': ['']
+        'text': [''],
+        'provider': ['provider'],
+        'keyword': [''],
     }
     args.update(dictionary)
     request.args = args
@@ -58,16 +60,21 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
         self.assertEquals(request.responseCode, http.OK)
         msg = Message(**{
             'transport_message_id': '1',
-            'transport_timestamp': self.today.strftime('%Y.%m.%d %H:%M:%S'),
+            'transport_timestamp': self.today.strftime('%Y-%m-%dT%H:%M:%S'),
+            'transport_network_id': 'provider',
+            'transport_keyword': '',
             'to_msisdn': '9292',
             'from_msisdn': '0041791234567',
             'message': 'hello world'
         })
+        
         self.assertEquals(self.publisher.queue, [(msg, {'routing_key': 'sms.inbound.vas2nets.9292'})])
     
     def test_delivery_receipt(self):
         request = create_request({
             'smsid': ['1'],
+            'messageid': ['internal id'],
+            'sender': ['0041791234567'],
             'time': [self.today.strftime('%Y.%m.%d %H:%M:%S')],
             'status': ['2'],
             'text': ['Message delivered to MSISDN.']
@@ -78,12 +85,17 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
         self.assertEquals(response, '')
         self.assertEquals(request.outgoingHeaders['content-type'], 'text/plain')
         self.assertEquals(request.responseCode, http.OK)
-        self.assertEquals(self.publisher.queue, [(Message(**{
+        msg = Message(**{
             'transport_message_id': '1',
             'transport_status': '2',
-            'transport_timestamp': self.today.strftime('%Y.%m.%d %H:%M:%S'),
+            'transport_network_id': 'provider',
+            'to_msisdn': '0041791234567',
+            'id': 'internal id',
+            'transport_timestamp': self.today.strftime('%Y-%m-%dT%H:%M:%S'),
             'transport_status_message': 'Message delivered to MSISDN.'
-        }), {'routing_key': 'sms.receipt.vas2nets'})])
+        })
+        self.assertEquals(self.publisher.queue, [(msg, 
+            {'routing_key': 'sms.receipt.vas2nets'})])
     
     def test_send_sms(self):
         """no clue yet how I'm going to test this."""

@@ -39,6 +39,8 @@ class ReceiveSMSResource(Resource):
                 self.publisher.publish_message(Message(**{
                     'transport_message_id': request.args['messageid'][0],
                     'transport_timestamp': iso8601(request.args['time'][0]),
+                    'transport_network_id': request.args['provider'][0],
+                    'transport_keyword': request.args['keyword'][0],
                     'to_msisdn': request.args['destination'][0],
                     'from_msisdn': request.args['sender'][0],
                     'message': request.args['text'][0]
@@ -67,6 +69,9 @@ class DeliveryReceiptResource(Resource):
                 'transport_status': request.args['status'][0],
                 'transport_status_message': request.args['text'][0],
                 'transport_timestamp': iso8601(request.args['time'][0]),
+                'transport_network_id': request.args['provider'][0],
+                'to_msisdn': request.args['sender'][0],
+                'id': request.args['messageid'][0]
             }), routing_key='sms.receipt.%(transport_name)s' % self.config)
             return ''
 
