@@ -123,7 +123,7 @@ class Vas2NetsTransport(Worker):
             'password': self.config['password'],
             'call-number': data['to_msisdn'],
             'origin': data['from_msisdn'],
-            'messageid': data.get('reply_to') or data['id'],
+            'messageid': data.get('reply_to', data['id']),
             'provider': data['provider'],
             'tariff': data.get('tariff', 0),
             'text': data['message'],
@@ -139,7 +139,7 @@ class Vas2NetsTransport(Worker):
         )
         
         @inlineCallbacks
-        def _cb_success(self, response):
+        def _cb_success(response):
             deferred = Deferred()
             response.deliverBody(HttpResponseHandler(deferred))
             response_content = yield deferred
@@ -150,7 +150,7 @@ class Vas2NetsTransport(Worker):
                     self.publisher.publish_message(Message(**{
                         'id': data['id'],
                         'transport_message_id': transport_message_id
-                    }), routing_key='sms.%(transport_name)s.ack')
+                    }), routing_key='sms.%(transport_name)s.ack' % self.config)
             else:
                 raise Vas2NetsTransportError('No SmsId Header, content: %s' % 
                                                 response_content)
