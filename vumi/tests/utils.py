@@ -1,6 +1,7 @@
 import json, importlib
 from twisted.internet import defer
 from collections import namedtuple
+from contextlib import contextmanager
 
 def setup_django_test_database():
     from django.test.simple import DjangoTestSuiteRunner
@@ -66,7 +67,11 @@ class TestPublisher(object):
     """
     def __init__(self):
         self.queue = []
-
+    
+    @contextmanager
+    def transaction(self):
+        yield
+    
     def publish_message(self, message, **kwargs):
         self.queue.append((message, kwargs))
 
