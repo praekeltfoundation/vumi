@@ -16,6 +16,11 @@ from vumi.service import Worker
 from vumi.errors import VumiError
 
 from urllib import urlencode
+from datetime import datetime
+
+def iso8601(vas2nets_timestamp):
+    ts = datetime.strptime(vas2nets_timestamp, '%Y.%m.%d %H:%M:%S')
+    return ts.isoformat()
 
 class Vas2NetsTransportError(VumiError): pass
 
@@ -33,7 +38,7 @@ class ReceiveSMSResource(Resource):
             with self.publisher.transaction():
                 self.publisher.publish_message(Message(**{
                     'transport_message_id': request.args['messageid'][0],
-                    'transport_timestamp': request.args['time'][0],
+                    'transport_timestamp': iso8601(request.args['time'][0]),
                     'to_msisdn': request.args['destination'][0],
                     'from_msisdn': request.args['sender'][0],
                     'message': request.args['text'][0]
@@ -61,7 +66,7 @@ class DeliveryReceiptResource(Resource):
                 'transport_message_id': request.args['smsid'][0],
                 'transport_status': request.args['status'][0],
                 'transport_status_message': request.args['text'][0],
-                'transport_timestamp': request.args['time'][0],
+                'transport_timestamp': iso8601(request.args['time'][0]),
             }), routing_key='sms.receipt.%(transport_name)s' % self.config)
             return ''
 
