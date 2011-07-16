@@ -9,7 +9,7 @@ class ReceivedMessageTestCase(UglyModelTestCase):
         return self.setup_db(ReceivedMessage)
 
     def tearDown(self):
-        self.close_db()
+        return self.shutdown_db()
 
     def test_receive_message(self):
         """

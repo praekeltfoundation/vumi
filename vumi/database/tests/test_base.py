@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 
 from twisted.trial.unittest import TestCase, SkipTest
-from twisted.internet.defer import succeed
+from twisted.internet.defer import succeed, inlineCallbacks
 import pytz
 
 from vumi.database.base import setup_db, get_db, close_db
@@ -26,33 +26,42 @@ class UglyModelTestCase(TestCase):
     def ricb(self, _r, *args, **kw):
         return self.db.runInteraction(*args, **kw)
 
-    def recreate_table(self, d, table):
-        d.addCallback(lambda _: table.drop_table(self.db))
-        d.addCallback(lambda _: table.create_table(self.db))
-        return d
-
-    def _sdb(self):
-        if getattr(self, 'db', None):
-            close_db('test')
+    def _sdb(self, dbname):
+        self._dbname = dbname
+        try:
+            get_db(dbname)
+            close_db(dbname)
+        except:
+            pass
         # TODO: Pull this out into some kind of config?
-        setup_db('test', user='vumi', password='vumi', database='test')
-        self.db = get_db('test')
-        return succeed(None)
+        self.db = setup_db(dbname, user='vumi', password='vumi', database=dbname)
+        return self.db.runQuery("SELECT 1")
 
-    def setup_db(self, table, *tables):
+    def setup_db(self, *tables, **kw):
+        dbname = kw.pop('dbname', 'test')
+        self._test_tables = tables
         def _eb(f):
             raise SkipTest("Unable to connect to test database: %s" % (f.getErrorMessage(),))
-        d = self._sdb()
-        d.pause()
-        self.recreate_table(d, table)
+        d = self._sdb(dbname)
         d.addErrback(_eb)
-        d.unpause()
-        for tbl in tables:
-            self.recreate_table(d, tbl)
+        def add_callback(func):
+            # This function exists to create a closure around a
+            # variable in the correct scope. If we just add the
+            # callback directly in the loops below, we only get the
+            # final value of "table", not each intermediate value.
+            d.addCallback(lambda _: func(self.db))
+        for table in reversed(tables):
+            add_callback(table.drop_table)
+        for table in tables:
+            add_callback(table.create_table)
         return d
 
-    def close_db(self):
-        close_db('test')
-        self.db = None
-        return succeed(None)
+    def shutdown_db(self):
+        d = succeed(None)
+        for tbl in reversed(self._test_tables):
+            d.addCallback(lambda _: tbl.drop_table(self.db))
+        def _cb(_):
+            close_db(self._dbname)
+            self.db = None
+        return d.addCallback(_cb)
 

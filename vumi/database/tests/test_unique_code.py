@@ -4,13 +4,14 @@ from vumi.database.tests.test_base import UglyModelTestCase
 from vumi.database.unique_code import UniqueCode, VoucherCode, CampaignEntry
 from vumi.database.message_io import ReceivedMessage
 
+
 class UniqueCodeTestCase(UglyModelTestCase):
 
     def setUp(self):
         return self.setup_db(UniqueCode)
 
     def tearDown(self):
-        self.close_db()
+        return self.shutdown_db()
 
     def test_check_status(self):
         d = self.ri(UniqueCode.load_codes, ['abc', '123', 'useme'])
@@ -53,7 +54,7 @@ class VoucherCodeTestCase(UglyModelTestCase):
         return self.setup_db(VoucherCode)
 
     def tearDown(self):
-        self.close_db()
+        return self.shutdown_db()
 
     def set_up_codes(self, with_suppliers=True):
         codes = [('abc1', 's1'), ('abc2', 's1'), ('abc3', 's1'),
@@ -164,11 +165,7 @@ class CampaignEntryTestCase(UglyModelTestCase):
         return d.addCallback(lambda _: self.setup_data())
 
     def tearDown(self):
-        d = CampaignEntry.drop_table(self.db)
-        d.addCallback(lambda _: VoucherCode.drop_table(self.db))
-        d.addCallback(lambda _: UniqueCode.drop_table(self.db))
-        d.addCallback(lambda _: ReceivedMessage.drop_table(self.db))
-        return d.addCallback(lambda _: self.close_db())
+        return self.shutdown_db()
 
     def mkmsg(self, content):
         return {

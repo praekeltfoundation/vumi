@@ -11,9 +11,7 @@ class CampaignEntryTestCase(UglyModelTestCase):
         return self.setup_db(ReceivedMessage, Prospect)
 
     def tearDown(self):
-        d = Prospect.drop_table(self.db)
-        d.addCallback(lambda _: ReceivedMessage.drop_table(self.db))
-        return d.addCallback(lambda _: self.close_db())
+        return self.shutdown_db()
 
     def mkmsg(self, content):
         return {
