@@ -1,4 +1,5 @@
 # -*- test-case-name: vumi.workers.vas2nets.test_vas2nets -*-
+# -*- encoding: utf-8 -*-
 
 from twisted.web import http
 from twisted.web.resource import Resource
@@ -17,12 +18,37 @@ from vumi.errors import VumiError
 
 from urllib import urlencode
 from datetime import datetime
+import string
+import warnings
 
 def iso8601(vas2nets_timestamp):
     ts = datetime.strptime(vas2nets_timestamp, '%Y.%m.%d %H:%M:%S')
     return ts.isoformat()
 
+def validate_characters(chars):
+    single_byte_set = ''.join([
+        string.ascii_lowercase,     # a-z
+        string.ascii_uppercase,     # A-Z
+        u'0123456789',
+        u'äöüÄÖÜàùòìèé§Ññ£$@',
+        u' ',
+        u'/?!#%&()*+,-:;<=>.',
+        u'\n\r'
+    ])
+    double_byte_set = u'|{}[]€\~^'
+    superset = single_byte_set + double_byte_set
+    for char in chars:
+        if char not in superset:
+            raise Vas2NetsEncodingError, 'illegal character %s' % char
+        if char in double_byte_set:
+            warnings.warn('double byte character %s, max SMS length is ' \
+                            '70 chars as a result' % char, Vas2NetsEncodingWarning)
+    return chars
+
+
 class Vas2NetsTransportError(VumiError): pass
+class Vas2NetsEncodingError(VumiError): pass
+class Vas2NetsEncodingWarning(VumiError): pass
 
 class ReceiveSMSResource(Resource):
     isLeaf = True
@@ -85,7 +111,7 @@ class HealthResource(Resource):
         return "OK"
 
 
-class HttpResponseReader(Protocol):
+class HttpResponseHandler(Protocol):
     def __init__(self, deferrred):
         self.deferred = deferred
         self.stringio = StringIO()
@@ -133,7 +159,7 @@ class Vas2NetsTransport(Worker):
             'messageid': data.get('reply_to', data['id']),
             'provider': data['provider'],
             'tariff': data.get('tariff', 0),
-            'text': data['message'],
+            'text': validate_characters(data['message']),
         }
         
         request_params.update(default_params)

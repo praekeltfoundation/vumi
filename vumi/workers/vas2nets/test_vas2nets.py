@@ -1,3 +1,4 @@
+# encoding: utf-8
 from twisted.trial import unittest
 from twisted.python import log, failure
 from twisted.internet import defer, reactor
@@ -12,7 +13,9 @@ from StringIO import StringIO
 from urllib import urlencode
 from uuid import uuid1
 from datetime import datetime
-from .transport import ReceiveSMSResource, DeliveryReceiptResource
+from .transport import (ReceiveSMSResource, DeliveryReceiptResource, 
+                        validate_characters, Vas2NetsEncodingError)
+import string
 
 def create_request(dictionary={}, path='/', method='POST'):
     """Creates a dummy Vas2Nets request for testing our 
@@ -96,6 +99,16 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
         })
         self.assertEquals(self.publisher.queue, [(msg, 
             {'routing_key': 'sms.receipt.vas2nets'})])
+    
+    def test_validate_characters(self):
+        self.assertRaises(Vas2NetsEncodingError, validate_characters, 
+                            u"ïøéå¬∆˚")
+        self.assertTrue(validate_characters(string.ascii_lowercase))
+        self.assertTrue(validate_characters(string.ascii_uppercase))
+        self.assertTrue(validate_characters('0123456789'))
+        self.assertTrue(validate_characters(u'äöü ÄÖÜ àùò ìèé §Ññ £$@'))
+        self.assertTrue(validate_characters(u'/?!#%&()*+,-:;<=>.'))
+        self.assertTrue(validate_characters(u'testing\ncarriage\rreturns'))
     
     def test_send_sms(self):
         """no clue yet how I'm going to test this."""
