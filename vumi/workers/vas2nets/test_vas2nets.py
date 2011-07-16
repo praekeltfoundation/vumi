@@ -20,14 +20,14 @@ def create_request(dictionary={}, path='/', method='POST'):
     request = DummyRequest(path)
     request.method = method
     args = {
-        'messageid': str(uuid1()),
-        'time': datetime.utcnow().strftime('%Y.%m.%d %H:%M:%S'),
-        'sender': '0041791234567',
-        'destination': '9292',
-        'provider': '22801',
-        'keyword': '',
-        'header': '',
-        'text': ''
+        'messageid': [str(uuid1())],
+        'time': [datetime.utcnow().strftime('%Y.%m.%d %H:%M:%S')],
+        'sender': ['0041791234567'],
+        'destination': ['9292'],
+        'provider': ['22801'],
+        'keyword': [''],
+        'header': [''],
+        'text': ['']
     }
     args.update(dictionary)
     request.args = args
@@ -48,28 +48,29 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
     def test_receive_sms(self):
         resource = ReceiveSMSResource(self.config, self.publisher)
         request = create_request({
-            'messageid': '1',
-            'time': self.today.strftime('%Y.%m.%d %H:%M:%S'),
-            'text': 'hello world'
+            'messageid': ['1'],
+            'time': [self.today.strftime('%Y.%m.%d %H:%M:%S')],
+            'text': ['hello world']
         })
         response = resource.render(request)
         self.assertEquals(response, '')
         self.assertEquals(request.outgoingHeaders['content-type'], 'text/plain')
         self.assertEquals(request.responseCode, http.OK)
-        self.assertEquals(self.publisher.queue, [(Message(**{
+        msg = Message(**{
             'transport_message_id': '1',
             'transport_timestamp': self.today.strftime('%Y.%m.%d %H:%M:%S'),
             'to_msisdn': '9292',
             'from_msisdn': '0041791234567',
             'message': 'hello world'
-        }), {'routing_key': 'sms.inbound.vas2nets.9292'})])
+        })
+        self.assertEquals(self.publisher.queue, [(msg, {'routing_key': 'sms.inbound.vas2nets.9292'})])
     
     def test_delivery_receipt(self):
         request = create_request({
-            'smsid': '1',
-            'time': self.today.strftime('%Y.%m.%d %H:%M:%S'),
-            'status': '2',
-            'text': 'Message delivered to MSISDN.'
+            'smsid': ['1'],
+            'time': [self.today.strftime('%Y.%m.%d %H:%M:%S')],
+            'status': ['2'],
+            'text': ['Message delivered to MSISDN.']
         })
         
         resource = DeliveryReceiptResource(self.config, self.publisher)
@@ -83,3 +84,7 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
             'transport_timestamp': self.today.strftime('%Y.%m.%d %H:%M:%S'),
             'transport_status_message': 'Message delivered to MSISDN.'
         }), {'routing_key': 'sms.receipt.vas2nets'})])
+    
+    def test_send_sms(self):
+        """no clue yet how I'm going to test this."""
+        pass

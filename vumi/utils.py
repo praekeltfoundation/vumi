@@ -1,6 +1,32 @@
+from zope.interface import implements
+from twisted.internet.defer import succeed
+from twisted.web.iweb import IBodyProducer
+
 import importlib
 import os.path
 import re
+
+class StringProducer(object):
+    """
+    For various twisted.web mechanics we need a producer to produce
+    content for HTTP requests, this is a helper class to quickly
+    create a producer for a bit of content
+    """
+    implements(IBodyProducer)
+    
+    def __init__(self, body):
+        self.body = body
+        self.length = len(body)
+    
+    def startProducing(self, consumer):
+        consumer.write(self.body)
+        return succeed(None)
+    
+    def pauseProducing(self):
+        pass
+    
+    def stopProducing(self):
+        pass
 
 
 def make_vumi_path_abs(path):

@@ -49,14 +49,16 @@ class Worker(AMQClient):
         # authentication was successful
         log.msg("Got an authenticated connection")
         yield self.startWorker()
-
-    @inlineCallbacks
+    
     def startWorker(self):
         # I hate camelCasing method but since Twisted has it as a
         # standard I voting to stick with it
         raise VumiError("You need to subclass Worker and its "
                         "startWorker method")
-
+    
+    def stopWorker(self):
+        pass
+    
     @inlineCallbacks
     def get_channel(self, channel_id=None):
         """If channel_id is None a new channel is created"""
@@ -338,6 +340,7 @@ class Publisher(object):
                                    routing_key=routing_key)
 
     def publish_message(self, message, **kwargs):
+        log.msg('Publishing message: %s with %s' % (message.to_json(), repr(kwargs)))
         amq_message = Content(message.to_json())
         amq_message['delivery mode'] = kwargs.pop('delivery_mode',
                 self.delivery_mode)
@@ -361,7 +364,8 @@ class AmqpFactory(protocol.ReconnectingClientFactory):
         self.worker_class = worker_class
 
     def buildProtocol(self, addr):
-        worker = self.worker_class(self.delegate, self.options['vhost'], self.spec)
+        worker = self.worker_class(self.delegate, self.options['vhost'], 
+                                    self.spec, self.options.get('heartbeat', 0))
         worker.factory = self
         worker.global_options = self.options
         worker.config = self.config
