@@ -118,19 +118,25 @@ class Vas2NetsTransport(Worker):
     def handle_outbound_message(self, message):
         """handle messages arriving over AMQP meant for delivery via vas2nets"""
         data = message.payload
-        request_params = {
+        
+        default_params = {
             'username': self.config['username'],
             'password': self.config['password'],
+            'owner': self.config['owner'],
+            'service': self.config['service'],
+            'subservice': self.config['subservice'],
+        }
+        
+        request_params = {
             'call-number': data['to_msisdn'],
             'origin': data['from_msisdn'],
             'messageid': data.get('reply_to', data['id']),
             'provider': data['provider'],
             'tariff': data.get('tariff', 0),
             'text': data['message'],
-            'owner': self.config['owner'],
-            'service': self.config['service'],
-            'subservice': self.config['subservice'],
         }
+        
+        request_params.update(default_params)
         
         agent = Agent(reactor)
         deferred = agent.request('POST', self.config['url'], 
