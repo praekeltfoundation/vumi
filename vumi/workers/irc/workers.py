@@ -31,7 +31,7 @@ class IRCWorker(Worker):
         }
 
         self.publisher.publish_message(Message(
-                recipient=self.name, message=json.dumps(payload)))
+                recipient=self.name, **payload))
 
     def consume_message(self, message):
         log.msg("Consumed message %s" % message)
@@ -58,7 +58,6 @@ class MessageLogger(IRCWorker):
         log.msg("payload: %r" % (kwargs,))
 
     def process_message(self, payload):
-        log.msg("Payload: %r" % (payload,))
         msg_type = payload['message_type']
         msg = payload['message_content']
         nickname = payload['nickname']
@@ -67,7 +66,8 @@ class MessageLogger(IRCWorker):
         # Check to see if they're sending me a private message
         if not any(channel.startswith(p) for p in ('#', '&', '$')):
             msg = "It isn't nice to whisper!  Play nice with the group."
-            self._publish_message(nickname=nickname, msg=msg, server=payload['server'])
+            self._publish_message(message_type='message', channel=nickname,
+                                  msg=msg, server=payload['server'])
             return
         if msg_type in ('message', 'system'):
             self.log(nickname=nickname, channel=channel, msg=msg)

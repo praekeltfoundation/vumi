@@ -31,6 +31,8 @@ class VumiBot(irc.IRCClient):
         self.nickname = self.factory.nickname
         self.server = self.factory.network
         self.publisher = self.factory.publisher
+        self.consumer = self.factory.consumer
+        self.consumer.callback = self.consume_message
         irc.IRCClient.connectionMade(self)
         self._publish_message(message_type='system', msg="[%s connected at %s]" % (
                 self.nickname, time.asctime(datetime.utcnow().timetuple())))
@@ -81,9 +83,20 @@ class VumiBot(irc.IRCClient):
         """
         return nickname + '^'
 
+    def consume_message(self, message):
+        log.msg('Consumed Message with %s' % (message.payload,))
+        try:
+            payload = message.payload
+            msg_type = payload['message_type']
+            if msg_type == 'message':
+                self.msg(payload['channel'].encode('utf8'),
+                         payload['message_content'].encode('utf8'))
+        except Exception, e:
+            log.msg("Oops: %r" % (e,))
 
-class LogBotFactory(protocol.ReconnectingClientFactory):
-    """A factory for LogBots.
+
+class VumiBotFactory(protocol.ReconnectingClientFactory):
+    """A factory for VumiBots.
 
     A new protocol instance will be created each time we connect to the server.
     """
@@ -91,17 +104,19 @@ class LogBotFactory(protocol.ReconnectingClientFactory):
     # the class of the protocol to build when new connection is made
     protocol = VumiBot
 
-    def __init__(self, network, nickname, channels, publisher):
+    def __init__(self, network, nickname, channels, publisher, consumer):
         self.network = network
         self.nickname = nickname
         self.channels = channels
         self.publisher = publisher
+        self.consumer = consumer
 
     def buildProtocol(self, addr):
         self.resetDelay()
         p = self.protocol()
         p.factory = self
         return p
+
 
 class IrcTransport(Worker):
 
@@ -114,17 +129,18 @@ class IrcTransport(Worker):
         outbound = self.config.get('outbound', 'irc.outbound')
         self.publisher = yield self.publish_to(inbound)
         self.name = nickname
-        self.consume(outbound, self.consume_message, '%s.%s' % (outbound, self.name))
+        self.consumer = yield self.consume(outbound, self.consume_message,
+                                           '%s.%s' % (outbound, self.name))
         port = self.config.get('port', 6667)
 
         # create factory protocol and application
-        f = LogBotFactory(network, nickname, channels, self.publisher)
+        f = VumiBotFactory(network, nickname, channels, self.publisher, self.consumer)
 
         # connect factory to this host and port
         reactor.connectTCP(network, port, f)
 
     def consume_message(self, message):
-        log.msg('Consumed Message with %s' % message.payload)
+        log.msg('Consumed Message with %s, but have nowhere to send it. :-(' % message.payload)
 
     @inlineCallbacks
     def stopWorker(self):
