@@ -86,3 +86,5 @@ Valid double byte characters, will limit SMS to max length of 70 instead of
 160 if used::
 
     '|{}[]€\~^'
+
+.. note:: If any characters are published that aren't in this list the transport will raise a `Vas2NetsEncodingError`. If characters are published that are in the double byte set the transport will print warnings in the log.
