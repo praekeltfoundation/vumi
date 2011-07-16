@@ -7,6 +7,7 @@ from twisted.python import log
 from twisted.internet.defer import inlineCallbacks, succeed
 
 from vumi.service import Worker
+from vumi.message import Message
 from vumi.database.base import setup_db, get_db
 from vumi.database.message_io import ReceivedMessage
 from vumi.database.unique_code import UniqueCode, VoucherCode, CampaignEntry
@@ -50,6 +51,46 @@ class TransactionHandler(object):
 
     def handle(self, *args, **kw):
         raise NotImplementedError()
+
+
+class CampaignDispatchWorker(Worker):
+
+    @inlineCallbacks
+    def startWorker(self):
+        log.msg("Starting the CampaignDispatchWorker with config: %s" % self.config)
+        self.setup_db()
+        listen_rkey = self.config.get('listen_rkey', 'campaigns.loadtest.incoming')
+        prospect_rkey = self.config.get('prospect_rkey', 'campaigns.loadtest.prospect')
+        competition_rkey = self.config.get('competition_rkey', 'campaigns.loadtest.competition')
+        self.prospect_pub = yield self.publish_to(prospect_rkey)
+        self.competition_pub = yield self.publish_to(competition_rkey)
+        yield self.consume(listen_rkey, self.consume_message)
+
+    def setup_db(self):
+        try:
+            setup_db('loadtest', user='vumi', password='vumi', database='loadtest')
+        except:
+            log.msg("Unable to create db pool, assuming it already exists.")
+        self.db = get_db('loadtest')
+
+    def stopWorker(self):
+        log.msg("Stopping the CampaignDispatchWorker")
+
+    def publish_msg(self, publisher, message):
+        publisher.publish_message(Message(**message))
+
+    def consume_message(self, message):
+        self.process_message(message.payload)
+
+    @inlineCallbacks
+    def process_message(self, message):
+        log.msg("Processing message: %s" % (message))
+        msg_id = yield self.db.runInteraction(ReceivedMessage.receive_message, message)
+        keyword = message['message'].split()[0].lower()
+        message['msg_id'] = msg_id
+        if keyword not in ['yes', 'vip', 'stop', 'no']:
+            self.publish_msg(self.competition_rkey, message)
+        self.publish_msg(self.prospect_rkey, message)
 
 
 class CampaignCompetitionHandler(TransactionHandler):
@@ -96,7 +137,7 @@ class CampaignCompetitionWorker(Worker):
     def startWorker(self):
         log.msg("Starting the CampaignCompetitionWorker with config: %s" % self.config)
         self.setup_db()
-        listen_rkey = self.config.get('listen_rkey', 'campaigns.loadtest.incoming')
+        listen_rkey = self.config.get('listen_rkey', 'campaigns.loadtest.competition')
         yield self.consume(listen_rkey, self.consume_message)
 
     def setup_db(self):
@@ -123,9 +164,72 @@ class CampaignCompetitionWorker(Worker):
 
     @inlineCallbacks
     def process_message(self, message):
-        log.msg("Processing message: %s" % (message))
-        msg_id = yield self.db.runInteraction(ReceivedMessage.receive_message, message)
-        response = yield self.run_transaction(CampaignCompetitionHandler, msg_id, message)
+        log.msg("Processing message: %s" % (message,))
+        response = yield self.run_transaction(CampaignCompetitionHandler, message['msg_id'], message)
         for reply in response.replies:
             yield self.send_reply(message, reply)
 
+
+class ProspectPoolHandler(TransactionHandler):
+    def handle(self, user_id, keyword, content, msg_id):
+        prospect = Prospect.get_prospect(self.txn, user_id)
+        if not prospect:
+            Prospect.create_prospect(self.txn, user_id)
+        if not keyword:
+            return
+        elif keyword == 'yes':
+            self.handle_yes(prospect, content, msg_id)
+        elif keyword == 'vip':
+            self.handle_vip(prospect, content, msg_id)
+        elif keywork in ['no', 'stop']:
+            self.handle_stop(prospect, msg_id)
+
+    def handle_yes(self, prospect, content, msg_id):
+        prospect.opt_in(self.txn, msg_id, content)
+
+    def handle_vip(self, prospect, content, msg_id):
+        prospect.update_name(self.txn, msg_id, content)
+
+    def handle_stop(self, prospect, msg_id):
+        prospect.opt_out(self.txn, msg_id)
+
+
+class ProspectPoolWorker(Worker):
+
+    @inlineCallbacks
+    def startWorker(self):
+        log.msg("Starting the ProspectPoolWorker with config: %s" % self.config)
+        self.setup_db()
+        listen_rkey = self.config.get('listen_rkey', 'campaigns.loadtest.prospect')
+        yield self.consume(listen_rkey, self.consume_message)
+
+    def setup_db(self):
+        try:
+            setup_db('loadtest', user='vumi', password='vumi', database='loadtest')
+        except:
+            log.msg("Unable to create db pool, assuming it already exists.")
+        self.db = get_db('loadtest')
+
+    def stopWorker(self):
+        log.msg("Stopping the ProspectPoolWorker")
+
+    def consume_message(self, message):
+        self.process_message(message.payload)
+
+    def run_transaction(self, handler, *args, **kw):
+        def _eb(f):
+            f.trap(RollbackTransaction)
+            return f.value.return_value
+        return self.db.runInteraction(handler(), *args, **kw).addErrback(_eb)
+
+    def parse_message(self, message):
+        # TODO: Make this sane.
+        msg_id = message['msg_id']
+        keyword, content = (message['message'].split(None, 1) + [''])[:2]
+        user_id = message['from_msisdn']
+        return user_id, keyword.lower(), content, msg_id
+
+    def process_message(self, message):
+        log.msg("Processing message: %s" % (message))
+        user_id, keyword, content, msg_id = self.parse_message(message)
+        return self.run_transaction(ProspectPoolHandler, user_id, keyword, message, msg_id)

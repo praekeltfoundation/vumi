@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 
-from twisted.internet.defer import DeferredList
+from twisted.internet.defer import DeferredList, inlineCallbacks
 
 from vumi.database.tests.test_base import UglyModelTestCase
 from vumi.database.unique_code import UniqueCode, VoucherCode, CampaignEntry
@@ -69,85 +69,89 @@ class CampaignCompetitionWorkerTestCase(WorkerTestCase):
             msg['network'] = network
         return msg
 
+    def mkrmsg(self, content, network=None):
+        msg = self.mkmsg(content, network)
+        d = self.ri(ReceivedMessage.receive_message, msg)
+        def _cb(msg_id):
+            msg['msg_id'] = msg_id
+            return msg
+        return d.addCallback(_cb)
+
+    @inlineCallbacks
     def test_receive_invalid_message(self):
         """
         If we have an invalid message, bail with an appropriate reply.
         """
         ccw = self.get_ccw()
-        msg = self.mkmsg("foo", "s2")
-        d = ccw.process_message(msg)
+        msg = yield self.mkrmsg("foo", "s2")
+        yield ccw.process_message(msg)
 
-        def _cb(_):
-            self.assertEquals([(msg, "Invalid code: invalid")], ccw.replies)
-        d.addCallback(_cb)
+        self.assertEquals([(msg, "Invalid code: invalid")], ccw.replies)
 
         def _txn(txn):
             self.assertEquals(1, ReceivedMessage.count_messages(txn))
             self.assertEquals(0, CampaignEntry.count_entries(txn))
-        d.addCallback(self.ricb, _txn)
-        return d
 
+        yield self.ri(_txn)
+
+    @inlineCallbacks
     def test_receive_valid_message_voucher_available(self):
         """
         If we have a valid message, dispense a voucher.
         """
         ccw = self.get_ccw()
-        msg = self.mkmsg("aaa", "s2")
-        d = ccw.process_message(msg)
-        def _cb(_):
-            self.assertEquals([(msg, "Valid code. Have a voucher: xyz1")], ccw.replies)
-        d.addCallback(_cb)
+        msg = yield self.mkrmsg("aaa", "s2")
+        yield ccw.process_message(msg)
+
+        self.assertEquals([(msg, "Valid code. Have a voucher: xyz1")], ccw.replies)
 
         def _txn(txn):
             self.assertEquals(1, ReceivedMessage.count_messages(txn))
             self.assertEquals(1, CampaignEntry.count_entries(txn))
-        d.addCallback(self.ricb, _txn)
-        return d
 
+        yield self.ri(_txn)
+
+    @inlineCallbacks
     def test_receive_valid_message_voucher_unavailable(self):
         """
         If we have a valid message but no voucher, apologise.
         """
         ccw = self.get_ccw()
-        msg = self.mkmsg("aaa", "s3")
-        d = ccw.process_message(msg)
-        def _cb(_):
-            self.assertEquals([(msg, "Valid code. No vouchers, sorry.")], ccw.replies)
-        d.addCallback(_cb)
+        msg = yield self.mkrmsg("aaa", "s3")
+        yield ccw.process_message(msg)
+
+        self.assertEquals([(msg, "Valid code. No vouchers, sorry.")], ccw.replies)
 
         def _txn(txn):
             self.assertEquals(1, ReceivedMessage.count_messages(txn))
             self.assertEquals(1, CampaignEntry.count_entries(txn))
-        d.addCallback(self.ricb, _txn)
-        return d
 
+        yield self.ri(_txn)
+
+    @inlineCallbacks
     def test_over_quota(self):
         """
         If the limit has been reached, don't vend a code.
         """
         ccw = self.get_ccw()
-        msgs = [self.mkmsg(c*3, "s3") for c in 'abcde']
-        d = DeferredList([ccw.process_message(m) for m in msgs])
-        def _cb(_):
-            self.assertEquals(["Valid code. No vouchers, sorry."]*5,
-                              [r[1] for r in ccw.replies])
-            ccw.replies = []
-        d.addCallback(_cb)
+        msgs = yield DeferredList([self.mkrmsg(c*3, "s3") for c in 'abcde'])
+        yield DeferredList([ccw.process_message(m) for _, m in msgs])
+        self.assertEquals(["Valid code. No vouchers, sorry."]*5,
+                          [r for _, r in ccw.replies])
+        ccw.replies = []
 
         def _txn(txn):
             self.assertEquals(5, ReceivedMessage.count_messages(txn))
             self.assertEquals(5, CampaignEntry.count_entries(txn))
-        d.addCallback(self.ricb, _txn)
+        yield self.ri(_txn)
 
-        d.addCallback(lambda _: ccw.process_message(self.mkmsg('fff')))
-        def _cb(_):
-            self.assertEquals(["Valid code, but you're over your limit for the day."],
-                              [r[1] for r in ccw.replies])
-        d.addCallback(_cb)
+        msg = yield self.mkrmsg('fff')
+        yield ccw.process_message(msg)
+
+        self.assertEquals(["Valid code, but you're over your limit for the day."],
+                          [r for _, r in ccw.replies])
 
         def _txn(txn):
             self.assertEquals(6, ReceivedMessage.count_messages(txn))
             self.assertEquals(5, CampaignEntry.count_entries(txn))
-        d.addCallback(self.ricb, _txn)
-
-        return d
+        yield self.ri(_txn)
