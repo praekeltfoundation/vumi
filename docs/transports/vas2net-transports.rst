@@ -69,8 +69,8 @@ the following info:
     }
 
 
-Notes:
-~~~~~~
+Notes
+~~~~~
 
 Valid single byte characters::
 
