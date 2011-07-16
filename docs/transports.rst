@@ -1,4 +1,4 @@
-Welcome to Vumi's documentation!
+Vumi Transports
 ================================
 
 Vumi supports various transports, the internal specifics are documented

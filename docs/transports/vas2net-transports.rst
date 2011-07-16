@@ -87,4 +87,20 @@ Valid double byte characters, will limit SMS to max length of 70 instead of
 
     '|{}[]€\~^'
 
-.. note:: If any characters are published that aren't in this list the transport will raise a `Vas2NetsEncodingError`. If characters are published that are in the double byte set the transport will print warnings in the log.
+If any characters are published that aren't in this list the transport will raise a `Vas2NetsEncodingError`. If characters are published that are in the double byte set the transport will print warnings in the log.
+
+Configuration parameters
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: yaml
+
+    transport_name: vas2nets
+    web_receive_path: /api/v1/sms/vas2nets/receive/
+    web_receipt_path: /api/v1/sms/vas2nets/receipt/
+    web_port: 8123
+
+    owner: <provided by vas2nets>
+    service: <provided by vas2nets>
+    subservice: <provided by vas2nets>
+
+
