@@ -6,13 +6,19 @@ import importlib
 import os.path
 import re
 
-def normalize_msisdn(raw):
+def normalize_msisdn(raw, country_code=''):
+    # don't touch shortcodes
+    if len(raw) <= 5:
+        return raw
+    
     raw = ''.join([c for c in str(raw) if c.isdigit() or c == '+'])
+    if raw.startswith('00'):
+        return '+' + raw[2:]
     if raw.startswith('0'):
-        return '+27' + raw[1:]
+        return '+' + country_code + raw[1:]
     if raw.startswith('+'):
         return raw
-    if raw.startswith('27'):
+    if raw.startswith(country_code):
         return '+' + raw
     return raw
 

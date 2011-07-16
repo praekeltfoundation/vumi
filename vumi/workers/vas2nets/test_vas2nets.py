@@ -27,11 +27,10 @@ def create_request(dictionary={}, path='/', method='POST'):
         'time': [datetime.utcnow().strftime('%Y.%m.%d %H:%M:%S')],
         'sender': ['0041791234567'],
         'destination': ['9292'],
-        'provider': ['22801'],
+        'provider': ['provider'],
         'keyword': [''],
         'header': [''],
         'text': [''],
-        'provider': ['provider'],
         'keyword': [''],
     }
     args.update(dictionary)
@@ -67,7 +66,7 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
             'transport_network_id': 'provider',
             'transport_keyword': '',
             'to_msisdn': '9292',
-            'from_msisdn': '0041791234567',
+            'from_msisdn': '+41791234567',
             'message': 'hello world'
         })
         
@@ -77,7 +76,7 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
         request = create_request({
             'smsid': ['1'],
             'messageid': ['internal id'],
-            'sender': ['0041791234567'],
+            'sender': ['+41791234567'],
             'time': [self.today.strftime('%Y.%m.%d %H:%M:%S')],
             'status': ['2'],
             'text': ['Message delivered to MSISDN.']
@@ -92,7 +91,7 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
             'transport_message_id': '1',
             'transport_status': '2',
             'transport_network_id': 'provider',
-            'to_msisdn': '0041791234567',
+            'to_msisdn': '+41791234567',
             'id': 'internal id',
             'transport_timestamp': self.today.strftime('%Y-%m-%dT%H:%M:%S'),
             'transport_status_message': 'Message delivered to MSISDN.'
