@@ -10,7 +10,7 @@ from vumi.service import Worker, Consumer, Publisher
 from vumi.session import getVumiSession, delVumiSession, VumiSession, TraversedDecisionTree
 from vumi.message import Message, VUMI_DATE_FORMAT
 from vumi.webapp.api import utils
-import vumi.options
+from vumi.utils import *
 
 from twisted.python import log
 from twisted.python.log import logging
@@ -34,7 +34,7 @@ class SessionConsumer(Consumer):
         self.publisher = publisher
         if hasattr(publisher, 'vumi_options'):
             self.vhost = publisher.vumi_options.get('vhost', self.vhost)
-        self.r_server = redis.Redis("localhost", db=vumi.options.get_deploy_int(self.vhost))
+        self.r_server = redis.Redis("localhost", db=get_deploy_int(self.vhost))
 
     def set_yaml_template(self, yaml_template):
         self.yaml_template = yaml_template
