@@ -1,6 +1,7 @@
 # -*- test-case-name: vumi.tests.test_service -*-
 
 from copy import deepcopy
+from contextlib import contextmanager
 import json
 
 from twisted.python import log, usage
@@ -321,7 +322,13 @@ class Publisher(object):
             raise RoutingKeyError("The routing_key: %s is not bound to any"
                                   " queues in vhost: %s  exchange: %s" % (
                                   routing_key, self.vumi_options['vhost'], self.exchange_name))
-
+    
+    @contextmanager
+    def transaction(self):
+        self.channel.tx_select()
+        yield
+        self.channel.tx_commit()
+    
     def publish(self, message, **kwargs):
         exchange_name = kwargs.get('exchange_name') or self.exchange_name
         routing_key = kwargs.get('routing_key') or self.routing_key

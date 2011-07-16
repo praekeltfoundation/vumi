@@ -18,16 +18,17 @@ class ReceiveSMSResource(Resource):
         request.setResponseCode(http.OK)
         request.setHeader('Content-Type', 'text/plain')
         
-        self.publisher.publish_message(Message(**{
-            'transport_message_id': request.args['messageid'],
-            'transport_timestamp': request.args['time'],
-            'to_msisdn': request.args['destination'],
-            'from_msisdn': request.args['sender'],
-            'message': request.args['text']
-        }), routing_key='sms.inbound.%s.%s' % (
-            self.config.get('transport_name'), 
-            request.args['destination']
-        ))
+        with self.publisher.transaction():
+            self.publisher.publish_message(Message(**{
+                'transport_message_id': request.args['messageid'],
+                'transport_timestamp': request.args['time'],
+                'to_msisdn': request.args['destination'],
+                'from_msisdn': request.args['sender'],
+                'message': request.args['text']
+            }), routing_key='sms.inbound.%s.%s' % (
+                self.config.get('transport_name'), 
+                request.args['destination']
+            ))
         return ''
     
 
@@ -40,13 +41,14 @@ class DeliveryReceiptResource(Resource):
     def render_POST(self, request):
         request.setResponseCode(http.OK)
         request.setHeader('Content-Type', 'text/plain')
-        self.publisher.publish_message(Message(**{
-            'transport_message_id': request.args['smsid'],
-            'transport_status': request.args['status'],
-            'transport_status_message': request.args['text'],
-            'transport_timestamp': request.args['time'],
-        }), routing_key='sms.receipt.%(transport_name)s' % self.config)
-        return ''
+        with self.publisher.transaction():
+            self.publisher.publish_message(Message(**{
+                'transport_message_id': request.args['smsid'],
+                'transport_status': request.args['status'],
+                'transport_status_message': request.args['text'],
+                'transport_timestamp': request.args['time'],
+            }), routing_key='sms.receipt.%(transport_name)s' % self.config)
+            return ''
 
 class Vas2NetsTransport(Worker):
     
