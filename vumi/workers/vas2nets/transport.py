@@ -11,7 +11,7 @@ from twisted.internet.protocol import Protocol
 from twisted.internet import reactor
 
 from StringIO import StringIO
-from vumi.utils import StringProducer
+from vumi.utils import StringProducer, normalize_msisdn
 from vumi.message import Message
 from vumi.service import Worker
 from vumi.errors import VumiError
@@ -67,8 +67,8 @@ class ReceiveSMSResource(Resource):
                     'transport_timestamp': iso8601(request.args['time'][0]),
                     'transport_network_id': request.args['provider'][0],
                     'transport_keyword': request.args['keyword'][0],
-                    'to_msisdn': request.args['destination'][0],
-                    'from_msisdn': request.args['sender'][0],
+                    'to_msisdn': normalize_msisdn(request.args['destination'][0]),
+                    'from_msisdn': normalize_msisdn(request.args['sender'][0]),
                     'message': request.args['text'][0]
                 }), routing_key='sms.inbound.%s.%s' % (
                     self.config.get('transport_name'), 
@@ -96,7 +96,7 @@ class DeliveryReceiptResource(Resource):
                 'transport_status_message': request.args['text'][0],
                 'transport_timestamp': iso8601(request.args['time'][0]),
                 'transport_network_id': request.args['provider'][0],
-                'to_msisdn': request.args['sender'][0],
+                'to_msisdn': normalize_msisdn(request.args['sender'][0]),
                 'id': request.args['messageid'][0]
             }), routing_key='sms.receipt.%(transport_name)s' % self.config)
             return ''
@@ -157,7 +157,7 @@ class Vas2NetsTransport(Worker):
             'call-number': data['to_msisdn'],
             'origin': data['from_msisdn'],
             'messageid': data.get('reply_to', data['id']),
-            'provider': data['provider'],
+            'provider': data['transport_network_id'],
             'tariff': data.get('tariff', 0),
             'text': validate_characters(data['message']),
         }
@@ -182,7 +182,7 @@ class Vas2NetsTransport(Worker):
                     self.publisher.publish_message(Message(**{
                         'id': data['id'],
                         'transport_message_id': transport_message_id
-                    }), routing_key='sms.%(transport_name)s.ack' % self.config)
+                    }), routing_key='sms.ack.%(transport_name)s' % self.config)
             else:
                 raise Vas2NetsTransportError('No SmsId Header, content: %s' % 
                                                 response_content)

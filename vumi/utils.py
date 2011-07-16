@@ -6,6 +6,17 @@ import importlib
 import os.path
 import re
 
+def normalize_msisdn(raw):
+    raw = ''.join([c for c in str(raw) if c.isdigit() or c == '+'])
+    if raw.startswith('0'):
+        return '+27' + raw[1:]
+    if raw.startswith('+'):
+        return raw
+    if raw.startswith('27'):
+        return '+' + raw
+    return raw
+
+
 class StringProducer(object):
     """
     For various twisted.web mechanics we need a producer to produce
