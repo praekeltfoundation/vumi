@@ -103,8 +103,6 @@ class DeliveryReceiptResource(Resource):
 
 class HealthResource(Resource):
     isLeaf = True
-    def __init__(self, publisher):
-        self.publisher
     
     def render_GET(self, request):
         request.setResponseCode(http.OK)

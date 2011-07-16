@@ -92,7 +92,7 @@ If any characters are published that aren't in this list the transport will rais
 Configuration parameters
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. code-block:: yaml
+::
 
     transport_name: vas2nets
     web_receive_path: /api/v1/sms/vas2nets/receive/
