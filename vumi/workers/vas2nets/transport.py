@@ -6,7 +6,8 @@ from twisted.web.resource import Resource
 from twisted.web.server import NOT_DONE_YET
 from twisted.web.client import Agent
 from twisted.web.http_headers import Headers
-from twisted.internet.defer import inlineCallbacks
+from twisted.python import log
+from twisted.internet.defer import inlineCallbacks, Deferred
 from twisted.internet.protocol import Protocol
 from twisted.internet import reactor
 
@@ -106,11 +107,10 @@ class HealthResource(Resource):
     
     def render_GET(self, request):
         request.setResponseCode(http.OK)
-        return "OK"
-
+        return 'OK'
 
 class HttpResponseHandler(Protocol):
-    def __init__(self, deferrred):
+    def __init__(self, deferred):
         self.deferred = deferred
         self.stringio = StringIO()
 
@@ -118,7 +118,7 @@ class HttpResponseHandler(Protocol):
         self.stringio.write(bytes)
 
     def connectionLost(self, reason):
-        self.finished.callback(self.stringio.buf)
+        self.deferred.callback(self.stringio.getvalue())
 
 
 class Vas2NetsTransport(Worker):
@@ -139,6 +139,7 @@ class Vas2NetsTransport(Worker):
         )
         
     
+    @inlineCallbacks
     def handle_outbound_message(self, message):
         """handle messages arriving over AMQP meant for delivery via vas2nets"""
         data = message.payload
@@ -163,30 +164,25 @@ class Vas2NetsTransport(Worker):
         request_params.update(default_params)
         
         agent = Agent(reactor)
-        deferred = agent.request('POST', self.config['url'], 
+        response = yield agent.request('POST', self.config['url'], 
             Headers({'User-Agent': ['Vumi Vas2Net Transport']}),
             StringProducer(urlencode(request_params))
         )
         
-        @inlineCallbacks
-        def _cb_success(response):
-            deferred = Deferred()
-            response.deliverBody(HttpResponseHandler(deferred))
-            response_content = yield deferred
-            
-            if response.headers.hasHeader('X-VAS2Nets-SmsId'):
-                transport_message_id = response.headers.getRawHeaders('X-VAS2Nets-SmsId')[0]
-                with self.publisher.transaction():
-                    self.publisher.publish_message(Message(**{
-                        'id': data['id'],
-                        'transport_message_id': transport_message_id
-                    }), routing_key='sms.ack.%(transport_name)s' % self.config)
-            else:
-                raise Vas2NetsTransportError('No SmsId Header, content: %s' % 
-                                                response_content)
+        deferred = Deferred()
+        response.deliverBody(HttpResponseHandler(deferred))
+        response_content = yield deferred
         
-        deferred.addCallback(_cb_success)
-        return deferred
+        if response.headers.hasHeader('X-VAS2Nets-SmsId'):
+            transport_message_id = response.headers.getRawHeaders('X-VAS2Nets-SmsId')[0]
+            with self.publisher.transaction():
+                self.publisher.publish_message(Message(**{
+                    'id': data['id'],
+                    'transport_message_id': transport_message_id
+                }), routing_key='sms.ack.%(transport_name)s' % self.config)
+        else:
+            raise Vas2NetsTransportError('No SmsId Header, content: %s' % 
+                                            response_content)
         
     def stopWorker(self):
         """shutdown"""

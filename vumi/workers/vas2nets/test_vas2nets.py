@@ -1,4 +1,6 @@
 # encoding: utf-8
+from twisted.web import http
+from twisted.web.resource import Resource
 from twisted.trial import unittest
 from twisted.python import log, failure
 from twisted.internet import defer, reactor
@@ -6,7 +8,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.web.test.test_web import DummyRequest
 from twisted.web import http
 
-from vumi.tests.utils import TestPublisher
+from vumi.tests.utils import TestPublisher, TestWorker, TestQueue
 from vumi.message import Message
 
 from StringIO import StringIO
@@ -14,7 +16,8 @@ from urllib import urlencode
 from uuid import uuid1
 from datetime import datetime
 from .transport import (ReceiveSMSResource, DeliveryReceiptResource, 
-                        validate_characters, Vas2NetsEncodingError)
+                        Vas2NetsTransport, validate_characters, 
+                        Vas2NetsEncodingError, Vas2NetsTransportError)
 import string
 
 def create_request(dictionary={}, path='/', method='POST'):
@@ -36,6 +39,45 @@ def create_request(dictionary={}, path='/', method='POST'):
     args.update(dictionary)
     request.args = args
     return request
+
+class TestResource(Resource):
+    isLeaf = True
+    def __init__(self, message_id, message):
+        self.message_id = message_id
+        self.message = message
+    
+    def render(self, request):
+        request.setResponseCode(http.OK)
+        if self.message_id:
+            request.setHeader('X-VAS2Nets-SmsId', self.message_id)
+        return self.message
+
+class Vas2NetsTestWorker(TestWorker):
+    
+    def __init__(self, path, port, message_id, message, queue):
+        TestWorker.__init__(self, queue)
+        self.path = path
+        self.port = port
+        self.message_id = message_id
+        self.message = message
+    
+    @inlineCallbacks
+    def startWorker(self):
+        self.receipt_resource = yield self.start_web_resources(
+            [
+                (TestResource(self.message_id, self.message), self.path),
+            ],
+            self.port
+        )
+    
+    def stopWorker(self):
+        self.receipt_resource.stopListening()
+
+class TestVas2NetsTransport(Vas2NetsTransport):
+    def __init__(self, config):
+        self.publisher = TestPublisher()
+        self.config = config
+    
 
 class Vas2NetsTransportTestCase(unittest.TestCase):
     
@@ -109,6 +151,78 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
         self.assertTrue(validate_characters(u'/?!#%&()*+,-:;<=>.'))
         self.assertTrue(validate_characters(u'testing\ncarriage\rreturns'))
     
-    def test_send_sms(self):
+    @inlineCallbacks
+    def test_send_sms_success(self):
         """no clue yet how I'm going to test this."""
-        pass
+        path = '/api/v1/sms/vas2nets/receive/'
+        port = 9999
+        mocked_message_id = str(uuid1())
+        mocked_message = "Result_code: 00, Message OK"
+        stubbed_worker = Vas2NetsTestWorker(path, port, mocked_message_id,
+                                            mocked_message, TestQueue([]))
+        yield stubbed_worker.startWorker()
+        
+        transport = TestVas2NetsTransport({
+            'transport_name': 'vas2nets',
+            'url': 'http://localhost:%s%s' % (port, path),
+            'username': 'username',
+            'password': 'password',
+            'owner': 'owner',
+            'service': 'service',
+            'subservice': 'subservice'
+        })
+        resp = yield transport.handle_outbound_message(Message(**{
+            'to_msisdn': '+27761234567',
+            'from_msisdn': '9292',
+            'id': '1',
+            'reply_to': '',
+            'transport_network_id': 'network-id',
+            'message': 'hello world'
+        }))
+        
+        msg, kwargs = transport.publisher.queue.pop()
+        self.assertEquals(msg.payload, {
+            'id': '1',
+            'transport_message_id': mocked_message_id
+        })
+        self.assertEquals(kwargs, {
+            'routing_key': 'sms.ack.vas2nets'
+        })
+        
+        stubbed_worker.stopWorker()
+        
+    @inlineCallbacks
+    def test_send_sms_fail(self):
+        """no clue yet how I'm going to test this."""
+        path = '/api/v1/sms/vas2nets/receive/'
+        port = 9999
+        mocked_message_id = False
+        mocked_message = "Result_code: 04, Internal system error occurred " \
+                            "while processing message"
+        stubbed_worker = Vas2NetsTestWorker(path, port, mocked_message_id,
+                                            mocked_message, TestQueue([]))
+        yield stubbed_worker.startWorker()
+
+        transport = TestVas2NetsTransport({
+            'transport_name': 'vas2nets',
+            'url': 'http://localhost:%s%s' % (port, path),
+            'username': 'username',
+            'password': 'password',
+            'owner': 'owner',
+            'service': 'service',
+            'subservice': 'subservice'
+        })
+        
+        deferred = transport.handle_outbound_message(Message(**{
+            'to_msisdn': '+27761234567',
+            'from_msisdn': '9292',
+            'id': '1',
+            'reply_to': '',
+            'transport_network_id': 'network-id',
+            'message': 'hello world'
+        }))
+        self.assertFailure(deferred, Vas2NetsTransportError)
+        yield deferred
+        self.assertEquals([], transport.publisher.queue)
+        stubbed_worker.stopWorker()
+

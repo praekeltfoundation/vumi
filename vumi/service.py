@@ -178,8 +178,8 @@ class Worker(AMQClient):
             parent.putChild(leaf, resource)
 
         site_factory = Site(root)
-        yield reactor.listenTCP(port, site_factory)
-        returnValue(root)
+        port = yield reactor.listenTCP(port, site_factory)
+        returnValue(port)
 
 
 class Consumer(object):
