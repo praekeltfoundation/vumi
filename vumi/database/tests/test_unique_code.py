@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+import uuid
 
 from vumi.database.tests.test_base import UglyModelTestCase
 from vumi.database.unique_code import UniqueCode, VoucherCode, CampaignEntry
@@ -172,6 +173,7 @@ class CampaignEntryTestCase(UglyModelTestCase):
                 'from_msisdn': '27831234567',
                 'to_msisdn': '90210',
                 'message': content,
+                'transport_message_id': uuid.uuid4().get_hex(),
                 }
 
     def setup_data(self):

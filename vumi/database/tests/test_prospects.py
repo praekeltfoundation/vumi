@@ -1,11 +1,12 @@
 from datetime import datetime, timedelta
+import uuid
 
 from vumi.database.tests.test_base import UglyModelTestCase
 from vumi.database.prospect import Prospect
 from vumi.database.message_io import ReceivedMessage
 
 
-class CampaignEntryTestCase(UglyModelTestCase):
+class ProspectTestCase(UglyModelTestCase):
 
     def setUp(self):
         return self.setup_db(ReceivedMessage, Prospect)
@@ -18,6 +19,7 @@ class CampaignEntryTestCase(UglyModelTestCase):
                 'from_msisdn': '27831234567',
                 'to_msisdn': '90210',
                 'message': content,
+                'transport_message_id': uuid.uuid4().get_hex(),
                 }
 
     def test_create_prospect(self):
