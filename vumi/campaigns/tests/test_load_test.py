@@ -6,7 +6,7 @@ from twisted.internet.defer import DeferredList, inlineCallbacks
 from vumi.database.tests.test_base import UglyModelTestCase
 from vumi.database.unique_code import UniqueCode, VoucherCode, CampaignEntry
 from vumi.database.message_io import ReceivedMessage
-from vumi.campaigns.load_test import CampaignCompetitionWorker
+from vumi.campaigns.load_test import CampaignCompetitionWorker, CampaignDispatchWorker
 from vumi.service import WorkerCreator
 
 
@@ -38,8 +38,11 @@ class StubbedCCW(CampaignCompetitionWorker):
     def send_reply(self, source_msg, msg_content):
         self.replies.append((source_msg, msg_content))
 
-    def consume(self, *args, **kw):
-        pass
+    def consume(self, rkey, *args, **kw):
+        return rkey
+
+    def publish_to(self, rkey, *args, **kw):
+        return rkey
 
 
 class CampaignCompetitionWorkerTestCase(WorkerTestCase):
@@ -157,3 +160,35 @@ class CampaignCompetitionWorkerTestCase(WorkerTestCase):
             self.assertEquals(6, ReceivedMessage.count_messages(txn))
             self.assertEquals(5, CampaignEntry.count_entries(txn))
         yield self.ri(_txn)
+
+
+class StubbedCDW(CampaignDispatchWorker):
+    def dispatch_message(self, message):
+        self.dispatched.append(message)
+
+    def setup_dispatch(self):
+        pass
+
+    def consume(self, rkey, *args, **kw):
+        return rkey
+
+    def publish_to(self, rkey, *args, **kw):
+        return rkey
+
+    def send_sms(self, message):
+        self.sent_messages.append(message)
+
+
+class CampaignDispatchWorkerTestCase(WorkerTestCase):
+    def setUp(self):
+        return self.setup_db(dbname='loadtest')
+
+    def tearDown(self):
+        return self.shutdown_db()
+
+    def get_cdw(self, **kw):
+        cdw = self.create_worker(StubbedCDW, kw)
+        cdw.dispatched = []
+        cdw.sent_messages = []
+        cdw.startWorker()
+        return cdw

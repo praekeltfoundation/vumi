@@ -51,8 +51,7 @@ def mksent(smsg_dict, message_send_id=None):
         'to_msisdn': smsg_dict['to_msisdn'],
         'from_msisdn': smsg_dict['from_msisdn'],
         'message': smsg_dict['message'],
-        'message_send_id': message_send_id,
-        'reply_to_msg_id': smsg_dict.get('reply_to_msg_id', None),
+        'id': message_send_id,
         }
 
 
@@ -88,14 +87,14 @@ class StubbedDW(DispatchWorker):
     def setup_dispatch(self):
         pass
 
-    def consume(self, *args, **kw):
-        pass
+    def consume(self, rkey, *args, **kw):
+        return rkey
 
-    def publish_to(self, *args, **kw):
-        pass
+    def publish_to(self, rkey, *args, **kw):
+        return rkey
 
-    def send_sms(self, message):
-        self.sent_messages.append(message)
+    def publish_msg(self, publisher, msg):
+        self.published.append((publisher, msg))
 
 
 class DispatchWorkerTestCase(WorkerTestCase):
@@ -106,9 +105,14 @@ class DispatchWorkerTestCase(WorkerTestCase):
         return self.shutdown_db()
 
     def get_dw(self, **kw):
-        dw = self.create_worker(StubbedDW, kw)
+        config = {
+            'transport': 'faketransport',
+            'shortcode': '12345',
+            }
+        config.update(kw)
+        dw = self.create_worker(StubbedDW, config)
         dw.dispatched = []
-        dw.sent_messages = []
+        dw.published = []
         dw.startWorker()
         return dw
 
@@ -124,12 +128,12 @@ class DispatchWorkerTestCase(WorkerTestCase):
         self.assertEquals(msg_dict['from_msisdn'], msg.from_msisdn)
         self.assertEquals(msg_dict['message'], msg.message)
 
-    def assert_smsg_fields(self, msg_dict, msg):
-        self.assertEquals(msg_dict['reply_to_msg_id'], msg.reply_to_msg_id)
-        self.assertEquals(msg_dict['message_send_id'], msg.message_send_id)
+    def assert_smsg_fields(self, msg_dict, msg, reply_to=None):
+        self.assertEquals(msg_dict['id'], msg.message_send_id)
         self.assertEquals(msg_dict['to_msisdn'], msg.to_msisdn)
         self.assertEquals(msg_dict['from_msisdn'], msg.from_msisdn)
         self.assertEquals(msg_dict['message'], msg.message)
+        self.assertEquals(reply_to, msg.reply_to_msg_id)
 
     def mkrmsg(self, *args, **kw):
         def _txn(txn):
@@ -146,7 +150,14 @@ class DispatchWorkerTestCase(WorkerTestCase):
                 send_id = rmsg.transport_message_id
             else:
                 send_id = uuid.uuid4().get_hex()[10:]
-            msg_id = SentMessage.send_message(txn, mksent(smsg, send_id))
+            msg_dict = {
+                'to_msisdn': smsg['to_msisdn'],
+                'from_msisdn': smsg['from_msisdn'],
+                'message': smsg['message'],
+                'message_send_id': send_id,
+                'reply_to_msg_id': reply_to,
+                }
+            msg_id = SentMessage.send_message(txn, msg_dict)
             return SentMessage.get_message(txn, msg_id)
         return self.ri(_txn)
 
@@ -160,7 +171,7 @@ class DispatchWorkerTestCase(WorkerTestCase):
 
         yield self.assert_message_count(0, ReceivedMessage)
         self.assertEquals([], dw.dispatched)
-        self.assertEquals([], dw.sent_messages)
+        self.assertEquals([], dw.published)
 
         yield dw.process_message(msg_dict.copy())
 
@@ -171,7 +182,7 @@ class DispatchWorkerTestCase(WorkerTestCase):
         dispatched = msg_dict.copy()
         dispatched['msg_id'] = 1
         self.assertEquals([dispatched], dw.dispatched)
-        self.assertEquals([], dw.sent_messages)
+        self.assertEquals([], dw.published)
 
     @inlineCallbacks
     def test_send_message(self):
@@ -183,7 +194,7 @@ class DispatchWorkerTestCase(WorkerTestCase):
 
         yield self.assert_message_count(0, SentMessage)
         self.assertEquals([], dw.dispatched)
-        self.assertEquals([], dw.sent_messages)
+        self.assertEquals([], dw.published)
 
         yield dw.process_send(msg_dict.copy())
 
@@ -192,7 +203,7 @@ class DispatchWorkerTestCase(WorkerTestCase):
         smsg_dict = mksent(msg_dict)
         self.assert_smsg_fields(smsg_dict, msg)
         self.assertEquals([], dw.dispatched)
-        self.assertEquals([smsg_dict], dw.sent_messages)
+        self.assertEquals([('sms.outbound.faketransport', smsg_dict)], dw.published)
 
     @inlineCallbacks
     def test_send_reply_message(self):
@@ -207,16 +218,16 @@ class DispatchWorkerTestCase(WorkerTestCase):
 
         yield self.assert_message_count(0, SentMessage)
         self.assertEquals([], dw.dispatched)
-        self.assertEquals([], dw.sent_messages)
+        self.assertEquals([], dw.published)
 
         yield dw.process_send(msg_dict.copy())
 
         yield self.assert_message_count(1, SentMessage)
         msg = yield self.ri(SentMessage.get_message, 1)
         smsg_dict = mksent(msg_dict, rmsg.transport_message_id)
-        self.assert_smsg_fields(smsg_dict, msg)
+        self.assert_smsg_fields(smsg_dict, msg, rmsg.id)
         self.assertEquals([], dw.dispatched)
-        self.assertEquals([smsg_dict], dw.sent_messages)
+        self.assertEquals([('sms.outbound.faketransport', smsg_dict)], dw.published)
 
 
     @inlineCallbacks
@@ -234,7 +245,7 @@ class DispatchWorkerTestCase(WorkerTestCase):
 
         yield self.assert_message_count(1, SentMessage)
         self.assertEquals([], dw.dispatched)
-        self.assertEquals([], dw.sent_messages)
+        self.assertEquals([], dw.published)
         self.assertEquals(None, smsg.transport_message_id)
 
         yield dw.process_ack(ack_dict.copy())
@@ -243,4 +254,4 @@ class DispatchWorkerTestCase(WorkerTestCase):
         msg = yield self.ri(SentMessage.get_message, 1)
         self.assertEquals(ack_dict['transport_message_id'], msg.transport_message_id)
         self.assertEquals([], dw.dispatched)
-        self.assertEquals([], dw.sent_messages)
+        self.assertEquals([], dw.published)

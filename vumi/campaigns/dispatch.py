@@ -92,6 +92,7 @@ class DispatchWorker(DatabaseWorker):
             'id': 'transport message id if this was a reply, else internal id'
         }
         """
+        # TODO: Implement this.
         pass
 
     @inlineCallbacks
@@ -131,4 +132,4 @@ class DispatchWorker(DatabaseWorker):
         msg = message.copy()
         msg['id'] = msg.pop('message_send_id')
         msg.pop('reply_to_msg_id')
-        pass
+        self.publish_msg(self.outbound_publisher, msg)
