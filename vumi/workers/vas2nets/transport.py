@@ -129,6 +129,13 @@ class Vas2NetsTransport(Worker):
         self.publisher = yield self.publish_to('sms.inbound.%(transport_name)s.fallback' % self.config)
         self.consumer = yield self.consume('sms.outbound.%(transport_name)s' % self.config, 
                                     self.handle_outbound_message)
+        # don't care about prefetch window size
+        # but only want one message sent to me at a time, this'll 
+        # throttle our output to 1 msg at a time, which means 
+        # 1 transport = 1 connection, 10 transports is max 10 connections at a time.
+        # and make it apply only to this channel
+        self.consumer.channel.basic_qos(0,1, False)
+        
         self.receipt_resource = yield self.start_web_resources(
             [
                 (ReceiveSMSResource(self.config, self.publisher), self.config['web_receive_path']),
