@@ -75,8 +75,7 @@ class DispatchWorker(DatabaseWorker):
             'transport_message_id': 'transport message id, alpha numeric'
         }
         """
-        return self.ri(SentMessage.ack_message, message['id'],
-                       message['transport_message_id'])
+        return self.ri(SentMessage.ack_message, message)
 
     def process_delivery(self, message):
         """

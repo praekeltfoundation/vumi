@@ -137,6 +137,19 @@ class DispatchWorkerTestCase(WorkerTestCase):
             return ReceivedMessage.get_message(txn, msg_id)
         return self.ri(_txn)
 
+    def mksmsg(self, *args, **kw):
+        def _txn(txn):
+            smsg = mksend(*args, **kw)
+            reply_to = smsg.get('reply_to_msg_id')
+            if reply_to:
+                rmsg = ReceivedMessage.get_message(txn, reply_to)
+                send_id = rmsg.transport_message_id
+            else:
+                send_id = uuid.uuid4().get_hex()[10:]
+            msg_id = SentMessage.send_message(txn, mksent(smsg, send_id))
+            return SentMessage.get_message(txn, msg_id)
+        return self.ri(_txn)
+
     @inlineCallbacks
     def test_receive_message(self):
         """
@@ -205,3 +218,29 @@ class DispatchWorkerTestCase(WorkerTestCase):
         self.assertEquals([], dw.dispatched)
         self.assertEquals([smsg_dict], dw.sent_messages)
 
+
+    @inlineCallbacks
+    def test_ack(self):
+        """
+        An ack should update the db appropriately.
+        """
+        rmsg = yield self.mkrmsg('bar')
+        smsg = yield self.mksmsg('foo')
+        ack_dict = {
+            'id': smsg.message_send_id,
+            'transport_message_id': uuid.uuid4().get_hex()[10:],
+            }
+        dw = self.get_dw()
+
+        yield self.assert_message_count(1, SentMessage)
+        self.assertEquals([], dw.dispatched)
+        self.assertEquals([], dw.sent_messages)
+        self.assertEquals(None, smsg.transport_message_id)
+
+        yield dw.process_ack(ack_dict.copy())
+
+        yield self.assert_message_count(1, SentMessage)
+        msg = yield self.ri(SentMessage.get_message, 1)
+        self.assertEquals(ack_dict['transport_message_id'], msg.transport_message_id)
+        self.assertEquals([], dw.dispatched)
+        self.assertEquals([], dw.sent_messages)
