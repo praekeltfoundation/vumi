@@ -28,17 +28,19 @@ class ReceivedMessage(UglyModel):
         ('to_msisdn', 'varchar NOT NULL'),
         ('from_msisdn', 'varchar NOT NULL'),
         ('message', 'varchar NOT NULL'),
-        # Transport network id?
-        # Transport keyword?
+        ('transport_network_id', 'varchar'),
+        ('transport_keyword', 'varchar'), # XXX: ?
         )
 
     @classmethod
     def receive_message(cls, txn, msg):
         params = {
             'transport_message_id': msg['transport_message_id'],
-            'from_msisdn': msg['from_msisdn'],
             'to_msisdn': msg['to_msisdn'],
+            'from_msisdn': msg['from_msisdn'],
             'message': msg['message'],
+            'transport_network_id': msg.get('transport_network_id'),
+            'transport_keyword': msg.get('transport_keyword'),
             }
         txn.execute(cls.insert_values_query(**params), params)
         txn.execute("SELECT lastval()")
@@ -96,11 +98,9 @@ class SentMessage(UglyModel):
         ('to_msisdn', 'varchar NOT NULL'),
         ('reply_to_msg_id', 'integer REFERENCES received_messages'),
         ('message', 'varchar NOT NULL'),
-
-        # For acks:
-        ('transport_message_id', 'varchar'),
-
-        # For delivery reports:
+        ('message_send_id', 'varchar NOT NULL'), # TODO: Index this
+        ('transport_message_id', 'varchar'), # Filled in after ack
+        # TODO: Fill in some fields for delivery reports
         )
 
     @classmethod
@@ -121,23 +121,26 @@ class SentMessage(UglyModel):
             'to_msisdn': msg['to_msisdn'],
             'reply_to_msg_id': msg.get('reply_to_msg_id', None),
             'message': msg['message'],
+            'message_send_id': msg['message_send_id'],
             }
         txn.execute(cls.insert_values_query(**params), params)
         txn.execute("SELECT lastval()")
         return txn.fetchone()[0]
 
     @classmethod
-    def ack_message(cls, txn, msg_id, transport_message_id):
-        query = "UPDATE %s SET %s WHERE id=%%(id)s" % (
-            cls.table_name, "transport_message_id=%(transport_message_id)s")
+    def ack_message(cls, txn, msg):
         params = {
-            'id': msg_id,
-            'transport_message_id': transport_message_id,
+            'message_send_id': msg['id'],
+            'transport_message_id': msg['transport_message_id'],
             }
+        query = "UPDATE %s SET %s WHERE %s" % (
+            cls.table_name,
+            "transport_message_id=%(transport_message_id)s",
+            "message_send_id=%(message_send_id)s")
         txn.execute(query, params)
-        return msg_id
 
     @classmethod
     def receive_delivery_report(cls, txn, msg):
+        # TODO: Implement this
         pass
 

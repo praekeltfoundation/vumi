@@ -10,90 +10,22 @@ from vumi.database.message_io import ReceivedMessage
 from vumi.database.unique_code import UniqueCode, VoucherCode, CampaignEntry
 from vumi.database.prospect import Prospect
 from vumi.campaigns.base import TransactionHandler, DatabaseWorker
+from vumi.campaigns.dispatch import DispatchWorker
 
 
-class CampaignDispatchWorker(DatabaseWorker):
+class CampaignDispatchWorker(DispatchWorker):
 
     @inlineCallbacks
-    def setup_worker(self):
-        # Incoming SMS rkey: sms.inbound.<transport-name>.<to_msisdn>
-        listen_rkey = self.get_config('incoming_rkey',
-                                      'campaigns.loadtest.incoming')
+    def setup_dispatch(self):
         prospect_rkey = self.get_campaign_rkey('prospect_rkey', 'prospect')
         competition_rkey = self.get_campaign_rkey('competition_rkey', 'competition')
         self.prospect_pub = yield self.publish_to(prospect_rkey)
         self.competition_pub = yield self.publish_to(competition_rkey)
-        yield self.consume(listen_rkey, self.consume_message)
-
-    def receive_sms(self, message):
-        """
-        Receive an incoming SMS.
-
-        The message structure looks like this:
-        {
-            'transport_message_id': 'alpha numeric',
-            'transport_timestamp': 'iso 8601 format',
-            'transport_network_id': 'MNO unique id, used for number portability',
-            'transport_keyword': 'keyword if provided by vas2nets',
-            'to_msisdn': '+27761234567',
-            'from_msisdn': '+27761234567',
-            'message': 'message content'
-        }
-        """
-        pass
-
-    def receive_delivery_report(self, message):
-        """
-        Receive a delivery report for an outgoing message.
-
-        The message structure looks like this:
-        {
-            'transport_message_id': 'alpha numeric',
-            'transport_status': 'numeric',
-            'transport_status_message': 'text status accompanying numeric status',
-            'transport_timestamp': 'iso 8601 format',
-            'transport_network_id': 'MNO unique id, used for number portability',
-            'to_msisdn': '+27761234567',
-            'id': 'transport message id if this was a reply, else internal id'
-        }
-        """
-        pass
-
-    def receive_ack(self, message):
-        """
-        Receive an ack for an outgoing message.
-
-        The message structure looks like this:
-        {
-            'id': 'internal message id',
-            'transport_message_id': 'transport message id, alpha numeric'
-        }
-        """
-        pass
-
-    def send_sms(self, message):
-        """
-        Send an outgoing sms.Receive an ack for an outgoing message.
-
-        The message structure looks like this:
-        {
-            'to_msisdn': '...',
-            'from_msisdn': '...',
-            'reply_to': 'reply to transport_message_id',
-            'id': 'internal message id',
-            'transport_network_id': 'MNO unique id, used for number portability',
-            'message': 'the body of the sms text'
-        }
-        """
-        pass
 
     @inlineCallbacks
-    def process_message(self, message):
-        log.msg("Processing message: %s" % (message))
-        msg_id = yield self.db.runInteraction(ReceivedMessage.receive_message,
-                                              message)
+    def dispatch_message(self, message):
+        # TODO: Better keyword handling
         keyword = message['message'].split()[0].lower()
-        message['msg_id'] = msg_id
         if keyword not in ['yes', 'vip', 'stop', 'no']:
             self.publish_msg(self.competition_rkey, message)
         self.publish_msg(self.prospect_rkey, message)

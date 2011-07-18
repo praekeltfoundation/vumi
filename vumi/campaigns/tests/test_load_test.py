@@ -72,7 +72,7 @@ class CampaignCompetitionWorkerTestCase(WorkerTestCase):
 
     def mkrmsg(self, content, network=None):
         msg = self.mkmsg(content, network)
-        msg['transport_message_id'] = uuid.uuid4().get_hex()
+        msg['transport_message_id'] = uuid.uuid4().get_hex()[10:]
         d = self.ri(ReceivedMessage.receive_message, msg)
         def _cb(msg_id):
             msg['msg_id'] = msg_id

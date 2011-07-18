@@ -8,7 +8,7 @@ from vumi.database.message_io import ReceivedMessage, SentMessage
 
 def mkmsg_r(message, transport_message_id=None, from_msisdn=None, to_msisdn=None):
     if not transport_message_id:
-        transport_message_id = uuid.uuid4().get_hex()
+        transport_message_id = uuid.uuid4().get_hex()[10:]
     if not from_msisdn:
         from_msisdn = '27831234567'
     if not to_msisdn:
@@ -20,19 +20,30 @@ def mkmsg_r(message, transport_message_id=None, from_msisdn=None, to_msisdn=None
         'to_msisdn': to_msisdn,
         }
 
-def mkmsg_s(message, reply_to_msg_id=None, from_msisdn=None, to_msisdn=None):
+def mkmsg_s(message, send_id=None, reply_to=None, from_msisdn=None, to_msisdn=None):
+    if not send_id:
+        send_id = uuid.uuid4().get_hex()[10:]
     if not from_msisdn:
         from_msisdn = '12345'
     if not to_msisdn:
         to_msisdn = '27831234567'
     msg_dict = {
+        'message_send_id': send_id,
         'message': message,
         'from_msisdn': from_msisdn,
         'to_msisdn': to_msisdn,
         }
-    if reply_to_msg_id:
-        msg_dict['reply_to_msg_id'] = reply_to_msg_id
+    if reply_to:
+        msg_dict['reply_to_msg_id'] = reply_to
     return msg_dict
+
+def mkack(send_id, transport_message_id=None):
+    if not transport_message_id:
+        transport_message_id = uuid.uuid4().get_hex()[10:]
+    return {
+        'id': send_id,
+        'transport_message_id': transport_message_id,
+        }
 
 
 class ReceivedMessageTestCase(UglyModelTestCase):
@@ -75,6 +86,18 @@ class SentMessageTestCase(UglyModelTestCase):
         for field, value in msg_dict.items():
             self.assertEquals(value, getattr(msg, field))
 
+    def check_ack(self, msg_dict, sent_msg_id):
+        ack_dict = mkack(msg_dict['message_send_id'])
+        def _txn(txn):
+            sent_count = SentMessage.count_messages(txn)
+            SentMessage.ack_message(txn, ack_dict)
+            msg = SentMessage.get_message(txn, sent_msg_id)
+            self.assert_msg_fields(msg_dict, msg)
+            self.assertEquals(ack_dict['transport_message_id'],
+                              msg.transport_message_id)
+            self.assertEquals(sent_count, SentMessage.count_messages(txn))
+        return self.ri(_txn)
+
     @inlineCallbacks
     def test_send_message(self):
         """
@@ -82,7 +105,6 @@ class SentMessageTestCase(UglyModelTestCase):
         """
         msg_dict = mkmsg_s('foo')
 
-        # Send message
         def _txn(txn):
             self.assertEquals(0, SentMessage.count_messages(txn))
             msg_id = SentMessage.send_message(txn, msg_dict)
@@ -94,17 +116,8 @@ class SentMessageTestCase(UglyModelTestCase):
             return msg_id
         sent_msg_id = yield self.ri(_txn)
 
-        transport_message_id = uuid.uuid4().get_hex()
-        # Transport ack
-        def _txn(txn):
-            self.assertEquals(1, SentMessage.count_messages(txn))
-            SentMessage.ack_message(txn, sent_msg_id, transport_message_id)
-            msg = SentMessage.get_message(txn, sent_msg_id)
-            self.assert_msg_fields(msg_dict, msg)
-            self.assertEquals(None, msg.reply_to_msg_id)
-            self.assertEquals(transport_message_id, msg.transport_message_id)
-            self.assertEquals(1, SentMessage.count_messages(txn))
-        yield self.ri(_txn)
+        yield self.check_ack(msg_dict, sent_msg_id)
+
 
     @inlineCallbacks
     def test_send_message_reply(self):
@@ -114,9 +127,8 @@ class SentMessageTestCase(UglyModelTestCase):
         src_dict = mkmsg_r('foo')
         src_id = yield self.ri(ReceivedMessage.receive_message, src_dict)
         self.assertNotEquals(None, src_id)
-        msg_dict = mkmsg_s('bar', src_id)
+        msg_dict = mkmsg_s('bar', src_dict['transport_message_id'], src_id)
 
-        # Send message
         def _txn(txn):
             self.assertEquals(0, SentMessage.count_messages(txn))
             msg_id = SentMessage.send_message(txn, msg_dict)
@@ -128,14 +140,4 @@ class SentMessageTestCase(UglyModelTestCase):
             return msg_id
         sent_msg_id = yield self.ri(_txn)
 
-        transport_message_id = uuid.uuid4().get_hex()
-        # Transport ack
-        def _txn(txn):
-            self.assertEquals(1, SentMessage.count_messages(txn))
-            SentMessage.ack_message(txn, sent_msg_id, transport_message_id)
-            msg = SentMessage.get_message(txn, sent_msg_id)
-            self.assert_msg_fields(msg_dict, msg)
-            self.assertEquals(src_id, msg.reply_to_msg_id)
-            self.assertEquals(transport_message_id, msg.transport_message_id)
-            self.assertEquals(1, SentMessage.count_messages(txn))
-        yield self.ri(_txn)
+        yield self.check_ack(msg_dict, sent_msg_id)
