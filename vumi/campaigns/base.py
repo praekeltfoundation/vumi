@@ -1,6 +1,6 @@
-
 from twisted.python import log
 
+from vumi.message import Message
 from vumi.service import Worker
 from vumi.database.base import setup_db, get_db
 
@@ -46,9 +46,12 @@ class TransactionHandler(object):
 
 
 class DatabaseWorker(Worker):
+    def get_name(self):
+        return type(self).__name__
 
     def startWorker(self):
-        log.msg("Starting DatabaseWorker '%s' with config: %s" % (type(self).__name__, self.config))
+        log.msg("Starting DatabaseWorker '%s' with config: %s" % (
+                self.get_name(), self.config))
         self.setup_db()
         return self.setup_worker()
 
@@ -66,10 +69,28 @@ class DatabaseWorker(Worker):
         self.db = get_db(dbname)
 
     def stopWorker(self):
-        log.msg("Stopping DatabaseWorker '%s'" % (type(self).__name__,))
+        log.msg("Stopping DatabaseWorker '%s'" % (self.get_name(),))
+
+    def publish_msg(self, publisher, message):
+        publisher.publish_message(Message(**message))
 
     def consume_message(self, message):
         self.process_message(message.payload)
 
     def process_message(self, message):
         raise NotImplementedError()
+
+    def run_transaction(self, handler, *args, **kw):
+        def _eb(f):
+            f.trap(RollbackTransaction)
+            return f.value.return_value
+        return self.db.runInteraction(handler(), *args, **kw).addErrback(_eb)
+
+    def get_config(self, key, default=None):
+        # TODO: Mandatory config keys
+        return self.config.get(key, default)
+
+    def get_campaign_rkey(self, name, default=None):
+        base_rkey = self.get_config('base_rkey', 'campaigns.loadtest')
+        suffix = self.get_config('name', default)
+        return "%s.%s" % (base_rkey, suffix)
