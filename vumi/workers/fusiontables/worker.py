@@ -4,7 +4,7 @@ from vumi.service import Worker
 from fusiontables.authorization.clientlogin import ClientLogin
 from fusiontables.sql.sqlbuilder import SQL
 from fusiontables import ftclient
-from urllib2 import HTTPError
+from urllib2 import HTTPError, URLError
 from urllib import quote
 
 
@@ -33,7 +33,8 @@ def create_table(client, table_name, structure):
 
 def prep(value):
     v = value or ''
-    return v.replace("'","\\'")
+    v = v.replace("'","\\'")
+    return v.replace('"', '\"')
 
 def prep_geo(dictionary):
     if isinstance(dictionary, dict):
@@ -74,6 +75,10 @@ class FusionTableWorker(Worker):
             log.msg('write row: %s' % row.split("\n")[1])
             return True
         except HTTPError, e:
+            log.msg(post_data)
+            log.err()
+            return False
+        except URLError, e:
             log.msg(post_data)
             log.err()
             return False
