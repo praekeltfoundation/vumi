@@ -47,6 +47,12 @@ def validate_characters(chars):
                                 Vas2NetsEncodingWarning)
     return chars
 
+def normalize_outbound_msisdn(msisdn):
+    if msisdn.startswith('+'):
+        return msisdn.replace('+','00')
+    else:
+        return msisdn
+
 
 class Vas2NetsTransportError(VumiError): pass
 class Vas2NetsEncodingError(VumiError): pass
@@ -161,19 +167,23 @@ class Vas2NetsTransport(Worker):
         }
         
         request_params = {
-            'call-number': data['to_msisdn'],
+            'call-number': normalize_outbound_msisdn(data['to_msisdn']),
             'origin': data['from_msisdn'],
             'messageid': data.get('reply_to', data['id']),
             'provider': data['transport_network_id'],
             'tariff': data.get('tariff', 0),
             'text': validate_characters(data['message']),
+            'subservice': data.get('transport_keyword','')
         }
         
         request_params.update(default_params)
         
         agent = Agent(reactor)
         response = yield agent.request('POST', self.config['url'], 
-            Headers({'User-Agent': ['Vumi Vas2Net Transport']}),
+            Headers({
+                'User-Agent': ['Vumi Vas2Net Transport'],
+                'Content-Type': ['application/x-www-form-urlencoded'],
+            }),
             StringProducer(urlencode(request_params))
         )
         

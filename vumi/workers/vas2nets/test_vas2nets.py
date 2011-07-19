@@ -17,7 +17,8 @@ from uuid import uuid1
 from datetime import datetime
 from .transport import (ReceiveSMSResource, DeliveryReceiptResource, 
                         Vas2NetsTransport, validate_characters, 
-                        Vas2NetsEncodingError, Vas2NetsTransportError)
+                        Vas2NetsEncodingError, Vas2NetsTransportError,
+                        normalize_outbound_msisdn)
 import string
 
 def create_request(dictionary={}, path='/', method='POST'):
@@ -46,8 +47,18 @@ class TestResource(Resource):
         self.message_id = message_id
         self.message = message
     
-    def render(self, request):
+    def render_POST(self, request):
+        log.msg(request.content.read())
         request.setResponseCode(http.OK)
+        required_fields = [
+            'username', 'password', 'call-number', 'origin', 'text',
+            'messageid', 'provider', 'tariff', 'owner', 'service',
+            'subservice'
+        ]
+        log.msg('request.args', request.args)
+        for key in required_fields:
+            assert key in request.args
+        
         if self.message_id:
             request.setHeader('X-VAS2Nets-SmsId', self.message_id)
         return self.message
@@ -225,4 +236,6 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
         yield deferred
         self.assertEquals([], transport.publisher.queue)
         stubbed_worker.stopWorker()
-
+    
+    def test_normalize_outbound_msisdn(self):
+        self.assertEquals(normalize_outbound_msisdn('+27761234567'), '0027761234567')

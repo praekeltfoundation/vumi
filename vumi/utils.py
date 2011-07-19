@@ -1,5 +1,6 @@
 from zope.interface import implements
 from twisted.internet.defer import succeed
+from twisted.python import log
 from twisted.web.iweb import IBodyProducer
 
 import importlib

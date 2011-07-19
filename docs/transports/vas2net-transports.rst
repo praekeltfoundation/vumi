@@ -51,6 +51,7 @@ Outbound SMSs
         'reply_to': 'reply to transport_message_id',
         'id': 'internal message id',
         'transport_network_id': 'MNO unique id, used for number portability',
+        'transport_keyword': 'MNO unique id, used for internal billing',
         'message': 'the body of the sms text'
     }
 
