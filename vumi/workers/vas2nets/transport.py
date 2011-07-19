@@ -134,7 +134,7 @@ class Vas2NetsTransport(Worker):
         # throttle our output to 1 msg at a time, which means 
         # 1 transport = 1 connection, 10 transports is max 10 connections at a time.
         # and make it apply only to this channel
-        self.consumer.channel.basic_qos(0,1, False)
+        self.consumer.channel.basic_qos(0,int(self.config.get('throttle', 1)), False)
         
         self.receipt_resource = yield self.start_web_resources(
             [
