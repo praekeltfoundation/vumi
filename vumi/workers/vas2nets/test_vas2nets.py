@@ -57,6 +57,7 @@ class TestResource(Resource):
         ]
         log.msg('request.args', request.args)
         for key in required_fields:
+            log.msg('checking for %s' % key)
             assert key in request.args
         
         if self.message_id:

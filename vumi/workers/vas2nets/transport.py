@@ -173,10 +173,11 @@ class Vas2NetsTransport(Worker):
             'provider': data['transport_network_id'],
             'tariff': data.get('tariff', 0),
             'text': validate_characters(data['message']),
-            'subservice': data.get('transport_keyword','')
+            'subservice': data.get('transport_keyword',
+                            self.config['subservice'])
         }
         
-        request_params.update(default_params)
+        default_params.update(request_params)
         
         agent = Agent(reactor)
         response = yield agent.request('POST', self.config['url'], 
@@ -184,7 +185,7 @@ class Vas2NetsTransport(Worker):
                 'User-Agent': ['Vumi Vas2Net Transport'],
                 'Content-Type': ['application/x-www-form-urlencoded'],
             }),
-            StringProducer(urlencode(request_params))
+            StringProducer(urlencode(default_params))
         )
         
         deferred = Deferred()
