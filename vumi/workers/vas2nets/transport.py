@@ -23,8 +23,11 @@ import string
 import warnings
 
 def iso8601(vas2nets_timestamp):
-    ts = datetime.strptime(vas2nets_timestamp, '%Y.%m.%d %H:%M:%S')
-    return ts.isoformat()
+    if vas2nets_timestamp:
+        ts = datetime.strptime(vas2nets_timestamp, '%Y.%m.%d %H:%M:%S')
+        return ts.isoformat()
+    else:
+        return ''
 
 def validate_characters(chars):
     single_byte_set = ''.join([
