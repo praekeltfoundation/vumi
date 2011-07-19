@@ -28,6 +28,7 @@ class EchoWorker(Worker):
             'message': data['message'],
             'id': data['transport_message_id'],
             'transport_network_id': data['transport_network_id'],
+            'transport_keyword': data['transport_keyword'],
             }
 
         return self.publisher.publish_message(Message(**reply))
