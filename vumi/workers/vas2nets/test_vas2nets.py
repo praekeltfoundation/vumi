@@ -61,7 +61,7 @@ class TestResource(Resource):
             assert key in request.args
         
         if self.message_id:
-            request.setHeader('X-VAS2Nets-SmsId', self.message_id)
+            request.setHeader('X-Nth-Smsid', self.message_id)
         return self.message
 
 class Vas2NetsTestWorker(TestWorker):

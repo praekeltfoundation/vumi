@@ -199,9 +199,10 @@ class Vas2NetsTransport(Worker):
         response_content = yield deferred
         
         log.msg('Headers', list(response.headers.getAllRawHeaders()))
+        header = self.config.get('header', 'X-Nth-Smsid')
         
-        if response.headers.hasHeader('X-VAS2Nets-SmsId'):
-            transport_message_id = response.headers.getRawHeaders('X-VAS2Nets-SmsId')[0]
+        if response.headers.hasHeader(header):
+            transport_message_id = response.headers.getRawHeaders(header)[0]
             with self.publisher.transaction():
                 self.publisher.publish_message(Message(**{
                     'id': data['id'],
