@@ -10,8 +10,7 @@ from vumi.service import Worker, Consumer, Publisher
 from vumi.session import getVumiSession, delVumiSession, VumiSession, TraversedDecisionTree
 from vumi.message import Message, VUMI_DATE_FORMAT
 from vumi.webapp.api import utils
-from vumi.utils import get_deploy_int
-import vumi.options
+from vumi.utils import *
 
 from twisted.python import log
 from twisted.python.log import logging
