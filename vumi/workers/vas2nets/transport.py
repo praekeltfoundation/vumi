@@ -42,8 +42,9 @@ def validate_characters(chars):
         if char not in superset:
             raise Vas2NetsEncodingError, 'illegal character %s' % char
         if char in double_byte_set:
-            warnings.warn('double byte character %s, max SMS length is ' \
-                            '70 chars as a result' % char, Vas2NetsEncodingWarning)
+            warnings.warn(''.join['double byte character %s, max SMS length',
+                                    ' is 70 chars as a result'] % char, 
+                                Vas2NetsEncodingWarning)
     return chars
 
 
