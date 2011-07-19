@@ -100,6 +100,7 @@ class SentMessage(UglyModel):
         ('message', 'varchar NOT NULL'),
         ('message_send_id', 'varchar NOT NULL'), # TODO: Index this
         ('transport_message_id', 'varchar'), # Filled in after ack
+        ('modified_at', 'timestamp with time zone DEFAULT current_timestamp'),
         # TODO: Fill in some fields for delivery reports
         )
 
@@ -135,7 +136,10 @@ class SentMessage(UglyModel):
             }
         query = "UPDATE %s SET %s WHERE %s" % (
             cls.table_name,
-            "transport_message_id=%(transport_message_id)s",
+            ", ".join([
+                    "modified_at=current_timestamp",
+                    "transport_message_id=%(transport_message_id)s",
+                    ]),
             "message_send_id=%(message_send_id)s")
         txn.execute(query, params)
 

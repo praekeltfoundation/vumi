@@ -8,8 +8,8 @@ class UniqueCode(UglyModel):
     fields = (
         ('code', 'varchar PRIMARY KEY'),
         ('used', 'boolean DEFAULT false'),
-        ('created', 'timestamp with time zone DEFAULT current_timestamp'),
-        ('modified', 'timestamp with time zone DEFAULT current_timestamp'),
+        ('created_at', 'timestamp with time zone DEFAULT current_timestamp'),
+        ('modified_at', 'timestamp with time zone DEFAULT current_timestamp'),
         )
 
     @classmethod
@@ -35,8 +35,8 @@ class UniqueCode(UglyModel):
 
     @classmethod
     def modify_code(cls, txn, code, **kw):
-        kw.pop('modified', None)
-        setchunks = ["modified=current_timestamp"]
+        kw.pop('modified_at', None)
+        setchunks = ["modified_at=current_timestamp"]
         setchunks.extend(["%s=%%(%s)s" % (f, f) for f in kw.keys()])
         setchunks = ", ".join(setchunks)
         kw['_code'] = code
@@ -67,8 +67,8 @@ class VoucherCode(UglyModel):
         ('code', 'varchar NOT NULL'),
         ('supplier', 'varchar'),
         ('used', 'boolean DEFAULT false'),
-        ('created', 'timestamp with time zone DEFAULT current_timestamp'),
-        ('modified', 'timestamp with time zone DEFAULT current_timestamp'),
+        ('created_at', 'timestamp with time zone DEFAULT current_timestamp'),
+        ('modified_at', 'timestamp with time zone DEFAULT current_timestamp'),
         )
 
     @classmethod
@@ -130,8 +130,8 @@ class VoucherCode(UglyModel):
 
     @classmethod
     def modify_code(cls, txn, code_id, **kw):
-        kw.pop('modified', None)
-        setchunks = ["modified=current_timestamp"]
+        kw.pop('modified_at', None)
+        setchunks = ["modified_at=current_timestamp"]
         setchunks.extend(["%s=%%(%s)s" % (f, f) for f in kw.keys()])
         setchunks = ", ".join(setchunks)
         kw['_id'] = code_id
@@ -149,8 +149,8 @@ class CampaignEntry(UglyModel):
     fields = (
         ('id', 'SERIAL PRIMARY KEY'),
         ('received_message_id', 'integer NOT NULL REFERENCES received_messages'),
-        ('created', 'timestamp with time zone DEFAULT current_timestamp'),
-        ('user_id', 'varchar NOT NULL'),
+        ('created_at', 'timestamp with time zone DEFAULT current_timestamp'),
+        ('entrant_id', 'varchar NOT NULL'),
         ('unique_code', 'varchar NOT NULL REFERENCES unique_codes'),
         ('voucher_code_id', 'integer REFERENCES voucher_codes'),
         )
@@ -163,27 +163,27 @@ class CampaignEntry(UglyModel):
         return None
 
     @classmethod
-    def count_entries(cls, txn, user_id=None):
+    def count_entries(cls, txn, entrant_id=None):
         suffix = ""
-        if user_id:
-            suffix += "WHERE user_id=%(user_id)s"
-        return cls.count_rows(txn, suffix, {'user_id': user_id})
+        if entrant_id:
+            suffix += "WHERE entrant_id=%(entrant_id)s"
+        return cls.count_rows(txn, suffix, {'entrant_id': entrant_id})
 
     @classmethod
-    def count_entries_since(cls, txn, timestamp, user_id=None):
+    def count_entries_since(cls, txn, timestamp, entrant_id=None):
         suffix = "WHERE "
-        if user_id:
-            suffix += "user_id=%(user_id)s AND"
-        suffix += " created>=%(timestamp)s"
-        return cls.count_rows(txn, suffix, {'user_id': user_id,
+        if entrant_id:
+            suffix += "entrant_id=%(entrant_id)s AND"
+        suffix += " created_at>=%(timestamp)s"
+        return cls.count_rows(txn, suffix, {'entrant_id': entrant_id,
                                             'timestamp': timestamp})
 
     @classmethod
-    def enter(cls, txn, received_message_id, unique_code, user_id, voucher_code_id):
+    def enter(cls, txn, received_message_id, unique_code, entrant_id, voucher_code_id):
         params = {
             'unique_code': unique_code,
             'received_message_id': received_message_id,
-            'user_id': user_id,
+            'entrant_id': entrant_id,
             'voucher_code_id': voucher_code_id,
             }
         txn.execute(cls.insert_values_query(**params), params)

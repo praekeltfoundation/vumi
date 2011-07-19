@@ -202,7 +202,7 @@ class CampaignEntryTestCase(UglyModelTestCase):
             entry = CampaignEntry.get_entry(txn, entry_id)
             self.assertEquals(2, entry.received_message_id)
             self.assertEquals('aaa', entry.unique_code)
-            self.assertEquals('27831234567', entry.user_id)
+            self.assertEquals('27831234567', entry.entrant_id)
             self.assertEquals(1, entry.voucher_code_id)
         return self.ri(_txn)
 

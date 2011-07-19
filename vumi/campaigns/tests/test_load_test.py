@@ -175,8 +175,8 @@ class StubbedCDW(CampaignDispatchWorker):
     def publish_to(self, rkey, *args, **kw):
         return rkey
 
-    def send_sms(self, message):
-        self.sent_messages.append(message)
+    def publish_msg(self, publisher, msg):
+        self.published.append((publisher, msg))
 
 
 class CampaignDispatchWorkerTestCase(WorkerTestCase):
@@ -188,7 +188,6 @@ class CampaignDispatchWorkerTestCase(WorkerTestCase):
 
     def get_cdw(self, **kw):
         cdw = self.create_worker(StubbedCDW, kw)
-        cdw.dispatched = []
-        cdw.sent_messages = []
+        cdw.published = []
         cdw.startWorker()
         return cdw
