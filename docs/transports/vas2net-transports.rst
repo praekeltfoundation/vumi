@@ -98,7 +98,10 @@ Configuration parameters
     web_receive_path: /api/v1/sms/vas2nets/receive/
     web_receipt_path: /api/v1/sms/vas2nets/receipt/
     web_port: 8123
-
+    
+    url: <provided by vas2nets>
+    username: <provided by vas2nets>
+    password: <provided by vas2nets>
     owner: <provided by vas2nets>
     service: <provided by vas2nets>
     subservice: <provided by vas2nets>
