@@ -198,6 +198,8 @@ class Vas2NetsTransport(Worker):
         response.deliverBody(HttpResponseHandler(deferred))
         response_content = yield deferred
         
+        log.msg('Headers', list(response.headers.getAllRawHeaders()))
+        
         if response.headers.hasHeader('X-VAS2Nets-SmsId'):
             transport_message_id = response.headers.getRawHeaders('X-VAS2Nets-SmsId')[0]
             with self.publisher.transaction():
