@@ -182,6 +182,9 @@ class Vas2NetsTransport(Worker):
         
         default_params.update(request_params)
         
+        log.msg('Hitting %s with %s' % (self.config['url'], default_params))
+        log.msg(urlencode(default_params))
+        
         agent = Agent(reactor)
         response = yield agent.request('POST', self.config['url'], 
             Headers({
