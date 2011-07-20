@@ -78,7 +78,7 @@ class HttpRpcTransport(Worker):
         log.msg("HttpRpcTransport consuming on %s: %s" % (
             self.consume_key,
             repr(message.payload)))
-        if message.payload.get('uuid') and message.payload.get('message'):
+        if message.payload.get('uuid') and 'message' in message.payload:
             self.finishRequest(
                     message.payload['uuid'],
                     message.payload['message'])

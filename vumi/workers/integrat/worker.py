@@ -30,7 +30,8 @@ class IntegratWorker(Worker):
         self.publisher.publish_message(msg)
     
     def blank(self, hgmsg):
-        return u' '
+        log.msg('returning blank!')
+        return u''
     
     def end(self, session_id, closing_text):
         return self.reply(session_id, closing_text, 1)
@@ -56,4 +57,4 @@ class IntegratWorker(Worker):
         return self.call('new_session', hgmsg['SessionID'])
     
     def new_session(self, session_id):
-        return self.reply(session_id, 'hi there new %s' % session_id, "")
+        return self.reply(session_id, 'hi there new %s' % session_id)
