@@ -30,3 +30,4 @@ redis
 pyserial
 pytz
 gunicorn
+python-fusiontables==0.1
