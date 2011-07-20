@@ -44,14 +44,38 @@ class HigateXMLParser():
 
         if messagedict.get('Type') == "OnUSSEvent":
             contextlist = element.find("Response").find("OnUSSEvent").find("USSContext").items()
-            text = element.find("Response").find("OnUSSEvent").find("USSText").findtext("")
-            messagedict['TEXT'] = text
+            USSText = element.find("Response").find("OnUSSEvent").find("USSText").findtext("")
+            messagedict['USSText'] = USSText
             for i in contextlist:
                 messagedict[i[0]] = i[1]
 
         if messagedict.get('Type') == "USSReply":
-            pass #TODO
+            UserID = element.find("Request").find("UserID").findtext('')
+            Password = element.find("Request").find("UserID").findtext('')
+            USSText = element.find("Request").find("USSText").findtext('')
+            messagedict['UserID'] = UserID
+            messagedict['Password'] = Password
+            messagedict['USSText'] = USSText
 
         #############################################################
 
         return messagedict
+
+
+    def build(self, messagedict):
+        message = ElementTree.Element("Message")
+        version = ElementTree.SubElement(message, "Version")
+        version.set("Version","1.0")
+
+        ##############  Conditional checks ##########################
+
+        if messagedict.get("Type") == "USSReply":
+            request = ElementTree.SubElement(message, "Request")
+            request.set("Type", messagedict.get("Type"))
+            request.set("SessionID", messagedict.get("SessionID"))
+            request.set("Flags", messagedict.get("Flags", "0"))
+
+        #############################################################
+
+        return ElementTree.tostring(message)
+        #return dir(version)
