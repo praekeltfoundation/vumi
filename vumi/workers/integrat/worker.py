@@ -3,7 +3,10 @@ from twisted.python import log
 
 from vumi.message import Message
 from vumi.service import Worker
+from vumi.errors import VumiError
 from vumi.workers.integrat.utils import HigateXMLParser
+
+hxp = HigateXMLParser()
 
 class IntegratWorker(Worker):
     
@@ -18,16 +21,39 @@ class IntegratWorker(Worker):
     def consume_message(self, message):
         uuid = message.payload.get('uuid')
         xml_message = message.payload.get('message')
-        hgmsg = HigateXMLParser().parse(xml_message.get('content'))
+        hgmsg = hxp.parse(xml_message.get('content'))
         log.msg(hgmsg)
-        handler = getattr(self, 'handle_%s' % hgmsg.get('USSText'), self.all_ok)
-        log.msg('handler', handler)
-        msg = Message(uuid=uuid,message=handler(hgmsg))
-        log.msg('Publishing', msg)
+        handler = getattr(self, '_handle_%s' % hgmsg.get('USSText', ''), 
+                            self.blank)
+        xml_response = handler(hgmsg)
+        msg = Message(uuid=uuid,message=xml_response)
         self.publisher.publish_message(msg)
     
-    def all_ok(self, hgmsg):
-        return u'<?xml version="1.0" encoding="utf-8"?>'
+    def blank(self, hgmsg):
+        return u' '
     
-    def handle_REQ(self, hgmsg):
-        return 'this is a REQ'
+    def end(self, session_id, closing_text):
+        return self.reply(session_id, closing_text, 1)
+    
+    def reply(self, session_id, reply_text, flag=0):
+        return hxp.build({
+            'Flags': str(flag),
+            'SessionID': session_id,
+            'Type': 'USSReply',
+            'USSText': reply_text,
+            'Password': self.config.get('password'),
+            'UserID': self.config.get('username')
+        })
+    
+    def call(self, fn_name, *args):
+        handler = getattr(self, fn_name)
+        if not handler:
+            raise VumiError, 'Please override %s(session_id, msg)' % fn_name
+        return handler(*args) 
+    
+    def _handle_REQ(self, hgmsg):
+        log.msg('handling REQ')
+        return self.call('new_session', hgmsg['SessionID'])
+    
+    def new_session(self, session_id):
+        return self.reply(session_id, 'hi there new %s' % session_id, "")

@@ -331,7 +331,6 @@ class Publisher(object):
                                    routing_key=routing_key)
 
     def publish_message(self, message, **kwargs):
-        log.msg('Publishing', message, kwargs)
         amq_message = Content(message.to_json())
         amq_message['delivery mode'] = kwargs.pop('delivery_mode',
                 self.delivery_mode)
