@@ -122,7 +122,7 @@ class HigateXMLTestCases(TestCase):
                               NetworkID="1"
                               AdultRating="0"
                               DataCoding="8"
-                              EsmClass="128" >e
+                              EsmClass="128" >
                     <Content Type="HEX">06052677F6A565 ...etc</Content>
                 </OnReceiveSMS>
             </Response>
