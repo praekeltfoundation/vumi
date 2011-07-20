@@ -79,6 +79,9 @@ class HigateXMLParser():
             userid.text = messagedict.get("UserID", "")
             password = ElementTree.SubElement(request, "Password")
             password.text = messagedict.get("Password", "")
+            usstext = ElementTree.SubElement(request, "USSText")
+            usstext.set("Type", "TEXT")
+            usstext.text = messagedict.get("USSText", "")
 
         #############################################################
 
