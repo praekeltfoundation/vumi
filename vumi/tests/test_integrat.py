@@ -1,9 +1,10 @@
 import json
 import re
+from  xml.etree import ElementTree
 
 from twisted.python import log
 from twisted.trial.unittest import TestCase
-from vumi.workers.integrat.utils import *
+from vumi.workers.integrat.utils import HigateXMLParser
 
 
 
@@ -260,11 +261,8 @@ class HigateXMLTestCases(TestCase):
         </Message>
         '''
         # make xml string formatting compact & consistent
-        USSReply_xml = re.sub(r'^\s*<', '<', USSReply_xml)
-        USSReply_xml = re.sub(r'>\s*<', '><', USSReply_xml)
-        USSReply_xml = re.sub(r'>\s*$', '>', USSReply_xml)
-        USSReply_xml = re.sub(r' */>', ' />', USSReply_xml)
-        USSReply_xml = re.sub(r'\n', '', USSReply_xml)
+        USSReply_xml = ElementTree.tostring(ElementTree.fromstring(USSReply_xml))
+        USSReply_xml = re.sub(r'\n\s*', '', USSReply_xml)
         if self.dolog:
             log.msg("USSReply -> %s" % (repr(self.hxp.build(USSReply_dict))))
         self.assertEquals(self.hxp.build(USSReply_dict), USSReply_xml)
