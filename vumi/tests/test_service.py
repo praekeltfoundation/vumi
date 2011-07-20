@@ -2,21 +2,8 @@ from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.service import Worker, WorkerCreator
-from vumi.tests.utils import TestChannel, TestQueue, fake_amq_message
+from vumi.tests.utils import TestQueue, fake_amq_message, TestWorker
 from vumi.message import Message
-
-
-class TestWorker(Worker):
-
-    def __init__(self, queue):
-        self._queue = queue
-        self.global_options = {}
-
-    def get_channel(self):
-        return TestChannel()
-
-    def queue(self, *args, **kwargs):
-        return self._queue
 
 
 class LoadableTestWorker(Worker):
