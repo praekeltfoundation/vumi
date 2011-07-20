@@ -26,6 +26,9 @@ class HigateXMLParser():
             for i in resultlist:
                 messagedict[i[0]] = i[1]
 
+        if messagedict.get('Type') == "SendSMS":
+            pass #TODO
+
         if messagedict.get('Type') == "OnReceiveSMS":
             receivelist = element.find("Response").find("OnReceiveSMS").items()
             hex = element.find("Response").find("OnReceiveSMS").find("Content").findtext("")
@@ -33,12 +36,21 @@ class HigateXMLParser():
             for i in receivelist:
                 messagedict[i[0]] = i[1]
 
+        if messagedict.get('Type') == "OnOBSResponse":
+            pass #TODO
+
+        if messagedict.get('Type') == "OnLBSResponse":
+            pass #TODO
+
         if messagedict.get('Type') == "OnUSSEvent":
             contextlist = element.find("Response").find("OnUSSEvent").find("USSContext").items()
             text = element.find("Response").find("OnUSSEvent").find("USSText").findtext("")
             messagedict['TEXT'] = text
             for i in contextlist:
                 messagedict[i[0]] = i[1]
+
+        if messagedict.get('Type') == "USSReply":
+            pass #TODO
 
         #############################################################
 
