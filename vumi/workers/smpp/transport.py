@@ -17,7 +17,6 @@ from vumi.webapp.api import models
 from vumi.webapp.api import forms
 from vumi.webapp.api import utils
 from vumi.utils import *
-import vumi.options
 
 import urllib
 import urllib2
@@ -40,23 +39,17 @@ class SmppConsumer(Consumer):
     queue_name = "sms.outbound.fallback"
     routing_key = "sms.outbound.fallback"
 
-    def __init__(self, r_server, r_prefix, send_callback):
+    def __init__(self, r_server, r_prefix, smpp_offset, send_callback):
         self.r_server = r_server
         self.r_prefix = r_prefix
+        self.smpp_offset = smpp_offset
         self.send = send_callback
         log.msg("Consuming on %s -> %s" % (self.routing_key, self.queue_name))
 
     def consume_message(self, message):
         log.msg("Consumed JSON", message)
         sequence_number = self.send(**message.payload)
-        formdict = {
-                "sent_sms":message.payload.get("id"),
-                "sequence_number": sequence_number,
-                }
-        log.msg("SMPPLinkForm", repr(formdict))
-        form = forms.SMPPLinkForm(formdict)
-        form.save()
-        self.r_server.set("%s_%s#last_sequence_number" % (self.r_prefix, vumi.options.get_all()['config']['smpp_offset']),
+        self.r_server.set("%s_%s#last_sequence_number" % (self.r_prefix, self.smpp_offset),
                 sequence_number)
         self.r_server.set("%s#%s" % (self.r_prefix, sequence_number),
                 message.payload.get("id"))
@@ -95,20 +88,17 @@ class SmppTransport(Worker):
 
     def startWorker(self):
         # Connect to Redis
-        self.r_server = redis.Redis("localhost", db=vumi.options.get_deploy_int(self.vhost))
+        self.r_server = redis.Redis("localhost", db=get_deploy_int(self.vhost))
         log.msg("Connected to Redis")
-        config = vumi.options.get_all()['config']
-        self.r_prefix = "%s@%s:%s" % (config['system_id'], config['host'], config['port'])
+        self.r_prefix = "%s@%s:%s" % (self.config['system_id'], self.config['host'], self.config['port'])
         log.msg("r_prefix = %s" % self.r_prefix)
 
         log.msg("Starting the SmppTransport")
         # start the Smpp transport
-        factory = EsmeTransceiverFactory(
-                int(self.config['smpp_increment']),
-                int(self.config['smpp_offset']))
+        factory = EsmeTransceiverFactory(self.config, self.global_options)
         factory.loadDefaults(self.config)
 
-        self.sequence_key = "%s_%s#last_sequence_number" % (self.r_prefix, config['smpp_offset'])
+        self.sequence_key = "%s_%s#last_sequence_number" % (self.r_prefix, self.config['smpp_offset'])
         log.msg("sequence_key = %s" % (self.sequence_key))
         last_sequence_number = int(self.r_server.get(self.sequence_key) or 0)
 
@@ -126,15 +116,6 @@ class SmppTransport(Worker):
                 factory)
 
 
-    #def getLatestSequenceNumber(self):
-        #sequence_number = 0
-        #try:
-            #sequence_number = models.SMPPLink.objects.latest().sequence_number
-        #except Exception, e:
-            #log.msg("No SMPPLink entries yet")
-        #return sequence_number
-
-
     @inlineCallbacks
     def esme_connected(self, client):
         log.msg("ESME Connected, adding handlers")
@@ -150,7 +131,7 @@ class SmppTransport(Worker):
         yield self.start_consumer(dynamically_create_smpp_consumer(transport,
                     routing_key='sms.outbound.%s' % transport,
                     queue_name='sms.outbound.%s' % transport
-                ), self.r_server, self.r_prefix, self.send_smpp)
+                ), self.r_server, self.r_prefix, self.config['smpp_offset'], self.send_smpp)
 
 
     @inlineCallbacks
@@ -161,9 +142,6 @@ class SmppTransport(Worker):
 
     @inlineCallbacks
     def submit_sm_resp(self, *args, **kwargs):
-        smpplink = models.SMPPLink.objects \
-                .filter(sequence_number=kwargs['sequence_number']) \
-                .latest('created_at')
         redis_key = "%s#%s" % (self.r_prefix, kwargs['sequence_number'])
         log.msg("redis_key = %s" % redis_key)
         sent_sms_id = self.r_server.get(redis_key)
@@ -239,10 +217,6 @@ class SmppTransport(Worker):
                 destination_addr = str(to_msisdn),
                 source_addr = route,
                 )
-        #self.deliver_sm(
-                #short_message=str(message),
-                #destination_addr=str(to_msisdn),
-                #source_addr=route)
         return sequence_number
 
 

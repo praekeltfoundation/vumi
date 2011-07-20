@@ -17,7 +17,7 @@ Contents:
    client.rst
    deploying.rst
    keywords.rst
-   setup-smpp.rst
+   transports.rst
 
 Indices and tables
 ==================

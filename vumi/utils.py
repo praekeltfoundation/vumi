@@ -1,6 +1,50 @@
+from zope.interface import implements
+from twisted.internet.defer import succeed
+from twisted.python import log
+from twisted.web.iweb import IBodyProducer
+
 import importlib
 import os.path
 import re
+
+def normalize_msisdn(raw, country_code=''):
+    # don't touch shortcodes
+    if len(raw) <= 5:
+        return raw
+    
+    raw = ''.join([c for c in str(raw) if c.isdigit() or c == '+'])
+    if raw.startswith('00'):
+        return '+' + raw[2:]
+    if raw.startswith('0'):
+        return '+' + country_code + raw[1:]
+    if raw.startswith('+'):
+        return raw
+    if raw.startswith(country_code):
+        return '+' + raw
+    return raw
+
+
+class StringProducer(object):
+    """
+    For various twisted.web mechanics we need a producer to produce
+    content for HTTP requests, this is a helper class to quickly
+    create a producer for a bit of content
+    """
+    implements(IBodyProducer)
+    
+    def __init__(self, body):
+        self.body = body
+        self.length = len(body)
+    
+    def startProducing(self, consumer):
+        consumer.write(self.body)
+        return succeed(None)
+    
+    def pauseProducing(self):
+        pass
+    
+    def stopProducing(self):
+        pass
 
 
 def make_vumi_path_abs(path):
@@ -146,3 +190,19 @@ OPERATOR_PREFIX:
     2784: CELLC
 
 """
+
+
+def get_deploy_int(deployment):
+    lookup = {
+        "develop": 7,
+        "/develop": 7,
+        "development": 7,
+        "/development": 7,
+        "production": 8,
+        "/production": 8,
+        "staging": 9,
+        "/staging": 9,
+        "qa": 9,
+        "/qa": 9,
+        }
+    return lookup.get(deployment.lower(), 7)

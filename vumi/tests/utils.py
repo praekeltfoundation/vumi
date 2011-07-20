@@ -1,6 +1,8 @@
 import json, importlib
 from twisted.internet import defer
+from vumi.service import Worker
 from collections import namedtuple
+from contextlib import contextmanager
 
 def setup_django_test_database():
     from django.test.simple import DjangoTestSuiteRunner
@@ -66,7 +68,11 @@ class TestPublisher(object):
     """
     def __init__(self):
         self.queue = []
-
+    
+    @contextmanager
+    def transaction(self):
+        yield
+    
     def publish_message(self, message, **kwargs):
         self.queue.append((message, kwargs))
 
@@ -129,5 +135,18 @@ class TestChannel(object):
     def close(self, *args, **kwargs):
         return True
 
+
+
+class TestWorker(Worker):
+
+    def __init__(self, queue):
+        self._queue = queue
+        self.global_options = {}
+
+    def get_channel(self):
+        return TestChannel()
+
+    def queue(self, *args, **kwargs):
+        return self._queue
 
 

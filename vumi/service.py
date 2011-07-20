@@ -1,6 +1,7 @@
 # -*- test-case-name: vumi.tests.test_service -*-
 
 from copy import deepcopy
+from contextlib import contextmanager
 import json
 
 from twisted.python import log, usage
@@ -48,14 +49,16 @@ class Worker(AMQClient):
         # authentication was successful
         log.msg("Got an authenticated connection")
         yield self.startWorker()
-
-    @inlineCallbacks
+    
     def startWorker(self):
         # I hate camelCasing method but since Twisted has it as a
         # standard I voting to stick with it
         raise VumiError("You need to subclass Worker and its "
                         "startWorker method")
-
+    
+    def stopWorker(self):
+        pass
+    
     @inlineCallbacks
     def get_channel(self, channel_id=None):
         """If channel_id is None a new channel is created"""
@@ -175,8 +178,8 @@ class Worker(AMQClient):
             parent.putChild(leaf, resource)
 
         site_factory = Site(root)
-        yield reactor.listenTCP(port, site_factory)
-        returnValue(root)
+        port = yield reactor.listenTCP(port, site_factory)
+        returnValue(port)
 
 
 class Consumer(object):
@@ -321,7 +324,13 @@ class Publisher(object):
             raise RoutingKeyError("The routing_key: %s is not bound to any"
                                   " queues in vhost: %s  exchange: %s" % (
                                   routing_key, self.vumi_options['vhost'], self.exchange_name))
-
+    
+    @contextmanager
+    def transaction(self):
+        self.channel.tx_select()
+        yield
+        self.channel.tx_commit()
+    
     def publish(self, message, **kwargs):
         exchange_name = kwargs.get('exchange_name') or self.exchange_name
         routing_key = kwargs.get('routing_key') or self.routing_key
@@ -331,6 +340,7 @@ class Publisher(object):
                                    routing_key=routing_key)
 
     def publish_message(self, message, **kwargs):
+        log.msg('Publishing message: %s with %s' % (message.to_json(), repr(kwargs)))
         amq_message = Content(message.to_json())
         amq_message['delivery mode'] = kwargs.pop('delivery_mode',
                 self.delivery_mode)
@@ -354,7 +364,8 @@ class AmqpFactory(protocol.ReconnectingClientFactory):
         self.worker_class = worker_class
 
     def buildProtocol(self, addr):
-        worker = self.worker_class(self.delegate, self.options['vhost'], self.spec)
+        worker = self.worker_class(self.delegate, self.options['vhost'], 
+                                    self.spec, self.options.get('heartbeat', 0))
         worker.factory = self
         worker.global_options = self.options
         worker.config = self.config
