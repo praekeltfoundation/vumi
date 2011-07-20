@@ -47,6 +47,9 @@ class HigateXMLParser():
             if element.find("Response").find("OnUSSEvent").find("USSText") != None:
                 USSText = element.find("Response").find("OnUSSEvent").find("USSText").findtext("")
                 messagedict['USSText'] = USSText
+            
+            messagedict['EventType'] = element.find("Response").find("OnUSSEvent").attrib['Type']
+            
             for i in contextlist:
                 messagedict[i[0]] = i[1]
 

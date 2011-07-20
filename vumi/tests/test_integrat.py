@@ -194,7 +194,7 @@ class HigateXMLTestCases(TestCase):
         self.assertEquals(self.hxp.parse(OnLBSResponse_xml), OnLBSResponse_dict)
 
 
-    def testParseOnUSSEvent(self):
+    def testParseOnUSSEventRequest(self):
         OnUSSEvent_xml = '''
         <Message>
             <Version Version="1.0"/>
@@ -210,21 +210,6 @@ class HigateXMLTestCases(TestCase):
             </Response>
         </Message>
         '''
-        #OnUSSEvent_xml = '''
-        #<Message>
-            #<Version Version="1.0"/>
-            #<CreditBalance Account="-9" Client="4220016578"/>
-            #<Response Type="OnUSSEvent">
-                #<SystemID>Higate</SystemID>
-                #<UserID>C5Test01HTTP</UserID>
-                #<Service>C5HT01</Service>
-                #<Network ID="1" MCC="655" MNC="001"/>
-                #<OnUSSEvent Type="Open">
-                    #<USSContext SessionID="393673169" NetworkSID="1241591752" MSISDN="27764493806" Script="" ConnStr="*120*99*987#"/>
-                #</OnUSSEvent>
-            #</Response>
-        #</Message>
-        #'''
 
         OnUSSEvent_dict = {'ConnStr': '*120*99*123#',
                          'MSISDN': '27821234567',
@@ -232,7 +217,63 @@ class HigateXMLTestCases(TestCase):
                          'Script': 'testscript',
                          'SessionID': '16502',
                          'Type': 'OnUSSEvent',
-                         'USSText': 'REQ'}
+                         'USSText': 'REQ',
+                         'EventType': 'Request'}
+        if self.dolog:
+            log.msg("OnUSSEvent -> %s" % (repr(self.hxp.parse(OnUSSEvent_xml))))
+        self.assertEquals(self.hxp.parse(OnUSSEvent_xml), OnUSSEvent_dict)
+
+    def testParseOnUSSEventRequestOpen(self):
+        OnUSSEvent_xml = '''
+        <Message>
+            <Version Version="1.0"/>
+            <CreditBalance Account="-9" Client="4220016578"/>
+            <Response Type="OnUSSEvent">
+                <SystemID>Higate</SystemID>
+                <UserID>LoginName</UserID>
+                <Service>SERVICECODE</Service>
+                <Network ID="1" MCC="655" MNC="001"/>
+                <OnUSSEvent Type="Open">
+                    <USSContext SessionID="16502" NetworkSID="310941653" MSISDN="27821234567" Script="testscript" ConnStr="*120*99*123#"/>
+                </OnUSSEvent>
+            </Response>
+        </Message>
+        '''
+        OnUSSEvent_dict = {'ConnStr': '*120*99*123#',
+                         'MSISDN': '27821234567',
+                         'NetworkSID': '310941653',
+                         'Script': 'testscript',
+                         'SessionID': '16502',
+                         'Type': 'OnUSSEvent',
+                         'EventType': 'Open'}
+        if self.dolog:
+            log.msg("OnUSSEvent -> %s" % (repr(self.hxp.parse(OnUSSEvent_xml))))
+        self.assertEquals(self.hxp.parse(OnUSSEvent_xml), OnUSSEvent_dict)
+        
+    
+    def testParseOnUSSEventRequestClose(self):
+        OnUSSEvent_xml = '''
+        <Message>
+            <Version Version="1.0"/>
+            <CreditBalance Account="-10" Client="4219964578"/>
+            <Response Type="OnUSSEvent">
+                <SystemID>Higate</SystemID>
+                <UserID>LoginName</UserID>
+                <Service>LoginName</Service>
+                <Network ID="1" MCC="655" MNC="001"/>
+                <OnUSSEvent Type="Close">
+                    <USSContext SessionID="16502" NetworkSID="310941653" MSISDN="27821234567" Script="testscript" ConnStr="*120*99*123#"/>
+                </OnUSSEvent>
+            </Response>
+        </Message>
+        '''
+        OnUSSEvent_dict = {'ConnStr': '*120*99*123#',
+                         'MSISDN': '27821234567',
+                         'NetworkSID': '310941653',
+                         'Script': 'testscript',
+                         'SessionID': '16502',
+                         'Type': 'OnUSSEvent',
+                         'EventType': 'Close'}
         if self.dolog:
             log.msg("OnUSSEvent -> %s" % (repr(self.hxp.parse(OnUSSEvent_xml))))
         self.assertEquals(self.hxp.parse(OnUSSEvent_xml), OnUSSEvent_dict)

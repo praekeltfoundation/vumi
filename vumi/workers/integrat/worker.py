@@ -23,11 +23,16 @@ class IntegratWorker(Worker):
         xml_message = message.payload.get('message')
         hgmsg = hxp.parse(xml_message.get('content'))
         log.msg(hgmsg)
-        handler = getattr(self, '_handle_%s' % hgmsg.get('USSText', ''), 
-                            self.blank)
-        xml_response = handler(hgmsg)
+        
+        xml_response = self.handle_text(hgmsg):
         msg = Message(uuid=uuid,message=xml_response)
         self.publisher.publish_message(msg)
+    
+    def handle_ussd_event(self, hgmsg):
+        if 'USSText' in hgmsg:
+            return self.handle_text(hgmsg)
+        else:
+            return self.blank(hgmsg)
     
     def blank(self, hgmsg):
         log.msg('returning blank!')
@@ -52,9 +57,9 @@ class IntegratWorker(Worker):
             raise VumiError, 'Please override %s(session_id, msg)' % fn_name
         return handler(*args) 
     
-    def _handle_REQ(self, hgmsg):
-        log.msg('handling REQ')
-        return self.call('new_session', hgmsg['SessionID'])
+    def handle_text(self, hgmsg):
+        if hgmsg['USSText'] == 'REQ':
+            return self.call('new_session', hgmsg['SessionID'])
     
     def new_session(self, session_id):
         return self.reply(session_id, 'hi there new %s' % session_id)
