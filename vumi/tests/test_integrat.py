@@ -206,25 +206,25 @@ class HigateXMLTestCases(TestCase):
                 <OnUSSEvent Type="Request">
                     <USSContext SessionID="16502" NetworkSID="310941653" MSISDN="27821234567" Script="testscript" ConnStr="*120*99*123#"/>
                     <USSText Type="TEXT">REQ</USSText>
-            </OnUSSEvent>
-        </Response>
-    </Message>
-    '''
-        OnUSSEvent_xml = '''
-        <Message>
-            <Version Version="1.0"/>
-            <CreditBalance Account="-9" Client="4220016578"/>
-            <Response Type="OnUSSEvent">
-                <SystemID>Higate</SystemID>
-                <UserID>C5Test01HTTP</UserID>
-                <Service>C5HT01</Service>
-                <Network ID="1" MCC="655" MNC="001"/>
-                <OnUSSEvent Type="Open">
-                    <USSContext SessionID="393673169" NetworkSID="1241591752" MSISDN="27764493806" Script="" ConnStr="*120*99*987#"/>
                 </OnUSSEvent>
             </Response>
         </Message>
         '''
+        #OnUSSEvent_xml = '''
+        #<Message>
+            #<Version Version="1.0"/>
+            #<CreditBalance Account="-9" Client="4220016578"/>
+            #<Response Type="OnUSSEvent">
+                #<SystemID>Higate</SystemID>
+                #<UserID>C5Test01HTTP</UserID>
+                #<Service>C5HT01</Service>
+                #<Network ID="1" MCC="655" MNC="001"/>
+                #<OnUSSEvent Type="Open">
+                    #<USSContext SessionID="393673169" NetworkSID="1241591752" MSISDN="27764493806" Script="" ConnStr="*120*99*987#"/>
+                #</OnUSSEvent>
+            #</Response>
+        #</Message>
+        #'''
 
         OnUSSEvent_dict = {'ConnStr': '*120*99*123#',
                          'MSISDN': '27821234567',
