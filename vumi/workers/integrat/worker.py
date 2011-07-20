@@ -24,19 +24,13 @@ class IntegratWorker(Worker):
         hgmsg = hxp.parse(xml_message.get('content'))
         log.msg(hgmsg)
         
-        xml_response = self.handle_text(hgmsg):
-        msg = Message(uuid=uuid,message=xml_response)
+        event_name = hgmsg.get('EventType','').lower()
+        handler = getattr(self, 'handle_%s' % event_name, self.noop)
+        msg = Message(uuid=uuid,message=handler(hgmsg))
         self.publisher.publish_message(msg)
     
-    def handle_ussd_event(self, hgmsg):
-        if 'USSText' in hgmsg:
-            return self.handle_text(hgmsg)
-        else:
-            return self.blank(hgmsg)
-    
-    def blank(self, hgmsg):
-        log.msg('returning blank!')
-        return u''
+    def noop(self, hgmsg):
+        return ''
     
     def end(self, session_id, closing_text):
         return self.reply(session_id, closing_text, 1)
@@ -51,15 +45,30 @@ class IntegratWorker(Worker):
             'UserID': self.config.get('username')
         })
     
-    def call(self, fn_name, *args):
-        handler = getattr(self, fn_name)
-        if not handler:
-            raise VumiError, 'Please override %s(session_id, msg)' % fn_name
-        return handler(*args) 
+    def handle_request(self, hgmsg):
+        session_id = hgmsg['SessionID']
+        text = hgmsg['USSText'].strip()
+        if text == 'REQ':
+            return self.new_session(session_id, text)
+        return self.resume_session(session_id, text)
     
-    def handle_text(self, hgmsg):
-        if hgmsg['USSText'] == 'REQ':
-            return self.call('new_session', hgmsg['SessionID'])
+    def handle_open(self, hgmsg):
+        session_id = hgmsg['SessionID']
+        self.session_started(session_id)
     
-    def new_session(self, session_id):
+    def handle_close(self, hgmsg):
+        session_id = hgmsg['SessionID']
+        self.session_ended(session_id)
+    
+    def session_started(self, session_id):
+        log.msg('session started for %s' % session_id)
+    
+    def session_ended(self, session_id):
+        log.msg('session ended for %s' % session_id)
+    
+    def new_session(self, session_id, text):
         return self.reply(session_id, 'hi there new %s' % session_id)
+    
+    def resume_session(self, session_id, text):
+        return self.end(session_id, 'you said %s. Bye!' % text)
+    
