@@ -5,14 +5,21 @@ from twisted.trial.unittest import TestCase
 from vumi.workers.integrat.utils import *
 
 
+
 class HigateXMLTestCases(TestCase):
+    '''
+    Tests for the Sample XML found at:
+    http://www.integrat.co.za/wiki/index.php/Sample_xml
+    '''
 
     def setUp(self):
         self.dolog = True
         self.hxp = HigateXMLParser()
 
+
     def tearDown(self):
         del self.hxp
+
 
     def testOnResult(self):
         OnResult_xml = '''
@@ -37,6 +44,62 @@ class HigateXMLTestCases(TestCase):
         if self.dolog:
             log.msg("OnResult -> %s" % (repr(self.hxp.parse(OnResult_xml))))
         self.assertEquals(self.hxp.parse(OnResult_xml), OnResult_dict)
+
+
+    def testSendSMS_Linked(self):
+        SendSMS_xml = '''
+        <Message>
+            <Request Type="SendSMS" RefNo="1">
+                <UserID>George</UserID>
+                <Password>xxxxxx</Password>
+                <SendSMS ToAddr="0829993619"
+                         Validity="00020000"
+                         Flags="32"
+                         DataCoding="0">
+                    <Reply Tag=""/>
+                    <AdultRating>0</AdultRating>
+                    <Ticket Type="Mobile"
+                            OBSService="OBSSrv"
+                            Service="MyService"
+                            SubService="MySubService"
+                            ChargeAddr="0829034444"
+                            Description=""
+                            Value="500"/>
+                    <Subscr Started="2008-09-15 15:59:52"
+                            Category="BookClub"
+                            Trigger=""/>
+                    <Content Type="TEXT">Test message from Higate Http client</Content>
+                </SendSMS>
+         </Request>
+        </Message>
+        '''
+        SendSMS_dict = {'RefNo': '1', 'Type': 'SendSMS'}
+        if self.dolog:
+            log.msg("SendSMS -> %s" % (repr(self.hxp.parse(SendSMS_xml))))
+        self.assertEquals(self.hxp.parse(SendSMS_xml), SendSMS_dict)
+
+
+    def testSendSMS(self):
+        SendSMS_xml = '''
+        <Message>
+            <Request Type="SendSMS" RefNo="1">
+                <UserID>George</UserID>
+                <Password>xxxxxx</Password>
+                <SendSMS ToAddr="0829993619"
+                         Validity="00020000"
+                         Flags="0"
+                         DataCoding="0">
+                    <Reply Tag=""/>
+                    <AdultRating>0</AdultRating>
+                    <Content Type="TEXT">Test message from Higate Http client</Content>
+                </SendSMS>
+         </Request>
+        </Message>
+        '''
+        SendSMS_dict = {'RefNo': '1', 'Type': 'SendSMS'}
+        if self.dolog:
+            log.msg("SendSMS -> %s" % (repr(self.hxp.parse(SendSMS_xml))))
+        self.assertEquals(self.hxp.parse(SendSMS_xml), SendSMS_dict)
 
 
     def testOnReceiveSMS(self):
@@ -85,7 +148,7 @@ class HigateXMLTestCases(TestCase):
             </Response>
         </Message>
         '''
-        OnOBSResponse_dict = {}
+        OnOBSResponse_dict = {'RefNo': '123', 'SeqNo': '1234568', 'Type': 'OnOBSResponse'}
         if self.dolog:
             log.msg("OnOBSResponse -> %s" % (repr(self.hxp.parse(OnOBSResponse_xml))))
         self.assertEquals(self.hxp.parse(OnOBSResponse_xml), OnOBSResponse_dict)
@@ -123,7 +186,7 @@ class HigateXMLTestCases(TestCase):
             </Response>
         </Message>
         '''
-        OnLBSResponse_dict = {}
+        OnLBSResponse_dict = {'RefNo': '123', 'SeqNo': '548245219', 'Type': 'OnLBSResponse'}
         if self.dolog:
             log.msg("OnLBSResponse -> %s" % (repr(self.hxp.parse(OnLBSResponse_xml))))
         self.assertEquals(self.hxp.parse(OnLBSResponse_xml), OnLBSResponse_dict)
@@ -145,7 +208,7 @@ class HigateXMLTestCases(TestCase):
             </Response>
         </Message>
         '''
-        OnUSSEvent_dict = {'Script': 'testscript', 'MSISDN': '27821234567', 'Text': 'REQ', 'NetworkSID': '310941653', 'ConnStr': '*120*99*123#', 'SessionID': '16502', 'Type': 'OnUSSEvent'}
+        OnUSSEvent_dict = {'Script': 'testscript', 'MSISDN': '27821234567', 'TEXT': 'REQ', 'NetworkSID': '310941653', 'ConnStr': '*120*99*123#', 'SessionID': '16502', 'Type': 'OnUSSEvent'}
         if self.dolog:
             log.msg("OnUSSEvent -> %s" % (repr(self.hxp.parse(OnUSSEvent_xml))))
         self.assertEquals(self.hxp.parse(OnUSSEvent_xml), OnUSSEvent_dict)
@@ -162,7 +225,7 @@ class HigateXMLTestCases(TestCase):
          </Request>
         </Message>
         '''
-        USSReply_dict = {}
+        USSReply_dict = {'Flags': '0', 'SessionID': '223665', 'Type': 'USSReply'}
         if self.dolog:
             log.msg("USSReply -> %s" % (repr(self.hxp.parse(USSReply_xml))))
         self.assertEquals(self.hxp.parse(USSReply_xml), USSReply_dict)

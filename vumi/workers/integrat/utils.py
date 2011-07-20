@@ -6,15 +6,25 @@ class HigateXMLParser():
         element = ElementTree.fromstring(xmlstring)
 
         messagedict = {}
-        responselist = element.find("Response").items()
-        for i in responselist:
-            messagedict[i[0]] = i[1]
+        try:
+            responselist = element.find("Response").items()
+            for i in responselist:
+                messagedict[i[0]] = i[1]
+        except Exception, e:
+            pass
+        try:
+            requestlist = element.find("Request").items()
+            for i in requestlist:
+                messagedict[i[0]] = i[1]
+        except Exception, e:
+            pass
+
+        ##############  Conditional checks ##########################
 
         if messagedict.get('Type') == "OnResult":
             resultlist = element.find("Response").find("OnResult").items()
             for i in resultlist:
                 messagedict[i[0]] = i[1]
-            return messagedict
 
         if messagedict.get('Type') == "OnReceiveSMS":
             receivelist = element.find("Response").find("OnReceiveSMS").items()
@@ -22,14 +32,14 @@ class HigateXMLParser():
             messagedict['hex'] = hex
             for i in receivelist:
                 messagedict[i[0]] = i[1]
-            return messagedict
 
         if messagedict.get('Type') == "OnUSSEvent":
             contextlist = element.find("Response").find("OnUSSEvent").find("USSContext").items()
             text = element.find("Response").find("OnUSSEvent").find("USSText").findtext("")
-            messagedict['Text'] = text
+            messagedict['TEXT'] = text
             for i in contextlist:
                 messagedict[i[0]] = i[1]
-            return messagedict
+
+        #############################################################
 
         return messagedict
