@@ -86,4 +86,5 @@ class HigateXMLParser():
         #############################################################
 
         return ElementTree.tostring(message)
-        #return dir(version)
+
+
