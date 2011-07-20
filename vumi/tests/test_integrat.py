@@ -234,7 +234,7 @@ class HigateXMLTestCases(TestCase):
         </Message>
         '''
         USSReply_dict = {'Flags': '0',
-                        'Password': 'LoginName',
+                        'Password': 'xxxxxxxx',
                         'SessionID': '223665',
                         'Type': 'USSReply',
                         'USSText': 'Welcome the this USSD session',
@@ -246,7 +246,7 @@ class HigateXMLTestCases(TestCase):
 
     def testBuildUSSReply(self):
         USSReply_dict = {'Flags': '0',
-                        'Password': 'LoginName',
+                        'Password': 'xxxxxxxx',
                         'SessionID': '223665',
                         'Type': 'USSReply',
                         'USSText': 'Welcome the this USSD session',

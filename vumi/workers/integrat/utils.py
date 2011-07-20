@@ -51,7 +51,7 @@ class HigateXMLParser():
 
         if messagedict.get('Type') == "USSReply":
             UserID = element.find("Request").find("UserID").findtext('')
-            Password = element.find("Request").find("UserID").findtext('')
+            Password = element.find("Request").find("Password").findtext('')
             USSText = element.find("Request").find("USSText").findtext('')
             messagedict['UserID'] = UserID
             messagedict['Password'] = Password
@@ -72,8 +72,13 @@ class HigateXMLParser():
         if messagedict.get("Type") == "USSReply":
             request = ElementTree.SubElement(message, "Request")
             request.set("Type", messagedict.get("Type"))
-            request.set("SessionID", messagedict.get("SessionID"))
+            request.set("SessionID", messagedict.get("SessionID", ""))
             request.set("Flags", messagedict.get("Flags", "0"))
+            userid = ElementTree.SubElement(request, "UserID")
+            userid.set("Orientation", "TR")
+            userid.text = messagedict.get("UserID", "")
+            password = ElementTree.SubElement(request, "Password")
+            password.text = messagedict.get("Password", "")
 
         #############################################################
 
