@@ -186,12 +186,10 @@ class TicTacToeWorker(IntegratWorker):
         if game:
             if self.open_game == game:
                 self.open_game = None
-            sid_X = game.player_X
-            sid_O = game.player_O
-            self.games.pop(sid_X, None)
-            self.games.pop(sid_O, None)
-            self.end(sid_X, "Other side timed out.")
-            self.end(sid_O, "Other side timed out.")
+            for sid in (game.player_X, game.player_O):
+                if sid is not None:
+                    self.games.pop(sid, None)
+                    self.end(sid, "Other side timed out.")
 
     def resume_session(self, data):
         log.msg("Resume session:", data)
