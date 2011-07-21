@@ -181,6 +181,7 @@ class TicTacToeWorker(IntegratWorker):
         self.games[session_id] = game
 
     def close_session(self, data):
+        log.msg("Close session:", data)
         game = self.games.get(data['transport_session_id'])
         if game:
             if self.open_game == game:
