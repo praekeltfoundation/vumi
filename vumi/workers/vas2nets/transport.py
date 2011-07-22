@@ -92,6 +92,12 @@ class ReceiveSMSResource(Resource):
                     "Missing request key: %s" % e
             log.msg('Returning %s: %s' % (http.BAD_REQUEST, msg))
             return msg
+        except ValueError, e:
+            request.setResponseCode(http.BAD_REQUEST)
+            msg = "ValueError: %s" % e
+            log.msg('Returning %s: %s' % (http.BAD_REQUEST, msg))
+            return msg
+            
 
 class DeliveryReceiptResource(Resource):
     isLeaf = True
