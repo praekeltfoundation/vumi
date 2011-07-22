@@ -145,16 +145,14 @@ class SmppTransport(Worker):
         redis_key = "%s#%s" % (self.r_prefix, kwargs['sequence_number'])
         log.msg("redis_key = %s" % redis_key)
         sent_sms_id = self.r_server.get(redis_key)
+        transport_msg_id = kwargs['message_id']
         self.r_server.delete(redis_key)
+        log.msg("Mapping transport_msg_id=%s to sent_sms_id=%s" % (transport_msg_id, sent_sms_id))
+#TODO publish don't write
         sent_sms = models.SentSMS.objects.get(id=sent_sms_id)
-        print "@@@@@@@@@@@@@@@@@@@@", sent_sms
-        sent_sms.transport_msg_id = kwargs['message_id']
-        print "@@@@@@@@@@@@@@@@@@@@", sent_sms
+        sent_sms.transport_msg_id = transport_msg_id
         sent_sms.save()
-        kwargs.update({'sent_sms':sent_sms_id})
-        log.msg("SMPPRespForm <- %s" % repr(kwargs))
-        form = forms.SMPPRespForm(kwargs)
-        #form.save()
+#TODO publish don't write
         yield log.msg("SUBMIT SM RESP %s" % repr(kwargs))
 
 
