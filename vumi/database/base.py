@@ -41,11 +41,14 @@ class UglyModel(object):
         return db.runOperation(query)
 
     @classmethod
-    def drop_table(cls, db, if_exists=True):
+    def drop_table(cls, db, if_exists=True, cascade=False):
         q = "DROP TABLE "
         if if_exists:
             q += "IF EXISTS "
-        return db.runOperation(q + cls.table_name)
+        q += cls.table_name
+        if cascade:
+            q += " CASCADE"
+        return db.runOperation(q)
 
     @classmethod
     def wrap_results(cls, txn, results):

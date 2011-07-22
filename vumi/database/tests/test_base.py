@@ -44,14 +44,14 @@ class UglyModelTestCase(TestCase):
             raise SkipTest("Unable to connect to test database: %s" % (f.getErrorMessage(),))
         d = self._sdb(dbname)
         d.addErrback(_eb)
-        def add_callback(func):
+        def add_callback(func, *args, **kw):
             # This function exists to create a closure around a
             # variable in the correct scope. If we just add the
             # callback directly in the loops below, we only get the
             # final value of "table", not each intermediate value.
-            d.addCallback(lambda _: func(self.db))
+            d.addCallback(lambda _: func(self.db, *args, **kw))
         for table in reversed(tables):
-            add_callback(table.drop_table)
+            add_callback(table.drop_table, cascade=True)
         for table in tables:
             add_callback(table.create_table)
         return d
