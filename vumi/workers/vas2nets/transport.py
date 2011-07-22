@@ -90,7 +90,7 @@ class ReceiveSMSResource(Resource):
             request.setResponseCode(http.BAD_REQUEST)
             msg = "Need more request keys to complete this request. \n\n" \
                     "Missing request key: %s" % e
-            log.msg('Returning %s: %s' % http.BAD_REQUEST, msg)
+            log.msg('Returning %s: %s' % (http.BAD_REQUEST, msg))
             return msg
 
 class DeliveryReceiptResource(Resource):
