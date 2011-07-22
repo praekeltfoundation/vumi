@@ -146,10 +146,15 @@ class SmppTransport(Worker):
         log.msg("redis_key = %s" % redis_key)
         sent_sms_id = self.r_server.get(redis_key)
         self.r_server.delete(redis_key)
+        sent_sms = models.SentSMS.objects.get(id=sent_sms_id)
+        print "@@@@@@@@@@@@@@@@@@@@", sent_sms
+        sent_sms.transport_msg_id = kwargs['message_id']
+        print "@@@@@@@@@@@@@@@@@@@@", sent_sms
+        sent_sms.save()
         kwargs.update({'sent_sms':sent_sms_id})
         log.msg("SMPPRespForm <- %s" % repr(kwargs))
         form = forms.SMPPRespForm(kwargs)
-        form.save()
+        #form.save()
         yield log.msg("SUBMIT SM RESP %s" % repr(kwargs))
 
 
