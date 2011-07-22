@@ -105,20 +105,33 @@ class DeliveryReceiptResource(Resource):
         self.config = config
         self.publisher = publisher
     
-    def render_POST(self, request):
-        request.setResponseCode(http.OK)
-        request.setHeader('Content-Type', 'text/plain')
-        with self.publisher.transaction():
-            self.publisher.publish_message(Message(**{
-                'transport_message_id': request.args['smsid'][0],
-                'transport_status': request.args['status'][0],
-                'transport_status_message': request.args['text'][0],
-                'transport_timestamp': iso8601(request.args['time'][0]),
-                'transport_network_id': request.args['provider'][0],
-                'to_msisdn': normalize_msisdn(request.args['sender'][0]),
-                'id': request.args['messageid'][0]
-            }), routing_key='sms.receipt.%(transport_name)s' % self.config)
-            return ''
+    def render(self, request):
+        log.msg('got hit with %s' % request.args)
+        try:
+            request.setResponseCode(http.OK)
+            request.setHeader('Content-Type', 'text/plain')
+            with self.publisher.transaction():
+                self.publisher.publish_message(Message(**{
+                    'transport_message_id': request.args['smsid'][0],
+                    'transport_status': request.args['status'][0],
+                    'transport_status_message': request.args['text'][0],
+                    'transport_timestamp': iso8601(request.args['time'][0]),
+                    'transport_network_id': request.args['provider'][0],
+                    'to_msisdn': normalize_msisdn(request.args['sender'][0]),
+                    'id': request.args['messageid'][0]
+                }), routing_key='sms.receipt.%(transport_name)s' % self.config)
+                return ''
+        except KeyError, e:
+            request.setResponseCode(http.BAD_REQUEST)
+            msg = "Need more request keys to complete this request. \n\n" \
+                    "Missing request key: %s" % e
+            log.msg('Returning %s: %s' % (http.BAD_REQUEST, msg))
+            return msg
+        except ValueError, e:
+            request.setResponseCode(http.BAD_REQUEST)
+            msg = "ValueError: %s" % e
+            log.msg('Returning %s: %s' % (http.BAD_REQUEST, msg))
+            return msg
 
 class HealthResource(Resource):
     isLeaf = True
