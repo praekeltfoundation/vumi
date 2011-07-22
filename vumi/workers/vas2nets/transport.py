@@ -68,7 +68,7 @@ class ReceiveSMSResource(Resource):
         self.publisher = publisher
     
     def render(self, request):
-        
+        log.msg('got hit with %s' % request.args)
         request.setResponseCode(http.OK)
         request.setHeader('Content-Type', 'text/plain')
         try:
@@ -88,8 +88,10 @@ class ReceiveSMSResource(Resource):
             return ''
         except KeyError, e:
             request.setResponseCode(http.BAD_REQUEST)
-            return "Need more request keys to complete this request. \n\n" \
+            msg = "Need more request keys to complete this request. \n\n" \
                     "Missing request key: %s" % e
+            log.msg('Returning %s: %s' % http.BAD_REQUEST, msg)
+            return msg
 
 class DeliveryReceiptResource(Resource):
     isLeaf = True
