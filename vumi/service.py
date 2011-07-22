@@ -336,8 +336,8 @@ class Publisher(object):
         routing_key = kwargs.get('routing_key') or self.routing_key
         require_bind = kwargs.get('require_bind')
         self.check_routing_key(routing_key, require_bind)
-        self.channel.basic_publish(exchange=exchange_name, content=message,
-                                   routing_key=routing_key)
+        return self.channel.basic_publish(exchange=exchange_name, content=message,
+                                          routing_key=routing_key, mandatory=1)
 
     def publish_message(self, message, **kwargs):
         log.msg('Publishing message: %s with %s' % (message.to_json(), repr(kwargs)))

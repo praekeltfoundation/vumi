@@ -66,30 +66,34 @@ class ReceiveSMSResource(Resource):
     def __init__(self, config, publisher):
         self.config = config
         self.publisher = publisher
-    
-    def render(self, request):
-        
+
+    @inlineCallbacks
+    def do_render(self, request):
         request.setResponseCode(http.OK)
         request.setHeader('Content-Type', 'text/plain')
         try:
-            with self.publisher.transaction():
-                self.publisher.publish_message(Message(**{
-                    'transport_message_id': request.args['messageid'][0],
-                    'transport_timestamp': iso8601(request.args['time'][0]),
-                    'transport_network_id': request.args['provider'][0],
-                    'transport_keyword': request.args['keyword'][0],
-                    'to_msisdn': normalize_msisdn(request.args['destination'][0]),
-                    'from_msisdn': normalize_msisdn(request.args['sender'][0]),
-                    'message': request.args['text'][0]
-                }), routing_key='sms.inbound.%s.%s' % (
-                    self.config.get('transport_name'), 
-                    request.args['destination'][0]
-                ))
-            return ''
+            yield self.publisher.publish_message(Message(**{
+                'transport_message_id': request.args['messageid'][0],
+                'transport_timestamp': iso8601(request.args['time'][0]),
+                'transport_network_id': request.args['provider'][0],
+                'transport_keyword': request.args['keyword'][0],
+                'to_msisdn': normalize_msisdn(request.args['destination'][0]),
+                'from_msisdn': normalize_msisdn(request.args['sender'][0]),
+                'message': request.args['text'][0]
+            }), routing_key='sms.inbound.%s.%s' % (
+                self.config.get('transport_name'),
+                request.args['destination'][0]
+            ))
+            log.msg("Enqueued.")
         except KeyError, e:
             request.setResponseCode(http.BAD_REQUEST)
-            return "Need more request keys to complete this request. \n\n" \
-                    "Missing request key: %s" % e
+            request.write("Need more request keys to complete this request. \n\n" \
+                              "Missing request key: %s" % e)
+        request.finish()
+
+    def render(self, request):
+        self.do_render(request)
+        return NOT_DONE_YET
 
 class DeliveryReceiptResource(Resource):
     isLeaf = True
@@ -145,7 +149,7 @@ class Vas2NetsTransport(Worker):
         # 1 transport = 1 connection, 10 transports is max 10 connections at a time.
         # and make it apply only to this channel
         self.consumer.channel.basic_qos(0,int(self.config.get('throttle', 1)), False)
-        
+
         self.receipt_resource = yield self.start_web_resources(
             [
                 (ReceiveSMSResource(self.config, self.publisher), self.config['web_receive_path']),
