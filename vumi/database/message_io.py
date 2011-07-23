@@ -29,7 +29,7 @@ class ReceivedMessage(UglyModel):
         ('from_msisdn', 'varchar NOT NULL'),
         ('message', 'varchar NOT NULL'),
         ('transport_network_id', 'varchar'),
-        ('transport_keyword', 'varchar'), # XXX: ?
+        ('transport_keyword', 'varchar'),
         )
 
     @classmethod
@@ -42,8 +42,7 @@ class ReceivedMessage(UglyModel):
             'transport_network_id': msg.get('transport_network_id'),
             'transport_keyword': msg.get('transport_keyword'),
             }
-        txn.execute(cls.insert_values_query(**params), params)
-        txn.execute("SELECT lastval()")
+        txn.execute(cls.insert_values_query(**params) + " RETURNING id", params)
         return txn.fetchone()[0]
 
     @classmethod
@@ -103,6 +102,7 @@ class SentMessage(UglyModel):
         ('modified_at', 'timestamp with time zone DEFAULT current_timestamp'),
         # TODO: Fill in some fields for delivery reports
         )
+    indexes = ('message_send_id', 'transport_message_id')
 
     @classmethod
     def get_message(cls, txn, msg_id):

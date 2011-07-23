@@ -104,7 +104,8 @@ class DeliveryReceiptResource(Resource):
     def render_POST(self, request):
         request.setResponseCode(http.OK)
         request.setHeader('Content-Type', 'text/plain')
-        with self.publisher.transaction():
+        # with self.publisher.transaction():
+        if 1:
             self.publisher.publish_message(Message(**{
                 'transport_message_id': request.args['smsid'][0],
                 'transport_status': request.args['status'][0],
@@ -207,7 +208,8 @@ class Vas2NetsTransport(Worker):
         
         if response.headers.hasHeader(header):
             transport_message_id = response.headers.getRawHeaders(header)[0]
-            with self.publisher.transaction():
+            # with self.publisher.transaction():
+            if 1:
                 self.publisher.publish_message(Message(**{
                     'id': data['id'],
                     'transport_message_id': transport_message_id
