@@ -1,6 +1,8 @@
+from twisted.internet.defer import DeferredList
 from twisted.enterprise import adbapi
 
 DATABASES = {}
+
 
 def setup_db(name, *args, **kw):
     if DATABASES.get(name, None):
@@ -26,6 +28,7 @@ def close_db(name):
 class UglyModel(object):
     table_name = None
     fields = ()
+    indexes = ()
 
     def __init__(self, txn, *args):
         if len(args) != len(self.fields):
@@ -38,17 +41,41 @@ class UglyModel(object):
     def create_table(cls, db):
         cols = ', '.join([' '.join(f) for f in cls.fields])
         query = ''.join(['CREATE TABLE ', cls.table_name, ' (', cols, ')'])
-        return db.runOperation(query)
+        return db.runOperation(query).addCallback(lambda _: cls.create_indexes(db))
 
     @classmethod
     def drop_table(cls, db, if_exists=True, cascade=False):
+        d = cls.drop_indexes(db, if_exists, cascade)
         q = "DROP TABLE "
         if if_exists:
             q += "IF EXISTS "
         q += cls.table_name
         if cascade:
             q += " CASCADE"
-        return db.runOperation(q)
+        return d.addCallback(lambda _: db.runOperation(q))
+
+    @classmethod
+    def create_indexes(cls, db):
+        deferreds = []
+        for index in cls.indexes:
+            name = 'idx_%s_%s' % (cls.table_name, index)
+            query = 'CREATE INDEX %s ON %s (%s)' % (
+                name, cls.table_name, index)
+            deferreds.append(db.runOperation(query))
+        return DeferredList(deferreds)
+
+    @classmethod
+    def drop_indexes(cls, db, if_exists=True, cascade=False):
+        deferreds = []
+        for index in cls.indexes:
+            q = "DROP INDEX "
+            if if_exists:
+                q += "IF EXISTS "
+            q += index
+            if cascade:
+                q += " CASCADE"
+            deferreds.append(db.runOperation(q))
+        return DeferredList(deferreds)
 
     @classmethod
     def wrap_results(cls, txn, results):

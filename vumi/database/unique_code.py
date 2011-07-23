@@ -70,6 +70,7 @@ class VoucherCode(UglyModel):
         ('created_at', 'timestamp with time zone DEFAULT current_timestamp'),
         ('modified_at', 'timestamp with time zone DEFAULT current_timestamp'),
         )
+    indexes = ('supplier',)
 
     @classmethod
     def load_codes(cls, txn, codes):
