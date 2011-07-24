@@ -216,6 +216,7 @@ class RockPaperScissorsGame(object):
         self.player_2 = None
         self.current_move = None
         self.scores = (0, 0)
+        self.last_result = None
 
     def set_player_2(self, player_2):
         self.player_2 = player_2
@@ -229,12 +230,26 @@ class RockPaperScissorsGame(object):
         scores = self.scores
         if sid == self.player_2:
             scores = tuple(reversed(scores))
-        return '\n'.join([
+        result = []
+        if self.last_result == (0,0):
+            result.append("Draw.")
+        elif self.last_result == (1, 0):
+            if sid == self.player_1:
+                result.append("You won!")
+            else:
+                result.append("You lost!")
+        elif self.last_result == (0, 1):
+            if sid == self.player_1:
+                result.append("You lost!")
+            else:
+                result.append("You won!")
+        result.extend([
                 'You: %s, opponent: %s' % scores,
                 '1. rock',
                 '2. paper',
                 '3. scissors',
                 ])
+        return '\n'.join(result)
 
     def move(self, sid, choice):
         if not self.current_move:
@@ -246,6 +261,7 @@ class RockPaperScissorsGame(object):
             player_1, player_2 = self.current_move, choice
         self.current_move = None
         result = self.decide(player_1, player_2)
+        self.last_result = result
         self.scores = (
             self.scores[0] + result[0],
             self.scores[1] + result[1],
