@@ -211,7 +211,8 @@ class TicTacToeWorker(IntegratWorker):
 
 
 class RockPaperScissorsGame(object):
-    def __init__(self, player_1):
+    def __init__(self, best_of, player_1):
+        self.best_of = best_of
         self.player_1 = player_1
         self.player_2 = None
         self.current_move = None
@@ -281,6 +282,9 @@ class RockPaperScissorsGame(object):
             (3, 3): (0, 0),
             }[(player_1, player_2)]
 
+    def check_win(self):
+        return sum(self.scores) >= self.best_of
+
 
 class RockPaperScissorsWorker(MultiPlayerGameWorker):
 
@@ -288,7 +292,7 @@ class RockPaperScissorsWorker(MultiPlayerGameWorker):
         return RockPaperScissorsGame(session_id)
 
     def add_player_to_game(self, game, session_id):
-        game.set_player_2(session_id)
+        game.set_player_2(5, session_id)
         self.turn_reply(game)
         return False
 
@@ -311,5 +315,13 @@ class RockPaperScissorsWorker(MultiPlayerGameWorker):
         return None
 
     def turn_reply(self, game):
+        if game.check_win():
+            if game.scores[0] > game.scores[1]:
+                self.end(game.player_1, "You won! :-)")
+                self.end(game.player_2, "You lost. :-(")
+            else:
+                self.end(game.player_1, "You lost. :-(")
+                self.end(game.player_2, "You won! :-)")
+            return
         self.reply(game.player_1, game.draw_board(game.player_1))
         self.reply(game.player_2, game.draw_board(game.player_2))
