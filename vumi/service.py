@@ -36,11 +36,38 @@ class Options(usage.Options):
     ]
 
 
-class Worker(AMQClient):
-    """
-    The Worker is responsible for starting consumers & publishers
-    as needed.
-    """
+class AmqpFactory(protocol.ReconnectingClientFactory):
+
+    def __init__(self, worker_class, options, config):
+        self.options = options
+        self.config = config
+        self.spec = txamqp.spec.load(make_vumi_path_abs(options['specfile']))
+        self.delegate = TwistedDelegate()
+        self.worker_class = worker_class
+
+    def buildProtocol(self, addr):
+        amqp_client = WorkerAMQClient(self.delegate, self.options['vhost'],
+                                      self.spec, self.options.get('heartbeat', 0))
+        amqp_client.factory = self
+        amqp_client.global_options = self.options
+        self.worker = self.worker_class(amqp_client, self.config)
+        self.resetDelay()
+        return self.worker
+
+    def clientConnectionFailed(self, connector, reason):
+        log.err("Connection failed.", reason)
+        self.worker.stopWorker()
+        protocol.ReconnectingClientFactory.clientConnectionFailed(self,
+                connector, reason)
+
+    def clientConnectionLost(self, connector, reason):
+        log.err("Client connection lost.", reason)
+        self.worker.stopWorker()
+        protocol.ReconnectingClientFactory.clientConnectionLost(self,
+                connector, reason)
+
+
+class WorkerAMQClient(AMQClient):
     @inlineCallbacks
     def connectionMade(self):
         AMQClient.connectionMade(self)
@@ -49,16 +76,7 @@ class Worker(AMQClient):
         # authentication was successful
         log.msg("Got an authenticated connection")
         yield self.startWorker()
-    
-    def startWorker(self):
-        # I hate camelCasing method but since Twisted has it as a
-        # standard I voting to stick with it
-        raise VumiError("You need to subclass Worker and its "
-                        "startWorker method")
-    
-    def stopWorker(self):
-        pass
-    
+
     @inlineCallbacks
     def get_channel(self, channel_id=None):
         """If channel_id is None a new channel is created"""
@@ -79,31 +97,10 @@ class Worker(AMQClient):
         """
         return (max(self.channels) + 1) if self.channels else 0
 
-    def routing_key_to_class_name(self, routing_key):
-        return ''.join(map(lambda s: s.capitalize(), routing_key.split('.')))
-
-    def consume(self, routing_key, callback, queue_name=None,
-                exchange_name='vumi', exchange_type='direct', durable=True):
-
-        # use the routing key to generate the name for the class
-        # amq.routing.key -> AmqRoutingKey
-        dynamic_name = self.routing_key_to_class_name(routing_key)
-        class_name = "%sDynamicConsumer" % str(dynamic_name)
-        kwargs = {
-            'routing_key': routing_key,
-            'queue_name': queue_name or routing_key,
-            'exchange_name': exchange_name,
-            'exchange_type': exchange_type,
-            'durable': durable,
-        }
-        log.msg('Staring %s with %s' % (class_name, kwargs))
-        klass = type(class_name, (DynamicConsumer,), kwargs)
-        return self.start_consumer(klass, callback)
-
     @inlineCallbacks
-    def start_consumer(self, klass, *args, **kwargs):
+    def start_consumer(self, consumer_class, *args, **kwargs):
         channel = yield self.get_channel()
-        consumer = klass(*args, **kwargs)
+        consumer = consumer_class(*args, **kwargs)
         consumer.vumi_options = self.global_options
 
         # get the details for AMQP
@@ -130,6 +127,64 @@ class Worker(AMQClient):
         # return the newly created & consuming consumer
         returnValue(consumer)
 
+    @inlineCallbacks
+    def start_publisher(self, publisher_class, *args, **kwargs):
+        # much more braindead than start_consumer
+        # get a channel
+        channel = yield self.get_channel()
+        # start the publisher
+        publisher = publisher_class(*args, **kwargs)
+        publisher.vumi_options = self.global_options
+        # start!
+        yield publisher.start(channel)
+        # return the publisher
+        returnValue(publisher)
+
+
+
+class Worker(object):
+    """
+    The Worker is responsible for starting consumers & publishers
+    as needed.
+    """
+
+    def __init__(self, amqp_client, config):
+        self._amqp_client = amqp_client
+        self.config = config
+
+    def startWorker(self):
+        # I hate camelCasing method but since Twisted has it as a
+        # standard I voting to stick with it
+        raise VumiError("You need to subclass Worker and its "
+                        "startWorker method")
+
+    def stopWorker(self):
+        pass
+
+    def routing_key_to_class_name(self, routing_key):
+        return ''.join(map(lambda s: s.capitalize(), routing_key.split('.')))
+
+    def consume(self, routing_key, callback, queue_name=None,
+                exchange_name='vumi', exchange_type='direct', durable=True):
+
+        # use the routing key to generate the name for the class
+        # amq.routing.key -> AmqRoutingKey
+        dynamic_name = self.routing_key_to_class_name(routing_key)
+        class_name = "%sDynamicConsumer" % str(dynamic_name)
+        kwargs = {
+            'routing_key': routing_key,
+            'queue_name': queue_name or routing_key,
+            'exchange_name': exchange_name,
+            'exchange_type': exchange_type,
+            'durable': durable,
+        }
+        log.msg('Staring %s with %s' % (class_name, kwargs))
+        klass = type(class_name, (DynamicConsumer,), kwargs)
+        return self.start_consumer(klass, callback)
+
+    def start_consumer(self, consumer_class, *args, **kwargs):
+        return self._amqp_client.start_consumer(consumer_class, *args, **kwargs)
+
     def publish_to(self, routing_key, exchange_name='vumi',
                    exchange_type='direct', delivery_mode=2):
         class_name = self.routing_key_to_class_name(routing_key)
@@ -142,20 +197,9 @@ class Worker(AMQClient):
             })
         return self.start_publisher(publisher_class)
 
-    @inlineCallbacks
-    def start_publisher(self, klass, *args, **kwargs):
-        # much more braindead than start_consumer
-        # get a channel
-        channel = yield self.get_channel()
-        # start the publisher
-        publisher = klass(*args, **kwargs)
-        publisher.vumi_options = self.global_options
-        # start!
-        yield publisher.start(channel)
-        # return the publisher
-        returnValue(publisher)
+    def start_publisher(self, publisher_class, *args, **kwargs):
+        return self._amqp_client.start_publisher(publisher_class, *args, **kwargs)
 
-    @inlineCallbacks
     def start_web_resources(self, resources, port):
         # start the HTTP server for receiving the receipts
         root = Resource()
@@ -178,8 +222,7 @@ class Worker(AMQClient):
             parent.putChild(leaf, resource)
 
         site_factory = Site(root)
-        port = yield reactor.listenTCP(port, site_factory)
-        returnValue(port)
+        return reactor.listenTCP(port, site_factory)
 
 
 class Consumer(object):
@@ -324,13 +367,7 @@ class Publisher(object):
             raise RoutingKeyError("The routing_key: %s is not bound to any"
                                   " queues in vhost: %s  exchange: %s" % (
                                   routing_key, self.vumi_options['vhost'], self.exchange_name))
-    
-    @contextmanager
-    def transaction(self):
-        self.channel.tx_select()
-        yield
-        self.channel.tx_commit()
-    
+
     def publish(self, message, **kwargs):
         exchange_name = kwargs.get('exchange_name') or self.exchange_name
         routing_key = kwargs.get('routing_key') or self.routing_key
@@ -354,38 +391,6 @@ class Publisher(object):
         return self.publish(message, **kwargs)
 
 
-class AmqpFactory(protocol.ReconnectingClientFactory):
-
-    def __init__(self, worker_class, options, config):
-        self.options = options
-        self.config = config
-        self.spec = txamqp.spec.load(make_vumi_path_abs(options['specfile']))
-        self.delegate = TwistedDelegate()
-        self.worker_class = worker_class
-
-    def buildProtocol(self, addr):
-        worker = self.worker_class(self.delegate, self.options['vhost'], 
-                                    self.spec, self.options.get('heartbeat', 0))
-        worker.factory = self
-        worker.global_options = self.options
-        worker.config = self.config
-        self.worker = worker
-        self.resetDelay()
-        return worker
-
-    def clientConnectionFailed(self, connector, reason):
-        log.err("Connection failed.", reason)
-        self.worker.stopWorker()
-        protocol.ReconnectingClientFactory.clientConnectionLost(self,
-                connector, reason)
-
-    def clientConnectionLost(self, connector, reason):
-        log.err("Client connection lost.", reason)
-        self.worker.stopWorker()
-        protocol.ReconnectingClientFactory.clientConnectionFailed(self,
-                connector, reason)
-
-
 class WorkerCreator(object):
     """
     Creates workers
@@ -402,3 +407,5 @@ class WorkerCreator(object):
     def _connect(self, factory, timeout, bindAddress):
         reactor.connectTCP(self.options['hostname'], self.options['port'],
                            factory, timeout, bindAddress)
+
+

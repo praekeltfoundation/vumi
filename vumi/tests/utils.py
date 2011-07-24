@@ -1,8 +1,15 @@
+# -*- test-case-name: vumi.tests.test_testutils -*-
+
 import json, importlib
-from twisted.internet import defer
-from vumi.service import Worker
 from collections import namedtuple
 from contextlib import contextmanager
+
+import txamqp
+from txamqp.client import TwistedDelegate
+from twisted.internet import defer
+
+from vumi.utils import make_vumi_path_abs
+from vumi.service import Worker, WorkerAMQClient
 
 def setup_django_test_database():
     from django.test.simple import DjangoTestSuiteRunner
@@ -136,9 +143,7 @@ class TestChannel(object):
         return True
 
 
-
-class TestWorker(Worker):
-
+class StubbedAMQClient(WorkerAMQClient):
     def __init__(self, queue):
         self._queue = queue
         self.global_options = {}
@@ -149,4 +154,40 @@ class TestWorker(Worker):
     def queue(self, *args, **kwargs):
         return self._queue
 
+
+class TestWorker(Worker):
+    def __init__(self, queue, config=None):
+        if config is None:
+            config = {}
+        self._queue = queue
+        Worker.__init__(self, StubbedAMQClient(queue), config)
+
+
+
+class TestAMQClient(WorkerAMQClient):
+    def __init__(self, global_options=None):
+        spec = txamqp.spec.load(make_vumi_path_abs("config/amqp-spec-0-8.xml"))
+        WorkerAMQClient.__init__(self, TwistedDelegate(), '', spec)
+        if global_options is not None:
+            self.global_options = global_options
+
+    def get_channel(self):
+        return TestChannel()
+
+    @defer.inlineCallbacks
+    def queue(self, key):
+        yield self.queueLock.acquire()
+        try:
+            try:
+                q = self.queues[key]
+            except KeyError:
+                q = TestQueue([])
+                self.queues[key] = q
+        finally:
+            self.queueLock.release()
+        defer.returnValue(q)
+
+
+def get_stubbed_worker(worker_class):
+    pass
 
