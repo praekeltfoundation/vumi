@@ -289,10 +289,10 @@ class RockPaperScissorsGame(object):
 class RockPaperScissorsWorker(MultiPlayerGameWorker):
 
     def create_new_game(self, session_id):
-        return RockPaperScissorsGame(session_id)
+        return RockPaperScissorsGame(5, session_id)
 
     def add_player_to_game(self, game, session_id):
-        game.set_player_2(5, session_id)
+        game.set_player_2(session_id)
         self.turn_reply(game)
         return False
 

@@ -7,14 +7,14 @@ from vumi.workers.integrat.games import RockPaperScissorsGame, RockPaperScissors
 
 class TestRockPaperScissorsGame(unittest.TestCase):
     def get_game(self, scores=None):
-        game = RockPaperScissorsGame('p1')
+        game = RockPaperScissorsGame(5, 'p1')
         game.set_player_2('p2')
         if scores is not None:
             game.scores = scores
         return game
 
     def test_game_init(self):
-        game = RockPaperScissorsGame('p1')
+        game = RockPaperScissorsGame(5, 'p1')
         self.assertEquals('p1', game.player_1)
         self.assertEquals(None, game.player_2)
         self.assertEquals((0, 0), game.scores)
