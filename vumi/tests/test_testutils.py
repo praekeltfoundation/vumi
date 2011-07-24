@@ -1,12 +1,26 @@
 from twisted.internet.defer import inlineCallbacks
 from twisted.trial.unittest import TestCase
 
+from vumi.service import Worker
+from vumi.tests.utils import (TestAMQClient, TestQueue, TestChannel,
+                              get_stubbed_worker)
 
-from vumi.tests.utils import TestAMQClient, TestQueue
+
+class ToyWorker(Worker):
+    def poke(self):
+        return "poke"
+
 
 class UtilsTestCase(TestCase):
     @inlineCallbacks
     def test_test_amq_client(self):
         amq_client = TestAMQClient()
-        q = yield amq_client.queue('foo')
-        self.assertEquals(TestQueue, type(q))
+        queue = yield amq_client.queue('foo')
+        channel = yield amq_client.channel('foo')
+        self.assertEquals(TestQueue, type(queue))
+        self.assertEquals(TestChannel, type(channel))
+
+    def test_get_stubbed_worker(self):
+        worker = get_stubbed_worker(ToyWorker)
+        self.assertEquals("poke", worker.poke())
+        self.assertEquals(TestAMQClient, worker._amqp_client.__class__)

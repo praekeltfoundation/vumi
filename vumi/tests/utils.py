@@ -111,7 +111,7 @@ class TestQueue(object):
         return d
 
 class TestChannel(object):
-    def __init__(self):
+    def __init__(self, _id=None):
         self.ack_log = []
         self.publish_log = []
 
@@ -171,9 +171,6 @@ class TestAMQClient(WorkerAMQClient):
         if global_options is not None:
             self.global_options = global_options
 
-    def get_channel(self):
-        return TestChannel()
-
     @defer.inlineCallbacks
     def queue(self, key):
         yield self.queueLock.acquire()
@@ -187,7 +184,22 @@ class TestAMQClient(WorkerAMQClient):
             self.queueLock.release()
         defer.returnValue(q)
 
+    @defer.inlineCallbacks
+    def channel(self, id):
+        yield self.channelLock.acquire()
+        try:
+            try:
+                ch = self.channels[id]
+            except KeyError:
+                ch = TestChannel(id)
+                self.channels[id] = ch
+        finally:
+            self.channelLock.release()
+        defer.returnValue(ch)
+
 
 def get_stubbed_worker(worker_class):
-    pass
+    amq_client = TestAMQClient()
+    worker = worker_class(amq_client)
+    return worker
 

@@ -148,8 +148,10 @@ class Worker(object):
     as needed.
     """
 
-    def __init__(self, amqp_client, config):
+    def __init__(self, amqp_client, config=None):
         self._amqp_client = amqp_client
+        if config is None:
+            config = {}
         self.config = config
 
     def startWorker(self):
@@ -400,9 +402,15 @@ class WorkerCreator(object):
         self.options = global_options
 
     def create_worker(self, worker_class, config, timeout=30, bindAddress=None):
+        """
+        Create a worker factory, connect to AMQP and return the factory.
+
+        Return value is the AmqpFactory instance containing the worker.
+        """
         worker_class = load_class_by_string(worker_class)
         factory = AmqpFactory(worker_class, deepcopy(self.options), config)
         self._connect(factory, timeout=timeout, bindAddress=bindAddress)
+        return factory
 
     def _connect(self, factory, timeout, bindAddress):
         reactor.connectTCP(self.options['hostname'], self.options['port'],
