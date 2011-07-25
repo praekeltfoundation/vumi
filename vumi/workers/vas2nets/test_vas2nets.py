@@ -167,6 +167,8 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
         self.assertTrue(validate_characters(u'äöü ÄÖÜ àùò ìèé §Ññ £$@'))
         self.assertTrue(validate_characters(u'/?!#%&()*+,-:;<=>.'))
         self.assertTrue(validate_characters(u'testing\ncarriage\rreturns'))
+        self.assertTrue(validate_characters(u'testing "quotes"'))
+        self.assertTrue(validate_characters(u"testing 'quotes'"))
     
     @inlineCallbacks
     def test_send_sms_success(self):

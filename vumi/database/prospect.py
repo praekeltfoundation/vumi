@@ -18,6 +18,7 @@ class Prospect(UglyModel):
         ('created_at', 'timestamp with time zone DEFAULT current_timestamp'),
         ('modified_at', 'timestamp with time zone DEFAULT current_timestamp'),
         )
+    indexes = ('msisdn',)
 
     @classmethod
     def get_prospect(cls, txn, msisdn):
