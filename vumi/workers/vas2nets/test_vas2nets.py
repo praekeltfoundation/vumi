@@ -1,6 +1,7 @@
 # encoding: utf-8
 from twisted.web import http
 from twisted.web.resource import Resource
+from twisted.web.server import NOT_DONE_YET
 from twisted.trial import unittest
 from twisted.python import log, failure
 from twisted.internet import defer, reactor
@@ -102,7 +103,8 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
     
     def tearDown(self):
         pass
-    
+
+    @inlineCallbacks
     def test_receive_sms(self):
         resource = ReceiveSMSResource(self.config, self.publisher)
         request = create_request({
@@ -110,8 +112,11 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
             'time': [self.today.strftime('%Y.%m.%d %H:%M:%S')],
             'text': ['hello world']
         })
+        d = request.notifyFinish()
         response = resource.render(request)
-        self.assertEquals(response, '')
+        self.assertEquals(response, NOT_DONE_YET)
+        yield d
+        self.assertEquals('', ''.join(request.written))
         self.assertEquals(request.outgoingHeaders['content-type'], 'text/plain')
         self.assertEquals(request.responseCode, http.OK)
         msg = Message(**{
