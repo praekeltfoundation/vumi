@@ -114,6 +114,7 @@ class TestChannel(object):
     def __init__(self, _id=None):
         self.ack_log = []
         self.publish_log = []
+        self.publish_message_log = []
 
     def basic_ack(self, tag, multiple=False):
         self.ack_log.append((tag, multiple))
@@ -122,9 +123,20 @@ class TestChannel(object):
         d = defer.Deferred()
         d.callback(True)
         return d
-
+    
+    def channel_open(self, *args, **kwargs):
+        d = defer.Deferred()
+        d.callback(True)
+        return d
+    
     def basic_publish(self, *args, **kwargs):
+        self.publish_message_log.append(kwargs)
         self.publish_log.append(kwargs)
+    
+    def basic_qos(self, *args, **kwargs):
+        d = defer.Deferred()
+        d.callback(True)
+        return d
     
     def exchange_declare(self, *args, **kwargs):
         pass
@@ -198,8 +210,9 @@ class TestAMQClient(WorkerAMQClient):
         defer.returnValue(ch)
 
 
-def get_stubbed_worker(worker_class):
+def get_stubbed_worker(worker_class, config=None):
     amq_client = TestAMQClient()
-    worker = worker_class(amq_client)
+    amq_client.global_options = {}
+    worker = worker_class(amq_client, config)
     return worker
 

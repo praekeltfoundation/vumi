@@ -24,30 +24,29 @@ class IntegratHttpResource(Resource):
     def render(self, request):
         request.setResponseCode(http.OK)
         request.setHeader('Content-Type', 'text/plain')
-        with self.publisher.transaction():
-            hxg_msg = hxg.parse(request.content.read())
-            text = hxg_msg.get('USSText','').strip()
-            if hxg_msg['EventType'] == 'Request':
-                if text == 'REQ':
-                    event_type = 'new_session'
-                else:
-                    event_type = 'resume_session'
+        hxg_msg = hxg.parse(request.content.read())
+        text = hxg_msg.get('USSText','').strip()
+        if hxg_msg['EventType'] == 'Request':
+            if text == 'REQ':
+                event_type = 'new_session'
             else:
-                event_type = '%s_session' % hxg_msg['EventType'].lower()
-            
-            routing_key = 'ussd.inbound.%s.%s' % (
-                self.config['transport_name'],
-                safe_routing_key(hxg_msg['ConnStr'])
-            )
-            msg = Message(**{
-                'transport_session_id': hxg_msg['SessionID'],
-                'transport_message_type': event_type,
-                'message': text,
-                'recipient': hxg_msg['ConnStr'],
-                'sender': hxg_msg['MSISDN'],
-            })
-            log.msg('publishing', msg, routing_key)
-            self.publisher.publish_message(msg, routing_key=routing_key)
+                event_type = 'resume_session'
+        else:
+            event_type = '%s_session' % hxg_msg['EventType'].lower()
+        
+        routing_key = 'ussd.inbound.%s.%s' % (
+            self.config['transport_name'],
+            safe_routing_key(hxg_msg['ConnStr'])
+        )
+        msg = Message(**{
+            'transport_session_id': hxg_msg['SessionID'],
+            'transport_message_type': event_type,
+            'message': text,
+            'recipient': hxg_msg['ConnStr'],
+            'sender': hxg_msg['MSISDN'],
+        })
+        log.msg('publishing', msg, routing_key)
+        self.publisher.publish_message(msg, routing_key=routing_key)
         return ''
     
 
