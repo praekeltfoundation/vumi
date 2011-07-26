@@ -62,6 +62,7 @@ class SmscServer(Protocol):
             self.sendPDU(pdu_resp)
             print "callLater >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
             reactor.callLater(2, self.delivery_report, message_id)
+            reactor.callLater(2, self.delivery_report, message_id)
             self.boomerang(pdu)
 
 
