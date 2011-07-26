@@ -158,7 +158,7 @@ class TestChannel(object):
 class StubbedAMQClient(WorkerAMQClient):
     def __init__(self, queue):
         self._queue = queue
-        self.global_options = {}
+        self.vumi_options = {}
 
     def get_channel(self):
         return TestChannel()
@@ -177,11 +177,11 @@ class TestWorker(Worker):
 
 
 class TestAMQClient(WorkerAMQClient):
-    def __init__(self, global_options=None):
+    def __init__(self, vumi_options=None):
         spec = txamqp.spec.load(make_vumi_path_abs("config/amqp-spec-0-8.xml"))
         WorkerAMQClient.__init__(self, TwistedDelegate(), '', spec)
-        if global_options is not None:
-            self.global_options = global_options
+        if vumi_options is not None:
+            self.vumi_options = vumi_options
 
     @defer.inlineCallbacks
     def queue(self, key):
@@ -212,7 +212,7 @@ class TestAMQClient(WorkerAMQClient):
 
 def get_stubbed_worker(worker_class, config=None):
     amq_client = TestAMQClient()
-    amq_client.global_options = {}
+    amq_client.vumi_options = {}
     worker = worker_class(amq_client, config)
     return worker
 

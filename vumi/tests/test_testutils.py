@@ -28,5 +28,5 @@ class UtilsTestCase(TestCase):
     def test_get_stubbed_worker_with_config(self):
         options = {'key':'value'}
         worker = get_stubbed_worker(ToyWorker, options)
-        self.assertEquals({}, worker._amqp_client.global_options)
+        self.assertEquals({}, worker._amqp_client.vumi_options)
         self.assertEquals(options, worker.config)

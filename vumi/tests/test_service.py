@@ -62,7 +62,7 @@ class NoQueueWorkerCreator(WorkerCreator):
 
 class TestWorkerCreator(TestCase):
     def get_creator(self, **options):
-        global_options = {
+        vumi_options = {
             "hostname": "localhost",
             "port": 5672,
             "username": "vumitest",
@@ -70,8 +70,8 @@ class TestWorkerCreator(TestCase):
             "vhost": "/test",
             "specfile": "config/amqp-spec-0-8.xml",
             }
-        global_options.update(options)
-        return NoQueueWorkerCreator(global_options)
+        vumi_options.update(options)
+        return NoQueueWorkerCreator(vumi_options)
 
     def test_create_worker(self):
         """

@@ -49,7 +49,7 @@ class AmqpFactory(protocol.ReconnectingClientFactory):
         amqp_client = WorkerAMQClient(self.delegate, self.options['vhost'],
                                       self.spec, self.options.get('heartbeat', 0))
         amqp_client.factory = self
-        amqp_client.global_options = self.options
+        amqp_client.vumi_options = self.options
         self.worker = self.worker_class(amqp_client, self.config)
         self.resetDelay()
         return self.worker
@@ -71,8 +71,8 @@ class WorkerAMQClient(AMQClient):
     @inlineCallbacks
     def connectionMade(self):
         AMQClient.connectionMade(self)
-        yield self.authenticate(self.global_options['username'],
-                                self.global_options['password'])
+        yield self.authenticate(self.vumi_options['username'],
+                                self.vumi_options['password'])
         # authentication was successful
         log.msg("Got an authenticated connection")
         yield self.startWorker()
@@ -101,7 +101,7 @@ class WorkerAMQClient(AMQClient):
     def start_consumer(self, consumer_class, *args, **kwargs):
         channel = yield self.get_channel()
         consumer = consumer_class(*args, **kwargs)
-        consumer.vumi_options = self.global_options
+        consumer.vumi_options = self.vumi_options
 
         # get the details for AMQP
         exchange_name = consumer.exchange_name
@@ -134,7 +134,7 @@ class WorkerAMQClient(AMQClient):
         channel = yield self.get_channel()
         # start the publisher
         publisher = publisher_class(*args, **kwargs)
-        publisher.vumi_options = self.global_options
+        publisher.vumi_options = self.vumi_options
         # start!
         yield publisher.start(channel)
         # return the publisher
@@ -398,8 +398,8 @@ class WorkerCreator(object):
     Creates workers
     """
 
-    def __init__(self, global_options):
-        self.options = global_options
+    def __init__(self, vumi_options):
+        self.options = vumi_options
 
     def create_worker(self, worker_class, config, timeout=30, bindAddress=None):
         """
