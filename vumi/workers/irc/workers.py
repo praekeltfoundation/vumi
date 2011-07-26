@@ -1,3 +1,5 @@
+# -*- test-case-name: vumi.workers.irc.tests.test_workers -*-
+
 import re
 import json
 from datetime import datetime
@@ -33,7 +35,7 @@ class IRCWorker(Worker):
             "timestamp": timestamp.isoformat()
         }
 
-        self.publisher.publish_message(Message(
+        return self.publisher.publish_message(Message(
                 recipient=self.name, **payload))
 
     def consume_message(self, message):
@@ -83,15 +85,17 @@ class MemoWorker(IRCWorker):
     def worker_setup(self):
         self.memos = {}
 
+    @inlineCallbacks
     def process_potential_memo(self, channel, nickname, message, payload):
         match = re.match(r'^\S+ tell (\S+) (.*)$', message)
         if match:
             self.memos.setdefault((channel, match.group(1)), []).append(
                 (nickname, match.group(2)))
             msg = "Sure thing, boss."
-            self._publish_message(message_type='message', channel=channel, msg=msg,
-                                  server=payload['server'])
+            yield self._publish_message(message_type='message', channel=channel,
+                                        msg=msg, server=payload['server'])
 
+    @inlineCallbacks
     def process_message(self, payload):
         msg_type = payload['message_type']
         msg = payload['message_content']
@@ -102,12 +106,12 @@ class MemoWorker(IRCWorker):
 
         if msg_type == 'message' and payload["addressed"]:
             log.msg("Looks like something I should process.")
-            self.process_potential_memo(channel, nickname, msg, payload)
+            yield self.process_potential_memo(channel, nickname, msg, payload)
 
         memos = self.memos.pop((channel, nickname), [])
         if memos:
             log.msg("Time to deliver some memos:", memos)
         for memo in memos:
             msg = "%s: message from %s: %s" % (nickname, memo[0], memo[1])
-            self._publish_message(message_type='message', channel=channel, msg=msg,
-                                  server=payload['server'])
+            yield self._publish_message(message_type='message', channel=channel,
+                                        msg=msg, server=payload['server'])
