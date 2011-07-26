@@ -36,8 +36,8 @@ def validate_characters(chars):
         u'0123456789',
         u'äöüÄÖÜàùòìèé§Ññ£$@',
         u' ',
-        u'/?!#%&()*+,-:;<=>.',
-        u'\n\r'
+        u'/?!#%&()*+,-:;<=>."\'',
+        u'\n\r',
     ])
     double_byte_set = u'|{}[]€\~^'
     superset = single_byte_set + double_byte_set

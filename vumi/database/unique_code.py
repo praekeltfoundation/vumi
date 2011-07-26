@@ -155,6 +155,7 @@ class CampaignEntry(UglyModel):
         ('unique_code', 'varchar NOT NULL REFERENCES unique_codes'),
         ('voucher_code_id', 'integer REFERENCES voucher_codes'),
         )
+    indexes = ('entrant_id', 'created_at')
 
     @classmethod
     def get_entry(cls, txn, entry_id):
