@@ -120,23 +120,17 @@ class TestChannel(object):
         self.ack_log.append((tag, multiple))
 
     def channel_close(self, *args, **kwargs):
-        d = defer.Deferred()
-        d.callback(True)
-        return d
+        return defer.succeed(None)
     
     def channel_open(self, *args, **kwargs):
-        d = defer.Deferred()
-        d.callback(True)
-        return d
+        return defer.succeed(None)
     
     def basic_publish(self, *args, **kwargs):
         self.publish_message_log.append(kwargs)
         self.publish_log.append(kwargs)
     
     def basic_qos(self, *args, **kwargs):
-        d = defer.Deferred()
-        d.callback(True)
-        return d
+        return defer.succeed(None)
     
     def exchange_declare(self, *args, **kwargs):
         pass
