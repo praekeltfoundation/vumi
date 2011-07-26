@@ -15,7 +15,7 @@ from vumi.utils import *
 
 class EsmeTransceiver(Protocol):
 
-    def __init__(self, seq, config, global_options):
+    def __init__(self, seq, config, vumi_options):
         self.name = 'Proto' + str(seq)
         log.msg('__init__', self.name)
         self.defaults = {}
@@ -23,7 +23,7 @@ class EsmeTransceiver(Protocol):
         log.msg(self.name, 'STATE :', self.state)
         self.seq = seq
         self.config = config
-        self.global_options = global_options
+        self.vumi_options = vumi_options
         self.inc = int(self.config['smpp_increment'])
         self.datastream = ''
         self.__connect_callback = None
@@ -32,7 +32,7 @@ class EsmeTransceiver(Protocol):
         self.__deliver_sm_callback = None
 
         self.r_server = redis.Redis("localhost",
-                db=get_deploy_int(self.global_options['vhost']))
+                db=get_deploy_int(self.vumi_options['vhost']))
         log.msg("Connected to Redis")
         self.r_prefix = "%s@%s:%s" % (
                 self.config['system_id'],
@@ -293,9 +293,9 @@ class EsmeTransceiver(Protocol):
 
 class EsmeTransceiverFactory(ReconnectingClientFactory):
 
-    def __init__(self, config, global_options):
+    def __init__(self, config, vumi_options):
         self.config = config
-        self.global_options = global_options
+        self.vumi_options = vumi_options
         if int(self.config['smpp_increment']) < int(self.config['smpp_offset']):
             raise Exception("increment may not be less than offset")
         if int(self.config['smpp_increment']) < 1:
@@ -360,7 +360,7 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
 
     def buildProtocol(self, addr):
         print 'Connected'
-        self.esme = EsmeTransceiver(self.seq, self.config, self.global_options)
+        self.esme = EsmeTransceiver(self.seq, self.config, self.vumi_options)
         self.esme.loadDefaults(self.defaults)
         self.esme.setConnectCallback(
                 connect_callback = self.__connect_callback)
