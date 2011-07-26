@@ -205,10 +205,6 @@ class SMSAckConsumer(Consumer):
     queue_name = "" # overwritten by subclass
     routing_key = "" # overwritten by subclass
 
-    def find_sent_sms(self, transport_name, message_id):
-        return SentSMS.objects.get(
-                transport_name__iexact=transport_name,
-                transport_msg_id=message_id)
 
     def consume_message(self, message):
         dictionary = message.payload
@@ -216,7 +212,7 @@ class SMSAckConsumer(Consumer):
         id = dictionary['id']
         transport_message_id = dictionary['transport_message_id']
         try:
-            sent_sms = self.find_sent_sms(transport_name, id)
+            sent_sms = SentSMS.objects.get(id=id)
             log.msg('Processing ack for', sent_sms, dictionary)
             sent_sms.transport_msg_id=transport_message_id
             sent_sms.save() 

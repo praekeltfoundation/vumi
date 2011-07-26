@@ -148,17 +148,15 @@ class SmppTransport(Worker):
         transport_msg_id = kwargs['message_id']
         self.r_server.delete(redis_key)
         log.msg("Mapping transport_msg_id=%s to sent_sms_id=%s" % (transport_msg_id, sent_sms_id))
-#TODO publish don't write
-        sent_sms = models.SentSMS.objects.get(id=sent_sms_id)
-        sent_sms.transport_msg_id = transport_msg_id
-        sent_sms.save()
+        #sent_sms = models.SentSMS.objects.get(id=sent_sms_id)
+        #sent_sms.transport_msg_id = transport_msg_id
+        #sent_sms.save()
         #print 'sms.ack.%s' % self.config['TRANSPORT_NAME'].lower()
         with self.publisher.transaction():
             self.publisher.publish_message(Message(**{
                 'id': sent_sms_id,
                 'transport_message_id': transport_msg_id
                 }), routing_key = 'sms.ack.%s' % self.config['TRANSPORT_NAME'].lower())
-#TODO publish don't write
         yield log.msg("SUBMIT SM RESP %s" % repr(kwargs))
 
 
