@@ -97,19 +97,20 @@ class ReceiveSMSResource(Resource):
             log.msg('Returning %s: %s' % (http.BAD_REQUEST, msg))
             request.write(msg)
         request.finish()
-            
 
     def render(self, request):
         self.do_render(request)
         return NOT_DONE_YET
+
 
 class DeliveryReceiptResource(Resource):
     isLeaf = True
     def __init__(self, config, publisher):
         self.config = config
         self.publisher = publisher
-    
-    def render(self, request):
+
+    @inlineCallbacks
+    def do_render(self, request):
         log.msg('got hit with %s' % request.args)
         try:
             request.setResponseCode(http.OK)
@@ -123,18 +124,23 @@ class DeliveryReceiptResource(Resource):
                 'to_msisdn': normalize_msisdn(request.args['sender'][0]),
                 'id': request.args['messageid'][0]
             }), routing_key='sms.receipt.%(transport_name)s' % self.config)
-            return ''
         except KeyError, e:
             request.setResponseCode(http.BAD_REQUEST)
             msg = "Need more request keys to complete this request. \n\n" \
                     "Missing request key: %s" % e
             log.msg('Returning %s: %s' % (http.BAD_REQUEST, msg))
-            return msg
+            request.write(msg)
         except ValueError, e:
             request.setResponseCode(http.BAD_REQUEST)
             msg = "ValueError: %s" % e
             log.msg('Returning %s: %s' % (http.BAD_REQUEST, msg))
-            return msg
+            request.write(msg)
+        request.finish()
+
+    def render(self, request):
+        self.do_render(request)
+        return NOT_DONE_YET
+
 
 class HealthResource(Resource):
     isLeaf = True
