@@ -24,6 +24,8 @@ class VumiBot(irc.IRCClient):
             "message_content": kwargs.get('msg', ''),
             "timestamp": timestamp.isoformat()
         }
+        if "addressed" in kwargs:
+            payload["addressed"] = kwargs["addressed"]
 
         self.publisher.publish_message(Message(**payload))
 
@@ -58,7 +60,12 @@ class VumiBot(irc.IRCClient):
     def privmsg(self, user, channel, msg):
         """This will get called when the bot receives a message."""
         user = user.split('!', 1)[0]
-        self._publish_message(nickname=user, channel=channel, msg=msg)
+        addressed = False
+        if not any(channel.startswith(p) for p in ('#', '&', '$')):
+            addressed = True
+        elif msg.split(None, 1)[0].rstrip(':,').lower() == self.nickname.lower():
+            addressed = True
+        self._publish_message(nickname=user, channel=channel, msg=msg, addressed=addressed)
 
     def action(self, user, channel, msg):
         """This will get called when the bot sees someone do an action."""

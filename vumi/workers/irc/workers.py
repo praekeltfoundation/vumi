@@ -1,7 +1,10 @@
+import re
 import json
 from datetime import datetime
+
 from twisted.internet.defer import inlineCallbacks
 from twisted.python import log
+
 from vumi.service import Worker
 from vumi.message import Message
 
@@ -65,9 +68,6 @@ class MessageLogger(IRCWorker):
 
         # Check to see if they're sending me a private message
         if not any(channel.startswith(p) for p in ('#', '&', '$')):
-            msg = "It isn't nice to whisper!  Play nice with the group."
-            self._publish_message(message_type='message', channel=nickname,
-                                  msg=msg, server=payload['server'])
             return
         if msg_type in ('message', 'system'):
             self.log(nickname=nickname, channel=channel, msg=msg)
@@ -75,3 +75,39 @@ class MessageLogger(IRCWorker):
             self.log(message_type=msg_type, channel=channel, msg="* %s %s" % (nickname, msg))
         elif msg_type == 'nick_change':
             self.log(message_type='system', msg="%s is now known as %s" % (nickname, msg))
+
+
+class MemoWorker(IRCWorker):
+    name = 'memo_worker'
+
+    def worker_setup(self):
+        self.memos = {}
+
+    def process_potential_memo(self, channel, nickname, message, payload):
+        match = re.match(r'^\S+ tell (\S+) (.*)$', message)
+        if match:
+            self.memos.setdefault((channel, match.group(1)), []).append(
+                (nickname, match.group(2)))
+            msg = "Sure thing, boss."
+            self._publish_message(message_type='message', channel=channel, msg=msg,
+                                  server=payload['server'])
+
+    def process_message(self, payload):
+        msg_type = payload['message_type']
+        msg = payload['message_content']
+        nickname = payload['nickname']
+        channel = payload.get('channel', 'unknown')
+
+        log.msg("Got message:", payload)
+
+        if msg_type == 'message' and payload["addressed"]:
+            log.msg("Looks like something I should process.")
+            self.process_potential_memo(channel, nickname, msg, payload)
+
+        memos = self.memos.pop((channel, nickname), [])
+        if memos:
+            log.msg("Time to deliver some memos:", memos)
+        for memo in memos:
+            msg = "%s: message from %s: %s" % (nickname, memo[0], memo[1])
+            self._publish_message(message_type='message', channel=channel, msg=msg,
+                                  server=payload['server'])
