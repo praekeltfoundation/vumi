@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# -*- test-case-name: vumi.workers.opera.test_opera -*-
 from twisted.python import log
 from twisted.web import xmlrpc, http
 from twisted.web.resource import Resource
@@ -85,22 +86,19 @@ class OperaConsumer(Consumer):
     
     @inlineCallbacks
     def consume_message(self, message):
+        log.msg("Consumed Message %s" % message)
         dictionary = self.default_values.copy()
         payload = message.payload
 
         delivery = payload.get('deliver_at', datetime.utcnow())
         expiry = payload.get('expire_at', (delivery + timedelta(days=1)))
         
-        log.msg("Consumed Message %s" % message)
-        
-        sent_sms = SentSMS.objects.get(pk=payload['id'])
-        
         # check for non-ascii chars
         message = payload.get('message')
         if any(ord(c) > 127 for c in message):
             message = xmlrpclib.Binary(message.encode('utf-8'))
 
-        dictionary['Numbers'] = payload.get('to_msisdn')
+        dictionary['Numbers'] = payload.get('to_msisdn') or payload.get('recipient')
         dictionary['SMSText'] = message 
         dictionary['Delivery'] = delivery
         dictionary['Expiry'] = expiry
@@ -112,9 +110,13 @@ class OperaConsumer(Consumer):
         proxy_response = yield self.proxy.callRemote('EAPIGateway.SendSMS',
                 dictionary)
         log.msg("Proxy response: %s" % proxy_response)
-        sent_sms.transport_msg_id = proxy_response.get('Identifier')
-        sent_sms.save()
-        returnValue(sent_sms)
+        
+        if 'id' in payload:
+            sent_sms = SentSMS.objects.get(pk=payload['id'])
+            sent_sms.transport_msg_id = proxy_response.get('Identifier')
+            sent_sms.save()
+        
+        returnValue(proxy_response)
     
 
 class OperaPublisher(Publisher):
@@ -130,20 +132,11 @@ class OperaPublisher(Publisher):
         super(OperaPublisher, self).publish_message(message, **kwargs)
     
 
-class OperaTransport(Worker):
-    
-    # inlineCallbacks, TwistedMatrix's fancy way of allowing you to write
-    # asynchronous code as if it was synchronous by the nifty use of
-    # coroutines.
-    # See: http://twistedmatrix.com/documents/10.0.0/api/twisted.internet.defer.html#inlineCallbacks
+class OperaReceiptTransport(Worker):
     @inlineCallbacks
     def startWorker(self):
-        log.msg("Starting the OperaTransport config: %s" % self.config)
-        # create the publisher
+        log.msg('Starting the OperaReceiptTransport config: %s' % self.config)
         self.publisher = yield self.start_publisher(OperaPublisher)
-        # when it's done, create the consumer and pass it the publisher
-        self.consumer = yield self.start_consumer(OperaConsumer, self.publisher, self.config)
-        
         # start receipt web resource
         self.receipt_resource = yield self.start_web_resources(
             [
@@ -153,9 +146,25 @@ class OperaTransport(Worker):
             ],
             self.config['web_port']
         )
+    def stopWorker(self):
+        log.msg('Stopping the OperaReceiptTransport')
+
+class OperaSMSTransport(Worker):
+    
+    # inlineCallbacks, TwistedMatrix's fancy way of allowing you to write
+    # asynchronous code as if it was synchronous by the nifty use of
+    # coroutines.
+    # See: http://twistedmatrix.com/documents/10.0.0/api/twisted.internet.defer.html#inlineCallbacks
+    @inlineCallbacks
+    def startWorker(self):
+        log.msg("Starting the OperaSMSTransport config: %s" % self.config)
+        # create the publisher
+        self.publisher = yield self.start_publisher(OperaPublisher)
+        # when it's done, create the consumer and pass it the publisher
+        self.consumer = yield self.start_consumer(OperaConsumer, self.publisher, self.config)
     
     def stopWorker(self):
-        log.msg("Stopping the OperaTransport")
+        log.msg("Stopping the OperaSMSTransport")
     
 
 

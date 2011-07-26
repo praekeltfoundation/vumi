@@ -33,11 +33,10 @@ class vumi::packages {
     apt::package { "postgresql-8.4": ensure => "8.4.3-1" }
     apt::package { "libpq-dev": ensure => "8.4.8-0ubuntu0.10.04" }
     apt::package { "rabbitmq-server": ensure => "1.7.2-1ubuntu1" }
-    # apt::package { "rabbitmq-server": ensure => "2.3.1-1ubuntu1" }
     apt::package { "git-core": ensure => "1:1.7.0.4-1ubuntu0.2" }
     apt::package { "openjdk-6-jre-headless": ensure => "6b20-1.9.7-0ubuntu1~10.04.1" }
     apt::package { "libcurl4-openssl-dev": ensure => "7.19.7-1ubuntu1" }
-    redis::server { redis: version => "2.2.8" }
+    apt::package { "redis-server": ensure => "2:1.2.0-1" }
 }
 
 
@@ -165,11 +164,11 @@ exec { "Start Vumi":
     unless => "ps -p `cat tmp/pids/supervisord.pid`"
 }
 
-exec { "Start Redis":
-    command => "redis-server",
-    cwd => "/var/praekelt/vumi",
-    user => "root"
-}
+# exec { "Start Redis":
+#     command => "redis-server",
+#     cwd => "/var/praekelt/vumi",
+#     user => "root"
+# }
 
 class vumi {
     include apt::update,
@@ -191,7 +190,7 @@ Exec["Resynchronize apt package index"]
     -> Exec["Create virtualenv"] 
     -> Exec["Install Selenium SMPPSim"]
     -> Exec["Install requirements"] 
-    # -> EXec["Start Redis"]
+    # -> Exec["Start Redis"]
     -> Exec["Copy template.py to develop.py"]
     -> Exec['Syncdb']
     -> Exec['Migrate']

@@ -12,8 +12,8 @@ from twisted.web import http
 from vumi.message import Message
 from vumi.workers.opera import transport
 from vumi.webapp.api.models import *
-from vumi.utils import TestPublisher
-
+from vumi.tests.utils import TestPublisher
+from datetime import datetime
 from StringIO import StringIO
 
 class OperaTransportTestCase(unittest.TestCase):

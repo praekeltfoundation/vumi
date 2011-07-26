@@ -1,6 +1,15 @@
+# -*- test-case-name: vumi.tests.test_testutils -*-
+
 import json, importlib
-from twisted.internet import defer
 from collections import namedtuple
+from contextlib import contextmanager
+
+import txamqp
+from txamqp.client import TwistedDelegate
+from twisted.internet import defer
+
+from vumi.utils import make_vumi_path_abs
+from vumi.service import Worker, WorkerAMQClient
 
 def setup_django_test_database():
     from django.test.simple import DjangoTestSuiteRunner
@@ -66,7 +75,11 @@ class TestPublisher(object):
     """
     def __init__(self):
         self.queue = []
-
+    
+    @contextmanager
+    def transaction(self):
+        yield
+    
     def publish_message(self, message, **kwargs):
         self.queue.append((message, kwargs))
 
@@ -98,20 +111,26 @@ class TestQueue(object):
         return d
 
 class TestChannel(object):
-    def __init__(self):
+    def __init__(self, _id=None):
         self.ack_log = []
         self.publish_log = []
+        self.publish_message_log = []
 
     def basic_ack(self, tag, multiple=False):
         self.ack_log.append((tag, multiple))
 
     def channel_close(self, *args, **kwargs):
-        d = defer.Deferred()
-        d.callback(True)
-        return d
-
+        return defer.succeed(None)
+    
+    def channel_open(self, *args, **kwargs):
+        return defer.succeed(None)
+    
     def basic_publish(self, *args, **kwargs):
+        self.publish_message_log.append(kwargs)
         self.publish_log.append(kwargs)
+    
+    def basic_qos(self, *args, **kwargs):
+        return defer.succeed(None)
     
     def exchange_declare(self, *args, **kwargs):
         pass
@@ -130,4 +149,64 @@ class TestChannel(object):
         return True
 
 
+class StubbedAMQClient(WorkerAMQClient):
+    def __init__(self, queue):
+        self._queue = queue
+        self.vumi_options = {}
+
+    def get_channel(self):
+        return TestChannel()
+
+    def queue(self, *args, **kwargs):
+        return self._queue
+
+
+class TestWorker(Worker):
+    def __init__(self, queue, config=None):
+        if config is None:
+            config = {}
+        self._queue = queue
+        Worker.__init__(self, StubbedAMQClient(queue), config)
+
+
+
+class TestAMQClient(WorkerAMQClient):
+    def __init__(self, vumi_options=None):
+        spec = txamqp.spec.load(make_vumi_path_abs("config/amqp-spec-0-8.xml"))
+        WorkerAMQClient.__init__(self, TwistedDelegate(), '', spec)
+        if vumi_options is not None:
+            self.vumi_options = vumi_options
+
+    @defer.inlineCallbacks
+    def queue(self, key):
+        yield self.queueLock.acquire()
+        try:
+            try:
+                q = self.queues[key]
+            except KeyError:
+                q = TestQueue([])
+                self.queues[key] = q
+        finally:
+            self.queueLock.release()
+        defer.returnValue(q)
+
+    @defer.inlineCallbacks
+    def channel(self, id):
+        yield self.channelLock.acquire()
+        try:
+            try:
+                ch = self.channels[id]
+            except KeyError:
+                ch = TestChannel(id)
+                self.channels[id] = ch
+        finally:
+            self.channelLock.release()
+        defer.returnValue(ch)
+
+
+def get_stubbed_worker(worker_class, config=None):
+    amq_client = TestAMQClient()
+    amq_client.vumi_options = {}
+    worker = worker_class(amq_client, config)
+    return worker
 

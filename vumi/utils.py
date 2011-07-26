@@ -1,6 +1,84 @@
+from zope.interface import implements
+from twisted.internet import defer
+from twisted.internet import reactor, protocol
+from twisted.internet.defer import succeed
+from twisted.web.client import Agent
+from twisted.web.http_headers import Headers
+from twisted.python import log
+from twisted.web.iweb import IBodyProducer
+
 import importlib
 import os.path
 import re
+
+
+def http_request(url, data, headers={}, method='POST'):
+    # Construct an Agent.
+    agent = Agent(reactor)
+
+    d = agent.request(method,
+                      url,
+                      Headers(headers),
+                      StringProducer(data) if data else None)
+
+    def handle_response(response):
+        if response.code == 204:
+            d = defer.succeed('')
+        else:
+            class SimpleReceiver(protocol.Protocol):
+                def __init__(s, d):
+                    s.buf = ''; s.d = d
+                def dataReceived(s, data):
+                    s.buf += data
+                def connectionLost(s, reason):
+                    # TODO: test if reason is twisted.web.client.ResponseDone, if not, do an errback
+                    s.d.callback(s.buf)
+
+            d = defer.Deferred()
+            response.deliverBody(SimpleReceiver(d))
+        return d
+
+    d.addCallback(handle_response)
+    return d
+
+def normalize_msisdn(raw, country_code=''):
+    # don't touch shortcodes
+    if len(raw) <= 5:
+        return raw
+    
+    raw = ''.join([c for c in str(raw) if c.isdigit() or c == '+'])
+    if raw.startswith('00'):
+        return '+' + raw[2:]
+    if raw.startswith('0'):
+        return '+' + country_code + raw[1:]
+    if raw.startswith('+'):
+        return raw
+    if raw.startswith(country_code):
+        return '+' + raw
+    return raw
+
+
+class StringProducer(object):
+    """
+    For various twisted.web mechanics we need a producer to produce
+    content for HTTP requests, this is a helper class to quickly
+    create a producer for a bit of content
+    """
+    implements(IBodyProducer)
+    
+    def __init__(self, body):
+        self.body = body
+        self.length = len(body)
+    
+    def startProducing(self, consumer):
+        consumer.write(self.body)
+        return succeed(None)
+    
+    def pauseProducing(self):
+        pass
+    
+    def stopProducing(self):
+        pass
 
 
 def make_vumi_path_abs(path):
@@ -146,3 +224,19 @@ OPERATOR_PREFIX:
     2784: CELLC
 
 """
+
+
+def get_deploy_int(deployment):
+    lookup = {
+        "develop": 7,
+        "/develop": 7,
+        "development": 7,
+        "/development": 7,
+        "production": 8,
+        "/production": 8,
+        "staging": 9,
+        "/staging": 9,
+        "qa": 9,
+        "/qa": 9,
+        }
+    return lookup.get(deployment.lower(), 7)

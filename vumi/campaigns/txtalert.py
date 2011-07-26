@@ -4,6 +4,8 @@ from twisted.internet import task
 from twisted.python import log
 from vumi.service import Worker
 from vumi.message import Message
+from vumi.utils import safe_routing_key
+from vumi.workers.integrat.worker import IntegratWorker
 from datetime import datetime, timedelta, date
 from urllib import urlopen, urlencode
 import json
@@ -120,7 +122,6 @@ class Menu(object):
         yield self.close('Sorry, that wasn\'t what I expected. '
                          'Please reconnect and try again')
 
-
 class BookingTool(Worker):
 
     TIMEOUT_PERIOD = timedelta(minutes=1)
@@ -200,3 +201,74 @@ class BookingTool(Worker):
     @inlineCallbacks
     def stopWorker(self):
         yield None
+
+class USSDBookingTool(IntegratWorker):
+    @inlineCallbacks
+    def startWorker(self):
+        self.publisher = yield self.publish_to('ussd.outbound.%s'
+                                                % self.config['transport_name'])
+        self.sessions = {}
+        self.consume('ussd.inbound.%s.%s' % (
+            self.config['transport_name'],
+            safe_routing_key(self.config['ussd_code'])
+        ), self.consume_message)
+        
+    
+    def session_exists(self, uuid):
+        return uuid in self.sessions
+
+    def serialize(self, obj):
+        # return picklegenerators.dumps(obj)
+        return (datetime.utcnow(), obj)
+
+    def deserialize(self, obj):
+        # menu, gen = picklegenerators.loads(obj)
+        # gen.next()
+        # return (menu, gen)
+        return obj
+
+    def end_session(self, uuid):
+        log.msg('Ending session %s' % uuid)
+        return self.sessions.pop(uuid, None)
+    
+    def save_session(self, uuid, menu, coroutine):
+        self.sessions[uuid] = self.serialize((menu, coroutine))
+    
+    def get_session(self, uuid):
+        dt, session = self.deserialize(self.sessions[uuid])
+        return session
+    
+    def new_session(self, data):
+        session_id = data['transport_session_id']
+        msisdn = data['sender']
+        message = data['message']
+        
+        menu = Menu()
+        coroutine = menu.run()
+        coroutine.next()
+        self.save_session(session_id, menu, coroutine)
+        start_of_conversation = coroutine.send(msisdn)  # announcement
+        log.msg('replying with', start_of_conversation)
+        self.reply(session_id, start_of_conversation)
+    
+    def resume_session(self, data):
+        session_id = data['transport_session_id']
+        msisdn = data['sender']
+        message = data['message']
+        
+        menu, coroutine = self.get_session(session_id)
+        response = coroutine.send(message)
+        
+        if menu.finished:
+            self.end(session_id, response)
+        else:
+            self.save_session(session_id, menu, coroutine)
+            self.reply(session_id, response)
+    
+    def open_session(self, data):
+        pass
+    
+    def close_session(self, data):
+        session_id = data['transport_session_id']
+        self.end_session(session_id)
+    

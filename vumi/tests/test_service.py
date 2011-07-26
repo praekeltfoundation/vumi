@@ -2,26 +2,8 @@ from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.service import Worker, WorkerCreator
-from vumi.tests.utils import TestChannel, TestQueue, fake_amq_message
+from vumi.tests.utils import TestQueue, fake_amq_message, TestWorker
 from vumi.message import Message
-
-
-class TestWorker(Worker):
-
-    def __init__(self, queue):
-        self._queue = queue
-        self.global_options = {}
-
-    def get_channel(self):
-        return TestChannel()
-
-    def queue(self, *args, **kwargs):
-        return self._queue
-
-
-class LoadableTestWorker(Worker):
-    def poke(self):
-        return "poke"
 
 
 class ServiceTestCase(TestCase):
@@ -66,11 +48,21 @@ class ServiceTestCase(TestCase):
         self.assertEquals(delivered_content.body, '{"key": "value"}')
         self.assertEquals(delivered_content.properties, {'delivery mode': 2})
 
-    def test_create_worker(self):
-        """
-        WorkerCreator should successfully create an instance of the test worker.
-        """
-        global_options = {
+
+
+class LoadableTestWorker(Worker):
+    def poke(self):
+        return "poke"
+
+
+class NoQueueWorkerCreator(WorkerCreator):
+    def _connect(self, *_args, **_kw):
+        pass
+
+
+class TestWorkerCreator(TestCase):
+    def get_creator(self, **options):
+        vumi_options = {
             "hostname": "localhost",
             "port": 5672,
             "username": "vumitest",
@@ -78,16 +70,17 @@ class ServiceTestCase(TestCase):
             "vhost": "/test",
             "specfile": "config/amqp-spec-0-8.xml",
             }
-        f = []
-        class NoQueueWorkerCreator(WorkerCreator):
-            def _connect(self, factory, *_args, **_kw):
-                f.append(factory)
+        vumi_options.update(options)
+        return NoQueueWorkerCreator(vumi_options)
 
-        creator = NoQueueWorkerCreator(global_options)
+    def test_create_worker(self):
+        """
+        WorkerCreator should successfully create an instance of the test worker.
+        """
+
+        creator = self.get_creator()
         worker_class = "%s.%s" % (LoadableTestWorker.__module__,
                                   LoadableTestWorker.__name__)
-        creator.create_worker(worker_class, {})
-        f = f[0]
-        p = f.buildProtocol(None)
-        self.assertEquals("poke", p.poke())
+        worker = creator.create_worker(worker_class, {}).buildProtocol(None)
+        self.assertEquals("poke", worker.poke())
 

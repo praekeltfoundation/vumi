@@ -10,19 +10,21 @@ from twisted.internet.task import LoopingCall
 from smpp.pdu_builder import *
 from smpp.pdu_inspector import *
 
-import vumi.options
+from vumi.utils import *
 
 
 class EsmeTransceiver(Protocol):
 
-    def __init__(self, seq, inc):
+    def __init__(self, seq, config, vumi_options):
         self.name = 'Proto' + str(seq)
         log.msg('__init__', self.name)
         self.defaults = {}
         self.state = 'CLOSED'
         log.msg(self.name, 'STATE :', self.state)
         self.seq = seq
-        self.inc = inc
+        self.config = config
+        self.vumi_options = vumi_options
+        self.inc = int(self.config['smpp_increment'])
         self.datastream = ''
         self.__connect_callback = None
         self.__submit_sm_resp_callback = None
@@ -30,10 +32,12 @@ class EsmeTransceiver(Protocol):
         self.__deliver_sm_callback = None
 
         self.r_server = redis.Redis("localhost",
-                db=vumi.options.get_deploy_int(vumi.options.get_all()['vhost']))
+                db=get_deploy_int(self.vumi_options['vhost']))
         log.msg("Connected to Redis")
-        config = vumi.options.get_all()['config']
-        self.r_prefix = "%s@%s:%s" % (config['system_id'], config['host'], config['port'])
+        self.r_prefix = "%s@%s:%s" % (
+                self.config['system_id'],
+                self.config['host'],
+                self.config['port'])
         log.msg("r_prefix = %s" % self.r_prefix)
 
 
@@ -289,12 +293,14 @@ class EsmeTransceiver(Protocol):
 
 class EsmeTransceiverFactory(ReconnectingClientFactory):
 
-    def __init__(self, increment, offset):
-        if increment < offset:
+    def __init__(self, config, vumi_options):
+        self.config = config
+        self.vumi_options = vumi_options
+        if int(self.config['smpp_increment']) < int(self.config['smpp_offset']):
             raise Exception("increment may not be less than offset")
-        if increment < 1:
+        if int(self.config['smpp_increment']) < 1:
             raise Exception("increment may not be less than 1")
-        if offset < 1:
+        if int(self.config['smpp_offset']) < 1:
             raise Exception("offset may not be less than 1")
         self.esme = None
         self.__connect_callback = None
@@ -303,10 +309,8 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
         self.__delivery_report_callback = None
         self.__deliver_sm_callback = None
         self.__looping_query_sm_callback = None
-        self.seq = [offset]
-        self.inc = increment
-        self.offset = offset
-        print '#########################', self.seq, self.inc, self.offset
+        self.seq = [int(self.config['smpp_offset'])]
+        log.msg("Set sequence number: %s, config: %s" % (self.seq, self.config))
         self.initialDelay = 30.0
         self.maxDelay = 45
         self.defaults = {
@@ -322,15 +326,8 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
 
 
     def setLatestSequenceNumber(self, latest):
-        sequence_number = (latest/self.inc)*self.inc + self.offset
-        if latest >= sequence_number:
-            sequence_number += self.inc
-        self.seq = [sequence_number]
-        print '#########################', self.seq, self.inc, self.offset
-
-
-    def setSequenceIncrement(self, sequence_increment):
-        self.inc = sequence_increment
+        self.seq = [latest]
+        log.msg("Set sequence number: %s, config: %s" % (self.seq, self.config))
 
 
     def setConnectCallback(self, connect_callback):
@@ -363,8 +360,7 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
 
     def buildProtocol(self, addr):
         print 'Connected'
-        self.esme = EsmeTransceiver(self.seq, self.inc)
-        #self.esme.factory = self
+        self.esme = EsmeTransceiver(self.seq, self.config, self.vumi_options)
         self.esme.loadDefaults(self.defaults)
         self.esme.setConnectCallback(
                 connect_callback = self.__connect_callback)

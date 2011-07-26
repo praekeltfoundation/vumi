@@ -23,3 +23,4 @@ dist/*
 .coverage-results/
 htmlcov/
 coverage-html/
+.ftclient_authtoken
