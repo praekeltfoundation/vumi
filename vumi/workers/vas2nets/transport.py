@@ -87,25 +87,34 @@ class ReceiveSMSResource(Resource):
             log.msg("Enqueued.")
         except KeyError, e:
             request.setResponseCode(http.BAD_REQUEST)
-            request.write("Need more request keys to complete this request. \n\n" \
-                              "Missing request key: %s" % e)
+            msg = "Need more request keys to complete this request. \n\n" \
+                    "Missing request key: %s" % e
+            log.msg('Returning %s: %s' % (http.BAD_REQUEST, msg))
+            request.write(msg)
+        except ValueError, e:
+            request.setResponseCode(http.BAD_REQUEST)
+            msg = "ValueError: %s" % e
+            log.msg('Returning %s: %s' % (http.BAD_REQUEST, msg))
+            request.write(msg)
         request.finish()
 
     def render(self, request):
         self.do_render(request)
         return NOT_DONE_YET
 
+
 class DeliveryReceiptResource(Resource):
     isLeaf = True
     def __init__(self, config, publisher):
         self.config = config
         self.publisher = publisher
-    
-    def render_POST(self, request):
-        request.setResponseCode(http.OK)
-        request.setHeader('Content-Type', 'text/plain')
-        # with self.publisher.transaction():
-        if 1:
+
+    @inlineCallbacks
+    def do_render(self, request):
+        log.msg('got hit with %s' % request.args)
+        try:
+            request.setResponseCode(http.OK)
+            request.setHeader('Content-Type', 'text/plain')
             self.publisher.publish_message(Message(**{
                 'transport_message_id': request.args['smsid'][0],
                 'transport_status': request.args['status'][0],
@@ -115,7 +124,23 @@ class DeliveryReceiptResource(Resource):
                 'to_msisdn': normalize_msisdn(request.args['sender'][0]),
                 'id': request.args['messageid'][0]
             }), routing_key='sms.receipt.%(transport_name)s' % self.config)
-            return ''
+        except KeyError, e:
+            request.setResponseCode(http.BAD_REQUEST)
+            msg = "Need more request keys to complete this request. \n\n" \
+                    "Missing request key: %s" % e
+            log.msg('Returning %s: %s' % (http.BAD_REQUEST, msg))
+            request.write(msg)
+        except ValueError, e:
+            request.setResponseCode(http.BAD_REQUEST)
+            msg = "ValueError: %s" % e
+            log.msg('Returning %s: %s' % (http.BAD_REQUEST, msg))
+            request.write(msg)
+        request.finish()
+
+    def render(self, request):
+        self.do_render(request)
+        return NOT_DONE_YET
+
 
 class HealthResource(Resource):
     isLeaf = True
@@ -208,17 +233,15 @@ class Vas2NetsTransport(Worker):
         
         if response.headers.hasHeader(header):
             transport_message_id = response.headers.getRawHeaders(header)[0]
-            # with self.publisher.transaction():
-            if 1:
-                self.publisher.publish_message(Message(**{
-                    'id': data['id'],
-                    'transport_message_id': transport_message_id
-                }), routing_key='sms.ack.%(transport_name)s' % self.config)
+            self.publisher.publish_message(Message(**{
+                'id': data['id'],
+                'transport_message_id': transport_message_id
+            }), routing_key='sms.ack.%(transport_name)s' % self.config)
         else:
             raise Vas2NetsTransportError('No SmsId Header, content: %s' % 
                                             response_content)
         
     def stopWorker(self):
         """shutdown"""
-        pass
+        self.receipt_resource.stopListening()
     

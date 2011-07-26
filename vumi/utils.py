@@ -1,11 +1,45 @@
 from zope.interface import implements
+from twisted.internet import defer
+from twisted.internet import reactor, protocol
 from twisted.internet.defer import succeed
+from twisted.web.client import Agent
+from twisted.web.http_headers import Headers
 from twisted.python import log
 from twisted.web.iweb import IBodyProducer
 
 import importlib
 import os.path
 import re
+
+
+def http_request(url, data, headers={}, method='POST'):
+    # Construct an Agent.
+    agent = Agent(reactor)
+
+    d = agent.request(method,
+                      url,
+                      Headers(headers),
+                      StringProducer(data) if data else None)
+
+    def handle_response(response):
+        if response.code == 204:
+            d = defer.succeed('')
+        else:
+            class SimpleReceiver(protocol.Protocol):
+                def __init__(s, d):
+                    s.buf = ''; s.d = d
+                def dataReceived(s, data):
+                    s.buf += data
+                def connectionLost(s, reason):
+                    # TODO: test if reason is twisted.web.client.ResponseDone, if not, do an errback
+                    s.d.callback(s.buf)
+
+            d = defer.Deferred()
+            response.deliverBody(SimpleReceiver(d))
+        return d
+
+    d.addCallback(handle_response)
+    return d
 
 def normalize_msisdn(raw, country_code=''):
     # don't touch shortcodes

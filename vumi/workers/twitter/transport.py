@@ -21,10 +21,7 @@ class TwitterTransport(Worker):
         terms = self.config.get('terms') or raw_input('Track terms: ').split()
         
         # create the publisher
-        self.publisher = yield self.publish_to('twitter.inbound.%(username)s.%(terms)s' % {
-            'username': self.config['username'],
-            'terms': ''.join(self.config['terms'])
-        })
+        self.publisher = yield self.publish_to('twitter.inbound.%(username)s' % self.config)
         # when it's done, create the consumer and pass it the publisher
         self.consumer = yield self.consume('twitter.outbound.%(username)s' % self.config, self.consume_message)
         # publish something into the queue for the consumer to pick up.

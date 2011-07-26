@@ -72,12 +72,13 @@ class HttpRpcTransport(Worker):
                 (HttpRpcHealthResource(self), 'health'),
             ],
             self.config['web_port'])
+        print self.receipt_resource
 
     def consume_message(self, message):
         log.msg("HttpRpcTransport consuming on %s: %s" % (
             self.consume_key,
             repr(message.payload)))
-        if message.payload.get('uuid') and message.payload.get('message'):
+        if message.payload.get('uuid') and 'message' in message.payload:
             self.finishRequest(
                     message.payload['uuid'],
                     message.payload['message'])
