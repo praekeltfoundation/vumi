@@ -4,6 +4,7 @@ from twisted.internet import reactor
 from getpass import getpass
 
 from vumi.service import Worker, Consumer, Publisher
+from vumi.utils import safe_routing_key
 from vumi.message import Message
 from django.contrib.auth.models import User, Group
 from uuid import uuid4
@@ -83,7 +84,6 @@ class TwitterWorker(Worker):
     def stopWorker(self):
         log.msg("Stopping the TwitterWorker")
     
-
 class TwitterXMPPBridgeWorker(Worker):
     @inlineCallbacks
     def startWorker(self):
@@ -130,3 +130,4 @@ class TwitterXMPPBridgeWorker(Worker):
             self.publisher.publish_message(Message(
                 recipient=user.email, 
                 message=message))
+

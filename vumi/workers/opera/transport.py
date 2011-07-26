@@ -84,23 +84,21 @@ class OperaConsumer(Consumer):
             'Channel': config.get('channel'),
         }
     
+    @inlineCallbacks
     def consume_message(self, message):
+        log.msg("Consumed Message %s" % message)
         dictionary = self.default_values.copy()
         payload = message.payload
 
         delivery = payload.get('deliver_at', datetime.utcnow())
         expiry = payload.get('expire_at', (delivery + timedelta(days=1)))
         
-        log.msg("Consumed Message %s" % message)
-        
-        sent_sms = SentSMS.objects.get(pk=payload['id'])
-        
         # check for non-ascii chars
         message = payload.get('message')
         if any(ord(c) > 127 for c in message):
             message = xmlrpclib.Binary(message.encode('utf-8'))
 
-        dictionary['Numbers'] = payload.get('to_msisdn')
+        dictionary['Numbers'] = payload.get('to_msisdn') or payload.get('recipient')
         dictionary['SMSText'] = message 
         dictionary['Delivery'] = delivery
         dictionary['Expiry'] = expiry
@@ -108,20 +106,17 @@ class OperaConsumer(Consumer):
         dictionary['Receipt'] = payload.get('receipt', 'Y')
         
         log.msg("Sending SMS via Opera: %s" % dictionary)
+
+        proxy_response = yield self.proxy.callRemote('EAPIGateway.SendSMS',
+                dictionary)
+        log.msg("Proxy response: %s" % proxy_response)
         
-        def success(proxy_response):
-            log.msg("Proxy response: %s" % proxy_response)
+        if 'id' in payload:
+            sent_sms = SentSMS.objects.get(pk=payload['id'])
             sent_sms.transport_msg_id = proxy_response.get('Identifier')
             sent_sms.save()
-            return sent_sms
         
-        def errback(error):
-            log.err(error)
-            return error
-        
-        deferred = self.proxy.callRemote('EAPIGateway.SendSMS', dictionary)
-        deferred.addCallbacks(success, errback)
-        return deferred
+        returnValue(proxy_response)
     
 
 class OperaPublisher(Publisher):
