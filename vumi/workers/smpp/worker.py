@@ -126,6 +126,7 @@ class SMSReceiptConsumer(Consumer):
         transport_name = dictionary['transport_name']
         delivered_at = dictionary['transport_delivered_at']
         message_id = dictionary['transport_msg_id']
+        log.msg("-------------------------------------%s" % message_id)
         
         try:
             sent_sms = self.find_sent_sms(transport_name, message_id)

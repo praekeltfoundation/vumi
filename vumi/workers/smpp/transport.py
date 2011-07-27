@@ -152,11 +152,10 @@ class SmppTransport(Worker):
         #sent_sms.transport_msg_id = transport_msg_id
         #sent_sms.save()
         #print 'sms.ack.%s' % self.config['TRANSPORT_NAME'].lower()
-        with self.publisher.transaction():
-            self.publisher.publish_message(Message(**{
-                'id': sent_sms_id,
-                'transport_message_id': transport_msg_id
-                }), routing_key = 'sms.ack.%s' % self.config['TRANSPORT_NAME'].lower())
+        self.publisher.publish_message(Message(**{
+            'id': sent_sms_id,
+            'transport_message_id': transport_msg_id
+            }), routing_key = 'sms.ack.%s' % self.config['TRANSPORT_NAME'].lower())
         yield log.msg("SUBMIT SM RESP %s" % repr(kwargs))
 
 
