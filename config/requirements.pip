@@ -31,3 +31,5 @@ pyserial
 pytz
 gunicorn
 python-fusiontables==0.1
+python-subunit
+junitxml

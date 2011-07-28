@@ -51,8 +51,9 @@ class AmqpFactory(protocol.ReconnectingClientFactory):
         amqp_client.factory = self
         amqp_client.vumi_options = self.options
         self.worker = self.worker_class(amqp_client, self.config)
+        amqp_client.startWorker = self.worker.startWorker
         self.resetDelay()
-        return self.worker
+        return amqp_client
 
     def clientConnectionFailed(self, connector, reason):
         log.err("Connection failed.", reason)
