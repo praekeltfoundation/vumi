@@ -18,11 +18,11 @@ class VumiService(Service):
     # Twistd calls this method at boot
     def startService(self):
         log.msg("Starting VumiService")
-        global_options = {}
+        vumi_options = {}
         for opt in [i[0] for i in Options.optParameters]:
-            global_options[opt] = self.options.pop(opt)
+            vumi_options[opt] = self.options.pop(opt)
 
-        worker_creator = WorkerCreator(global_options)
+        worker_creator = WorkerCreator(vumi_options)
 
         # We need an initial worker. This would either be a normal
         # worker class (if we're using the old one-per-process model)

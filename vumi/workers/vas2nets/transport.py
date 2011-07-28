@@ -72,19 +72,18 @@ class ReceiveSMSResource(Resource):
         request.setResponseCode(http.OK)
         request.setHeader('Content-Type', 'text/plain')
         try:
-            with self.publisher.transaction():
-                self.publisher.publish_message(Message(**{
-                    'transport_message_id': request.args['messageid'][0],
-                    'transport_timestamp': iso8601(request.args['time'][0]),
-                    'transport_network_id': request.args['provider'][0],
-                    'transport_keyword': request.args['keyword'][0],
-                    'to_msisdn': normalize_msisdn(request.args['destination'][0]),
-                    'from_msisdn': normalize_msisdn(request.args['sender'][0]),
-                    'message': request.args['text'][0]
-                }), routing_key='sms.inbound.%s.%s' % (
-                    self.config.get('transport_name'), 
-                    request.args['destination'][0]
-                ))
+            self.publisher.publish_message(Message(**{
+                'transport_message_id': request.args['messageid'][0],
+                'transport_timestamp': iso8601(request.args['time'][0]),
+                'transport_network_id': request.args['provider'][0],
+                'transport_keyword': request.args['keyword'][0],
+                'to_msisdn': normalize_msisdn(request.args['destination'][0]),
+                'from_msisdn': normalize_msisdn(request.args['sender'][0]),
+                'message': request.args['text'][0]
+            }), routing_key='sms.inbound.%s.%s' % (
+                self.config.get('transport_name'), 
+                request.args['destination'][0]
+            ))
             return ''
         except KeyError, e:
             request.setResponseCode(http.BAD_REQUEST)
@@ -110,17 +109,16 @@ class DeliveryReceiptResource(Resource):
         try:
             request.setResponseCode(http.OK)
             request.setHeader('Content-Type', 'text/plain')
-            with self.publisher.transaction():
-                self.publisher.publish_message(Message(**{
-                    'transport_message_id': request.args['smsid'][0],
-                    'transport_status': request.args['status'][0],
-                    'transport_status_message': request.args['text'][0],
-                    'transport_timestamp': iso8601(request.args['time'][0]),
-                    'transport_network_id': request.args['provider'][0],
-                    'to_msisdn': normalize_msisdn(request.args['sender'][0]),
-                    'id': request.args['messageid'][0]
-                }), routing_key='sms.receipt.%(transport_name)s' % self.config)
-                return ''
+            self.publisher.publish_message(Message(**{
+                'transport_message_id': request.args['smsid'][0],
+                'transport_status': request.args['status'][0],
+                'transport_status_message': request.args['text'][0],
+                'transport_timestamp': iso8601(request.args['time'][0]),
+                'transport_network_id': request.args['provider'][0],
+                'to_msisdn': normalize_msisdn(request.args['sender'][0]),
+                'id': request.args['messageid'][0]
+            }), routing_key='sms.receipt.%(transport_name)s' % self.config)
+            return ''
         except KeyError, e:
             request.setResponseCode(http.BAD_REQUEST)
             msg = "Need more request keys to complete this request. \n\n" \
@@ -224,16 +222,15 @@ class Vas2NetsTransport(Worker):
         
         if response.headers.hasHeader(header):
             transport_message_id = response.headers.getRawHeaders(header)[0]
-            with self.publisher.transaction():
-                self.publisher.publish_message(Message(**{
-                    'id': data['id'],
-                    'transport_message_id': transport_message_id
-                }), routing_key='sms.ack.%(transport_name)s' % self.config)
+            self.publisher.publish_message(Message(**{
+                'id': data['id'],
+                'transport_message_id': transport_message_id
+            }), routing_key='sms.ack.%(transport_name)s' % self.config)
         else:
             raise Vas2NetsTransportError('No SmsId Header, content: %s' % 
                                             response_content)
         
     def stopWorker(self):
         """shutdown"""
-        pass
+        self.receipt_resource.stopListening()
     
