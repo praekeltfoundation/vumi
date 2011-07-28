@@ -1,3 +1,5 @@
+# -*- test-case-name: vumi.workers.smpp.test.test_smpp_transport -*-
+
 from twisted.python import log
 from twisted.python.log import logging
 from twisted.internet.defer import inlineCallbacks, returnValue
