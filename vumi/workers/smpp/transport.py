@@ -95,7 +95,7 @@ class SmppTransport(Worker):
 
         log.msg("Starting the SmppTransport")
         # start the Smpp transport
-        factory = EsmeTransceiverFactory(self.config, self.vumi_options)
+        factory = EsmeTransceiverFactory(self.config, self._amqp_client.vumi_options)
         factory.loadDefaults(self.config)
 
         self.sequence_key = "%s_%s#last_sequence_number" % (self.r_prefix, self.config['smpp_offset'])
