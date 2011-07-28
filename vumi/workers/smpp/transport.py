@@ -88,7 +88,7 @@ class SmppTransport(Worker):
 
     def startWorker(self):
         # Connect to Redis
-        self.r_server = redis.Redis("localhost", db=get_deploy_int(self.vhost))
+        self.r_server = redis.Redis("localhost", db=get_deploy_int(self._amqp_client.vhost))
         log.msg("Connected to Redis")
         self.r_prefix = "%s@%s:%s" % (self.config['system_id'], self.config['host'], self.config['port'])
         log.msg("r_prefix = %s" % self.r_prefix)
