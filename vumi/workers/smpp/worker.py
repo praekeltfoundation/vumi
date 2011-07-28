@@ -5,7 +5,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from vumi.service import Worker, Consumer, Publisher
 from vumi.message import Message, VUMI_DATE_FORMAT
 from vumi.webapp.api import utils
-from vumi.webapp.api.models import Keyword, SentSMS, SMPPResp, Transport
+from vumi.webapp.api.models import Keyword, SentSMS, Transport
 
 import json
 import time
@@ -108,15 +108,9 @@ class SMSReceiptConsumer(Consumer):
 
     
     def find_sent_sms(self, transport_name, message_id):
-        try:
-            # update sent sms objects
-            smpp_resp = SMPPResp.objects.filter(message_id=message_id,
-                    sent_sms__transport_name__iexact=transport_name).latest('created_at')
-            return smpp_resp.sent_sms
-        except SMPPResp.DoesNotExist, e:
-            return SentSMS.objects.get(
-                    transport_name__iexact=transport_name,
-                    transport_msg_id=message_id)
+        return SentSMS.objects.get(
+                transport_name__iexact=transport_name,
+                transport_msg_id=message_id)
 
 
     def consume_message(self, message):
@@ -126,7 +120,6 @@ class SMSReceiptConsumer(Consumer):
         transport_name = dictionary['transport_name']
         delivered_at = dictionary['transport_delivered_at']
         message_id = dictionary['transport_msg_id']
-        log.msg("-------------------------------------%s" % message_id)
         
         try:
             sent_sms = self.find_sent_sms(transport_name, message_id)

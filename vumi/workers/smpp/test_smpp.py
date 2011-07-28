@@ -18,7 +18,7 @@ from vumi.workers.smpp.worker import SMSBatchConsumer, SMSReceiptConsumer, \
 from django.conf import settings
 
 from django.contrib.auth.models import User
-from vumi.webapp.api.models import SentSMSBatch, SentSMS, SMPPResp, Keyword, \
+from vumi.webapp.api.models import SentSMSBatch, SentSMS, Keyword, \
                                     ReceivedSMS, Transport
 from vumi.webapp.api import utils
 
@@ -82,19 +82,9 @@ class SMSReceiptTestCase(TestCase):
         self.assertEquals(sent_sms,
             self.receipt_consumer.find_sent_sms('TransportName', 'message_id'))
 
-        # if given an SMPPResp message id, it should find it too
-        sent_sms = SentSMS.objects.create(user=user,
-                transport_name='TransportName')
-        smpp_resp = SMPPResp(message_id='smpp_message_id')
-        smpp_resp.sent_sms = sent_sms
-        smpp_resp.sequence_number = 0
-        smpp_resp.save()
-
-        self.assertEquals(sent_sms, 
-                self.receipt_consumer.find_sent_sms('TransportName','smpp_message_id'))
 
     def test_failure_to_find_sent_sms(self):
-        """When no SentSMS or SMPPResp can be found it should raise a
+        """When no SentSMS can be found it should raise a
         SentSMS.DoesNotExist exception"""
         self.assertRaises(SentSMS.DoesNotExist,
                 self.receipt_consumer.find_sent_sms,
