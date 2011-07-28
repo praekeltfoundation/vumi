@@ -81,6 +81,7 @@ class TestWorkerCreator(TestCase):
         creator = self.get_creator()
         worker_class = "%s.%s" % (LoadableTestWorker.__module__,
                                   LoadableTestWorker.__name__)
-        worker = creator.create_worker(worker_class, {}).buildProtocol(None)
-        self.assertEquals("poke", worker.poke())
+        factory = creator.create_worker(worker_class, {})
+        factory.buildProtocol(None)
+        self.assertEquals("poke", factory.worker.poke())
 

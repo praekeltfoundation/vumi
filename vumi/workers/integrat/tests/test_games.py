@@ -1,7 +1,7 @@
 from twisted.trial import unittest
 from twisted.internet.defer import succeed
 
-from vumi.service import WorkerCreator
+from vumi.tests.utils import get_stubbed_worker
 from vumi.workers.integrat.games import RockPaperScissorsGame, RockPaperScissorsWorker
 
 
@@ -65,34 +65,13 @@ class RockPaperScissorsWorkerStub(RockPaperScissorsWorker):
     def end(self, sid, message):
         self.replies.append(('end', sid, message))
 
-    def publish_to(self, *args, **kw):
-        return succeed(None)
-
-    def consume(self, *args, **kw):
-        return succeed(None)
-
 
 class TestRockPaperScissorsWorker(unittest.TestCase):
     def get_worker(self):
-        f = []
-        class NoQueueWorkerCreator(WorkerCreator):
-            def _connect(self, factory, *_args, **_kw):
-                f.append(factory)
-        creator = NoQueueWorkerCreator({
-            "hostname": "localhost",
-            "port": 5672,
-            "username": "vumitest",
-            "password": "vumitest",
-            "vhost": "/test",
-            "specfile": "config/amqp-spec-0-8.xml",
-            })
-        worker_class = "%s.%s" % (RockPaperScissorsWorkerStub.__module__,
-                                  RockPaperScissorsWorkerStub.__name__)
-        creator.create_worker(worker_class, {
+        worker = get_stubbed_worker(RockPaperScissorsWorkerStub, {
                 'transport_name': 'foo',
                 'ussd_code': '99999',
                 })
-        worker = f[0].buildProtocol(None)
         worker.replies = []
         worker.startWorker()
         return worker
