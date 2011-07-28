@@ -1,3 +1,5 @@
+# -*- test-case-name: vumi.workers.smpp.test.test_smpp_transport -*-
+
 from twisted.python import log
 from twisted.python.log import logging
 from twisted.internet.defer import inlineCallbacks, returnValue
@@ -95,7 +97,7 @@ class SmppTransport(Worker):
 
         log.msg("Starting the SmppTransport")
         # start the Smpp transport
-        factory = EsmeTransceiverFactory(self.config, self.vumi_options)
+        factory = EsmeTransceiverFactory(self.config, self._amqp_client.vumi_options)
         factory.loadDefaults(self.config)
 
         self.sequence_key = "%s_%s#last_sequence_number" % (self.r_prefix, self.config['smpp_offset'])
