@@ -32,12 +32,11 @@ class TopicSmppTransport(SmppTransport):
         # send the message via SMPP
         sequence_number = self.send_smpp(**message.payload)
         # get the sequence_number, link it back to our own internal
-            # TODO This needs to be replaced with a Redis save
-            #formdict = {
-                    #"sent_sms":message.payload.get("id"),
-                    #"sequence_number": sequence_number,
-                    #}
-            #log.msg("SMPPLinkForm", repr(formdict))
-            #form = forms.SMPPLinkForm(formdict)
-            #form.save()
+        formdict = {
+                "sent_sms":message.payload.get("id"),
+                "sequence_number": sequence_number,
+                }
+        log.msg("SMPPLinkForm", repr(formdict))
+        form = forms.SMPPLinkForm(formdict)
+        form.save()
         return True
