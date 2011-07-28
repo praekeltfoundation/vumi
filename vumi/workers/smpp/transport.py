@@ -110,7 +110,6 @@ class SmppTransport(Worker):
         factory.setSubmitSMRespCallback(self.submit_sm_resp)
         factory.setDeliveryReportCallback(self.delivery_report)
         factory.setDeliverSMCallback(self.deliver_sm)
-        factory.setLoopingQuerySMCallback(self.query_sm_group)
         log.msg(factory.defaults)
         reactor.connectTCP(
                 factory.defaults['host'],
