@@ -49,19 +49,41 @@ class Vas2NetsFailureWorker(Worker):
     def get_failure_keys(self):
         return self.r_server.smembers(self.r_key("failure_keys"))
 
-    def store_failure(self, message, reason, retry=False):
+    def store_failure(self, message, reason, retry_delay=None):
         key = self.failure_key()
         self.r_server.hmset(key, {
                 "message": message,
                 "reason": reason,
-                "retry": retry,
+                "retry_delay": retry_delay,
                 })
         self.add_to_failure_set(key)
+        if retry_delay is not None:
+            self.store_retry(key, retry_delay)
         return key
 
-    def get_next_write_timestamp(self, delta=0, timestamp=None):
-        if timestamp is None:
-            timestamp = int(time.time())
-        timestamp += delta
+    def store_retry(self, failure_key, retry_delay, now=None):
+        timestamp = self.get_next_write_timestamp(retry_delay, now=now)
+        bucket_key = self.r_key("retry_keys." + timestamp)
+        self.r_server.sadd(bucket_key, failure_key)
+        self.store_read_timestamp(timestamp)
+
+    def store_read_timestamp(self, timestamp):
+        # I deserve to be shot for this:
+        score = int(''.join([c for c in timestamp if c.isdigit()]))
+        self.r_server.zadd(self.r_key("retry_timestamps"), **{timestamp: score})
+
+    def get_next_write_timestamp(self, delta, now=None):
+        if now is None:
+            now = int(time.time())
+        timestamp = now + delta
         timestamp += self.GRANULARITY - (timestamp % self.GRANULARITY)
         return datetime.utcfromtimestamp(timestamp).isoformat().split('.')[0]
+
+    def get_next_read_timestamp(self, now=None):
+        if now is None:
+            now = int(time.time())
+        timestamp = datetime.utcfromtimestamp(now).isoformat().split('.')[0]
+        next_timestamp = self.r_server.zrange(self.r_key("retry_timestamps"), 0, 0)
+        if next_timestamp and next_timestamp[0] <= timestamp:
+            return next_timestamp[0]
+        return None
