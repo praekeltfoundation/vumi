@@ -1,5 +1,6 @@
 # -*- test-case-name: vumi.workers.failures.tests.test_workers -*-
 
+import time
 from datetime import datetime
 from uuid import uuid4
 
@@ -14,6 +15,8 @@ class Vas2NetsFailureWorker(Worker):
     """
     Handler for transport failures in the Vas2Nets transport.
     """
+
+    GRANULARITY = 5 # seconds
 
     def startWorker(self):
         # Connect to Redis
@@ -56,3 +59,9 @@ class Vas2NetsFailureWorker(Worker):
         self.add_to_failure_set(key)
         return key
 
+    def get_next_write_timestamp(self, delta=0, timestamp=None):
+        if timestamp is None:
+            timestamp = int(time.time())
+        timestamp += delta
+        timestamp += self.GRANULARITY - (timestamp % self.GRANULARITY)
+        return datetime.utcfromtimestamp(timestamp).isoformat().split('.')[0]
