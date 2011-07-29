@@ -35,7 +35,7 @@ class Vas2NetsFailureWorkerTestCase(unittest.TestCase):
         }
         self.worker = get_stubbed_worker(Vas2NetsFailureWorker, self.config)
         self.worker.startWorker()
-        self.worker.r_server = FakeRedis()
+        # self.worker.r_server = FakeRedis()
         self.worker.r_server.flushdb()
 
     def test_redis_access(self):
@@ -45,3 +45,11 @@ class Vas2NetsFailureWorkerTestCase(unittest.TestCase):
         self.assertEqual("bar", self.worker.r_get("foo"))
         self.assertEqual(['failures:vas2nets#foo'], self.worker.r_server.keys())
 
+    def test_store_failure(self):
+        key = self.worker.store_failure({'message': 'foo'}, "bad stuff happened")
+        self.assertEqual(set([key]), self.worker.get_failure_keys())
+        self.assertEqual({
+                "message": str({"message": "foo"}),
+                "retry": "False",
+                "reason": "bad stuff happened",
+                }, self.worker.r_server.hgetall(key))
