@@ -68,8 +68,7 @@ class Vas2NetsFailureWorker(Worker):
         self.store_read_timestamp(timestamp)
 
     def store_read_timestamp(self, timestamp):
-        # I deserve to be shot for this:
-        score = int(''.join([c for c in timestamp if c.isdigit()]))
+        score = time.mktime(time.strptime(timestamp, "%Y-%m-%dT%H:%M:%S"))
         self.r_server.zadd(self.r_key("retry_timestamps"), **{timestamp: score})
 
     def get_next_write_timestamp(self, delta, now=None):
