@@ -62,6 +62,7 @@ class SmscServer(Protocol):
             self.sendPDU(pdu_resp)
             self.delivery_report(message_id)
             self.boomerang(pdu)
+            self.ESME_(pdu)
 
 
     def delivery_report(self, message_id):
@@ -71,6 +72,13 @@ class SmscServer(Protocol):
         pdu = DeliverSM(sequence_number, short_message = short_message)
         self.sendPDU(pdu)
 
+    def ESME_(self, pdu):
+        if pdu['body']['mandatory_parameters']['short_message'][:5] == "ESME_":
+            pdu = DeliverSM(sequence_number,
+                    command_status = pdu['body']['mandatory_parameters']['short_message'],
+                    short_message = pdu['body']['mandatory_parameters']['short_message'],
+                    destination_addr = destination_addr,
+                    source_addr = source_addr)
 
     def boomerang(self, pdu):
         if pdu['body']['mandatory_parameters']['short_message'] == "boomerang":
