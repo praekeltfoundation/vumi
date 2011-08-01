@@ -54,15 +54,20 @@ class SmscServer(Protocol):
             self.sendPDU(pdu_resp)
 
 
+    def command_status(self, pdu):
+        if pdu['body']['mandatory_parameters']['short_message'][:5] == "ESME_":
+            return pdu['body']['mandatory_parameters']['short_message'].split(' ')[0]
+
+
     def handle_submit_sm(self, pdu):
         if pdu['header']['command_status'] == 'ESME_ROK':
             sequence_number = pdu['header']['sequence_number']
             message_id = str(uuid.uuid4())
-            pdu_resp = SubmitSMResp(sequence_number, message_id)
+            command_status = self.command_status(pdu)
+            pdu_resp = SubmitSMResp(sequence_number, message_id, command_status)
             self.sendPDU(pdu_resp)
             self.delivery_report(message_id)
             self.boomerang(pdu)
-            self.ESME_(pdu)
 
 
     def delivery_report(self, message_id):
@@ -72,13 +77,6 @@ class SmscServer(Protocol):
         pdu = DeliverSM(sequence_number, short_message = short_message)
         self.sendPDU(pdu)
 
-    def ESME_(self, pdu):
-        if pdu['body']['mandatory_parameters']['short_message'][:5] == "ESME_":
-            pdu = DeliverSM(sequence_number,
-                    command_status = pdu['body']['mandatory_parameters']['short_message'],
-                    short_message = pdu['body']['mandatory_parameters']['short_message'],
-                    destination_addr = destination_addr,
-                    source_addr = source_addr)
 
     def boomerang(self, pdu):
         if pdu['body']['mandatory_parameters']['short_message'] == "boomerang":
