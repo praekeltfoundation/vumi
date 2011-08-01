@@ -13,57 +13,6 @@ from smpp.pdu_inspector import *
 from vumi.utils import *
 
 
-ESME_error_map = {
-    "ESME_ROK"              : "No Error",
-    "ESME_RINVMSGLEN"       : "Message Length is invalid",
-    "ESME_RINVCMDLEN"       : "Command Length is invalid",
-    "ESME_RINVCMDID"        : "Invalid Command ID",
-    "ESME_RINVBNDSTS"       : "Incorrect BIND Status for given command",
-    "ESME_RALYBND"          : "ESME Already in Bound State",
-    "ESME_RINVPRTFLG"       : "Invalid Priority Flag",
-    "ESME_RINVREGDLVFLG"    : "Invalid Registered Delivery Flag",
-    "ESME_RSYSERR"          : "System Error",
-    "ESME_RINVSRCADR"       : "Invalid Source Address",
-    "ESME_RINVDSTADR"       : "Invalid Dest Addr",
-    "ESME_RINVMSGID"        : "Message ID is invalid",
-    "ESME_RBINDFAIL"        : "Bind Failed",
-    "ESME_RINVPASWD"        : "Invalid Password",
-    "ESME_RINVSYSID"        : "Invalid System ID",
-    "ESME_RCANCELFAIL"      : "Cancel SM Failed",
-    "ESME_RREPLACEFAIL"     : "Replace SM Failed",
-    "ESME_RMSGQFUL"         : "Message Queue Full",
-    "ESME_RINVSERTYP"       : "Invalid Service Type",
-    "ESME_RINVNUMDESTS"     : "Invalid number of destinations",
-    "ESME_RINVDLNAME"       : "Invalid Distribution List name",
-    "ESME_RINVDESTFLAG"     : "Destination flag is invalid (submit_multi)",
-    "ESME_RINVSUBREP"       : "Invalid 'submit with replace' request (i.e. submit_sm with replace_if_present_flag set)",
-    "ESME_RINVESMCLASS"     : "Invalid esm_class field data",
-    "ESME_RCNTSUBDL"        : "Cannot Submit to Distribution List",
-    "ESME_RSUBMITFAIL"      : "submit_sm or submit_multi failed",
-    "ESME_RINVSRCTON"       : "Invalid Source address TON",
-    "ESME_RINVSRCNPI"       : "Invalid Source address NPI",
-    "ESME_RINVDSTTON"       : "Invalid Destination address TON",
-    "ESME_RINVDSTNPI"       : "Invalid Destination address NPI",
-    "ESME_RINVSYSTYP"       : "Invalid system_type field",
-    "ESME_RINVREPFLAG"      : "Invalid replace_if_present flag",
-    "ESME_RINVNUMMSGS"      : "Invalid number of messages",
-    "ESME_RTHROTTLED"       : "Throttling error (ESME has exceeded allowed message limits)",
-    "ESME_RINVSCHED"        : "Invalid Scheduled Delivery Time",
-    "ESME_RINVEXPIRY"       : "Invalid message validity period (Expiry time)",
-    "ESME_RINVDFTMSGID"     : "Predefined Message Invalid or Not Found",
-    "ESME_RX_T_APPN"        : "ESME Receiver Temporary App Error Code",
-    "ESME_RX_P_APPN"        : "ESME Receiver Permanent App Error Code",
-    "ESME_RX_R_APPN"        : "ESME Receiver Reject Message Error Code",
-    "ESME_RQUERYFAIL"       : "query_sm request failed",
-    "ESME_RINVOPTPARSTREAM" : "Error in the optional part of the PDU Body.",
-    "ESME_ROPTPARNOTALLWD"  : "Optional Parameter not allowed",
-    "ESME_RINVPARLEN"       : "Invalid Parameter Length.",
-    "ESME_RMISSINGOPTPARAM" : "Expected Optional Parameter missing",
-    "ESME_RINVOPTPARAMVAL"  : "Invalid Optional Parameter Value",
-    "ESME_RDELIVERYFAILURE" : "Delivery Failure (used for data_sm_resp)",
-    "ESME_RUNKNOWNERR"      : "Unknown Error",
-}
-
 class EsmeTransceiver(Protocol):
 
     def __init__(self, seq, config, vumi_options):
@@ -114,28 +63,19 @@ class EsmeTransceiver(Protocol):
         return data
 
 
-    def handleError(self, pdu):
-        pass
-
-
     def handleData(self, data):
         pdu = unpack_pdu(data)
         log.msg('INCOMING <<<<', pdu)
-        command_status = pdu['header']['command_status']
-        if command_status != 'ESME_ROK':
-            log.msg('ESME ERROR: [%s] %s' % (command_status, ESME_error_map[command_status]))
-            self.handleError(pdu)
-        else:
-            if pdu['header']['command_id'] == 'bind_transceiver_resp':
-                self.handle_bind_transceiver_resp(pdu)
-            if pdu['header']['command_id'] == 'submit_sm_resp':
-                self.handle_submit_sm_resp(pdu)
-            if pdu['header']['command_id'] == 'submit_multi_resp':
-                self.handle_submit_multi_resp(pdu)
-            if pdu['header']['command_id'] == 'deliver_sm':
-                self.handle_deliver_sm(pdu)
-            if pdu['header']['command_id'] == 'enquire_link_resp':
-                self.handle_enquire_link_resp(pdu)
+        if pdu['header']['command_id'] == 'bind_transceiver_resp':
+            self.handle_bind_transceiver_resp(pdu)
+        if pdu['header']['command_id'] == 'submit_sm_resp':
+            self.handle_submit_sm_resp(pdu)
+        if pdu['header']['command_id'] == 'submit_multi_resp':
+            self.handle_submit_multi_resp(pdu)
+        if pdu['header']['command_id'] == 'deliver_sm':
+            self.handle_deliver_sm(pdu)
+        if pdu['header']['command_id'] == 'enquire_link_resp':
+            self.handle_enquire_link_resp(pdu)
         log.msg(self.name, 'STATE :', self.state)
 
 
