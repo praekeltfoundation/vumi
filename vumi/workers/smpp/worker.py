@@ -5,7 +5,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from vumi.service import Worker, Consumer, Publisher
 from vumi.message import Message, VUMI_DATE_FORMAT
 from vumi.webapp.api import utils
-from vumi.webapp.api.models import Keyword, SentSMS, Transport
+from vumi.webapp.api.models import Keyword, SentSMS, SMPPResp, Transport
 
 import json
 import time
@@ -108,9 +108,15 @@ class SMSReceiptConsumer(Consumer):
 
     
     def find_sent_sms(self, transport_name, message_id):
-        return SentSMS.objects.get(
-                transport_name__iexact=transport_name,
-                transport_msg_id=message_id)
+        try:
+            # update sent sms objects
+            smpp_resp = SMPPResp.objects.filter(message_id=message_id,
+                    sent_sms__transport_name__iexact=transport_name).latest('created_at')
+            return smpp_resp.sent_sms
+        except SMPPResp.DoesNotExist, e:
+            return SentSMS.objects.get(
+                    transport_name__iexact=transport_name,
+                    transport_msg_id=message_id)
 
 
     def consume_message(self, message):
@@ -191,56 +197,6 @@ class SMSReceiptWorker(Worker):
 
 #==================================================================================================
 
-class SMSAckConsumer(Consumer):
-    exchange_name = "vumi"
-    exchange_type = "direct"
-    durable = True
-    delivery_mode = 2
-    queue_name = "" # overwritten by subclass
-    routing_key = "" # overwritten by subclass
-
-
-    def consume_message(self, message):
-        dictionary = message.payload
-        log.msg("Consuming message:", message)
-        id = dictionary['id']
-        transport_message_id = dictionary['transport_message_id']
-        try:
-            sent_sms = SentSMS.objects.get(id=id)
-            log.msg('Processing ack for', sent_sms, dictionary)
-            sent_sms.transport_msg_id=transport_message_id
-            sent_sms.save() 
-        except Exception, e:
-            log.err()
-        log.msg("Message Ack %s consumed by %s" % (repr(dictionary),self.__class__.__name__))
-
-
-def dynamically_create_ack_consumer(name,**kwargs):
-    log.msg("Dynamically creating ack consumer for %s with %s" % (name,
-        repr(kwargs)))
-    return type("%s_SMSAckConsumer" % name, (SMSAckConsumer,), kwargs)
-
-class SMSAckWorker(Worker):
-    """
-    A worker that writes all ack's to the database
-    """
-
-    @inlineCallbacks
-    def startWorker(self):
-        for transport in Transport.objects.all():
-            log.msg("Starting the SMSAckWorkers for: %s" % transport.name) 
-            yield self.start_consumer(
-                    dynamically_create_ack_consumer(str(transport.name),
-                            routing_key='sms.ack.%s' % transport.name.lower(),
-                            queue_name='sms.ack.%s' % transport.name.lower()
-                        ))
-        
-
-    def stopWorker(self):
-        log.msg("Stopping the SMSAckWorker")
-
-
-#==================================================================================================
 class SMSBatchConsumer(Consumer):
     exchange_name = "vumi"
     exchange_type = "direct"

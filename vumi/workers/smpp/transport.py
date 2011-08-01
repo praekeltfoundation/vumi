@@ -146,18 +146,38 @@ class SmppTransport(Worker):
         redis_key = "%s#%s" % (self.r_prefix, kwargs['sequence_number'])
         log.msg("redis_key = %s" % redis_key)
         sent_sms_id = self.r_server.get(redis_key)
-        transport_msg_id = kwargs['message_id']
         self.r_server.delete(redis_key)
-        log.msg("Mapping transport_msg_id=%s to sent_sms_id=%s" % (transport_msg_id, sent_sms_id))
-        #sent_sms = models.SentSMS.objects.get(id=sent_sms_id)
-        #sent_sms.transport_msg_id = transport_msg_id
-        #sent_sms.save()
-        #print 'sms.ack.%s' % self.config['TRANSPORT_NAME'].lower()
-        self.publisher.publish_message(Message(**{
-            'id': sent_sms_id,
-            'transport_message_id': transport_msg_id
-            }), routing_key = 'sms.ack.%s' % self.config['TRANSPORT_NAME'].lower())
+        kwargs.update({'sent_sms':sent_sms_id})
+        log.msg("SMPPRespForm <- %s" % repr(kwargs))
+        form = forms.SMPPRespForm(kwargs)
+        form.save()
         yield log.msg("SUBMIT SM RESP %s" % repr(kwargs))
+
+
+    @inlineCallbacks
+    def query_sm_group(self, *args, **kwargs):
+        try:
+            self.second_counter += 1
+            if self.second_counter >= 60:
+                self.second_counter = 0
+        except:
+            self.second_counter = 0
+        fromdate = datetime.now() - timedelta(days=1)
+        smppRespList = models.SMPPResp.objects \
+                .filter(created_at__gte=fromdate) \
+                .extra(where=['ROUND(EXTRACT(SECOND FROM created_at)) = %d' % (self.second_counter)]) \
+                .order_by('-created_at')
+        for r in smppRespList:
+            route = get_operator_number(
+                    r.sent_sms.to_msisdn,
+                    self.config['COUNTRY_CODE'],
+                    self.config.get('OPERATOR_PREFIX',{}),
+                    self.config.get('OPERATOR_NUMBER',{}))
+            sequence_number = self.esme_client.query_sm(
+                    message_id = r.message_id,
+                    source_addr = route
+                    )
+        yield log.msg("LOOPING QUERY SM" % repr(kwargs))
 
 
     @inlineCallbacks
