@@ -57,6 +57,9 @@ class SmscServer(Protocol):
     def command_status(self, pdu):
         if pdu['body']['mandatory_parameters']['short_message'][:5] == "ESME_":
             return pdu['body']['mandatory_parameters']['short_message'].split(' ')[0]
+        else:
+            return 'ESME_ROK'
+
 
 
     def handle_submit_sm(self, pdu):
