@@ -32,3 +32,6 @@ pyserial
 pytz
 gunicorn
 python-fusiontables==0.1
+# oauth and simplejson are needed by twittytwister
+oauth
+simplejson
