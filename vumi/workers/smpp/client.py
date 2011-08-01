@@ -121,9 +121,9 @@ class EsmeTransceiver(Protocol):
     def handleData(self, data):
         pdu = unpack_pdu(data)
         log.msg('INCOMING <<<<', pdu)
-        if pdu['header']['command_status'] != 'ESME_ROK':
-            log.msg('ESME ERROR: [%s] %s' % (pdu['header']['command_status'],
-                                            ESME_error_map[pdu['header']['command_status']]))
+        command_status = pdu['header']['command_status']
+        if command_status != 'ESME_ROK':
+            log.msg('ESME ERROR: [%s] %s' % (command_status, ESME_error_map[command_status]))
             self.handleError(pdu)
         else:
             if pdu['header']['command_id'] == 'bind_transceiver_resp':
