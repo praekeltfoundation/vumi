@@ -27,6 +27,7 @@ redis
 -e git+git://github.com/dmaclay/python-smpp.git#egg=python-smpp
 -e git+git://github.com/dustin/twitty-twister#egg=twitty-twister
 -e git+git://github.com/smn/pygsm.git#egg=smn-pygsm
+-e git+git://github.com/smn/trialcoverage.git#egg=trial-coverage
 pyserial
 pytz
 gunicorn
