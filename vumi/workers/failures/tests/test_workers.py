@@ -221,7 +221,7 @@ class Vas2NetsFailureWorkerTestCase(unittest.TestCase):
 
     def test_get_retry_two_due_different_times(self):
         """
-        Get a retry from redis when we have two due.
+        Get a retry from redis when we have two due at different times.
         """
         self.worker.store_retry(self.store_failure(), 0, now=time.time()-5)
         self.worker.store_retry(self.store_failure(), 0, now=time.time()-15)
@@ -233,7 +233,7 @@ class Vas2NetsFailureWorkerTestCase(unittest.TestCase):
 
     def test_get_retry_one_due_one_future(self):
         """
-        Get a retry from redis when we have two due.
+        Get a retry from redis when we have one due and one in the future.
         """
         self.worker.store_retry(self.store_failure(), 0, now=time.time()-5)
         self.worker.store_retry(self.store_failure(), 0)
