@@ -1,3 +1,4 @@
+import time
 import fnmatch
 from datetime import datetime, timedelta
 
@@ -5,6 +6,9 @@ from twisted.trial import unittest
 
 from vumi.tests.utils import get_stubbed_worker
 from vumi.workers.failures.workers import Vas2NetsFailureWorker
+
+
+RETRY_TIMESTAMPS_KEY = "failures:vas2nets#retry_timestamps"
 
 
 class FakeRedis(object):
@@ -51,9 +55,15 @@ class Vas2NetsFailureWorkerTestCase(unittest.TestCase):
         self.assertEqual(expected, self.worker.r_server.zcard(key))
 
     def assert_stored_timestamps(self, *expected):
-        retry_timestamps_key = "failures:vas2nets#retry_timestamps"
         self.assertEqual(list(expected),
-                         self.worker.r_server.zrange(retry_timestamps_key, 0, -1))
+                         self.worker.r_server.zrange(RETRY_TIMESTAMPS_KEY, 0, -1))
+
+    def store_failure(self, reason=None, message=None):
+        if not reason:
+            reason = "bad stuff happened"
+        if not message:
+            message = {'message': 'foo', 'reason': reason}
+        return self.worker.store_failure(message, reason)
 
     def test_redis_access(self):
         """
@@ -164,13 +174,72 @@ class Vas2NetsFailureWorkerTestCase(unittest.TestCase):
         Store a retry in redis and make sure we can get at it again.
         """
         timestamp = "1970-01-01T00:00:05"
-        retry_timestamps_key = "failures:vas2nets#retry_timestamps"
         retry_key = "failures:vas2nets#retry_keys." + timestamp
         key = self.worker.store_failure({'message': 'foo'}, "bad stuff happened")
-        self.assert_zcard(0, retry_timestamps_key)
+        self.assert_zcard(0, RETRY_TIMESTAMPS_KEY)
+
         self.worker.store_retry(key, 0, now=0)
-        self.assert_zcard(1, retry_timestamps_key)
+        self.assert_zcard(1, RETRY_TIMESTAMPS_KEY)
         self.assertEqual([timestamp],
-                         self.worker.r_server.zrange(retry_timestamps_key, 0, 0))
+                         self.worker.r_server.zrange(RETRY_TIMESTAMPS_KEY, 0, 0))
         self.assertEqual(set([key]), self.worker.r_server.smembers(retry_key))
+
+    def test_get_retry_none(self):
+        """
+        If there are no stored retries, get None.
+        """
+        self.assertEqual(None, self.worker.get_next_retry())
+
+    def test_get_retry_future(self):
+        """
+        If there are no retries due, get None.
+        """
+        self.worker.store_retry(self.store_failure(), 10)
+        self.assert_zcard(1, RETRY_TIMESTAMPS_KEY)
+        self.assertEqual(None, self.worker.get_next_retry())
+        self.assert_zcard(1, RETRY_TIMESTAMPS_KEY)
+
+    def test_get_retry_one_due(self):
+        """
+        Get a retry from redis when we have one due.
+        """
+        self.worker.store_retry(self.store_failure(), 0, now=time.time()-5)
+        self.assert_zcard(1, RETRY_TIMESTAMPS_KEY)
+        self.assertNotEqual(None, self.worker.get_next_retry())
+        self.assert_zcard(0, RETRY_TIMESTAMPS_KEY)
+        self.assertEqual(None, self.worker.get_next_retry())
+
+    def test_get_retry_two_due(self):
+        """
+        Get a retry from redis when we have two due.
+        """
+        self.worker.store_retry(self.store_failure(), 0, now=time.time()-5)
+        self.worker.store_retry(self.store_failure(), 0, now=time.time()-5)
+        self.assert_zcard(1, RETRY_TIMESTAMPS_KEY)
+        self.assertNotEqual(None, self.worker.get_next_retry())
+        self.assert_zcard(1, RETRY_TIMESTAMPS_KEY)
+
+    def test_get_retry_two_due_different_times(self):
+        """
+        Get a retry from redis when we have two due.
+        """
+        self.worker.store_retry(self.store_failure(), 0, now=time.time()-5)
+        self.worker.store_retry(self.store_failure(), 0, now=time.time()-15)
+        self.assert_zcard(2, RETRY_TIMESTAMPS_KEY)
+        self.assertNotEqual(None, self.worker.get_next_retry())
+        self.assert_zcard(1, RETRY_TIMESTAMPS_KEY)
+        self.assertNotEqual(None, self.worker.get_next_retry())
+        self.assert_zcard(0, RETRY_TIMESTAMPS_KEY)
+
+    def test_get_retry_one_due_one_future(self):
+        """
+        Get a retry from redis when we have two due.
+        """
+        self.worker.store_retry(self.store_failure(), 0, now=time.time()-5)
+        self.worker.store_retry(self.store_failure(), 0)
+        self.assert_zcard(2, RETRY_TIMESTAMPS_KEY)
+        self.assertNotEqual(None, self.worker.get_next_retry())
+        self.assert_zcard(1, RETRY_TIMESTAMPS_KEY)
+        self.assertEqual(None, self.worker.get_next_retry())
+        self.assert_zcard(1, RETRY_TIMESTAMPS_KEY)
 

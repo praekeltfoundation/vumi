@@ -25,6 +25,7 @@ class Vas2NetsFailureWorker(Worker):
         log.msg("Connected to Redis")
         self.r_prefix = ":".join(["failures", self.config['transport_name']])
         log.msg("r_prefix = %s" % self.r_prefix)
+        self._retry_timestamps_key = self.r_key("retry_timestamps")
 
     def r_key(self, key):
         return "#".join((self.r_prefix, key))
@@ -69,7 +70,7 @@ class Vas2NetsFailureWorker(Worker):
 
     def store_read_timestamp(self, timestamp):
         score = time.mktime(time.strptime(timestamp, "%Y-%m-%dT%H:%M:%S"))
-        self.r_server.zadd(self.r_key("retry_timestamps"), **{timestamp: score})
+        self.r_server.zadd(self._retry_timestamps_key, **{timestamp: score})
 
     def get_next_write_timestamp(self, delta, now=None):
         if now is None:
@@ -82,7 +83,18 @@ class Vas2NetsFailureWorker(Worker):
         if now is None:
             now = int(time.time())
         timestamp = datetime.utcfromtimestamp(now).isoformat().split('.')[0]
-        next_timestamp = self.r_server.zrange(self.r_key("retry_timestamps"), 0, 0)
+        next_timestamp = self.r_server.zrange(self._retry_timestamps_key, 0, 0)
         if next_timestamp and next_timestamp[0] <= timestamp:
             return next_timestamp[0]
         return None
+
+    def get_next_retry(self, now=None):
+        timestamp = self.get_next_read_timestamp(now)
+        if not timestamp:
+            return None
+        bucket_key = self.r_key("retry_keys." + timestamp)
+        failure_key = self.r_server.spop(bucket_key)
+        if self.r_server.scard(bucket_key) < 1:
+            self.r_server.zrem(self._retry_timestamps_key, timestamp)
+        return failure_key
+
