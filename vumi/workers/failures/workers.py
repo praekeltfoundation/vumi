@@ -11,9 +11,9 @@ from vumi.service import Worker
 from vumi.utils import get_deploy_int
 
 
-class Vas2NetsFailureWorker(Worker):
+class FailureWorker(Worker):
     """
-    Handler for transport failures in the Vas2Nets transport.
+    Base class for transport failure handlers.
     """
 
     GRANULARITY = 5 # seconds
@@ -98,3 +98,14 @@ class Vas2NetsFailureWorker(Worker):
             self.r_server.zrem(self._retry_timestamps_key, timestamp)
         return failure_key
 
+    def handle_failure(self, message, reason):
+        raise NotImplementedError()
+
+
+class Vas2NetsFailureWorker(FailureWorker):
+    """
+    Handler for transport failures in the Vas2Nets transport.
+    """
+
+    def handle_failure(self, message, reason):
+        self.store_failure(message, reason)

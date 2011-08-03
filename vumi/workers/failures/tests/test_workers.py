@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from twisted.trial import unittest
 
 from vumi.tests.utils import get_stubbed_worker
-from vumi.workers.failures.workers import Vas2NetsFailureWorker
+from vumi.workers.failures.workers import FailureWorker
 
 
 RETRY_TIMESTAMPS_KEY = "failures:vas2nets#retry_timestamps"
@@ -36,13 +36,13 @@ def mktimestamp(delta=0):
     return timestamp.isoformat().split('.')[0]
 
 
-class Vas2NetsFailureWorkerTestCase(unittest.TestCase):
+class FailureWorkerTestCase(unittest.TestCase):
 
     def setUp(self):
         self.config = {
             'transport_name': 'vas2nets'
         }
-        self.worker = get_stubbed_worker(Vas2NetsFailureWorker, self.config)
+        self.worker = get_stubbed_worker(FailureWorker, self.config)
         self.worker.startWorker()
         # self.worker.r_server = FakeRedis()
         self.worker.r_server.flushdb()
