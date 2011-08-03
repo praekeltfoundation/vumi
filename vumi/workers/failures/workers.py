@@ -88,7 +88,7 @@ class FailureWorker(Worker):
             return next_timestamp[0]
         return None
 
-    def get_next_retry(self, now=None):
+    def get_next_retry_key(self, now=None):
         timestamp = self.get_next_read_timestamp(now)
         if not timestamp:
             return None
@@ -101,6 +101,11 @@ class FailureWorker(Worker):
     def handle_failure(self, message, reason):
         raise NotImplementedError()
 
+    def process_message(self, failure_message):
+        message = failure_message.payload['message']
+        reason = failure_message.payload['reason']
+        self.handle_failure(message, reason)
+
 
 class Vas2NetsFailureWorker(FailureWorker):
     """
@@ -109,3 +114,4 @@ class Vas2NetsFailureWorker(FailureWorker):
 
     def handle_failure(self, message, reason):
         self.store_failure(message, reason)
+

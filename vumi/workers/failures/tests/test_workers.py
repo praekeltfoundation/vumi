@@ -184,62 +184,62 @@ class FailureWorkerTestCase(unittest.TestCase):
                          self.worker.r_server.zrange(RETRY_TIMESTAMPS_KEY, 0, 0))
         self.assertEqual(set([key]), self.worker.r_server.smembers(retry_key))
 
-    def test_get_retry_none(self):
+    def test_get_retry_key_none(self):
         """
         If there are no stored retries, get None.
         """
-        self.assertEqual(None, self.worker.get_next_retry())
+        self.assertEqual(None, self.worker.get_next_retry_key())
 
-    def test_get_retry_future(self):
+    def test_get_retry_key_future(self):
         """
         If there are no retries due, get None.
         """
         self.worker.store_retry(self.store_failure(), 10)
         self.assert_zcard(1, RETRY_TIMESTAMPS_KEY)
-        self.assertEqual(None, self.worker.get_next_retry())
+        self.assertEqual(None, self.worker.get_next_retry_key())
         self.assert_zcard(1, RETRY_TIMESTAMPS_KEY)
 
-    def test_get_retry_one_due(self):
+    def test_get_retry_key_one_due(self):
         """
         Get a retry from redis when we have one due.
         """
         self.worker.store_retry(self.store_failure(), 0, now=time.time()-5)
         self.assert_zcard(1, RETRY_TIMESTAMPS_KEY)
-        self.assertNotEqual(None, self.worker.get_next_retry())
+        self.assertNotEqual(None, self.worker.get_next_retry_key())
         self.assert_zcard(0, RETRY_TIMESTAMPS_KEY)
-        self.assertEqual(None, self.worker.get_next_retry())
+        self.assertEqual(None, self.worker.get_next_retry_key())
 
-    def test_get_retry_two_due(self):
+    def test_get_retry_key_two_due(self):
         """
         Get a retry from redis when we have two due.
         """
         self.worker.store_retry(self.store_failure(), 0, now=time.time()-5)
         self.worker.store_retry(self.store_failure(), 0, now=time.time()-5)
         self.assert_zcard(1, RETRY_TIMESTAMPS_KEY)
-        self.assertNotEqual(None, self.worker.get_next_retry())
+        self.assertNotEqual(None, self.worker.get_next_retry_key())
         self.assert_zcard(1, RETRY_TIMESTAMPS_KEY)
 
-    def test_get_retry_two_due_different_times(self):
+    def test_get_retry_key_two_due_different_times(self):
         """
         Get a retry from redis when we have two due at different times.
         """
         self.worker.store_retry(self.store_failure(), 0, now=time.time()-5)
         self.worker.store_retry(self.store_failure(), 0, now=time.time()-15)
         self.assert_zcard(2, RETRY_TIMESTAMPS_KEY)
-        self.assertNotEqual(None, self.worker.get_next_retry())
+        self.assertNotEqual(None, self.worker.get_next_retry_key())
         self.assert_zcard(1, RETRY_TIMESTAMPS_KEY)
-        self.assertNotEqual(None, self.worker.get_next_retry())
+        self.assertNotEqual(None, self.worker.get_next_retry_key())
         self.assert_zcard(0, RETRY_TIMESTAMPS_KEY)
 
-    def test_get_retry_one_due_one_future(self):
+    def test_get_retry_key_one_due_one_future(self):
         """
         Get a retry from redis when we have one due and one in the future.
         """
         self.worker.store_retry(self.store_failure(), 0, now=time.time()-5)
         self.worker.store_retry(self.store_failure(), 0)
         self.assert_zcard(2, RETRY_TIMESTAMPS_KEY)
-        self.assertNotEqual(None, self.worker.get_next_retry())
+        self.assertNotEqual(None, self.worker.get_next_retry_key())
         self.assert_zcard(1, RETRY_TIMESTAMPS_KEY)
-        self.assertEqual(None, self.worker.get_next_retry())
+        self.assertEqual(None, self.worker.get_next_retry_key())
         self.assert_zcard(1, RETRY_TIMESTAMPS_KEY)
 
