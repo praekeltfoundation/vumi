@@ -23,6 +23,8 @@ Set the version in the release branch setup.py::
 
 Set the version number in the develop branch *if necessary*.
 
+Push your changes to Github.
+
 
 Tag the release
 ---------------
@@ -51,4 +53,4 @@ Merge to master *if this is a tag off the latest release series*::
     $ git merge vumi-$VER
     $ git commit -m "Merge $VER to master."
 
-Declare victory.
+Push your changes to Github. Declare victory.
