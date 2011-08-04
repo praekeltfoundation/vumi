@@ -4,6 +4,7 @@ from datetime import datetime
 
 from vumi.workers.smpp.transport import SmppTransport
 from vumi.webapp.api import forms
+from vumi.errors import VumiError
 
 class TopicSmppTransport(SmppTransport):
     
@@ -38,5 +39,9 @@ class TopicSmppTransport(SmppTransport):
                 }
         log.msg("SMPPLinkForm", repr(formdict))
         form = forms.SMPPLinkForm(formdict)
-        form.save()
-        return True
+        if form.is_valid():
+            form.save()
+            return True
+        else:
+            log.msg(form.errors)
+            raise VumiError, form.errors
