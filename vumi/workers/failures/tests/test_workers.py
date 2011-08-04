@@ -81,12 +81,12 @@ class FailureWorkerTestCase(unittest.TestCase):
         """
         Store a failure in redis and make sure we can get at it again.
         """
-        key = self.store_failure()
+        key = self.store_failure(reason="reason")
         self.assertEqual(set([key]), self.worker.get_failure_keys())
         self.assertEqual({
-                "message": str({"message": "foo"}),
+                "message": str({"message": "foo", "reason": "reason"}),
                 "retry_delay": "None",
-                "reason": "bad stuff happened",
+                "reason": "reason",
                 }, self.redis.hgetall(key))
 
     def test_write_timestamp(self):
