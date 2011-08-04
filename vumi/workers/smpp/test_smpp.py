@@ -73,9 +73,7 @@ class SMSReceiptTestCase(TestCase):
     
     def test_find_sent_sms(self):
         """Given a transport and a message_id it should find the SentSMS record
-        that they belong to. This is hacky as there really shouldn't be two
-        tables to check for this message_id lookup stuff"""
-        
+        that they belong to."""
         user = User.objects.create(username='vumi')
         sent_sms = SentSMS.objects.create(user=user,
             transport_name='TransportName', transport_msg_id='message_id')
