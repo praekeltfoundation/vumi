@@ -34,7 +34,7 @@ class vumi::packages {
     apt::package { "libpq-dev": ensure => "8.4.8-0ubuntu0.10.04" }
     apt::package { "rabbitmq-server": ensure => "1.7.2-1ubuntu1" }
     apt::package { "git-core": ensure => "1:1.7.0.4-1ubuntu0.2" }
-    apt::package { "openjdk-6-jre-headless": ensure => "6b20-1.9.7-0ubuntu1~10.04.1" }
+    apt::package { "openjdk-6-jre-headless": ensure => "6b20-1.9.8-0ubuntu1~10.04.1" }
     apt::package { "libcurl4-openssl-dev": ensure => "7.19.7-1ubuntu1" }
     apt::package { "redis-server": ensure => "2:1.2.0-1" }
 }
