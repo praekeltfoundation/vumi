@@ -27,10 +27,11 @@ class MetricsConsumer(Consumer):
 
 
 def timedelta_millis(td):
-    millis = 1000*3600*24*td.days
-    millis += 1000*td.seconds
-    millis += td.microseconds/1000.0
+    millis = 1000 * 3600 * 24 * td.days
+    millis += 1000 * td.seconds
+    millis += td.microseconds / 1000.0
     return millis
+
 
 class MetricsPublisher(Publisher):
     exchange_name = "vumi.metrics"
@@ -62,10 +63,12 @@ class MetricsPublisher(Publisher):
         """
         if timer_name not in self.timers:
             # TODO: Find a way to dedup this
-            raise ValueError("Trying to stop timer that hasn't been started: %s" % (timer_name))
+            raise ValueError("Trying to stop timer that hasn't been"
+                             " started: %s" % (timer_name))
         timer = self._get_timer(timer_name)
         if not len(timer['stop']) < len(timer['start']):
-            raise ValueError("Trying to stop timer that hasn't been started: %s" % (timer_name))
+            raise ValueError("Trying to stop timer that hasn't been"
+                             " started: %s" % (timer_name))
         timer['stop'].append(datetime.utcnow())
 
     def send_metrics(self):
@@ -93,8 +96,9 @@ class MetricsPublisher(Publisher):
                 # TODO: Something appropriate
                 pass
             times = zip(start, stop)
-            total_millis = sum(timedelta_millis(e-s) for s, e in times)
-            metrics.append({'name': name, 'count': len(times), 'time': total_millis})
+            total_millis = sum(timedelta_millis(e - s) for s, e in times)
+            metrics.append({'name': name, 'count': len(times),
+                            'time': total_millis})
         return metrics
 
     def _get_timer(self, timer_name):
@@ -103,7 +107,6 @@ class MetricsPublisher(Publisher):
     def _make_message(self, metrics):
         msg = MetricsMessage('metrics', 'metrics generator', '0', metrics)
         return msg.to_vumi_message()
-
 
 
 class GraphitePublisher(Publisher):
@@ -122,13 +125,15 @@ class MetricsCollector(Worker):
     @inlineCallbacks
     def startWorker(self):
         log.msg("Starting the MetricsCollector with config: %s" % self.config)
-        self.consumer = yield self.start_consumer(MetricsConsumer, self.consume_metrics)
+        self.consumer = yield self.start_consumer(MetricsConsumer,
+                                                  self.consume_metrics)
 
     def consume_metrics(self, message):
         msg = MetricsMessage.from_dict(message.payload)
         for name, metrics in msg.metrics.items():
             self.metrics.setdefault(name, []).extend(metrics)
-        log.msg("Collected: " + ", ".join("%s=%s" % m for m in self.metrics_stats()))
+        log.msg("Collected: " + ", ".join("%s=%s" % m for m in
+                                          self.metrics_stats()))
 
     def metrics_stats(self, *keys):
         if not keys:
@@ -143,9 +148,11 @@ class GraphiteMetricsCollector(Worker):
 
     @inlineCallbacks
     def startWorker(self):
-        log.msg("Starting the GraphiteMetricsCollector with config: %s" % self.config)
+        log.msg("Starting the GraphiteMetricsCollector with"
+                " config: %s" % self.config)
         self.graphite_publisher = yield self.start_publisher(GraphitePublisher)
-        self.consumer = yield self.start_consumer(MetricsConsumer, self.consume_metrics)
+        self.consumer = yield self.start_consumer(MetricsConsumer,
+                                                  self.consume_metrics)
 
     def process_timestamp(self, timestamp):
         unix_timestamp = time.mktime(timestamp.timetuple())

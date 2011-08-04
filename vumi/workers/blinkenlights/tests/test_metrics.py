@@ -1,7 +1,6 @@
 from datetime import datetime, timedelta
 
 from twisted.trial.unittest import TestCase
-from twisted.internet.defer import inlineCallbacks
 
 from vumi.workers.blinkenlights import metrics
 
@@ -26,6 +25,7 @@ class MetricsPublisherTestCase(TestCase):
     def _get_testable_publisher(self):
         pub = metrics.MetricsPublisher()
         pub._published = []
+
         def _pm(msg):
             pub._published.append(msg)
         pub.publish_message = _pm
@@ -64,20 +64,25 @@ class MetricsPublisherTestCase(TestCase):
         pub.start_timer('foo')
         self.assert_pub_metrics(pub, {}, {'foo': {'start': [t], 'stop': []}})
         pub.start_timer('foo')
-        self.assert_pub_metrics(pub, {}, {'foo': {'start': [t, t], 'stop': []}})
+        self.assert_pub_metrics(pub, {}, {'foo': {'start': [t, t],
+                                                  'stop': []}})
         pub.stop_timer('foo')
-        self.assert_pub_metrics(pub, {}, {'foo': {'start': [t, t], 'stop': [t]}})
+        self.assert_pub_metrics(pub, {}, {'foo': {'start': [t, t],
+                                                  'stop': [t]}})
         pub.start_timer('bar')
-        self.assert_pub_metrics(pub, {}, {'foo': {'start': [t, t], 'stop': [t]},
-                                          'bar': {'start': [t], 'stop': []}})
+        self.assert_pub_metrics(pub, {}, {'foo': {'start': [t, t],
+                                                  'stop': [t]},
+                                          'bar': {'start': [t],
+                                                  'stop': []}})
         pub.stop_timer('foo')
-        self.assert_pub_metrics(pub, {}, {'foo': {'start': [t, t], 'stop': [t, t]},
+        self.assert_pub_metrics(pub, {}, {'foo': {'start': [t, t],
+                                                  'stop': [t, t]},
                                           'bar': {'start': [t], 'stop': []}})
         pub.stop_timer('bar')
-        self.assert_pub_metrics(pub, {}, {'foo': {'start': [t, t], 'stop': [t, t]},
+        self.assert_pub_metrics(pub, {}, {'foo': {'start': [t, t],
+                                                  'stop': [t, t]},
                                           'bar': {'start': [t], 'stop': [t]}})
         self.assertRaises(ValueError, pub.stop_timer, 'foo')
-
 
     def test_build_metrics(self):
         """

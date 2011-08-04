@@ -4,6 +4,7 @@ from datetime import datetime
 
 from vumi import message as vumi_message
 
+
 class Message(object):
     """
     Blinkenlights message object. This sits inside a Vumi message, and
@@ -21,7 +22,8 @@ class Message(object):
         "timestamp",
         )
 
-    def __init__(self, message_type, source_name, source_id, payload, timestamp=None):
+    def __init__(self, message_type, source_name, source_id, payload,
+                 timestamp=None):
         self.source_name = source_name
         self.source_id = source_id
         self.message_type = message_type
@@ -33,7 +35,8 @@ class Message(object):
             timestamp = datetime(*timestamp)
         self.timestamp = timestamp
         if self.MESSAGE_TYPE and self.MESSAGE_TYPE != self.message_type:
-            raise ValueError("Incorrect message type. Expected '%s', got '%s'." % (self.MESSAGE_TYPE, self.message_type))
+            raise ValueError("Incorrect message type. Expected '%s', got"
+                             " '%s'." % (self.MESSAGE_TYPE, self.message_type))
         self.process_payload()
 
     def process_payload(self):
@@ -41,7 +44,8 @@ class Message(object):
 
     def to_dict(self):
         message = {'message_version': self.VERSION}
-        message.update(dict((field, getattr(self, field)) for field in self.REQUIRED_FIELDS))
+        message.update(dict((field, getattr(self, field))
+                            for field in self.REQUIRED_FIELDS))
         # Massage the timestamp into the serialised list we use
         message['timestamp'] = list(self.timestamp.timetuple()[:6])
         return message
@@ -51,10 +55,11 @@ class Message(object):
 
     @classmethod
     def from_dict(cls, message):
-        message = message.copy() # So we can modify it safely
+        message = message.copy()  # So we can modify it safely
         version = message.pop('message_version')
         if version != cls.VERSION:
-            raise ValueError("Incorrect message version. Expected '%s', got '%s'." % (cls.VERSION, version))
+            raise ValueError("Incorrect message version. Expected '%s', got"
+                             " '%s'." % (cls.VERSION, version))
         for field in cls.REQUIRED_FIELDS:
             if field not in message:
                 raise ValueError("Missing mandatory field '%s'." % (field,))
@@ -91,6 +96,6 @@ class MetricsMessage(Message):
             name = metric['name']
             count = metric['count']
             time = metric.get('time', None)
-            tags = dict(i for i in metric.items() if i[0] not in ('name', 'count', 'time'))
+            tags = dict(i for i in metric.items()
+                        if i[0] not in ('name', 'count', 'time'))
             self.metrics.setdefault(name, []).append((count, time, tags))
-
