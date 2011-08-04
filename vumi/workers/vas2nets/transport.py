@@ -3,7 +3,6 @@
 
 from twisted.web import http
 from twisted.web.resource import Resource
-from twisted.web.server import NOT_DONE_YET
 from twisted.web.client import Agent
 from twisted.web.http_headers import Headers
 from twisted.python import log
@@ -155,6 +154,7 @@ class Vas2NetsTransport(Worker):
     @inlineCallbacks
     def startWorker(self):
         """called by the Worker class when the AMQP connections been established"""
+        yield self.setup_failure_publisher()
         self.publisher = yield self.publish_to('sms.inbound.%(transport_name)s.fallback' % self.config)
         self.consumer = yield self.consume('sms.outbound.%(transport_name)s' % self.config, 
                                     self.handle_outbound_message)
@@ -173,10 +173,18 @@ class Vas2NetsTransport(Worker):
             ],
             self.config['web_port']
         )
-        
-    
-    @inlineCallbacks
+
     def handle_outbound_message(self, message):
+        """Handle messages arriving meant for delivery via vas2nets"""
+        def _send_failure(f):
+            self.send_failure(message, f.getTraceback())
+            return f
+        d = self._handle_outbound_message(message)
+        d.addErrback(_send_failure)
+        return d
+
+    @inlineCallbacks
+    def _handle_outbound_message(self, message):
         """handle messages arriving over AMQP meant for delivery via vas2nets"""
         data = message.payload
         
@@ -233,4 +241,16 @@ class Vas2NetsTransport(Worker):
     def stopWorker(self):
         """shutdown"""
         self.receipt_resource.stopListening()
-    
+
+    @inlineCallbacks
+    def setup_failure_publisher(self):
+        rkey = 'sms.outbound.%(transport_name)s.failures' % self.config
+        self.failure_publisher = yield self.publish_to(rkey)
+
+    def send_failure(self, message, reason):
+        """Send a failure report."""
+        try:
+            self.failure_publisher.publish_message(Message(message=message.payload,
+                                                           reason=reason))
+        except Exception, e:
+            log.msg("Error publishing failure:", message, reason, e)

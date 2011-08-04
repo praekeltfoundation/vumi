@@ -207,7 +207,7 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
             'message': 'hello world'
         }))
         
-        channel = transport._amqp_client.channels[0]
+        channel = transport._amqp_client.channels[1]
         kwargs = channel.publish_log[0]
         content = kwargs['content']
         routing_key = kwargs['routing_key']
@@ -240,22 +240,38 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
             'password': 'password',
             'owner': 'owner',
             'service': 'service',
-            'subservice': 'subservice'
+            'subservice': 'subservice',
+            'web_receive_path': '/receive',
+            'web_receipt_path': '/receipt',
+            'web_port': 9998,
         })
-        
-        deferred = transport.handle_outbound_message(Message(**{
+        yield transport.startWorker()
+
+        # Monkeypatch the failure message publisher
+        def _collect_failure(msg):
+            failure_msgs.append(msg)
+        failure_msgs = []
+        transport.failure_publisher.publish_message = _collect_failure
+
+        msg = {
             'to_msisdn': '+27761234567',
             'from_msisdn': '9292',
             'id': '1',
             'reply_to': '',
             'transport_network_id': 'network-id',
             'message': 'hello world'
-        }))
+        }
+        deferred = transport.handle_outbound_message(Message(**msg))
         self.assertFailure(deferred, Vas2NetsTransportError)
         yield deferred
-        # nothing should've been published and no channels should've been made
-        self.assertEquals({}, transport._amqp_client.channels)
-        stubbed_worker.stopWorker()
-    
+        self.assertEqual(1, len(failure_msgs))
+        f_message = failure_msgs[0].payload['message']
+        f_reason = failure_msgs[0].payload['reason']
+        self.assertEqual(msg, f_message)
+        self.assertTrue("Vas2NetsTransportError: No SmsId Header" in f_reason)
+
+        yield transport.stopWorker()
+        yield stubbed_worker.stopWorker()
+
     def test_normalize_outbound_msisdn(self):
         self.assertEquals(normalize_outbound_msisdn('+27761234567'), '0027761234567')
