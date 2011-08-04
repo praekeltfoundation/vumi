@@ -26,7 +26,7 @@ class UglyModelTestCase(TestCase):
     def ricb(self, _r, *args, **kw):
         return self.db.runInteraction(*args, **kw)
 
-    def _sdb(self, dbname):
+    def _sdb(self, dbname, **kw):
         self._dbname = dbname
         try:
             get_db(dbname)
@@ -34,7 +34,9 @@ class UglyModelTestCase(TestCase):
         except:
             pass
         # TODO: Pull this out into some kind of config?
-        self.db = setup_db(dbname, user='vumi', password='vumi', database=dbname)
+        self.db = setup_db(dbname, database=dbname,
+                           user=kw.get('dbuser', 'vumi'),
+                           password=kw.get('dbpassword', 'vumi'))
         return self.db.runQuery("SELECT 1")
 
     def setup_db(self, *tables, **kw):
