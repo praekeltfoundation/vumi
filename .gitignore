@@ -24,3 +24,6 @@ dist/*
 htmlcov/
 coverage-html/
 .ftclient_authtoken
+coverage.xml
+test_results.xml
+django_test_results.xml
