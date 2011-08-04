@@ -3,6 +3,7 @@
 
 from twisted.web import http
 from twisted.web.resource import Resource
+from twisted.web.server import NOT_DONE_YET
 from twisted.web.client import Agent
 from twisted.web.http_headers import Headers
 from twisted.python import log
@@ -35,8 +36,8 @@ def validate_characters(chars):
         u'0123456789',
         u'äöüÄÖÜàùòìèé§Ññ£$@',
         u' ',
-        u'/?!#%&()*+,-:;<=>.',
-        u'\n\r'
+        u'/?!#%&()*+,-:;<=>."\'',
+        u'\n\r',
     ])
     double_byte_set = u'|{}[]€\~^'
     superset = single_byte_set + double_byte_set
@@ -65,13 +66,13 @@ class ReceiveSMSResource(Resource):
     def __init__(self, config, publisher):
         self.config = config
         self.publisher = publisher
-    
-    def render(self, request):
-        log.msg('got hit with %s' % request.args)
+
+    @inlineCallbacks
+    def do_render(self, request):
         request.setResponseCode(http.OK)
         request.setHeader('Content-Type', 'text/plain')
         try:
-            self.publisher.publish_message(Message(**{
+            yield self.publisher.publish_message(Message(**{
                 'transport_message_id': request.args['messageid'][0],
                 'transport_timestamp': iso8601(request.args['time'][0]),
                 'transport_network_id': request.args['provider'][0],
@@ -80,30 +81,36 @@ class ReceiveSMSResource(Resource):
                 'from_msisdn': normalize_msisdn(request.args['sender'][0]),
                 'message': request.args['text'][0]
             }), routing_key='sms.inbound.%s.%s' % (
-                self.config.get('transport_name'), 
+                self.config.get('transport_name'),
                 request.args['destination'][0]
             ))
-            return ''
+            log.msg("Enqueued.")
         except KeyError, e:
             request.setResponseCode(http.BAD_REQUEST)
             msg = "Need more request keys to complete this request. \n\n" \
                     "Missing request key: %s" % e
             log.msg('Returning %s: %s' % (http.BAD_REQUEST, msg))
-            return msg
+            request.write(msg)
         except ValueError, e:
             request.setResponseCode(http.BAD_REQUEST)
             msg = "ValueError: %s" % e
             log.msg('Returning %s: %s' % (http.BAD_REQUEST, msg))
-            return msg
-            
+            request.write(msg)
+        request.finish()
+
+    def render(self, request):
+        self.do_render(request)
+        return NOT_DONE_YET
+
 
 class DeliveryReceiptResource(Resource):
     isLeaf = True
     def __init__(self, config, publisher):
         self.config = config
         self.publisher = publisher
-    
-    def render(self, request):
+
+    @inlineCallbacks
+    def do_render(self, request):
         log.msg('got hit with %s' % request.args)
         try:
             request.setResponseCode(http.OK)
@@ -117,18 +124,23 @@ class DeliveryReceiptResource(Resource):
                 'to_msisdn': normalize_msisdn(request.args['sender'][0]),
                 'id': request.args['messageid'][0]
             }), routing_key='sms.receipt.%(transport_name)s' % self.config)
-            return ''
         except KeyError, e:
             request.setResponseCode(http.BAD_REQUEST)
             msg = "Need more request keys to complete this request. \n\n" \
                     "Missing request key: %s" % e
             log.msg('Returning %s: %s' % (http.BAD_REQUEST, msg))
-            return msg
+            request.write(msg)
         except ValueError, e:
             request.setResponseCode(http.BAD_REQUEST)
             msg = "ValueError: %s" % e
             log.msg('Returning %s: %s' % (http.BAD_REQUEST, msg))
-            return msg
+            request.write(msg)
+        request.finish()
+
+    def render(self, request):
+        self.do_render(request)
+        return NOT_DONE_YET
+
 
 class HealthResource(Resource):
     isLeaf = True
@@ -164,7 +176,7 @@ class Vas2NetsTransport(Worker):
         # 1 transport = 1 connection, 10 transports is max 10 connections at a time.
         # and make it apply only to this channel
         self.consumer.channel.basic_qos(0,int(self.config.get('throttle', 1)), False)
-        
+
         self.receipt_resource = yield self.start_web_resources(
             [
                 (ReceiveSMSResource(self.config, self.publisher), self.config['web_receive_path']),
