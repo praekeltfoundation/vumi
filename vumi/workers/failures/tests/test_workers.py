@@ -46,17 +46,18 @@ class FailureWorkerTestCase(unittest.TestCase):
         self.worker.startWorker()
         # self.worker.r_server = FakeRedis()
         self.worker.r_server.flushdb()
+        self.redis = self.worker.r_server
 
     def assert_write_timestamp(self, expected, delta, now):
         self.assertEqual(expected,
                          self.worker.get_next_write_timestamp(delta, now=now))
 
     def assert_zcard(self, expected, key):
-        self.assertEqual(expected, self.worker.r_server.zcard(key))
+        self.assertEqual(expected, self.redis.zcard(key))
 
     def assert_stored_timestamps(self, *expected):
         self.assertEqual(list(expected),
-                         self.worker.r_server.zrange(RETRY_TIMESTAMPS_KEY, 0, -1))
+                         self.redis.zrange(RETRY_TIMESTAMPS_KEY, 0, -1))
 
     def store_failure(self, reason=None, message=None):
         if not reason:
@@ -71,22 +72,22 @@ class FailureWorkerTestCase(unittest.TestCase):
         get it out again.
         """
         self.assertEqual(None, self.worker.r_get("foo"))
-        self.assertEqual([], self.worker.r_server.keys())
+        self.assertEqual([], self.redis.keys())
         self.worker.r_set("foo", "bar")
         self.assertEqual("bar", self.worker.r_get("foo"))
-        self.assertEqual(['failures:vas2nets#foo'], self.worker.r_server.keys())
+        self.assertEqual(['failures:vas2nets#foo'], self.redis.keys())
 
     def test_store_failure(self):
         """
         Store a failure in redis and make sure we can get at it again.
         """
-        key = self.worker.store_failure({'message': 'foo'}, "bad stuff happened")
+        key = self.store_failure()
         self.assertEqual(set([key]), self.worker.get_failure_keys())
         self.assertEqual({
                 "message": str({"message": "foo"}),
                 "retry_delay": "None",
                 "reason": "bad stuff happened",
-                }, self.worker.r_server.hgetall(key))
+                }, self.redis.hgetall(key))
 
     def test_write_timestamp(self):
         """
@@ -175,14 +176,14 @@ class FailureWorkerTestCase(unittest.TestCase):
         """
         timestamp = "1970-01-01T00:00:05"
         retry_key = "failures:vas2nets#retry_keys." + timestamp
-        key = self.worker.store_failure({'message': 'foo'}, "bad stuff happened")
+        key = self.store_failure()
         self.assert_zcard(0, RETRY_TIMESTAMPS_KEY)
 
         self.worker.store_retry(key, 0, now=0)
         self.assert_zcard(1, RETRY_TIMESTAMPS_KEY)
         self.assertEqual([timestamp],
-                         self.worker.r_server.zrange(RETRY_TIMESTAMPS_KEY, 0, 0))
-        self.assertEqual(set([key]), self.worker.r_server.smembers(retry_key))
+                         self.redis.zrange(RETRY_TIMESTAMPS_KEY, 0, 0))
+        self.assertEqual(set([key]), self.redis.smembers(retry_key))
 
     def test_get_retry_key_none(self):
         """
@@ -203,7 +204,7 @@ class FailureWorkerTestCase(unittest.TestCase):
         """
         Get a retry from redis when we have one due.
         """
-        self.worker.store_retry(self.store_failure(), 0, now=time.time()-5)
+        self.worker.store_retry(self.store_failure(), 0, now=time.time() - 5)
         self.assert_zcard(1, RETRY_TIMESTAMPS_KEY)
         self.assertNotEqual(None, self.worker.get_next_retry_key())
         self.assert_zcard(0, RETRY_TIMESTAMPS_KEY)
@@ -213,8 +214,8 @@ class FailureWorkerTestCase(unittest.TestCase):
         """
         Get a retry from redis when we have two due.
         """
-        self.worker.store_retry(self.store_failure(), 0, now=time.time()-5)
-        self.worker.store_retry(self.store_failure(), 0, now=time.time()-5)
+        self.worker.store_retry(self.store_failure(), 0, now=time.time() - 5)
+        self.worker.store_retry(self.store_failure(), 0, now=time.time() - 5)
         self.assert_zcard(1, RETRY_TIMESTAMPS_KEY)
         self.assertNotEqual(None, self.worker.get_next_retry_key())
         self.assert_zcard(1, RETRY_TIMESTAMPS_KEY)
@@ -223,8 +224,8 @@ class FailureWorkerTestCase(unittest.TestCase):
         """
         Get a retry from redis when we have two due at different times.
         """
-        self.worker.store_retry(self.store_failure(), 0, now=time.time()-5)
-        self.worker.store_retry(self.store_failure(), 0, now=time.time()-15)
+        self.worker.store_retry(self.store_failure(), 0, now=time.time() - 5)
+        self.worker.store_retry(self.store_failure(), 0, now=time.time() - 15)
         self.assert_zcard(2, RETRY_TIMESTAMPS_KEY)
         self.assertNotEqual(None, self.worker.get_next_retry_key())
         self.assert_zcard(1, RETRY_TIMESTAMPS_KEY)
@@ -235,11 +236,10 @@ class FailureWorkerTestCase(unittest.TestCase):
         """
         Get a retry from redis when we have one due and one in the future.
         """
-        self.worker.store_retry(self.store_failure(), 0, now=time.time()-5)
+        self.worker.store_retry(self.store_failure(), 0, now=time.time() - 5)
         self.worker.store_retry(self.store_failure(), 0)
         self.assert_zcard(2, RETRY_TIMESTAMPS_KEY)
         self.assertNotEqual(None, self.worker.get_next_retry_key())
         self.assert_zcard(1, RETRY_TIMESTAMPS_KEY)
         self.assertEqual(None, self.worker.get_next_retry_key())
         self.assert_zcard(1, RETRY_TIMESTAMPS_KEY)
-

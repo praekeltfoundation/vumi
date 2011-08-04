@@ -16,7 +16,7 @@ class FailureWorker(Worker):
     Base class for transport failure handlers.
     """
 
-    GRANULARITY = 5 # seconds
+    GRANULARITY = 5  # seconds
 
     def startWorker(self):
         # Connect to Redis
@@ -114,4 +114,3 @@ class Vas2NetsFailureWorker(FailureWorker):
 
     def handle_failure(self, message, reason):
         self.store_failure(message, reason)
-
