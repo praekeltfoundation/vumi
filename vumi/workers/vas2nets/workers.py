@@ -1,8 +1,9 @@
 # -*- test-case-name: vumi.workers.vas2nets.test_vas2nets -*-
 # -*- encoding: utf-8 -*-
 
+
 from twisted.python import log
-from twisted.internet.defer import inlineCallbacks, Deferred
+from twisted.internet.defer import inlineCallbacks
 
 from vumi.message import Message
 from vumi.service import Worker
