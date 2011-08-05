@@ -106,9 +106,7 @@ class FailureWorker(Worker):
 
     def deliver_retry(self, retry_key, publisher):
         failure = self.get_failure(retry_key)
-        # This needs to use Publisher.publish_raw() as soon as it
-        # arrives from the metrics branch.
-        publisher.publish_json(json.loads(failure['message']))
+        publisher.publish_raw(failure['message'])
 
     def deliver_retries(self):
         # This assumes we have a suitable retry publisher. If not, it
