@@ -84,10 +84,8 @@ class FakeRedis(object):
         zval = self._data.get(key, [])
         stop += 1  # redis start/stop are element indexes
         if stop == 0:
-            vals = zval[start:]
-        else:
-            vals = zval[start:stop]
-        return [val[1] for val in vals]
+            stop = None
+        return [val[1] for val in zval[start:stop]]
 
 
 def mktimestamp(delta=0):
