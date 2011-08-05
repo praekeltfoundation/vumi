@@ -65,6 +65,9 @@ class FailureWorker(Worker):
             self.store_retry(key, retry_delay)
         return key
 
+    def get_failure(self, failure_key):
+        return self.r_server.hgetall(failure_key)
+
     def store_retry(self, failure_key, retry_delay, now=None):
         timestamp = self.get_next_write_timestamp(retry_delay, now=now)
         bucket_key = self.r_key("retry_keys." + timestamp)
@@ -100,6 +103,22 @@ class FailureWorker(Worker):
         if self.r_server.scard(bucket_key) < 1:
             self.r_server.zrem(self._retry_timestamps_key, timestamp)
         return failure_key
+
+    def deliver_retry(self, retry_key, publisher):
+        failure = self.get_failure(retry_key)
+        # This needs to use Publisher.publish_raw() as soon as it
+        # arrives from the metrics branch.
+        publisher.publish_json(json.loads(failure['message']))
+
+    def deliver_retries(self):
+        # This assumes we have a suitable retry publisher. If not, it
+        # will crash horribly.
+        publisher = self.retry_publisher
+        while True:
+            retry_key = self.get_next_retry_key()
+            if not retry_key:
+                return
+            self.deliver_retry(retry_key, publisher)
 
     def handle_failure(self, message, reason):
         raise NotImplementedError()
