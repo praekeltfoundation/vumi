@@ -1,30 +1,15 @@
 # -*- test-case-name: vumi.workers.smpp.test.test_smpp_transport -*-
 
 from twisted.python import log
-from twisted.python.log import logging
-from twisted.internet.defer import inlineCallbacks, returnValue
-from twisted.internet.task import LoopingCall
+from twisted.internet.defer import inlineCallbacks
 from twisted.internet import reactor
 
 from vumi.service import Worker, Consumer, Publisher
 from vumi.message import Message
-from vumi.workers.smpp.client import EsmeTransceiverFactory, EsmeTransceiver
+from vumi.workers.smpp.client import EsmeTransceiverFactory
+from vumi.utils import get_operator_number, get_deploy_int
 
-import json
-import re
-
-#import os
-#os.environ['DJANGO_SETTINGS_MODULE'] = 'vumi.webapp.settings'
-from vumi.webapp.api import models
-from vumi.webapp.api import forms
-from vumi.webapp.api import utils
-from vumi.utils import *
-
-import urllib
-import urllib2
-
-from datetime import datetime, timedelta
-import time
+from datetime import datetime
 import redis
 
 
@@ -138,7 +123,7 @@ class SmppTransport(Worker):
     @inlineCallbacks
     def esme_disconnected(self):
         log.msg("ESME Disconnected, stopping consumer")
-        stop = yield self.consumer.stop()
+        yield self.consumer.stop()
 
 
     @inlineCallbacks

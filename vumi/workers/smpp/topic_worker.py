@@ -5,7 +5,7 @@ from django.contrib.auth.models import User
 from vumi.service import Worker
 from vumi.message import Message
 from vumi.webapp.api import utils
-from vumi.webapp.api.models import SentSMS, SentSMSBatch
+from vumi.webapp.api.models import SentSMSBatch
 
 class TopicSmppWorker(Worker):
     

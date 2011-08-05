@@ -2,20 +2,16 @@ import os
 os.environ['DJANGO_SETTINGS_MODULE'] = 'vumi.webapp.settings'
 
 from twisted.trial.unittest import TestCase
-from twisted.python import log
 from twisted.internet import defer
-from txamqp.content import Content
 from vumi.tests.utils import TestPublisher, TestChannel, TestQueue, \
                             fake_amq_message, mocking, \
                             setup_django_test_database, \
                             teardown_django_test_database
-from vumi.message import Message, VUMI_DATE_FORMAT
+from vumi.message import Message
 from vumi.service import Consumer, Publisher, RoutingKeyError
 from vumi.workers.smpp.worker import SMSBatchConsumer, SMSReceiptConsumer, \
-    SMSKeywordConsumer, dynamically_create_keyword_consumer, SMSKeywordWorker, \
+    dynamically_create_keyword_consumer, SMSKeywordWorker, \
     SMSReceiptWorker
-
-from django.conf import settings
 
 from django.contrib.auth.models import User
 from vumi.webapp.api.models import SentSMSBatch, SentSMS, Keyword, \
@@ -191,7 +187,7 @@ class SMSKeywordTestCase(TestCase):
                                                         name='sms_received')
         urlcallback = profile.urlcallback_set.create(url='http://test.domain/2', 
                                                         name='sms_received')
-        keyword = Keyword.objects.create(keyword='keyword', user=user)
+        Keyword.objects.create(keyword='keyword', user=user)
         message = Message(
                     short_message="keyword message", 
                     destination_addr="27123456780",

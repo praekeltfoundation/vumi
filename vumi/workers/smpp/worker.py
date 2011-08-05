@@ -1,6 +1,5 @@
 from twisted.python import log
-from twisted.python.log import logging
-from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.defer import inlineCallbacks
 
 from vumi.service import Worker, Consumer, Publisher
 from vumi.message import Message, VUMI_DATE_FORMAT
@@ -8,7 +7,6 @@ from vumi.webapp.api import utils
 from vumi.webapp.api.models import Keyword, SentSMS, Transport
 
 import json
-import time
 from datetime import datetime
 
 from vumi.webapp.api import models
@@ -210,7 +208,7 @@ class SMSAckConsumer(Consumer):
             log.msg('Processing ack for', sent_sms, dictionary)
             sent_sms.transport_msg_id=transport_message_id
             sent_sms.save() 
-        except Exception, e:
+        except Exception:
             log.err()
         log.msg("Message Ack %s consumed by %s" % (repr(dictionary),self.__class__.__name__))
 
@@ -255,7 +253,6 @@ class SMSBatchConsumer(Consumer):
     def consume_message(self, message):
         dictionary = message.payload
         log.msg("SM BATCH %s consumed by %s" % (json.dumps(dictionary),self.__class__.__name__))
-        payload = []
         kwargs = dictionary.get('kwargs')
         if kwargs:
             pk = kwargs.get('pk')

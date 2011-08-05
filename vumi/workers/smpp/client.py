@@ -3,14 +3,15 @@ import json
 import redis
 
 from twisted.python import log
-from twisted.internet import reactor, defer
 from twisted.internet.protocol import Protocol, ReconnectingClientFactory
 from twisted.internet.task import LoopingCall
 
-from smpp.pdu_builder import *
-from smpp.pdu_inspector import *
+from smpp.pdu_builder import (BindTransceiver, DeliverSMResp, MultipartMessage, 
+                                SubmitSM, SubmitMulti, EnquireLink, QuerySM)
+from smpp.pdu_inspector import (binascii, unpack_pdu, detect_multipart, 
+                                multipart_key)
 
-from vumi.utils import *
+from vumi.utils import get_deploy_int
 
 
 class EsmeTransceiver(Protocol):
