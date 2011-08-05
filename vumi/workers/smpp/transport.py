@@ -12,62 +12,6 @@ from vumi.utils import get_operator_number, get_deploy_int
 from datetime import datetime
 import redis
 
-
-class SmppConsumer(Consumer):
-    """
-    This consumer creates the generic outbound SMPP transport.
-    Anything published to the `vumi.smpp` exchange with
-    routing key smpp.* (* == single word match, # == zero or more words)
-    """
-    exchange_name = "vumi"
-    exchange_type = "direct"
-    durable = True
-    auto_delete = False
-    queue_name = "sms.outbound.fallback"
-    routing_key = "sms.outbound.fallback"
-
-    def __init__(self, r_server, r_prefix, smpp_offset, send_callback):
-        self.r_server = r_server
-        self.r_prefix = r_prefix
-        self.smpp_offset = smpp_offset
-        self.send = send_callback
-        log.msg("Consuming on %s -> %s" % (self.routing_key, self.queue_name))
-
-    def consume_message(self, message):
-        log.msg("Consumed JSON", message)
-        sequence_number = self.send(**message.payload)
-        self.r_server.set("%s_%s#last_sequence_number" % (self.r_prefix, self.smpp_offset),
-                sequence_number)
-        self.r_server.set("%s#%s" % (self.r_prefix, sequence_number),
-                message.payload.get("id"))
-        return True
-
-    def consume(self, message):
-        if self.consume_message(Message.from_json(message.content.body)):
-            self.ack(message)
-
-
-def dynamically_create_smpp_consumer(name, **kwargs):
-    return type("%s_SmppConsumer" % name, (SmppConsumer,), kwargs)
-
-
-class SmppPublisher(Publisher):
-    """
-    This publisher publishes all incoming SMPP messages to the
-    `vumi.smpp` exchange, its default routing key is `smpp.fallback`
-    """
-    exchange_name = "vumi"
-    exchange_type = "topic"             # -> route based on pattern matching
-    routing_key = 'smpp.fallback'       # -> overriden in publish method
-    durable = False                     # -> not created at boot
-    auto_delete = False                 # -> auto delete if no consumers bound
-    delivery_mode = 2                   # -> save to disk
-
-    def publish_message(self, message, **kwargs):
-        log.msg("Publishing Message %s with extra args: %s" % (message, kwargs))
-        super(SmppPublisher, self).publish_message(message, **kwargs)
-
-
 class SmppTransport(Worker):
     """
     The SmppTransport
@@ -84,8 +28,11 @@ class SmppTransport(Worker):
         # start the Smpp transport
         factory = EsmeTransceiverFactory(self.config, self._amqp_client.vumi_options)
         factory.loadDefaults(self.config)
-
-        self.sequence_key = "%s_%s#last_sequence_number" % (self.r_prefix, self.config['smpp_offset'])
+        
+        self.smpp_offset = self.config['smpp_offset']
+        self.transport_name = self.config.get('TRANSPORT_NAME','fallback')
+        
+        self.sequence_key = "%s_%s#last_sequence_number" % (self.r_prefix, self.smpp_offset)
         log.msg("sequence_key = %s" % (self.sequence_key))
         last_sequence_number = int(self.r_server.get(self.sequence_key) or 0)
 
@@ -109,23 +56,25 @@ class SmppTransport(Worker):
         self.esme_client.set_handler(self)
 
         # Start the publisher
-        self.publisher = yield self.start_publisher(SmppPublisher)
-        # Start the consumer, pass along the send_smpp callback for sending
-        # back consumed AMQP messages over SMPP.
-        #self.consumer = yield self.start_consumer(SmppConsumer, self.send_smpp)
-        transport = self.config.get('TRANSPORT_NAME', 'fallback').lower()
-        yield self.start_consumer(dynamically_create_smpp_consumer(transport,
-                    routing_key='sms.outbound.%s' % transport,
-                    queue_name='sms.outbound.%s' % transport
-                ), self.r_server, self.r_prefix, self.config['smpp_offset'], self.send_smpp)
-
-
+        self.publisher = yield self.publish_to('smpp.fallback')
+        
+        # Start the consumer
+        yield self.consume('sms.outbound.%s' % self.transport_name, 
+                self.consume_message)
+    
+    def consume_message(self, message):
+        log.msg("Consumed JSON", message)
+        sequence_number = self.send_smpp(**message.payload)
+        self.r_server.set("%s_%s#last_sequence_number" % (self.r_prefix, self.smpp_offset),
+                sequence_number)
+        self.r_server.set("%s#%s" % (self.r_prefix, sequence_number),
+                message.payload.get("id"))
+    
     @inlineCallbacks
     def esme_disconnected(self):
-        log.msg("ESME Disconnected, stopping consumer")
-        yield self.consumer.stop()
-
-
+        log.msg("ESME Disconnected")
+        pass
+    
     @inlineCallbacks
     def submit_sm_resp(self, *args, **kwargs):
         redis_key = "%s#%s" % (self.r_prefix, kwargs['sequence_number'])
@@ -134,23 +83,18 @@ class SmppTransport(Worker):
         transport_msg_id = kwargs['message_id']
         self.r_server.delete(redis_key)
         log.msg("Mapping transport_msg_id=%s to sent_sms_id=%s" % (transport_msg_id, sent_sms_id))
-        #sent_sms = models.SentSMS.objects.get(id=sent_sms_id)
-        #sent_sms.transport_msg_id = transport_msg_id
-        #sent_sms.save()
-        #print 'sms.ack.%s' % self.config['TRANSPORT_NAME'].lower()
         self.publisher.publish_message(Message(**{
             'id': sent_sms_id,
             'transport_message_id': transport_msg_id
-            }), routing_key = 'sms.ack.%s' % self.config['TRANSPORT_NAME'].lower())
+            }), routing_key = 'sms.ack.%s' % self.transport_name)
         yield log.msg("SUBMIT SM RESP %s" % repr(kwargs))
 
 
     @inlineCallbacks
     def delivery_report(self, *args, **kwargs):
-        transport_name = self.config.get('TRANSPORT_NAME', 'fallback').lower()
         log.msg("DELIVERY REPORT", kwargs)
         dictionary = {
-            'transport_name': transport_name,
+            'transport_name': self.transport_name,
             'transport_msg_id': kwargs['delivery_report']['id'],
             'transport_status': kwargs['delivery_report']['stat'],
             'transport_delivered_at': datetime.strptime(
@@ -158,15 +102,14 @@ class SmppTransport(Worker):
                 "%y%m%d%H%M%S")
         }
         yield self.publisher.publish_message(Message(**dictionary),
-            routing_key='sms.receipt.%s' % (transport_name,))
+            routing_key='sms.receipt.%s' % (self.transport_name,))
 
 
     @inlineCallbacks
     def deliver_sm(self, *args, **kwargs):
         yield self.publisher.publish_message(Message(**kwargs), 
             routing_key='sms.inbound.%s.%s' % (
-                self.config.get('TRANSPORT_NAME', 'fallback').lower(),
-                kwargs.get('destination_addr')))
+                self.transport_name, kwargs.get('destination_addr')))
 
 
     def send_smpp(self, id, to_msisdn, message, *args, **kwargs):
