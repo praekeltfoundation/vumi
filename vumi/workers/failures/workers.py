@@ -1,6 +1,7 @@
 # -*- test-case-name: vumi.workers.failures.tests.test_workers -*-
 
 import time
+import json
 from datetime import datetime
 from uuid import uuid4
 
@@ -50,15 +51,17 @@ class FailureWorker(Worker):
     def get_failure_keys(self):
         return self.r_server.smembers(self.r_key("failure_keys"))
 
-    def store_failure(self, message, reason, retry_delay=None):
+    def store_failure(self, message_json, reason, retry_delay=None):
         key = self.failure_key()
+        if not retry_delay:
+            retry_delay = 0
         self.r_server.hmset(key, {
-                "message": message,
+                "message": message_json,
                 "reason": reason,
-                "retry_delay": retry_delay,
+                "retry_delay": str(retry_delay),
                 })
         self.add_to_failure_set(key)
-        if retry_delay is not None:
+        if retry_delay:
             self.store_retry(key, retry_delay)
         return key
 
@@ -102,7 +105,7 @@ class FailureWorker(Worker):
         raise NotImplementedError()
 
     def process_message(self, failure_message):
-        message = failure_message.payload['message']
+        message = json.dumps(failure_message.payload['message'])
         reason = failure_message.payload['reason']
         self.handle_failure(message, reason)
 

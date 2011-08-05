@@ -1,4 +1,5 @@
 import time
+import json
 import fnmatch
 from datetime import datetime, timedelta
 
@@ -13,22 +14,80 @@ RETRY_TIMESTAMPS_KEY = "failures:vas2nets#retry_timestamps"
 
 class FakeRedis(object):
     def __init__(self):
-        self.data = {}
+        self._data = {}
 
-    def get(self, key):
-        return self.data.get(key)
-
-    def set(self, key, value):
-        self.data[key] = value
+    # Global operations
 
     def exists(self, key):
-        return key in self.data
+        return key in self._data
 
     def keys(self, pattern='*'):
-        return fnmatch.filter(self.data.keys(), pattern)
+        return fnmatch.filter(self._data.keys(), pattern)
 
     def flushdb(self):
-        self.data = {}
+        self._data = {}
+
+    # String operations
+
+    def get(self, key):
+        return self._data.get(key)
+
+    def set(self, key, value):
+        self._data[key] = value
+
+    # Hash operations
+
+    def hmset(self, key, mapping):
+        hval = self._data.setdefault(key, {})
+        hval.update(mapping)
+
+    def hgetall(self, key):
+        return self._data.get(key, {})
+
+    # Set operations
+
+    def sadd(self, key, value):
+        sval = self._data.setdefault(key, set())
+        sval.add(value)
+
+    def smembers(self, key):
+        return self._data.get(key, set())
+
+    def spop(self, key):
+        sval = self._data.get(key, set())
+        if not sval:
+            return None
+        return sval.pop()
+
+    def scard(self, key):
+        return len(self._data.get(key, set()))
+
+    # Sorted set operations
+
+    def zadd(self, key, **valscores):
+        zval = self._data.setdefault(key, [])
+        new_zval = [val for val in zval if val[1] not in valscores]
+        for value, score in valscores.items():
+            new_zval.append((score, value))
+        new_zval.sort()
+        self._data[key] = new_zval
+
+    def zrem(self, key, value):
+        zval = self._data.setdefault(key, [])
+        new_zval = [val for val in zval if val[1] != value]
+        self._data[key] = new_zval
+
+    def zcard(self, key):
+        return len(self._data.get(key, []))
+
+    def zrange(self, key, start, stop):
+        zval = self._data.get(key, [])
+        stop += 1  # redis start/stop are element indexes
+        if stop == 0:
+            vals = zval[start:]
+        else:
+            vals = zval[start:stop]
+        return [val[1] for val in vals]
 
 
 def mktimestamp(delta=0):
@@ -44,7 +103,7 @@ class FailureWorkerTestCase(unittest.TestCase):
         }
         self.worker = get_stubbed_worker(FailureWorker, self.config)
         self.worker.startWorker()
-        # self.worker.r_server = FakeRedis()
+        self.worker.r_server = FakeRedis()
         self.worker.r_server.flushdb()
         self.redis = self.worker.r_server
 
@@ -59,12 +118,12 @@ class FailureWorkerTestCase(unittest.TestCase):
         self.assertEqual(list(expected),
                          self.redis.zrange(RETRY_TIMESTAMPS_KEY, 0, -1))
 
-    def store_failure(self, reason=None, message=None):
+    def store_failure(self, reason=None, message_json=None):
         if not reason:
             reason = "bad stuff happened"
-        if not message:
-            message = {'message': 'foo', 'reason': reason}
-        return self.worker.store_failure(message, reason)
+        if not message_json:
+            message_json = json.dumps({'message': 'foo', 'reason': reason})
+        return self.worker.store_failure(message_json, reason)
 
     def test_redis_access(self):
         """
@@ -83,9 +142,10 @@ class FailureWorkerTestCase(unittest.TestCase):
         """
         key = self.store_failure(reason="reason")
         self.assertEqual(set([key]), self.worker.get_failure_keys())
+        message_json = json.dumps({"message": "foo", "reason": "reason"})
         self.assertEqual({
-                "message": str({"message": "foo", "reason": "reason"}),
-                "retry_delay": "None",
+                "message": message_json,
+                "retry_delay": "0",
                 "reason": "reason",
                 }, self.redis.hgetall(key))
 
