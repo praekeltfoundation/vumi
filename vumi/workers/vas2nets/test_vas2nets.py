@@ -1,6 +1,7 @@
 # encoding: utf-8
 from twisted.web import http
 from twisted.web.resource import Resource
+from twisted.web.server import NOT_DONE_YET
 from twisted.trial import unittest
 from twisted.python import log, failure
 from twisted.internet import defer, reactor
@@ -100,7 +101,8 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
     
     def tearDown(self):
         pass
-    
+
+    @inlineCallbacks
     def test_receive_sms(self):
         resource = ReceiveSMSResource(self.config, self.publisher)
         request = create_request({
@@ -108,8 +110,11 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
             'time': [self.today.strftime('%Y.%m.%d %H:%M:%S')],
             'text': ['hello world']
         })
+        d = request.notifyFinish()
         response = resource.render(request)
-        self.assertEquals(response, '')
+        self.assertEquals(response, NOT_DONE_YET)
+        yield d
+        self.assertEquals('', ''.join(request.written))
         self.assertEquals(request.outgoingHeaders['content-type'], 'text/plain')
         self.assertEquals(request.responseCode, http.OK)
         msg = Message(**{
@@ -138,10 +143,13 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
             'status': ['2'],
             'text': ['Message delivered to MSISDN.']
         })
-        
+
         resource = DeliveryReceiptResource(self.config, self.publisher)
+        d = request.notifyFinish()
         response = resource.render(request)
-        self.assertEquals(response, '')
+        self.assertEquals(response, NOT_DONE_YET)
+        yield d
+        self.assertEquals('', ''.join(request.written))
         self.assertEquals(request.outgoingHeaders['content-type'], 'text/plain')
         self.assertEquals(request.responseCode, http.OK)
         msg = Message(**{
@@ -159,7 +167,7 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
         routing_key = kwargs['routing_key']
         self.assertEquals(Message.from_json(content.body), msg)
         self.assertEquals(routing_key, 'sms.receipt.vas2nets')
-    
+
     def test_validate_characters(self):
         self.assertRaises(Vas2NetsEncodingError, validate_characters, 
                             u"ïøéå¬∆˚")
@@ -169,6 +177,8 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
         self.assertTrue(validate_characters(u'äöü ÄÖÜ àùò ìèé §Ññ £$@'))
         self.assertTrue(validate_characters(u'/?!#%&()*+,-:;<=>.'))
         self.assertTrue(validate_characters(u'testing\ncarriage\rreturns'))
+        self.assertTrue(validate_characters(u'testing "quotes"'))
+        self.assertTrue(validate_characters(u"testing 'quotes'"))
     
     @inlineCallbacks
     def test_send_sms_success(self):

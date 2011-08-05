@@ -10,7 +10,7 @@ Contents:
 
 .. toctree::
    :maxdepth: 1
-   
+
    roadmap.rst
    installation.rst
    api.rst
@@ -18,6 +18,7 @@ Contents:
    deploying.rst
    keywords.rst
    transports.rst
+   how-we-do-releases.rst
 
 Indices and tables
 ==================

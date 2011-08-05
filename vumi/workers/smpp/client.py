@@ -245,7 +245,7 @@ class EsmeTransceiver(Protocol):
                     +' +err:(?P<err>...)'
                     +' +[Tt]ext:(?P<text>.{,20})'
                     +'.*',
-                    pdu['body']['mandatory_parameters']['short_message']
+                    pdu['body']['mandatory_parameters']['short_message'] or ''
                     )
             if delivery_report:
                 self.__delivery_report_callback(
