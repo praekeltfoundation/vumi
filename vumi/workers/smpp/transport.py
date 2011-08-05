@@ -4,7 +4,7 @@ from twisted.python import log
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet import reactor
 
-from vumi.service import Worker, Consumer, Publisher
+from vumi.service import Worker
 from vumi.message import Message
 from vumi.workers.smpp.client import EsmeTransceiverFactory
 from vumi.utils import get_operator_number, get_deploy_int
@@ -18,21 +18,26 @@ class SmppTransport(Worker):
     """
 
     def startWorker(self):
+        log.msg("Starting the SmppTransport with %s" % self.config)
+        
+        # TODO: move this to a config file
+        dbindex = get_deploy_int(self._amqp_client.vhost)
+        
         # Connect to Redis
-        self.r_server = redis.Redis("localhost", db=get_deploy_int(self._amqp_client.vhost))
-        log.msg("Connected to Redis")
-        self.r_prefix = "%s@%s:%s" % (self.config['system_id'], self.config['host'], self.config['port'])
-        log.msg("r_prefix = %s" % self.r_prefix)
-
-        log.msg("Starting the SmppTransport")
+        self.r_server = redis.Redis("localhost", db=dbindex)
+        self.r_prefix = "%(system_id)s@%(host)s:%(port)s" % self.config
+        log.msg("Connected to Redis, prefix: %s" % self.r_prefix)
+        
         # start the Smpp transport
-        factory = EsmeTransceiverFactory(self.config, self._amqp_client.vumi_options)
+        factory = EsmeTransceiverFactory(self.config, 
+                                            self._amqp_client.vumi_options)
         factory.loadDefaults(self.config)
         
         self.smpp_offset = self.config['smpp_offset']
         self.transport_name = self.config.get('TRANSPORT_NAME','fallback')
         
-        self.sequence_key = "%s_%s#last_sequence_number" % (self.r_prefix, self.smpp_offset)
+        self.sequence_key = "%s_%s#last_sequence_number" % (self.r_prefix, 
+                                                            self.smpp_offset)
         log.msg("sequence_key = %s" % (self.sequence_key))
         last_sequence_number = int(self.r_server.get(self.sequence_key) or 0)
 
@@ -113,6 +118,9 @@ class SmppTransport(Worker):
 
 
     def send_smpp(self, id, to_msisdn, message, *args, **kwargs):
+        # TODO: Do we want this in the transport or should it be part of the 
+        #       campaign logic?
+        
         log.msg("Sending SMPP, to: %s, message: %s" % (to_msisdn, repr(message)))
         # first do a lookup in our YAML to see if we've got a source_addr
         # defined for the given MT number, if not, trust the from_msisdn 
@@ -127,7 +135,6 @@ class SmppTransport(Worker):
                 source_addr = route,
                 )
         return sequence_number
-
 
     def stopWorker(self):
         log.msg("Stopping the SMPPTransport")
