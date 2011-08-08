@@ -25,6 +25,18 @@ from vumi.webapp.api import utils
 from datetime import datetime
 import re
 
+from smpp.pdu_builder import SubmitSMResp
+
+class SMPPErrorTextcase(TestCase):
+
+    def setUp(self):
+        pass
+
+    def tearDown(self):
+        pass
+
+
+
 class SMSBatchTestCase(TestCase):
 
     def setUp(self):
