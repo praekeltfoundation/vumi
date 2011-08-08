@@ -62,14 +62,11 @@ class SmscServer(Protocol):
             message_id = str(uuid.uuid4())
             pdu_resp = SubmitSMResp(sequence_number, message_id)
             self.sendPDU(pdu_resp)
-            print "callLater >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
-            reactor.callLater(2, self.delivery_report, message_id)
             reactor.callLater(2, self.delivery_report, message_id)
             self.boomerang(pdu)
 
 
     def delivery_report(self, message_id):
-        print ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>andCalling"
         sequence_number = 1
         short_message = 'id:%s sub:001 dlvrd:001 submit date:%s done date:%s stat:DELIVRD err:000 text:' % (
                 message_id, datetime.now().strftime("%y%m%d%H%M%S"), datetime.now().strftime("%y%m%d%H%M%S"))
