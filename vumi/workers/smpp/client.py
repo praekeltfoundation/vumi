@@ -6,10 +6,19 @@ from twisted.python import log
 from twisted.internet.protocol import Protocol, ReconnectingClientFactory
 from twisted.internet.task import LoopingCall
 
-from smpp.pdu_builder import (BindTransceiver, DeliverSMResp, MultipartMessage, 
-                                SubmitSM, SubmitMulti, EnquireLink, QuerySM)
-from smpp.pdu_inspector import (binascii, unpack_pdu, detect_multipart, 
-                                multipart_key)
+import binascii
+from smpp.pdu import unpack_pdu
+from smpp.pdu_builder import (  BindTransceiver,
+                                DeliverSMResp,
+                                SubmitSM,
+                                SubmitMulti,
+                                EnquireLink,
+                                QuerySM
+                                )
+from smpp.pdu_inspector import (MultipartMessage,
+                                detect_multipart,
+                                multipart_key
+                                )
 
 from vumi.utils import get_deploy_int
 
