@@ -38,3 +38,4 @@ simplejson
 # for Jenkins
 python-subunit
 junitxml
+pep8
