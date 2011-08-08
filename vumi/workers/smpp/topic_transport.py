@@ -28,14 +28,5 @@ class TopicSmppTransport(SmppTransport):
     
     def handle_outbound_sms(self, message):
         # send the message via SMPP
-        sequence_number = self.send_smpp(**message.payload)
-        # get the sequence_number, link it back to our own internal
-            # TODO This needs to be replaced with a Redis save
-            #formdict = {
-                    #"sent_sms":message.payload.get("id"),
-                    #"sequence_number": sequence_number,
-                    #}
-            #log.msg("SMPPLinkForm", repr(formdict))
-            #form = forms.SMPPLinkForm(formdict)
-            #form.save()
+        self.consume_message(message)
         return True
