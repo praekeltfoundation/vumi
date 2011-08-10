@@ -6,7 +6,6 @@ import os.path
 import json
 from datetime import datetime
 
-from vumi.webapp.api import signals
 from vumi.webapp.api.models import (SentSMS, SentSMSBatch, URLCallback, 
                                     Transport)
 from vumi.webapp.api.tests.utils import APIClient, mock_sent_messages
