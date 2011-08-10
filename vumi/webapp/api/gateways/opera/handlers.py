@@ -1,18 +1,17 @@
-import re, yaml, logging
-from datetime import datetime, timedelta
+import logging
+from datetime import datetime
 
 from django.http import HttpResponse
 from django.utils import simplejson
 
 from piston.handler import BaseHandler
-from piston.utils import rc, throttle, require_mime, validate
-from piston.utils import Mimer, FormValidationError
+from piston.utils import rc, throttle
+from piston.utils import FormValidationError
 
-from vumi.webapp.api.models import SentSMS, ReceivedSMS, URLCallback
+from vumi.webapp.api.models import SentSMS, ReceivedSMS
 from vumi.webapp.api import forms, signals
-from vumi.webapp.api.utils import require_content_type, specify_fields
+from vumi.webapp.api.utils import require_content_type
 
-import pystache
 import iso8601
 
 from utils import parse_receipts_xml, parse_post_event_xml, OPERA_TIMESTAMP_FORMAT
