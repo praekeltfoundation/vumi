@@ -376,22 +376,21 @@ class Publisher(object):
         routing_key = kwargs.get('routing_key') or self.routing_key
         require_bind = kwargs.get('require_bind')
         self.check_routing_key(routing_key, require_bind)
-        self.channel.basic_publish(exchange=exchange_name, content=message,
-                                   routing_key=routing_key)
+        return self.channel.basic_publish(exchange=exchange_name, content=message,
+                                          routing_key=routing_key)
 
     def publish_message(self, message, **kwargs):
-        log.msg('Publishing message: %s with %s' % (message.to_json(), repr(kwargs)))
-        amq_message = Content(message.to_json())
-        amq_message['delivery mode'] = kwargs.pop('delivery_mode',
-                self.delivery_mode)
-        return self.publish(amq_message, **kwargs)
+        return self.publish_raw(message.to_json(), **kwargs)
 
     def publish_json(self, data, **kwargs):
         """helper method"""
-        message = Content(json.dumps(data, cls=json.JSONEncoder))
-        message['delivery mode'] = kwargs.pop('delivery_mode',
-                                              self.delivery_mode)
-        return self.publish(message, **kwargs)
+        return self.publish_raw(json.dumps(data, cls=json.JSONEncoder), **kwargs)
+
+    def publish_raw(self, data, **kwargs):
+        amq_message = Content(data)
+        amq_message['delivery mode'] = kwargs.pop('delivery_mode',
+                self.delivery_mode)
+        return self.publish(amq_message, **kwargs)
 
 
 class WorkerCreator(object):

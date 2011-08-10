@@ -27,7 +27,8 @@ def http_request(url, data, headers={}, method='POST'):
         else:
             class SimpleReceiver(protocol.Protocol):
                 def __init__(s, d):
-                    s.buf = ''; s.d = d
+                    s.buf = ''
+                    s.d = d
                 def dataReceived(s, data):
                     s.buf += data
                 def connectionLost(s, reason):
@@ -45,7 +46,7 @@ def normalize_msisdn(raw, country_code=''):
     # don't touch shortcodes
     if len(raw) <= 5:
         return raw
-    
+
     raw = ''.join([c for c in str(raw) if c.isdigit() or c == '+'])
     if raw.startswith('00'):
         return '+' + raw[2:]

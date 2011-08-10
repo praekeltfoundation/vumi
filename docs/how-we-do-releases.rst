@@ -18,10 +18,15 @@ also specify a commit to start from)::
 
 Set the version in the release branch setup.py::
 
-    $ ./utils/bump_version.sh $VER
+    $ ./utils/bump-version.sh $VER
+    $ git add setup.py
     $ git commit -m "Set initial version for series $SERIES"
 
 Set the version number in the develop branch *if necessary*.
+
+Push your changes to Github::
+
+    $ git push origin release/0.1.x
 
 
 Tag the release
@@ -36,13 +41,15 @@ Select a series to release from and version number::
 Bump version immediately prior to release and tag the commit::
 
     $ git checkout release/$SERIES
-    $ ./utils/bump_version.sh $VER
+    $ ./utils/bump-version.sh $VER
+    $ git add setup.py
     $ git commit -m "Version $VER"
     $ git tag vumi-$VER
 
 Bump version number on release branch::
 
-    $ ./utils/bump_version $NEXTVER
+    $ ./utils/bump-version.sh $NEXTVER
+    $ git add setup.py
     $ git commit -m "Bump release series version."
 
 Merge to master *if this is a tag off the latest release series*::
@@ -51,4 +58,5 @@ Merge to master *if this is a tag off the latest release series*::
     $ git merge vumi-$VER
     $ git commit -m "Merge $VER to master."
 
-Declare victory.
+Push your changes to Github (don't forget to push the new
+tag). Declare victory.
