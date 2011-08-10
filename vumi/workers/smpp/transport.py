@@ -68,7 +68,7 @@ class SmppTransport(Worker):
                 self.consume_message)
     
     def consume_message(self, message):
-        log.msg("Consumed JSON", message)
+        log.msg("Consumed outgoing message", message)
         sequence_number = self.send_smpp(**message.payload)
         self.r_server.set("%s_%s#last_sequence_number" % (self.r_prefix, self.smpp_offset),
                 sequence_number)
