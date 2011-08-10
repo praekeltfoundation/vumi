@@ -24,7 +24,7 @@ class FailureWorker(Worker):
         self.r_server = redis.Redis("localhost",
                                     db=get_deploy_int(self._amqp_client.vhost))
         log.msg("Connected to Redis")
-        self.r_prefix = ":".join(["failures", self.config['transport_name']])
+        self.r_prefix = "failures:%s" % (self.config['transport_name'],)
         log.msg("r_prefix = %s" % self.r_prefix)
         self._retry_timestamps_key = self.r_key("retry_timestamps")
 
