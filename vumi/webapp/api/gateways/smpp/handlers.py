@@ -34,14 +34,14 @@ class SendSMPPHandler(BaseHandler):
         batch = SentSMSBatch.objects.create(title='', user=request.user)
         user = User.objects.get(username=request.user)
         transport = user.get_profile().transport.name
-        returnable = [self._send_one(
-                                transport_name=transport,
-                                batch=batch.pk,
-                                user=request.user.pk,
-                                to_msisdn=msisdn,
-                                from_msisdn=request.POST.get('from_msisdn'),
-                                message=request.POST.get('message'))
-                    for msisdn in request.POST.getlist('to_msisdn')]
+        for msisdn in request.POST.getlist('to_msisdn'):
+            self._send_one(transport_name=transport,
+                            batch=batch.pk,
+                            user=request.user.pk,
+                            to_msisdn=msisdn,
+                            from_msisdn=request.POST.get('from_msisdn'),
+                            message=request.POST.get('message'))
+        
         signals.sms_batch_scheduled.send(sender=SentSMSBatch, instance=batch,
                 pk=batch.pk)
         return {"send_group":batch.pk,
