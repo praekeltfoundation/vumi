@@ -1,10 +1,8 @@
 from django.test import TestCase
 from django.core.urlresolvers import reverse
 from django.contrib.auth.models import User
-from time import time
-from datetime import datetime, timedelta
 
-from vumi.webapp.api.models import *
+from vumi.webapp.api.models import SentSMS, ReceivedSMS
 from vumi.webapp.api.tests.utils import APIClient, mock_sent_messages
 
 class OperaSMSHandlerTestCase(TestCase):

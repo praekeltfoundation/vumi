@@ -1,4 +1,4 @@
-from django.conf.urls.defaults import *
+from django.conf.urls.defaults import patterns
 from piston.resource import Resource
 from piston.authentication import HttpBasicAuthentication
 from vumi.webapp.api.gateways.opera import handlers

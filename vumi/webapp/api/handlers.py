@@ -8,9 +8,6 @@ from vumi.webapp.api.models import URLCallback
 from vumi.webapp.api.forms import URLCallbackForm
 from vumi.webapp.api.utils import specify_fields
 
-from alexandria.loader.base import YAMLLoader
-from alexandria.dsl.utils import dump_menu
-
 # Complete reset, clear defaults - they're hard to debug
 Mimer.TYPES = {}
 # Specify the default Mime loader for YAML, Piston's YAML loader by default
@@ -29,10 +26,10 @@ class ConversationHandler(BaseHandler):
     @throttle(5, 10 * 60)  # allow 5 times in 10 minutes
     @require_mime('yaml')
     def create(self, request):
-        menu = YAMLLoader().load_from_string(request.raw_post_data)
-        dump = dump_menu(menu)  # debug
-        logging.debug("Received a new conversation script with %s items "
-                        "but not doing anything with it yet." % len(dump))
+        # menu = load_from_string(request.raw_post_data)
+        # dump = dump_menu(menu)  # debug
+        logging.debug("Received a new conversation script "
+                        "but not doing anything with it yet.")
         return rc.CREATED
 
 

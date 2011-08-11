@@ -1,15 +1,16 @@
 from textwrap import wrap
 
-from twisted.conch.insults.insults import TerminalProtocol, privateModes, ServerProtocol
+from twisted.conch.insults.insults import (TerminalProtocol, privateModes,
+                                           ServerProtocol)
 from twisted.conch.insults.window import TopWindow, VBox, TextInput, TextOutput
 from twisted.internet import reactor, protocol
-from twisted.conch.telnet import TelnetTransport, TelnetBootstrapProtocol, TelnetProtocol
+from twisted.conch.telnet import (TelnetTransport, TelnetBootstrapProtocol,
+                                  TelnetProtocol)
 from twisted.internet.defer import inlineCallbacks
 from twisted.python import log
 
 from vumi.service import Worker
 from vumi.message import Message
-
 
 
 class InputWidget(TextInput):
@@ -107,7 +108,6 @@ class UserInterface(TerminalProtocol):
         log.msg("Client lost connection.")
 
 
-
 class ThinUI(TelnetProtocol):
     def __init__(self, setUI, inputHandler, *args, **kw):
         setUI(self)
@@ -144,9 +144,12 @@ class TelnetConsoleTransport(Worker):
     def getFactory(self, use_thin=True):
         f = protocol.ServerFactory()
         if use_thin:
-            f.protocol = lambda: TelnetTransport(ThinUI, self.setUI, self.handleInput)
+            f.protocol = lambda: TelnetTransport(ThinUI, self.setUI,
+                                                 self.handleInput)
         else:
-            f.protocol = lambda: TelnetTransport(TelnetBootstrapProtocol, ServerProtocol, UserInterface, self.setUI, self.handleInput)
+            f.protocol = lambda: TelnetTransport(TelnetBootstrapProtocol,
+                                                 ServerProtocol, UserInterface,
+                                                 self.setUI, self.handleInput)
         return f
 
     def setUI(self, ui):
@@ -160,7 +163,7 @@ class TelnetConsoleTransport(Worker):
         log.msg("Consumed Message %s" % message)
         dictionary = message.payload
         src = dictionary.get('recipient', u'').encode('ascii')
-        text = dictionary.get('message',u'').encode('ascii')
+        text = dictionary.get('message', u'').encode('ascii')
         if self.ui:
             self.ui.addOutputMessage("[%s]: %s" % (src, text))
 

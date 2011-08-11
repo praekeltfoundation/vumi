@@ -1,8 +1,8 @@
 from twisted.trial import unittest
-from twisted.internet.defer import succeed
 
 from vumi.tests.utils import get_stubbed_worker
-from vumi.workers.integrat.games import RockPaperScissorsGame, RockPaperScissorsWorker
+from vumi.workers.integrat.games import (RockPaperScissorsGame,
+                                         RockPaperScissorsWorker)
 
 
 class TestRockPaperScissorsGame(unittest.TestCase):
@@ -27,7 +27,7 @@ class TestRockPaperScissorsGame(unittest.TestCase):
         self.assertEquals(None, game.current_move)
 
     def test_game_moves_draw(self):
-        game = self.get_game((1,1))
+        game = self.get_game((1, 1))
         game.move('p1', 1)
         self.assertEquals(1, game.current_move)
         self.assertEquals((1, 1), game.scores)
@@ -37,7 +37,7 @@ class TestRockPaperScissorsGame(unittest.TestCase):
         self.assertEquals((1, 1), game.scores)
 
     def test_game_moves_win(self):
-        game = self.get_game((1,1))
+        game = self.get_game((1, 1))
         game.move('p1', 1)
         self.assertEquals(1, game.current_move)
         self.assertEquals((1, 1), game.scores)
@@ -47,7 +47,7 @@ class TestRockPaperScissorsGame(unittest.TestCase):
         self.assertEquals((2, 1), game.scores)
 
     def test_game_moves_lose(self):
-        game = self.get_game((1,1))
+        game = self.get_game((1, 1))
         game.move('p1', 1)
         self.assertEquals(1, game.current_move)
         self.assertEquals((1, 1), game.scores)
@@ -55,7 +55,6 @@ class TestRockPaperScissorsGame(unittest.TestCase):
         game.move('p2', 3)
         self.assertEquals(None, game.current_move)
         self.assertEquals((1, 2), game.scores)
-
 
 
 class RockPaperScissorsWorkerStub(RockPaperScissorsWorker):
@@ -103,4 +102,4 @@ class TestRockPaperScissorsWorker(unittest.TestCase):
         self.assertEquals([], worker.replies)
         worker.resume_session({'transport_session_id': 'sp1', 'message': '2'})
         self.assertEquals(2, len(worker.replies))
-        self.assertEquals((0,1), game.scores)
+        self.assertEquals((0, 1), game.scores)

@@ -1,11 +1,9 @@
-import json
 import re
 from  xml.etree import ElementTree
 
 from twisted.python import log
 from twisted.trial.unittest import TestCase
 from vumi.workers.integrat.utils import HigateXMLParser
-
 
 
 class HigateXMLTestCases(TestCase):
@@ -18,10 +16,8 @@ class HigateXMLTestCases(TestCase):
         self.dolog = True
         self.hxp = HigateXMLParser()
 
-
     def tearDown(self):
         del self.hxp
-
 
     def testParseOnResult(self):
         OnResult_xml = '''
@@ -42,11 +38,19 @@ class HigateXMLTestCases(TestCase):
             </Response>
         </Message>
         '''
-        OnResult_dict = {'Code': '3', 'Text': 'Acknowledged', 'SubCode': '0', 'RefNo': '2313344', 'Flags': '0', 'SeqNo': '8199250', 'TOC': 'SMS', 'Type': 'OnResult'}
+        OnResult_dict = {
+            'Code': '3',
+            'Text': 'Acknowledged',
+            'SubCode': '0',
+            'RefNo': '2313344',
+            'Flags': '0',
+            'SeqNo': '8199250',
+            'TOC': 'SMS',
+            'Type': 'OnResult',
+            }
         if self.dolog:
             log.msg("OnResult -> %s" % (repr(self.hxp.parse(OnResult_xml))))
         self.assertEquals(self.hxp.parse(OnResult_xml), OnResult_dict)
-
 
     def testParseSendSMS_Linked(self):
         SendSMS_xml = '''
@@ -80,7 +84,6 @@ class HigateXMLTestCases(TestCase):
             log.msg("SendSMS -> %s" % (repr(self.hxp.parse(SendSMS_xml))))
         self.assertEquals(self.hxp.parse(SendSMS_xml), SendSMS_dict)
 
-
     def testParseSendSMS(self):
         SendSMS_xml = '''
         <Message>
@@ -102,7 +105,6 @@ class HigateXMLTestCases(TestCase):
         if self.dolog:
             log.msg("SendSMS -> %s" % (repr(self.hxp.parse(SendSMS_xml))))
         self.assertEquals(self.hxp.parse(SendSMS_xml), SendSMS_dict)
-
 
     def testParseOnReceiveSMS(self):
         OnReceiveSMS_xml = '''
@@ -128,11 +130,23 @@ class HigateXMLTestCases(TestCase):
             </Response>
         </Message>
         '''
-        OnReceiveSMS_dict = {'NetworkID': '1', 'FromAddr': '27829023456', 'SeqNo': '576674646', 'AdultRating': '0', 'hex': '06052677F6A565 ...etc', 'Value': '0', 'ToTag': '777', 'ToAddr': '27829020203777', 'EsmClass': '128', 'DataCoding': '8', 'Type': 'OnReceiveSMS', 'Sent': '20100614135709'}
+        OnReceiveSMS_dict = {
+            'NetworkID': '1',
+            'FromAddr': '27829023456',
+            'SeqNo': '576674646',
+            'AdultRating': '0',
+            'hex': '06052677F6A565 ...etc',
+            'Value': '0',
+            'ToTag': '777',
+            'ToAddr': '27829020203777',
+            'EsmClass': '128',
+            'DataCoding': '8',
+            'Type': 'OnReceiveSMS',
+            'Sent': '20100614135709',
+            }
         if self.dolog:
-            log.msg("OnReceiveSMS -> %s" % (repr(self.hxp.parse(OnReceiveSMS_xml))))
+            log.msg("OnReceiveSMS -> %r" % (self.hxp.parse(OnReceiveSMS_xml),))
         self.assertEquals(self.hxp.parse(OnReceiveSMS_xml), OnReceiveSMS_dict)
-
 
     def testParseOnOBSResponse(self):
         OnOBSResponse_xml = '''
@@ -150,11 +164,16 @@ class HigateXMLTestCases(TestCase):
             </Response>
         </Message>
         '''
-        OnOBSResponse_dict = {'RefNo': '123', 'SeqNo': '1234568', 'Type': 'OnOBSResponse'}
+        OnOBSResponse_dict = {
+            'RefNo': '123',
+            'SeqNo': '1234568',
+            'Type': 'OnOBSResponse',
+            }
         if self.dolog:
-            log.msg("OnOBSResponse -> %s" % (repr(self.hxp.parse(OnOBSResponse_xml))))
-        self.assertEquals(self.hxp.parse(OnOBSResponse_xml), OnOBSResponse_dict)
-
+            log.msg("OnOBSResponse -> %r" % (
+                    self.hxp.parse(OnOBSResponse_xml),))
+        self.assertEquals(self.hxp.parse(OnOBSResponse_xml),
+                          OnOBSResponse_dict)
 
     def testParseOnLBSResponse(self):
         OnLBSResponse_xml = '''
@@ -188,11 +207,16 @@ class HigateXMLTestCases(TestCase):
             </Response>
         </Message>
         '''
-        OnLBSResponse_dict = {'RefNo': '123', 'SeqNo': '548245219', 'Type': 'OnLBSResponse'}
+        OnLBSResponse_dict = {
+            'RefNo': '123',
+            'SeqNo': '548245219',
+            'Type': 'OnLBSResponse',
+            }
         if self.dolog:
-            log.msg("OnLBSResponse -> %s" % (repr(self.hxp.parse(OnLBSResponse_xml))))
-        self.assertEquals(self.hxp.parse(OnLBSResponse_xml), OnLBSResponse_dict)
-
+            log.msg("OnLBSResponse -> %r" % (
+                    self.hxp.parse(OnLBSResponse_xml),))
+        self.assertEquals(self.hxp.parse(OnLBSResponse_xml),
+                          OnLBSResponse_dict)
 
     def testParseOnUSSEventRequest(self):
         OnUSSEvent_xml = '''
@@ -220,7 +244,7 @@ class HigateXMLTestCases(TestCase):
                          'USSText': 'REQ',
                          'EventType': 'Request'}
         if self.dolog:
-            log.msg("OnUSSEvent -> %s" % (repr(self.hxp.parse(OnUSSEvent_xml))))
+            log.msg("OnUSSEvent -> %r" % (self.hxp.parse(OnUSSEvent_xml),))
         self.assertEquals(self.hxp.parse(OnUSSEvent_xml), OnUSSEvent_dict)
 
     def testParseOnUSSEventRequestOpen(self):
@@ -247,10 +271,9 @@ class HigateXMLTestCases(TestCase):
                          'Type': 'OnUSSEvent',
                          'EventType': 'Open'}
         if self.dolog:
-            log.msg("OnUSSEvent -> %s" % (repr(self.hxp.parse(OnUSSEvent_xml))))
+            log.msg("OnUSSEvent -> %r" % (self.hxp.parse(OnUSSEvent_xml),))
         self.assertEquals(self.hxp.parse(OnUSSEvent_xml), OnUSSEvent_dict)
-        
-    
+
     def testParseOnUSSEventRequestClose(self):
         OnUSSEvent_xml = '''
         <Message>
@@ -275,9 +298,8 @@ class HigateXMLTestCases(TestCase):
                          'Type': 'OnUSSEvent',
                          'EventType': 'Close'}
         if self.dolog:
-            log.msg("OnUSSEvent -> %s" % (repr(self.hxp.parse(OnUSSEvent_xml))))
+            log.msg("OnUSSEvent -> %r" % (self.hxp.parse(OnUSSEvent_xml),))
         self.assertEquals(self.hxp.parse(OnUSSEvent_xml), OnUSSEvent_dict)
-
 
     def testParseUSSReply(self):
         USSReply_xml = '''
@@ -300,7 +322,6 @@ class HigateXMLTestCases(TestCase):
             log.msg("USSReply -> %s" % (repr(self.hxp.parse(USSReply_xml))))
         self.assertEquals(self.hxp.parse(USSReply_xml), USSReply_dict)
 
-
     def testBuildUSSReply(self):
         USSReply_dict = {'Flags': '0',
                         'Password': 'xxxxxxxx',
@@ -318,11 +339,9 @@ class HigateXMLTestCases(TestCase):
         </Message>
         '''
         # make xml string formatting compact & consistent
-        USSReply_xml = ElementTree.tostring(ElementTree.fromstring(USSReply_xml))
+        USSReply_xml = ElementTree.tostring(
+            ElementTree.fromstring(USSReply_xml))
         USSReply_xml = re.sub(r'\n\s*', '', USSReply_xml)
         if self.dolog:
             log.msg("USSReply -> %s" % (repr(self.hxp.build(USSReply_dict))))
         self.assertEquals(self.hxp.build(USSReply_dict), USSReply_xml)
-
-
-

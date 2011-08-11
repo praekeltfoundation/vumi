@@ -18,7 +18,7 @@ class ServiceTestCase(TestCase):
         """The consume helper should direct all incoming messages matching the
         specified routing_key, queue_name & exchange to the given callback"""
 
-        message = fake_amq_message({"key":"value"})
+        message = fake_amq_message({"key": "value"})
         queue = TestQueue([message])
         worker = TestWorker(queue)
 
@@ -49,7 +49,6 @@ class ServiceTestCase(TestCase):
         self.assertEquals(delivered_content.properties, {'delivery mode': 2})
 
 
-
 class LoadableTestWorker(Worker):
     def poke(self):
         return "poke"
@@ -75,7 +74,7 @@ class TestWorkerCreator(TestCase):
 
     def test_create_worker(self):
         """
-        WorkerCreator should successfully create an instance of the test worker.
+        WorkerCreator should successfully create a test worker instance.
         """
 
         creator = self.get_creator()
@@ -84,4 +83,3 @@ class TestWorkerCreator(TestCase):
         factory = creator.create_worker(worker_class, {})
         factory.buildProtocol(None)
         self.assertEquals("poke", factory.worker.poke())
-

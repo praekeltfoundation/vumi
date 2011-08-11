@@ -3,11 +3,12 @@ from twisted.python import log
 from twisted.python.log import logging
 from ssmi import client
 
+
 def ussd_code_to_routing_key(ussd_code):
     # convert *120*663*79# to s120s663s79h since
     # * and # are wildcards for AMQP based routing
-    ussd_code = ussd_code.replace("*","s")
-    ussd_code = ussd_code.replace("#","h")
+    ussd_code = ussd_code.replace("*", "s")
+    ussd_code = ussd_code.replace("#", "h")
     return ussd_code
 
 
@@ -25,8 +26,8 @@ class VumiSSMIProtocol(client.SSMIClient):
     work with callbacks to do authorization
     """
     def __init__(self, username, password):
-        self._username = username # these could probably be a 
-        self._password = password # callback instance var
+        self._username = username  # these could probably be a
+        self._password = password  # callback instance var
 
     def set_handler(self, handler):
         # set the variables needed by SSMIClient so I don't have to
@@ -65,7 +66,7 @@ class VumiSSMIFactory(client.SSMIFactory):
         prot = self.protocol(*self.args, **self.kwargs)
         prot.factory = self
         log.msg('SSMIFactory Connected.', logLevel=logging.DEBUG)
-        log.msg('SSMIFactory Resetting reconnection delay', logLevel=logging.DEBUG)
+        log.msg('SSMIFactory Resetting reconnection delay',
+                logLevel=logging.DEBUG)
         self.resetDelay()
         return prot
-
