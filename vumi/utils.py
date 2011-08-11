@@ -4,7 +4,6 @@ from twisted.internet import reactor, protocol
 from twisted.internet.defer import succeed
 from twisted.web.client import Agent
 from twisted.web.http_headers import Headers
-from twisted.python import log
 from twisted.web.iweb import IBodyProducer
 
 import importlib
@@ -29,10 +28,13 @@ def http_request(url, data, headers={}, method='POST'):
                 def __init__(s, d):
                     s.buf = ''
                     s.d = d
+
                 def dataReceived(s, data):
                     s.buf += data
+
                 def connectionLost(s, reason):
-                    # TODO: test if reason is twisted.web.client.ResponseDone, if not, do an errback
+                    # TODO: test if reason is twisted.web.client.ResponseDone,
+                    # if not, do an errback
                     s.d.callback(s.buf)
 
             d = defer.Deferred()
@@ -41,6 +43,7 @@ def http_request(url, data, headers={}, method='POST'):
 
     d.addCallback(handle_response)
     return d
+
 
 def normalize_msisdn(raw, country_code=''):
     # don't touch shortcodes
@@ -66,18 +69,18 @@ class StringProducer(object):
     create a producer for a bit of content
     """
     implements(IBodyProducer)
-    
+
     def __init__(self, body):
         self.body = body
         self.length = len(body)
-    
+
     def startProducing(self, consumer):
         consumer.write(self.body)
         return succeed(None)
-    
+
     def pauseProducing(self):
         pass
-    
+
     def stopProducing(self):
         pass
 
@@ -114,7 +117,8 @@ def load_class_by_string(class_path):
     Load a class when given it's full name, including modules in python
     dot notation
 
-    >>> load_class_by_string('vumi.workers.example.ExampleWorker') # doctest: +ELLIPSIS
+    >>> cls = 'vumi.workers.example.ExampleWorker'
+    >>> load_class_by_string(cls) # doctest: +ELLIPSIS
     <class vumi.workers.example.ExampleWorker at ...>
     >>>
 

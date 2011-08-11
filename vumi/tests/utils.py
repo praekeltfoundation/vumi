@@ -14,6 +14,7 @@ from twisted.internet import defer
 from vumi.utils import make_vumi_path_abs
 from vumi.service import Worker, WorkerAMQClient
 
+
 def setup_django_test_database():
     from django.test.simple import DjangoTestSuiteRunner
     from django.test.utils import setup_test_environment
@@ -23,13 +24,15 @@ def setup_django_test_database():
     setup_test_environment()
     return runner, runner.setup_databases()
 
+
 def teardown_django_test_database(runner, config):
     from django.test.utils import teardown_test_environment
     runner.teardown_databases(config)
     teardown_test_environment()
 
+
 class Mocking(object):
-    
+
     class HistoryItem(object):
         def __init__(self, args, kwargs):
             self.args = args
@@ -44,7 +47,7 @@ class Mocking(object):
 
     def __enter__(self):
         """Overwrite whatever module the function is part of"""
-        self.mod = importlib.import_module(self.function.__module__) 
+        self.mod = importlib.import_module(self.function.__module__)
         setattr(self.mod, self.function.func_name, self)
         return self
 
@@ -58,7 +61,7 @@ class Mocking(object):
         if ever called."""
         self.args = args
         self.kwargs = kwargs
-        self.called +=1 
+        self.called += 1
         self.history.append(self.HistoryItem(args, kwargs))
         return self.return_value
 
@@ -67,7 +70,10 @@ class Mocking(object):
         self.return_value = args if len(args) > 1 else list(args).pop()
         return self
 
-def mocking(fn): return Mocking(fn)
+
+def mocking(fn):
+    return Mocking(fn)
+
 
 class TestPublisher(object):
     """
@@ -78,23 +84,23 @@ class TestPublisher(object):
     """
     def __init__(self):
         self.queue = []
-    
+
     @contextmanager
     def transaction(self):
         yield
-    
+
     def publish_message(self, message, **kwargs):
         self.queue.append((message, kwargs))
 
 
 _TUPLE_CACHE = {}
+
+
 def fake_amq_message(dictionary, delivery_tag='delivery_tag'):
     Content = namedtuple('Content', ['body'])
-    Message = namedtuple('Message', ['content','delivery_tag'])
-    return Message(
-        delivery_tag=delivery_tag, 
-        content=Content(body=json.dumps(dictionary))
-    )
+    Message = namedtuple('Message', ['content', 'delivery_tag'])
+    return Message(delivery_tag=delivery_tag,
+                   content=Content(body=json.dumps(dictionary)))
 
 
 class TestQueue(object):
@@ -113,6 +119,7 @@ class TestQueue(object):
             d.callback(self.queue.pop())
         return d
 
+
 class TestChannel(object):
     def __init__(self, _id=None):
         self.ack_log = []
@@ -124,17 +131,17 @@ class TestChannel(object):
 
     def channel_close(self, *args, **kwargs):
         return defer.succeed(None)
-    
+
     def channel_open(self, *args, **kwargs):
         return defer.succeed(None)
-    
+
     def basic_publish(self, *args, **kwargs):
         self.publish_message_log.append(kwargs)
         self.publish_log.append(kwargs)
-    
+
     def basic_qos(self, *args, **kwargs):
         return defer.succeed(None)
-    
+
     def exchange_declare(self, *args, **kwargs):
         pass
 
@@ -170,7 +177,6 @@ class TestWorker(Worker):
             config = {}
         self._queue = queue
         Worker.__init__(self, StubbedAMQClient(queue), config)
-
 
 
 class TestAMQClient(WorkerAMQClient):
@@ -212,6 +218,7 @@ def get_stubbed_worker(worker_class, config=None):
     amq_client.vumi_options = {}
     worker = worker_class(amq_client, config)
     return worker
+
 
 class FakeRedis(object):
     def __init__(self):
@@ -287,5 +294,3 @@ class FakeRedis(object):
         if stop == 0:
             stop = None
         return [val[1] for val in zval[start:stop]]
-
-

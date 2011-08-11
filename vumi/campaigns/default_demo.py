@@ -8,7 +8,6 @@ from vumi.workers.truteq.util import SessionType
 from alexandria.client import Client
 from alexandria.sessions.backend import DBBackend
 from alexandria.sessions.manager import SessionManager
-from alexandria.sessions.db import models
 from alexandria.sessions.db.views import _get_data
 from alexandria.dsl.core import MenuSystem, prompt, end, case
 from alexandria.dsl.validators import pick_one

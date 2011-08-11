@@ -1,11 +1,9 @@
 from twisted.python import log
-from twisted.python.log import logging
-from twisted.internet.defer import inlineCallbacks, returnValue
-from twisted.internet import reactor
+from twisted.internet.defer import inlineCallbacks
 
 from vumi.message import Message
 from vumi.service import Worker, Consumer, Publisher
-from vumi.workers.truteq.util import VumiSSMIFactory, SessionType, ussd_code_to_routing_key
+from vumi.workers.truteq.util import SessionType
 
 
 class TruTeqConsumer(Consumer):
@@ -18,10 +16,10 @@ class TruTeqConsumer(Consumer):
     durable = False
     queue_name = "ussd.truteq.test_campaign"
     routing_key = "ussd.s120s663s79h"
-    
+
     def __init__(self, publisher):
         self.publisher = publisher
-    
+
     def consume_message(self, message):
         log.msg("Consumed Message %s" % message)
         dictionary = message.payload
@@ -42,7 +40,7 @@ class TruTeqConsumer(Consumer):
             }
         self.publisher.publish_message(Message(**response))
         return True
-    
+
 
 class TruTeqPublisher(Publisher):
     exchange_name = "vumi.ussd"
@@ -51,22 +49,21 @@ class TruTeqPublisher(Publisher):
     durable = False                     # -> not created at boot
     auto_delete = False                 # -> auto delete if no consumers bound
     delivery_mode = 2                   # -> do not save to disk
-    
+
     def publish_message(self, message, **kwargs):
-        log.msg("Publishing Message %s with extra args: %s" % (message, kwargs))
+        log.msg("Publishing Message %s with extra args: %s" % (message,
+                                                               kwargs))
         super(TruTeqPublisher, self).publish_message(message, **kwargs)
-    
+
 
 class USSDWorker(Worker):
-    
+
     @inlineCallbacks
     def startWorker(self):
         log.msg("Starting the USSDWorker")
         self.publisher = yield self.start_publisher(TruTeqPublisher)
-        self.consumer = yield self.start_consumer(TruTeqConsumer, self.publisher)
-    
+        self.consumer = yield self.start_consumer(TruTeqConsumer,
+                                                  self.publisher)
+
     def stopWorker(self):
         log.msg("Stopping the USSDWorker")
-    
-
-

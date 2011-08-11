@@ -12,11 +12,13 @@ def setup_db(name, *args, **kw):
     DATABASES[name] = db
     return db
 
+
 def get_db(name):
     db = DATABASES.get(name, None)
     if db:
         return db
     raise ValueError("Database %s is not set up." % (name,))
+
 
 def close_db(name):
     db = DATABASES.get(name, None)
@@ -41,7 +43,9 @@ class UglyModel(object):
     def create_table(cls, db):
         cols = ', '.join([' '.join(f) for f in cls.fields])
         query = ''.join(['CREATE TABLE ', cls.table_name, ' (', cols, ')'])
-        return db.runOperation(query).addCallback(lambda _: cls.create_indexes(db))
+        d = db.runOperation(query)
+        d.addCallback(lambda _: cls.create_indexes(db))
+        return d
 
     @classmethod
     def drop_table(cls, db, if_exists=True, cascade=False):
@@ -94,9 +98,11 @@ class UglyModel(object):
     def insert_values_query(cls, **kw):
         fields = kw.keys()
         valuespecs = ", ".join(["%%(%s)s" % f for f in fields])
-        return "INSERT INTO %s (%s) VALUES (%s)" % (cls.table_name, ", ".join(fields), valuespecs)
+        return "INSERT INTO %s (%s) VALUES (%s)" % (
+            cls.table_name, ", ".join(fields), valuespecs)
 
     @classmethod
     def count_rows(cls, txn, suffix='', values=None):
-        txn.execute("SELECT count(1) FROM %s %s" % (cls.table_name, suffix), values)
+        txn.execute("SELECT count(1) FROM %s %s" % (
+                cls.table_name, suffix), values)
         return txn.fetchone()[0]

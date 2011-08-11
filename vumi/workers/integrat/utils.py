@@ -1,5 +1,6 @@
 from  xml.etree import ElementTree
 
+
 class HigateXMLParser():
 
     def parse(self, xmlstring):
@@ -10,13 +11,13 @@ class HigateXMLParser():
             responselist = element.find("Response").items()
             for i in responselist:
                 messagedict[i[0]] = i[1]
-        except Exception, e:
+        except Exception:
             pass
         try:
             requestlist = element.find("Request").items()
             for i in requestlist:
                 messagedict[i[0]] = i[1]
-        except Exception, e:
+        except Exception:
             pass
 
         ##############  Conditional checks ##########################
@@ -27,29 +28,34 @@ class HigateXMLParser():
                 messagedict[i[0]] = i[1]
 
         if messagedict.get('Type') == "SendSMS":
-            pass #TODO
+            pass  # TODO
 
         if messagedict.get('Type') == "OnReceiveSMS":
             receivelist = element.find("Response").find("OnReceiveSMS").items()
-            hex = element.find("Response").find("OnReceiveSMS").find("Content").findtext("")
+            hex = element.find("Response").find("OnReceiveSMS").find(
+                "Content").findtext("")
             messagedict['hex'] = hex
             for i in receivelist:
                 messagedict[i[0]] = i[1]
 
         if messagedict.get('Type') == "OnOBSResponse":
-            pass #TODO
+            pass  # TODO
 
         if messagedict.get('Type') == "OnLBSResponse":
-            pass #TODO
+            pass  # TODO
 
         if messagedict.get('Type') == "OnUSSEvent":
-            contextlist = element.find("Response").find("OnUSSEvent").find("USSContext").items()
-            if element.find("Response").find("OnUSSEvent").find("USSText") != None:
-                USSText = element.find("Response").find("OnUSSEvent").find("USSText").findtext("")
+            contextlist = element.find("Response").find("OnUSSEvent").find(
+                "USSContext").items()
+            if element.find("Response").find("OnUSSEvent").find(
+                "USSText") != None:
+                USSText = element.find("Response").find("OnUSSEvent").find(
+                    "USSText").findtext("")
                 messagedict['USSText'] = USSText
-            
-            messagedict['EventType'] = element.find("Response").find("OnUSSEvent").attrib['Type']
-            
+
+            messagedict['EventType'] = element.find("Response").find(
+                "OnUSSEvent").attrib['Type']
+
             for i in contextlist:
                 messagedict[i[0]] = i[1]
 
@@ -65,11 +71,10 @@ class HigateXMLParser():
 
         return messagedict
 
-
     def build(self, messagedict):
         message = ElementTree.Element("Message")
         version = ElementTree.SubElement(message, "Version")
-        version.set("Version","1.0")
+        version.set("Version", "1.0")
 
         ##############  Conditional checks ##########################
 
@@ -90,5 +95,3 @@ class HigateXMLParser():
         #############################################################
 
         return ElementTree.tostring(message)
-
-
