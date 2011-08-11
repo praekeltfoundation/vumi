@@ -1,8 +1,7 @@
 import re
 
 from twisted.python import log
-from twisted.internet.defer import inlineCallbacks, returnValue
-from twisted.internet import reactor
+from twisted.internet.defer import inlineCallbacks
 
 from vumi.service import Worker
 from vumi.message import Message
@@ -26,10 +25,10 @@ def packCellulantUSSDMessage(message):
 def unpackCellulantUSSDMessage(message):
     mess = re.search(
               '^(?P<SESSIONID>[^|]*)'
-            +'\|(?P<NETWORKID>[^|]*)'
-            +'\|(?P<MSISDN>[^|]*)'
-            +'\|(?P<MESSAGE>[^|]*)'
-            +'\|(?P<OPERATION>[^|]*)$',
+            + '\|(?P<NETWORKID>[^|]*)'
+            + '\|(?P<MSISDN>[^|]*)'
+            + '\|(?P<MESSAGE>[^|]*)'
+            + '\|(?P<OPERATION>[^|]*)$',
             message.payload['message'])
     return Message(recipient=mess.groupdict()['MSISDN'],
                     message=mess.groupdict()['MESSAGE'])
@@ -38,7 +37,8 @@ def unpackCellulantUSSDMessage(message):
 class XMPPtoCellulantUSSDWorker(Worker):
     @inlineCallbacks
     def startWorker(self):
-        log.msg("Starting the XMPPtoCellulantUSSDWorker config: %s" % self.config)
+        log.msg("Starting the XMPPtoCellulantUSSDWorker config: %s" % (
+                self.config,))
         # create the publisher
         self.publisher = yield self.publish_to('xmpp.inbound.cellulant.%s' %
                                                 self.config['username'])
@@ -54,16 +54,15 @@ class XMPPtoCellulantUSSDWorker(Worker):
             pass
         return _message
 
-
     def stopWorker(self):
         log.msg("Stopping the XMPPtoCellulantUSSDWorker")
-
 
 
 class CellulantUSSDtoXMPPWorker(Worker):
     @inlineCallbacks
     def startWorker(self):
-        log.msg("Starting the CellulantUSSDtoXMPPWorker config: %s" % self.config)
+        log.msg("Starting the CellulantUSSDtoXMPPWorker config: %s" % (
+                self.config,))
         # create the publisher
         self.publisher = yield self.publish_to('xmpp.outbound.gtalk.%s' %
                                                 self.config['username'])
@@ -79,8 +78,5 @@ class CellulantUSSDtoXMPPWorker(Worker):
             pass
         return _message
 
-
     def stopWorker(self):
         log.msg("Stopping the CellulantUSSDtoXMPPWorker")
-
-
