@@ -15,7 +15,6 @@ iso8601==0.1.4
 supervisor
 psycopg2==2.4.1
 South==0.7.3
-smn-alexandria==0.1.1
 Sphinx==1.0.7
 django-nose
 coverage

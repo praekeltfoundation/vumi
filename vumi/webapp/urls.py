@@ -1,13 +1,8 @@
-from django.conf.urls.defaults import *
-from django.views.generic import simple
+from django.conf.urls.defaults import patterns, url, include
 from django.contrib import admin
 admin.autodiscover()
 
-# always load the signals
-from vumi.webapp.api.signals import *
-
 urlpatterns = patterns('',
-    # Example:
     (r'^', include('vumi.webapp.prelaunch.urls', namespace="prelaunch")),
     (r'^api/v1/', include('vumi.webapp.api.urls', namespace="api")),
     (r'^health', include('vumi.webapp.health.urls', namespace="health")),

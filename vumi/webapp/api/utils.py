@@ -111,7 +111,7 @@ def callback(url, list_of_tuples, auth_type='basic', debug=False,
             auth_type.upper()))
 
     try:
-        result = ch.perform()
+        ch.perform()
         resp = data.getvalue()
         logging.debug("Posting to %r which returned %r", url, resp)
         return (url, resp)
@@ -131,7 +131,7 @@ def post_data_to_url(url, payload, content_type):
     ch.setopt(pycurl.POSTFIELDSIZE, len(payload))
 
     try:
-        result = ch.perform()
+        ch.perform()
         resp = data.getvalue()
         logging.debug("Posting to %r which returned %r", url, resp)
         return (url, resp)
