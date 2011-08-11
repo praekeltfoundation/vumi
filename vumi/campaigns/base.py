@@ -5,7 +5,8 @@ from vumi.message import Message
 
 
 class BaseWorker(Worker):
-    def subscribe_to_transport(self, transport, account, identifier=None, callback=lambda *a: a):
+    def subscribe_to_transport(self, transport, account, identifier=None,
+                               callback=lambda *a: a):
         routing_key = '%s.inbound.%s' % (transport, account)
         if identifier:
             routing_key += ".%s" % identifier

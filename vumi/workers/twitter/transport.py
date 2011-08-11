@@ -7,11 +7,6 @@ from vumi.message import Message
 
 
 class TwitterTransport(Worker):
-
-    # inlineCallbacks, TwistedMatrix's fancy way of allowing you to write
-    # asynchronous code as if it was synchronous by the nifty use of
-    # coroutines.
-    # See: http://twistedmatrix.com/documents/10.0.0/api/twisted.internet.defer.html#inlineCallbacks
     @inlineCallbacks
     def startWorker(self):
         log.msg("Starting the TwitterTransport config: %s" % self.config)
@@ -24,8 +19,8 @@ class TwitterTransport(Worker):
         self.publisher = yield self.publish_to(
             'twitter.inbound.%(username)s' % self.config)
         # when it's done, create the consumer and pass it the publisher
-        self.consumer = yield self.consume(
-            'twitter.outbound.%(username)s' % self.config, self.consume_message)
+        self.consumer = yield self.consume('twitter.outbound.%(username)s' %
+                                           self.config, self.consume_message)
         # publish something into the queue for the consumer to pick up.
         self.stream = yield twitter.TwitterFeed(username, password). \
                                 track(self.handle_status, terms). \

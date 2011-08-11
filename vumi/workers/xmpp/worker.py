@@ -6,11 +6,6 @@ from vumi.message import Message
 
 
 class XMPPWorker(Worker):
-
-    # inlineCallbacks, TwistedMatrix's fancy way of allowing you to write
-    # asynchronous code as if it was synchronous by the nifty use of
-    # coroutines.
-    # See: http://twistedmatrix.com/documents/10.0.0/api/twisted.internet.defer.html#inlineCallbacks
     @inlineCallbacks
     def startWorker(self):
         log.msg("Starting the XMPPWorker config: %s" % self.config)
