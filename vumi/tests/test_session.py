@@ -1,12 +1,9 @@
-import time
-import json
-import yaml
-import redis
-
 from twisted.trial.unittest import TestCase
-from vumi.session import VumiSession, TemplatedDecisionTree, PopulatedDecisionTree, TraversedDecisionTree
-from vumi.workers.session.worker import SessionConsumer, SessionPublisher, SessionWorker
-from vumi.session import *
+
+from vumi.session import (VumiSession, TemplatedDecisionTree,
+                          PopulatedDecisionTree, TraversedDecisionTree)
+from vumi.workers.session.worker import SessionConsumer
+
 
 class SessionTestCase(TestCase):
 
@@ -143,7 +140,6 @@ class SessionTestCase(TestCase):
                 swahili: "Asante na kwaheri."
         '''
 
-
         # just check the load operations don't blow up
         self.assertEquals(dt1.load_yaml_template(test_yaml), None)
         self.assertEquals(dt2.load_yaml_template(test_yaml), None)
@@ -192,7 +188,6 @@ class SessionTestCase(TestCase):
         self.assertEquals(dt3.finish(),
                 'Thank you and goodbye.')
         #print dt3.dumps(level=2, serialize=yaml.dump)
-
 
         test_yaml = '''
         __data__:
@@ -390,7 +385,6 @@ class SessionTestCase(TestCase):
         sess4 = sc.get_session("12345")
         dt4 = sess4.get_decision_tree()
         dt4.answer(23)
-
 
         self.assertEquals(dt4.question(),
                 "Which day was it?\n1. Today\n2. Yesterday\n3. An earlier day")
