@@ -10,4 +10,3 @@ class WorkerLoaderBase(Worker):
             options.update(vumi_options_override)
         creator = WorkerCreator(options)
         creator.create_worker(worker_class, config)
-
