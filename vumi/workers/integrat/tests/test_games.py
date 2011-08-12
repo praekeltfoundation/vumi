@@ -2,7 +2,27 @@ from twisted.trial import unittest
 
 from vumi.tests.utils import get_stubbed_worker
 from vumi.workers.integrat.games import (RockPaperScissorsGame,
-                                         RockPaperScissorsWorker)
+                                         RockPaperScissorsWorker,
+                                         HangmanGame,
+                                         HangmanWorker)
+
+
+class WorkerStubMixin(object):
+    def _get_replies(self):
+        if not hasattr(self, '_replies'):
+            self._replies = []
+        return self._replies
+
+    def _set_replies(self, value):
+        self._replies = value
+
+    replies = property(fget=_get_replies, fset=_set_replies)
+
+    def reply(self, sid, message):
+        self.replies.append(('reply', sid, message))
+
+    def end(self, sid, message):
+        self.replies.append(('end', sid, message))
 
 
 class TestRockPaperScissorsGame(unittest.TestCase):
@@ -57,12 +77,8 @@ class TestRockPaperScissorsGame(unittest.TestCase):
         self.assertEquals((1, 2), game.scores)
 
 
-class RockPaperScissorsWorkerStub(RockPaperScissorsWorker):
-    def reply(self, sid, message):
-        self.replies.append(('reply', sid, message))
-
-    def end(self, sid, message):
-        self.replies.append(('end', sid, message))
+class RockPaperScissorsWorkerStub(WorkerStubMixin, RockPaperScissorsWorker):
+    pass
 
 
 class TestRockPaperScissorsWorker(unittest.TestCase):
@@ -71,7 +87,6 @@ class TestRockPaperScissorsWorker(unittest.TestCase):
                 'transport_name': 'foo',
                 'ussd_code': '99999',
                 })
-        worker.replies = []
         worker.startWorker()
         return worker
 
@@ -103,3 +118,52 @@ class TestRockPaperScissorsWorker(unittest.TestCase):
         worker.resume_session({'transport_session_id': 'sp1', 'message': '2'})
         self.assertEquals(2, len(worker.replies))
         self.assertEquals((0, 1), game.scores)
+
+
+class TestHangmanGame(unittest.TestCase):
+    def test_easy_game(self):
+        game = HangmanGame(word='moo')
+        game.event('m')
+        game.event('o')
+        self.assertTrue(game.won())
+        self.assertTrue(game.state().startswith("moo:mo:"))
+
+    def test_from_state(self):
+        game = HangmanGame.from_state("bar:xyz:Eep?")
+        self.assertEqual(game.word, "bar")
+        self.assertEqual(game.guesses, set("xyz"))
+        self.assertEqual(game.msg, "Eep?")
+        self.assertEqual(game.exited, False)
+
+    def test_exit(self):
+        game = HangmanGame()
+        game.event('0')
+        self.assertTrue(game.exited)
+
+    def test_garbage_input(self):
+        game = HangmanGame(word="zoo")
+        for garbage in [
+            ":", "!", "\x00", "+", "abc",
+            ]:
+            game.event(garbage)
+        self.assertEqual(game.guesses, set())
+        game.event('z')
+        game.event('o')
+        self.assertTrue(game.won())
+
+    def test_random_word(self):
+        pass
+
+
+class HangmanWorkerStub(WorkerStubMixin, HangmanWorker):
+    pass
+
+
+class TestHangmanWorker(unittest.TestCase):
+    def get_worker(self):
+        worker = get_stubbed_worker(HangmanWorkerStub, {
+                'transport_name': 'foo',
+                'ussd_code': '99999',
+                })
+        worker.startWorker()
+        return worker

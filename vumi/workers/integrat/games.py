@@ -3,8 +3,11 @@
 from twisted.internet.defer import inlineCallbacks
 from twisted.python import log
 
-from vumi.utils import safe_routing_key
+from vumi.utils import safe_routing_key, get_deploy_int
 from vumi.workers.integrat.worker import IntegratWorker
+
+import redis
+import string
 
 
 class MultiPlayerGameWorker(IntegratWorker):
@@ -19,7 +22,7 @@ class MultiPlayerGameWorker(IntegratWorker):
             'ussd.outbound.%(transport_name)s' % self.config)
         self.consumer = yield self.consume('ussd.inbound.%s.%s' % (
             self.config['transport_name'],
-            safe_routing_key(self.config['ussd_code'])
+            safe_routing_key(self.config['ussd_code']),
         ), self.consume_message)
 
     def new_session(self, data):
@@ -329,3 +332,185 @@ class RockPaperScissorsWorker(MultiPlayerGameWorker):
             return
         self.reply(game.player_1, game.draw_board(game.player_1))
         self.reply(game.player_2, game.draw_board(game.player_2))
+
+
+class HangmanGame(object):
+    """Represents a game of Hangman.
+
+       Parameters
+       ----------
+       word : str, optional
+           Word to guess. If None, a word is randomly selected.
+       guesses : set, optional
+           Characters guessed so far. If None, defaults to the empty set.
+       msg : str, optional
+           Message set in reply to last user action. Defaults to the
+           empty str.
+       """
+
+    UI_TEMPLATE = \
+        "%(msg)s\n" \
+        "Word: %(word)s\n" \
+        "Letters guessed so far: %(guesses)\n" \
+        "%(prompt)s (0 to quit):\n"
+
+    def __init__(self, word=None, guesses=None, msg="New game!"):
+        self.word = word if word is not None else self.random_word()
+        self.guesses = guesses if guesses is not None else set()
+        self.msg = msg
+        self.exited = False
+
+    def state(self):
+        """Serialize the Hangman object to a string."""
+        guesses = "".join(sorted(self.guesses))
+        return "%s:%s:%s" % (self.word, guesses, self.msg)
+
+    def random_word(self):
+        return "elephant"
+
+    @classmethod
+    def from_state(cls, state):
+        word, guesses, msg = state.split(":", 2)
+        guesses = set(guesses)
+        return cls(word=word, guesses=guesses, msg=msg)
+
+    def event(self, message):
+        """Handle an user input string."""
+        message = message.lower()
+        if not message:
+            self.msg = "Some input required please."
+        elif len(message) > 1:
+            self.msg = "Single characters only please."
+        elif message == '0':
+            self.exited = True
+            self.msg = "Game ended."
+        elif message not in string.lowercase:
+            self.msg = "Letters of the alphabet only please."
+        elif self.won():
+            # new game!
+            self.__init__()
+        elif message in self.guesses:
+            self.msg = "You've already guessed %r." % (message,)
+        else:
+            assert len(message) == 1
+            self.guesses.add(message)
+            if message in self.word:
+                self.msg = "Word contains at least one %r! :D" % (message,)
+            else:
+                self.msg = "Word contains no %r. :(" % (message,)
+
+        if self.won():
+            self.msg = self.victory_message()
+
+    def victory_message(self):
+        uniques = len(set(self.word))
+        guesses = len(self.guesses)
+        for factor, msg in [
+            (1, "Flawless victory!"),
+            (1.5, "Epic victory!"),
+            (2, "Standard victory!"),
+            (3, "Sub-par victory!"),
+            (4, "Random victory!"),
+            ]:
+            if guesses <= uniques * factor:
+                return msg
+        return "Button mashing!"
+
+    def won(self):
+        return all(x in self.guesses for x in self.word)
+
+    def draw_board(self):
+        """Return a text-based UI."""
+        if self.exited:
+            return "Adieu!"
+        word = "".join((x if x in self.guesses else '_') for x in self.word)
+        guesses = "".join(sorted(self.guesses))
+        if self.won():
+            prompt = "Enter anything to start a new game"
+        else:
+            prompt = "Enter next guess"
+        return self.UI_TEMPLATE % {'word': word,
+                                   'guesses': guesses,
+                                   'msg': self.msg,
+                                   'prompt': prompt,
+                                   }
+
+
+class HangmanWorker(IntegratWorker):
+    """Worker that plays Hangman.
+       """
+
+    @inlineCallbacks
+    def startWorker(self):
+        """Start the worker"""
+        # Connect to Redis
+        self.r_server = redis.Redis("localhost",
+                                    db=get_deploy_int(self._amqp_client.vhost))
+        log.msg("Connected to Redis")
+        self.r_prefix = "hangman:%s:%s" % (
+                self.config['transport_name'],
+                safe_routing_key(self.config['ussd_code']))
+        log.msg("r_prefix = %s" % self.r_prefix)
+
+        for deferred in super(HangmanWorker, self).startWorker():
+            yield deferred
+
+    def game_key(self, userid):
+        "Key for looking up a users game in data store."""
+        # TODO: Is this a safe key?
+        return "%s#%s" % (self.r_prefix, userid)
+
+    def load_game(self, userid):
+        """Fetch a game for the given user ID.
+
+           Creates a new game if none exists.
+           """
+        game_key = self.game_key(userid)
+        state = self.r_server.get(game_key)
+        if state is not None:
+            game = HangmanGame.from_state(state)
+        else:
+            game = HangmanGame()
+            self.r_server.set(game_key, game.state())
+        return game
+
+    def save_game(self, userid, game):
+        """Save the game state for the given game."""
+        game_key = self.game_key(userid)
+        state = game.state()
+        self.r_server.set(game_key, state)
+
+    def delete_game(self, userid):
+        """Delete the users saved game."""
+        game_key = self.game_key(userid)
+        self.r_server.delete(game_key)
+
+    def new_session(self, data):
+        """Find or creating hangman game for this player.
+
+           Sends current state.
+           """
+        log.msg("New session:", data)
+        session_id = data['transport_session_id']
+        msisdn = data['sender']
+        game = self.load_game(msisdn)
+        self.reply(session_id, game.draw_board())
+
+    def close_session(self, data):
+        # Hangman games intentionally stick around
+        # and can be picked up again later.
+        pass
+
+    def resume_session(self, data):
+        log.msg("Resume session:", data)
+        session_id = data['transport_session_id']
+        msisdn = data['sender']
+        message = data['message'].strip()
+        game = self.load_game(msisdn)
+        game.event(message)
+        if game.exited:
+            self.delete_game(msisdn)
+            self.end(session_id, game.draw_board())
+        else:
+            self.save_game(msisdn, game)
+            self.reply(session_id, game.draw_board())
