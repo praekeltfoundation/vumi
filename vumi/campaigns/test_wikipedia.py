@@ -1,6 +1,6 @@
-from twisted.python import log
 from twisted.trial.unittest import TestCase
 from vumi.campaigns.wikipedia import OpenSearch, pretty_print_results
+
 
 class WikipediaTestCase(TestCase):
     def setUp(self):
@@ -33,10 +33,10 @@ class WikipediaTestCase(TestCase):
                 </Item>
             </Section>
         </SearchSuggestion>"""
-    
+
     def tearDown(self):
         pass
-    
+
     def test_open_search_results(self):
         os = OpenSearch()
         results = os.parse_xml(self.sample_xml)
@@ -54,7 +54,7 @@ class WikipediaTestCase(TestCase):
                 'height': '50'
             }
         })
-    
+
     def test_pretty_print_results(self):
         results = OpenSearch().parse_xml(self.sample_xml)
         self.assertEquals(pretty_print_results(results), '\n'.join([

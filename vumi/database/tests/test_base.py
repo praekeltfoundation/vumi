@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 
 from twisted.trial.unittest import TestCase, SkipTest
-from twisted.internet.defer import succeed, inlineCallbacks
+from twisted.internet.defer import succeed
 import pytz
 
 from vumi.database.base import setup_db, get_db, close_db
@@ -42,10 +42,13 @@ class UglyModelTestCase(TestCase):
     def setup_db(self, *tables, **kw):
         dbname = kw.pop('dbname', 'test')
         self._test_tables = tables
+
         def _eb(f):
-            raise SkipTest("Unable to connect to test database: %s" % (f.getErrorMessage(),))
+            raise SkipTest("Unable to connect to test database: %s" % (
+                    f.getErrorMessage(),))
         d = self._sdb(dbname)
         d.addErrback(_eb)
+
         def add_callback(func, *args, **kw):
             # This function exists to create a closure around a
             # variable in the correct scope. If we just add the
@@ -62,8 +65,8 @@ class UglyModelTestCase(TestCase):
         d = succeed(None)
         for tbl in reversed(self._test_tables):
             d.addCallback(lambda _: tbl.drop_table(self.db))
+
         def _cb(_):
             close_db(self._dbname)
             self.db = None
         return d.addCallback(_cb)
-

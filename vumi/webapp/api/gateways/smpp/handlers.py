@@ -1,21 +1,15 @@
-import re, yaml, logging
-from datetime import datetime, timedelta
+import logging
 
 from piston.handler import BaseHandler
-from piston.utils import rc, throttle, require_mime, validate
-from piston.utils import Mimer, FormValidationError
+from piston.utils import throttle
+from piston.utils import FormValidationError
 
-from vumi.webapp.api.models import SentSMS, SentSMSBatch, ReceivedSMS, URLCallback
+from vumi.webapp.api.models import SentSMS, SentSMSBatch
 from vumi.webapp.api import forms
 from vumi.webapp.api import signals
 from vumi.webapp.api.utils import specify_fields
 
-from alexandria.loader.base import YAMLLoader
-from alexandria.dsl.utils import dump_menu
-
 from django.contrib.auth.models import User
-
-import pystache
 
 
 class SendSMPPHandler(BaseHandler):
@@ -40,14 +34,14 @@ class SendSMPPHandler(BaseHandler):
         batch = SentSMSBatch.objects.create(title='', user=request.user)
         user = User.objects.get(username=request.user)
         transport = user.get_profile().transport.name
-        returnable = [self._send_one(
-                                transport_name=transport,
-                                batch=batch.pk,
-                                user=request.user.pk,
-                                to_msisdn=msisdn,
-                                from_msisdn=request.POST.get('from_msisdn'),
-                                message=request.POST.get('message'))
-                    for msisdn in request.POST.getlist('to_msisdn')]
+        for msisdn in request.POST.getlist('to_msisdn'):
+            self._send_one(transport_name=transport,
+                            batch=batch.pk,
+                            user=request.user.pk,
+                            to_msisdn=msisdn,
+                            from_msisdn=request.POST.get('from_msisdn'),
+                            message=request.POST.get('message'))
+        
         signals.sms_batch_scheduled.send(sender=SentSMSBatch, instance=batch,
                 pk=batch.pk)
         return {"send_group":batch.pk,

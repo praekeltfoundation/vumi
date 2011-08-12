@@ -13,14 +13,16 @@ class TelnetConsoleWorker(Worker):
     def startWorker(self):
         log.msg("Starting console worker.")
         self.publisher = yield self.publish_to('console.outbound')
-        self.consume('console.inbound', self.consume_message, 'console.inbound.%s' % (self.name,))
+        self.consume('console.inbound', self.consume_message,
+                     'console.inbound.%s' % (self.name,))
         log.msg("Started service")
 
     def consume_message(self, message):
         log.msg("Consumed message %s" % message)
         data = self.process_message(message.payload['message'])
         if data:
-            self.publisher.publish_message(Message(recipient=self.name, message=data))
+            self.publisher.publish_message(Message(recipient=self.name,
+                                                   message=data))
 
     def process_message(self, data):
         return None
@@ -57,10 +59,9 @@ class TelnetConsoleCounts(TelnetConsoleWorker):
         return ', '.join(response)
 
 
-
 def safe_split(s, sep, maxsplit):
     split = s.split(sep, maxsplit)
-    return (split + ['']*(maxsplit+1))[:maxsplit+1]
+    return (split + [''] * (maxsplit + 1))[:maxsplit + 1]
 
 
 class TelnetConsoleWorkerManager(WorkerLoaderBase):
@@ -72,10 +73,12 @@ class TelnetConsoleWorkerManager(WorkerLoaderBase):
     def startWorker(self):
         log.msg("Starting console worker.")
 
-        self.command_prefix = self.config.get('command_prefix', self.command_prefix)
+        self.command_prefix = self.config.get('command_prefix',
+                                              self.command_prefix)
 
         self.publisher = yield self.publish_to('console.outbound')
-        self.consume('console.inbound', self.consume_message, 'console.inbound.%s' % (self.name,))
+        self.consume('console.inbound', self.consume_message,
+                     'console.inbound.%s' % (self.name,))
         log.msg("Started service")
 
     def consume_message(self, message):
@@ -87,14 +90,15 @@ class TelnetConsoleWorkerManager(WorkerLoaderBase):
             return
 
         command, params = safe_split(msg[len(self.command_prefix):], None, 1)
-        cmd = getattr(self, 'cmd_'+command.lower(), None)
+        cmd = getattr(self, 'cmd_' + command.lower(), None)
         if cmd:
             resp = cmd(params)
         else:
             resp = "No such command: %s" % (command,)
 
         if resp:
-            self.publisher.publish_message(Message(recipient=self.name, message=resp))
+            self.publisher.publish_message(Message(recipient=self.name,
+                                                   message=resp))
 
     def cmd_load(self, params):
         params = params.split()
@@ -113,7 +117,8 @@ class TelnetConsoleWorkerManager(WorkerLoaderBase):
 
         try:
             self.load_worker(worker_class, config)
-            return "Loaded worker class %s with config %r" % (worker_class, config)
+            return "Loaded worker class %s with config %r" % (
+                worker_class, config)
         except Exception, e:
             return "Error loading worker class: %r" % (e,)
 

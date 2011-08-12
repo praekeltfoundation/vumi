@@ -3,12 +3,11 @@ from django.core.urlresolvers import reverse
 from django.contrib.auth.models import User
 from django.conf import settings
 import os.path
-from time import time
 import json
-from datetime import datetime, timedelta
+from datetime import datetime
 
-from vumi.webapp.api.signals import *
-from vumi.webapp.api.models import *
+from vumi.webapp.api.models import (SentSMS, SentSMSBatch, URLCallback, 
+                                    Transport)
 from vumi.webapp.api.tests.utils import APIClient, mock_sent_messages
 
 class BaseSMSHandlerTestCase(TestCase):
@@ -91,7 +90,8 @@ class BaseSentSMSStatusTestCase(TestCase):
         of only the most recent 50 ones (which I create manually in this test).
         """
         january_2009 = datetime(2009,01,01,0,0,0)
-        new_smss = mock_sent_messages(self.user, count=50)
+        # write some new SMSs
+        mock_sent_messages(self.user, count=50)
         resp = self.client.get(reverse('api:sms-status-list'), {
             'since': january_2009
         })

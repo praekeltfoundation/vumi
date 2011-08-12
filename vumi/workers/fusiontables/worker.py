@@ -1,11 +1,12 @@
+from urllib2 import HTTPError, URLError
+
 from twisted.python import log
 from twisted.internet.defer import inlineCallbacks
-from vumi.service import Worker
 from fusiontables.authorization.clientlogin import ClientLogin
 from fusiontables.sql.sqlbuilder import SQL
 from fusiontables import ftclient
-from urllib2 import HTTPError, URLError
-from urllib import quote
+
+from vumi.service import Worker
 
 
 def get_or_create_table(client, table_name, structure):
@@ -14,7 +15,8 @@ def get_or_create_table(client, table_name, structure):
         return table
     else:
         return create_table(client, table_name, structure)
-    
+
+
 def get_table(client, table_name):
     try:
         tables = client.query(SQL().showTables())
@@ -22,41 +24,44 @@ def get_table(client, table_name):
             table_id, table_name = line.split(',')
             if table_id.isdigit() and table_name == table_name:
                 return table_id
-    except ValueError, e:
+    except ValueError:
         log.err()
-    
+
+
 def create_table(client, table_name, structure):
     return client.query(SQL().createTable({
         table_name: structure
     })).split("\n")[1]
-    
+
 
 def prep(value):
     v = value or ''
-    v = v.replace("'","\\'")
+    v = v.replace("'", "\\'")
     return v.replace('"', '\"')
+
 
 def prep_geo(dictionary):
     if isinstance(dictionary, dict):
         return ' '.join(map(str, dictionary['coordinates']))
     return ''
 
+
 class FusionTableWorker(Worker):
-    
+
     @inlineCallbacks
     def startWorker(self):
         """start consuming json off the queue"""
         table_name = self.config['table_name']
         table_structure = self.config['table_structure']
-        
-        token = ClientLogin().authorize(self.config['username'], 
-                                                self.config['password'])
+
+        token = ClientLogin().authorize(self.config['username'],
+                                        self.config['password'])
         self.client = ftclient.ClientLoginFTClient(token)
-        self.table_id = get_or_create_table(self.client, table_name, table_structure)
-        consumer = yield self.consume('twitter.inbound.vumiapp.mandela', 
-                        self.consume_message)
-        
-    
+        self.table_id = get_or_create_table(self.client, table_name,
+                                            table_structure)
+        yield self.consume('twitter.inbound.vumiapp.mandela',
+                           self.consume_message)
+
     def consume_message(self, message):
         try:
             data = message.payload['data']
@@ -74,16 +79,15 @@ class FusionTableWorker(Worker):
             row = self.client.query(SQL().insert(self.table_id, post_data))
             log.msg('write row: %s' % row.split("\n")[1])
             return True
-        except HTTPError, e:
+        except HTTPError:
             log.msg(post_data)
             log.err()
             return False
-        except URLError, e:
+        except URLError:
             log.msg(post_data)
             log.err()
             return False
-    
+
     def stopWorker(self):
         """stop consuming json off the queue"""
         pass
-    

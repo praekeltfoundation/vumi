@@ -10,4 +10,5 @@ Contents
     :maxdepth: 1
     
     transports/setup-smpp.rst
+    transports/smpp-transports.rst
     transports/vas2net-transports.rst

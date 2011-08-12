@@ -13,10 +13,14 @@ class EchoWorker(Worker):
 
     @inlineCallbacks
     def startWorker(self):
-        """called by the Worker class when the AMQP connections been established"""
-        self.publisher = yield self.publish_to('sms.outbound.%(transport_name)s' % self.config)
-        self.consumer = yield self.consume('sms.inbound.%(transport_name)s.%(shortcode)s' % self.config,
-                                           self.handle_inbound_message)
+        """
+        called by the Worker class when the AMQP connections been established
+        """
+        self.publisher = yield self.publish_to(
+            'sms.outbound.%(transport_name)s' % self.config)
+        self.consumer = yield self.consume(
+            'sms.inbound.%(transport_name)s.%(shortcode)s' % self.config,
+            self.handle_inbound_message)
 
     def handle_inbound_message(self, message):
         log.msg("Received: %s" % (message.payload,))

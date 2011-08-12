@@ -37,9 +37,8 @@ class HttpRpcResource(Resource):
         md['path'] = request.path
         if logmsg:
             log.msg("HttpRpcResource", logmsg, "Message.message:", repr(md))
-        message = Message(message = md,
-                uuid = uu,
-                return_path = [self.transport.consume_key])
+        message = Message(message=md, uuid=uu,
+                          return_path=[self.transport.consume_key])
         self.transport.publisher.publish_message(message)
         self.transport.requests[uu] = request
         return NOT_DONE_YET
@@ -56,7 +55,8 @@ class HttpRpcTransport(Worker):
     @inlineCallbacks
     def startWorker(self):
         self.uuid = uuid.uuid4()
-        log.msg("Starting HttpRpcTransport %s config: %s" % (self.uuid, self.config))
+        log.msg("Starting HttpRpcTransport %s config: %s" % (self.uuid,
+                                                             self.config))
         self.publish_key = self.config['publish_key']
         self.consume_key = self.config['consume_key']
 
