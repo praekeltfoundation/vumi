@@ -361,13 +361,13 @@ class RedisTestSmppTransport(SmppTransport):
 class RedisRespTestCase(TestCase):
 
     def setUp(self):
-        self.seq = [123450]
+        self.seq = [123456]
         self.config = {
                 "system_id" : "vumitest-vumitest-vumitest",
                 "host" : "host",
                 "port" : "port",
                 "smpp_increment" : 10,
-                "smpp_offset" : 1,
+                "smpp_offset" : 6,
                 "TRANSPORT_NAME" : "redis_testing_transport",
                 }
         self.vumi_options = {
@@ -390,7 +390,8 @@ class RedisRespTestCase(TestCase):
     def tearDown(self):
         # still need to clean out all redis keys which starting with:
         # "vumitest-vumitest-vumitest"
-        pass
+        for k in self.transport.r_server.keys(self.config["system_id"]+"**").split(' '):
+            self.transport.r_server.delete(k)
 
 
     def test_match_resp(self):
