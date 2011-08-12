@@ -27,6 +27,8 @@ import re
 
 from smpp.pdu_builder import SubmitSMResp
 from vumi.workers.smpp.client import EsmeTransceiver
+from vumi.workers.smpp.transport import SmppTransport
+import redis
 
 
 #class SMSBatchTestCase(TestCase):
@@ -345,6 +347,16 @@ class RedisTestEsmeTransceiver(EsmeTransceiver):
     def sendPDU(self, pdu):
         pass # don't actually send anything
 
+class RedisTestSmppTransport(SmppTransport):
+
+    def send_smpp(self, id, to_msisdn, message, *args, **kwargs):
+        sequence_number = self.esme_client.submit_sm(
+                short_message = message.encode('utf-8'),
+                destination_addr = str(to_msisdn),
+                source_addr = "1234567890",
+                )
+        return sequence_number
+
 
 class RedisRespTestCase(TestCase):
 
@@ -355,26 +367,43 @@ class RedisRespTestCase(TestCase):
                 "host" : "host",
                 "port" : "port",
                 "smpp_increment" : 10,
+                "smpp_offset" : 1,
+                "TRANSPORT_NAME" : "redis_testing_transport",
                 }
         self.vumi_options = {
                 "vhost" : "develop",
                 }
 
+        # hack a lot of transport setup
         self.esme = RedisTestEsmeTransceiver(self.seq, self.config, self.vumi_options)
         self.esme.state = 'BOUND_TRX'
-        print self.esme.r_prefix
+        self.transport = RedisTestSmppTransport(None, self.config)
+        self.transport.esme_client = self.esme
+        self.transport.smpp_offset = self.config['smpp_offset']
+        self.transport.transport_name = self.config.get('TRANSPORT_NAME','fallback')
+        self.transport.r_server = redis.Redis("localhost", db=7)
+        self.transport.r_prefix = "%(system_id)s@%(host)s:%(port)s" % self.config
+        self.transport.publisher = TestPublisher()
+        self.esme.setSubmitSMRespCallback(self.transport.submit_sm_resp)
 
 
     def tearDown(self):
+        # still need to clean out all redis keys which starting with:
+        # "vumitest-vumitest-vumitest"
         pass
 
 
     def test_match_resp(self):
-        print self.esme.getSeq()
-        self.esme.submit_sm(
-                short_message = "hello world",
-                destination_addr = "1234567890",
-                source_addr = "0987654321",
-                )
-        print self.esme.getSeq()
-        pass
+        message = Message(
+            id = 444,
+            message = "hello world",
+            to_msisdn = "1111111111",
+            )
+        sequence_num = self.esme.getSeq()
+        self.transport.consume_message(message)
+        response = SubmitSMResp(sequence_num, "3rd_party_id")
+        self.esme.handleData(response.get_bin())
+        self.assertEquals(self.transport.publisher.queue[0][0].payload,
+                {'id': '444', 'transport_message_id': '3rd_party_id'})
+
+
