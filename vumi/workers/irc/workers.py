@@ -88,12 +88,14 @@ class MessageLogger(IRCWorker):
 class MemoWorker(IRCWorker):
     name = 'memo_worker'
 
+    MEMO_RE = re.compile(r'^\S+ tell (\S+) (.*)$')
+
     def worker_setup(self):
         self.memos = {}
 
     @inlineCallbacks
     def process_potential_memo(self, channel, nickname, message, payload):
-        match = re.match(r'^\S+ tell (\S+) (.*)$', message)
+        match = self.MEMO_RE.match(message)
         if match:
             self.memos.setdefault((channel, match.group(1)), []).append(
                 (nickname, match.group(2)))
