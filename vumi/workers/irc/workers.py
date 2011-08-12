@@ -1,6 +1,7 @@
 # -*- test-case-name: vumi.workers.irc.tests.test_workers -*-
 
 import re
+import json
 from datetime import datetime
 
 from twisted.internet.defer import inlineCallbacks
@@ -8,6 +9,7 @@ from twisted.python import log
 
 from vumi.service import Worker
 from vumi.message import Message
+from vumi.webapp.api.utils import post_data_to_url
 
 
 class IRCWorker(Worker):
@@ -60,8 +62,8 @@ class MessageLogger(IRCWorker):
 
     def log(self, **kwargs):
         """Write a message to the file."""
-        # utils.post_data_to_url(self.log_server, json.dumps(payload),
-        #                        'application/json')
+        post_data_to_url(self.log_server, json.dumps(kwargs),
+                         'application/json')
         log.msg("payload: %r" % (kwargs,))
 
     def process_message(self, payload):
