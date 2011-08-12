@@ -170,6 +170,17 @@ class EsmeTransceiver(Protocol):
         if pdu['header']['command_status'] == 'ESME_ROK':
             pass
 
+    def _decode_message(self, message, data_coding):
+        codec = {
+            1: 'ascii',
+            3: 'latin1',
+            8: 'utf-16be',  # Actually UCS-2, but close enough.
+            }.get(data_coding, None)
+        if codec is None:
+            log.msg("WARNING: Not decoding message with data_coding=%s" % (
+                    data_coding,))
+            return message
+        return message.decode(codec)
 
     def handle_deliver_sm(self, pdu):
         if pdu['header']['command_status'] == 'ESME_ROK':
@@ -185,7 +196,7 @@ class EsmeTransceiver(Protocol):
                     +' +err:(?P<err>...)'
                     +' +[Tt]ext:(?P<text>.{,20})'
                     +'.*',
-                    pdu['body']['mandatory_parameters']['short_message']
+                    pdu['body']['mandatory_parameters']['short_message'] or ''
                     )
             if delivery_report:
                 self.__delivery_report_callback(
@@ -213,10 +224,13 @@ class EsmeTransceiver(Protocol):
                 else:
                     self.r_server.set(redis_key, json.dumps(multi.get_array()))
             else:
+                pdu_mp = pdu['body']['mandatory_parameters']
+                decoded_msg = self._decode_message(pdu_mp['short_message'],
+                                                   pdu_mp['data_coding'])
                 self.__deliver_sm_callback(
-                        destination_addr = pdu['body']['mandatory_parameters']['destination_addr'],
-                        source_addr = pdu['body']['mandatory_parameters']['source_addr'],
-                        short_message = pdu['body']['mandatory_parameters']['short_message']
+                        destination_addr=pdu_mp['destination_addr'],
+                        source_addr=pdu_mp['source_addr'],
+                        short_message=decoded_msg,
                         )
 
 

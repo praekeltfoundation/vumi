@@ -15,7 +15,8 @@ class MultiPlayerGameWorker(IntegratWorker):
         self.games = {}
         self.open_game = None
         self.game_setup()
-        self.publisher = yield self.publish_to('ussd.outbound.%(transport_name)s' % self.config)
+        self.publisher = yield self.publish_to(
+            'ussd.outbound.%(transport_name)s' % self.config)
         self.consumer = yield self.consume('ussd.inbound.%s.%s' % (
             self.config['transport_name'],
             safe_routing_key(self.config['ussd_code'])
@@ -45,7 +46,8 @@ class MultiPlayerGameWorker(IntegratWorker):
             for sid, sgame in self.games.items():
                 if game == sgame:
                     self.games.pop(sid, None)
-                    self.end(sid, "Game terminated due to remote player disconnect.")
+                    msg = "Game terminated due to remote player disconnect."
+                    self.end(sid, msg)
 
     def resume_session(self, data):
         log.msg("Resume session:", data)
@@ -112,15 +114,15 @@ class TicTacToeGame(object):
         return False
 
     def check_win(self):
-        for l in [((0,0), (0,1), (0,2)),
-                  ((1,0), (1,1), (1,2)),
-                  ((2,0), (2,1), (2,2)),
-                  ((0,0), (1,0), (2,0)),
-                  ((0,1), (1,1), (2,1)),
-                  ((0,2), (1,2), (2,2)),
-                  ((0,0), (1,1), (2,2)),
-                  ((0,2), (1,1), (2,0))]:
-            ll = [self.board[y][x] for x,y in l]
+        for l in [((0, 0), (0, 1), (0, 2)),
+                  ((1, 0), (1, 1), (1, 2)),
+                  ((2, 0), (2, 1), (2, 2)),
+                  ((0, 0), (1, 0), (2, 0)),
+                  ((0, 1), (1, 1), (2, 1)),
+                  ((0, 2), (1, 2), (2, 2)),
+                  ((0, 0), (1, 1), (2, 2)),
+                  ((0, 2), (1, 1), (2, 0))]:
+            ll = [self.board[y][x] for x, y in l]
             result = self.check_line(*ll)
             if result:
                 return result
@@ -141,7 +143,8 @@ class TicTacToeWorker(IntegratWorker):
         """docstring for startWorker"""
         self.games = {}
         self.open_game = None
-        self.publisher = yield self.publish_to('ussd.outbound.%(transport_name)s' % self.config)
+        self.publisher = yield self.publish_to(
+            'ussd.outbound.%(transport_name)s' % self.config)
         self.consumer = yield self.consume('ussd.inbound.%s.%s' % (
             self.config['transport_name'],
             safe_routing_key(self.config['ussd_code'])
@@ -201,9 +204,9 @@ class TicTacToeWorker(IntegratWorker):
 
     def parse_move(self, move):
         moves = {
-            '1': (0,0), '2': (1,0), '3': (2,0),
-            '4': (0,1), '5': (1,1), '6': (2,1),
-            '7': (0,2), '8': (1,2), '9': (2,2),
+            '1': (0, 0), '2': (1, 0), '3': (2, 0),
+            '4': (0, 1), '5': (1, 1), '6': (2, 1),
+            '7': (0, 2), '8': (1, 2), '9': (2, 2),
             }
         if move[0] in moves:
             return moves[move[0]]
@@ -232,7 +235,7 @@ class RockPaperScissorsGame(object):
         if sid == self.player_2:
             scores = tuple(reversed(scores))
         result = []
-        if self.last_result == (0,0):
+        if self.last_result == (0, 0):
             result.append("Draw.")
         elif self.last_result == (1, 0):
             if sid == self.player_1:
@@ -303,13 +306,14 @@ class RockPaperScissorsWorker(MultiPlayerGameWorker):
         move = self.parse_move(message)
         if move is None:
             self.end(session_id, 'You disconnected.')
-            self.end(game.get_other_player(session_id), 'Your opponent disconnected.')
+            self.end(game.get_other_player(session_id),
+                     'Your opponent disconnected.')
             return
         if game.move(session_id, move):
             self.turn_reply(game)
 
     def parse_move(self, message):
-        char = (message+' ')[0]
+        char = (message + ' ')[0]
         if char in '123':
             return int(char)
         return None

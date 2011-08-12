@@ -1,17 +1,14 @@
-import re, yaml, logging
+import logging
 from datetime import datetime, timedelta
 
 from piston.handler import BaseHandler
-from piston.utils import rc, throttle, require_mime, validate
-from piston.utils import Mimer, FormValidationError
+from piston.utils import rc, throttle
+from piston.utils import FormValidationError
 
-from vumi.webapp.api.models import SentSMS, ReceivedSMS, URLCallback, SentSMSBatch
+from vumi.webapp.api.models import SentSMS, SentSMSBatch
 from vumi.webapp.api import forms
 from vumi.webapp.api import signals
 from vumi.webapp.api.utils import specify_fields
-
-from alexandria.loader.base import YAMLLoader
-from alexandria.dsl.utils import dump_menu
 
 import pystache
 
@@ -141,7 +138,7 @@ class SendTemplateSMSHandler(BaseHandler):
             context = dict([(var_name, var_value_list.pop(0)) # NOTE: pop the first off, maintain the right order
                                 for var_name, var_value_list 
                                 in context_list])
-            send_sms = self._render_and_send_one(
+            self._render_and_send_one(
                 batch=batch,
                 to_msisdn=msisdn, 
                 from_msisdn=request.POST.get('from_msisdn'), 

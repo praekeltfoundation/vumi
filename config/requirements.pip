@@ -15,7 +15,6 @@ iso8601==0.1.4
 supervisor
 psycopg2==2.4.1
 South==0.7.3
-smn-alexandria==0.1.1
 Sphinx==1.0.7
 django-nose
 coverage
@@ -27,7 +26,15 @@ redis
 -e git+git://github.com/dmaclay/python-smpp.git#egg=python-smpp
 -e git+git://github.com/dustin/twitty-twister#egg=twitty-twister
 -e git+git://github.com/smn/pygsm.git#egg=smn-pygsm
+-e git+git://github.com/smn/trialcoverage.git#egg=trial-coverage
 pyserial
 pytz
 gunicorn
 python-fusiontables==0.1
+# oauth and simplejson are needed by twittytwister
+oauth
+simplejson
+# for Jenkins
+python-subunit
+junitxml
+pep8
