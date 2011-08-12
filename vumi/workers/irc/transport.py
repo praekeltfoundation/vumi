@@ -1,12 +1,13 @@
+from datetime import datetime
+import time
+
 from twisted.words.protocols import irc
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet import protocol, reactor
 from twisted.python import log
+
 from vumi.service import Worker
 from vumi.message import Message
-from datetime import datetime
-import time, json
-
 
 
 class VumiBot(irc.IRCClient):
@@ -36,12 +37,14 @@ class VumiBot(irc.IRCClient):
         self.consumer = self.factory.consumer
         self.consumer.callback = self.consume_message
         irc.IRCClient.connectionMade(self)
-        self._publish_message(message_type='system', msg="[%s connected at %s]" % (
+        self._publish_message(message_type='system',
+                              msg="[%s connected at %s]" % (
                 self.nickname, time.asctime(datetime.utcnow().timetuple())))
 
     def connectionLost(self, reason):
         irc.IRCClient.connectionLost(self, reason)
-        self._publish_message(message_type='system', msg="[%s disconnected at %s]" % (
+        self._publish_message(message_type='system',
+                              msg="[%s disconnected at %s]" % (
                 self.nickname, time.asctime(datetime.utcnow().timetuple())))
 
     # callbacks for events
@@ -54,7 +57,8 @@ class VumiBot(irc.IRCClient):
 
     def joined(self, channel):
         """This will get called when the bot joins the channel."""
-        self._publish_message(message_type='system', msg="[%s has joined %s]" % (
+        self._publish_message(message_type='system',
+                              msg="[%s has joined %s]" % (
                 self.nickname, channel))
 
     def privmsg(self, user, channel, msg):
@@ -63,14 +67,17 @@ class VumiBot(irc.IRCClient):
         addressed = False
         if not any(channel.startswith(p) for p in ('#', '&', '$')):
             addressed = True
-        elif msg.split(None, 1)[0].rstrip(':,').lower() == self.nickname.lower():
+        elif (msg.split(None, 1)[0].rstrip(':,').lower() ==
+              self.nickname.lower()):
             addressed = True
-        self._publish_message(nickname=user, channel=channel, msg=msg, addressed=addressed)
+        self._publish_message(nickname=user, channel=channel, msg=msg,
+                              addressed=addressed)
 
     def action(self, user, channel, msg):
         """This will get called when the bot sees someone do an action."""
         user = user.split('!', 1)[0]
-        self._publish_message(message_type='action', nickname=user, channel=channel, msg=msg)
+        self._publish_message(message_type='action', nickname=user,
+                              channel=channel, msg=msg)
 
     # irc callbacks
 
@@ -78,8 +85,8 @@ class VumiBot(irc.IRCClient):
         """Called when an IRC user changes their nickname."""
         old_nick = prefix.split('!')[0]
         new_nick = params[0]
-        self._publish_message(message_type='nick_change', nickname=old_nick, msg=new_nick)
-
+        self._publish_message(message_type='nick_change', nickname=old_nick,
+                              msg=new_nick)
 
     # For fun, override the method that determines how a nickname is changed on
     # collisions. The default method appends an underscore.
@@ -141,13 +148,15 @@ class IrcTransport(Worker):
         port = self.config.get('port', 6667)
 
         # create factory protocol and application
-        f = VumiBotFactory(network, nickname, channels, self.publisher, self.consumer)
+        f = VumiBotFactory(network, nickname, channels, self.publisher,
+                           self.consumer)
 
         # connect factory to this host and port
         reactor.connectTCP(network, port, f)
 
     def consume_message(self, message):
-        log.msg('Consumed Message with %s, but have nowhere to send it. :-(' % message.payload)
+        log.msg('Consumed Message with %s, but have nowhere to send it. :-(' %
+                (message.payload),)
 
     @inlineCallbacks
     def stopWorker(self):

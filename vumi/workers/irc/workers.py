@@ -1,7 +1,6 @@
 # -*- test-case-name: vumi.workers.irc.tests.test_workers -*-
 
 import re
-import json
 from datetime import datetime
 
 from twisted.internet.defer import inlineCallbacks
@@ -19,7 +18,8 @@ class IRCWorker(Worker):
         inbound = self.config.get('inbound', 'irc.inbound')
         outbound = self.config.get('outbound', 'irc.outbound')
         self.publisher = yield self.publish_to(outbound)
-        self.consume(inbound, self.consume_message, '%s.%s' % (inbound, self.name))
+        self.consume(inbound, self.consume_message,
+                     '%s.%s' % (inbound, self.name))
         self.worker_setup()
         log.msg("Started service")
 
@@ -42,7 +42,8 @@ class IRCWorker(Worker):
         log.msg("Consumed message %s" % message)
         data = self.process_message(message.payload)
         if data:
-            self.publisher.publish_message(Message(recipient=self.name, message=data))
+            self.publisher.publish_message(Message(recipient=self.name,
+                                                   message=data))
 
     def process_message(self, data):
         return None
@@ -59,7 +60,8 @@ class MessageLogger(IRCWorker):
 
     def log(self, **kwargs):
         """Write a message to the file."""
-        # utils.post_data_to_url(self.log_server, json.dumps(payload), 'application/json')
+        # utils.post_data_to_url(self.log_server, json.dumps(payload),
+        #                        'application/json')
         log.msg("payload: %r" % (kwargs,))
 
     def process_message(self, payload):
@@ -74,9 +76,11 @@ class MessageLogger(IRCWorker):
         if msg_type in ('message', 'system'):
             self.log(nickname=nickname, channel=channel, msg=msg)
         elif msg_type == 'action':
-            self.log(message_type=msg_type, channel=channel, msg="* %s %s" % (nickname, msg))
+            self.log(message_type=msg_type, channel=channel,
+                     msg="* %s %s" % (nickname, msg))
         elif msg_type == 'nick_change':
-            self.log(message_type='system', msg="%s is now known as %s" % (nickname, msg))
+            self.log(message_type='system',
+                     msg="%s is now known as %s" % (nickname, msg))
 
 
 class MemoWorker(IRCWorker):
@@ -92,8 +96,9 @@ class MemoWorker(IRCWorker):
             self.memos.setdefault((channel, match.group(1)), []).append(
                 (nickname, match.group(2)))
             msg = "Sure thing, boss."
-            yield self._publish_message(message_type='message', channel=channel,
-                                        msg=msg, server=payload['server'])
+            yield self._publish_message(message_type='message',
+                                        channel=channel, msg=msg,
+                                        server=payload['server'])
 
     @inlineCallbacks
     def process_message(self, payload):
@@ -113,5 +118,6 @@ class MemoWorker(IRCWorker):
             log.msg("Time to deliver some memos:", memos)
         for memo in memos:
             msg = "%s: message from %s: %s" % (nickname, memo[0], memo[1])
-            yield self._publish_message(message_type='message', channel=channel,
-                                        msg=msg, server=payload['server'])
+            yield self._publish_message(message_type='message',
+                                        channel=channel, msg=msg,
+                                        server=payload['server'])

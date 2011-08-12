@@ -17,7 +17,8 @@ class TestMemoWorker(unittest.TestCase):
         yield worker.startWorker()
         returnValue(worker)
 
-    def mkmsg(self, msg, addressed=False, nickname='testdude', channel='#test'):
+    def mkmsg(self, msg, addressed=False, nickname='testdude',
+              channel='#test'):
         return {
             'server': 'testserv',
             'message_type': 'message',
@@ -37,15 +38,17 @@ class TestMemoWorker(unittest.TestCase):
         self.assertEquals({}, worker.memos)
         yield worker.process_message(self.mkmsg('hey there'))
         self.assertEquals({}, worker.memos)
-        self.assertEquals([], worker._amqp_client.channels[0].publish_message_log)
+        self.assertEquals([],
+                          worker._amqp_client.channels[0].publish_message_log)
 
     @inlineCallbacks
     def test_leave_memo(self):
         worker = yield self.get_worker()
         self.assertEquals({}, worker.memos)
-        yield worker.process_message(self.mkmsg('bot: tell memoed hey there', True))
+        yield worker.process_message(self.mkmsg('bot: tell memoed hey there',
+                                                True))
         self.assertEquals({('#test', 'memoed'): [('testdude', 'hey there')]},
                           worker.memos)
         self.assertEquals(['Sure thing, boss.'],
-                          [m['message_content'] for m in self.snarf_msgs(worker, 0)])
-
+                          [m['message_content']
+                           for m in self.snarf_msgs(worker, 0)])
