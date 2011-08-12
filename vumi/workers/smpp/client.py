@@ -3,14 +3,24 @@ import json
 import redis
 
 from twisted.python import log
-from twisted.internet import reactor, defer
 from twisted.internet.protocol import Protocol, ReconnectingClientFactory
 from twisted.internet.task import LoopingCall
 
-from smpp.pdu_builder import *
-from smpp.pdu_inspector import *
+import binascii
+from smpp.pdu import unpack_pdu
+from smpp.pdu_builder import (  BindTransceiver,
+                                DeliverSMResp,
+                                SubmitSM,
+                                SubmitMulti,
+                                EnquireLink,
+                                QuerySM
+                                )
+from smpp.pdu_inspector import (MultipartMessage,
+                                detect_multipart,
+                                multipart_key
+                                )
 
-from vumi.utils import *
+from vumi.utils import get_deploy_int
 
 
 class EsmeTransceiver(Protocol):
@@ -99,10 +109,6 @@ class EsmeTransceiver(Protocol):
         self.__deliver_sm_callback = deliver_sm_callback
 
 
-    def setLoopingQuerySMCallback(self, looping_query_sm_callback):
-        self.__looping_query_sm_callback = looping_query_sm_callback
-
-
     def connectionMade(self):
         self.state = 'OPEN'
         log.msg(self.name, 'STATE :', self.state)
@@ -149,8 +155,6 @@ class EsmeTransceiver(Protocol):
             self.state = 'BOUND_TRX'
             self.lc_enquire = LoopingCall(self.enquire_link)
             self.lc_enquire.start(55.0)
-            #self.lc_query = LoopingCall(self.query_sm_group)
-            #self.lc_query.start(1.0)
             self.__connect_callback(self)
         log.msg(self.name, 'STATE :', self.state)
 
@@ -300,11 +304,6 @@ class EsmeTransceiver(Protocol):
         return 0
 
 
-    def query_sm_group(self, **kwargs):
-        self.__looping_query_sm_callback()
-        return 0
-
-
 class EsmeTransceiverFactory(ReconnectingClientFactory):
 
     def __init__(self, config, vumi_options):
@@ -322,7 +321,6 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
         self.__submit_sm_resp_callback = None
         self.__delivery_report_callback = None
         self.__deliver_sm_callback = None
-        self.__looping_query_sm_callback = None
         self.seq = [int(self.config['smpp_offset'])]
         log.msg("Set sequence number: %s, config: %s" % (self.seq, self.config))
         self.initialDelay = 30.0
@@ -364,10 +362,6 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
         self.__deliver_sm_callback = deliver_sm_callback
 
 
-    def setLoopingQuerySMCallback(self, looping_query_sm_callback):
-        self.__looping_query_sm_callback = looping_query_sm_callback
-
-
     def startedConnecting(self, connector):
         print 'Started to connect.'
 
@@ -384,8 +378,6 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
                 delivery_report_callback = self.__delivery_report_callback)
         self.esme.setDeliverSMCallback(
                 deliver_sm_callback = self.__deliver_sm_callback)
-        self.esme.setLoopingQuerySMCallback(
-                looping_query_sm_callback = self.__looping_query_sm_callback)
         self.resetDelay()
         return self.esme
 

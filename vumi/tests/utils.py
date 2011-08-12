@@ -241,7 +241,11 @@ class FakeRedis(object):
         return self._data.get(key)
 
     def set(self, key, value):
+        value = str(value) # set() sets string value
         self._data[key] = value
+
+    def delete(self, key):
+        del self._data[key]
 
     # Hash operations
 

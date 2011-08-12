@@ -2,10 +2,12 @@ import uuid
 from datetime import datetime
 
 from twisted.python import log
-from twisted.internet import reactor, defer
+from twisted.internet import reactor
 from twisted.internet.protocol import Protocol, ServerFactory
 
-from smpp.pdu_builder import *
+from smpp.pdu_builder import (BindTransceiverResp, EnquireLinkResp, SubmitSMResp,
+                                DeliverSM)
+from smpp.pdu_inspector import binascii, unpack_pdu
 
 class SmscServer(Protocol):
 
@@ -60,7 +62,7 @@ class SmscServer(Protocol):
             message_id = str(uuid.uuid4())
             pdu_resp = SubmitSMResp(sequence_number, message_id)
             self.sendPDU(pdu_resp)
-            self.delivery_report(message_id)
+            reactor.callLater(2, self.delivery_report, message_id)
             self.boomerang(pdu)
 
 
