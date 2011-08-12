@@ -390,8 +390,13 @@ class RedisRespTestCase(TestCase):
     def tearDown(self):
         # still need to clean out all redis keys which starting with:
         # "vumitest-vumitest-vumitest"
-        for k in self.transport.r_server.keys(self.config["system_id"]+"*").split(' '):
-            self.transport.r_server.delete(k)
+        print "\n\tRedis info(): %s" % self.transport.r_server.info()
+        keys = self.transport.r_server.keys(self.config["system_id"]+"*")
+        if len(keys) and type(keys) is str:
+            keys = keys.split(' ')
+        if len(keys):
+            for k in keys:
+                self.transport.r_server.delete(k)
 
 
     def test_match_resp(self):
