@@ -243,6 +243,9 @@ class FakeRedis(object):
     def set(self, key, value):
         self._data[key] = value
 
+    def delete(self, key):
+        del self._data[key]
+
     # Hash operations
 
     def hmset(self, key, mapping):
