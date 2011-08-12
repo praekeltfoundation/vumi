@@ -1,10 +1,7 @@
 from twisted.internet.defer import inlineCallbacks
 from twisted.python import log
-from datetime import datetime
 
 from vumi.workers.smpp.transport import SmppTransport
-from vumi.webapp.api import forms
-from vumi.errors import VumiError
 
 class TopicSmppTransport(SmppTransport):
     
@@ -31,17 +28,5 @@ class TopicSmppTransport(SmppTransport):
     
     def handle_outbound_sms(self, message):
         # send the message via SMPP
-        sequence_number = self.send_smpp(**message.payload)
-        # get the sequence_number, link it back to our own internal
-        formdict = {
-                "sent_sms":message.payload.get("id"),
-                "sequence_number": sequence_number,
-                }
-        log.msg("SMPPLinkForm", repr(formdict))
-        form = forms.SMPPLinkForm(formdict)
-        if form.is_valid():
-            form.save()
-            return True
-        else:
-            log.msg(form.errors)
-            raise VumiError, form.errors
+        self.consume_message(message)
+        return True
