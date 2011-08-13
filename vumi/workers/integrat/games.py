@@ -1,17 +1,14 @@
 # -*- test-case-name: vumi.workers.integrat.tests.test_games -*-
 
-from twisted.internet.defer import inlineCallbacks, Deferred
-from twisted.internet.protocol import Protocol
-from twisted.internet import reactor
-from twisted.web.client import Agent
+from twisted.internet.defer import inlineCallbacks
 from twisted.python import log
 
-from vumi.utils import safe_routing_key, get_deploy_int, http_request
+from vumi.utils import (safe_routing_key, get_deploy_int,
+                        http_request, normalize_msisdn)
 from vumi.workers.integrat.worker import IntegratWorker
 
 import redis
 import string
-from StringIO import StringIO
 
 
 class MultiPlayerGameWorker(IntegratWorker):
@@ -470,15 +467,16 @@ class HangmanWorker(IntegratWorker):
         log.msg('Fetching random word from %s' % (self.random_word_url,))
         return http_request(self.random_word_url, None, method='GET')
 
-    def game_key(self, userid):
+    def game_key(self, msisdn):
         "Key for looking up a users game in data store."""
-        # TODO: Is this a safe key?
+        msisdn = normalize_msisdn(msisdn)
+        userid = msisdn.lstrip('+')
         return "%s#%s" % (self.r_prefix, userid)
 
-    def load_game(self, userid):
+    def load_game(self, msisdn):
         """Fetch a game for the given user ID.
            """
-        game_key = self.game_key(userid)
+        game_key = self.game_key(msisdn)
         state = self.r_server.get(game_key)
         if state is not None:
             game = HangmanGame.from_state(state)
@@ -486,15 +484,15 @@ class HangmanWorker(IntegratWorker):
             game = None
         return game
 
-    def save_game(self, userid, game):
+    def save_game(self, msisdn, game):
         """Save the game state for the given game."""
-        game_key = self.game_key(userid)
+        game_key = self.game_key(msisdn)
         state = game.state()
         self.r_server.set(game_key, state)
 
-    def delete_game(self, userid):
+    def delete_game(self, msisdn):
         """Delete the users saved game."""
-        game_key = self.game_key(userid)
+        game_key = self.game_key(msisdn)
         self.r_server.delete(game_key)
 
     @inlineCallbacks
