@@ -393,6 +393,7 @@ class HangmanGame(object):
         else:
             assert len(message) == 1
             self.guesses.add(message)
+            log.msg("Message: %r, word: %r" % (message, self.word))
             if message in self.word:
                 self.msg = "Word contains at least one %r! :D" % (message,)
             else:

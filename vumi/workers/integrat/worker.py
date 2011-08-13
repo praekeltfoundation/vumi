@@ -22,7 +22,10 @@ class IntegratWorker(Worker):
         data = message.payload
         handler = getattr(self, '%(transport_message_type)s' % data,
                             self.noop)
-        return handler(data)
+        try:
+            return handler(data)
+        except Exception, e:
+            log.msg("Error handling message %r, ignoring: %s" % (data, e))
 
     def noop(self, data):
         log.msg('Got', data, 'but not doing anything with it')
@@ -56,5 +59,3 @@ class IntegratWorker(Worker):
 
     def close_session(self, data):
         pass
-
-
