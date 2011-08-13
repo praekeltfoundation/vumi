@@ -6,7 +6,7 @@ urlpatterns = patterns('',
     (r'^', include('vumi.webapp.prelaunch.urls', namespace="prelaunch")),
     (r'^api/v1/', include('vumi.webapp.api.urls', namespace="api")),
     (r'^health', include('vumi.webapp.health.urls', namespace="health")),
-    # Uncomment the admin/doc line below and add 'django.contrib.admindocs' 
+    # Uncomment the admin/doc line below and add 'django.contrib.admindocs'
     # to INSTALLED_APPS to enable admin documentation:
     (r'^admin/doc/', include('django.contrib.admindocs.urls')),
 
