@@ -371,6 +371,8 @@ class HangmanGame(object):
     @classmethod
     def from_state(cls, state):
         word, guesses, msg = state.split(":", 2)
+        # Hack. :-(
+        word = word.decode('utf-8').strip(u'\ufeff')
         guesses = set(guesses)
         return cls(word=word, guesses=guesses, msg=msg)
 

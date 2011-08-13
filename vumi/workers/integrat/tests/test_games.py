@@ -172,6 +172,13 @@ class TestHangmanGame(unittest.TestCase):
         self.assertEqual(game.msg, "Eep?")
         self.assertEqual(game.exit_code, game.NOT_DONE)
 
+    def test_from_state_badword(self):
+        game = HangmanGame.from_state("\xef\xbb\xbfbar:xyz:Eep?")
+        self.assertEqual(game.word, "bar")
+        self.assertEqual(game.guesses, set("xyz"))
+        self.assertEqual(game.msg, "Eep?")
+        self.assertEqual(game.exit_code, game.NOT_DONE)
+
     def test_exit(self):
         game = HangmanGame('elephant')
         game.event('0')
