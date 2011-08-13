@@ -1,5 +1,9 @@
 from twisted.trial import unittest
-from twisted.internet.defer import inlineCallbacks, Deferred
+from twisted.internet.defer import inlineCallbacks
+from twisted.internet import reactor
+from twisted.web.server import Site
+from twisted.web.resource import Resource
+from twisted.web.static import Data
 
 from vumi.tests.utils import get_stubbed_worker
 from vumi.workers.integrat.games import (RockPaperScissorsGame,
@@ -177,22 +181,42 @@ class HangmanWorkerStub(WorkerStubMixin, HangmanWorker):
 class TestHangmanWorker(unittest.TestCase):
 
     # TODO: stub out Redis in tests
-    # TODO: don't connect to intertubes during tests
 
-    def get_worker(self):
-        worker = get_stubbed_worker(HangmanWorkerStub, {
+    @inlineCallbacks
+    def setUp(self):
+        root = Resource()
+        root.putChild("word", Data('elephant', 'text/html'))
+        site_factory = Site(root)
+        self.webserver = yield reactor.listenTCP(0, site_factory)
+        addr = self.webserver.getHost()
+        random_word_url = "http://%s:%s/word" % (addr.host, addr.port)
+
+        self.worker = get_stubbed_worker(HangmanWorkerStub, {
                 'transport_name': 'foo',
                 'ussd_code': '99999',
-                'random_word_url': 'http://randomword.setgetgo.com/get.php',
+                'random_word_url': random_word_url,
                 })
-        return worker
+        yield self.worker.startWorker()
+
+    @inlineCallbacks
+    def tearDown(self):
+        yield self.webserver.loseConnection()
 
     @inlineCallbacks
     def test_new_session(self):
-        worker = self.get_worker()
-        yield worker.startWorker()
-        yield worker.new_session({'transport_session_id': 'sp1',
-                                  'sender': '+134567'})
+        yield self.worker.new_session({'transport_session_id': 'sp1',
+                                       'sender': '+134567'})
+        self.assertEqual(len(self.worker.replies), 1)
 
+        reply = self.worker.replies[0]
+        self.assertEqual(reply[:2], ('reply', 'sp1'))
+        self.assertEqual(reply[2],
+                         "New game!\n"
+                         "Word: ___________________\n"
+                         "Letters guessed so far: \n"
+                         "Enter next guess (0 to quit):\n")
+
+    @inlineCallbacks
     def test_random_word(self):
-        pass
+        word = yield self.worker.random_word()
+        self.assertEqual(word, 'elephant')

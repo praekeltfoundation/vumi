@@ -6,7 +6,7 @@ from twisted.internet import reactor
 from twisted.web.client import Agent
 from twisted.python import log
 
-from vumi.utils import safe_routing_key, get_deploy_int
+from vumi.utils import safe_routing_key, get_deploy_int, http_request
 from vumi.workers.integrat.worker import IntegratWorker
 
 import redis
@@ -436,20 +436,6 @@ class HangmanGame(object):
                                    }
 
 
-#TODO: copied from vas2nets transports and needs to be factored
-#      out into a utilities module somewhere.
-class HttpResponseHandler(Protocol):
-    def __init__(self, deferred):
-        self.deferred = deferred
-        self.stringio = StringIO()
-
-    def dataReceived(self, bytes):
-        self.stringio.write(bytes)
-
-    def connectionLost(self, reason):
-        self.deferred.callback(self.stringio.getvalue())
-
-
 class HangmanWorker(IntegratWorker):
     """Worker that plays Hangman.
 
@@ -482,15 +468,7 @@ class HangmanWorker(IntegratWorker):
 
     def random_word(self):
         log.msg('Fetching random word from %s' % (self.random_word_url,))
-        agent = Agent(reactor)
-        deferred_connect = agent.request('GET', self.random_word_url)
-        deferred_body = Deferred()
-
-        def connect(response):
-            response.deliverBody(HttpResponseHandler(deferred_body))
-
-        deferred_connect.addCallback(connect)
-        return deferred_body
+        return http_request(self.random_word_url, None, method='GET')
 
     def game_key(self, userid):
         "Key for looking up a users game in data store."""
@@ -531,6 +509,7 @@ class HangmanWorker(IntegratWorker):
         game = self.load_game(msisdn)
         if game is None:
             word = yield self.random_word()
+            word = word.strip().lower()
             game = HangmanGame(word)
             self.save_game(msisdn, game)
         self.reply(session_id, game.draw_board())
