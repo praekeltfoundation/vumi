@@ -262,3 +262,50 @@ class TestHangmanWorker(unittest.TestCase):
     def test_random_word(self):
         word = yield self.worker.random_word()
         self.assertEqual(word, 'elephant')
+
+    @inlineCallbacks
+    def test_full_session(self):
+        session_data = {
+            'transport_session_id': 'sp1',
+            'sender': '+134567',
+            }
+
+        def resume(event):
+            data = session_data.copy()
+            data['message'] = event
+            return self.worker.resume_session(data)
+
+        yield self.worker.new_session(session_data)
+        for event in ('e', 'l', 'p', 'h', 'a', 'n', 'o', 't'):
+            yield resume(event)
+
+        self.assertEqual(len(self.worker.replies), 9)
+
+        last_reply = self.worker.replies[-1]
+        self.assertEqual(last_reply[:2], ('reply', 'sp1'))
+        self.assertEqual(last_reply[2],
+                         "Epic victory!\n"
+                         "Word: elephant\n"
+                         "Letters guessed so far: aehlnopt\n"
+                         "Enter anything to start a new game (0 to quit):\n")
+
+        yield resume('1')
+
+        last_reply = self.worker.replies[-1]
+        self.assertEqual(last_reply[:2], ('reply', 'sp1'))
+        self.assertEqual(last_reply[2],
+                         "New game!\n"
+                         "Word: ________\n"
+                         "Letters guessed so far: \n"
+                         "Enter next guess (0 to quit):\n")
+
+        yield resume('0')
+        last_reply = self.worker.replies[-1]
+        self.assertEqual(last_reply[:2], ('end', 'sp1'))
+        self.assertEqual(last_reply[2], "Adieu!")
+
+    @inlineCallbacks
+    def test_close_session(self):
+        yield self.worker.close_session({'transport_session_id': 'sp1',
+                                       'sender': '+134567'})
+        self.assertEqual(self.worker.replies, [])
