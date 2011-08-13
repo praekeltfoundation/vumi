@@ -468,7 +468,14 @@ class HangmanWorker(IntegratWorker):
 
     def random_word(self):
         log.msg('Fetching random word from %s' % (self.random_word_url,))
-        return http_request(self.random_word_url, None, method='GET')
+        d = http_request(self.random_word_url, None, method='GET')
+
+        def _decode(word):
+            if not isinstance(word, unicode):
+                # Hack. :-(
+                return word.decode('utf-8').strip(u'\ufeff')
+            return word
+        return d.addCallback(_decode)
 
     def game_key(self, msisdn):
         "Key for looking up a users game in data store."""
