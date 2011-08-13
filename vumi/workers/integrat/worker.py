@@ -23,7 +23,7 @@ class IntegratWorker(Worker):
         data = message.payload
         handler = getattr(self, '%(transport_message_type)s' % data,
                             self.noop)
-        handler(data)
+        return handler(data)
 
     def noop(self, data):
         log.msg('Got', data, 'but not doing anything with it')
