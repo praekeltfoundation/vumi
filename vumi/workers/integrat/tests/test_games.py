@@ -5,7 +5,7 @@ from twisted.web.server import Site
 from twisted.web.resource import Resource
 from twisted.web.static import Data
 
-from vumi.tests.utils import get_stubbed_worker
+from vumi.tests.utils import get_stubbed_worker, FakeRedis
 from vumi.workers.integrat.games import (RockPaperScissorsGame,
                                          RockPaperScissorsWorker,
                                          HangmanGame,
@@ -179,9 +179,6 @@ class HangmanWorkerStub(WorkerStubMixin, HangmanWorker):
 
 
 class TestHangmanWorker(unittest.TestCase):
-
-    # TODO: stub out Redis in tests
-
     @inlineCallbacks
     def setUp(self):
         root = Resource()
@@ -197,6 +194,7 @@ class TestHangmanWorker(unittest.TestCase):
                 'random_word_url': random_word_url,
                 })
         yield self.worker.startWorker()
+        self.worker.r_server = FakeRedis()
 
     @inlineCallbacks
     def tearDown(self):
@@ -212,7 +210,7 @@ class TestHangmanWorker(unittest.TestCase):
         self.assertEqual(reply[:2], ('reply', 'sp1'))
         self.assertEqual(reply[2],
                          "New game!\n"
-                         "Word: ___________________\n"
+                         "Word: ________\n"
                          "Letters guessed so far: \n"
                          "Enter next guess (0 to quit):\n")
 
