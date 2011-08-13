@@ -1,6 +1,9 @@
 # -*- test-case-name: vumi.workers.integrat.tests.test_games -*-
 
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import inlineCallbacks, Deferred
+from twisted.internet.protocol import Protocol
+from twisted.internet import reactor
+from twisted.web.client import Agent
 from twisted.python import log
 
 from vumi.utils import safe_routing_key, get_deploy_int
@@ -8,6 +11,7 @@ from vumi.workers.integrat.worker import IntegratWorker
 
 import redis
 import string
+from StringIO import StringIO
 
 
 class MultiPlayerGameWorker(IntegratWorker):
@@ -339,23 +343,22 @@ class HangmanGame(object):
 
        Parameters
        ----------
-       word : str, optional
-           Word to guess. If None, a word is randomly selected.
+       word : str
+           Word to guess.
        guesses : set, optional
            Characters guessed so far. If None, defaults to the empty set.
        msg : str, optional
-           Message set in reply to last user action. Defaults to the
-           empty str.
+           Message set in reply to last user action. Defaults to 'New game!'.
        """
 
     UI_TEMPLATE = \
         "%(msg)s\n" \
         "Word: %(word)s\n" \
-        "Letters guessed so far: %(guesses)\n" \
+        "Letters guessed so far: %(guesses)s\n" \
         "%(prompt)s (0 to quit):\n"
 
-    def __init__(self, word=None, guesses=None, msg="New game!"):
-        self.word = word if word is not None else self.random_word()
+    def __init__(self, word, guesses=None, msg="New game!"):
+        self.word = word
         self.guesses = guesses if guesses is not None else set()
         self.msg = msg
         self.exited = False
@@ -364,9 +367,6 @@ class HangmanGame(object):
         """Serialize the Hangman object to a string."""
         guesses = "".join(sorted(self.guesses))
         return "%s:%s:%s" % (self.word, guesses, self.msg)
-
-    def random_word(self):
-        return "elephant"
 
     @classmethod
     def from_state(cls, state):
@@ -436,8 +436,32 @@ class HangmanGame(object):
                                    }
 
 
+#TODO: copied from vas2nets transports and needs to be factored
+#      out into a utilities module somewhere.
+class HttpResponseHandler(Protocol):
+    def __init__(self, deferred):
+        self.deferred = deferred
+        self.stringio = StringIO()
+
+    def dataReceived(self, bytes):
+        self.stringio.write(bytes)
+
+    def connectionLost(self, reason):
+        self.deferred.callback(self.stringio.getvalue())
+
+
 class HangmanWorker(IntegratWorker):
     """Worker that plays Hangman.
+
+       Configuration
+       -------------
+       transport_name : str
+           Name of the transport.
+       ussd_code : str
+           USSD code.
+       random_word_url : URL
+           Page to GET a random word from.
+           E.g. http://randomword.setgetgo.com/get.php
        """
 
     @inlineCallbacks
@@ -451,9 +475,22 @@ class HangmanWorker(IntegratWorker):
                 self.config['transport_name'],
                 safe_routing_key(self.config['ussd_code']))
         log.msg("r_prefix = %s" % self.r_prefix)
+        self.random_word_url = self.config['random_word_url']
+        log.msg("random_word_url = %s" % self.random_word_url)
 
-        for deferred in super(HangmanWorker, self).startWorker():
-            yield deferred
+        yield super(HangmanWorker, self).startWorker()
+
+    def random_word(self):
+        log.msg('Fetching random word from %s' % (self.random_word_url,))
+        agent = Agent(reactor)
+        deferred_connect = agent.request('GET', self.random_word_url)
+        deferred_body = Deferred()
+
+        def connect(response):
+            response.deliverBody(HttpResponseHandler(deferred_body))
+
+        deferred_connect.addCallback(connect)
+        return deferred_body
 
     def game_key(self, userid):
         "Key for looking up a users game in data store."""
@@ -462,16 +499,13 @@ class HangmanWorker(IntegratWorker):
 
     def load_game(self, userid):
         """Fetch a game for the given user ID.
-
-           Creates a new game if none exists.
            """
         game_key = self.game_key(userid)
         state = self.r_server.get(game_key)
         if state is not None:
             game = HangmanGame.from_state(state)
         else:
-            game = HangmanGame()
-            self.r_server.set(game_key, game.state())
+            game = None
         return game
 
     def save_game(self, userid, game):
@@ -485,6 +519,7 @@ class HangmanWorker(IntegratWorker):
         game_key = self.game_key(userid)
         self.r_server.delete(game_key)
 
+    @inlineCallbacks
     def new_session(self, data):
         """Find or creating hangman game for this player.
 
@@ -494,6 +529,10 @@ class HangmanWorker(IntegratWorker):
         session_id = data['transport_session_id']
         msisdn = data['sender']
         game = self.load_game(msisdn)
+        if game is None:
+            word = yield self.random_word()
+            game = HangmanGame(word)
+            self.save_game(msisdn, game)
         self.reply(session_id, game.draw_board())
 
     def close_session(self, data):

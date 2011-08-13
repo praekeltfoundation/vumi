@@ -1,4 +1,5 @@
 from twisted.trial import unittest
+from twisted.internet.defer import inlineCallbacks, Deferred
 
 from vumi.tests.utils import get_stubbed_worker
 from vumi.workers.integrat.games import (RockPaperScissorsGame,
@@ -136,9 +137,26 @@ class TestHangmanGame(unittest.TestCase):
         self.assertEqual(game.exited, False)
 
     def test_exit(self):
-        game = HangmanGame()
+        game = HangmanGame('elephant')
         game.event('0')
         self.assertTrue(game.exited)
+
+    def test_draw_board(self):
+        game = HangmanGame('word')
+        board = game.draw_board()
+        msg, word, guesses, prompt, end = board.split("\n")
+        self.assertEqual(msg, "New game!")
+        self.assertEqual(word, "Word: ____")
+        self.assertEqual(guesses, "Letters guessed so far: ")
+        self.assertEqual(prompt, "Enter next guess (0 to quit):")
+
+    def test_displaying_word(self):
+        game = HangmanGame('word')
+        game.event('w')
+        game.event('r')
+        board = game.draw_board()
+        _msg, word, _guesses, _prompt, _end = board.split("\n")
+        self.assertEqual(word, "Word: w_r_")
 
     def test_garbage_input(self):
         game = HangmanGame(word="zoo")
@@ -151,19 +169,30 @@ class TestHangmanGame(unittest.TestCase):
         game.event('o')
         self.assertTrue(game.won())
 
-    def test_random_word(self):
-        pass
-
 
 class HangmanWorkerStub(WorkerStubMixin, HangmanWorker):
     pass
 
 
 class TestHangmanWorker(unittest.TestCase):
+
+    # TODO: stub out Redis in tests
+    # TODO: don't connect to intertubes during tests
+
     def get_worker(self):
         worker = get_stubbed_worker(HangmanWorkerStub, {
                 'transport_name': 'foo',
                 'ussd_code': '99999',
+                'random_word_url': 'http://randomword.setgetgo.com/get.php',
                 })
-        worker.startWorker()
         return worker
+
+    @inlineCallbacks
+    def test_new_session(self):
+        worker = self.get_worker()
+        yield worker.startWorker()
+        yield worker.new_session({'transport_session_id': 'sp1',
+                                  'sender': '+134567'})
+
+    def test_random_word(self):
+        pass
