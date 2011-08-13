@@ -11,6 +11,8 @@ from vumi.workers.integrat.games import (RockPaperScissorsGame,
                                          HangmanGame,
                                          HangmanWorker)
 
+import string
+
 
 class WorkerStubMixin(object):
     def _get_replies(self):
@@ -131,19 +133,50 @@ class TestHangmanGame(unittest.TestCase):
         game.event('m')
         game.event('o')
         self.assertTrue(game.won())
-        self.assertTrue(game.state().startswith("moo:mo:"))
+        self.assertTrue(game.state().startswith("moo:mo:Flawless"))
+
+    def test_incorrect_guesses(self):
+        game = HangmanGame(word='moo')
+        game.event('f')
+        game.event('g')
+        self.assertFalse(game.won())
+        self.assertTrue(game.state().startswith("moo:fg:Word contains no"))
+
+    def test_repeated_guesses(self):
+        game = HangmanGame(word='moo')
+        game.event('f')
+        game.event('f')
+        self.assertFalse(game.won())
+        self.assertTrue(game.state().startswith("moo:f:You've already"))
+
+    def test_button_mashing(self):
+        game = HangmanGame(word='moo')
+        for event in string.lowercase.replace('o', ''):
+            game.event(event)
+        game.event('o')
+        self.assertTrue(game.won())
+        self.assertEqual(game.state(),
+                         "moo:%s:Button mashing!" % string.lowercase)
+
+    def test_new_game(self):
+        game = HangmanGame(word='moo')
+        for event in ('m', 'o', '-'):
+            game.event(event)
+        self.assertEqual(game.state(), 'moo:mo:Flawless victory!')
+        self.assertEqual(game.exit_code, game.DONE_WANTS_NEW)
 
     def test_from_state(self):
         game = HangmanGame.from_state("bar:xyz:Eep?")
         self.assertEqual(game.word, "bar")
         self.assertEqual(game.guesses, set("xyz"))
         self.assertEqual(game.msg, "Eep?")
-        self.assertEqual(game.exited, False)
+        self.assertEqual(game.exit_code, game.NOT_DONE)
 
     def test_exit(self):
         game = HangmanGame('elephant')
         game.event('0')
-        self.assertTrue(game.exited)
+        self.assertEqual(game.exit_code, game.DONE)
+        self.assertEqual(game.draw_board(), "Adieu!")
 
     def test_draw_board(self):
         game = HangmanGame('word')
@@ -153,6 +186,17 @@ class TestHangmanGame(unittest.TestCase):
         self.assertEqual(word, "Word: ____")
         self.assertEqual(guesses, "Letters guessed so far: ")
         self.assertEqual(prompt, "Enter next guess (0 to quit):")
+
+    def test_draw_board_at_end_of_game(self):
+        game = HangmanGame('m')
+        game.event('m')
+        board = game.draw_board()
+        msg, word, guesses, prompt, end = board.split("\n")
+        self.assertEqual(msg, "Flawless victory!")
+        self.assertEqual(word, "Word: m")
+        self.assertEqual(guesses, "Letters guessed so far: m")
+        self.assertEqual(prompt, "Enter anything to start a new game"
+                                 " (0 to quit):")
 
     def test_displaying_word(self):
         game = HangmanGame('word')
@@ -165,7 +209,7 @@ class TestHangmanGame(unittest.TestCase):
     def test_garbage_input(self):
         game = HangmanGame(word="zoo")
         for garbage in [
-            ":", "!", "\x00", "+", "abc",
+            ":", "!", "\x00", "+", "abc", "",
             ]:
             game.event(garbage)
         self.assertEqual(game.guesses, set())

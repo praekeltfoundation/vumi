@@ -1,6 +1,6 @@
 # -*- test-case-name: vumi.workers.integrat.tests.test_games -*-
 
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.python import log
 
 from vumi.utils import (safe_routing_key, get_deploy_int,
@@ -354,11 +354,14 @@ class HangmanGame(object):
         "Letters guessed so far: %(guesses)s\n" \
         "%(prompt)s (0 to quit):\n"
 
+    # exit codes
+    NOT_DONE, DONE, DONE_WANTS_NEW = range(3)
+
     def __init__(self, word, guesses=None, msg="New game!"):
         self.word = word
         self.guesses = guesses if guesses is not None else set()
         self.msg = msg
-        self.exited = False
+        self.exit_code = self.NOT_DONE
 
     def state(self):
         """Serialize the Hangman object to a string."""
@@ -379,13 +382,12 @@ class HangmanGame(object):
         elif len(message) > 1:
             self.msg = "Single characters only please."
         elif message == '0':
-            self.exited = True
+            self.exit_code = self.DONE
             self.msg = "Game ended."
+        elif self.won():
+            self.exit_code = self.DONE_WANTS_NEW
         elif message not in string.lowercase:
             self.msg = "Letters of the alphabet only please."
-        elif self.won():
-            # new game!
-            self.__init__()
         elif message in self.guesses:
             self.msg = "You've already guessed %r." % (message,)
         else:
@@ -418,7 +420,7 @@ class HangmanGame(object):
 
     def draw_board(self):
         """Return a text-based UI."""
-        if self.exited:
+        if self.exit_code != self.NOT_DONE:
             return "Adieu!"
         word = "".join((x if x in self.guesses else '_') for x in self.word)
         guesses = "".join(sorted(self.guesses))
@@ -484,6 +486,15 @@ class HangmanWorker(IntegratWorker):
             game = None
         return game
 
+    @inlineCallbacks
+    def new_game(self, msisdn):
+        """Create a new game for the given user ID.
+           """
+        word = yield self.random_word()
+        word = word.strip().lower()
+        game = HangmanGame(word)
+        returnValue(game)
+
     def save_game(self, msisdn, game):
         """Save the game state for the given game."""
         game_key = self.game_key(msisdn)
@@ -506,9 +517,7 @@ class HangmanWorker(IntegratWorker):
         msisdn = data['sender']
         game = self.load_game(msisdn)
         if game is None:
-            word = yield self.random_word()
-            word = word.strip().lower()
-            game = HangmanGame(word)
+            game = yield self.new_game(msisdn)
             self.save_game(msisdn, game)
         self.reply(session_id, game.draw_board())
 
@@ -517,6 +526,7 @@ class HangmanWorker(IntegratWorker):
         # and can be picked up again later.
         pass
 
+    @inlineCallbacks
     def resume_session(self, data):
         log.msg("Resume session:", data)
         session_id = data['transport_session_id']
@@ -524,9 +534,13 @@ class HangmanWorker(IntegratWorker):
         message = data['message'].strip()
         game = self.load_game(msisdn)
         game.event(message)
-        if game.exited:
+        if game.exit_code == game.DONE:
             self.delete_game(msisdn)
             self.end(session_id, game.draw_board())
+        elif game.exit_code == game.DONE_WANTS_NEW:
+            game = yield self.new_game(msisdn)
+            self.save_game(msisdn, game)
+            self.reply(session_id, game.draw_board())
         else:
             self.save_game(msisdn, game)
             self.reply(session_id, game.draw_board())
