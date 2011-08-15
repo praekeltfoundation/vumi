@@ -16,7 +16,7 @@ class SendSMPPHandler(BaseHandler):
     allowed_methods = ('GET', 'POST',)
     exclude, fields = specify_fields(SentSMS,
         include=['transport_status_display'],
-        exclude=['user','batch'])
+        exclude=['user', 'batch'])
 
     def _send_one(self, **kwargs):
         #kwargs.update({
@@ -29,7 +29,7 @@ class SendSMPPHandler(BaseHandler):
         logging.debug('Scheduling an SMPP to: %s' % kwargs['to_msisdn'])
         return send_sms
 
-    @throttle(6000, 60) # allow for 100 a second
+    @throttle(6000, 60)  # allow for 100 a second
     def create(self, request):
         batch = SentSMSBatch.objects.create(title='', user=request.user)
         user = User.objects.get(username=request.user)
@@ -41,9 +41,8 @@ class SendSMPPHandler(BaseHandler):
                             to_msisdn=msisdn,
                             from_msisdn=request.POST.get('from_msisdn'),
                             message=request.POST.get('message'))
-        
+
         signals.sms_batch_scheduled.send(sender=SentSMSBatch, instance=batch,
                 pk=batch.pk)
-        return {"send_group":batch.pk,
-                "group_list":batch.sentsms_set.all()}
-
+        return {"send_group": batch.pk,
+                "group_list": batch.sentsms_set.all()}

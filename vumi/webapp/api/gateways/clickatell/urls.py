@@ -12,4 +12,3 @@ urlpatterns = patterns('',
     (r'^receipt\.json$', sms_receipt_resource, {}, 'sms-receipt'),
     (r'^receive\.json$', sms_receive_resource, {}, 'sms-receive'),
 )
-
