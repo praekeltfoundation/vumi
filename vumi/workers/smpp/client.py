@@ -8,7 +8,7 @@ from twisted.internet.task import LoopingCall
 
 import binascii
 from smpp.pdu import unpack_pdu
-from smpp.pdu_builder import (  BindTransceiver,
+from smpp.pdu_builder import (BindTransceiver,
                                 DeliverSMResp,
                                 SubmitSM,
                                 SubmitMulti,
@@ -23,9 +23,62 @@ from smpp.pdu_inspector import (MultipartMessage,
 from vumi.utils import get_deploy_int
 
 
+ESME_command_status_map = {
+    "ESME_ROK"              : "No Error",
+    "ESME_RINVMSGLEN"       : "Message Length is invalid",
+    "ESME_RINVCMDLEN"       : "Command Length is invalid",
+    "ESME_RINVCMDID"        : "Invalid Command ID",
+    "ESME_RINVBNDSTS"       : "Incorrect BIND Status for given command",
+    "ESME_RALYBND"          : "ESME Already in Bound State",
+    "ESME_RINVPRTFLG"       : "Invalid Priority Flag",
+    "ESME_RINVREGDLVFLG"    : "Invalid Registered Delivery Flag",
+    "ESME_RSYSERR"          : "System Error",
+    "ESME_RINVSRCADR"       : "Invalid Source Address",
+    "ESME_RINVDSTADR"       : "Invalid Dest Addr",
+    "ESME_RINVMSGID"        : "Message ID is invalid",
+    "ESME_RBINDFAIL"        : "Bind Failed",
+    "ESME_RINVPASWD"        : "Invalid Password",
+    "ESME_RINVSYSID"        : "Invalid System ID",
+    "ESME_RCANCELFAIL"      : "Cancel SM Failed",
+    "ESME_RREPLACEFAIL"     : "Replace SM Failed",
+    "ESME_RMSGQFUL"         : "Message Queue Full",
+    "ESME_RINVSERTYP"       : "Invalid Service Type",
+    "ESME_RINVNUMDESTS"     : "Invalid number of destinations",
+    "ESME_RINVDLNAME"       : "Invalid Distribution List name",
+    "ESME_RINVDESTFLAG"     : "Destination flag is invalid (submit_multi)",
+    "ESME_RINVSUBREP"       : "Invalid 'submit with replace' request (i.e. submit_sm with replace_if_present_flag set)",
+    "ESME_RINVESMCLASS"     : "Invalid esm_class field data",
+    "ESME_RCNTSUBDL"        : "Cannot Submit to Distribution List",
+    "ESME_RSUBMITFAIL"      : "submit_sm or submit_multi failed",
+    "ESME_RINVSRCTON"       : "Invalid Source address TON",
+    "ESME_RINVSRCNPI"       : "Invalid Source address NPI",
+    "ESME_RINVDSTTON"       : "Invalid Destination address TON",
+    "ESME_RINVDSTNPI"       : "Invalid Destination address NPI",
+    "ESME_RINVSYSTYP"       : "Invalid system_type field",
+    "ESME_RINVREPFLAG"      : "Invalid replace_if_present flag",
+    "ESME_RINVNUMMSGS"      : "Invalid number of messages",
+    "ESME_RTHROTTLED"       : "Throttling error (ESME has exceeded allowed message limits)",
+    "ESME_RINVSCHED"        : "Invalid Scheduled Delivery Time",
+    "ESME_RINVEXPIRY"       : "Invalid message validity period (Expiry time)",
+    "ESME_RINVDFTMSGID"     : "Predefined Message Invalid or Not Found",
+    "ESME_RX_T_APPN"        : "ESME Receiver Temporary App Error Code",
+    "ESME_RX_P_APPN"        : "ESME Receiver Permanent App Error Code",
+    "ESME_RX_R_APPN"        : "ESME Receiver Reject Message Error Code",
+    "ESME_RQUERYFAIL"       : "query_sm request failed",
+    "ESME_RINVOPTPARSTREAM" : "Error in the optional part of the PDU Body.",
+    "ESME_ROPTPARNOTALLWD"  : "Optional Parameter not allowed",
+    "ESME_RINVPARLEN"       : "Invalid Parameter Length.",
+    "ESME_RMISSINGOPTPARAM" : "Expected Optional Parameter missing",
+    "ESME_RINVOPTPARAMVAL"  : "Invalid Optional Parameter Value",
+    "ESME_RDELIVERYFAILURE" : "Delivery Failure (used for data_sm_resp)",
+    "ESME_RUNKNOWNERR"      : "Unknown Error",
+}
+
+
 class EsmeTransceiver(Protocol):
 
     def __init__(self, seq, config, vumi_options):
+        self.build_maps()
         self.name = 'Proto' + str(seq)
         log.msg('__init__', self.name)
         self.defaults = {}
@@ -50,18 +103,76 @@ class EsmeTransceiver(Protocol):
                 self.config['port'])
         log.msg("r_prefix = %s" % self.r_prefix)
 
+    def build_maps(self):
+        self.ESME_command_status_dispatch_map = {
+            "ESME_ROK"              : self.status_ok,
+            #"ESME_RINVMSGLEN"       : ,
+            #"ESME_RINVCMDLEN"       : ,
+            #"ESME_RINVCMDID"        : ,
+            #"ESME_RINVBNDSTS"       : ,
+            #"ESME_RALYBND"          : ,
+            #"ESME_RINVPRTFLG"       : ,
+            #"ESME_RINVREGDLVFLG"    : ,
+            "ESME_RSYSERR"          : self.status_give_up,
+            #"ESME_RINVSRCADR"       : ,
+            #"ESME_RINVDSTADR"       : ,
+            #"ESME_RINVMSGID"        : ,
+            #"ESME_RBINDFAIL"        : ,
+            #"ESME_RINVPASWD"        : ,
+            #"ESME_RINVSYSID"        : ,
+            #"ESME_RCANCELFAIL"      : ,
+            #"ESME_RREPLACEFAIL"     : ,
+            #"ESME_RMSGQFUL"         : ,
+            #"ESME_RINVSERTYP"       : ,
+            #"ESME_RINVNUMDESTS"     : ,
+            #"ESME_RINVDLNAME"       : ,
+            #"ESME_RINVDESTFLAG"     : ,
+            #"ESME_RINVSUBREP"       : ,
+            #"ESME_RINVESMCLASS"     : ,
+            #"ESME_RCNTSUBDL"        : ,
+            #"ESME_RSUBMITFAIL"      : ,
+            #"ESME_RINVSRCTON"       : ,
+            #"ESME_RINVSRCNPI"       : ,
+            #"ESME_RINVDSTTON"       : ,
+            #"ESME_RINVDSTNPI"       : ,
+            #"ESME_RINVSYSTYP"       : ,
+            #"ESME_RINVREPFLAG"      : ,
+            #"ESME_RINVNUMMSGS"      : ,
+            #"ESME_RTHROTTLED"       : ,
+            #"ESME_RINVSCHED"        : ,
+            #"ESME_RINVEXPIRY"       : ,
+            #"ESME_RINVDFTMSGID"     : ,
+            #"ESME_RX_T_APPN"        : ,
+            #"ESME_RX_P_APPN"        : ,
+            #"ESME_RX_R_APPN"        : ,
+            #"ESME_RQUERYFAIL"       : ,
+            #"ESME_RINVOPTPARSTREAM" : ,
+            #"ESME_ROPTPARNOTALLWD"  : ,
+            #"ESME_RINVPARLEN"       : ,
+            #"ESME_RMISSINGOPTPARAM" : ,
+            #"ESME_RINVOPTPARAMVAL"  : ,
+            #"ESME_RDELIVERYFAILURE" : ,
+            #"ESME_RUNKNOWNERR"      : ,
+        }
+
+    def command_status_dispatch(self, pdu):
+        method = self.ESME_command_status_dispatch_map.get(pdu['header']['command_status'], self.status_ok)
+        return method(pdu)
+
+    def status_ok(self, pdu):
+        return True
+
+    def status_give_up(self, pdu):
+        return False
 
     def set_handler(self, handler):
         self.handler = handler
 
-
     def getSeq(self):
         return self.seq[0]
 
-
     def incSeq(self):
         self.seq[0] += self.inc
-
 
     def popData(self):
         data = None
@@ -72,10 +183,10 @@ class EsmeTransceiver(Protocol):
                 self.datastream = self.datastream[command_length:]
         return data
 
-
     def handleData(self, data):
         pdu = unpack_pdu(data)
         log.msg('INCOMING <<<<', pdu)
+        print self.command_status_dispatch(pdu)
         if pdu['header']['command_id'] == 'bind_transceiver_resp':
             self.handle_bind_transceiver_resp(pdu)
         if pdu['header']['command_id'] == 'submit_sm_resp':
