@@ -349,10 +349,10 @@ class HangmanGame(object):
        """
 
     UI_TEMPLATE = \
-        "%(msg)s\n" \
-        "Word: %(word)s\n" \
-        "Letters guessed so far: %(guesses)s\n" \
-        "%(prompt)s (0 to quit):\n"
+        u"%(msg)s\n" \
+        u"Word: %(word)s\n" \
+        u"Letters guessed so far: %(guesses)s\n" \
+        u"%(prompt)s (0 to quit):\n"
 
     # exit codes
     NOT_DONE, DONE, DONE_WANTS_NEW = range(3)
@@ -365,41 +365,47 @@ class HangmanGame(object):
 
     def state(self):
         """Serialize the Hangman object to a string."""
-        guesses = "".join(sorted(self.guesses))
-        return "%s:%s:%s" % (self.word, guesses, self.msg)
+        guesses = u"".join(sorted(self.guesses))
+        state = u"%s:%s:%s" % (self.word, guesses, self.msg)
+        return state.encode("utf-8")
 
     @classmethod
     def from_state(cls, state):
+        state = state.decode("utf-8")
         word, guesses, msg = state.split(":", 2)
-        # Hack. :-(
-        word = word.decode('utf-8').strip(u'\ufeff')
         guesses = set(guesses)
         return cls(word=word, guesses=guesses, msg=msg)
 
     def event(self, message):
-        """Handle an user input string."""
+        """Handle an user input string.
+
+           Parameters
+           ----------
+           message : unicode
+               Message received from user.
+           """
         message = message.lower()
         if not message:
-            self.msg = "Some input required please."
+            self.msg = u"Some input required please."
         elif len(message) > 1:
-            self.msg = "Single characters only please."
+            self.msg = u"Single characters only please."
         elif message == '0':
             self.exit_code = self.DONE
-            self.msg = "Game ended."
+            self.msg = u"Game ended."
         elif self.won():
             self.exit_code = self.DONE_WANTS_NEW
         elif message not in string.lowercase:
-            self.msg = "Letters of the alphabet only please."
+            self.msg = u"Letters of the alphabet only please."
         elif message in self.guesses:
-            self.msg = "You've already guessed %r." % (message,)
+            self.msg = u"You've already guessed '%s'." % (message,)
         else:
             assert len(message) == 1
             self.guesses.add(message)
             log.msg("Message: %r, word: %r" % (message, self.word))
             if message in self.word:
-                self.msg = "Word contains at least one %r! :D" % (message,)
+                self.msg = u"Word contains at least one '%s'! :D" % (message,)
             else:
-                self.msg = "Word contains no %r. :(" % (message,)
+                self.msg = u"Word contains no '%s'. :(" % (message,)
 
         if self.won():
             self.msg = self.victory_message()
@@ -408,15 +414,15 @@ class HangmanGame(object):
         uniques = len(set(self.word))
         guesses = len(self.guesses)
         for factor, msg in [
-            (1, "Flawless victory!"),
-            (1.5, "Epic victory!"),
-            (2, "Standard victory!"),
-            (3, "Sub-par victory!"),
-            (4, "Random victory!"),
+            (1, u"Flawless victory!"),
+            (1.5, u"Epic victory!"),
+            (2, u"Standard victory!"),
+            (3, u"Sub-par victory!"),
+            (4, u"Random victory!"),
             ]:
             if guesses <= uniques * factor:
                 return msg
-        return "Button mashing!"
+        return u"Button mashing!"
 
     def won(self):
         return all(x in self.guesses for x in self.word)
@@ -424,13 +430,13 @@ class HangmanGame(object):
     def draw_board(self):
         """Return a text-based UI."""
         if self.exit_code != self.NOT_DONE:
-            return "Adieu!"
-        word = "".join((x if x in self.guesses else '_') for x in self.word)
+            return u"Adieu!"
+        word = u"".join((x if x in self.guesses else '_') for x in self.word)
         guesses = "".join(sorted(self.guesses))
         if self.won():
-            prompt = "Enter anything to start a new game"
+            prompt = u"Enter anything to start a new game"
         else:
-            prompt = "Enter next guess"
+            prompt = u"Enter next guess"
         return self.UI_TEMPLATE % {'word': word,
                                    'guesses': guesses,
                                    'msg': self.msg,
@@ -473,9 +479,11 @@ class HangmanWorker(IntegratWorker):
         d = http_request(self.random_word_url, None, method='GET')
 
         def _decode(word):
-            if not isinstance(word, unicode):
-                # Hack. :-(
-                return word.decode('utf-8').strip(u'\ufeff')
+            # result from http_request should always be bytes
+            # convert to unicode, strip BOMs and whitespace
+            word = word.decode("utf-8", "ignore")
+            word = word.lstrip(u'\ufeff\ufffe')
+            word = word.strip()
             return word
         return d.addCallback(_decode)
 

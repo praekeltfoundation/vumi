@@ -172,9 +172,9 @@ class TestHangmanGame(unittest.TestCase):
         self.assertEqual(game.msg, "Eep?")
         self.assertEqual(game.exit_code, game.NOT_DONE)
 
-    def test_from_state_badword(self):
-        game = HangmanGame.from_state("\xef\xbb\xbfbar:xyz:Eep?")
-        self.assertEqual(game.word, "bar")
+    def test_from_state_non_ascii(self):
+        game = HangmanGame.from_state("b\xc3\xa4r:xyz:Eep?")
+        self.assertEqual(game.word, u"b\u00e4r")
         self.assertEqual(game.guesses, set("xyz"))
         self.assertEqual(game.msg, "Eep?")
         self.assertEqual(game.exit_code, game.NOT_DONE)
@@ -213,6 +213,23 @@ class TestHangmanGame(unittest.TestCase):
         _msg, word, _guesses, _prompt, _end = board.split("\n")
         self.assertEqual(word, "Word: w_r_")
 
+    def test_displaying_guesses(self):
+        game = HangmanGame('word')
+        game.event('w')
+        board = game.draw_board()
+        msg, _word, _guesses, _prompt, _end = board.split("\n")
+        self.assertEqual(msg, "Word contains at least one 'w'! :D")
+
+        game.event('w')
+        board = game.draw_board()
+        msg, _word, _guesses, _prompt, _end = board.split("\n")
+        self.assertEqual(msg, "You've already guessed 'w'.")
+
+        game.event('x')
+        board = game.draw_board()
+        msg, _word, _guesses, _prompt, _end = board.split("\n")
+        self.assertEqual(msg, "Word contains no 'x'. :(")
+
     def test_garbage_input(self):
         game = HangmanGame(word="zoo")
         for garbage in [
@@ -233,7 +250,9 @@ class TestHangmanWorker(unittest.TestCase):
     @inlineCallbacks
     def setUp(self):
         root = Resource()
-        root.putChild("word", Data('elephant', 'text/html'))
+        # data is elephant with a UTF-8 encoded BOM
+        # it is a sad elephant (as seen in the wild)
+        root.putChild("word", Data('\xef\xbb\xbfelephant\r\n', 'text/html'))
         site_factory = Site(root)
         self.webserver = yield reactor.listenTCP(0, site_factory)
         addr = self.webserver.getHost()
