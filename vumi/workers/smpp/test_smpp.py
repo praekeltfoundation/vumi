@@ -519,7 +519,7 @@ class FakeRedisRespTestCase(TestCase):
 
 
         response4 = BindTransceiverResp(sequence_num4, "ESME_RINVPASWD")
-        self.esme.handleData(response4.get_bin())
+        print self.esme.command_status_dispatch(response4.get_obj())
 
         response5 = BindTransceiverResp(sequence_num4, "ESME_RINVSYSID")
-        self.esme.handleData(response5.get_bin())
+        print self.esme.command_status_dispatch(response5.get_obj())

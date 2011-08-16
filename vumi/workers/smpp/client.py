@@ -94,6 +94,7 @@ class EsmeTransceiver(Protocol):
         self.__submit_sm_resp_callback = None
         self.__delivery_report_callback = None
         self.__deliver_sm_callback = None
+        self.error_handlers = {}
 
         self.r_server = redis.Redis("localhost",
                 db=get_deploy_int(self.vumi_options['vhost']))
@@ -161,15 +162,17 @@ class EsmeTransceiver(Protocol):
         return method(pdu)
 
     def command_status_dispatch_ok(self, pdu):
-        print "command_status_dispatch_ok"
-        return True
+        return self.error_handlers.get("command_status_dispatch_ok")
 
     def command_status_dispatch_permafault(self, pdu):
-        print "status_status_dispatch_permafault"
-        return False
+        return self.error_handlers.get("command_status_dispatch_permafault")
 
+    # TODO this is currently unused ... i think
     def set_handler(self, handler):
         self.handler = handler
+
+    def update_error_handlers(self, handler_dict={}):
+        self.error_handlers.update(handler_dict)
 
     def getSeq(self):
         return self.seq[0]
@@ -181,7 +184,7 @@ class EsmeTransceiver(Protocol):
         data = None
         if(len(self.datastream) >= 16):
             command_length = int(binascii.b2a_hex(self.datastream[0:4]), 16)
-            if(len(self.datastream) >= command_length):
+            if(len(self.datastream) >= command_):
                 data = self.datastream[0:command_length]
                 self.datastream = self.datastream[command_length:]
         return data
@@ -189,7 +192,9 @@ class EsmeTransceiver(Protocol):
     def handleData(self, data):
         pdu = unpack_pdu(data)
         log.msg('INCOMING <<<<', pdu)
-        self.command_status_dispatch(pdu)
+        error_handler = self.command_status_dispatch(pdu)
+        if error_handler:
+            error_handler(pdu)
         if pdu['header']['command_id'] == 'bind_transceiver_resp':
             self.handle_bind_transceiver_resp(pdu)
         if pdu['header']['command_id'] == 'submit_sm_resp':
