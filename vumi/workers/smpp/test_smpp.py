@@ -518,5 +518,8 @@ class FakeRedisRespTestCase(TestCase):
                 {'id': '447', 'transport_message_id': '3rd_party_id_4'})
 
 
-        response4 = BindTransceiverResp(sequence_num4, "3rd_party_id_4", command_status="ESME_RINVPASWD")
+        response4 = BindTransceiverResp(sequence_num4, "ESME_RINVPASWD")
         self.esme.handleData(response4.get_bin())
+
+        response5 = BindTransceiverResp(sequence_num4, "ESME_RINVSYSID")
+        self.esme.handleData(response5.get_bin())
