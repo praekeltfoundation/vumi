@@ -23,6 +23,7 @@ from smpp.pdu_inspector import (MultipartMessage,
 from vumi.utils import get_deploy_int
 
 
+# TODO this will move to pdu_inspector in python-smpp
 ESME_command_status_map = {
     "ESME_ROK"              : "No Error",
     "ESME_RINVMSGLEN"       : "Message Length is invalid",
