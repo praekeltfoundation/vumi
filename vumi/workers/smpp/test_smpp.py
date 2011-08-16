@@ -25,7 +25,7 @@ from vumi.webapp.api import utils
 from datetime import datetime
 import re
 
-from smpp.pdu_builder import SubmitSMResp
+from smpp.pdu_builder import SubmitSMResp, BindTransceiverResp
 from vumi.workers.smpp.client import EsmeTransceiver
 from vumi.workers.smpp.transport import SmppTransport
 import redis
@@ -503,3 +503,20 @@ class FakeRedisRespTestCase(TestCase):
         self.esme.handleData(response3.get_bin())
         self.assertEquals(self.transport.publisher.queue[2][0].payload,
                 {'id': '446', 'transport_message_id': '3rd_party_id_3'})
+
+
+        message4 = Message(
+            id = 447,
+            message = "hello world",
+            to_msisdn = "1111111111",
+            )
+        sequence_num4 = self.esme.getSeq()
+        response4 = SubmitSMResp(sequence_num4, "3rd_party_id_4", command_status="ESME_RINVPASWD")
+        self.transport.consume_message(message4)
+        self.esme.handleData(response4.get_bin())
+        self.assertEquals(self.transport.publisher.queue[3][0].payload,
+                {'id': '447', 'transport_message_id': '3rd_party_id_4'})
+
+
+        response4 = BindTransceiverResp(sequence_num4, "3rd_party_id_4", command_status="ESME_RINVPASWD")
+        self.esme.handleData(response4.get_bin())

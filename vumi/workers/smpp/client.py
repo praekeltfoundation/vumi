@@ -106,7 +106,7 @@ class EsmeTransceiver(Protocol):
 
     def build_maps(self):
         self.ESME_command_status_dispatch_map = {
-            "ESME_ROK"              : self.status_ok,
+            "ESME_ROK"              : self.command_status_dispatch_ok,
             #"ESME_RINVMSGLEN"       : ,
             #"ESME_RINVCMDLEN"       : ,
             #"ESME_RINVCMDID"        : ,
@@ -114,13 +114,13 @@ class EsmeTransceiver(Protocol):
             #"ESME_RALYBND"          : ,
             #"ESME_RINVPRTFLG"       : ,
             #"ESME_RINVREGDLVFLG"    : ,
-            "ESME_RSYSERR"          : self.status_give_up,
+            "ESME_RSYSERR"          : self.command_status_dispatch_permafault,
             #"ESME_RINVSRCADR"       : ,
             #"ESME_RINVDSTADR"       : ,
             #"ESME_RINVMSGID"        : ,
             #"ESME_RBINDFAIL"        : ,
-            #"ESME_RINVPASWD"        : ,
-            #"ESME_RINVSYSID"        : ,
+            "ESME_RINVPASWD"        : self.command_status_dispatch_permafault,
+            "ESME_RINVSYSID"        : self.command_status_dispatch_permafault,
             #"ESME_RCANCELFAIL"      : ,
             #"ESME_RREPLACEFAIL"     : ,
             #"ESME_RMSGQFUL"         : ,
@@ -157,13 +157,15 @@ class EsmeTransceiver(Protocol):
         }
 
     def command_status_dispatch(self, pdu):
-        method = self.ESME_command_status_dispatch_map.get(pdu['header']['command_status'], self.status_ok)
+        method = self.ESME_command_status_dispatch_map.get(pdu['header']['command_status'], self.command_status_dispatch_ok)
         return method(pdu)
 
-    def status_ok(self, pdu):
+    def command_status_dispatch_ok(self, pdu):
+        print "command_status_dispatch_ok"
         return True
 
-    def status_give_up(self, pdu):
+    def command_status_dispatch_permafault(self, pdu):
+        print "status_status_dispatch_permafault"
         return False
 
     def set_handler(self, handler):
@@ -187,7 +189,7 @@ class EsmeTransceiver(Protocol):
     def handleData(self, data):
         pdu = unpack_pdu(data)
         log.msg('INCOMING <<<<', pdu)
-        print self.command_status_dispatch(pdu)
+        self.command_status_dispatch(pdu)
         if pdu['header']['command_id'] == 'bind_transceiver_resp':
             self.handle_bind_transceiver_resp(pdu)
         if pdu['header']['command_id'] == 'submit_sm_resp':
