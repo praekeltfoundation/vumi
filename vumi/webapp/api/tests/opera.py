@@ -5,16 +5,17 @@ from django.contrib.auth.models import User
 from vumi.webapp.api.models import SentSMS, ReceivedSMS
 from vumi.webapp.api.tests.utils import APIClient, mock_sent_messages
 
+
 class OperaSMSHandlerTestCase(TestCase):
-    
+
     fixtures = ['user_set']
-    
+
     def setUp(self):
         self.client = APIClient()
         self.client.login(username='api', password='password')
         # create the user we need to be authorized
         self.user = User.objects.get(username='api')
-    
+
     def test_sms_receipts(self):
         """
         Receipts received from opera should update the status
@@ -23,7 +24,7 @@ class OperaSMSHandlerTestCase(TestCase):
                                     transport_name="Opera",
                                     transport_msg_id="001efc31")
         self.assertEquals(sms.transport_status, '')
-        
+
         raw_xml_post = """
         <?xml version="1.0"?>
         <!DOCTYPE receipts>
@@ -38,20 +39,18 @@ class OperaSMSHandlerTestCase(TestCase):
           </receipt>
         </receipts>
         """
-        
-        resp = self.client.post(reverse('api:opera:sms-receipt'), 
+
+        resp = self.client.post(reverse('api:opera:sms-receipt'),
                                 raw_xml_post.strip(), content_type='text/xml')
-        sms = SentSMS.objects.get(pk=sms.pk) # reload
+        sms = SentSMS.objects.get(pk=sms.pk)  # reload
         self.assertEquals(sms.transport_status, 'D')
         self.assertEquals(resp.status_code, 201)
-    
-    
+
     def test_sms_receiving_with_text_plain_headers(self):
         """
         By eavesdropping we got the following log, this is what opera sends.
         DTD is available at https://dragon.sa.operatelecom.com/MEnable/Client/Extra/bspostevent-1_0_0.dtd
-        
-        
+
         POST /api/v1/sms/opera/receive.xml HTTP/1.1
         Content-Length: 1798
         Content-Type: text/plain; charset=utf-8
@@ -93,19 +92,18 @@ class OperaSMSHandlerTestCase(TestCase):
           <field name="Now" type = "date">2010-06-04 15:51:27 +0000</field>
         </bspostevent>
         """
-        
+
         self.assertEquals(ReceivedSMS.objects.count(), 0)
-        resp = self.client.post(reverse('api:opera:sms-receive'), 
+        resp = self.client.post(reverse('api:opera:sms-receive'),
                                     receive_sms_doc.strip(),
                                     content_type='text/plain; charset=utf-8')
         self.assertEquals(resp.status_code, 200)
         self.assertEquals(ReceivedSMS.objects.count(), 1)
         sms = ReceivedSMS.objects.latest()
         self.assertEquals(
-            sms.received_at.strftime('%Y-%m-%d %H:%M:%S +0000'), 
+            sms.received_at.strftime('%Y-%m-%d %H:%M:%S +0000'),
             '2010-06-04 15:51:25 +0000'
         )
         self.assertEquals(sms.from_msisdn, '+27831234567')
         self.assertEquals(sms.to_msisdn, '*32323')
         self.assertEquals(sms.transport_name, 'Opera')
-    

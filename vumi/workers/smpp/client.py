@@ -13,6 +13,7 @@ from smpp.pdu_builder import (BindTransceiver,
                                 SubmitSM,
                                 SubmitMulti,
                                 EnquireLink,
+                                EnquireLinkResp,
                                 QuerySM
                                 )
 from smpp.pdu_inspector import (MultipartMessage,
@@ -203,6 +204,8 @@ class EsmeTransceiver(Protocol):
             self.handle_submit_multi_resp(pdu)
         if pdu['header']['command_id'] == 'deliver_sm':
             self.handle_deliver_sm(pdu)
+        if pdu['header']['command_id'] == 'enquire_link':
+            self.handle_enquire_link(pdu)
         if pdu['header']['command_id'] == 'enquire_link_resp':
             self.handle_enquire_link_resp(pdu)
         log.msg(self.name, 'STATE :', self.state)
@@ -356,6 +359,12 @@ class EsmeTransceiver(Protocol):
                         short_message=decoded_msg,
                         )
 
+
+    def handle_enquire_link(self, pdu):
+        if pdu['header']['command_status'] == 'ESME_ROK':
+            sequence_number = pdu['header']['sequence_number']
+            pdu_resp = EnquireLinkResp(sequence_number)
+            self.sendPDU(pdu_resp)
 
     def handle_enquire_link_resp(self, pdu):
         if pdu['header']['command_status'] == 'ESME_ROK':
