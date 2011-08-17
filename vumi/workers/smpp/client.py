@@ -184,7 +184,7 @@ class EsmeTransceiver(Protocol):
         data = None
         if(len(self.datastream) >= 16):
             command_length = int(binascii.b2a_hex(self.datastream[0:4]), 16)
-            if(len(self.datastream) >= command_):
+            if(len(self.datastream) >= command_length):
                 data = self.datastream[0:command_length]
                 self.datastream = self.datastream[command_length:]
         return data
