@@ -1,0 +1,22 @@
+from twisted.trial.unittest import TestCase
+import vumi.blinkenlights.message20110818 as message
+import time
+
+
+class TestMessage(TestCase):
+
+    def test_to_dict(self):
+        now = time.time()
+        datapoint = ("vumi.w1.a_metric", now, 1.5)
+        msg = message.MetricMessage()
+        msg.append(datapoint)
+        self.assertEqual(msg.to_dict(), {
+            'datapoints': [datapoint],
+            })
+
+    def test_from_dict(self):
+        now = time.time()
+        datapoint = ("vumi.w1.a_metric", now, 1.5)
+        msgdict = {"datapoints": [datapoint]}
+        msg = message.MetricMessage.from_dict(msgdict)
+        self.assertEqual(msg._datapoints, [datapoint])
