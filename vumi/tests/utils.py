@@ -3,10 +3,11 @@
 import json
 import importlib
 import fnmatch
-
+from datetime import datetime, timedelta
 from collections import namedtuple
 from contextlib import contextmanager
 
+import pytz
 import txamqp
 from txamqp.client import TwistedDelegate
 from twisted.internet import defer
@@ -29,6 +30,15 @@ def teardown_django_test_database(runner, config):
     from django.test.utils import teardown_test_environment
     runner.teardown_databases(config)
     teardown_test_environment()
+
+
+class UTCNearNow(object):
+    def __init__(self, offset=10):
+        self.now = datetime.utcnow().replace(tzinfo=pytz.UTC)
+        self.offset = timedelta(offset)
+
+    def __eq__(self, other):
+        return (self.now - self.offset) < other < (self.now + self.offset)
 
 
 class Mocking(object):
