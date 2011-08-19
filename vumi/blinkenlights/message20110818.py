@@ -1,7 +1,9 @@
 # -*- test-case-name: vumi.blinkenlights.tests.test_message20110818 -*-
 
+from vumi.message import Message
 
-class MetricMessage(object):
+
+class MetricMessage(Message):
     """Class representing Vumi metrics messages.
 
     A metrics message is a list of (metric_name, timestamp, float
@@ -14,11 +16,9 @@ class MetricMessage(object):
     * `value` is any float.
     """
 
-    # TODO: This class should inherit from Vumi's standardised
-    #       message class once we have one.
-
     def __init__(self):
         self._datapoints = []
+        super(MetricMessage, self).__init__(datapoints=self._datapoints)
 
     def append(self, datapoint):
         self._datapoints.append(datapoint)
