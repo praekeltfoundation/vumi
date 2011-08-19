@@ -167,9 +167,9 @@ class Sum(Metric):
         super(Sum, self).__init__(*args, **kws)
         self._value = 0.0
 
-    def add(self):
+    def add(self, amount):
         """Add an amount to the sum."""
-        self._value += 1
+        self._value += amount
 
     def poll(self):
         """Return the sum and reset it to zero."""
@@ -216,6 +216,6 @@ class Timer(Sum):
         self._start_time = time.time()
 
     def stop(self):
-        duration = time.time() - self._start_time()
+        duration = time.time() - self._start_time
         self._start_time = None
         self.add(duration)
