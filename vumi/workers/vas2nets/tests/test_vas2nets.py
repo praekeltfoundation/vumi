@@ -94,14 +94,23 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
     @inlineCallbacks
     def setUp(self):
         self.config = {
-            'transport_name': 'vas2nets'
+            'transport_name': 'vas2nets',
+            'url': 'http://localhost:9999/api/v1/sms/vas2nets/receive/',
+            'username': 'username',
+            'password': 'password',
+            'owner': 'owner',
+            'service': 'service',
+            'subservice': 'subservice',
+            'web_receive_path': '/receive',
+            'web_receipt_path': '/receipt',
+            'web_port': 9998,
         }
-        self.worker = get_stubbed_worker(Vas2NetsTransport, {})
+        self.worker = get_stubbed_worker(Vas2NetsTransport, self.config)
         self.publisher = yield self.worker.publish_to('some.routing.key')
         self.today = datetime.utcnow().date()
 
     def tearDown(self):
-        pass
+        self.worker.stopWorker()
 
     @inlineCallbacks
     def test_receive_sms(self):
@@ -197,34 +206,21 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
         stubbed_worker = Vas2NetsTestWorker(path, port, mocked_message_id,
                                             mocked_message, TestQueue([]))
         yield stubbed_worker.startWorker()
+        yield self.worker.startWorker()
 
-        transport = get_stubbed_worker(Vas2NetsTransport, {
-            'transport_name': 'vas2nets',
-            'url': 'http://localhost:%s%s' % (port, path),
-            'username': 'username',
-            'password': 'password',
-            'owner': 'owner',
-            'service': 'service',
-            'subservice': 'subservice',
-            'web_receive_path': '/receive',
-            'web_receipt_path': '/receipt',
-            'web_port': 9998
-        })
-        yield transport.startWorker()
-
-        yield transport.handle_outbound_message(Message(**{
+        yield self.worker.handle_outbound_message(Message(**{
             'to_msisdn': '+27761234567',
             'from_msisdn': '9292',
             'id': '1',
             'reply_to': '',
             'transport_network_id': 'network-id',
-            'message': 'hello world'
+            'message': 'hello world',
         }))
 
-        channel = transport._amqp_client.channels[1]
-        kwargs = channel.publish_log[0]
-        content = kwargs['content']
-        routing_key = kwargs['routing_key']
+        channel = self.worker._amqp_client.channels[2]
+        msg = channel.publish_log[0]
+        content = msg['content']
+        routing_key = msg['routing_key']
 
         self.assertEquals(Message.from_json(content.body), Message(**{
             'id': '1',
@@ -232,7 +228,6 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
         }))
         self.assertEquals(routing_key, 'sms.ack.vas2nets')
 
-        transport.stopWorker()
         stubbed_worker.stopWorker()
 
     @inlineCallbacks
@@ -246,26 +241,13 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
         stubbed_worker = Vas2NetsTestWorker(path, port, mocked_message_id,
                                             mocked_message, TestQueue([]))
         yield stubbed_worker.startWorker()
-
-        transport = get_stubbed_worker(Vas2NetsTransport, {
-            'transport_name': 'vas2nets',
-            'url': 'http://localhost:%s%s' % (port, path),
-            'username': 'username',
-            'password': 'password',
-            'owner': 'owner',
-            'service': 'service',
-            'subservice': 'subservice',
-            'web_receive_path': '/receive',
-            'web_receipt_path': '/receipt',
-            'web_port': 9998,
-        })
-        yield transport.startWorker()
+        yield self.worker.startWorker()
 
         # Monkeypatch the failure message publisher
         def _collect_failure(msg):
             failure_msgs.append(msg)
         failure_msgs = []
-        transport.failure_publisher.publish_message = _collect_failure
+        self.worker.failure_publisher.publish_message = _collect_failure
 
         msg = {
             'to_msisdn': '+27761234567',
@@ -275,7 +257,7 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
             'transport_network_id': 'network-id',
             'message': 'hello world'
         }
-        deferred = transport.handle_outbound_message(Message(**msg))
+        deferred = self.worker.handle_outbound_message(Message(**msg))
         self.assertFailure(deferred, Vas2NetsTransportError)
         yield deferred
         self.assertEqual(1, len(failure_msgs))
@@ -284,7 +266,6 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
         self.assertEqual(msg, f_message)
         self.assertTrue("Vas2NetsTransportError: No SmsId Header" in f_reason)
 
-        yield transport.stopWorker()
         yield stubbed_worker.stopWorker()
 
     def test_normalize_outbound_msisdn(self):
