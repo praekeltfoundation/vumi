@@ -116,13 +116,13 @@ class EsmeTransceiver(Protocol):
             #"ESME_RALYBND"          : ,
             #"ESME_RINVPRTFLG"       : ,
             #"ESME_RINVREGDLVFLG"    : ,
-            "ESME_RSYSERR"          : self.command_status_dispatch_permafault,
+            "ESME_RSYSERR"          : self.command_status_dispatch_conn_permfault,
             #"ESME_RINVSRCADR"       : ,
             #"ESME_RINVDSTADR"       : ,
             #"ESME_RINVMSGID"        : ,
             #"ESME_RBINDFAIL"        : ,
-            "ESME_RINVPASWD"        : self.command_status_dispatch_permafault,
-            "ESME_RINVSYSID"        : self.command_status_dispatch_permafault,
+            "ESME_RINVPASWD"        : self.command_status_dispatch_conn_permfault,
+            "ESME_RINVSYSID"        : self.command_status_dispatch_conn_permfault,
             #"ESME_RCANCELFAIL"      : ,
             #"ESME_RREPLACEFAIL"     : ,
             #"ESME_RMSGQFUL"         : ,
@@ -141,7 +141,7 @@ class EsmeTransceiver(Protocol):
             #"ESME_RINVSYSTYP"       : ,
             #"ESME_RINVREPFLAG"      : ,
             #"ESME_RINVNUMMSGS"      : ,
-            #"ESME_RTHROTTLED"       : ,
+            "ESME_RTHROTTLED"       : self.command_status_dispatch_conn_throttle,
             #"ESME_RINVSCHED"        : ,
             #"ESME_RINVEXPIRY"       : ,
             #"ESME_RINVDFTMSGID"     : ,
@@ -165,8 +165,20 @@ class EsmeTransceiver(Protocol):
     def command_status_dispatch_ok(self, pdu):
         return self.error_handlers.get("command_status_dispatch_ok")
 
-    def command_status_dispatch_permafault(self, pdu):
-        return self.error_handlers.get("command_status_dispatch_permafault")
+    def command_status_dispatch_conn_permfault(self, pdu):
+        return self.error_handlers.get("command_status_dispatch_conn_permfault")
+
+    def command_status_dispatch_mess_permfault(self, pdu):
+        return self.error_handlers.get("command_status_dispatch_mess_permfault")
+
+    def command_status_dispatch_conn_tempfault(self, pdu):
+        return self.error_handlers.get("command_status_dispatch_conn_tempfault")
+
+    def command_status_dispatch_mess_tempfault(self, pdu):
+        return self.error_handlers.get("command_status_dispatch_mess_tempfault")
+
+    def command_status_dispatch_conn_throttle(self, pdu):
+        return self.error_handlers.get("command_status_dispatch_conn_throttle")
 
     # TODO this is currently unused ... i think
     def set_handler(self, handler):
