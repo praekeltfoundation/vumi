@@ -1,3 +1,6 @@
+from datetime import datetime
+
+import pytz
 from twisted.trial.unittest import TestCase, SkipTest
 from twisted.internet.defer import succeed
 
@@ -62,6 +65,12 @@ class UglyModelTestCase(TestCase):
         return d.addCallback(_cb)
 
 
+class UglyModelTestCaseTest(UglyModelTestCase):
+
+    def test_assert_utc_near_now(self):
+        self.assert_utc_near_now(datetime.utcnow().replace(tzinfo=pytz.UTC))
+
+
 class ToyModel(UglyModel):
     TABLE_NAME = 'toy_items'
     fields = (
@@ -108,7 +117,11 @@ class UglyModelTest(UglyModelTestCase):
             self.assertEqual('item1', item.name)
             self.assertEqual('a test item', item.thingy)
             self.assertEqual(None, item.other_item)
-        return self.ri(_txn)
+        d = self.ri(_txn)
+
+        def _txn2(txn):
+            self.assertEqual(None, ToyModel.get_item(txn, 'missing_item'))
+        return d.addCallback(self.ricb, _txn2)
 
     def test_with_prefix(self):
         """

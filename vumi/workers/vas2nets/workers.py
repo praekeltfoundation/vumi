@@ -1,4 +1,3 @@
-# -*- test-case-name: vumi.workers.vas2nets.test_vas2nets -*-
 # -*- encoding: utf-8 -*-
 
 

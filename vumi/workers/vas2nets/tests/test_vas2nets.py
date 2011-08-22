@@ -1,4 +1,5 @@
 # encoding: utf-8
+import string
 from uuid import uuid1
 from datetime import datetime
 
@@ -13,12 +14,10 @@ from twisted.web.test.test_web import DummyRequest
 from vumi.service import Worker
 from vumi.tests.utils import get_stubbed_worker, TestQueue, StubbedAMQClient
 from vumi.message import Message
-
-from .transport import (ReceiveSMSResource, DeliveryReceiptResource,
-                        Vas2NetsTransport, validate_characters,
-                        Vas2NetsEncodingError, Vas2NetsTransportError,
-                        normalize_outbound_msisdn)
-import string
+from vumi.workers.vas2nets.transport import (
+    ReceiveSMSResource, DeliveryReceiptResource, Vas2NetsTransport,
+    validate_characters, Vas2NetsEncodingError, Vas2NetsTransportError,
+    normalize_outbound_msisdn)
 
 
 def create_request(dictionary={}, path='/', method='POST'):
@@ -110,7 +109,7 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
         request = create_request({
             'messageid': ['1'],
             'time': [self.today.strftime('%Y.%m.%d %H:%M:%S')],
-            'text': ['hello world']
+            'text': ['hello world'],
         })
         d = request.notifyFinish()
         response = resource.render(request)
@@ -127,7 +126,7 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
             'transport_keyword': '',
             'to_msisdn': '9292',
             'from_msisdn': '+41791234567',
-            'message': 'hello world'
+            'message': 'hello world',
         })
 
         channel = self.worker._amqp_client.channels[0]
@@ -137,17 +136,18 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
         self.assertEquals(Message.from_json(content.body), msg)
         self.assertEquals(routing_key, 'sms.inbound.vas2nets.9292')
 
+    @inlineCallbacks
     def test_delivery_receipt(self):
+        resource = DeliveryReceiptResource(self.config, self.publisher)
+
         request = create_request({
             'smsid': ['1'],
             'messageid': ['internal id'],
             'sender': ['+41791234567'],
             'time': [self.today.strftime('%Y.%m.%d %H:%M:%S')],
             'status': ['2'],
-            'text': ['Message delivered to MSISDN.']
+            'text': ['Message delivered to MSISDN.'],
         })
-
-        resource = DeliveryReceiptResource(self.config, self.publisher)
         d = request.notifyFinish()
         response = resource.render(request)
         self.assertEquals(response, NOT_DONE_YET)
@@ -163,7 +163,7 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
             'to_msisdn': '+41791234567',
             'id': 'internal id',
             'transport_timestamp': self.today.strftime('%Y-%m-%dT%H:%M:%S'),
-            'transport_status_message': 'Message delivered to MSISDN.'
+            'transport_status_message': 'Message delivered to MSISDN.',
         })
         channel = self.worker._amqp_client.channels[0]
         kwargs = channel.publish_log[0]
