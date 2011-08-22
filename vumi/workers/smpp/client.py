@@ -207,7 +207,7 @@ class EsmeTransceiver(Protocol):
         log.msg('INCOMING <<<<', pdu)
         error_handler = self.command_status_dispatch(pdu)
         if error_handler:
-            error_handler(pdu)
+            error_handler(pdu=pdu)
         if pdu['header']['command_id'] == 'bind_transceiver_resp':
             self.handle_bind_transceiver_resp(pdu)
         if pdu['header']['command_id'] == 'submit_sm_resp':

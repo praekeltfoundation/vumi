@@ -357,6 +357,9 @@ class RedisTestSmppTransport(SmppTransport):
                 )
         return sequence_number
 
+    def conn_permfault(self, **kwargs):
+        pass
+
 
 class RedisRespTestCase(TestCase):
 
@@ -492,6 +495,8 @@ class FakeRedisRespTestCase(TestCase):
                 {'id': '444', 'transport_message_id': '3rd_party_id_1'})
 
 
+        # test with error messages
+        self.esme.update_error_handlers({"command_status_dispatch_conn_permfault":self.transport.conn_permfault})
         message3 = Message(
             id = 446,
             message = "hello world",
