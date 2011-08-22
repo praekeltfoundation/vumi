@@ -1,4 +1,4 @@
-# -*- test-case-name: vumi.workers.vas2nets.test_vas2nets -*-
+# -*- test-case-name: vumi.workers.vas2nets.tests.test_vas2nets -*-
 # -*- encoding: utf-8 -*-
 
 from twisted.web import http
@@ -128,7 +128,7 @@ class DeliveryReceiptResource(Resource):
         try:
             request.setResponseCode(http.OK)
             request.setHeader('Content-Type', 'text/plain')
-            self.publisher.publish_message(Message(**{
+            yield self.publisher.publish_message(Message(**{
                 'transport_message_id': request.args['smsid'][0],
                 'transport_status': request.args['status'][0],
                 'transport_status_message': request.args['text'][0],
