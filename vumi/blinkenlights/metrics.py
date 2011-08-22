@@ -33,16 +33,18 @@ class MetricManager(Publisher):
         self._task = None  # created in .start()
 
     def start(self, channel):
-        """Start publishing metrics in a loop.
-
-        Parameters
-        ----------
-        """
+        """Start publishing metrics in a loop."""
         super(MetricManager, self).start(channel)
         self._task = LoopingCall(self._publish_metrics)
         self._task.start(self._publish_interval)
+        # TODO: capture deferred and add an errback to log errors?
 
-    def _publish_metric(self):
+    def stop(self):
+        """Stop publishing metrics."""
+        self._task.stop()
+        self._task = None
+
+    def _publish_metrics(self):
         msg = MetricMessage()
         now = time.time()
         for metric in self._metrics:
