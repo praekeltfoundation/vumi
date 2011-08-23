@@ -109,9 +109,6 @@ class WorkerAMQClient(AMQClient):
         queue_name = consumer.queue_name
         routing_key = consumer.routing_key
 
-        # stash for tests if needed:
-        getattr(self, "consumer_channels", {})[routing_key] = channel
-
         # declare the exchange, doesn't matter if it already exists
         yield channel.exchange_declare(exchange=exchange_name,
                                         type=exchange_type, durable=durable)
@@ -138,9 +135,6 @@ class WorkerAMQClient(AMQClient):
         publisher = publisher_class(*args, **kwargs)
         publisher.vumi_options = self.vumi_options
         # start!
-
-        # stash for tests if needed:
-        getattr(self, "publisher_channels", {})[publisher.routing_key] = channel
 
         yield publisher.start(channel)
         # return the publisher

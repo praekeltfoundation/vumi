@@ -13,7 +13,8 @@ from twisted.internet.defer import inlineCallbacks
 from twisted.web.test.test_web import DummyRequest
 
 from vumi.service import Worker
-from vumi.tests.utils import get_stubbed_worker, TestQueue, StubbedAMQClient
+from vumi.tests.utils import (get_stubbed_worker, TestQueue, StubbedAMQClient,
+                              FakeAMQBroker)
 from vumi.message import Message
 from vumi.workers.vas2nets.transport import (
     ReceiveSMSResource, DeliveryReceiptResource, Vas2NetsTransport,
@@ -86,7 +87,9 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
             'web_receipt_path': '/receipt',
             'web_port': 9998,
         }
-        self.worker = get_stubbed_worker(Vas2NetsTransport, self.config)
+        self.broker = FakeAMQBroker()
+        self.worker = get_stubbed_worker(Vas2NetsTransport, self.config,
+                                         self.broker)
         self.publisher = yield self.worker.publish_to('some.routing.key')
         self.today = datetime.utcnow().date()
         self.workers = [self.worker]
@@ -95,9 +98,8 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
         for worker in self.workers:
             worker.stopWorker()
 
-    def get_first_pubmsg(self, rkey):
-        channel = self.worker.get_pubchan(rkey)
-        return channel.publish_log[0]
+    def get_dispatched(self, rkey):
+        return self.broker.get_dispatched('vumi', rkey)
 
     def create_request(self, dictionary={}, path='/', method='POST'):
         """
@@ -163,9 +165,8 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
         msg = self.mkmsg_in()
 
         # we faked this channel
-        smsg = self.get_first_pubmsg('some.routing.key')
-        self.assertEquals(json.loads(smsg['content'].body), msg)
-        self.assertEquals(smsg['routing_key'], 'sms.inbound.vas2nets.9292')
+        [smsg] = self.get_dispatched('sms.inbound.vas2nets.9292')
+        self.assertEquals(json.loads(smsg.body), msg)
 
     @inlineCallbacks
     def test_delivery_receipt(self):
@@ -195,9 +196,8 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
             'transport_timestamp': self.today.strftime('%Y-%m-%dT%H:%M:%S'),
             'transport_status_message': 'Message delivered to MSISDN.',
         })
-        smsg = self.get_first_pubmsg('some.routing.key')
-        self.assertEquals(Message.from_json(smsg['content'].body), msg)
-        self.assertEquals(smsg['routing_key'], 'sms.receipt.vas2nets')
+        [smsg] = self.get_dispatched('sms.receipt.vas2nets')
+        self.assertEquals(Message.from_json(smsg.body), msg)
 
     def test_validate_characters(self):
         self.assertRaises(Vas2NetsEncodingError, validate_characters,
@@ -226,14 +226,11 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
 
         yield self.worker.handle_outbound_message(Message(**self.mkmsg_out()))
 
-        # we write to this channel, even though the routing key is different
-        smsg = self.get_first_pubmsg('sms.inbound.vas2nets.fallback')
-
-        self.assertEquals(json.loads(smsg['content'].body), {
+        [smsg] = self.get_dispatched('sms.ack.vas2nets')
+        self.assertEqual(json.loads(smsg.body), {
             'id': '1',
             'transport_message_id': mocked_message_id,
         })
-        self.assertEquals(smsg['routing_key'], 'sms.ack.vas2nets')
 
     @inlineCallbacks
     def test_send_sms_fail(self):
@@ -250,8 +247,8 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
         deferred = self.worker.handle_outbound_message(Message(**msg))
         self.assertFailure(deferred, Vas2NetsTransportError)
         yield deferred
-        fmsg = self.get_first_pubmsg('sms.outbound.vas2nets.failures')
-        fmsg = json.loads(fmsg['content'].body)
+        [fmsg] = self.get_dispatched('sms.outbound.vas2nets.failures')
+        fmsg = json.loads(fmsg.body)
         self.assertEqual(msg, fmsg['message'])
         self.assertTrue(
             "Vas2NetsTransportError: No SmsId Header" in fmsg['reason'])
