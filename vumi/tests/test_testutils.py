@@ -3,7 +3,7 @@ from twisted.trial.unittest import TestCase
 
 from vumi.service import Worker
 from vumi.tests.utils import (TestAMQClient, TestQueue, TestChannel,
-                              get_stubbed_worker)
+                              FakeAMQBroker, get_stubbed_worker)
 
 
 class ToyWorker(Worker):
@@ -30,3 +30,18 @@ class UtilsTestCase(TestCase):
         worker = get_stubbed_worker(ToyWorker, options)
         self.assertEquals({}, worker._amqp_client.vumi_options)
         self.assertEquals(options, worker.config)
+
+    @inlineCallbacks
+    def test_fake_broker(self):
+        broker = FakeAMQBroker()
+        amq_client = TestAMQClient(fake_broker=broker)
+        queue = yield amq_client.queue('foo')
+        channel = yield amq_client.channel('foo')
+        self.assertEqual(broker, queue.fake_broker)
+        self.assertEqual(broker, channel.fake_broker)
+
+        channel.basic_publish(exchange='exchange', routing_key='rkey',
+                              content='blah')
+        self.assertEqual(['blah'], broker.get_dispatched('exchange', 'rkey'))
+        self.assertEqual([], broker.get_dispatched('exchange', 'foo'))
+        self.assertEqual([], broker.get_dispatched('meh', 'foo'))

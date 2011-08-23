@@ -117,8 +117,10 @@ class TestQueue(object):
     """
     A test queue that mimicks txAMQP's queue behaviour
     """
-    def __init__(self, queue):
+    def __init__(self, queue, fake_broker=None):
         self.queue = queue
+        self.fake_broker = fake_broker
+        # TODO: Hook this up.
 
     def push(self, item):
         self.queue.append(item)
@@ -131,7 +133,9 @@ class TestQueue(object):
 
 
 class TestChannel(object):
-    def __init__(self, _id=None):
+    def __init__(self, channel_id=None, fake_broker=None):
+        self.channel_id = channel_id
+        self.fake_broker = fake_broker
         self.ack_log = []
         self.publish_log = []
         self.publish_message_log = []
@@ -148,6 +152,8 @@ class TestChannel(object):
     def basic_publish(self, *args, **kwargs):
         self.publish_message_log.append(kwargs)
         self.publish_log.append(kwargs)
+        if self.fake_broker:
+            self.fake_broker.publish(**kwargs)
 
     def basic_qos(self, *args, **kwargs):
         return defer.succeed(None)
@@ -190,11 +196,12 @@ class TestWorker(Worker):
 
 
 class TestAMQClient(WorkerAMQClient):
-    def __init__(self, vumi_options=None):
+    def __init__(self, vumi_options=None, fake_broker=None):
         spec = txamqp.spec.load(make_vumi_path_abs("config/amqp-spec-0-8.xml"))
         WorkerAMQClient.__init__(self, TwistedDelegate(), '', spec)
         if vumi_options is not None:
             self.vumi_options = vumi_options
+        self.fake_broker = fake_broker
 
     @defer.inlineCallbacks
     def queue(self, key):
@@ -203,7 +210,7 @@ class TestAMQClient(WorkerAMQClient):
             try:
                 q = self.queues[key]
             except KeyError:
-                q = TestQueue([])
+                q = TestQueue([], self.fake_broker)
                 self.queues[key] = q
         finally:
             self.queueLock.release()
@@ -216,15 +223,37 @@ class TestAMQClient(WorkerAMQClient):
             try:
                 ch = self.channels[id]
             except KeyError:
-                ch = TestChannel(id)
+                ch = TestChannel(id, self.fake_broker)
                 self.channels[id] = ch
         finally:
             self.channelLock.release()
         defer.returnValue(ch)
 
 
-def get_stubbed_worker(worker_class, config=None):
-    amq_client = TestAMQClient()
+class FakeAMQBroker(object):
+    """
+    This is to allow us to actually route messages.
+
+    To begin with, it'll just stash them by routing key.
+    """
+    def __init__(self):
+        self.dispatched = {}
+        self._queues = {}
+
+    def publish(self, exchange, routing_key, content):
+        # For looking at later:
+        exch = self.dispatched.setdefault(exchange, {})
+        exch.setdefault(routing_key, []).append(content)
+        # For distribution:
+        exch = self._queues.setdefault(exchange, {})
+        exch.setdefault(routing_key, []).append(content)
+
+    def get_dispatched(self, exchange, routing_key):
+        return self.dispatched.get(exchange, {}).get(routing_key, [])
+
+
+def get_stubbed_worker(worker_class, config=None, broker=None):
+    amq_client = TestAMQClient(fake_broker=broker)
     amq_client.vumi_options = {}
     worker = worker_class(amq_client, config)
     return worker

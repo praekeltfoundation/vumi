@@ -276,7 +276,8 @@ class Vas2NetsTransport(Worker):
 
     def stopWorker(self):
         """shutdown"""
-        self.receipt_resource.stopListening()
+        if hasattr(self, 'receipt_resource'):
+            self.receipt_resource.stopListening()
 
     @inlineCallbacks
     def setup_failure_publisher(self):
