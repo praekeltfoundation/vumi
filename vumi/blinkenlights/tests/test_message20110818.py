@@ -19,12 +19,12 @@ class TestMessage(TestCase):
         datapoint = ("vumi.w1.a_metric", now, 1.5)
         msgdict = {"datapoints": [datapoint]}
         msg = message.MetricMessage.from_dict(msgdict)
-        self.assertEqual(msg._datapoints, [datapoint])
+        self.assertEqual(msg.datapoints(), [datapoint])
 
     def test_extend(self):
         now = time.time()
         datapoint = ("vumi.w1.a_metric", now, 1.5)
         msg = message.MetricMessage()
         msg.extend([datapoint, datapoint, datapoint])
-        self.assertEqual(msg._datapoints, [
+        self.assertEqual(msg.datapoints(), [
             datapoint, datapoint, datapoint])

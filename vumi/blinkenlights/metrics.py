@@ -1,7 +1,8 @@
 # -*- test-case-name: vumi.blinkenlights.tests.test_metrics -*-
 
 from twisted.internet.task import LoopingCall
-from vumi.service import Publisher
+
+from vumi.service import Publisher, Consumer
 from vumi.blinkenlights.message20110818 import MetricMessage
 
 import time
@@ -221,3 +222,26 @@ class Timer(Sum):
         duration = time.time() - self._start_time
         self._start_time = None
         self.add(duration)
+
+
+class MetricsConsumer(Consumer):
+    """Utility for consuming metrics published by :class:`MetricManager`s.
+
+    Parameters
+    ----------
+    callback : function, f(metric_name, timestamp, value)
+        Called for each metric datapoint as it arrives.
+    """
+    exchange_name = "vumi.metrics"
+    exchange_type = "direct"
+    routing_key = "vumi.metrics"
+    durable = True
+
+    def __init__(self, callback):
+        self.callback = callback
+        self.queue_name = self.routing_key
+
+    def consume_message(self, vumi_message):
+        msg = MetricMessage.from_dict(vumi_message.payload)
+        for datapoint in msg.datapoints():
+            self.callback(*datapoint)

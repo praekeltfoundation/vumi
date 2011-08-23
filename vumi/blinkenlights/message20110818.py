@@ -26,6 +26,9 @@ class MetricMessage(Message):
     def extend(self, datapoints):
         self._datapoints.extend(datapoints)
 
+    def datapoints(self):
+        return self._datapoints
+
     def to_dict(self):
         return {
             'datapoints': self._datapoints,

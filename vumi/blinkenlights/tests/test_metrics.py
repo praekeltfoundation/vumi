@@ -156,3 +156,18 @@ class TestTimer(TestCase):
             time.sleep(0.1)
         self.assertTrue(0.18 <= timer.poll() <= 0.22)
         self.assertEqual(timer.poll(), 0.0)
+
+
+class TestMetricsConsumer(TestCase):
+    def test_consume_message(self):
+        expected_datapoints = [
+            ("vumi.test.v1", 1234, 1.0),
+            ("vumi.test.v2", 3456, 2.0),
+            ]
+        datapoints = []
+        consumer = metrics.MetricsConsumer(lambda *v: datapoints.append(v))
+        msg = metrics.MetricMessage()
+        msg.extend(expected_datapoints)
+        vumi_msg = Message.from_json(msg.to_json())
+        consumer.consume_message(vumi_msg)
+        self.assertEqual(datapoints, expected_datapoints)
