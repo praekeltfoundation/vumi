@@ -21,28 +21,6 @@ from vumi.workers.vas2nets.transport import (
     normalize_outbound_msisdn)
 
 
-def create_request(dictionary={}, path='/', method='POST'):
-    """
-    Creates a dummy Vas2Nets request for testing our resources with
-    """
-    request = DummyRequest(path)
-    request.method = method
-    args = {
-        'messageid': [str(uuid1())],
-        'time': [datetime.utcnow().strftime('%Y.%m.%d %H:%M:%S')],
-        'sender': ['0041791234567'],
-        'destination': ['9292'],
-        'provider': ['provider'],
-        'keyword': [''],
-        'header': [''],
-        'text': [''],
-        'keyword': [''],
-    }
-    args.update(dictionary)
-    request.args = args
-    return request
-
-
 class TestResource(Resource):
     isLeaf = True
 
@@ -119,12 +97,57 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
         channel = self.worker.get_pubchan(rkey)
         return channel.publish_log[0]
 
+    def create_request(self, dictionary={}, path='/', method='POST'):
+        """
+        Creates a dummy Vas2Nets request for testing our resources with
+        """
+        request = DummyRequest(path)
+        request.method = method
+        args = {
+            'messageid': [str(uuid1())],
+            'time': [self.today.strftime('%Y.%m.%d %H:%M:%S')],
+            'sender': ['0041791234567'],
+            'destination': ['9292'],
+            'provider': ['provider'],
+            'keyword': [''],
+            'header': [''],
+            'text': [''],
+            'keyword': [''],
+        }
+        args.update(dictionary)
+        request.args = args
+        return request
+
+    def mkmsg_in(self, **fields):
+        msg = {
+            'from_msisdn': '+41791234567',
+            'to_msisdn': '9292',
+            'transport_network_id': 'provider',
+            'transport_message_id': '1',
+            'transport_keyword': '',
+            'transport_timestamp': self.today.strftime('%Y-%m-%dT%H:%M:%S'),
+            'message': 'hello world',
+            }
+        msg.update(fields)
+        return msg
+
+    def mkmsg_out(self, **fields):
+        msg = {
+            'to_msisdn': '+27761234567',
+            'from_msisdn': '9292',
+            'id': '1',
+            'reply_to': '',
+            'transport_network_id': 'network-id',
+            'message': 'hello world',
+            }
+        msg.update(fields)
+        return msg
+
     @inlineCallbacks
     def test_receive_sms(self):
         resource = ReceiveSMSResource(self.config, self.publisher)
-        request = create_request({
+        request = self.create_request({
             'messageid': ['1'],
-            'time': [self.today.strftime('%Y.%m.%d %H:%M:%S')],
             'text': ['hello world'],
         })
         d = request.notifyFinish()
@@ -135,30 +158,21 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
         self.assertEquals(request.outgoingHeaders['content-type'],
                           'text/plain')
         self.assertEquals(request.responseCode, http.OK)
-        msg = Message(**{
-            'transport_message_id': '1',
-            'transport_timestamp': self.today.strftime('%Y-%m-%dT%H:%M:%S'),
-            'transport_network_id': 'provider',
-            'transport_keyword': '',
-            'to_msisdn': '9292',
-            'from_msisdn': '+41791234567',
-            'message': 'hello world',
-        })
+        msg = self.mkmsg_in()
 
         # we faked this channel
         smsg = self.get_first_pubmsg('some.routing.key')
-        self.assertEquals(Message.from_json(smsg['content'].body), msg)
+        self.assertEquals(json.loads(smsg['content'].body), msg)
         self.assertEquals(smsg['routing_key'], 'sms.inbound.vas2nets.9292')
 
     @inlineCallbacks
     def test_delivery_receipt(self):
         resource = DeliveryReceiptResource(self.config, self.publisher)
 
-        request = create_request({
+        request = self.create_request({
             'smsid': ['1'],
             'messageid': ['internal id'],
             'sender': ['+41791234567'],
-            'time': [self.today.strftime('%Y.%m.%d %H:%M:%S')],
             'status': ['2'],
             'text': ['Message delivered to MSISDN.'],
         })
@@ -200,7 +214,6 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
 
     @inlineCallbacks
     def test_send_sms_success(self):
-        """no clue yet how I'm going to test this."""
         mocked_message_id = str(uuid1())
         mocked_message = "Result_code: 00, Message OK"
 
@@ -212,14 +225,7 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
         yield stubbed_worker.startWorker()
         yield self.worker.startWorker()
 
-        yield self.worker.handle_outbound_message(Message(**{
-            'to_msisdn': '+27761234567',
-            'from_msisdn': '9292',
-            'id': '1',
-            'reply_to': '',
-            'transport_network_id': 'network-id',
-            'message': 'hello world',
-        }))
+        yield self.worker.handle_outbound_message(Message(**self.mkmsg_out()))
 
         # we write to this channel, even though the routing key is different
         smsg = self.get_first_pubmsg('sms.inbound.vas2nets.fallback')
@@ -234,7 +240,6 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
 
     @inlineCallbacks
     def test_send_sms_fail(self):
-        """no clue yet how I'm going to test this."""
         mocked_message_id = False
         mocked_message = "Result_code: 04, Internal system error occurred " \
                             "while processing message"
@@ -244,14 +249,7 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
         yield stubbed_worker.startWorker()
         yield self.worker.startWorker()
 
-        msg = {
-            'to_msisdn': '+27761234567',
-            'from_msisdn': '9292',
-            'id': '1',
-            'reply_to': '',
-            'transport_network_id': 'network-id',
-            'message': 'hello world'
-        }
+        msg = self.mkmsg_out()
         deferred = self.worker.handle_outbound_message(Message(**msg))
         self.assertFailure(deferred, Vas2NetsTransportError)
         yield deferred
