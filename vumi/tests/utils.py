@@ -195,6 +195,9 @@ class TestAMQClient(WorkerAMQClient):
         WorkerAMQClient.__init__(self, TwistedDelegate(), '', spec)
         if vumi_options is not None:
             self.vumi_options = vumi_options
+        # To more easily get channels later
+        self.consumer_channels = {}
+        self.publisher_channels = {}
 
     @defer.inlineCallbacks
     def queue(self, key):
@@ -227,6 +230,8 @@ def get_stubbed_worker(worker_class, config=None):
     amq_client = TestAMQClient()
     amq_client.vumi_options = {}
     worker = worker_class(amq_client, config)
+    worker.get_pubchan = lambda rkey: amq_client.publisher_channels[rkey]
+    worker.get_conschan = lambda rkey: amq_client.consumer_channels[rkey]
     return worker
 
 

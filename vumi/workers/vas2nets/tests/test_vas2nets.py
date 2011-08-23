@@ -2,6 +2,7 @@
 import string
 from uuid import uuid1
 from datetime import datetime
+import json
 
 from twisted.web import http
 from twisted.web.resource import Resource
@@ -93,9 +94,11 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
 
     @inlineCallbacks
     def setUp(self):
+        self.path = '/api/v1/sms/vas2nets/receive/'
+        self.port = 9999
         self.config = {
             'transport_name': 'vas2nets',
-            'url': 'http://localhost:9999/api/v1/sms/vas2nets/receive/',
+            'url': 'http://localhost:%s%s' % (self.port, self.path),
             'username': 'username',
             'password': 'password',
             'owner': 'owner',
@@ -111,6 +114,10 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
 
     def tearDown(self):
         self.worker.stopWorker()
+
+    def get_first_pubmsg(self, rkey):
+        channel = self.worker.get_pubchan(rkey)
+        return channel.publish_log[0]
 
     @inlineCallbacks
     def test_receive_sms(self):
@@ -138,12 +145,10 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
             'message': 'hello world',
         })
 
-        channel = self.worker._amqp_client.channels[0]
-        kwargs = channel.publish_log[0]
-        content = kwargs['content']
-        routing_key = kwargs['routing_key']
-        self.assertEquals(Message.from_json(content.body), msg)
-        self.assertEquals(routing_key, 'sms.inbound.vas2nets.9292')
+        # we faked this channel
+        smsg = self.get_first_pubmsg('some.routing.key')
+        self.assertEquals(Message.from_json(smsg['content'].body), msg)
+        self.assertEquals(smsg['routing_key'], 'sms.inbound.vas2nets.9292')
 
     @inlineCallbacks
     def test_delivery_receipt(self):
@@ -196,15 +201,14 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
     @inlineCallbacks
     def test_send_sms_success(self):
         """no clue yet how I'm going to test this."""
-        path = '/api/v1/sms/vas2nets/receive/'
-        port = 9999
         mocked_message_id = str(uuid1())
         mocked_message = "Result_code: 00, Message OK"
 
         # open an HTTP resource that mocks the Vas2Nets response for the
         # duration of this test
-        stubbed_worker = Vas2NetsTestWorker(path, port, mocked_message_id,
-                                            mocked_message, TestQueue([]))
+        stubbed_worker = Vas2NetsTestWorker(self.path, self.port,
+                                            mocked_message_id, mocked_message,
+                                            TestQueue([]))
         yield stubbed_worker.startWorker()
         yield self.worker.startWorker()
 
@@ -217,37 +221,28 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
             'message': 'hello world',
         }))
 
-        channel = self.worker._amqp_client.channels[2]
-        msg = channel.publish_log[0]
-        content = msg['content']
-        routing_key = msg['routing_key']
+        # we write to this channel, even though the routing key is different
+        smsg = self.get_first_pubmsg('sms.inbound.vas2nets.fallback')
 
-        self.assertEquals(Message.from_json(content.body), Message(**{
+        self.assertEquals(json.loads(smsg['content'].body), {
             'id': '1',
-            'transport_message_id': mocked_message_id
-        }))
-        self.assertEquals(routing_key, 'sms.ack.vas2nets')
+            'transport_message_id': mocked_message_id,
+        })
+        self.assertEquals(smsg['routing_key'], 'sms.ack.vas2nets')
 
         stubbed_worker.stopWorker()
 
     @inlineCallbacks
     def test_send_sms_fail(self):
         """no clue yet how I'm going to test this."""
-        path = '/api/v1/sms/vas2nets/receive/'
-        port = 9999
         mocked_message_id = False
         mocked_message = "Result_code: 04, Internal system error occurred " \
                             "while processing message"
-        stubbed_worker = Vas2NetsTestWorker(path, port, mocked_message_id,
-                                            mocked_message, TestQueue([]))
+        stubbed_worker = Vas2NetsTestWorker(self.path, self.port,
+                                            mocked_message_id, mocked_message,
+                                            TestQueue([]))
         yield stubbed_worker.startWorker()
         yield self.worker.startWorker()
-
-        # Monkeypatch the failure message publisher
-        def _collect_failure(msg):
-            failure_msgs.append(msg)
-        failure_msgs = []
-        self.worker.failure_publisher.publish_message = _collect_failure
 
         msg = {
             'to_msisdn': '+27761234567',
@@ -260,11 +255,11 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
         deferred = self.worker.handle_outbound_message(Message(**msg))
         self.assertFailure(deferred, Vas2NetsTransportError)
         yield deferred
-        self.assertEqual(1, len(failure_msgs))
-        f_message = failure_msgs[0].payload['message']
-        f_reason = failure_msgs[0].payload['reason']
-        self.assertEqual(msg, f_message)
-        self.assertTrue("Vas2NetsTransportError: No SmsId Header" in f_reason)
+        fmsg = self.get_first_pubmsg('sms.outbound.vas2nets.failures')
+        fmsg = json.loads(fmsg['content'].body)
+        self.assertEqual(msg, fmsg['message'])
+        self.assertTrue(
+            "Vas2NetsTransportError: No SmsId Header" in fmsg['reason'])
 
         yield stubbed_worker.stopWorker()
 
