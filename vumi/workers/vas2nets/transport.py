@@ -10,6 +10,7 @@ from twisted.python import log
 from twisted.internet.defer import inlineCallbacks, Deferred
 from twisted.internet.protocol import Protocol
 from twisted.internet import reactor
+from twisted.internet.error import ConnectionRefusedError
 
 from StringIO import StringIO
 from vumi.utils import StringProducer, normalize_msisdn
@@ -248,14 +249,18 @@ class Vas2NetsTransport(Worker):
         log.msg('Hitting %s with %s' % (self.config['url'], default_params))
         log.msg(urlencode(default_params))
 
-        agent = Agent(reactor)
-        response = yield agent.request('POST', self.config['url'],
-            Headers({
-                'User-Agent': ['Vumi Vas2Net Transport'],
-                'Content-Type': ['application/x-www-form-urlencoded'],
-            }),
-            StringProducer(urlencode(default_params))
-        )
+        try:
+            agent = Agent(reactor)
+            response = yield agent.request(
+                'POST', self.config['url'], Headers({
+                        'User-Agent': ['Vumi Vas2Net Transport'],
+                        'Content-Type': ['application/x-www-form-urlencoded'],
+                        }),
+                StringProducer(urlencode(default_params)))
+        except ConnectionRefusedError:
+            log.msg("Connection failed sending message:", data)
+            self.send_failure(message, 'connection refused')
+            return
 
         deferred = Deferred()
         response.deliverBody(HttpResponseHandler(deferred))
@@ -263,6 +268,11 @@ class Vas2NetsTransport(Worker):
 
         log.msg('Headers', list(response.headers.getAllRawHeaders()))
         header = self.config.get('header', 'X-Nth-Smsid')
+
+        if response.code != 200:
+            self.send_failure(message, 'server error: HTTP %s: %s' % (
+                    response.code, response_content))
+            return
 
         if response.headers.hasHeader(header):
             transport_message_id = response.headers.getRawHeaders(header)[0]

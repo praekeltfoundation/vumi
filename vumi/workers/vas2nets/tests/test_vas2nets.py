@@ -25,13 +25,14 @@ from vumi.workers.vas2nets.transport import (
 class TestResource(Resource):
     isLeaf = True
 
-    def __init__(self, message_id, message):
+    def __init__(self, message_id, message, code=http.OK):
         self.message_id = message_id
         self.message = message
+        self.code = code
 
     def render_POST(self, request):
         log.msg(request.content.read())
-        request.setResponseCode(http.OK)
+        request.setResponseCode(self.code)
         required_fields = [
             'username', 'password', 'call-number', 'origin', 'text',
             'messageid', 'provider', 'tariff', 'owner', 'service',
@@ -49,21 +50,20 @@ class TestResource(Resource):
 
 class Vas2NetsTestWorker(Worker):
 
-    def __init__(self, path, port, message_id, message, queue):
+    def __init__(self, path, port, message_id, message, queue, code=http.OK):
         Worker.__init__(self, StubbedAMQClient(queue))
         self.path = path
         self.port = port
+        self.code = code
         self.message_id = message_id
         self.message = message
 
     @inlineCallbacks
     def startWorker(self):
-        self.receipt_resource = yield self.start_web_resources(
-            [
-                (TestResource(self.message_id, self.message), self.path),
-            ],
-            self.port
-        )
+        self.receipt_resource = yield self.start_web_resources([
+                (TestResource(self.message_id, self.message, self.code),
+                 self.path),
+            ], self.port)
 
     def stopWorker(self):
         self.receipt_resource.stopListening()
@@ -251,6 +251,35 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
         self.assertEqual(msg, fmsg['message'])
         self.assertTrue(
             "Vas2NetsTransportError: No SmsId Header" in fmsg['reason'])
+
+    @inlineCallbacks
+    def test_send_sms_noconn(self):
+        yield self.worker.startWorker()
+
+        msg = self.mkmsg_out()
+        deferred = self.worker.handle_outbound_message(Message(**msg))
+        yield deferred
+        [fmsg] = self.get_dispatched('sms.outbound.vas2nets.failures')
+        fmsg = json.loads(fmsg.body)
+        self.assertEqual(msg, fmsg['message'])
+        self.assertEqual("connection refused", fmsg['reason'])
+
+    @inlineCallbacks
+    def test_send_sms_not_OK(self):
+        mocked_message = "Page not found."
+        self.workers.append(Vas2NetsTestWorker(
+                self.path, self.port, None, mocked_message, TestQueue([]),
+                http.NOT_FOUND))
+        yield self.workers[-1].startWorker()
+        yield self.worker.startWorker()
+
+        msg = self.mkmsg_out()
+        deferred = self.worker.handle_outbound_message(Message(**msg))
+        yield deferred
+        [fmsg] = self.get_dispatched('sms.outbound.vas2nets.failures')
+        fmsg = json.loads(fmsg.body)
+        self.assertEqual(msg, fmsg['message'])
+        self.assertTrue(fmsg['reason'].startswith("server error"))
 
     def test_normalize_outbound_msisdn(self):
         self.assertEquals(normalize_outbound_msisdn('+27761234567'),
