@@ -1,20 +1,22 @@
+from twisted.python import log
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.service import Worker
 from vumi.message import Message
 from vumi.webapp.api import utils
 
+
 class SMSForwardWorker(Worker):
-    
+
     @inlineCallbacks
     def startWorker(self):
         # create the publisher
         self.publisher = yield self.publish_to('sms.outbound.wasp.%s' %
                                                 self.config['msisdn'])
         # when it's done, create the consumer and pass it the publisher
-        self.consume("sms.inbound.wasp.%s" % self.config['msisdn'], 
+        self.consume("sms.inbound.wasp.%s" % self.config['msisdn'],
                         self.consume_message)
-    
+
     def consume_message(self, message):
         dictionary = message.payload
         # specify a user per campaign
@@ -33,9 +35,7 @@ class SMSForwardWorker(Worker):
                 log.msg('RESP: %s' % repr(resp))
             except Exception, e:
                 log.err(e)
-        
+
         recipient = dictionary['sender']
-        self.publisher.publish_message(Message(recipient=recipient, 
+        self.publisher.publish_message(Message(recipient=recipient,
                             message="Thanks, your SMS has been registered"))
-    
-    

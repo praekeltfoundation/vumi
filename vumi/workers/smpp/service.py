@@ -1,11 +1,9 @@
 
 from twisted.python import log
-from twisted.python.log import logging
-from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet import reactor
 
 from vumi.service import Worker, Consumer, Publisher
-from vumi.workers.smpp.server import SmscServerFactory, SmscServer
+from vumi.workers.smpp.server import SmscServerFactory
 
 class SmppServiceConsumer(Consumer):
     exchange_name = "vumi"

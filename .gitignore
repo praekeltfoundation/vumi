@@ -30,3 +30,4 @@ coverage-html/
 coverage.xml
 test_results.xml
 django_test_results.xml
+/pep8.txt

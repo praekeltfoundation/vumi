@@ -1,3 +1,5 @@
+# -*- test-case-name: vumi.workers.vas2nets.tests.test_vas2nets_stubs -*-
+
 import uuid
 import random
 from urllib import urlencode
@@ -55,14 +57,20 @@ class FakeVas2NetsHandler(Resource):
     """
     isLeaf = True
 
-    def __init__(self, receipt_url):
+    delay_choices = (0.5, 1, 1.5, 2, 5)
+    deliver_hook = None
+
+    def __init__(self, receipt_url, delay_choices=None, deliver_hook=None):
+        if delay_choices:
+            self.delay_choices = delay_choices
+        if deliver_hook:
+            self.deliver_hook = deliver_hook
         self.receipt_url = receipt_url
 
     def get_sms_id(self):
         return uuid.uuid4().get_hex()[-8:]
 
     def render_POST(self, request):
-        log.msg(request.content.read())
         request.setResponseCode(http.OK)
         required_fields = [
             'username', 'password', 'call-number', 'origin', 'text',
@@ -83,7 +91,7 @@ class FakeVas2NetsHandler(Resource):
     def schedule_delivery(self, *args):
         if not self.receipt_url:
             return succeed(None)
-        return reactor.callLater(random.choice([0.5, 1, 1.5, 2, 5]),
+        return reactor.callLater(random.choice(self.delay_choices),
                                  self.deliver_receipt, *args)
 
     def deliver_receipt(self, sms_id, message_id, provider, sender):
@@ -106,17 +114,27 @@ class FakeVas2NetsHandler(Resource):
             }
 
         log.msg("Sending receipt: %s" % (params,))
-        return HttpResponseHandler.req_POST(self.receipt_url, params)
+        d = HttpResponseHandler.req_POST(self.receipt_url, params)
+        if self.deliver_hook:
+            d.addCallback(self.deliver_hook)
+        return d
 
 
 class FakeVas2NetsWorker(Worker):
+    delay_choices = None
+    deliver_hook = None
+
     @inlineCallbacks
     def startWorker(self):
         url = urlparse(self.config.get('url'))
         receipt_url = "http://localhost:%s%s" % (
             self.config.get('web_port'), self.config.get('web_receipt_path'))
+
         self.receipt_resource = yield self.start_web_resources(
-            [(FakeVas2NetsHandler(receipt_url), url.path)], url.port)
+            [(FakeVas2NetsHandler(receipt_url, self.delay_choices,
+                                  self.deliver_hook), url.path)],
+            url.port)
 
     def stopWorker(self):
-        self.receipt_resource.stopListening()
+        if hasattr(self, 'receipt_resource'):
+            self.receipt_resource.stopListening()

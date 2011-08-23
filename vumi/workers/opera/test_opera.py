@@ -1,23 +1,23 @@
-import os, iso8601
-os.environ['DJANGO_SETTINGS_MODULE'] = 'vumi.webapp.settings'
+from datetime import datetime
+from StringIO import StringIO
+import os
 
-from django.test.simple import DjangoTestSuiteRunner
-
+import iso8601
 from twisted.trial import unittest
-from twisted.python import log, failure
-from twisted.internet import defer, reactor
+from twisted.python import failure
+from twisted.internet import defer
 from twisted.web.test.test_web import DummyRequest
-from twisted.web import http
+
+os.environ['DJANGO_SETTINGS_MODULE'] = 'vumi.webapp.settings'
 
 from vumi.message import Message
 from vumi.workers.opera import transport
-from vumi.webapp.api.models import *
 from vumi.tests.utils import TestPublisher
-from datetime import datetime
-from StringIO import StringIO
+# from vumi.webapp.api.models import *
+
 
 class OperaTransportTestCase(unittest.TestCase):
-    
+
     def test_receipt_processing(self):
         """it should be able to process an incoming XML receipt via HTTP"""
         publisher = TestPublisher()
@@ -37,19 +37,21 @@ class OperaTransportTestCase(unittest.TestCase):
           </receipt>
         </receipts>
         """.strip())
-        response = resource.render_POST(request)
+        resource.render_POST(request)
         self.assertEquals(publisher.queue.pop(), (Message(**{
                 'transport_name': 'Opera',
                 'transport_msg_id': '001efc31',
-                'transport_status': 'D', # OK / delivered, opera specific
-                'transport_delivered_at': datetime(2008,8,31,15,59,24),
+                'transport_status': 'D',  # OK / delivered, opera specific
+                'transport_delivered_at': datetime(2008, 8, 31, 15, 59, 24),
             }), {
                 'routing_key': 'sms.receipt.opera'
             })
         )
-    
+
     def test_incoming_sms_processing(self):
-        """it should be able to process in incoming sms as XML delivered via HTTP"""
+        """
+        it should be able to process in incoming sms as XML delivered via HTTP
+        """
         publisher = TestPublisher()
         resource = transport.OperaReceiveResource(publisher)
         request = DummyRequest('/api/v1/sms/opera/receive.xml')
@@ -88,7 +90,7 @@ class OperaTransportTestCase(unittest.TestCase):
           <field name="Now" type = "date">2010-06-04 15:51:27 +0000</field>
         </bspostevent>
         """.strip())
-        response = resource.render_POST(request)
+        resource.render_POST(request)
         self.assertEquals(publisher.queue.pop(), (Message(**{
                 'to_msisdn': '*32323',
                 'from_msisdn': '+27831234567',
@@ -96,7 +98,7 @@ class OperaTransportTestCase(unittest.TestCase):
                 'transport_name': 'Opera',
                 'received_at': iso8601.parse_date('2010-06-04 15:51:25 +0000'),
             }), {
-                'routing_key': 'sms.inbound.opera.s32323' # * -> s
+                'routing_key': 'sms.inbound.opera.s32323'  # * -> s
             }))
 
     # @defer.inlineCallbacks
@@ -105,15 +107,18 @@ class OperaTransportTestCase(unittest.TestCase):
         if for some reason the delivery of the SMS to opera crashes it
         shouldn't ACK the message over AMQ but leave it for a retry later
         """
-        
+
         from collections import namedtuple
         Message = namedtuple('Message', ['content'])
         Content = namedtuple('Content', ['body'])
 
         fake_amqp_message = Message(content=Content(body='{"sample":"json"}'))
-        
-        class ExpectedException(failure.DefaultException): pass
-        class UnexpectedException(failure.DefaultException): pass
+
+        class ExpectedException(failure.DefaultException):
+            pass
+
+        class UnexpectedException(failure.DefaultException):
+            pass
 
         def error_raiser(klass, message):
             def raise_error(*args, **kwargs):
@@ -130,13 +135,15 @@ class OperaTransportTestCase(unittest.TestCase):
             return all_ok_cb
 
         consumer = transport.OperaConsumer(publisher=TestPublisher(),
-                config={'url':'http://localhost'})
-        consumer.consume_message = error_raiser(ExpectedException, 'this is expected')
-        consumer.ack = error_raiser(UnexpectedException, 'this should not be called if consume ' \
+                config={'url': 'http://localhost'})
+        consumer.consume_message = error_raiser(ExpectedException,
+                                                'this is expected')
+        consumer.ack = error_raiser(UnexpectedException,
+                                    'this should not be called if consume '\
                                         'message raises an error')
         d = consumer.consume(fake_amqp_message)
         d.addErrback(lambda f: f.trap(ExpectedException))
-        
+
         consumer.consume_message = all_ok("all is ok")
         ack_history = []
         consumer.ack = lambda *args, **kwargs: ack_history.append((args,

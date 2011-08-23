@@ -1,5 +1,4 @@
-from django.conf.urls.defaults import *
-from django.http import HttpResponse
+from django.conf.urls.defaults import patterns
 from django.views.generic.base import TemplateView
 from vumi.webapp.prelaunch import views
 

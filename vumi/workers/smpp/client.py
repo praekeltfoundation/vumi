@@ -3,14 +3,25 @@ import json
 import redis
 
 from twisted.python import log
-from twisted.internet import reactor, defer
 from twisted.internet.protocol import Protocol, ReconnectingClientFactory
 from twisted.internet.task import LoopingCall
 
-from smpp.pdu_builder import *
-from smpp.pdu_inspector import *
+import binascii
+from smpp.pdu import unpack_pdu
+from smpp.pdu_builder import (  BindTransceiver,
+                                DeliverSMResp,
+                                SubmitSM,
+                                SubmitMulti,
+                                EnquireLink,
+                                EnquireLinkResp,
+                                QuerySM
+                                )
+from smpp.pdu_inspector import (MultipartMessage,
+                                detect_multipart,
+                                multipart_key
+                                )
 
-from vumi.utils import *
+from vumi.utils import get_deploy_int
 
 
 class EsmeTransceiver(Protocol):
@@ -74,6 +85,8 @@ class EsmeTransceiver(Protocol):
             self.handle_submit_multi_resp(pdu)
         if pdu['header']['command_id'] == 'deliver_sm':
             self.handle_deliver_sm(pdu)
+        if pdu['header']['command_id'] == 'enquire_link':
+            self.handle_enquire_link(pdu)
         if pdu['header']['command_id'] == 'enquire_link_resp':
             self.handle_enquire_link_resp(pdu)
         log.msg(self.name, 'STATE :', self.state)
@@ -97,10 +110,6 @@ class EsmeTransceiver(Protocol):
 
     def setDeliverSMCallback(self, deliver_sm_callback):
         self.__deliver_sm_callback = deliver_sm_callback
-
-
-    def setLoopingQuerySMCallback(self, looping_query_sm_callback):
-        self.__looping_query_sm_callback = looping_query_sm_callback
 
 
     def connectionMade(self):
@@ -149,8 +158,6 @@ class EsmeTransceiver(Protocol):
             self.state = 'BOUND_TRX'
             self.lc_enquire = LoopingCall(self.enquire_link)
             self.lc_enquire.start(55.0)
-            #self.lc_query = LoopingCall(self.query_sm_group)
-            #self.lc_query.start(1.0)
             self.__connect_callback(self)
         log.msg(self.name, 'STATE :', self.state)
 
@@ -170,6 +177,17 @@ class EsmeTransceiver(Protocol):
         if pdu['header']['command_status'] == 'ESME_ROK':
             pass
 
+    def _decode_message(self, message, data_coding):
+        codec = {
+            1: 'ascii',
+            3: 'latin1',
+            8: 'utf-16be',  # Actually UCS-2, but close enough.
+            }.get(data_coding, None)
+        if codec is None:
+            log.msg("WARNING: Not decoding message with data_coding=%s" % (
+                    data_coding,))
+            return message
+        return message.decode(codec)
 
     def handle_deliver_sm(self, pdu):
         if pdu['header']['command_status'] == 'ESME_ROK':
@@ -213,12 +231,21 @@ class EsmeTransceiver(Protocol):
                 else:
                     self.r_server.set(redis_key, json.dumps(multi.get_array()))
             else:
+                pdu_mp = pdu['body']['mandatory_parameters']
+                decoded_msg = self._decode_message(pdu_mp['short_message'],
+                                                   pdu_mp['data_coding'])
                 self.__deliver_sm_callback(
-                        destination_addr = pdu['body']['mandatory_parameters']['destination_addr'],
-                        source_addr = pdu['body']['mandatory_parameters']['source_addr'],
-                        short_message = pdu['body']['mandatory_parameters']['short_message']
+                        destination_addr=pdu_mp['destination_addr'],
+                        source_addr=pdu_mp['source_addr'],
+                        short_message=decoded_msg,
                         )
 
+
+    def handle_enquire_link(self, pdu):
+        if pdu['header']['command_status'] == 'ESME_ROK':
+            sequence_number = pdu['header']['sequence_number']
+            pdu_resp = EnquireLinkResp(sequence_number)
+            self.sendPDU(pdu_resp)
 
     def handle_enquire_link_resp(self, pdu):
         if pdu['header']['command_status'] == 'ESME_ROK':
@@ -286,11 +313,6 @@ class EsmeTransceiver(Protocol):
         return 0
 
 
-    def query_sm_group(self, **kwargs):
-        self.__looping_query_sm_callback()
-        return 0
-
-
 class EsmeTransceiverFactory(ReconnectingClientFactory):
 
     def __init__(self, config, vumi_options):
@@ -308,7 +330,6 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
         self.__submit_sm_resp_callback = None
         self.__delivery_report_callback = None
         self.__deliver_sm_callback = None
-        self.__looping_query_sm_callback = None
         self.seq = [int(self.config['smpp_offset'])]
         log.msg("Set sequence number: %s, config: %s" % (self.seq, self.config))
         self.initialDelay = 30.0
@@ -350,10 +371,6 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
         self.__deliver_sm_callback = deliver_sm_callback
 
 
-    def setLoopingQuerySMCallback(self, looping_query_sm_callback):
-        self.__looping_query_sm_callback = looping_query_sm_callback
-
-
     def startedConnecting(self, connector):
         print 'Started to connect.'
 
@@ -370,8 +387,6 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
                 delivery_report_callback = self.__delivery_report_callback)
         self.esme.setDeliverSMCallback(
                 deliver_sm_callback = self.__deliver_sm_callback)
-        self.esme.setLoopingQuerySMCallback(
-                looping_query_sm_callback = self.__looping_query_sm_callback)
         self.resetDelay()
         return self.esme
 

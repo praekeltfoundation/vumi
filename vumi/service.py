@@ -1,15 +1,13 @@
 # -*- test-case-name: vumi.tests.test_service -*-
 
-from copy import deepcopy
-from contextlib import contextmanager
 import json
+from copy import deepcopy
 
 from twisted.python import log, usage
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet import protocol, reactor
 from twisted.web.server import Site
 from twisted.web.resource import Resource
-
 import txamqp
 from txamqp.client import TwistedDelegate
 from txamqp.content import Content
@@ -18,7 +16,6 @@ from txamqp.protocol import AMQClient
 from vumi.errors import VumiError
 from vumi.message import Message
 from vumi.webapp.api import utils
-
 from vumi.utils import load_class_by_string, make_vumi_path_abs
 
 
@@ -46,8 +43,9 @@ class AmqpFactory(protocol.ReconnectingClientFactory):
         self.worker_class = worker_class
 
     def buildProtocol(self, addr):
-        amqp_client = WorkerAMQClient(self.delegate, self.options['vhost'],
-                                      self.spec, self.options.get('heartbeat', 0))
+        amqp_client = WorkerAMQClient(
+            self.delegate, self.options['vhost'],
+            self.spec, self.options.get('heartbeat', 0))
         amqp_client.factory = self
         amqp_client.vumi_options = self.options
         self.worker = self.worker_class(amqp_client, self.config)
@@ -142,7 +140,6 @@ class WorkerAMQClient(AMQClient):
         returnValue(publisher)
 
 
-
 class Worker(object):
     """
     The Worker is responsible for starting consumers & publishers
@@ -185,8 +182,8 @@ class Worker(object):
         klass = type(class_name, (DynamicConsumer,), kwargs)
         return self.start_consumer(klass, callback)
 
-    def start_consumer(self, consumer_class, *args, **kwargs):
-        return self._amqp_client.start_consumer(consumer_class, *args, **kwargs)
+    def start_consumer(self, consumer_class, *args, **kw):
+        return self._amqp_client.start_consumer(consumer_class, *args, **kw)
 
     def publish_to(self, routing_key, exchange_name='vumi',
                    exchange_type='direct', delivery_mode=2):
@@ -200,8 +197,8 @@ class Worker(object):
             })
         return self.start_publisher(publisher_class)
 
-    def start_publisher(self, publisher_class, *args, **kwargs):
-        return self._amqp_client.start_publisher(publisher_class, *args, **kwargs)
+    def start_publisher(self, publisher_class, *args, **kw):
+        return self._amqp_client.start_publisher(publisher_class, *args, **kw)
 
     def start_web_resources(self, resources, port):
         # start the HTTP server for receiving the receipts
@@ -369,22 +366,24 @@ class Publisher(object):
         if not self.routing_key_is_bound(routing_key):
             raise RoutingKeyError("The routing_key: %s is not bound to any"
                                   " queues in vhost: %s  exchange: %s" % (
-                                  routing_key, self.vumi_options['vhost'], self.exchange_name))
+                                  routing_key, self.vumi_options['vhost'],
+                                  self.exchange_name))
 
     def publish(self, message, **kwargs):
         exchange_name = kwargs.get('exchange_name') or self.exchange_name
         routing_key = kwargs.get('routing_key') or self.routing_key
         require_bind = kwargs.get('require_bind')
         self.check_routing_key(routing_key, require_bind)
-        return self.channel.basic_publish(exchange=exchange_name, content=message,
+        return self.channel.basic_publish(exchange=exchange_name,
+                                          content=message,
                                           routing_key=routing_key)
 
     def publish_message(self, message, **kwargs):
         return self.publish_raw(message.to_json(), **kwargs)
 
-    def publish_json(self, data, **kwargs):
+    def publish_json(self, data, **kw):
         """helper method"""
-        return self.publish_raw(json.dumps(data, cls=json.JSONEncoder), **kwargs)
+        return self.publish_raw(json.dumps(data, cls=json.JSONEncoder), **kw)
 
     def publish_raw(self, data, **kwargs):
         amq_message = Content(data)
@@ -401,7 +400,8 @@ class WorkerCreator(object):
     def __init__(self, vumi_options):
         self.options = vumi_options
 
-    def create_worker(self, worker_class, config, timeout=30, bindAddress=None):
+    def create_worker(self, worker_class, config, timeout=30,
+                      bindAddress=None):
         """
         Create a worker factory, connect to AMQP and return the factory.
 
@@ -415,5 +415,3 @@ class WorkerCreator(object):
     def _connect(self, factory, timeout, bindAddress):
         reactor.connectTCP(self.options['hostname'], self.options['port'],
                            factory, timeout, bindAddress)
-
-

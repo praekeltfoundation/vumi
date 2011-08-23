@@ -1,17 +1,29 @@
-from twisted.internet.defer import inlineCallbacks
-from generator_tools import picklegenerators
+from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet import task
 from twisted.python import log
 from vumi.service import Worker
 from vumi.message import Message
 from vumi.utils import safe_routing_key
+from vumi.utils import http_request
 from vumi.workers.integrat.worker import IntegratWorker
 from datetime import datetime, timedelta, date
 from urllib import urlopen, urlencode
-import json
+import json, base64
 
 PATIENT_API_URL = 'http://qa.txtalert.praekeltfoundation.org/' \
                   'api/v1/patient.json'
+REQUEST_CHANGE_URL = 'http://qa.txtalert.praekeltfoundation.org/' \
+                    'api/v1/request/change.json'
+REQUEST_CALL_URL = 'http://qa.txtalert.praekeltfoundation.org/' \
+                    'api/v1/request/call.json'
+
+def basic_auth_string(username, password):
+    """
+    Encode a username and password for use in an HTTP Basic Authentication
+    header
+    """
+    b64 = base64.encodestring('%s:%s' % (username, password)).strip()
+    return 'Basic %s' % b64
 
 
 def get_patient(msisdn, patient_id):
@@ -21,17 +33,46 @@ def get_patient(msisdn, patient_id):
         urlencode({'msisdn': msisdn, 'patient_id': patient_id}))
     return json.loads(urlopen(url).read())
 
+@inlineCallbacks
+def request_change(visit_id, change_type, headers):
+    default_headers = {
+        'Content-Type': ['application/x-www-form-urlencoded']
+    }
+    default_headers.update(headers)
+    
+    response = yield http_request(REQUEST_CHANGE_URL, urlencode({
+        'visit_id': visit_id,
+        'when': change_type
+    }), headers=default_headers, method='POST')
+    print 'response', response
+    returnValue(response)
 
-def reschedule_earlier_date(*args, **kwargs):
-    log.msg("Rescheduling earlier date", args, kwargs)
+def reschedule_earlier_date(visit_id, headers):
+    log.msg("Rescheduling earlier date", visit_id)
+    request_change(visit_id, 'earlier', headers)
 
+def reschedule_later_date(visit_id, headers):
+    log.msg("Rescheduling later date", visit_id)
+    request_change(visit_id, 'later', headers)
 
-def reschedule_later_date(*args, **kwargs):
-    log.msg("Rescheduling later date", args, kwargs)
-
+@inlineCallbacks
+def call_request(msisdn, headers):
+    default_headers = {
+        'Content-Type': ['application/x-www-form-urlencoded']
+    }
+    default_headers.update(headers)
+    
+    response = yield http_request(REQUEST_CALL_URL, urlencode({
+        'msisdn': msisdn
+    }), headers=default_headers, method='POST')
+    print 'response', response
+    returnValue(response)
+    
 
 class Menu(object):
-    def __init__(self):
+    def __init__(self, username, password):
+        self.username = username
+        self.password = password
         self.finished = False
 
     def ask(self, q):
@@ -95,12 +136,16 @@ class Menu(object):
                 )
             )
             if answer == '1':
-                reschedule_earlier_date()
+                reschedule_earlier_date(patient.get('visit_id'), {
+                    'Authorization': [basic_auth_string(self.username, self.password)]
+                })
                 yield self.close("Thanks! Your change request has been"
                                  " registered. You'll receive an SMS with"
                                  " your appointment information")
             elif answer == '2':
-                reschedule_later_date()
+                reschedule_later_date(patient.get('visit_id'), {
+                    'Authorization': [basic_auth_string(self.username, self.password)]
+                })
                 yield self.close("Thanks! Your change request has been"
                                  " registered. You'll receive an SMS with"
                                  " your appointment information")
@@ -113,6 +158,9 @@ class Menu(object):
                             patient.get('rescheduled', 0),
                             patient.get('missed', 0)))
         elif answer == '3':
+            call_request(patient.get('msisdn'), {
+                'Authorization': [basic_auth_string(self.username, self.password)]
+            })
             yield self.close("Welcome to txtAlert. "
                         "You have requested a call from the clinic. "
                         "You will be called as soon as possible.")
@@ -121,6 +169,7 @@ class Menu(object):
         # it should never get here.
         yield self.close('Sorry, that wasn\'t what I expected. '
                          'Please reconnect and try again')
+
 
 class BookingTool(Worker):
 
@@ -168,7 +217,7 @@ class BookingTool(Worker):
 
     def start_new_session(self, uuid, message):
         # assume the first message is the announcement
-        menu = Menu()
+        menu = Menu(**self.config['txtalert'])
         coroutine = menu.run()
         coroutine.next()
         self.save_session(uuid, menu, coroutine)
@@ -202,18 +251,18 @@ class BookingTool(Worker):
     def stopWorker(self):
         yield None
 
+
 class USSDBookingTool(IntegratWorker):
     @inlineCallbacks
     def startWorker(self):
-        self.publisher = yield self.publish_to('ussd.outbound.%s'
-                                                % self.config['transport_name'])
+        self.publisher = yield self.publish_to('ussd.outbound.%s' %
+                                               self.config['transport_name'])
         self.sessions = {}
         self.consume('ussd.inbound.%s.%s' % (
             self.config['transport_name'],
             safe_routing_key(self.config['ussd_code'])
         ), self.consume_message)
-        
-    
+
     def session_exists(self, uuid):
         return uuid in self.sessions
 
@@ -230,45 +279,42 @@ class USSDBookingTool(IntegratWorker):
     def end_session(self, uuid):
         log.msg('Ending session %s' % uuid)
         return self.sessions.pop(uuid, None)
-    
+
     def save_session(self, uuid, menu, coroutine):
         self.sessions[uuid] = self.serialize((menu, coroutine))
-    
+
     def get_session(self, uuid):
         dt, session = self.deserialize(self.sessions[uuid])
         return session
-    
+
     def new_session(self, data):
         session_id = data['transport_session_id']
         msisdn = data['sender']
-        message = data['message']
-        
-        menu = Menu()
+
+        menu = Menu(**self.config['txtalert'])
         coroutine = menu.run()
         coroutine.next()
         self.save_session(session_id, menu, coroutine)
         start_of_conversation = coroutine.send(msisdn)  # announcement
         log.msg('replying with', start_of_conversation)
         self.reply(session_id, start_of_conversation)
-    
+
     def resume_session(self, data):
         session_id = data['transport_session_id']
-        msisdn = data['sender']
         message = data['message']
-        
+
         menu, coroutine = self.get_session(session_id)
         response = coroutine.send(message)
-        
+
         if menu.finished:
             self.end(session_id, response)
         else:
             self.save_session(session_id, menu, coroutine)
             self.reply(session_id, response)
-    
+
     def open_session(self, data):
         pass
-    
+
     def close_session(self, data):
         session_id = data['transport_session_id']
         self.end_session(session_id)
-    
