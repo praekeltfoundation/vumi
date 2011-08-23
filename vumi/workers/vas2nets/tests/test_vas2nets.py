@@ -89,9 +89,11 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
         self.worker = get_stubbed_worker(Vas2NetsTransport, self.config)
         self.publisher = yield self.worker.publish_to('some.routing.key')
         self.today = datetime.utcnow().date()
+        self.workers = [self.worker]
 
     def tearDown(self):
-        self.worker.stopWorker()
+        for worker in self.workers:
+            worker.stopWorker()
 
     def get_first_pubmsg(self, rkey):
         channel = self.worker.get_pubchan(rkey)
@@ -193,12 +195,9 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
             'transport_timestamp': self.today.strftime('%Y-%m-%dT%H:%M:%S'),
             'transport_status_message': 'Message delivered to MSISDN.',
         })
-        channel = self.worker._amqp_client.channels[0]
-        kwargs = channel.publish_log[0]
-        content = kwargs['content']
-        routing_key = kwargs['routing_key']
-        self.assertEquals(Message.from_json(content.body), msg)
-        self.assertEquals(routing_key, 'sms.receipt.vas2nets')
+        smsg = self.get_first_pubmsg('some.routing.key')
+        self.assertEquals(Message.from_json(smsg['content'].body), msg)
+        self.assertEquals(smsg['routing_key'], 'sms.receipt.vas2nets')
 
     def test_validate_characters(self):
         self.assertRaises(Vas2NetsEncodingError, validate_characters,
@@ -219,10 +218,10 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
 
         # open an HTTP resource that mocks the Vas2Nets response for the
         # duration of this test
-        stubbed_worker = Vas2NetsTestWorker(self.path, self.port,
-                                            mocked_message_id, mocked_message,
-                                            TestQueue([]))
-        yield stubbed_worker.startWorker()
+        self.workers.append(Vas2NetsTestWorker(
+                self.path, self.port, mocked_message_id, mocked_message,
+                TestQueue([])))
+        yield self.workers[-1].startWorker()
         yield self.worker.startWorker()
 
         yield self.worker.handle_outbound_message(Message(**self.mkmsg_out()))
@@ -236,17 +235,15 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
         })
         self.assertEquals(smsg['routing_key'], 'sms.ack.vas2nets')
 
-        stubbed_worker.stopWorker()
-
     @inlineCallbacks
     def test_send_sms_fail(self):
         mocked_message_id = False
         mocked_message = "Result_code: 04, Internal system error occurred " \
                             "while processing message"
-        stubbed_worker = Vas2NetsTestWorker(self.path, self.port,
-                                            mocked_message_id, mocked_message,
-                                            TestQueue([]))
-        yield stubbed_worker.startWorker()
+        self.workers.append(Vas2NetsTestWorker(
+                self.path, self.port, mocked_message_id, mocked_message,
+                TestQueue([])))
+        yield self.workers[-1].startWorker()
         yield self.worker.startWorker()
 
         msg = self.mkmsg_out()
@@ -258,8 +255,6 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
         self.assertEqual(msg, fmsg['message'])
         self.assertTrue(
             "Vas2NetsTransportError: No SmsId Header" in fmsg['reason'])
-
-        yield stubbed_worker.stopWorker()
 
     def test_normalize_outbound_msisdn(self):
         self.assertEquals(normalize_outbound_msisdn('+27761234567'),
