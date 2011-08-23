@@ -164,7 +164,6 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
         self.assertEquals(request.responseCode, http.OK)
         msg = self.mkmsg_in()
 
-        # we faked this channel
         [smsg] = self.get_dispatched('sms.inbound.vas2nets.9292')
         self.assertEquals(json.loads(smsg.body), msg)
 
