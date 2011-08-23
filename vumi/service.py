@@ -135,7 +135,6 @@ class WorkerAMQClient(AMQClient):
         publisher = publisher_class(*args, **kwargs)
         publisher.vumi_options = self.vumi_options
         # start!
-
         yield publisher.start(channel)
         # return the publisher
         returnValue(publisher)
