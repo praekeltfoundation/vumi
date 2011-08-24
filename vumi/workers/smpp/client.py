@@ -159,17 +159,21 @@ class EsmeTransceiver(Protocol):
         }
 
     def command_status_dispatch(self, pdu):
-        method = self.ESME_command_status_dispatch_map.get(pdu['header']['command_status'], self.command_status_dispatch_ok)
+        method = self.ESME_command_status_dispatch_map.get(
+                pdu['header']['command_status'],
+                self.command_status_dispatch_ok)
         return method(pdu)
 
     def command_status_dispatch_ok(self, pdu):
         return self.error_handlers.get("command_status_dispatch_ok")
 
     def command_status_dispatch_conn_permfault(self, pdu):
-        return self.error_handlers.get("command_status_dispatch_conn_permfault")
+        return self.error_handlers.get("command_status_dispatch_conn_permfault") \
+            or self.error_handlers.get("command_status_dispatch_conn_tempfault")
 
     def command_status_dispatch_mess_permfault(self, pdu):
-        return self.error_handlers.get("command_status_dispatch_mess_permfault")
+        return self.error_handlers.get("command_status_dispatch_mess_permfault") \
+            or self.error_handlers.get("command_status_dispatch_mess_permfault")
 
     def command_status_dispatch_conn_tempfault(self, pdu):
         return self.error_handlers.get("command_status_dispatch_conn_tempfault")
@@ -222,26 +226,20 @@ class EsmeTransceiver(Protocol):
             self.handle_enquire_link_resp(pdu)
         log.msg(self.name, 'STATE :', self.state)
 
-
     def loadDefaults(self, defaults):
         self.defaults = dict(self.defaults, **defaults)
-
 
     def setConnectCallback(self, connect_callback):
         self.__connect_callback = connect_callback
 
-
     def setSubmitSMRespCallback(self, submit_sm_resp_callback):
         self.__submit_sm_resp_callback = submit_sm_resp_callback
-
 
     def setDeliveryReportCallback(self, delivery_report_callback):
         self.__delivery_report_callback = delivery_report_callback
 
-
     def setDeliverSMCallback(self, deliver_sm_callback):
         self.__deliver_sm_callback = deliver_sm_callback
-
 
     def connectionMade(self):
         self.state = 'OPEN'
@@ -250,7 +248,6 @@ class EsmeTransceiver(Protocol):
         log.msg(pdu.get_obj())
         self.incSeq()
         self.sendPDU(pdu)
-
 
     def connectionLost(self, *args, **kwargs):
         self.state = 'CLOSED'
@@ -268,7 +265,6 @@ class EsmeTransceiver(Protocol):
         #except:
             #pass
 
-
     def dataReceived(self, data):
         self.datastream += data
         data = self.popData()
@@ -276,13 +272,10 @@ class EsmeTransceiver(Protocol):
             self.handleData(data)
             data = self.popData()
 
-
     def sendPDU(self, pdu):
         data = pdu.get_bin()
         log.msg('OUTGOING >>>>', unpack_pdu(data))
-
         self.transport.write(data)
-
 
     def handle_bind_transceiver_resp(self, pdu):
         if pdu['header']['command_status'] == 'ESME_ROK':
@@ -291,7 +284,6 @@ class EsmeTransceiver(Protocol):
             self.lc_enquire.start(55.0)
             self.__connect_callback(self)
         log.msg(self.name, 'STATE :', self.state)
-
 
     def handle_submit_sm_resp(self, pdu):
         message_id = pdu.get('body',{}).get('mandatory_parameters',{}).get('message_id')
@@ -302,7 +294,6 @@ class EsmeTransceiver(Protocol):
                 message_id = message_id)
         if pdu['header']['command_status'] == 'ESME_ROK':
             pass
-
 
     def handle_submit_multi_resp(self, pdu):
         if pdu['header']['command_status'] == 'ESME_ROK':
@@ -371,7 +362,6 @@ class EsmeTransceiver(Protocol):
                         short_message=decoded_msg,
                         )
 
-
     def handle_enquire_link(self, pdu):
         if pdu['header']['command_status'] == 'ESME_ROK':
             sequence_number = pdu['header']['sequence_number']
@@ -382,7 +372,6 @@ class EsmeTransceiver(Protocol):
         if pdu['header']['command_status'] == 'ESME_ROK':
             pass
 
-
     def submit_sm(self, **kwargs):
         if self.state in ['BOUND_TX', 'BOUND_TRX']:
             sequence_number = self.getSeq()
@@ -392,7 +381,6 @@ class EsmeTransceiver(Protocol):
             return sequence_number
         return 0
 
-
     def submit_multi(self, dest_address=[], **kwargs):
         if self.state in ['BOUND_TX', 'BOUND_TRX']:
             sequence_number = self.getSeq()
@@ -401,16 +389,16 @@ class EsmeTransceiver(Protocol):
                 if isinstance(item, str): # assume strings are addresses not lists
                     pdu.addDestinationAddress(
                             item,
-                            dest_addr_ton = self.defaults['dest_addr_ton'],
-                            dest_addr_npi = self.defaults['dest_addr_npi'],
+                            dest_addr_ton=self.defaults['dest_addr_ton'],
+                            dest_addr_npi=self.defaults['dest_addr_npi'],
                             )
                 elif isinstance(item, dict):
                     if item.get('dest_flag') == 1:
                         pdu.addDestinationAddress(
                                 item.get('destination_addr', ''),
-                                dest_addr_ton = item.get('dest_addr_ton',
+                                dest_addr_ton=item.get('dest_addr_ton',
                                     self.defaults['dest_addr_ton']),
-                                dest_addr_npi = item.get('dest_addr_npi',
+                                dest_addr_npi=item.get('dest_addr_npi',
                                     self.defaults['dest_addr_npi']),
                                 )
                     elif item.get('dest_flag') == 2:
@@ -419,7 +407,6 @@ class EsmeTransceiver(Protocol):
             self.sendPDU(pdu)
             return sequence_number
         return 0
-
 
     def enquire_link(self, **kwargs):
         if self.state in ['BOUND_TX', 'BOUND_TRX']:
@@ -430,13 +417,12 @@ class EsmeTransceiver(Protocol):
             return sequence_number
         return 0
 
-
     def query_sm(self, message_id, source_addr, **kwargs):
         if self.state in ['BOUND_TX', 'BOUND_TRX']:
             sequence_number = self.getSeq()
             pdu = QuerySM(sequence_number,
-                    message_id = message_id,
-                    source_addr = source_addr,
+                    message_id=message_id,
+                    source_addr=source_addr,
                     **dict(self.defaults, **kwargs))
             self.incSeq()
             self.sendPDU(pdu)
@@ -466,70 +452,60 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
         self.initialDelay = 30.0
         self.maxDelay = 45
         self.defaults = {
-                'host':'127.0.0.1',
-                'port':2775,
-                'dest_addr_ton':0,
-                'dest_addr_npi':0,
+                'host': '127.0.0.1',
+                'port': 2775,
+                'dest_addr_ton': 0,
+                'dest_addr_npi': 0,
                 }
-
 
     def loadDefaults(self, defaults):
         self.defaults = dict(self.defaults, **defaults)
 
-
     def setLatestSequenceNumber(self, latest):
         self.seq = [latest]
-        log.msg("Set sequence number: %s, config: %s" % (self.seq, self.config))
-
+        log.msg("Set sequence number: %s, config: %s" % (
+            self.seq, self.config))
 
     def setConnectCallback(self, connect_callback):
         self.__connect_callback = connect_callback
 
-
     def setDisconnectCallback(self, disconnect_callback):
         self.__disconnect_callback = disconnect_callback
-
 
     def setSubmitSMRespCallback(self, submit_sm_resp_callback):
         self.__submit_sm_resp_callback = submit_sm_resp_callback
 
-
     def setDeliveryReportCallback(self, delivery_report_callback):
         self.__delivery_report_callback = delivery_report_callback
-
 
     def setDeliverSMCallback(self, deliver_sm_callback):
         self.__deliver_sm_callback = deliver_sm_callback
 
-
     def startedConnecting(self, connector):
         print 'Started to connect.'
-
 
     def buildProtocol(self, addr):
         print 'Connected'
         self.esme = EsmeTransceiver(self.seq, self.config, self.vumi_options)
         self.esme.loadDefaults(self.defaults)
         self.esme.setConnectCallback(
-                connect_callback = self.__connect_callback)
+                connect_callback=self.__connect_callback)
         self.esme.setSubmitSMRespCallback(
-                submit_sm_resp_callback = self.__submit_sm_resp_callback)
+                submit_sm_resp_callback=self.__submit_sm_resp_callback)
         self.esme.setDeliveryReportCallback(
-                delivery_report_callback = self.__delivery_report_callback)
+                delivery_report_callback=self.__delivery_report_callback)
         self.esme.setDeliverSMCallback(
-                deliver_sm_callback = self.__deliver_sm_callback)
+                deliver_sm_callback=self.__deliver_sm_callback)
         self.resetDelay()
         return self.esme
-
 
     def clientConnectionLost(self, connector, reason):
         print 'Lost connection.  Reason:', reason
         self.__disconnect_callback()
-        ReconnectingClientFactory.clientConnectionLost(self, connector, reason)
-
+        ReconnectingClientFactory.clientConnectionLost(
+                self, connector, reason)
 
     def clientConnectionFailed(self, connector, reason):
         print 'Connection failed. Reason:', reason
-        ReconnectingClientFactory.clientConnectionFailed(self, connector, reason)
-
-
+        ReconnectingClientFactory.clientConnectionFailed(
+                self, connector, reason)
