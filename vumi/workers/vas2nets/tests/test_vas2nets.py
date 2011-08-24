@@ -2,6 +2,7 @@
 import string
 from uuid import uuid1
 from datetime import datetime
+import json
 
 from twisted.web import http
 from twisted.web.resource import Resource
@@ -12,34 +13,13 @@ from twisted.internet.defer import inlineCallbacks
 from twisted.web.test.test_web import DummyRequest
 
 from vumi.service import Worker
-from vumi.tests.utils import get_stubbed_worker, TestQueue, StubbedAMQClient
+from vumi.tests.utils import (get_stubbed_worker, TestQueue, StubbedAMQClient,
+                              FakeAMQBroker)
 from vumi.message import Message
 from vumi.workers.vas2nets.transport import (
     ReceiveSMSResource, DeliveryReceiptResource, Vas2NetsTransport,
     validate_characters, Vas2NetsEncodingError, Vas2NetsTransportError,
     normalize_outbound_msisdn)
-
-
-def create_request(dictionary={}, path='/', method='POST'):
-    """
-    Creates a dummy Vas2Nets request for testing our resources with
-    """
-    request = DummyRequest(path)
-    request.method = method
-    args = {
-        'messageid': [str(uuid1())],
-        'time': [datetime.utcnow().strftime('%Y.%m.%d %H:%M:%S')],
-        'sender': ['0041791234567'],
-        'destination': ['9292'],
-        'provider': ['provider'],
-        'keyword': [''],
-        'header': [''],
-        'text': [''],
-        'keyword': [''],
-    }
-    args.update(dictionary)
-    request.args = args
-    return request
 
 
 class TestResource(Resource):
@@ -93,22 +73,85 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
 
     @inlineCallbacks
     def setUp(self):
+        self.path = '/api/v1/sms/vas2nets/receive/'
+        self.port = 9999
         self.config = {
-            'transport_name': 'vas2nets'
+            'transport_name': 'vas2nets',
+            'url': 'http://localhost:%s%s' % (self.port, self.path),
+            'username': 'username',
+            'password': 'password',
+            'owner': 'owner',
+            'service': 'service',
+            'subservice': 'subservice',
+            'web_receive_path': '/receive',
+            'web_receipt_path': '/receipt',
+            'web_port': 9998,
         }
-        self.worker = get_stubbed_worker(Vas2NetsTransport, {})
+        self.broker = FakeAMQBroker()
+        self.worker = get_stubbed_worker(Vas2NetsTransport, self.config,
+                                         self.broker)
         self.publisher = yield self.worker.publish_to('some.routing.key')
         self.today = datetime.utcnow().date()
+        self.workers = [self.worker]
 
     def tearDown(self):
-        pass
+        for worker in self.workers:
+            worker.stopWorker()
+
+    def get_dispatched(self, rkey):
+        return self.broker.get_dispatched('vumi', rkey)
+
+    def create_request(self, dictionary={}, path='/', method='POST'):
+        """
+        Creates a dummy Vas2Nets request for testing our resources with
+        """
+        request = DummyRequest(path)
+        request.method = method
+        args = {
+            'messageid': [str(uuid1())],
+            'time': [self.today.strftime('%Y.%m.%d %H:%M:%S')],
+            'sender': ['0041791234567'],
+            'destination': ['9292'],
+            'provider': ['provider'],
+            'keyword': [''],
+            'header': [''],
+            'text': [''],
+            'keyword': [''],
+        }
+        args.update(dictionary)
+        request.args = args
+        return request
+
+    def mkmsg_in(self, **fields):
+        msg = {
+            'from_msisdn': '+41791234567',
+            'to_msisdn': '9292',
+            'transport_network_id': 'provider',
+            'transport_message_id': '1',
+            'transport_keyword': '',
+            'transport_timestamp': self.today.strftime('%Y-%m-%dT%H:%M:%S'),
+            'message': 'hello world',
+            }
+        msg.update(fields)
+        return msg
+
+    def mkmsg_out(self, **fields):
+        msg = {
+            'to_msisdn': '+27761234567',
+            'from_msisdn': '9292',
+            'id': '1',
+            'reply_to': '',
+            'transport_network_id': 'network-id',
+            'message': 'hello world',
+            }
+        msg.update(fields)
+        return msg
 
     @inlineCallbacks
     def test_receive_sms(self):
         resource = ReceiveSMSResource(self.config, self.publisher)
-        request = create_request({
+        request = self.create_request({
             'messageid': ['1'],
-            'time': [self.today.strftime('%Y.%m.%d %H:%M:%S')],
             'text': ['hello world'],
         })
         d = request.notifyFinish()
@@ -119,32 +162,19 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
         self.assertEquals(request.outgoingHeaders['content-type'],
                           'text/plain')
         self.assertEquals(request.responseCode, http.OK)
-        msg = Message(**{
-            'transport_message_id': '1',
-            'transport_timestamp': self.today.strftime('%Y-%m-%dT%H:%M:%S'),
-            'transport_network_id': 'provider',
-            'transport_keyword': '',
-            'to_msisdn': '9292',
-            'from_msisdn': '+41791234567',
-            'message': 'hello world',
-        })
+        msg = self.mkmsg_in()
 
-        channel = self.worker._amqp_client.channels[0]
-        kwargs = channel.publish_log[0]
-        content = kwargs['content']
-        routing_key = kwargs['routing_key']
-        self.assertEquals(Message.from_json(content.body), msg)
-        self.assertEquals(routing_key, 'sms.inbound.vas2nets.9292')
+        [smsg] = self.get_dispatched('sms.inbound.vas2nets.9292')
+        self.assertEquals(json.loads(smsg.body), msg)
 
     @inlineCallbacks
     def test_delivery_receipt(self):
         resource = DeliveryReceiptResource(self.config, self.publisher)
 
-        request = create_request({
+        request = self.create_request({
             'smsid': ['1'],
             'messageid': ['internal id'],
             'sender': ['+41791234567'],
-            'time': [self.today.strftime('%Y.%m.%d %H:%M:%S')],
             'status': ['2'],
             'text': ['Message delivered to MSISDN.'],
         })
@@ -165,12 +195,8 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
             'transport_timestamp': self.today.strftime('%Y-%m-%dT%H:%M:%S'),
             'transport_status_message': 'Message delivered to MSISDN.',
         })
-        channel = self.worker._amqp_client.channels[0]
-        kwargs = channel.publish_log[0]
-        content = kwargs['content']
-        routing_key = kwargs['routing_key']
-        self.assertEquals(Message.from_json(content.body), msg)
-        self.assertEquals(routing_key, 'sms.receipt.vas2nets')
+        [smsg] = self.get_dispatched('sms.receipt.vas2nets')
+        self.assertEquals(Message.from_json(smsg.body), msg)
 
     def test_validate_characters(self):
         self.assertRaises(Vas2NetsEncodingError, validate_characters,
@@ -186,106 +212,45 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
 
     @inlineCallbacks
     def test_send_sms_success(self):
-        """no clue yet how I'm going to test this."""
-        path = '/api/v1/sms/vas2nets/receive/'
-        port = 9999
         mocked_message_id = str(uuid1())
         mocked_message = "Result_code: 00, Message OK"
 
         # open an HTTP resource that mocks the Vas2Nets response for the
         # duration of this test
-        stubbed_worker = Vas2NetsTestWorker(path, port, mocked_message_id,
-                                            mocked_message, TestQueue([]))
-        yield stubbed_worker.startWorker()
+        self.workers.append(Vas2NetsTestWorker(
+                self.path, self.port, mocked_message_id, mocked_message,
+                TestQueue([])))
+        yield self.workers[-1].startWorker()
+        yield self.worker.startWorker()
 
-        transport = get_stubbed_worker(Vas2NetsTransport, {
-            'transport_name': 'vas2nets',
-            'url': 'http://localhost:%s%s' % (port, path),
-            'username': 'username',
-            'password': 'password',
-            'owner': 'owner',
-            'service': 'service',
-            'subservice': 'subservice',
-            'web_receive_path': '/receive',
-            'web_receipt_path': '/receipt',
-            'web_port': 9998
+        yield self.worker.handle_outbound_message(Message(**self.mkmsg_out()))
+
+        [smsg] = self.get_dispatched('sms.ack.vas2nets')
+        self.assertEqual(json.loads(smsg.body), {
+            'id': '1',
+            'transport_message_id': mocked_message_id,
         })
-        yield transport.startWorker()
-
-        yield transport.handle_outbound_message(Message(**{
-            'to_msisdn': '+27761234567',
-            'from_msisdn': '9292',
-            'id': '1',
-            'reply_to': '',
-            'transport_network_id': 'network-id',
-            'message': 'hello world'
-        }))
-
-        channel = transport._amqp_client.channels[1]
-        kwargs = channel.publish_log[0]
-        content = kwargs['content']
-        routing_key = kwargs['routing_key']
-
-        self.assertEquals(Message.from_json(content.body), Message(**{
-            'id': '1',
-            'transport_message_id': mocked_message_id
-        }))
-        self.assertEquals(routing_key, 'sms.ack.vas2nets')
-
-        transport.stopWorker()
-        stubbed_worker.stopWorker()
 
     @inlineCallbacks
     def test_send_sms_fail(self):
-        """no clue yet how I'm going to test this."""
-        path = '/api/v1/sms/vas2nets/receive/'
-        port = 9999
         mocked_message_id = False
         mocked_message = "Result_code: 04, Internal system error occurred " \
                             "while processing message"
-        stubbed_worker = Vas2NetsTestWorker(path, port, mocked_message_id,
-                                            mocked_message, TestQueue([]))
-        yield stubbed_worker.startWorker()
+        self.workers.append(Vas2NetsTestWorker(
+                self.path, self.port, mocked_message_id, mocked_message,
+                TestQueue([])))
+        yield self.workers[-1].startWorker()
+        yield self.worker.startWorker()
 
-        transport = get_stubbed_worker(Vas2NetsTransport, {
-            'transport_name': 'vas2nets',
-            'url': 'http://localhost:%s%s' % (port, path),
-            'username': 'username',
-            'password': 'password',
-            'owner': 'owner',
-            'service': 'service',
-            'subservice': 'subservice',
-            'web_receive_path': '/receive',
-            'web_receipt_path': '/receipt',
-            'web_port': 9998,
-        })
-        yield transport.startWorker()
-
-        # Monkeypatch the failure message publisher
-        def _collect_failure(msg):
-            failure_msgs.append(msg)
-        failure_msgs = []
-        transport.failure_publisher.publish_message = _collect_failure
-
-        msg = {
-            'to_msisdn': '+27761234567',
-            'from_msisdn': '9292',
-            'id': '1',
-            'reply_to': '',
-            'transport_network_id': 'network-id',
-            'message': 'hello world'
-        }
-        deferred = transport.handle_outbound_message(Message(**msg))
+        msg = self.mkmsg_out()
+        deferred = self.worker.handle_outbound_message(Message(**msg))
         self.assertFailure(deferred, Vas2NetsTransportError)
         yield deferred
-        self.assertEqual(1, len(failure_msgs))
-        f_message = failure_msgs[0].payload['message']
-        f_reason = failure_msgs[0].payload['reason']
-        self.assertEqual(msg, f_message)
-        self.assertTrue("Vas2NetsTransportError: No SmsId Header" in f_reason)
-
-        yield transport.stopWorker()
-        yield stubbed_worker.stopWorker()
+        [fmsg] = self.get_dispatched('sms.outbound.vas2nets.failures')
+        fmsg = json.loads(fmsg.body)
+        self.assertEqual(msg, fmsg['message'])
+        self.assertTrue(
+            "Vas2NetsTransportError: No SmsId Header" in fmsg['reason'])
 
     def test_normalize_outbound_msisdn(self):
         self.assertEquals(normalize_outbound_msisdn('+27761234567'),
