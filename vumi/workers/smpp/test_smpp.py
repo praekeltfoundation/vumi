@@ -358,6 +358,11 @@ class RedisTestSmppTransport(SmppTransport):
         return sequence_number
 
     def conn_permfault(self, **kwargs):
+        #print kwargs.get('pdu')
+        pass
+
+    def conn_throttle(self, **kwargs):
+        #print kwargs.get('pdu')
         pass
 
 
@@ -495,8 +500,6 @@ class FakeRedisRespTestCase(TestCase):
                 {'id': '444', 'transport_message_id': '3rd_party_id_1'})
 
 
-        # test with error messages
-        self.esme.update_error_handlers({"command_status_dispatch_conn_permfault":self.transport.conn_permfault})
         message3 = Message(
             id = 446,
             message = "hello world",
@@ -523,8 +526,71 @@ class FakeRedisRespTestCase(TestCase):
                 {'id': '447', 'transport_message_id': '3rd_party_id_4'})
 
 
-        response4 = BindTransceiverResp(sequence_num4, "ESME_RINVPASWD")
-        print self.esme.command_status_dispatch(response4.get_obj())
+        # test with error messages
+        self.esme.update_error_handlers({
+            "command_status_dispatch_conn_permfault":self.transport.conn_permfault,
+            "command_status_dispatch_conn_throttle":self.transport.conn_throttle,
+            })
 
-        response5 = BindTransceiverResp(sequence_num4, "ESME_RINVSYSID")
-        print self.esme.command_status_dispatch(response5.get_obj())
+
+        bind_dispatch_methods = {
+            "ESME_ROK"              : None,
+            #"ESME_RINVMSGLEN"       : ,
+            #"ESME_RINVCMDLEN"       : ,
+            #"ESME_RINVCMDID"        : ,
+            #"ESME_RINVBNDSTS"       : ,
+            #"ESME_RALYBND"          : ,
+            #"ESME_RINVPRTFLG"       : ,
+            #"ESME_RINVREGDLVFLG"    : ,
+            "ESME_RSYSERR"          : self.transport.conn_permfault,
+            #"ESME_RINVSRCADR"       : ,
+            #"ESME_RINVDSTADR"       : ,
+            #"ESME_RINVMSGID"        : ,
+            #"ESME_RBINDFAIL"        : ,
+            "ESME_RINVPASWD"        : self.transport.conn_permfault,
+            "ESME_RINVSYSID"        : self.transport.conn_permfault,
+            #"ESME_RCANCELFAIL"      : ,
+            #"ESME_RREPLACEFAIL"     : ,
+            #"ESME_RMSGQFUL"         : ,
+            #"ESME_RINVSERTYP"       : ,
+            #"ESME_RINVNUMDESTS"     : ,
+            #"ESME_RINVDLNAME"       : ,
+            #"ESME_RINVDESTFLAG"     : ,
+            #"ESME_RINVSUBREP"       : ,
+            #"ESME_RINVESMCLASS"     : ,
+            #"ESME_RCNTSUBDL"        : ,
+            #"ESME_RSUBMITFAIL"      : ,
+            #"ESME_RINVSRCTON"       : ,
+            #"ESME_RINVSRCNPI"       : ,
+            #"ESME_RINVDSTTON"       : ,
+            #"ESME_RINVDSTNPI"       : ,
+            #"ESME_RINVSYSTYP"       : ,
+            #"ESME_RINVREPFLAG"      : ,
+            #"ESME_RINVNUMMSGS"      : ,
+            "ESME_RTHROTTLED"       : self.transport.conn_throttle,
+            #"ESME_RINVSCHED"        : ,
+            #"ESME_RINVEXPIRY"       : ,
+            #"ESME_RINVDFTMSGID"     : ,
+            #"ESME_RX_T_APPN"        : ,
+            #"ESME_RX_P_APPN"        : ,
+            #"ESME_RX_R_APPN"        : ,
+            #"ESME_RQUERYFAIL"       : ,
+            #"ESME_RINVOPTPARSTREAM" : ,
+            #"ESME_ROPTPARNOTALLWD"  : ,
+            #"ESME_RINVPARLEN"       : ,
+            #"ESME_RMISSINGOPTPARAM" : ,
+            #"ESME_RINVOPTPARAMVAL"  : ,
+            #"ESME_RDELIVERYFAILURE" : ,
+            #"ESME_RUNKNOWNERR"      : ,
+        }
+
+        for code, method in bind_dispatch_methods.items():
+            print code, method
+            response = BindTransceiverResp(1, code)
+            # check the dispatcher returns the correct transport method
+            #print self.esme.command_status_dispatch(response4.get_obj())
+            self.assertEquals(method,
+                    self.esme.command_status_dispatch(response.get_obj()))
+
+
+
