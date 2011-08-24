@@ -516,7 +516,7 @@ class FakeRedisRespTestCase(TestCase):
             to_msisdn="1111111111")
         sequence_num4 = self.esme.getSeq()
         response4 = SubmitSMResp(sequence_num4, "3rd_party_id_4",
-                command_status="ESME_RINVPASWD")
+                command_status="ESME_RTHROTTLED")
         self.transport.consume_message(message4)
         self.esme.handleData(response4.get_bin())
         self.assertEquals(self.transport.publisher.queue[3][0].payload,
