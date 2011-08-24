@@ -345,15 +345,16 @@ import redis
 class RedisTestEsmeTransceiver(EsmeTransceiver):
 
     def sendPDU(self, pdu):
-        pass # don't actually send anything
+        pass  # don't actually send anything
+
 
 class RedisTestSmppTransport(SmppTransport):
 
     def send_smpp(self, id, to_msisdn, message, *args, **kwargs):
         sequence_number = self.esme_client.submit_sm(
-                short_message = message.encode('utf-8'),
-                destination_addr = str(to_msisdn),
-                source_addr = "1234567890",
+                short_message=message.encode('utf-8'),
+                destination_addr=str(to_msisdn),
+                source_addr="1234567890",
                 )
         return sequence_number
 
@@ -371,56 +372,55 @@ class RedisRespTestCase(TestCase):
     def setUp(self):
         self.seq = [123456]
         self.config = {
-                "system_id" : "vumitest-vumitest-vumitest",
-                "host" : "host",
-                "port" : "port",
-                "smpp_increment" : 10,
-                "smpp_offset" : 6,
-                "TRANSPORT_NAME" : "redis_testing_transport",
+                "system_id": "vumitest-vumitest-vumitest",
+                "host": "host",
+                "port": "port",
+                "smpp_increment": 10,
+                "smpp_offset": 6,
+                "TRANSPORT_NAME": "redis_testing_transport",
                 }
         self.vumi_options = {
-                "vhost" : "develop",
+                "vhost": "develop",
                 }
 
         # hack a lot of transport setup
-        self.esme = RedisTestEsmeTransceiver(self.seq, self.config, self.vumi_options)
+        self.esme = RedisTestEsmeTransceiver(
+                self.seq, self.config, self.vumi_options)
         self.esme.state = 'BOUND_TRX'
         self.transport = RedisTestSmppTransport(None, self.config)
         self.transport.esme_client = self.esme
         self.transport.smpp_offset = self.config['smpp_offset']
-        self.transport.transport_name = self.config.get('TRANSPORT_NAME','fallback')
+        self.transport.transport_name = self.config.get('TRANSPORT_NAME',
+                'fallback')
         self.transport.r_server = redis.Redis("localhost", db=7)
-        self.transport.r_prefix = "%(system_id)s@%(host)s:%(port)s" % self.config
+        self.transport.r_prefix = "%(system_id)s@%(host)s:%(port)s" % (
+                self.config)
         self.transport.publisher = TestPublisher()
         self.esme.setSubmitSMRespCallback(self.transport.submit_sm_resp)
-
 
     def tearDown(self):
         # still need to clean out all redis keys which starting with:
         # "vumitest-vumitest-vumitest"
-        keys = self.transport.r_server.keys(self.config["system_id"]+"*")
+        keys = self.transport.r_server.keys(self.config["system_id"] + "*")
         if len(keys) and type(keys) is str:
             keys = keys.split(' ')
         if len(keys):
             for k in keys:
                 self.transport.r_server.delete(k)
 
-
     def test_match_resp(self):
         message1 = Message(
-            id = 444,
-            message = "hello world",
-            to_msisdn = "1111111111",
-            )
+            id=444,
+            message="hello world",
+            to_msisdn="1111111111")
         sequence_num1 = self.esme.getSeq()
         response1 = SubmitSMResp(sequence_num1, "3rd_party_id_1")
         self.transport.consume_message(message1)
 
         message2 = Message(
-            id = 445,
-            message = "hello world",
-            to_msisdn = "1111111111",
-            )
+            id=445,
+            message="hello world",
+            to_msisdn="1111111111")
         sequence_num2 = self.esme.getSeq()
         response2 = SubmitSMResp(sequence_num2, "3rd_party_id_2")
         self.transport.consume_message(message2)
@@ -441,50 +441,49 @@ class FakeRedisRespTestCase(TestCase):
     def setUp(self):
         self.seq = [123456]
         self.config = {
-                "system_id" : "vumitest-vumitest-vumitest",
-                "host" : "host",
-                "port" : "port",
-                "smpp_increment" : 10,
-                "smpp_offset" : 6,
-                "TRANSPORT_NAME" : "redis_testing_transport",
+                "system_id": "vumitest-vumitest-vumitest",
+                "host": "host",
+                "port": "port",
+                "smpp_increment": 10,
+                "smpp_offset": 6,
+                "TRANSPORT_NAME": "redis_testing_transport",
                 }
         self.vumi_options = {
-                "vhost" : "develop",
+                "vhost": "develop",
                 }
 
         # hack a lot of transport setup
-        self.esme = RedisTestEsmeTransceiver(self.seq, self.config, self.vumi_options)
+        self.esme = RedisTestEsmeTransceiver(
+                self.seq, self.config, self.vumi_options)
         self.esme.state = 'BOUND_TRX'
         self.transport = RedisTestSmppTransport(None, self.config)
         self.transport.esme_client = self.esme
         self.transport.smpp_offset = self.config['smpp_offset']
-        self.transport.transport_name = self.config.get('TRANSPORT_NAME','fallback')
+        self.transport.transport_name = self.config.get('TRANSPORT_NAME',
+                'fallback')
         self.transport.r_server = FakeRedis()
-        self.transport.r_prefix = "%(system_id)s@%(host)s:%(port)s" % self.config
+        self.transport.r_prefix = "%(system_id)s@%(host)s:%(port)s" % (
+                self.config)
         self.transport.publisher = TestPublisher()
         self.esme.setSubmitSMRespCallback(self.transport.submit_sm_resp)
-
 
     def tearDown(self):
         # no need to cleanup fake redis
         pass
 
-
     def test_match_resp(self):
         message1 = Message(
-            id = 444,
-            message = "hello world",
-            to_msisdn = "1111111111",
-            )
+            id=444,
+            message="hello world",
+            to_msisdn="1111111111")
         sequence_num1 = self.esme.getSeq()
         response1 = SubmitSMResp(sequence_num1, "3rd_party_id_1")
         self.transport.consume_message(message1)
 
         message2 = Message(
-            id = 445,
-            message = "hello world",
-            to_msisdn = "1111111111",
-            )
+            id=445,
+            message="hello world",
+            to_msisdn="1111111111")
         sequence_num2 = self.esme.getSeq()
         response2 = SubmitSMResp(sequence_num2, "3rd_party_id_2")
         self.transport.consume_message(message2)
@@ -499,39 +498,37 @@ class FakeRedisRespTestCase(TestCase):
         self.assertEquals(self.transport.publisher.queue[1][0].payload,
                 {'id': '444', 'transport_message_id': '3rd_party_id_1'})
 
-
         message3 = Message(
-            id = 446,
-            message = "hello world",
-            to_msisdn = "1111111111",
-            )
+            id=446,
+            message="hello world",
+            to_msisdn="1111111111")
         sequence_num3 = self.esme.getSeq()
-        response3 = SubmitSMResp(sequence_num3, "3rd_party_id_3", command_status="ESME_RSYSERR")
+        response3 = SubmitSMResp(sequence_num3, "3rd_party_id_3",
+                command_status="ESME_RSYSERR")
         self.transport.consume_message(message3)
         self.esme.handleData(response3.get_bin())
         self.assertEquals(self.transport.publisher.queue[2][0].payload,
                 {'id': '446', 'transport_message_id': '3rd_party_id_3'})
 
-
         message4 = Message(
-            id = 447,
-            message = "hello world",
-            to_msisdn = "1111111111",
-            )
+            id=447,
+            message="hello world",
+            to_msisdn="1111111111")
         sequence_num4 = self.esme.getSeq()
-        response4 = SubmitSMResp(sequence_num4, "3rd_party_id_4", command_status="ESME_RINVPASWD")
+        response4 = SubmitSMResp(sequence_num4, "3rd_party_id_4",
+                command_status="ESME_RINVPASWD")
         self.transport.consume_message(message4)
         self.esme.handleData(response4.get_bin())
         self.assertEquals(self.transport.publisher.queue[3][0].payload,
                 {'id': '447', 'transport_message_id': '3rd_party_id_4'})
 
-
         # test with error messages
         self.esme.update_error_handlers({
-            "command_status_dispatch_conn_permfault":self.transport.conn_permfault,
-            "command_status_dispatch_conn_throttle":self.transport.conn_throttle,
+            "command_status_dispatch_conn_permfault":
+                self.transport.conn_permfault,
+            "command_status_dispatch_conn_throttle":
+                self.transport.conn_throttle,
             })
-
 
         # Some error codes would occur on bind attempts
         bind_dispatch_methods = {
@@ -596,13 +593,9 @@ class FakeRedisRespTestCase(TestCase):
             self.assertEquals(method,
                     self.esme.command_status_dispatch(response.get_obj()))
 
-
         for code, method in submit_dispatch_methods.items():
             #print code, method
             response = SubmitSMResp(1, "2", code)
             # check the dispatcher returns the correct transport method
             self.assertEquals(method,
                     self.esme.command_status_dispatch(response.get_obj()))
-
-
-
