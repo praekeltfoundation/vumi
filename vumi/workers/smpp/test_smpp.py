@@ -533,62 +533,74 @@ class FakeRedisRespTestCase(TestCase):
             })
 
 
+        # Some error codes would occur on bind attempts
         bind_dispatch_methods = {
             "ESME_ROK"              : None,
-            #"ESME_RINVMSGLEN"       : ,
-            #"ESME_RINVCMDLEN"       : ,
-            #"ESME_RINVCMDID"        : ,
-            #"ESME_RINVBNDSTS"       : ,
-            #"ESME_RALYBND"          : ,
-            #"ESME_RINVPRTFLG"       : ,
-            #"ESME_RINVREGDLVFLG"    : ,
+            "ESME_RINVMSGLEN"       : None,
+            "ESME_RINVCMDLEN"       : None,
+            "ESME_RINVCMDID"        : None,
+            "ESME_RINVBNDSTS"       : None,
+            "ESME_RALYBND"          : None,
+            "ESME_RINVPRTFLG"       : None,
+            "ESME_RINVREGDLVFLG"    : None,
             "ESME_RSYSERR"          : self.transport.conn_permfault,
-            #"ESME_RINVSRCADR"       : ,
-            #"ESME_RINVDSTADR"       : ,
-            #"ESME_RINVMSGID"        : ,
-            #"ESME_RBINDFAIL"        : ,
+            "ESME_RINVSRCADR"       : None,
+            "ESME_RINVDSTADR"       : None,
+            "ESME_RINVMSGID"        : None,
+            "ESME_RBINDFAIL"        : None,
             "ESME_RINVPASWD"        : self.transport.conn_permfault,
             "ESME_RINVSYSID"        : self.transport.conn_permfault,
-            #"ESME_RCANCELFAIL"      : ,
-            #"ESME_RREPLACEFAIL"     : ,
-            #"ESME_RMSGQFUL"         : ,
-            #"ESME_RINVSERTYP"       : ,
-            #"ESME_RINVNUMDESTS"     : ,
-            #"ESME_RINVDLNAME"       : ,
-            #"ESME_RINVDESTFLAG"     : ,
-            #"ESME_RINVSUBREP"       : ,
-            #"ESME_RINVESMCLASS"     : ,
-            #"ESME_RCNTSUBDL"        : ,
-            #"ESME_RSUBMITFAIL"      : ,
-            #"ESME_RINVSRCTON"       : ,
-            #"ESME_RINVSRCNPI"       : ,
-            #"ESME_RINVDSTTON"       : ,
-            #"ESME_RINVDSTNPI"       : ,
-            #"ESME_RINVSYSTYP"       : ,
-            #"ESME_RINVREPFLAG"      : ,
-            #"ESME_RINVNUMMSGS"      : ,
+            "ESME_RCANCELFAIL"      : None,
+            "ESME_RREPLACEFAIL"     : None,
+            "ESME_RMSGQFUL"         : None,
+            "ESME_RINVSERTYP"       : None,
+            "ESME_RINVNUMDESTS"     : None,
+            "ESME_RINVDLNAME"       : None,
+            "ESME_RINVDESTFLAG"     : None,
+            "ESME_RINVSUBREP"       : None,
+            "ESME_RINVESMCLASS"     : None,
+            "ESME_RCNTSUBDL"        : None,
+            "ESME_RSUBMITFAIL"      : None,
+            "ESME_RINVSRCTON"       : None,
+            "ESME_RINVSRCNPI"       : None,
+            "ESME_RINVDSTTON"       : None,
+            "ESME_RINVDSTNPI"       : None,
+            "ESME_RINVSYSTYP"       : None,
+            "ESME_RINVREPFLAG"      : None,
+            "ESME_RINVNUMMSGS"      : None,
+            "ESME_RINVSCHED"        : None,
+            "ESME_RINVEXPIRY"       : None,
+            "ESME_RINVDFTMSGID"     : None,
+            "ESME_RX_T_APPN"        : None,
+            "ESME_RX_P_APPN"        : None,
+            "ESME_RX_R_APPN"        : None,
+            "ESME_RQUERYFAIL"       : None,
+            "ESME_RINVOPTPARSTREAM" : None,
+            "ESME_ROPTPARNOTALLWD"  : None,
+            "ESME_RINVPARLEN"       : None,
+            "ESME_RMISSINGOPTPARAM" : None,
+            "ESME_RINVOPTPARAMVAL"  : None,
+            "ESME_RDELIVERYFAILURE" : None,
+            "ESME_RUNKNOWNERR"      : None,
+        }
+
+        # Some error codes would occur post bind i.e. on submission attempts
+        submit_dispatch_methods = {
             "ESME_RTHROTTLED"       : self.transport.conn_throttle,
-            #"ESME_RINVSCHED"        : ,
-            #"ESME_RINVEXPIRY"       : ,
-            #"ESME_RINVDFTMSGID"     : ,
-            #"ESME_RX_T_APPN"        : ,
-            #"ESME_RX_P_APPN"        : ,
-            #"ESME_RX_R_APPN"        : ,
-            #"ESME_RQUERYFAIL"       : ,
-            #"ESME_RINVOPTPARSTREAM" : ,
-            #"ESME_ROPTPARNOTALLWD"  : ,
-            #"ESME_RINVPARLEN"       : ,
-            #"ESME_RMISSINGOPTPARAM" : ,
-            #"ESME_RINVOPTPARAMVAL"  : ,
-            #"ESME_RDELIVERYFAILURE" : ,
-            #"ESME_RUNKNOWNERR"      : ,
         }
 
         for code, method in bind_dispatch_methods.items():
-            print code, method
+            #print code, method
             response = BindTransceiverResp(1, code)
             # check the dispatcher returns the correct transport method
-            #print self.esme.command_status_dispatch(response4.get_obj())
+            self.assertEquals(method,
+                    self.esme.command_status_dispatch(response.get_obj()))
+
+
+        for code, method in submit_dispatch_methods.items():
+            #print code, method
+            response = SubmitSMResp(1, "2", code)
+            # check the dispatcher returns the correct transport method
             self.assertEquals(method,
                     self.esme.command_status_dispatch(response.get_obj()))
 
