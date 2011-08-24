@@ -30,6 +30,9 @@ class Message(object):
     def __str__(self):
         return u"<Message payload=\"%s\">" % repr(self.payload)
 
+    def __repr__(self):
+        return str(self)
+
     def __eq__(self, other):
         return self.payload == other.payload
 

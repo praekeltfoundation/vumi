@@ -1,3 +1,9 @@
+# -*- test-case-name: vumi.tests.test_utils -*-
+
+import os.path
+import re
+
+import importlib
 from zope.interface import implements
 from twisted.internet import defer
 from twisted.internet import reactor, protocol
@@ -5,10 +11,6 @@ from twisted.internet.defer import succeed
 from twisted.web.client import Agent
 from twisted.web.http_headers import Headers
 from twisted.web.iweb import IBodyProducer
-
-import importlib
-import os.path
-import re
 
 
 def http_request(url, data, headers={}, method='POST'):
