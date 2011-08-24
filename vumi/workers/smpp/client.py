@@ -164,25 +164,31 @@ class EsmeTransceiver(Protocol):
                 self.command_status_dispatch_ok)
         return method(pdu)
 
+    '''This maps SMPP error states to VUMI error states
+    For now assume VUMI understands:
+    connection -> temp fault or permanent fault
+    message -> temp fault or permanent fault
+    and the need to throttle the traffic on the connection
+    '''
     def command_status_dispatch_ok(self, pdu):
-        return self.error_handlers.get("command_status_dispatch_ok")
+        return self.error_handlers.get("ok")
 
     def command_status_dispatch_conn_permfault(self, pdu):
-        return self.error_handlers.get("command_status_dispatch_conn_permfault") \
-            or self.error_handlers.get("command_status_dispatch_conn_tempfault")
+        return self.error_handlers.get("conn_permfault") \
+            or self.error_handlers.get("conn_tempfault")
 
     def command_status_dispatch_mess_permfault(self, pdu):
-        return self.error_handlers.get("command_status_dispatch_mess_permfault") \
-            or self.error_handlers.get("command_status_dispatch_mess_permfault")
+        return self.error_handlers.get("mess_permfault") \
+            or self.error_handlers.get("mess_permfault")
 
     def command_status_dispatch_conn_tempfault(self, pdu):
-        return self.error_handlers.get("command_status_dispatch_conn_tempfault")
+        return self.error_handlers.get("conn_tempfault")
 
     def command_status_dispatch_mess_tempfault(self, pdu):
-        return self.error_handlers.get("command_status_dispatch_mess_tempfault")
+        return self.error_handlers.get("mess_tempfault")
 
     def command_status_dispatch_conn_throttle(self, pdu):
-        return self.error_handlers.get("command_status_dispatch_conn_throttle")
+        return self.error_handlers.get("conn_throttle")
 
     # TODO this is currently unused ... i think
     def set_handler(self, handler):

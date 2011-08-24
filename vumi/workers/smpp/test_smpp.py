@@ -524,10 +524,8 @@ class FakeRedisRespTestCase(TestCase):
 
         # test with error messages
         self.esme.update_error_handlers({
-            "command_status_dispatch_conn_permfault":
-                self.transport.conn_permfault,
-            "command_status_dispatch_conn_throttle":
-                self.transport.conn_throttle,
+            "conn_permfault": self.transport.conn_permfault,
+            "conn_throttle": self.transport.conn_throttle,
             })
 
         # Some error codes would occur on bind attempts
