@@ -7,6 +7,10 @@ from vumi.utils import make_vumi_path_abs
 from vumi.tests import fake_amqp
 
 
+def mkmsg(body):
+    return fake_amqp.Thing("Message", body=body)
+
+
 class FakeAMQPTestCase(TestCase):
     def setUp(self):
         self.broker = fake_amqp.FakeAMQPBroker()
@@ -33,6 +37,12 @@ class FakeAMQPTestCase(TestCase):
         self.q2 = self.make_queue('q2')
         self.q3 = self.make_queue('q3')
 
+    def test_misc(self):
+        str(fake_amqp.Thing('kind', foo='bar'))
+        msg = fake_amqp.Message(None, [('foo', 'bar')])
+        self.assertEqual('bar', msg.foo)
+        self.assertRaises(AttributeError, lambda: msg.bar)
+
     def test_channel_open(self):
         channel = fake_amqp.FakeAMQPChannel(0, self.broker, None)
         self.assertEqual([], self.broker.channels)
@@ -53,11 +63,16 @@ class FakeAMQPTestCase(TestCase):
         channel = self.make_channel(0)
         self.assertEqual({}, self.broker.queues)
         channel.queue_declare('foo')
+        channel.queue_declare('foo')
         self.assertEqual(['foo'], self.broker.queues.keys())
         exch = self.make_exchange('exch', 'direct')
         self.assertEqual({}, exch.binds)
         channel.queue_bind('foo', 'exch', 'routing.key')
         self.assertEqual(['routing.key'], exch.binds.keys())
+
+        n = len(self.broker.queues)
+        channel.queue_declare('')
+        self.assertEqual(n + 1, len(self.broker.queues))
 
     def test_publish_direct(self):
         self.set_up_broker()
@@ -88,6 +103,68 @@ class FakeAMQPTestCase(TestCase):
         self.chan1.basic_publish('direct', 'routing.key.two', 'blah')
         self.assertEqual([('direct', 'routing.key.two', 'blah')] * 2,
                          delivered)
+
+    def test_publish_topic(self):
+        self.set_up_broker()
+        self.chan1.queue_bind('q1', 'topic', 'routing.key.*.foo.#')
+        self.chan1.queue_bind('q2', 'topic', 'routing.key.#.foo')
+        self.chan1.queue_bind('q3', 'topic', 'routing.key.*.foo.*')
+        delivered = []
+
+        def mfp(q):
+            def fake_put(*args):
+                delivered.append((q,) + args)
+            return fake_put
+        self.q1.put = mfp('q1')
+        self.q2.put = mfp('q2')
+        self.q3.put = mfp('q3')
+
+        self.chan1.basic_publish('topic', 'routing.key.none', 'blah')
+        self.assertEqual([], delivered)
+
+        self.chan1.basic_publish('topic', 'routing.key.foo.one', 'blah')
+        self.assertEqual([], delivered)
+
+        self.chan1.basic_publish('topic', 'routing.key.foo', 'blah')
+        self.assertEqual([('q2', 'topic', 'routing.key.foo', 'blah')],
+                         delivered)
+
+        delivered[:] = []  # Clear without reassigning
+        self.chan1.basic_publish('topic', 'routing.key.one.two.foo', 'blah')
+        self.assertEqual([('q2', 'topic', 'routing.key.one.two.foo', 'blah')],
+                         delivered)
+
+        delivered[:] = []  # Clear without reassigning
+        self.chan1.basic_publish('topic', 'routing.key.one.foo', 'blah')
+        self.assertEqual([('q1', 'topic', 'routing.key.one.foo', 'blah'),
+                          ('q2', 'topic', 'routing.key.one.foo', 'blah'),
+                          ], sorted(delivered))
+
+        delivered[:] = []  # Clear without reassigning
+        self.chan1.basic_publish('topic', 'routing.key.one.foo.two', 'blah')
+        self.assertEqual([('q1', 'topic', 'routing.key.one.foo.two', 'blah'),
+                          ('q3', 'topic', 'routing.key.one.foo.two', 'blah'),
+                          ], sorted(delivered))
+
+    def test_basic_get(self):
+        self.set_up_broker()
+        self.assertEqual('get-empty', self.chan1.basic_get('q1').method.name)
+        self.q1.put('foo', 'rkey.foo', mkmsg('blah'))
+        self.assertEqual('blah', self.chan1.basic_get('q1').content.body)
+        self.assertEqual('get-empty', self.chan1.basic_get('q1').method.name)
+
+    def test_consumer_wrangling(self):
+        self.set_up_broker()
+        self.chan1.queue_bind('q1', 'direct', 'foo')
+        self.assertEqual(set(), self.q1.consumers)
+        self.chan1.basic_consume('q1', 'tag1')
+        self.assertEqual(set(['tag1']), self.q1.consumers)
+        self.chan1.basic_consume('q1', 'tag2')
+        self.assertEqual(set(['tag1', 'tag2']), self.q1.consumers)
+        self.chan1.basic_cancel('tag2')
+        self.assertEqual(set(['tag1']), self.q1.consumers)
+        self.chan1.basic_cancel('tag2')
+        self.assertEqual(set(['tag1']), self.q1.consumers)
 
     @inlineCallbacks
     def test_fake_amqclient(self):

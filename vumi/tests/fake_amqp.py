@@ -1,6 +1,7 @@
 # -*- test-case-name: vumi.tests.test_fake_amqp -*-
 
 from uuid import uuid4
+import re
 
 from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, returnValue
@@ -42,12 +43,6 @@ class Message(object):
         self._fields = fields
         self.content = content
 
-    def __len__(self):
-        l = len(self._fields)
-        if self.content is not None:
-            l += 1
-        return l
-
     def __getattr__(self, key):
         for k, v in self._fields:
             if k == key:
@@ -80,12 +75,12 @@ def mk_deliver(body, exchange, routing_key, ctag, dtag):
 
 
 def mk_get_ok(body, exchange, routing_key, dtag):
-    return Message(mkMethod('deliver'), mkContent(body), [
+    return Message(mkMethod('deliver'), [
             ('delivery_tag', dtag),
             ('redelivered', False),
             ('exchange', exchange),
             ('routing_key', routing_key),
-            ])
+            ], mkContent(body))
 
 
 class FakeAMQPBroker(object):
@@ -123,10 +118,11 @@ class FakeAMQPBroker(object):
         if not queue:
             queue = gen_id('queue.')
         self.queues.setdefault(queue, FakeAMQPQueue(queue))
+        queue_obj = self._get_queue(queue)
         return Message(mkMethod("declare-ok", 11), [
                 ('queue', queue),
-                ('message_count', None),
-                ('consumer_count', None),
+                ('message_count', queue_obj.message_count()),
+                ('consumer_count', queue_obj.consumer_count()),
                 ])
 
     def queue_bind(self, queue, exchange, routing_key):
@@ -134,7 +130,7 @@ class FakeAMQPBroker(object):
                                             self._get_queue(queue))
         return Message(mkMethod("bind-ok", 21))
 
-    def basic_consume(self, tag, queue):
+    def basic_consume(self, queue, tag):
         self._get_queue(queue).add_consumer(tag)
         self.kick_delivery()
         return Message(mkMethod("consume-ok", 21), [("consumer_tag", tag)])
@@ -153,6 +149,9 @@ class FakeAMQPBroker(object):
         self._get_exchange(exchange).basic_publish(routing_key, content)
         self.kick_delivery()
         return None
+
+    def basic_get(self, queue):
+        return self._get_queue(queue).get_message()
 
     def basic_ack(self, queue, delivery_tag):
         self._get_queue(queue).ack(delivery_tag)
@@ -212,7 +211,7 @@ class FakeAMQPChannel(object):
             tag = gen_id('consumer.')
         assert tag not in self.consumers
         self.consumers[tag] = queue
-        return self.broker.basic_consume(tag, queue)
+        return self.broker.basic_consume(queue, tag)
 
     def basic_cancel(self, tag):
         queue = self.consumers.pop(tag, None)
@@ -241,6 +240,14 @@ class FakeAMQPChannel(object):
         self.unacked.append((msg.delivery_tag, queue))
         self.delegate.basic_deliver(self, msg)
 
+    def basic_get(self, queue):
+        dtag, msg = self.broker.basic_get(queue)
+        if msg:
+            self.unacked.append((dtag, queue))
+            return mk_get_ok(msg['content'], msg['exchange'],
+                             msg['routing_key'], dtag)
+        return Message(mkMethod("get-empty", 72))
+
 
 class FakeAMQPExchange(object):
     def __init__(self, name):
@@ -266,6 +273,24 @@ class FakeAMQPExchangeDirect(FakeAMQPExchange):
 class FakeAMQPExchangeTopic(FakeAMQPExchange):
     exchange_type = 'topic'
 
+    def _bind_regex(self, bind):
+        for k, v in [('.', r'\.'),
+                     ('*', r'[^.]+'),
+                     ('\.#\.', r'\.([^.]+\.)*'),
+                     ('#\.', r'([^.]+\.)*'),
+                     ('\.#', r'(\.[^.]+)*')]:
+            bind = '^%s$' % bind.replace(k, v)
+        return re.compile(bind)
+
+    def match_rkey(self, bind, rkey):
+        return (self._bind_regex(bind).match(rkey) is not None)
+
+    def basic_publish(self, routing_key, content):
+        for bind, queues in self.binds.items():
+            if self.match_rkey(bind, routing_key):
+                for queue in queues:
+                    queue.put(self.name, routing_key, content)
+
 
 class FakeAMQPQueue(object):
     def __init__(self, name):
@@ -290,6 +315,9 @@ class FakeAMQPQueue(object):
 
     def message_count(self):
         return len(self.messages)
+
+    def consumer_count(self):
+        return len(self.consumers)
 
     def put(self, exchange, routing_key, content):
         self.messages.append({
