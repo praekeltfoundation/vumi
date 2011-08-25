@@ -91,10 +91,10 @@ class Metric(object):
         self._suffix = suffix
 
     def manage(self, prefix):
-        """Called by a :class:`MetricSet` when this metric is registered."""
+        """Called by :class:`MetricManager` when this metric is registered."""
         if self.name is not None:
             raise MetricRegistrationError("Metric %s%s already registered"
-                                          " with a MetricSet." %
+                                          " with a MetricManager." %
                                           (prefix, self._suffix))
         self.name = prefix + self._suffix
 
