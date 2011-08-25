@@ -100,7 +100,7 @@ class Metric(object):
 
     def poll(self):
         """Called periodically by the managing metric set."""
-        raise NotImplementedError("Metric subclasses should implement .pol()")
+        raise NotImplementedError("Metric subclasses should implement .poll()")
 
 
 class SimpleValue(Metric):
@@ -114,8 +114,8 @@ class SimpleValue(Metric):
     Examples
     --------
     >>> mm = MetricManager('vumi.worker0.')
-    >>> my_val = mm.register(Simple('my.vale'))
-    >>> my_val.set(???)
+    >>> my_val = mm.register(Simple('my.value'))
+    >>> my_val.set(1.5)
     """
 
     def __init__(self, *args, **kws):
@@ -191,8 +191,14 @@ class Timer(Sum):
     --------
     >>> mm = MetricManager('vumi.worker0.')
     >>> my_timer = mm.register(Timer('hard.work'))
+
+    Using the timer as a context manager:
+
     >>> with my_timer:
     >>>     process_data()
+
+    Or equivalently using .start() and stop() directly:
+
     >>> my_timer.start()
     >>> try:
     >>>     process_other_data()
