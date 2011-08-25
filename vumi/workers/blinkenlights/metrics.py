@@ -70,10 +70,10 @@ class RandomMetricsGenerator(Worker):
     def startWorker(self):
         log.msg("Starting the MetricsGenerator with config: %s" % self.config)
         manager_period = float(self.config.get("manager_period", 5.0))
-        log.msg("MetricManager will sent metrics every %s seconds",
+        log.msg("MetricManager will sent metrics every %s seconds" %
                 manager_period)
         generator_period = float(self.config.get("generator_period", 1.0))
-        log.msg("Random metrics values will be generated every %s seconds",
+        log.msg("Random metrics values will be generated every %s seconds" %
                 generator_period)
 
         self.mm = yield self.start_publisher(MetricManager, "vumi.random.",
