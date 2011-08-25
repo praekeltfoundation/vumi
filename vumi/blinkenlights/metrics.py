@@ -1,6 +1,7 @@
 # -*- test-case-name: vumi.blinkenlights.tests.test_metrics -*-
 
 from twisted.internet.task import LoopingCall
+from twisted.python import log
 
 from vumi.service import Publisher, Consumer
 from vumi.blinkenlights.message20110818 import MetricMessage
@@ -37,8 +38,9 @@ class MetricManager(Publisher):
         """Start publishing metrics in a loop."""
         super(MetricManager, self).start(channel)
         self._task = LoopingCall(self._publish_metrics)
-        self._task.start(self._publish_interval)
-        # TODO: capture deferred and add an errback to log errors?
+        done = self._task.start(self._publish_interval)
+        done.addErrback(lambda failure: log.err(failure,
+                        "MetricManager publishing thread died"))
 
     def stop(self):
         """Stop publishing metrics."""

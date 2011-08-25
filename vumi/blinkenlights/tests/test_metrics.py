@@ -76,6 +76,22 @@ class TestMetricManager(TestCase):
         finally:
             mm.stop()
 
+    def test_task_failure(self):
+        channel = TestChannel()
+        mm = metrics.MetricManager("vumi.test.", 0.1)
+
+        class BadMetricError(Exception):
+            pass
+
+        class BadMetric(metrics.Metric):
+            def poll(self):
+                raise BadMetricError("bad metric")
+
+        mm.register(BadMetric("bad"))
+        mm.start(channel)
+        error, = self.flushLoggedErrors(BadMetricError)
+        self.assertTrue(error.type is BadMetricError)
+
 
 class TestMetricBase(TestCase):
     def test_manage(self):
