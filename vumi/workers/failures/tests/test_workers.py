@@ -42,13 +42,9 @@ class FailureWorkerTestCase(unittest.TestCase):
         self.assertEqual(list(expected),
                          self.redis.zrange(RETRY_TIMESTAMPS_KEY, 0, -1))
 
-    def assert_published_messages(self, expected, channel_idx):
-        channel = self.worker._amqp_client.channels[channel_idx]
-        messages = [json.loads(m['content'].body) for m in channel.publish_log]
-        self.assertEqual(expected, messages)
-
     def assert_published_retries(self, expected):
-        self.assert_published_messages(expected, 0)
+        msgs = self.worker._amqp_client.broker.get_dispatched('vumi', 'foo')
+        self.assertEqual(expected, [json.loads(m.body) for m in msgs])
 
     def store_failure(self, reason=None, message_json=None):
         if not reason:

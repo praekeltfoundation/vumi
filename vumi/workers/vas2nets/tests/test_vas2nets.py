@@ -13,8 +13,8 @@ from twisted.internet.defer import inlineCallbacks
 from twisted.web.test.test_web import DummyRequest
 
 from vumi.service import Worker
-from vumi.tests.utils import (get_stubbed_worker, TestQueue, StubbedAMQClient,
-                              FakeAMQBroker)
+from vumi.tests.utils import get_stubbed_worker, TestQueue, StubbedAMQClient
+from vumi.tests.fake_amqp import FakeAMQPBroker
 from vumi.message import Message
 from vumi.workers.vas2nets.transport import (
     ReceiveSMSResource, DeliveryReceiptResource, Vas2NetsTransport,
@@ -87,7 +87,7 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
             'web_receipt_path': '/receipt',
             'web_port': 9998,
         }
-        self.broker = FakeAMQBroker()
+        self.broker = FakeAMQPBroker()
         self.worker = get_stubbed_worker(Vas2NetsTransport, self.config,
                                          self.broker)
         self.publisher = yield self.worker.publish_to('some.routing.key')
