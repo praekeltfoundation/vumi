@@ -140,6 +140,16 @@ class TestSum(TestCase):
         metric.add(0.4)
         self.assertEqual(metric.poll(), 1.5)
 
+    def test_averaging(self):
+        metric = metrics.Sum("foo", True)
+        self.assertEqual(metric.poll(), 0.0)
+        metric.add(1.5)
+        self.assertEqual(metric.poll(), 1.5)
+        self.assertEqual(metric.poll(), 0.0)
+        metric.add(1)
+        metric.add(2)
+        self.assertEqual(metric.poll(), 1.5)
+
 
 class TestTimer(TestCase):
     def test_start_and_stop(self):

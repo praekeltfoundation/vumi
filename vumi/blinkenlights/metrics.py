@@ -84,6 +84,12 @@ class Metric(object):
     Parameters
     ----------
     suffix : str
+        Suffix to append to the :class:`MetricManager`
+        prefix to create the metric name.
+
+    Parameters
+    ----------
+    suffix : str
         Partial name for the metric. The metric's full name
         will be constructed when it is registered with a
         :class:`MetricManager`.
@@ -113,6 +119,12 @@ class SimpleValue(Metric):
     sense to use it for value that can sensibly be sampled at sparse
     time intervals (or for values that change very slowly).
 
+    Parameters
+    ----------
+    suffix : str
+        Suffix to append to the :class:`MetricManager`
+        prefix to create the metric name.
+
     Examples
     --------
     >>> mm = MetricManager('vumi.worker0.')
@@ -135,6 +147,12 @@ class SimpleValue(Metric):
 
 class Count(Metric):
     """A simple counter.
+
+    Parameters
+    ----------
+    suffix : str
+        Suffix to append to the :class:`MetricManager`
+        prefix to create the metric name.
 
     Examples
     --------
@@ -160,26 +178,48 @@ class Count(Metric):
 class Sum(Metric):
     """A metric representing a sum of values.
 
+    Parameters
+    ----------
+    suffix : str
+        Suffix to append to the :class:`MetricManager`
+        prefix to create the metric name.
+    do_averaging : bool, optional
+        Whether to return an average of the added values
+        when polled (by a manager). Default is False (i.e.
+        to return the sum of the values added).
+
     Examples
     --------
     >>> mm = MetricManager('vumi.worker0.')
     >>> my_sum = mm.register(Sum('my.sum'))
     >>> my_sum.add(1.0)
     >>> my_sum.add(0.5)
+
+    >>> mm = MetricManager('vumi.worker0.')
+    >>> my_avg = mm.register(Sum('my.sum', True))
+    >>> my_avg.add(1.0)
+    >>> my_avg.add(0.5)
     """
 
-    def __init__(self, *args, **kws):
-        super(Sum, self).__init__(*args, **kws)
+    def __init__(self, suffix, do_averaging=False):
+        super(Sum, self).__init__(suffix)
         self._value = 0.0
+        self._count = 0
+        if do_averaging:
+            self._func = lambda value, count: value / count if count else 0.0
+        else:
+            self._func = lambda value, _count: value
 
     def add(self, amount):
         """Add an amount to the sum."""
         self._value += amount
+        self._count += 1
 
     def poll(self):
         """Return the sum and reset it to zero."""
         value, self._value = self._value, 0.0
-        return value
+        count, self._count = self._count, 0
+        return self._func(value, count)
 
 
 class TimerAlreadyStartedError(Exception):
@@ -188,6 +228,16 @@ class TimerAlreadyStartedError(Exception):
 
 class Timer(Sum):
     """A metric that accumulates time spent on operations.
+
+    Parameters
+    ----------
+    suffix : str
+        Suffix to append to the :class:`MetricManager`
+        prefix to create the metric name.
+    do_averaging : bool, optional
+        Whether to return an average of the times recorded
+        when polled (by a manager). Default is False (i.e.
+        to return the sum of the times recorded).
 
     Examples
     --------
