@@ -4,7 +4,7 @@ from uuid import uuid4
 import re
 
 from twisted.internet import reactor
-from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
 from txamqp.client import TwistedDelegate
 
 from vumi.service import WorkerAMQClient
@@ -158,10 +158,12 @@ class FakeAMQPBroker(object):
         self.kick_delivery()
         return None
 
-    def deliver_to_channels(self):
+    def deliver_to_channels(self, d):
         if any([self.try_deliver_to_channel(channel)
                 for channel in self.channels]):
-            self.kick_delivery()
+            self._kick_delivery(d)
+        else:
+            d.callback(None)
 
     def try_deliver_to_channel(self, channel):
         if not channel.deliverable():
@@ -176,7 +178,19 @@ class FakeAMQPBroker(object):
             return False
 
     def kick_delivery(self):
-        reactor.callLater(0, self.deliver_to_channels)
+        """
+        Schedule a message delivery run.
+
+        Returns a deferred that will fire when there are no more
+        deliverable messages. This is useful for manually triggering a
+        delivery run from inside a test.
+        """
+        d = Deferred()
+        self._kick_delivery(d)
+        return d
+
+    def _kick_delivery(self, d):
+        reactor.callLater(0, self.deliver_to_channels, d)
 
     def get_dispatched(self, exchange, rkey):
         return self.dispatched.get(exchange, {}).get(rkey, [])

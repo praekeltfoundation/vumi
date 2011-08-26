@@ -244,7 +244,6 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
 
         msg = self.mkmsg_out()
         deferred = self.worker.handle_outbound_message(Message(**msg))
-        self.assertFailure(deferred, Vas2NetsTransportError)
         yield deferred
         [fmsg] = self.get_dispatched('sms.outbound.vas2nets.failures')
         fmsg = json.loads(fmsg.body)

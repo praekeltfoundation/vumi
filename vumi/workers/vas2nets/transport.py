@@ -177,6 +177,7 @@ class HttpResponseHandler(Protocol):
 
 
 class Vas2NetsTransport(Worker):
+    SUPPRESS_EXCEPTIONS = True
 
     @inlineCallbacks
     def startWorker(self):
@@ -213,6 +214,8 @@ class Vas2NetsTransport(Worker):
         """Handle messages arriving meant for delivery via vas2nets"""
         def _send_failure(f):
             self.send_failure(message, f.getTraceback())
+            if self.SUPPRESS_EXCEPTIONS:
+                return None
             return f
         d = self._handle_outbound_message(message)
         d.addErrback(_send_failure)
@@ -299,5 +302,9 @@ class Vas2NetsTransport(Worker):
         try:
             self.failure_publisher.publish_message(Message(
                     message=message.payload, reason=reason))
+            self.failure_published()
         except Exception, e:
             log.msg("Error publishing failure:", message, reason, e)
+
+    def failure_published(self):
+        pass
