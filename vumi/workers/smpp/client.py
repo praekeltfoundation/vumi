@@ -214,6 +214,7 @@ class EsmeTransceiver(Protocol):
 
     def handleData(self, data):
         pdu = unpack_pdu(data)
+        log.msg('INCOMING <<<<', binascii.b2a_hex(data))
         log.msg('INCOMING <<<<', pdu)
         error_handler = self.command_status_dispatch(pdu)
         if error_handler:
