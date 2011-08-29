@@ -12,7 +12,7 @@ import txamqp
 from twisted.internet import defer
 
 from vumi.utils import make_vumi_path_abs
-from vumi.service import Worker, WorkerAMQClient
+from vumi.service import Worker
 from vumi.tests.fake_amqp import FakeAMQClient
 
 
@@ -115,7 +115,7 @@ def fake_amq_message(dictionary, delivery_tag='delivery_tag'):
 
 class TestQueue(object):
     """
-    A test queue that mimicks txAMQP's queue behaviour
+    A test queue that mimicks txAMQP's queue behaviour (DEPRECATED)
     """
     def __init__(self, queue, fake_broker=None):
         self.queue = queue
@@ -133,6 +133,8 @@ class TestQueue(object):
 
 
 class TestChannel(object):
+    "(DEPRECATED)"
+
     def __init__(self, channel_id=None, fake_broker=None):
         self.channel_id = channel_id
         self.fake_broker = fake_broker
@@ -176,31 +178,28 @@ class TestChannel(object):
         return True
 
 
-class StubbedAMQClient(WorkerAMQClient):
-    def __init__(self, queue):
-        self._queue = queue
-        self.vumi_options = {}
-
-    def get_channel(self):
-        return TestChannel()
-
-    def queue(self, *args, **kwargs):
-        return self._queue
-
-
-class TestWorker(Worker):
-    def __init__(self, queue, config=None):
-        if config is None:
-            config = {}
-        self._queue = queue
-        Worker.__init__(self, StubbedAMQClient(queue), config)
-
-
 def get_stubbed_worker(worker_class, config=None, broker=None):
     spec = txamqp.spec.load(make_vumi_path_abs("config/amqp-spec-0-8.xml"))
     amq_client = FakeAMQClient(spec, {}, broker)
     worker = worker_class(amq_client, config)
     return worker
+
+
+class TestResourceWorker(Worker):
+    port = 9999
+    _resources = ()
+
+    def set_resources(self, resources):
+        self._resources = resources
+
+    def startWorker(self):
+        resources = [(cls(*args), path) for path, cls, args in self._resources]
+        self.resources = self.start_web_resources(resources, self.port)
+        return defer.succeed(None)
+
+    def stopWorker(self):
+        if self.resources:
+            self.resources.stopListening()
 
 
 class FakeRedis(object):

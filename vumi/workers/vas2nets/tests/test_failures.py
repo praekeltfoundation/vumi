@@ -4,13 +4,10 @@ import json
 
 from twisted.web import http
 from twisted.web.resource import Resource
-from twisted.web.server import NOT_DONE_YET
 from twisted.trial import unittest
 from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
-from twisted.web.test.test_web import DummyRequest
 
-from vumi.service import Worker
-from vumi.tests.utils import get_stubbed_worker, FakeRedis
+from vumi.tests.utils import get_stubbed_worker, FakeRedis, TestResourceWorker
 from vumi.tests.fake_amqp import FakeAMQPBroker
 from vumi.message import Message
 from vumi.workers.vas2nets.transport import Vas2NetsTransport
@@ -32,23 +29,6 @@ class BadVas2NetsResource(Resource):
         for k, v in self.headers.items():
             request.setHeader(k, v)
         return self.body
-
-
-class TestResourceWorker(Worker):
-    port = 9999
-    _resources = ()
-
-    def set_resources(self, resources):
-        self._resources = resources
-
-    @inlineCallbacks
-    def startWorker(self):
-        resources = [(cls(*args), path) for path, cls, args in self._resources]
-        self.resources = yield self.start_web_resources(resources, self.port)
-
-    def stopWorker(self):
-        if self.resources:
-            self.resources.stopListening()
 
 
 class FailureCounter(object):

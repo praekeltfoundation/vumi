@@ -2,9 +2,7 @@ from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.service import Worker, WorkerCreator
-from vumi.tests.utils import (fake_amq_message, TestWorker,
-                              get_stubbed_worker)
-from vumi.tests.fake_amqp import FakeAMQPBroker
+from vumi.tests.utils import (fake_amq_message, get_stubbed_worker)
 from vumi.message import Message
 
 
