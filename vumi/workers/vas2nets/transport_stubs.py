@@ -124,6 +124,8 @@ class FakeVas2NetsWorker(Worker):
     delay_choices = None
     deliver_hook = None
 
+    handler = FakeVas2NetsHandler
+
     @inlineCallbacks
     def startWorker(self):
         url = urlparse(self.config.get('url'))
@@ -131,9 +133,8 @@ class FakeVas2NetsWorker(Worker):
             self.config.get('web_port'), self.config.get('web_receipt_path'))
 
         self.receipt_resource = yield self.start_web_resources(
-            [(FakeVas2NetsHandler(receipt_url, self.delay_choices,
-                                  self.deliver_hook), url.path)],
-            url.port)
+            [(self.handler(receipt_url, self.delay_choices, self.deliver_hook),
+              url.path)], url.port)
 
     def stopWorker(self):
         if hasattr(self, 'receipt_resource'):

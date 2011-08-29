@@ -28,9 +28,9 @@ class TestMemoWorker(unittest.TestCase):
             'addressed': addressed,
             }
 
-    def snarf_msgs(self, worker, channel_id):
-        msg_log = worker._amqp_client.channels[channel_id].publish_log
-        return [json.loads(m['content'].body) for m in msg_log]
+    def snarf_msgs(self, worker, rkey):
+        msgs = worker._amqp_client.broker.get_dispatched('vumi', rkey)
+        return [json.loads(m.body) for m in msgs]
 
     @inlineCallbacks
     def test_no_memos(self):
@@ -38,8 +38,7 @@ class TestMemoWorker(unittest.TestCase):
         self.assertEquals({}, worker.memos)
         yield worker.process_message(self.mkmsg('hey there'))
         self.assertEquals({}, worker.memos)
-        self.assertEquals([],
-                          worker._amqp_client.channels[0].publish_message_log)
+        self.assertEquals([], self.snarf_msgs(worker, 'irc.outbound'))
 
     @inlineCallbacks
     def test_leave_memo(self):
@@ -51,4 +50,4 @@ class TestMemoWorker(unittest.TestCase):
                           worker.memos)
         self.assertEquals(['Sure thing, boss.'],
                           [m['message_content']
-                           for m in self.snarf_msgs(worker, 0)])
+                           for m in self.snarf_msgs(worker, 'irc.outbound')])

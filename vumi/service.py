@@ -408,7 +408,12 @@ class WorkerCreator(object):
 
         Return value is the AmqpFactory instance containing the worker.
         """
-        worker_class = load_class_by_string(worker_class)
+        return self.create_worker_by_class(
+            load_class_by_string(worker_class), config, timeout=timeout,
+            bindAddress=bindAddress)
+
+    def create_worker_by_class(self, worker_class, config, timeout=30,
+                               bindAddress=None):
         factory = AmqpFactory(worker_class, deepcopy(self.options), config)
         self._connect(factory, timeout=timeout, bindAddress=bindAddress)
         return factory
