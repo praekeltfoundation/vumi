@@ -302,6 +302,7 @@ class Publisher(object):
     exchange_name = "vumi"
     exchange_type = "direct"
     routing_key = "routing_key"
+    require_bind = True
     durable = False
     auto_delete = False
     delivery_mode = 2  # save to disk
@@ -363,7 +364,7 @@ class Publisher(object):
         if(routing_key != routing_key.lower()):
             raise RoutingKeyError("The routing_key: %s is not all lower case!"
                                   % (routing_key))
-        if not self.routing_key_is_bound(routing_key):
+        if require_bind and not self.routing_key_is_bound(routing_key):
             raise RoutingKeyError("The routing_key: %s is not bound to any"
                                   " queues in vhost: %s  exchange: %s" % (
                                   routing_key, self.vumi_options['vhost'],
@@ -372,7 +373,7 @@ class Publisher(object):
     def publish(self, message, **kwargs):
         exchange_name = kwargs.get('exchange_name') or self.exchange_name
         routing_key = kwargs.get('routing_key') or self.routing_key
-        require_bind = kwargs.get('require_bind')
+        require_bind = kwargs.get('require_bind') or self.require_bind
         self.check_routing_key(routing_key, require_bind)
         return self.channel.basic_publish(exchange=exchange_name,
                                           content=message,
