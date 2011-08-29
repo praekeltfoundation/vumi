@@ -6,6 +6,7 @@ import re
 from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
 from txamqp.client import TwistedDelegate
+from txamqp.content import Content
 
 from vumi.service import WorkerAMQClient
 
@@ -195,6 +196,13 @@ class FakeAMQPBroker(object):
 
     def get_dispatched(self, exchange, rkey):
         return self.dispatched.get(exchange, {}).get(rkey, [])
+
+    def publish_message(self, exchange, routing_key, message):
+        return self.publish_raw(exchange, routing_key, message.to_json())
+
+    def publish_raw(self, exchange, routing_key, data):
+        amq_message = Content(data)
+        return self.basic_publish(exchange, routing_key, amq_message)
 
 
 class FakeAMQPChannel(object):
