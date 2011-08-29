@@ -6,6 +6,7 @@ from datetime import datetime
 from uuid import uuid4
 
 import redis
+from twisted.internet.defer import inlineCallbacks
 from twisted.python import log
 
 from vumi.service import Worker
@@ -15,29 +16,44 @@ from vumi.utils import get_deploy_int
 class FailureWorker(Worker):
     """
     Base class for transport failure handlers.
+
+    Subclasses should implement :meth:`handle_failure`.
     """
 
     GRANULARITY = 5  # seconds
 
+    MAX_DELAY = 3600
+    INITIAL_DELAY = 1
+    DELAY_FACTOR = 3
+
+    @inlineCallbacks
     def startWorker(self):
         # Connect to Redis
-        self.r_server = redis.Redis("localhost",
-                                    db=get_deploy_int(self._amqp_client.vhost))
+        if not hasattr(self, 'r_server'):
+            self.r_server = redis.Redis(
+                "localhost", db=get_deploy_int(self._amqp_client.vhost))
         log.msg("Connected to Redis")
         self.r_prefix = "failures:%s" % (self.config['transport_name'],)
         log.msg("r_prefix = %s" % self.r_prefix)
         self._retry_timestamps_key = self.r_key("retry_timestamps")
+        retry_rkey = self.get_rkey('retry')
+        failures_rkey = self.get_rkey('failures')
+        self.retry_publisher = yield self.publish_to(retry_rkey)
+        self.consumer = yield self.consume(failures_rkey, self.process_message)
+
+    def get_rkey(self, route_name):
+        return self.config['%s_routing_key' % route_name] % self.config
 
     def r_key(self, key):
+        """
+        Prefix ``key`` with a worker-specific string.
+        """
         return "#".join((self.r_prefix, key))
 
-    def r_set(self, key, value):
-        self.r_server.set(self.r_key(key), value)
-
-    def r_get(self, key):
-        return self.r_server.get(self.r_key(key))
-
     def failure_key(self, timestamp=None, failure_id=None):
+        """
+        Construct a failure key.
+        """
         if timestamp is None:
             timestamp = datetime.utcnow()
         if failure_id is None:
@@ -51,7 +67,21 @@ class FailureWorker(Worker):
     def get_failure_keys(self):
         return self.r_server.smembers(self.r_key("failure_keys"))
 
-    def store_failure(self, message_json, reason, retry_delay=None):
+    def store_failure(self, message, reason, retry_delay=None):
+        """
+        Store this failure in redis, with an optional retry delay.
+
+        :param message: The failed message.
+        :param reason: A string containing the failure reason.
+        :param retry_delay: The (optional) retry delay in seconds.
+
+        If ``retry_delay`` is not ``None``, a retry will be scheduled
+        approximately ``retry_delay`` seconds in the future.
+        """
+        message_json = message
+        if not isinstance(message, basestring):
+            # This isn't already JSON-encoded.
+            message_json = json.dumps(message)
         key = self.failure_key()
         if not retry_delay:
             retry_delay = 0
@@ -109,28 +139,38 @@ class FailureWorker(Worker):
         publisher.publish_raw(failure['message'])
 
     def deliver_retries(self):
-        # This assumes we have a suitable retry publisher. If not, it
-        # will crash horribly.
-        publisher = self.retry_publisher
         while True:
             retry_key = self.get_next_retry_key()
             if not retry_key:
                 return
-            self.deliver_retry(retry_key, publisher)
+            self.deliver_retry(retry_key, self.retry_publisher)
+
+    def next_retry_delay(self, delay):
+        if not delay:
+            return self.INITIAL_DELAY
+        return min(delay * self.DELAY_FACTOR, self.MAX_DELAY)
+
+    def update_retry_metadata(self, message):
+        rmd = message.get('retry_metadata', {})
+        message['retry_metadata'] = {
+            'retries': rmd.get('retries', 0) + 1,
+            'delay': self.next_retry_delay(rmd.get('delay', 0)),
+            }
+        return message
 
     def handle_failure(self, message, reason):
+        """
+        Handle a failed message from a transport.
+
+        :param message: The failed message, as a dict.
+        :param reason: A string containing the reason for the failure.
+
+        This method should be implemented in subclasses to handle
+        failures specific to particular transports.
+        """
         raise NotImplementedError()
 
     def process_message(self, failure_message):
-        message = json.dumps(failure_message.payload['message'])
+        message = failure_message.payload['message']
         reason = failure_message.payload['reason']
         self.handle_failure(message, reason)
-
-
-class Vas2NetsFailureWorker(FailureWorker):
-    """
-    Handler for transport failures in the Vas2Nets transport.
-    """
-
-    def handle_failure(self, message, reason):
-        self.store_failure(message, reason)
