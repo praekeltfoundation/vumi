@@ -1,8 +1,8 @@
 from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
-from vumi.tests.utils import (TestChannel, get_stubbed_worker,
-                              FakeAMQBroker)
+from vumi.tests.utils import TestChannel, get_stubbed_worker
 from vumi.workers.blinkenlights import metrics
+from vumi.blinkenlights.message20110818 import MetricMessage
 from vumi.message import Message
 
 import time
@@ -31,30 +31,32 @@ class TestGraphitePublisher(TestCase):
 class TestGraphiteMetricsCollector(TestCase):
     @inlineCallbacks
     def test_single_message(self):
-        broker = FakeAMQBroker()
-        worker = get_stubbed_worker(metrics.GraphiteMetricsCollector,
-                                    broker=broker)
+        worker = get_stubbed_worker(metrics.GraphiteMetricsCollector)
+        broker = worker._amqp_client.broker
         yield worker.startWorker()
 
-        broker.publish("vumi.metrics", "vumi.metrics", "foo")
-        yield None
+        msg = MetricMessage()
+        msg.append(("vumi.test.foo", 1234, 1.5))
 
-        output_channel = worker._amqp_client.channels[0]
-        input_channel = worker._amqp_client.channels[1]
+        broker.publish_message("vumi.metrics", "vumi.metrics", msg)
+        yield broker.kick_delivery()
 
-        self.fail("TODO: send message into input channel and test")
+        content, = broker.get_dispatched("graphite", "vumi.test.foo")
+        parts = content.body.split()
+        value, ts = float(parts[0]), int(parts[1])
+        self.assertEqual(value, 1.5)
+        self.assertEqual(ts, 1234 - time.timezone)
 
 
 class TestRandomMetricsGenerator(TestCase):
     @inlineCallbacks
     def test_one_run(self):
-        broker = FakeAMQBroker()
         worker = get_stubbed_worker(metrics.RandomMetricsGenerator,
                                     config={
                                         "manager_period": "0.1",
                                         "generator_period": "0.1",
-                                    },
-                                    broker=broker)
+                                    })
+        broker = worker._amqp_client.broker
         yield worker.startWorker()
 
         yield worker.wake_after_run()
