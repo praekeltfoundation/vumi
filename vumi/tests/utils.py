@@ -103,9 +103,6 @@ class TestPublisher(object):
         self.queue.append((message, kwargs))
 
 
-_TUPLE_CACHE = {}
-
-
 def fake_amq_message(dictionary, delivery_tag='delivery_tag'):
     Content = namedtuple('Content', ['body'])
     Message = namedtuple('Message', ['content', 'delivery_tag'])
