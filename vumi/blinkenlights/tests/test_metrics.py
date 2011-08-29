@@ -2,7 +2,7 @@ from twisted.trial.unittest import TestCase
 from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, Deferred
 from vumi.blinkenlights import metrics
-from vumi.tests.utils import TestChannel, get_stubbed_worker
+from vumi.tests.utils import get_stubbed_worker, get_stubbed_channel
 from vumi.message import Message
 from vumi.service import Worker
 
@@ -16,12 +16,10 @@ class TestMetricManager(TestCase):
         reactor.callLater(delay, lambda: d.callback(None))
         return d
 
-    def _check_msg(self, channel, metric, value):
-        msg = channel.publish_log[-1]
+    def _check_msg(self, broker, metric, value):
+        msgs = broker.get_dispatched("vumi.metrics", "vumi.metrics")
+        content = msgs[-1]
         name = metric.name
-        self.assertEqual(msg["routing_key"], "vumi.metrics")
-        self.assertEqual(msg["exchange"], "vumi.metrics")
-        content = msg["content"]
         self.assertEqual(content.properties, {"delivery mode": 2})
         msg = Message.from_json(content.body)
         datapoints = msg.payload["datapoints"]
@@ -37,47 +35,49 @@ class TestMetricManager(TestCase):
 
     @inlineCallbacks
     def test_start(self):
-        channel = TestChannel()
+        channel = yield get_stubbed_channel()
+        broker = channel.broker
         mm = metrics.MetricManager("vumi.test.", 0.1)
         cnt = mm.register(metrics.Count("my.count"))
         mm.start(channel)
         try:
             self.assertTrue(mm._task is not None)
-            self._check_msg(channel, cnt, 0)
+            self._check_msg(broker, cnt, 0)
 
             cnt.inc()
             yield self._sleep(0.1)
-            self._check_msg(channel, cnt, 1)
+            self._check_msg(broker, cnt, 1)
 
             cnt.inc()
             cnt.inc()
             yield self._sleep(0.1)
-            self._check_msg(channel, cnt, 2)
+            self._check_msg(broker, cnt, 2)
         finally:
             mm.stop()
 
     @inlineCallbacks
     def test_in_worker(self):
         worker = get_stubbed_worker(Worker)
+        broker = worker._amqp_client.broker
         mm = yield worker.start_publisher(metrics.MetricManager,
                                           "vumi.test.", 0.1)
-        channel = worker._amqp_client.channels[0]
         acc = mm.register(metrics.Sum("my.acc"))
         try:
             self.assertTrue(mm._task is not None)
 
             yield self._sleep(0.1)
-            self._check_msg(channel, acc, 0)
+            self._check_msg(broker, acc, 0)
 
             acc.add(1.5)
             acc.add(1.0)
             yield self._sleep(0.1)
-            self._check_msg(channel, acc, 2.5)
+            self._check_msg(broker, acc, 2.5)
         finally:
             mm.stop()
 
+    @inlineCallbacks
     def test_task_failure(self):
-        channel = TestChannel()
+        channel = yield get_stubbed_channel()
         mm = metrics.MetricManager("vumi.test.", 0.1)
 
         class BadMetricError(Exception):

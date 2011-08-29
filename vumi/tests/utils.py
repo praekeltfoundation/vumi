@@ -182,6 +182,12 @@ def get_stubbed_worker(worker_class, config=None, broker=None):
     return worker
 
 
+def get_stubbed_channel(broker=None, id=0):
+    spec = txamqp.spec.load(make_vumi_path_abs("config/amqp-spec-0-8.xml"))
+    amq_client = FakeAMQClient(spec, {}, broker)
+    return amq_client.channel(id)
+
+
 class TestResourceWorker(Worker):
     port = 9999
     _resources = ()
