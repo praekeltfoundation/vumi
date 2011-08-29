@@ -50,12 +50,13 @@ class Message(object):
         raise AttributeError(key)
 
 
-def mkMethod(name, index=None):
-    if index is None:
-        index = {
-            'deliver': 60,
-            'get-ok': 71,
-            }.get(name, -1)
+def mkMethod(name, index=-1):
+    """
+    Create a "Method" object, suitable for a ``txamqp`` message.
+
+    :param name: The name of the AMQP method, per the XML spec.
+    :param index: The index of the AMQP method, per the XML spec.
+    """
     return Thing("Method", name=name, id=index)
 
 
@@ -65,7 +66,7 @@ def mkContent(body, children=None, properties=None):
 
 
 def mk_deliver(body, exchange, routing_key, ctag, dtag):
-    return Message(mkMethod('deliver'), [
+    return Message(mkMethod('deliver', 60), [
             ('consumer_tag', ctag),
             ('delivery_tag', dtag),
             ('redelivered', False),
@@ -75,7 +76,7 @@ def mk_deliver(body, exchange, routing_key, ctag, dtag):
 
 
 def mk_get_ok(body, exchange, routing_key, dtag):
-    return Message(mkMethod('deliver'), [
+    return Message(mkMethod('get-ok', 71), [
             ('delivery_tag', dtag),
             ('redelivered', False),
             ('exchange', exchange),

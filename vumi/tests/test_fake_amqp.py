@@ -190,6 +190,14 @@ class FakeAMQPTestCase(TestCase):
         msg = yield d
         self.assertEqual({'message': 'bar'}, msg.payload)
 
+    # This is a test which actually connects to the AMQP broker.
+    #
+    # It originally existed purely as a mechanism for discovering what
+    # the real client/broker's behaviour is in order to duplicate it
+    # in the fake one. I've left it in here for now in case we need to
+    # do further investigation later, but we *really* don't want to
+    # run it as part of the test suite.
+    #
     # @inlineCallbacks
     # def test_zzz_real_amqclient(self):
     #     print ""
