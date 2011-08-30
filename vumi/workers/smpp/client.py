@@ -97,9 +97,9 @@ class EsmeTransceiver(Protocol):
         self.__deliver_sm_callback = None
         self.error_handlers = {
                 "ok": None,
-                "mess_permfault": None,
+                "mess_permfault": self.dummy_mess_permfault,
                 "mess_tempfault": None,
-                "conn_permfault": None,
+                "conn_permfault": self.dummy_conn_permfault,
                 "conn_tempfault": None,
                 "conn_throttle": None,
                 }
@@ -112,6 +112,15 @@ class EsmeTransceiver(Protocol):
                 self.config['host'],
                 self.config['port'])
         log.msg("r_prefix = %s" % self.r_prefix)
+
+    def dummy_mess_permfault(self, *args, **kwargs):
+            log.msg("dummy_mess_permfault(*args=%s, **kwargs=%s)" % (args, kwargs))
+    def dummy_conn_permfault(self, *args, **kwargs):
+            print "dummy_conn_permfault(*args=%s, **kwargs=%s)" % (args, kwargs)
+            log.msg("dummy_conn_permfault(*args=%s, **kwargs=%s)" % (args, kwargs))
+                #"mess_tempfault": None,
+                #"conn_tempfault": None,
+                #"conn_throttle": None,
 
     def build_maps(self):
         self.ESME_command_status_dispatch_map = {
