@@ -23,6 +23,9 @@ from smpp.pdu_inspector import (MultipartMessage,
 
 from vumi.utils import get_deploy_int
 
+# for testing with trial
+import sys
+log.startLogging(sys.stdout)
 
 # TODO this will move to pdu_inspector in python-smpp
 ESME_command_status_map = {
@@ -98,12 +101,11 @@ class EsmeTransceiver(Protocol):
         self.error_handlers = {
                 "ok": None,
                 "mess_permfault": self.dummy_mess_permfault,
-                "mess_tempfault": None,
+                "mess_tempfault": self.dummy_mess_tempfault,
                 "conn_permfault": self.dummy_conn_permfault,
-                "conn_tempfault": None,
-                "conn_throttle": None,
+                "conn_tempfault": self.dummy_conn_tempfault,
+                "conn_throttle": self.dummy_conn_throttle,
                 }
-
         self.r_server = redis.Redis("localhost",
                 db=get_deploy_int(self.vumi_options['vhost']))
         log.msg("Connected to Redis")
@@ -113,14 +115,53 @@ class EsmeTransceiver(Protocol):
                 self.config['port'])
         log.msg("r_prefix = %s" % self.r_prefix)
 
+    def logmsg(selfm):
+        print n
+
+    # Dummy error handler functions, just log invocation
     def dummy_mess_permfault(self, *args, **kwargs):
-            log.msg("dummy_mess_permfault(*args=%s, **kwargs=%s)" % (args, kwargs))
+            m = "%s.%s(*args=%s, **kwargs=%s)" % (
+                __name__,
+                "dummy_mess_permfault",
+                args,
+                kwargs)
+            log.msg(m)
+
+    # Dummy error handler functions, just log invocation
+    def dummy_mess_tempfault(self, *args, **kwargs):
+            m = "%s.%s(*args=%s, **kwargs=%s)" % (
+                __name__,
+                "dummy_mess_tempfault",
+                args,
+                kwargs)
+            log.msg(m)
+
+    # Dummy error handler functions, just log invocation
     def dummy_conn_permfault(self, *args, **kwargs):
-            print "dummy_conn_permfault(*args=%s, **kwargs=%s)" % (args, kwargs)
-            log.msg("dummy_conn_permfault(*args=%s, **kwargs=%s)" % (args, kwargs))
-                #"mess_tempfault": None,
-                #"conn_tempfault": None,
-                #"conn_throttle": None,
+            m = "%s.%s(*args=%s, **kwargs=%s)" % (
+                __name__,
+                "dummy_conn_permfault",
+                args,
+                kwargs)
+            log.msg(m)
+
+    # Dummy error handler functions, just log invocation
+    def dummy_conn_tempfault(self, *args, **kwargs):
+            m = "%s.%s(*args=%s, **kwargs=%s)" % (
+                __name__,
+                "dummy_conn_tempfault",
+                args,
+                kwargs)
+            log.msg(m)
+
+    # Dummy error handler functions, just log invocation
+    def dummy_conn_throttle(self, *args, **kwargs):
+            m = "%s.%s(*args=%s, **kwargs=%s)" % (
+                __name__,
+                "dummy_conn_throttle",
+                args,
+                kwargs)
+            log.msg(m)
 
     def build_maps(self):
         self.ESME_command_status_dispatch_map = {

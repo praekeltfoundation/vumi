@@ -358,11 +358,11 @@ class RedisTestSmppTransport(SmppTransport):
                 )
         return sequence_number
 
-    def conn_permfault(self, **kwargs):
+    def conn_permfault(self, *args, **kwargs):
         #print kwargs.get('pdu')
         pass
 
-    def conn_throttle(self, **kwargs):
+    def conn_throttle(self, *args, **kwargs):
         #print kwargs.get('pdu')
         pass
 
