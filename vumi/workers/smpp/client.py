@@ -24,8 +24,8 @@ from smpp.pdu_inspector import (MultipartMessage,
 from vumi.utils import get_deploy_int
 
 # for testing with trial
-import sys
-log.startLogging(sys.stdout)
+#import sys
+#log.startLogging(sys.stdout)
 
 # TODO this will move to pdu_inspector in python-smpp
 ESME_command_status_map = {
@@ -99,7 +99,7 @@ class EsmeTransceiver(Protocol):
         self.__delivery_report_callback = None
         self.__deliver_sm_callback = None
         self.error_handlers = {
-                "ok": None,
+                "ok": self.dummy_ok,
                 "mess_permfault": self.dummy_mess_permfault,
                 "mess_tempfault": self.dummy_mess_tempfault,
                 "conn_permfault": self.dummy_conn_permfault,
@@ -117,6 +117,15 @@ class EsmeTransceiver(Protocol):
 
     def logmsg(selfm):
         print n
+
+    # Dummy error handler functions, just log invocation
+    def dummy_ok(self, *args, **kwargs):
+            m = "%s.%s(*args=%s, **kwargs=%s)" % (
+                __name__,
+                "dummy_ok",
+                args,
+                kwargs)
+            #log.msg(m)
 
     # Dummy error handler functions, just log invocation
     def dummy_mess_permfault(self, *args, **kwargs):
@@ -272,8 +281,7 @@ class EsmeTransceiver(Protocol):
         log.msg('INCOMING <<<<', binascii.b2a_hex(data))
         log.msg('INCOMING <<<<', pdu)
         error_handler = self.command_status_dispatch(pdu)
-        if error_handler:
-            error_handler(pdu=pdu)
+        error_handler(pdu=pdu)
         if pdu['header']['command_id'] == 'bind_transceiver_resp':
             self.handle_bind_transceiver_resp(pdu)
         if pdu['header']['command_id'] == 'submit_sm_resp':
