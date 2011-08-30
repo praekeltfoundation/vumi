@@ -174,12 +174,10 @@ class EsmeTransceiver(Protocol):
         return self.error_handlers.get("ok")
 
     def command_status_dispatch_conn_permfault(self, pdu):
-        return self.error_handlers.get("conn_permfault") \
-            or self.error_handlers.get("conn_tempfault")
+        return self.error_handlers.get("conn_permfault")
 
     def command_status_dispatch_mess_permfault(self, pdu):
-        return self.error_handlers.get("mess_permfault") \
-            or self.error_handlers.get("mess_permfault")
+        return self.error_handlers.get("mess_permfault")
 
     def command_status_dispatch_conn_tempfault(self, pdu):
         return self.error_handlers.get("conn_tempfault")
