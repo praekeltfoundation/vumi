@@ -1,5 +1,10 @@
 # -*- test-case-name: vumi.blinkenlights.tests.test_metrics -*-
 
+"""Basic set of functionality for working with blinkenlights metrics.
+
+Includes a publisher, a consumer and a set of simple metrics.
+"""
+
 from twisted.internet.task import LoopingCall
 from twisted.python import log
 
@@ -17,9 +22,7 @@ class MetricManager(Publisher):
     prefix : str
         Prefix for the name of all metrics created by this metric set.
     publish_interval : int in seconds
-        How often to publish the set of metrics. This should match
-        the finest retention level specified in Graphite if you
-        are using Graphite to store the metric data points.
+        How often to publish the set of metrics.
     """
     exchange_name = "vumi.metrics"
     exchange_type = "direct"
@@ -49,9 +52,8 @@ class MetricManager(Publisher):
 
     def _publish_metrics(self):
         msg = MetricMessage()
-        now = time.time()
         for metric in self._metrics:
-            msg.append((metric.name, now, metric.poll()))
+            msg.append((metric.name, metric.aggs, metric.poll()))
         self.publish_message(msg)
 
     def register(self, metric):
@@ -74,29 +76,78 @@ class MetricManager(Publisher):
         return metric
 
 
+class AggregatorAlreadyDefinedError(Exception):
+    pass
+
+
+class Aggregator(object):
+    """Registry of aggregate functions for metrics.
+
+    Parameters
+    ----------
+    name : str
+       Short name for the aggregator.
+    """
+
+    REGISTRY = {}
+
+    def __init__(self, name, func):
+        if name in self.REGISTRY:
+            raise AggregatorAlreadyDefinedError(name)
+        self.name = name
+        self.func = func
+        self.REGISTRY[name] = self
+
+    @classmethod
+    def from_name(cls, name):
+        return cls.REGISTRY[name]
+
+    def __call__(self, values):
+        return self.func(values)
+
+
+SUM = Aggregator("sum", sum)
+AVG = Aggregator("avg",
+                 lambda values: sum(values) / len(values) if values else 0.0)
+MAX = Aggregator("max", lambda values: max(values) if values else 0.0)
+MIN = Aggregator("min", lambda values: min(values) if values else 0.0)
+
+
 class MetricRegistrationError(Exception):
     pass
 
 
 class Metric(object):
-    """Base clase for metrics.
+    """Simple metric.
+
+    Values set are collected and polled periodically by the metric
+    manager.
 
     Parameters
     ----------
     suffix : str
         Suffix to append to the :class:`MetricManager`
         prefix to create the metric name.
+    aggregators : list of aggregators, optional
+        List of aggregation functions to request
+        eventually be applied to this metric.
 
-    Parameters
-    ----------
-    suffix : str
-        Partial name for the metric. The metric's full name
-        will be constructed when it is registered with a
-        :class:`MetricManager`.
+    Examples
+    --------
+    >>> mm = MetricManager('vumi.worker0.')
+    >>> my_val = mm.register(Metric('my.value'))
+    >>> my_val.set(1.5)
     """
-    def __init__(self, suffix):
+
+    DEFAULT_AGGREGATORS = [AVG]
+
+    def __init__(self, suffix, aggregators=None):
+        if aggregators is None:
+            aggregators = self.DEFAULT_AGGREGATORS
         self.name = None  # set when prefix is set
+        self.aggs = tuple(sorted(agg.name for agg in aggregators))
         self._suffix = suffix
+        self._values = []  # list of unpolled values
 
     def manage(self, prefix):
         """Called by :class:`MetricManager` when this metric is registered."""
@@ -106,43 +157,14 @@ class Metric(object):
                                           (prefix, self._suffix))
         self.name = prefix + self._suffix
 
+    def set(self, value):
+        """Append a value for later polling."""
+        self._values.append((time.time(), value))
+
     def poll(self):
         """Called periodically by the managing metric set."""
-        raise NotImplementedError("Metric subclasses should implement .poll()")
-
-
-class SimpleValue(Metric):
-    """A metric representing a single value.
-
-    If this metric's value is set repeatedly before it is polled all
-    but the last value set will have no effect. Thus it only makes
-    sense to use it for value that can sensibly be sampled at sparse
-    time intervals (or for values that change very slowly).
-
-    Parameters
-    ----------
-    suffix : str
-        Suffix to append to the :class:`MetricManager`
-        prefix to create the metric name.
-
-    Examples
-    --------
-    >>> mm = MetricManager('vumi.worker0.')
-    >>> my_val = mm.register(Simple('my.value'))
-    >>> my_val.set(1.5)
-    """
-
-    def __init__(self, *args, **kws):
-        super(SimpleValue, self).__init__(*args, **kws)
-        self._value = 0.0
-
-    def set(self, value):
-        """Set the current value."""
-        self._value = value
-
-    def poll(self):
-        """Return the current value."""
-        return self._value
+        values, self._values = self._values, []
+        return values
 
 
 class Count(Metric):
@@ -161,83 +183,25 @@ class Count(Metric):
     >>> my_count.inc()
     """
 
-    def __init__(self, *args, **kws):
-        super(Count, self).__init__(*args, **kws)
-        self._value = 0
+    DEFAULT_AGGREGATORS = [SUM]
 
     def inc(self):
         """Increment the count by 1."""
-        self._value += 1
-
-    def poll(self):
-        """Return the count and reset it to zero."""
-        value, self._value = self._value, 0
-        return value
-
-
-class Sum(Metric):
-    """A metric representing a sum of values.
-
-    Parameters
-    ----------
-    suffix : str
-        Suffix to append to the :class:`MetricManager`
-        prefix to create the metric name.
-    do_averaging : bool, optional
-        Whether to return an average of the added values
-        when polled (by a manager). Default is False (i.e.
-        to return the sum of the values added).
-
-    Examples
-    --------
-    >>> mm = MetricManager('vumi.worker0.')
-    >>> my_sum = mm.register(Sum('my.sum'))
-    >>> my_sum.add(1.0)
-    >>> my_sum.add(0.5)
-
-    >>> mm = MetricManager('vumi.worker0.')
-    >>> my_avg = mm.register(Sum('my.sum', True))
-    >>> my_avg.add(1.0)
-    >>> my_avg.add(0.5)
-    """
-
-    def __init__(self, suffix, do_averaging=False):
-        super(Sum, self).__init__(suffix)
-        self._value = 0.0
-        self._count = 0
-        if do_averaging:
-            self._func = lambda value, count: value / count if count else 0.0
-        else:
-            self._func = lambda value, _count: value
-
-    def add(self, amount):
-        """Add an amount to the sum."""
-        self._value += amount
-        self._count += 1
-
-    def poll(self):
-        """Return the sum and reset it to zero."""
-        value, self._value = self._value, 0.0
-        count, self._count = self._count, 0
-        return self._func(value, count)
+        self.set(1.0)
 
 
 class TimerAlreadyStartedError(Exception):
     pass
 
 
-class Timer(Sum):
-    """A metric that accumulates time spent on operations.
+class Timer(Metric):
+    """A metric that records time spent on operations.
 
     Parameters
     ----------
     suffix : str
         Suffix to append to the :class:`MetricManager`
         prefix to create the metric name.
-    do_averaging : bool, optional
-        Whether to return an average of the times recorded
-        when polled (by a manager). Default is False (i.e.
-        to return the sum of the times recorded).
 
     Examples
     --------
@@ -257,6 +221,9 @@ class Timer(Sum):
     >>> finally:
     >>>     my_timer.stop()
     """
+
+    DEFAULT_AGGREGATORS = [AVG]
+
     def __init__(self, *args, **kws):
         super(Timer, self).__init__(*args, **kws)
         self._start_time = None
@@ -279,7 +246,7 @@ class Timer(Sum):
     def stop(self):
         duration = time.time() - self._start_time
         self._start_time = None
-        self.add(duration)
+        self.set(duration)
 
 
 class MetricsConsumer(Consumer):
@@ -287,8 +254,11 @@ class MetricsConsumer(Consumer):
 
     Parameters
     ----------
-    callback : function, f(metric_name, timestamp, value)
+    callback : function, f(metric_name, aggregators, values)
         Called for each metric datapoint as it arrives.
+        The parameters are metric_name (str),
+        aggregator (list of aggregator names) and values (a
+        list of timestamp and value paits).
     """
     exchange_name = "vumi.metrics"
     exchange_type = "direct"
@@ -301,5 +271,5 @@ class MetricsConsumer(Consumer):
 
     def consume_message(self, vumi_message):
         msg = MetricMessage.from_dict(vumi_message.payload)
-        for datapoint in msg.datapoints():
-            self.callback(*datapoint)
+        for metric_name, aggregators, values in msg.datapoints():
+            self.callback(metric_name, aggregators, values)
