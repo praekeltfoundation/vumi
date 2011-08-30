@@ -11,7 +11,7 @@ from twisted.internet.task import LoopingCall
 
 from vumi.service import Consumer, Publisher, Worker
 from vumi.blinkenlights.metrics import (MetricsConsumer, MetricManager, Count,
-                                        Metric, Timer)
+                                        Metric, Timer, Aggregator)
 from vumi.blinkenlights.message20110818 import MetricMessage
 
 
@@ -191,13 +191,32 @@ class MetricAggregator(Worker):
                         "MetricAggregator bucket checking task died"))
 
     def check_buckets(self):
-        # TODO: finish
-        now = time.time()
+        """Periodically clean out old buckets and calculate aggregates."""
+        # key for previous bucket
+        prev_ts_key = (int(time.time()) / self.bucket_size) - 1
+        prev_ts = prev_ts_key * self.bucket_size
         for ts_key in self.buckets.keys():
-            if ts_key < now - self.bucket_size * 2:
-                pass
+            if ts_key < prev_ts_key:
+                log.warn("Throwing way old metric data %r" %
+                         self.buckets[ts_key])
+                del self.buckets[ts_key]
+            elif ts_key == prev_ts_key:
+                aggregates = []
+                for metric_name, (agg_set, values) in self.buckets[ts_key]:
+                    for agg_name in agg_set:
+                        agg_metric = "%s.%s" % (metric_name, agg_name)
+                        agg_value = Aggregator.from_name(agg_name)(values)
+                        aggregates.append(agg_metric, agg_value)
 
-    def consume_metric(self, metric_name, ts_key, aggregates, values):
+                for agg_metric, agg_value in aggregates:
+                    self.publisher.publish_aggregate(agg_metric, prev_ts,
+                                                     agg_value)
+                del self.buckets[ts_key]
+
+    def consume_metric(self, metric_name, aggregates, values):
+        if not values:
+            return
+        ts_key = values[0] / self.bucket_size
         metrics = self.buckets.get(ts_key, None)
         if metrics is None:
             metrics = self.buckets[ts_key] = {}
