@@ -185,7 +185,7 @@ class MetricAggregator(Worker):
         self.consumer = yield self.start_consumer(TimeBucketConsumer,
                                                   bucket, self.consume_metric)
 
-        self._task = LoopingCall(self._check_buckets)
+        self._task = LoopingCall(self.check_buckets)
         done = self._task.start(self.bucket_size)
         done.addErrback(lambda failure: log.err(failure,
                         "MetricAggregator bucket checking task died"))

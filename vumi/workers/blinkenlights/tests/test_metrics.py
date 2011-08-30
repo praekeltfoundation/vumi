@@ -1,11 +1,59 @@
 from twisted.trial.unittest import TestCase
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import inlineCallbacks, returnValue
 from vumi.tests.utils import TestChannel, get_stubbed_worker
+from vumi.tests.fake_amqp import FakeAMQPBroker
 from vumi.workers.blinkenlights import metrics
 from vumi.blinkenlights.message20110818 import MetricMessage
 from vumi.message import Message
 
 import time
+
+
+class TestMetricAggregation(TestCase):
+
+    def setUp(self):
+        self._workers = []
+
+    @inlineCallbacks
+    def tearDown(self):
+        for worker in self._workers:
+            yield worker.stopWorker()
+
+    @inlineCallbacks
+    def _setup_workers(self, bucketters, aggregators, bucket_size):
+        broker = FakeAMQPBroker()
+
+        bucket_workers = []
+        bucket_config = {
+            'buckets': aggregators,
+            'bucket_size': bucket_size,
+            }
+        for _i in range(bucketters):
+            worker = get_stubbed_worker(metrics.MetricTimeBucket,
+                                        config=bucket_config, broker=broker)
+            yield worker.startWorker()
+            bucket_workers.append(worker)
+
+        aggregator_workers = []
+        aggregator_config = {
+            'bucket_size': bucket_size,
+            }
+        for i in range(aggregators):
+            config = aggregator_config.copy()
+            config['bucket'] = i
+            worker = get_stubbed_worker(metrics.MetricAggregator,
+                                        config=config, broker=broker)
+            yield worker.startWorker()
+            aggregator_workers.append(worker)
+
+        self._workers.extend(bucket_workers)
+        self._workers.extend(aggregator_workers)
+        returnValue((broker, bucket_workers, aggregator_workers))
+
+    @inlineCallbacks
+    def test_aggregating_one_metric(self):
+        broker, bucketters, aggregators = yield self._setup_workers(1, 1, 0.1)
+        # TODO: fill-in test
 
 
 class TestGraphitePublisher(TestCase):
