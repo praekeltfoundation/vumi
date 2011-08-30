@@ -36,7 +36,7 @@ class TestGraphiteMetricsCollector(TestCase):
         yield worker.startWorker()
 
         msg = MetricMessage()
-        msg.append(("vumi.test.foo", 1234, 1.5))
+        msg.append(("vumi.test.foo", "avg", [(1234, 1.5)]))
 
         broker.publish_message("vumi.metrics", "vumi.metrics", msg)
         yield broker.kick_delivery()
@@ -67,7 +67,7 @@ class TestRandomMetricsGenerator(TestCase):
         self.assertEqual(msg1["datapoints"], [])
         msg2 = Message.from_json(msg2.body).payload
         self.assertEqual(sorted(d[0] for d in msg2["datapoints"]),
-                         ["vumi.random.count", "vumi.random.sum",
-                          "vumi.random.timer", "vumi.random.value"])
+                         ["vumi.random.count", "vumi.random.timer",
+                          "vumi.random.value"])
 
         yield worker.stopWorker()

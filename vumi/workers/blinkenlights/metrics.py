@@ -2,15 +2,123 @@
 
 import time
 import random
+import hashlib
 
 from twisted.python import log
 from twisted.internet.defer import inlineCallbacks, Deferred
 from twisted.internet import reactor
 from twisted.internet.task import LoopingCall
 
-from vumi.service import Publisher, Worker
+from vumi.service import Consumer, Publisher, Worker
 from vumi.blinkenlights.metrics import (MetricsConsumer, MetricManager, Count,
-                                        Sum, SimpleValue, Timer)
+                                        Metric, Timer)
+from vumi.blinkenlights.message20110818 import MetricMessage
+
+
+class AggregatedMetricConsumer(Consumer):
+    """Consumer aggregate metrics.
+    """
+
+
+class AggregatedMetricPublisher(Publisher):
+    """Publishes aggregated metrics.
+    """
+
+
+class TimeBucketConsumer(Consumer):
+    """Consume time bucketed metric messages.
+    """
+
+
+class TimeBucketPublisher(Publisher):
+    """Publish time bucketed metric messages.
+
+    Parameters
+    ----------
+    buckets : int
+        Total number of buckets messages are being
+        distributed to.
+    bucket_size : int, in seconds
+        Size of each time bucket in seconds.
+    """
+    exchange_name = "vumi.metrics.buckets"
+    exchange_type = "direct"
+    durable = True
+    ROUTING_KEY_TEMPLATE = "bucket.%d"
+
+    def __init__(self, buckets, bucket_size):
+        self.buckets = buckets
+        self.bucket_size = bucket_size
+
+    def find_bucket(self, metric_name, ts_key):
+        md5 = hashlib.md5("%s:%d" % (metric_name, ts_key))
+        return int(md5.hexdigest(), 16) / self.buckets
+
+    def publish_metric(self, metric_name, aggregates, values):
+        timestamp_buckets = {}
+        for timestamp, value in values:
+            ts_key = timestamp / self.bucket_size
+            ts_bucket = timestamp_buckets.get(ts_key)
+            if ts_bucket is None:
+                ts_bucket[ts_key] = []
+            ts_bucket.append((timestamp, value))
+
+        for ts_key, ts_bucket in timestamp_buckets.iteritems():
+            bucket = self.find_bucket(metric_name, ts_key)
+            routing_key = self.ROUTING_KEY_TEMPLATE % bucket
+            msg = MetricMessage()
+            msg.extend((metric_name, aggregates, ts_bucket))
+            self.publish_message(msg, routing_key=routing_key)
+
+
+class MetricTimeBucket(Worker):
+    """Gathers metrics messages and redistributes them aggregators.
+
+    :class:`MetricTimeBuckets` take metrics from the vumi.metrics
+    exchange and redistribute them to one of N :class:`MetricAggregator`
+    workers.
+
+    There can be any number of :class:`MetricTimeBucket` workers.
+
+    Configuration Values
+    --------------------
+    buckets : int (N)
+        The total number of aggregator workers. :class:`MetricAggregator`
+        workers must be started with bucket numbers 0 to N-1 otherwise
+        metric data will go missing (or at best be stuck in a queue
+        somewhere).
+    bucket_size : int, in seconds
+        The amount of time each time bucket represents.
+    """
+    @inlineCallbacks
+    def startWorker(self):
+        log.msg("Starting a MetricTimeBucket with config: %s" % self.config)
+        buckets = int(self.config.get("buckets"))
+        log.msg("Total number of buckets %d" % buckets)
+        bucket_size = float(self.config.get("bucket_size"))
+        log.msg("Bucket size is %d seconds" % bucket_size)
+        self.publisher = yield self.start_publisher(TimeBucketPublisher,
+                                                    buckets, bucket_size)
+        self.consumer = yield self.start_consumer(MetricsConsumer,
+                self.publisher.publish_metric)
+
+
+class MetricAggregator(Worker):
+    """Gathers a subset of metrics and aggregates them.
+
+    :class:`MetricAggregators` work in sets of N.
+
+    Configuration Values
+    --------------------
+    bucket : int, 0 to N-1
+        An aggregator needs to know which number out of N it is. This is
+        its bucket number.
+    """
+    @inlineCallbacks
+    def startWorker(self):
+        log.msg("Starting a MetricAggregator with config: %s" % self.config)
+        self.bucket = int(self.config.get("bucket"))
+        log.msg("MetricAggregator bucket %d" % self.bucket)
 
 
 class GraphitePublisher(Publisher):
@@ -44,8 +152,10 @@ class GraphiteMetricsCollector(Worker):
         self.consumer = yield self.start_consumer(MetricsConsumer,
                                                   self.consume_metrics)
 
-    def consume_metrics(self, metric_name, timestamp, value):
-        self.graphite_publisher.publish_metric(metric_name, value, timestamp)
+    def consume_metrics(self, metric_name, aggregators, values):
+        for timestamp, value in values:
+            self.graphite_publisher.publish_metric(metric_name, value,
+                                                   timestamp)
 
     def stopWorker(self):
         log.msg("Stopping the GraphiteMetricsCollector")
@@ -79,8 +189,7 @@ class RandomMetricsGenerator(Worker):
         self.mm = yield self.start_publisher(MetricManager, "vumi.random.",
                                              manager_period)
         self.counter = self.mm.register(Count("count"))
-        self.sum = self.mm.register(Sum("sum"))
-        self.simple = self.mm.register(SimpleValue("value"))
+        self.value = self.mm.register(Metric("value"))
         self.timer = self.mm.register(Timer("timer"))
         self.next = Deferred()
         self.task = LoopingCall(self.run)
@@ -90,8 +199,7 @@ class RandomMetricsGenerator(Worker):
     def run(self):
         if random.choice([True, False]):
             self.counter.inc()
-        self.sum.add(random.uniform(0.0, 1.0))
-        self.simple.set(random.normalvariate(2.0, 0.1))
+        self.value.set(random.normalvariate(2.0, 0.1))
         with self.timer:
             d = Deferred()
             wait = random.uniform(0.0, 0.1)
