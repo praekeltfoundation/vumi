@@ -36,9 +36,10 @@ class TestGraphiteMetricsCollector(TestCase):
         yield worker.startWorker()
 
         msg = MetricMessage()
-        msg.append(("vumi.test.foo", "avg", [(1234, 1.5)]))
+        msg.append(("vumi.test.foo", "", [(1234, 1.5)]))
 
-        broker.publish_message("vumi.metrics", "vumi.metrics", msg)
+        broker.publish_message("vumi.metrics.aggregates",
+                               "vumi.metrics.aggregates", msg)
         yield broker.kick_delivery()
 
         content, = broker.get_dispatched("graphite", "vumi.test.foo")

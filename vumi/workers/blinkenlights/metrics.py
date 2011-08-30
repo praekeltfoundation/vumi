@@ -16,18 +16,71 @@ from vumi.blinkenlights.message20110818 import MetricMessage
 
 
 class AggregatedMetricConsumer(Consumer):
-    """Consumer aggregate metrics.
+    """Consumer for aggregate metrics.
+
+    Parameters
+    ----------
+    callback : function (metric_name, values)
+        Called for each metric datapoint as it arrives.  The
+        parameters are metric_name (str) and values (a list of
+        timestamp and value pairs).
     """
+    exchange_name = "vumi.metrics.aggregates"
+    exchange_type = "direct"
+    durable = True
+    routing_key = "vumi.metrics.aggregates"
+
+    def __init__(self, callback):
+        self.queue_name = self.routing_key
+        self.callback = callback
+
+    def consume_message(self, vumi_message):
+        msg = MetricMessage.from_dict(vumi_message.payload)
+        for metric_name, _aggregators, values in msg.datapoints():
+            self.callback(metric_name, values)
 
 
 class AggregatedMetricPublisher(Publisher):
     """Publishes aggregated metrics.
     """
+    exchange_name = "vumi.metrics.aggregates"
+    exchange_type = "direct"
+    durable = True
+    routing_key = "vumi.metrics.aggregates"
+
+    def publish_aggregate(self, metric_name, timestamp, value):
+        # TODO: perhaps change interface to publish multiple metrics?
+        msg = MetricMessage()
+        msg.append((metric_name, "", [(timestamp, value)]))
+        self.publish_message(msg)
 
 
 class TimeBucketConsumer(Consumer):
     """Consume time bucketed metric messages.
+
+    Parameters
+    ----------
+    bucket : int
+        Bucket to consume time buckets from.
+    callback : function, f(metric_name, aggregators, values)
+        Called for each metric datapoint as it arrives.
+        The parameters are metric_name (str),
+        aggregator (list of aggregator names) and values (a
+        list of timestamp and value pairs).
     """
+    exchange_name = "vumi.metrics.buckets"
+    exchange_type = "direct"
+    durable = True
+    ROUTING_KEY_TEMPLATE = "bucket.%d"
+
+    def __init__(self, bucket, callback):
+        self.queue_name = self.ROUTING_KEY_TEMPLATE % bucket
+        self.callback = callback
+
+    def consume_message(self, vumi_message):
+        msg = MetricMessage.from_dict(vumi_message.payload)
+        for metric_name, aggregators, values in msg.datapoints():
+            self.callback(metric_name, aggregators, values)
 
 
 class TimeBucketPublisher(Publisher):
@@ -72,7 +125,7 @@ class TimeBucketPublisher(Publisher):
 
 
 class MetricTimeBucket(Worker):
-    """Gathers metrics messages and redistributes them aggregators.
+    """Gathers metrics messages and redistributes them to aggregators.
 
     :class:`MetricTimeBuckets` take metrics from the vumi.metrics
     exchange and redistribute them to one of N :class:`MetricAggregator`
@@ -113,12 +166,51 @@ class MetricAggregator(Worker):
     bucket : int, 0 to N-1
         An aggregator needs to know which number out of N it is. This is
         its bucket number.
+    bucket_size : int, in seconds
+        The amount of time each time bucket represents.
     """
     @inlineCallbacks
     def startWorker(self):
         log.msg("Starting a MetricAggregator with config: %s" % self.config)
-        self.bucket = int(self.config.get("bucket"))
-        log.msg("MetricAggregator bucket %d" % self.bucket)
+        bucket = int(self.config.get("bucket"))
+        log.msg("MetricAggregator bucket %d" % bucket)
+        self.bucket_size = float(self.config.get("bucket_size"))
+        log.msg("Bucket size is %d seconds" % self.bucket_size)
+
+        # ts_key -> { metric_name -> (aggregate_set, values) }
+        # values is a list of (timestamp, value) pairs
+        self.buckets = {}
+
+        self.publisher = yield self.start_publisher(AggregatedMetricPublisher)
+        self.consumer = yield self.start_consumer(TimeBucketConsumer,
+                                                  bucket, self.consume_metric)
+
+        self._task = LoopingCall(self._check_buckets)
+        done = self._task.start(self.bucket_size)
+        done.addErrback(lambda failure: log.err(failure,
+                        "MetricAggregator bucket checking task died"))
+
+    def check_buckets(self):
+        # TODO: finish
+        now = time.time()
+        for ts_key in self.buckets.keys():
+            if ts_key < now - self.bucket_size * 2:
+                pass
+
+    def consume_metric(self, metric_name, ts_key, aggregates, values):
+        metrics = self.buckets.get(ts_key, None)
+        if metrics is None:
+            metrics = self.buckets[ts_key] = {}
+        metric = metrics.get(metric_name)
+        if metric is None:
+            metric = metrics[metric_name] = (set(), [])
+        existing_aggregates, existing_values = metric
+        existing_aggregates.update(aggregates)
+        existing_values.extend(values)
+
+    def stopWorker(self):
+        self._task.stop()
+        self.check_buckets()
 
 
 class GraphitePublisher(Publisher):
@@ -149,10 +241,10 @@ class GraphiteMetricsCollector(Worker):
         log.msg("Starting the GraphiteMetricsCollector with"
                 " config: %s" % self.config)
         self.graphite_publisher = yield self.start_publisher(GraphitePublisher)
-        self.consumer = yield self.start_consumer(MetricsConsumer,
+        self.consumer = yield self.start_consumer(AggregatedMetricConsumer,
                                                   self.consume_metrics)
 
-    def consume_metrics(self, metric_name, aggregators, values):
+    def consume_metrics(self, metric_name, values):
         for timestamp, value in values:
             self.graphite_publisher.publish_metric(metric_name, value,
                                                    timestamp)
