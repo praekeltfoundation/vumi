@@ -16,12 +16,19 @@ def mktimestamp(delta=0):
 
 class FailureWorkerTestCase(unittest.TestCase):
 
-    @inlineCallbacks
     def setUp(self):
+        return self.make_worker()
+
+    def tearDown(self):
+        return self.worker.stopWorker()
+
+    @inlineCallbacks
+    def make_worker(self, retry_delivery_period=0):
         self.config = {
             'transport_name': 'sphex',
             'retry_routing_key': 'sms.outbound.%(transport_name)s',
             'failures_routing_key': 'sms.failures.%(transport_name)s',
+            'retry_delivery_period': retry_delivery_period,
         }
         self.worker = get_stubbed_worker(FailureWorker, self.config)
         self.worker.r_server = FakeRedis()
@@ -306,3 +313,15 @@ class FailureWorkerTestCase(unittest.TestCase):
         assert_update_rmd(1, 1, {})
         assert_update_rmd(2, 3, mkmsg(1, 1))
         assert_update_rmd(3, 9, mkmsg(2, 3))
+
+    @inlineCallbacks
+    def test_start_retrying(self):
+        """
+        The retry publisher should start when configured appropriately.
+        """
+        self.assertEqual(None, self.worker.delivery_loop)
+        yield self.make_worker(1)
+        self.assertEqual(self.worker.deliver_retries,
+                         self.worker.delivery_loop.f)
+        self.assertTrue(self.worker.delivery_loop.running)
+        yield self.worker.stopWorker()
