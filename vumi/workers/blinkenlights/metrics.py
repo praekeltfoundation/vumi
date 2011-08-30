@@ -75,6 +75,7 @@ class TimeBucketConsumer(Consumer):
 
     def __init__(self, bucket, callback):
         self.queue_name = self.ROUTING_KEY_TEMPLATE % bucket
+        self.routing_key = self.queue_name
         self.callback = callback
 
     def consume_message(self, vumi_message):
@@ -105,7 +106,7 @@ class TimeBucketPublisher(Publisher):
 
     def find_bucket(self, metric_name, ts_key):
         md5 = hashlib.md5("%s:%d" % (metric_name, ts_key))
-        return int(md5.hexdigest(), 16) / self.buckets
+        return int(md5.hexdigest(), 16) % self.buckets
 
     def publish_metric(self, metric_name, aggregates, values):
         timestamp_buckets = {}
@@ -113,14 +114,14 @@ class TimeBucketPublisher(Publisher):
             ts_key = timestamp / self.bucket_size
             ts_bucket = timestamp_buckets.get(ts_key)
             if ts_bucket is None:
-                ts_bucket[ts_key] = []
+                ts_bucket = timestamp_buckets[ts_key] = []
             ts_bucket.append((timestamp, value))
 
         for ts_key, ts_bucket in timestamp_buckets.iteritems():
             bucket = self.find_bucket(metric_name, ts_key)
             routing_key = self.ROUTING_KEY_TEMPLATE % bucket
             msg = MetricMessage()
-            msg.extend((metric_name, aggregates, ts_bucket))
+            msg.append((metric_name, aggregates, ts_bucket))
             self.publish_message(msg, routing_key=routing_key)
 
 
@@ -148,12 +149,16 @@ class MetricTimeBucket(Worker):
         log.msg("Starting a MetricTimeBucket with config: %s" % self.config)
         buckets = int(self.config.get("buckets"))
         log.msg("Total number of buckets %d" % buckets)
-        bucket_size = float(self.config.get("bucket_size"))
+        bucket_size = int(self.config.get("bucket_size"))
         log.msg("Bucket size is %d seconds" % bucket_size)
         self.publisher = yield self.start_publisher(TimeBucketPublisher,
                                                     buckets, bucket_size)
         self.consumer = yield self.start_consumer(MetricsConsumer,
                 self.publisher.publish_metric)
+
+
+class DiscardedMetricError(Exception):
+    pass
 
 
 class MetricAggregator(Worker):
@@ -174,7 +179,7 @@ class MetricAggregator(Worker):
         log.msg("Starting a MetricAggregator with config: %s" % self.config)
         bucket = int(self.config.get("bucket"))
         log.msg("MetricAggregator bucket %d" % bucket)
-        self.bucket_size = float(self.config.get("bucket_size"))
+        self.bucket_size = int(self.config.get("bucket_size"))
         log.msg("Bucket size is %d seconds" % self.bucket_size)
 
         # ts_key -> { metric_name -> (aggregate_set, values) }
@@ -186,7 +191,7 @@ class MetricAggregator(Worker):
                                                   bucket, self.consume_metric)
 
         self._task = LoopingCall(self.check_buckets)
-        done = self._task.start(self.bucket_size)
+        done = self._task.start(self.bucket_size, False)
         done.addErrback(lambda failure: log.err(failure,
                         "MetricAggregator bucket checking task died"))
 
@@ -197,16 +202,18 @@ class MetricAggregator(Worker):
         prev_ts = prev_ts_key * self.bucket_size
         for ts_key in self.buckets.keys():
             if ts_key < prev_ts_key:
-                log.warn("Throwing way old metric data %r" %
-                         self.buckets[ts_key])
+                log.err(DiscardedMetricError("Throwing way old metric data: %r"
+                                             % self.buckets[ts_key]))
                 del self.buckets[ts_key]
             elif ts_key == prev_ts_key:
                 aggregates = []
-                for metric_name, (agg_set, values) in self.buckets[ts_key]:
+                items = self.buckets[ts_key].iteritems()
+                for metric_name, (agg_set, values) in items:
                     for agg_name in agg_set:
                         agg_metric = "%s.%s" % (metric_name, agg_name)
-                        agg_value = Aggregator.from_name(agg_name)(values)
-                        aggregates.append(agg_metric, agg_value)
+                        agg_func = Aggregator.from_name(agg_name)
+                        agg_value = agg_func(v[1] for v in values)
+                        aggregates.append((agg_metric, agg_value))
 
                 for agg_metric, agg_value in aggregates:
                     self.publisher.publish_aggregate(agg_metric, prev_ts,
@@ -216,7 +223,7 @@ class MetricAggregator(Worker):
     def consume_metric(self, metric_name, aggregates, values):
         if not values:
             return
-        ts_key = values[0] / self.bucket_size
+        ts_key = values[0][0] / self.bucket_size
         metrics = self.buckets.get(ts_key, None)
         if metrics is None:
             metrics = self.buckets[ts_key] = {}

@@ -1,5 +1,5 @@
 from twisted.trial.unittest import TestCase
-from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.defer import inlineCallbacks
 from vumi.tests.utils import TestChannel, get_stubbed_worker
 from vumi.tests.fake_amqp import FakeAMQPBroker
 from vumi.workers.blinkenlights import metrics
@@ -13,15 +13,24 @@ class TestMetricAggregation(TestCase):
 
     def setUp(self):
         self._workers = []
+        self._broker = None
 
     @inlineCallbacks
     def tearDown(self):
         for worker in self._workers:
             yield worker.stopWorker()
 
+    def publish(self, msg):
+        self._broker.publish_message("vumi.metrics",
+                                     "vumi.metrics", msg)
+
+    def get_dispatched(self):
+        return self._broker.get_dispatched("vumi.metrics.aggregates",
+                                           "vumi.metrics.aggregates")
+
     @inlineCallbacks
     def _setup_workers(self, bucketters, aggregators, bucket_size):
-        broker = FakeAMQPBroker()
+        self._broker = FakeAMQPBroker()
 
         bucket_workers = []
         bucket_config = {
@@ -30,7 +39,8 @@ class TestMetricAggregation(TestCase):
             }
         for _i in range(bucketters):
             worker = get_stubbed_worker(metrics.MetricTimeBucket,
-                                        config=bucket_config, broker=broker)
+                                        config=bucket_config,
+                                        broker=self._broker)
             yield worker.startWorker()
             bucket_workers.append(worker)
 
@@ -42,18 +52,35 @@ class TestMetricAggregation(TestCase):
             config = aggregator_config.copy()
             config['bucket'] = i
             worker = get_stubbed_worker(metrics.MetricAggregator,
-                                        config=config, broker=broker)
+                                        config=config, broker=self._broker)
             yield worker.startWorker()
             aggregator_workers.append(worker)
 
         self._workers.extend(bucket_workers)
         self._workers.extend(aggregator_workers)
-        returnValue((broker, bucket_workers, aggregator_workers))
 
+    # TODO: use parameteric test cases to test many combinations of workers
     @inlineCallbacks
     def test_aggregating_one_metric(self):
-        broker, bucketters, aggregators = yield self._setup_workers(1, 1, 0.1)
-        # TODO: fill-in test
+        yield self._setup_workers(1, 1, 1)
+
+        msg = MetricMessage()
+        now = int(time.time())
+        msg.append(("vumi.test.foo", ["sum"], [(now, 1.0), (now, 2.0)]))
+        self.publish(msg)
+        self.publish(msg)
+
+        yield self._broker.kick_delivery()
+        yield self._broker.kick_delivery()
+        time.sleep(1.1)
+        yield self._broker.kick_delivery()
+
+        content, = self.get_dispatched()
+        vumi_msg = Message.from_json(content.body)
+        msg = MetricMessage.from_dict(vumi_msg.payload)
+        self.assertEqual(msg.datapoints(), [
+            [u'vumi.test.foo.sum', u'', [[now, 6.0]]]
+            ])
 
 
 class TestGraphitePublisher(TestCase):
