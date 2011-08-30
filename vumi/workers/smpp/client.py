@@ -95,7 +95,14 @@ class EsmeTransceiver(Protocol):
         self.__submit_sm_resp_callback = None
         self.__delivery_report_callback = None
         self.__deliver_sm_callback = None
-        self.error_handlers = {}
+        self.error_handlers = {
+                "ok": None,
+                "mess_permfault": None,
+                "mess_tempfault": None,
+                "conn_permfault": None,
+                "conn_tempfault": None,
+                "conn_throttle": None,
+                }
 
         self.r_server = redis.Redis("localhost",
                 db=get_deploy_int(self.vumi_options['vhost']))
