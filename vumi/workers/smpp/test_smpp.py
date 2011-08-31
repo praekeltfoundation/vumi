@@ -560,36 +560,8 @@ class FakeRedisRespTestCase(TestCase):
             "ESME_RINVPASWD"        : self.transport.conn_permfault,
             "ESME_RINVSYSID"        : self.transport.conn_permfault,
 
-            "ESME_RMSGQFUL"         : self.transport.mess_tempfault,
-            "ESME_RINVSERTYP"       : self.transport.ok,
-            "ESME_RINVNUMDESTS"     : self.transport.ok,
-            "ESME_RINVDLNAME"       : self.transport.ok,
-            "ESME_RINVDESTFLAG"     : self.transport.ok,
-            "ESME_RINVSUBREP"       : self.transport.ok,
-            "ESME_RINVESMCLASS"     : self.transport.ok,
-            "ESME_RCNTSUBDL"        : self.transport.ok,
-            "ESME_RSUBMITFAIL"      : self.transport.ok,
-            "ESME_RINVSRCTON"       : self.transport.ok,
-            "ESME_RINVSRCNPI"       : self.transport.ok,
-            "ESME_RINVDSTTON"       : self.transport.ok,
-            "ESME_RINVDSTNPI"       : self.transport.ok,
-            "ESME_RINVSYSTYP"       : self.transport.ok,
-            "ESME_RINVREPFLAG"      : self.transport.ok,
-            "ESME_RINVNUMMSGS"      : self.transport.ok,
-            "ESME_RINVSCHED"        : self.transport.ok,
-            "ESME_RINVEXPIRY"       : self.transport.ok,
-            "ESME_RINVDFTMSGID"     : self.transport.ok,
-            "ESME_RX_T_APPN"        : self.transport.ok,
-            "ESME_RX_P_APPN"        : self.transport.ok,
-            "ESME_RX_R_APPN"        : self.transport.ok,
-            "ESME_RQUERYFAIL"       : self.transport.ok,
-            "ESME_RINVOPTPARSTREAM" : self.transport.ok,
-            "ESME_ROPTPARNOTALLWD"  : self.transport.ok,
-            "ESME_RINVPARLEN"       : self.transport.ok,
-            "ESME_RMISSINGOPTPARAM" : self.transport.ok,
-            "ESME_RINVOPTPARAMVAL"  : self.transport.ok,
-            "ESME_RDELIVERYFAILURE" : self.transport.ok,
-            "ESME_RUNKNOWNERR"      : self.transport.ok,
+            "ESME_RINVSERTYP"       : self.transport.conn_permfault,
+
         }
 
         # Some error codes would occur post bind i.e. on submission attempts
@@ -608,9 +580,45 @@ class FakeRedisRespTestCase(TestCase):
             "ESME_RCANCELFAIL"      : self.transport.mess_permfault,
             "ESME_RREPLACEFAIL"     : self.transport.mess_permfault,
 
-            "ESME_RMSGQFUL"         : self.transport.mess_tempfault,
+            "ESME_RMSGQFUL"         : self.transport.conn_throttle,
+
+            "ESME_RINVNUMDESTS"     : self.transport.mess_permfault,
+            "ESME_RINVDLNAME"       : self.transport.mess_permfault,
+            "ESME_RINVDESTFLAG"     : self.transport.mess_permfault,
+            "ESME_RINVSUBREP"       : self.transport.mess_permfault,
+            "ESME_RINVESMCLASS"     : self.transport.mess_permfault,
+            "ESME_RCNTSUBDL"        : self.transport.mess_permfault,
+
+            "ESME_RSUBMITFAIL"      : self.transport.mess_tempfault,
+
+            "ESME_RINVSRCTON"       : self.transport.mess_permfault,
+            "ESME_RINVSRCNPI"       : self.transport.mess_permfault,
+            "ESME_RINVDSTTON"       : self.transport.mess_permfault,
+            "ESME_RINVDSTNPI"       : self.transport.mess_permfault,
+            "ESME_RINVSYSTYP"       : self.transport.conn_permfault,
+            "ESME_RINVREPFLAG"      : self.transport.mess_permfault,
+
+            "ESME_RINVNUMMSGS"      : self.transport.mess_tempfault,
 
             "ESME_RTHROTTLED"       : self.transport.conn_throttle,
+
+            "ESME_RINVSCHED"        : self.transport.mess_permfault,
+            "ESME_RINVEXPIRY"       : self.transport.mess_permfault,
+            "ESME_RINVDFTMSGID"     : self.transport.mess_permfault,
+
+            "ESME_RX_T_APPN"        : self.transport.mess_tempfault,
+
+            "ESME_RX_P_APPN"        : self.transport.mess_permfault,
+            "ESME_RX_R_APPN"        : self.transport.mess_permfault,
+            "ESME_RQUERYFAIL"       : self.transport.mess_permfault,
+            "ESME_RINVOPTPARSTREAM" : self.transport.mess_permfault,
+            "ESME_ROPTPARNOTALLWD"  : self.transport.mess_permfault,
+            "ESME_RINVPARLEN"       : self.transport.mess_permfault,
+            "ESME_RMISSINGOPTPARAM" : self.transport.mess_permfault,
+            "ESME_RINVOPTPARAMVAL"  : self.transport.mess_permfault,
+
+            "ESME_RDELIVERYFAILURE" : self.transport.mess_tempfault,
+            "ESME_RUNKNOWNERR"      : self.transport.mess_tempfault,
         }
 
         for code, method in bind_dispatch_methods.items():

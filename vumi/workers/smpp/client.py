@@ -198,37 +198,47 @@ class EsmeTransceiver(Protocol):
             "ESME_RCANCELFAIL"      : self.command_status_dispatch_mess_permfault,
             "ESME_RREPLACEFAIL"     : self.command_status_dispatch_mess_permfault,
 
-            "ESME_RMSGQFUL"         : self.command_status_dispatch_mess_tempfault,
-            #"ESME_RINVSERTYP"       : ,
-            #"ESME_RINVNUMDESTS"     : ,
-            #"ESME_RINVDLNAME"       : ,
-            #"ESME_RINVDESTFLAG"     : ,
-            #"ESME_RINVSUBREP"       : ,
-            #"ESME_RINVESMCLASS"     : ,
-            #"ESME_RCNTSUBDL"        : ,
-            #"ESME_RSUBMITFAIL"      : ,
-            #"ESME_RINVSRCTON"       : ,
-            #"ESME_RINVSRCNPI"       : ,
-            #"ESME_RINVDSTTON"       : ,
-            #"ESME_RINVDSTNPI"       : ,
-            #"ESME_RINVSYSTYP"       : ,
-            #"ESME_RINVREPFLAG"      : ,
-            #"ESME_RINVNUMMSGS"      : ,
+            "ESME_RMSGQFUL"         : self.command_status_dispatch_conn_throttle,
+
+            "ESME_RINVSERTYP"       : self.command_status_dispatch_conn_permfault,
+
+            "ESME_RINVNUMDESTS"     : self.command_status_dispatch_mess_permfault,
+            "ESME_RINVDLNAME"       : self.command_status_dispatch_mess_permfault,
+            "ESME_RINVDESTFLAG"     : self.command_status_dispatch_mess_permfault,
+            "ESME_RINVSUBREP"       : self.command_status_dispatch_mess_permfault,
+            "ESME_RINVESMCLASS"     : self.command_status_dispatch_mess_permfault,
+            "ESME_RCNTSUBDL"        : self.command_status_dispatch_mess_permfault,
+
+            "ESME_RSUBMITFAIL"      : self.command_status_dispatch_mess_tempfault,
+
+            "ESME_RINVSRCTON"       : self.command_status_dispatch_mess_permfault,
+            "ESME_RINVSRCNPI"       : self.command_status_dispatch_mess_permfault,
+            "ESME_RINVDSTTON"       : self.command_status_dispatch_mess_permfault,
+            "ESME_RINVDSTNPI"       : self.command_status_dispatch_mess_permfault,
+            "ESME_RINVSYSTYP"       : self.command_status_dispatch_conn_permfault,
+            "ESME_RINVREPFLAG"      : self.command_status_dispatch_mess_permfault,
+
+            "ESME_RINVNUMMSGS"      : self.command_status_dispatch_mess_tempfault,
+
             "ESME_RTHROTTLED"       : self.command_status_dispatch_conn_throttle,
-            #"ESME_RINVSCHED"        : ,
-            #"ESME_RINVEXPIRY"       : ,
-            #"ESME_RINVDFTMSGID"     : ,
-            #"ESME_RX_T_APPN"        : ,
-            #"ESME_RX_P_APPN"        : ,
-            #"ESME_RX_R_APPN"        : ,
-            #"ESME_RQUERYFAIL"       : ,
-            #"ESME_RINVOPTPARSTREAM" : ,
-            #"ESME_ROPTPARNOTALLWD"  : ,
-            #"ESME_RINVPARLEN"       : ,
-            #"ESME_RMISSINGOPTPARAM" : ,
-            #"ESME_RINVOPTPARAMVAL"  : ,
-            #"ESME_RDELIVERYFAILURE" : ,
-            #"ESME_RUNKNOWNERR"      : ,
+
+            "ESME_RINVSCHED"        : self.command_status_dispatch_mess_permfault,
+            "ESME_RINVEXPIRY"       : self.command_status_dispatch_mess_permfault,
+            "ESME_RINVDFTMSGID"     : self.command_status_dispatch_mess_permfault,
+
+            "ESME_RX_T_APPN"        : self.command_status_dispatch_mess_tempfault,
+
+            "ESME_RX_P_APPN"        : self.command_status_dispatch_mess_permfault,
+            "ESME_RX_R_APPN"        : self.command_status_dispatch_mess_permfault,
+            "ESME_RQUERYFAIL"       : self.command_status_dispatch_mess_permfault,
+            "ESME_RINVOPTPARSTREAM" : self.command_status_dispatch_mess_permfault,
+            "ESME_ROPTPARNOTALLWD"  : self.command_status_dispatch_mess_permfault,
+            "ESME_RINVPARLEN"       : self.command_status_dispatch_mess_permfault,
+            "ESME_RMISSINGOPTPARAM" : self.command_status_dispatch_mess_permfault,
+            "ESME_RINVOPTPARAMVAL"  : self.command_status_dispatch_mess_permfault,
+
+            "ESME_RDELIVERYFAILURE" : self.command_status_dispatch_mess_tempfault,
+            "ESME_RUNKNOWNERR"      : self.command_status_dispatch_mess_tempfault,
         }
 
     def command_status_dispatch(self, pdu):
