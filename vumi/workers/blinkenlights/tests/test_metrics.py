@@ -9,28 +9,96 @@ from vumi.message import Message
 import time
 
 
+class BrokerWrapper(object):
+    """Wrap utility methods around a FakeAMQPBroker."""
+    def __init__(self, broker):
+        self._broker = broker
+
+    def __getattr__(self, name):
+        return getattr(self._broker, name)
+
+    def send_datapoints(self, exchange, queue, datapoints):
+        """Publish datapoints to a broker."""
+        msg = MetricMessage()
+        msg.extend(datapoints)
+        self._broker.publish_message(exchange, queue, msg)
+
+    def recv_datapoints(self, exchange, queue):
+        """Retrieve datapoints from a broker."""
+        contents = self._broker.get_dispatched(exchange, queue)
+        vumi_msgs = [Message.from_json(content.body) for content in contents]
+        msgs = [MetricMessage.from_dict(vm.payload) for vm in vumi_msgs]
+        return [msg.datapoints() for msg in msgs]
+
+
+class TestMetricTimeBucket(TestCase):
+    @inlineCallbacks
+    def test_bucketing(self):
+        config = {'buckets': 4, 'bucket_size': 5}
+        worker = get_stubbed_worker(metrics.MetricTimeBucket, config=config)
+        broker = BrokerWrapper(worker._amqp_client.broker)
+        yield worker.startWorker()
+
+        datapoints = [
+            ("vumi.test.foo", ("agg",), [(1230, 1.5), (1235, 2.0)]),
+            ("vumi.test.bar", ("sum",), [(1240, 1.0)]),
+            ]
+        broker.send_datapoints("vumi.metrics", "vumi.metrics", datapoints)
+        yield broker.kick_delivery()
+
+        buckets = [broker.recv_datapoints("vumi.metrics.buckets",
+                                          "bucket.%d" % i) for i in range(4)]
+
+        expected_buckets = [
+            [],
+            [[[u'vumi.test.bar', ['sum'], [[1240, 1.0]]]]],
+            [[[u'vumi.test.foo', ['agg'], [[1230, 1.5]]]],
+             [[u'vumi.test.foo', ['agg'], [[1235, 2.0]]]]],
+            [],
+            ]
+
+        self.assertEqual(buckets, expected_buckets)
+
+        yield worker.stopWorker()
+
+
+class TestMetricAggregator(TestCase):
+    @inlineCallbacks
+    def test_aggregating(self):
+        config = {'bucket': 3, 'bucket_size': 5}
+        worker = get_stubbed_worker(metrics.MetricAggregator, config=config)
+        broker = BrokerWrapper(worker._amqp_client.broker)
+        yield worker.startWorker()
+
+        # TODO: publish some messages, check they get aggregated correctly
+
+        yield worker.stopWorker()
+
+
 class TestMetricAggregation(TestCase):
+    """Tests tying MetricTimeBucket and MetricAggregator together."""
 
     def setUp(self):
         self._workers = []
         self._broker = None
+
+    def send(self, datapoints):
+        self._broker.send_datapoints("vumi.metrics",
+                                     "vumi.metrics", datapoints)
+
+    def recv(self):
+        return self._broker.recv_datapoints("vumi.metrics.aggregates",
+                                            "vumi.metrics.aggregates")
 
     @inlineCallbacks
     def tearDown(self):
         for worker in self._workers:
             yield worker.stopWorker()
 
-    def publish(self, msg):
-        self._broker.publish_message("vumi.metrics",
-                                     "vumi.metrics", msg)
-
-    def get_dispatched(self):
-        return self._broker.get_dispatched("vumi.metrics.aggregates",
-                                           "vumi.metrics.aggregates")
-
     @inlineCallbacks
     def _setup_workers(self, bucketters, aggregators, bucket_size):
-        self._broker = FakeAMQPBroker()
+        broker = FakeAMQPBroker()
+        self._broker = BrokerWrapper(broker)
 
         bucket_workers = []
         bucket_config = {
@@ -40,7 +108,7 @@ class TestMetricAggregation(TestCase):
         for _i in range(bucketters):
             worker = get_stubbed_worker(metrics.MetricTimeBucket,
                                         config=bucket_config,
-                                        broker=self._broker)
+                                        broker=broker)
             yield worker.startWorker()
             bucket_workers.append(worker)
 
@@ -52,7 +120,7 @@ class TestMetricAggregation(TestCase):
             config = aggregator_config.copy()
             config['bucket'] = i
             worker = get_stubbed_worker(metrics.MetricAggregator,
-                                        config=config, broker=self._broker)
+                                        config=config, broker=broker)
             yield worker.startWorker()
             aggregator_workers.append(worker)
 
@@ -64,21 +132,18 @@ class TestMetricAggregation(TestCase):
     def test_aggregating_one_metric(self):
         yield self._setup_workers(1, 1, 1)
 
-        msg = MetricMessage()
         now = int(time.time())
-        msg.append(("vumi.test.foo", ["sum"], [(now, 1.0), (now, 2.0)]))
-        self.publish(msg)
-        self.publish(msg)
+        datapoints = [("vumi.test.foo", ["sum"], [(now, 1.0), (now, 2.0)])]
+        self.send(datapoints)
+        self.send(datapoints)
 
-        yield self._broker.kick_delivery()
-        yield self._broker.kick_delivery()
-        time.sleep(1.1)
-        yield self._broker.kick_delivery()
+        yield self._broker.kick_delivery()  # deliver to bucketters
+        yield self._broker.kick_delivery()  # deliver to aggregators
+        time.sleep(1.1)  # wait for aggregators to do work
+        yield self._broker.kick_delivery()  # deliver
 
-        content, = self.get_dispatched()
-        vumi_msg = Message.from_json(content.body)
-        msg = MetricMessage.from_dict(vumi_msg.payload)
-        self.assertEqual(msg.datapoints(), [
+        datapoints, = self.recv()
+        self.assertEqual(datapoints, [
             [u'vumi.test.foo.sum', u'', [[now, 6.0]]]
             ])
 
@@ -107,14 +172,12 @@ class TestGraphiteMetricsCollector(TestCase):
     @inlineCallbacks
     def test_single_message(self):
         worker = get_stubbed_worker(metrics.GraphiteMetricsCollector)
-        broker = worker._amqp_client.broker
+        broker = BrokerWrapper(worker._amqp_client.broker)
         yield worker.startWorker()
 
-        msg = MetricMessage()
-        msg.append(("vumi.test.foo", "", [(1234, 1.5)]))
-
-        broker.publish_message("vumi.metrics.aggregates",
-                               "vumi.metrics.aggregates", msg)
+        datapoints = [("vumi.test.foo", "", [(1234, 1.5)])]
+        broker.send_datapoints("vumi.metrics.aggregates",
+                               "vumi.metrics.aggregates", datapoints)
         yield broker.kick_delivery()
 
         content, = broker.get_dispatched("graphite", "vumi.test.foo")
@@ -132,17 +195,16 @@ class TestRandomMetricsGenerator(TestCase):
                                         "manager_period": "0.1",
                                         "generator_period": "0.1",
                                     })
-        broker = worker._amqp_client.broker
+        broker = BrokerWrapper(worker._amqp_client.broker)
         yield worker.startWorker()
 
         yield worker.wake_after_run()
         yield worker.wake_after_run()
 
-        msg1, msg2 = broker.get_dispatched('vumi.metrics', 'vumi.metrics')
-        msg1 = Message.from_json(msg1.body).payload
-        self.assertEqual(msg1["datapoints"], [])
-        msg2 = Message.from_json(msg2.body).payload
-        self.assertEqual(sorted(d[0] for d in msg2["datapoints"]),
+        datapoints1, datapoints2 = broker.recv_datapoints('vumi.metrics',
+                                                          'vumi.metrics')
+        self.assertEqual(datapoints1, [])
+        self.assertEqual(sorted(d[0] for d in datapoints2),
                          ["vumi.random.count", "vumi.random.timer",
                           "vumi.random.value"])
 
