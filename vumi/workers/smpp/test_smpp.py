@@ -553,21 +553,28 @@ class FakeRedisRespTestCase(TestCase):
             "ESME_ROK"              : self.transport.ok,
             "ESME_RINVMSGLEN"       : self.transport.mess_permfault,
             "ESME_RINVCMDLEN"       : self.transport.mess_permfault,
-            "ESME_RINVCMDID"        : self.transport.ok,
-            "ESME_RINVBNDSTS"       : self.transport.ok,
-            "ESME_RALYBND"          : self.transport.ok,
-            "ESME_RINVPRTFLG"       : self.transport.ok,
-            "ESME_RINVREGDLVFLG"    : self.transport.ok,
+            "ESME_RINVCMDID"        : self.transport.mess_permfault,
+
+            "ESME_RINVBNDSTS"       : self.transport.conn_tempfault,
+            "ESME_RALYBND"          : self.transport.conn_tempfault,
+
+            "ESME_RINVPRTFLG"       : self.transport.mess_permfault,
+            "ESME_RINVREGDLVFLG"    : self.transport.mess_permfault,
+
             "ESME_RSYSERR"          : self.transport.conn_permfault,
-            "ESME_RINVSRCADR"       : self.transport.ok,
-            "ESME_RINVDSTADR"       : self.transport.ok,
-            "ESME_RINVMSGID"        : self.transport.ok,
-            "ESME_RBINDFAIL"        : self.transport.ok,
+
+            "ESME_RINVSRCADR"       : self.transport.mess_permfault,
+            "ESME_RINVDSTADR"       : self.transport.mess_permfault,
+            "ESME_RINVMSGID"        : self.transport.mess_permfault,
+
+            "ESME_RBINDFAIL"        : self.transport.conn_permfault,
             "ESME_RINVPASWD"        : self.transport.conn_permfault,
             "ESME_RINVSYSID"        : self.transport.conn_permfault,
-            "ESME_RCANCELFAIL"      : self.transport.ok,
-            "ESME_RREPLACEFAIL"     : self.transport.ok,
-            "ESME_RMSGQFUL"         : self.transport.ok,
+
+            "ESME_RCANCELFAIL"      : self.transport.mess_permfault,
+            "ESME_RREPLACEFAIL"     : self.transport.mess_permfault,
+
+            "ESME_RMSGQFUL"         : self.transport.mess_tempfault,
             "ESME_RINVSERTYP"       : self.transport.ok,
             "ESME_RINVNUMDESTS"     : self.transport.ok,
             "ESME_RINVDLNAME"       : self.transport.ok,

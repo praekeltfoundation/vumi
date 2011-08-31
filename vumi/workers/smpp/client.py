@@ -177,21 +177,28 @@ class EsmeTransceiver(Protocol):
             "ESME_ROK"              : self.command_status_dispatch_ok,
             "ESME_RINVMSGLEN"       : self.command_status_dispatch_mess_permfault,
             "ESME_RINVCMDLEN"       : self.command_status_dispatch_mess_permfault,
-            #"ESME_RINVCMDID"        : ,
-            #"ESME_RINVBNDSTS"       : ,
-            #"ESME_RALYBND"          : ,
-            #"ESME_RINVPRTFLG"       : ,
-            #"ESME_RINVREGDLVFLG"    : ,
+            "ESME_RINVCMDID"        : self.command_status_dispatch_mess_permfault,
+
+            "ESME_RINVBNDSTS"       : self.command_status_dispatch_conn_tempfault,
+            "ESME_RALYBND"          : self.command_status_dispatch_conn_tempfault,
+
+            "ESME_RINVPRTFLG"       : self.command_status_dispatch_mess_permfault,
+            "ESME_RINVREGDLVFLG"    : self.command_status_dispatch_mess_permfault,
+
             "ESME_RSYSERR"          : self.command_status_dispatch_conn_permfault,
-            #"ESME_RINVSRCADR"       : ,
-            #"ESME_RINVDSTADR"       : ,
-            #"ESME_RINVMSGID"        : ,
-            #"ESME_RBINDFAIL"        : ,
+
+            "ESME_RINVSRCADR"       : self.command_status_dispatch_mess_permfault,
+            "ESME_RINVDSTADR"       : self.command_status_dispatch_mess_permfault,
+            "ESME_RINVMSGID"        : self.command_status_dispatch_mess_permfault,
+
+            "ESME_RBINDFAIL"        : self.command_status_dispatch_conn_permfault,
             "ESME_RINVPASWD"        : self.command_status_dispatch_conn_permfault,
             "ESME_RINVSYSID"        : self.command_status_dispatch_conn_permfault,
-            #"ESME_RCANCELFAIL"      : ,
-            #"ESME_RREPLACEFAIL"     : ,
-            #"ESME_RMSGQFUL"         : ,
+
+            "ESME_RCANCELFAIL"      : self.command_status_dispatch_mess_permfault,
+            "ESME_RREPLACEFAIL"     : self.command_status_dispatch_mess_permfault,
+
+            "ESME_RMSGQFUL"         : self.command_status_dispatch_mess_tempfault,
             #"ESME_RINVSERTYP"       : ,
             #"ESME_RINVNUMDESTS"     : ,
             #"ESME_RINVDLNAME"       : ,
