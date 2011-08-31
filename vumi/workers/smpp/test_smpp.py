@@ -551,28 +551,14 @@ class FakeRedisRespTestCase(TestCase):
         # Some error codes would occur on bind attempts
         bind_dispatch_methods = {
             "ESME_ROK"              : self.transport.ok,
-            "ESME_RINVMSGLEN"       : self.transport.mess_permfault,
-            "ESME_RINVCMDLEN"       : self.transport.mess_permfault,
-            "ESME_RINVCMDID"        : self.transport.mess_permfault,
-
             "ESME_RINVBNDSTS"       : self.transport.conn_tempfault,
             "ESME_RALYBND"          : self.transport.conn_tempfault,
 
-            "ESME_RINVPRTFLG"       : self.transport.mess_permfault,
-            "ESME_RINVREGDLVFLG"    : self.transport.mess_permfault,
-
             "ESME_RSYSERR"          : self.transport.conn_permfault,
-
-            "ESME_RINVSRCADR"       : self.transport.mess_permfault,
-            "ESME_RINVDSTADR"       : self.transport.mess_permfault,
-            "ESME_RINVMSGID"        : self.transport.mess_permfault,
 
             "ESME_RBINDFAIL"        : self.transport.conn_permfault,
             "ESME_RINVPASWD"        : self.transport.conn_permfault,
             "ESME_RINVSYSID"        : self.transport.conn_permfault,
-
-            "ESME_RCANCELFAIL"      : self.transport.mess_permfault,
-            "ESME_RREPLACEFAIL"     : self.transport.mess_permfault,
 
             "ESME_RMSGQFUL"         : self.transport.mess_tempfault,
             "ESME_RINVSERTYP"       : self.transport.ok,
@@ -608,6 +594,22 @@ class FakeRedisRespTestCase(TestCase):
 
         # Some error codes would occur post bind i.e. on submission attempts
         submit_dispatch_methods = {
+            "ESME_RINVMSGLEN"       : self.transport.mess_permfault,
+            "ESME_RINVCMDLEN"       : self.transport.mess_permfault,
+            "ESME_RINVCMDID"        : self.transport.mess_permfault,
+
+            "ESME_RINVPRTFLG"       : self.transport.mess_permfault,
+            "ESME_RINVREGDLVFLG"    : self.transport.mess_permfault,
+
+            "ESME_RINVSRCADR"       : self.transport.mess_permfault,
+            "ESME_RINVDSTADR"       : self.transport.mess_permfault,
+            "ESME_RINVMSGID"        : self.transport.mess_permfault,
+
+            "ESME_RCANCELFAIL"      : self.transport.mess_permfault,
+            "ESME_RREPLACEFAIL"     : self.transport.mess_permfault,
+
+            "ESME_RMSGQFUL"         : self.transport.mess_tempfault,
+
             "ESME_RTHROTTLED"       : self.transport.conn_throttle,
         }
 
