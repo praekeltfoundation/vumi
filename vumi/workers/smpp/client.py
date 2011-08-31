@@ -215,7 +215,9 @@ class EsmeTransceiver(Protocol):
             "ESME_RINVSRCNPI"       : self.command_status_dispatch_mess_permfault,
             "ESME_RINVDSTTON"       : self.command_status_dispatch_mess_permfault,
             "ESME_RINVDSTNPI"       : self.command_status_dispatch_mess_permfault,
+
             "ESME_RINVSYSTYP"       : self.command_status_dispatch_conn_permfault,
+
             "ESME_RINVREPFLAG"      : self.command_status_dispatch_mess_permfault,
 
             "ESME_RINVNUMMSGS"      : self.command_status_dispatch_mess_tempfault,
