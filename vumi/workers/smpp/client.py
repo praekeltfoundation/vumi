@@ -175,8 +175,8 @@ class EsmeTransceiver(Protocol):
     def build_maps(self):
         self.ESME_command_status_dispatch_map = {
             "ESME_ROK"              : self.command_status_dispatch_ok,
-            #"ESME_RINVMSGLEN"       : ,
-            #"ESME_RINVCMDLEN"       : ,
+            "ESME_RINVMSGLEN"       : self.command_status_dispatch_mess_permfault,
+            "ESME_RINVCMDLEN"       : self.command_status_dispatch_mess_permfault,
             #"ESME_RINVCMDID"        : ,
             #"ESME_RINVBNDSTS"       : ,
             #"ESME_RALYBND"          : ,

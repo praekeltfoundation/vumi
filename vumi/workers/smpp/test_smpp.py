@@ -362,7 +362,19 @@ class RedisTestSmppTransport(SmppTransport):
         #print kwargs.get('pdu')
         pass
 
+    def mess_permfault(self, *args, **kwargs):
+        #print kwargs.get('pdu')
+        pass
+
+    def mess_tempfault(self, *args, **kwargs):
+        #print kwargs.get('pdu')
+        pass
+
     def conn_permfault(self, *args, **kwargs):
+        #print kwargs.get('pdu')
+        pass
+
+    def conn_tempfault(self, *args, **kwargs):
         #print kwargs.get('pdu')
         pass
 
@@ -529,15 +541,18 @@ class FakeRedisRespTestCase(TestCase):
         # test with error messages
         self.esme.update_error_handlers({
             "ok": self.transport.ok,
+            "mess_permfault": self.transport.mess_permfault,
+            "mess_tempfault": self.transport.mess_tempfault,
             "conn_permfault": self.transport.conn_permfault,
+            "conn_tempfault": self.transport.conn_tempfault,
             "conn_throttle": self.transport.conn_throttle,
             })
 
         # Some error codes would occur on bind attempts
         bind_dispatch_methods = {
             "ESME_ROK"              : self.transport.ok,
-            "ESME_RINVMSGLEN"       : self.transport.ok,
-            "ESME_RINVCMDLEN"       : self.transport.ok,
+            "ESME_RINVMSGLEN"       : self.transport.mess_permfault,
+            "ESME_RINVCMDLEN"       : self.transport.mess_permfault,
             "ESME_RINVCMDID"        : self.transport.ok,
             "ESME_RINVBNDSTS"       : self.transport.ok,
             "ESME_RALYBND"          : self.transport.ok,
