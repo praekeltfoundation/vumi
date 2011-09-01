@@ -7,6 +7,7 @@ from uuid import uuid4
 
 import redis
 from twisted.internet.defer import inlineCallbacks
+from twisted.internet.task import LoopingCall
 from twisted.python import log
 
 from vumi.service import Worker
@@ -21,6 +22,7 @@ class FailureWorker(Worker):
     """
 
     GRANULARITY = 5  # seconds
+    DELIVERY_PERIOD = 3
 
     MAX_DELAY = 3600
     INITIAL_DELAY = 1
@@ -28,7 +30,25 @@ class FailureWorker(Worker):
 
     @inlineCallbacks
     def startWorker(self):
-        # Connect to Redis
+        self.configure_retries()
+        self.set_up_redis()
+        retry_rkey = self.get_rkey('retry')
+        failures_rkey = self.get_rkey('failures')
+        self.retry_publisher = yield self.publish_to(retry_rkey)
+        self.consumer = yield self.consume(failures_rkey, self.process_message)
+        self.start_retry_delivery()
+
+    def stopWorker(self):
+        if self.delivery_loop and self.delivery_loop.running:
+            self.delivery_loop.stop()
+
+    def configure_retries(self):
+        for param in ['GRANULARITY', 'MAX_DELAY', 'INITIAL_DELAY',
+                      'DELAY_FACTOR', 'DELIVERY_PERIOD']:
+            setattr(self, param, self.config.get('retry_' + param.lower(),
+                                                 getattr(self, param)))
+
+    def set_up_redis(self):
         if not hasattr(self, 'r_server'):
             self.r_server = redis.Redis(
                 "localhost", db=get_deploy_int(self._amqp_client.vhost))
@@ -36,10 +56,12 @@ class FailureWorker(Worker):
         self.r_prefix = "failures:%s" % (self.config['transport_name'],)
         log.msg("r_prefix = %s" % self.r_prefix)
         self._retry_timestamps_key = self.r_key("retry_timestamps")
-        retry_rkey = self.get_rkey('retry')
-        failures_rkey = self.get_rkey('failures')
-        self.retry_publisher = yield self.publish_to(retry_rkey)
-        self.consumer = yield self.consume(failures_rkey, self.process_message)
+
+    def start_retry_delivery(self):
+        self.delivery_loop = None
+        if self.DELIVERY_PERIOD:
+            self.delivery_loop = LoopingCall(self.deliver_retries)
+            self.delivery_loop.start(self.DELIVERY_PERIOD)
 
     def get_rkey(self, route_name):
         return self.config['%s_routing_key' % route_name] % self.config
@@ -50,14 +72,12 @@ class FailureWorker(Worker):
         """
         return "#".join((self.r_prefix, key))
 
-    def failure_key(self, timestamp=None, failure_id=None):
+    def failure_key(self):
         """
         Construct a failure key.
         """
-        if timestamp is None:
-            timestamp = datetime.utcnow()
-        if failure_id is None:
-            failure_id = uuid4().get_hex()
+        timestamp = datetime.utcnow()
+        failure_id = uuid4().get_hex()
         timestamp = timestamp.isoformat().split('.')[0]
         return self.r_key(".".join(("failure", timestamp, failure_id)))
 
@@ -115,17 +135,16 @@ class FailureWorker(Worker):
         timestamp += self.GRANULARITY - (timestamp % self.GRANULARITY)
         return datetime.utcfromtimestamp(timestamp).isoformat().split('.')[0]
 
-    def get_next_read_timestamp(self, now=None):
-        if now is None:
-            now = int(time.time())
+    def get_next_read_timestamp(self):
+        now = int(time.time())
         timestamp = datetime.utcfromtimestamp(now).isoformat().split('.')[0]
         next_timestamp = self.r_server.zrange(self._retry_timestamps_key, 0, 0)
         if next_timestamp and next_timestamp[0] <= timestamp:
             return next_timestamp[0]
         return None
 
-    def get_next_retry_key(self, now=None):
-        timestamp = self.get_next_read_timestamp(now)
+    def get_next_retry_key(self):
+        timestamp = self.get_next_read_timestamp()
         if not timestamp:
             return None
         bucket_key = self.r_key("retry_keys." + timestamp)
@@ -136,14 +155,15 @@ class FailureWorker(Worker):
 
     def deliver_retry(self, retry_key, publisher):
         failure = self.get_failure(retry_key)
-        publisher.publish_raw(failure['message'])
+        return publisher.publish_raw(failure['message'])
 
+    @inlineCallbacks
     def deliver_retries(self):
         while True:
             retry_key = self.get_next_retry_key()
             if not retry_key:
                 return
-            self.deliver_retry(retry_key, self.retry_publisher)
+            yield self.deliver_retry(retry_key, self.retry_publisher)
 
     def next_retry_delay(self, delay):
         if not delay:
