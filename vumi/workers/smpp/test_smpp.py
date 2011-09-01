@@ -481,6 +481,7 @@ class FakeRedisRespTestCase(TestCase):
         self.transport.r_prefix = "%(system_id)s@%(host)s:%(port)s" % (
                 self.config)
         self.transport.publisher = TestPublisher()
+        self.transport.failure_publisher = TestPublisher()
         self.esme.setSubmitSMRespCallback(self.transport.submit_sm_resp)
 
     def tearDown(self):
@@ -537,6 +538,18 @@ class FakeRedisRespTestCase(TestCase):
         self.esme.handleData(response4.get_bin())
         self.assertEquals(self.transport.publisher.queue[3][0].payload,
                 {'id': '447', 'transport_message_id': '3rd_party_id_4'})
+
+        self.transport.send_failure(
+                Message(
+                    id=555,
+                    message="hello world",
+                    to_msisdn="1111111111"),
+                "testing")
+        self.assertEquals(self.transport.failure_publisher.queue[0][0],
+                Message(message={"id": 555,
+                    "message": "hello world",
+                    "to_msisdn": "1111111111"},
+                    reason="testing"))
 
         # test with error messages
         self.esme.update_error_handlers({
