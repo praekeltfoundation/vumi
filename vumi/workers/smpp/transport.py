@@ -12,6 +12,7 @@ from vumi.utils import get_operator_number, get_deploy_int
 from datetime import datetime
 import redis
 
+
 class SmppTransport(Worker):
     """
     The SmppTransport
@@ -34,7 +35,7 @@ class SmppTransport(Worker):
         factory.loadDefaults(self.config)
 
         self.smpp_offset = self.config['smpp_offset']
-        self.transport_name = self.config.get('TRANSPORT_NAME','fallback')
+        self.transport_name = self.config.get('TRANSPORT_NAME', 'fallback')
 
         self.sequence_key = "%s_%s#last_sequence_number" % (self.r_prefix,
                                                             self.smpp_offset)
@@ -54,7 +55,6 @@ class SmppTransport(Worker):
                 factory.defaults['port'],
                 factory)
 
-
     @inlineCallbacks
     def esme_connected(self, client):
         log.msg("ESME Connected, adding handlers")
@@ -64,6 +64,10 @@ class SmppTransport(Worker):
         # Start the publisher
         self.publisher = yield self.publish_to('smpp.fallback')
 
+        # Start the failure publisher
+        rkey = 'sms.outbound.%s.failures' % self.transport_name
+        self.failure_publisher = yield self.publish_to(rkey)
+
         # Start the consumer
         yield self.consume('sms.outbound.%s' % self.transport_name,
                 self.consume_message)
@@ -71,7 +75,8 @@ class SmppTransport(Worker):
     def consume_message(self, message):
         log.msg("Consumed outgoing message", message)
         sequence_number = self.send_smpp(**message.payload)
-        self.r_server.set("%s_%s#last_sequence_number" % (self.r_prefix, self.smpp_offset),
+        self.r_server.set("%s_%s#last_sequence_number" % (
+            self.r_prefix, self.smpp_offset),
                 sequence_number)
         self.r_server.set("%s#%s" % (self.r_prefix, sequence_number),
                 message.payload.get("id"))
@@ -88,13 +93,13 @@ class SmppTransport(Worker):
         sent_sms_id = self.r_server.get(redis_key)
         transport_msg_id = kwargs['message_id']
         self.r_server.delete(redis_key)
-        log.msg("Mapping transport_msg_id=%s to sent_sms_id=%s" % (transport_msg_id, sent_sms_id))
+        log.msg("Mapping transport_msg_id=%s to sent_sms_id=%s" % (
+            transport_msg_id, sent_sms_id))
         self.publisher.publish_message(Message(**{
             'id': sent_sms_id,
             'transport_message_id': transport_msg_id
-            }), routing_key = 'sms.ack.%s' % self.transport_name)
+            }), routing_key='sms.ack.%s' % self.transport_name)
         yield log.msg("SUBMIT SM RESP %s" % repr(kwargs))
-
 
     @inlineCallbacks
     def delivery_report(self, *args, **kwargs):
@@ -110,36 +115,40 @@ class SmppTransport(Worker):
         yield self.publisher.publish_message(Message(**dictionary),
             routing_key='sms.receipt.%s' % (self.transport_name,))
 
-
     @inlineCallbacks
     def deliver_sm(self, *args, **kwargs):
         yield self.publisher.publish_message(Message(**kwargs),
             routing_key='sms.inbound.%s.%s' % (
                 self.transport_name, kwargs.get('destination_addr')))
 
-
     def send_smpp(self, id, to_msisdn, message, *args, **kwargs):
         # TODO: Do we want this in the transport or should it be part of the
         #       campaign logic?
 
-        log.msg("Sending SMPP, to: %s, message: %s" % (to_msisdn, repr(message)))
+        log.msg("Sending SMPP to: %s message: %s" % (to_msisdn, repr(message)))
         # first do a lookup in our YAML to see if we've got a source_addr
         # defined for the given MT number, if not, trust the from_msisdn
         # in the message
         route = get_operator_number(to_msisdn,
-                self.config.get('COUNTRY_CODE',''),
-                self.config.get('OPERATOR_PREFIX',{}),
-                self.config.get('OPERATOR_NUMBER',{})) or kwargs.get('from_msisdn', '')
+                self.config.get('COUNTRY_CODE', ''),
+                self.config.get('OPERATOR_PREFIX', {}),
+                self.config.get('OPERATOR_NUMBER', {})) \
+            or kwargs.get('from_msisdn', '')
         sequence_number = self.esme_client.submit_sm(
-                short_message = message.encode('utf-8'),
-                destination_addr = str(to_msisdn),
-                source_addr = route,
+                short_message=message.encode('utf-8'),
+                destination_addr=str(to_msisdn),
+                source_addr=route,
                 )
         return sequence_number
-
-    def send_failure(self, message, reason=None):
-        log.msg("Failed to send: %s reason: %s" % (message, reason))
 
     def stopWorker(self):
         log.msg("Stopping the SMPPTransport")
 
+    def send_failure(self, message, reason=None):
+        """Send a failure report."""
+        log.msg("Failed to send: %s reason: %s" % (message, reason))
+        try:
+            self.failure_publisher.publish_message(Message(
+                    message=message.payload, reason=reason))
+        except Exception, e:
+            log.err("Error publishing failure:", message, reason, e)
