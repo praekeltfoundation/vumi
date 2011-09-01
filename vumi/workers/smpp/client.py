@@ -390,6 +390,10 @@ class EsmeTransceiver(Protocol):
         log.msg(self.name, 'STATE :', self.state)
 
     def handle_submit_sm_resp(self, pdu):
+        self.r_server.lpop("%s#unacked" % self.r_prefix)
+        log.msg("%s#unacked: %s" % (
+            self.r_prefix,
+            self.r_server.llen("%s#unacked" % self.r_prefix)))
         message_id = pdu.get('body',{}).get('mandatory_parameters',{}).get('message_id')
         self.__submit_sm_resp_callback(
                 sequence_number = pdu['header']['sequence_number'],
@@ -482,6 +486,10 @@ class EsmeTransceiver(Protocol):
             pdu = SubmitSM(sequence_number, **dict(self.defaults, **kwargs))
             self.incSeq()
             self.sendPDU(pdu)
+            self.r_server.lpush("%s#unacked" % self.r_prefix, 1)
+            log.msg("%s#unacked: %s" % (
+                self.r_prefix,
+                self.r_server.llen("%s#unacked" % self.r_prefix)))
             return sequence_number
         return 0
 
