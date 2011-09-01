@@ -482,6 +482,11 @@ class EsmeTransceiver(Protocol):
 
     def submit_sm(self, **kwargs):
         if self.state in ['BOUND_TX', 'BOUND_TRX']:
+            unacked = self.r_server.llen("%s#unacked" % self.r_prefix)
+            #log.msg("unacked: %s" % repr(unacked))
+            # if unacked >= 1000 don't send
+            # perhaps queue message for retry ?
+            # that would show up in metrics, which would be good
             sequence_number = self.getSeq()
             pdu = SubmitSM(sequence_number, **dict(self.defaults, **kwargs))
             self.incSeq()
