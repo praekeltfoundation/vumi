@@ -19,24 +19,24 @@ class SmppTransport(Worker):
 
     def startWorker(self):
         log.msg("Starting the SmppTransport with %s" % self.config)
-        
+
         # TODO: move this to a config file
         dbindex = get_deploy_int(self._amqp_client.vhost)
-        
+
         # Connect to Redis
         self.r_server = redis.Redis("localhost", db=dbindex)
         self.r_prefix = "%(system_id)s@%(host)s:%(port)s" % self.config
         log.msg("Connected to Redis, prefix: %s" % self.r_prefix)
-        
+
         # start the Smpp transport
-        factory = EsmeTransceiverFactory(self.config, 
+        factory = EsmeTransceiverFactory(self.config,
                                             self._amqp_client.vumi_options)
         factory.loadDefaults(self.config)
-        
+
         self.smpp_offset = self.config['smpp_offset']
         self.transport_name = self.config.get('TRANSPORT_NAME','fallback')
-        
-        self.sequence_key = "%s_%s#last_sequence_number" % (self.r_prefix, 
+
+        self.sequence_key = "%s_%s#last_sequence_number" % (self.r_prefix,
                                                             self.smpp_offset)
         log.msg("sequence_key = %s" % (self.sequence_key))
         last_sequence_number = int(self.r_server.get(self.sequence_key) or 0)
@@ -47,6 +47,7 @@ class SmppTransport(Worker):
         factory.setSubmitSMRespCallback(self.submit_sm_resp)
         factory.setDeliveryReportCallback(self.delivery_report)
         factory.setDeliverSMCallback(self.deliver_sm)
+        factory.setSendFailureCallback(self.send_failure)
         log.msg(factory.defaults)
         reactor.connectTCP(
                 factory.defaults['host'],
@@ -62,11 +63,11 @@ class SmppTransport(Worker):
 
         # Start the publisher
         self.publisher = yield self.publish_to('smpp.fallback')
-        
+
         # Start the consumer
-        yield self.consume('sms.outbound.%s' % self.transport_name, 
+        yield self.consume('sms.outbound.%s' % self.transport_name,
                 self.consume_message)
-    
+
     def consume_message(self, message):
         log.msg("Consumed outgoing message", message)
         sequence_number = self.send_smpp(**message.payload)
@@ -74,12 +75,12 @@ class SmppTransport(Worker):
                 sequence_number)
         self.r_server.set("%s#%s" % (self.r_prefix, sequence_number),
                 message.payload.get("id"))
-    
+
     @inlineCallbacks
     def esme_disconnected(self):
         log.msg("ESME Disconnected")
         pass
-    
+
     @inlineCallbacks
     def submit_sm_resp(self, *args, **kwargs):
         redis_key = "%s#%s" % (self.r_prefix, kwargs['sequence_number'])
@@ -112,18 +113,18 @@ class SmppTransport(Worker):
 
     @inlineCallbacks
     def deliver_sm(self, *args, **kwargs):
-        yield self.publisher.publish_message(Message(**kwargs), 
+        yield self.publisher.publish_message(Message(**kwargs),
             routing_key='sms.inbound.%s.%s' % (
                 self.transport_name, kwargs.get('destination_addr')))
 
 
     def send_smpp(self, id, to_msisdn, message, *args, **kwargs):
-        # TODO: Do we want this in the transport or should it be part of the 
+        # TODO: Do we want this in the transport or should it be part of the
         #       campaign logic?
-        
+
         log.msg("Sending SMPP, to: %s, message: %s" % (to_msisdn, repr(message)))
         # first do a lookup in our YAML to see if we've got a source_addr
-        # defined for the given MT number, if not, trust the from_msisdn 
+        # defined for the given MT number, if not, trust the from_msisdn
         # in the message
         route = get_operator_number(to_msisdn,
                 self.config.get('COUNTRY_CODE',''),
@@ -135,6 +136,9 @@ class SmppTransport(Worker):
                 source_addr = route,
                 )
         return sequence_number
+
+    def send_failure(self, message, reason=None):
+        log.msg("Failed to send: %s reason: %s" % (message, reason))
 
     def stopWorker(self):
         log.msg("Stopping the SMPPTransport")

@@ -98,6 +98,7 @@ class EsmeTransceiver(Protocol):
         self.__submit_sm_resp_callback = None
         self.__delivery_report_callback = None
         self.__deliver_sm_callback = None
+        self._send_failure_callback = None
         self.error_handlers = {
                 "ok": self.dummy_ok,
                 "mess_permfault": self.dummy_mess_permfault,
@@ -331,6 +332,9 @@ class EsmeTransceiver(Protocol):
 
     def setDeliverSMCallback(self, deliver_sm_callback):
         self.__deliver_sm_callback = deliver_sm_callback
+
+    def setSendFailureCallback(self, send_failure_callback):
+        self._send_failure_callback = send_failure_callback
 
     def connectionMade(self):
         self.state = 'OPEN'
@@ -597,6 +601,9 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
 
     def setDeliverSMCallback(self, deliver_sm_callback):
         self.__deliver_sm_callback = deliver_sm_callback
+
+    def setSendFailureCallback(self, send_failure_callback):
+        self._send_failure_callback = send_failure_callback
 
     def startedConnecting(self, connector):
         print 'Started to connect.'
