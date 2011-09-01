@@ -54,7 +54,9 @@ class SmppTransport(Worker):
     def esme_connected(self, client):
         log.msg("ESME Connected, adding handlers")
         self.esme_client = client
-        self.esme_client.set_handler(self)
+        self.esme_client.update_error_handlers({
+            "mess_tempfault": self.mess_tempfault,
+            })
 
         # Start the publisher
         self.publisher = yield self.publish_to('smpp.fallback')
@@ -154,8 +156,12 @@ class SmppTransport(Worker):
     def send_failure(self, message, reason=None):
         """Send a failure report."""
         log.msg("Failed to send: %s reason: %s" % (message, reason))
-        try:
-            self.failure_publisher.publish_message(Message(
-                    message=message.payload, reason=reason))
-        except Exception, e:
-            log.err("Error publishing failure:", message, reason, e)
+        self.failure_publisher.publish_message(Message(
+                message=message.payload, reason=reason))
+
+    def mess_tempfault(self, *args, **kwargs):
+        pdu = kwargs.get('pdu')
+        sequence_number = pdu['header']['sequence_number']
+        id = self.r_get_id_for_sequence(sequence_number)
+        reason = pdu['header']['command_status']
+        self.send_failure(Message(id=id), reason)

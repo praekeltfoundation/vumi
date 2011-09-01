@@ -244,7 +244,8 @@ class EsmeTransceiver(Protocol):
                 pdu['header']['command_status'],
                 self.dispatch_ok)
         handler = method()
-        log.msg("ERROR handler:%s pdu:%s" % (handler, pdu))
+        if pdu['header']['command_status'] != "ESME_ROK":
+            log.msg("ERROR handler:%s pdu:%s" % (handler, pdu))
         return handler
 
     '''This maps SMPP error states to VUMI error states
@@ -270,10 +271,6 @@ class EsmeTransceiver(Protocol):
 
     def dispatch_conn_throttle(self):
         return self.error_handlers.get("conn_throttle")
-
-    # TODO this is currently unused ... i think
-    def set_handler(self, handler):
-        self.handler = handler
 
     def update_error_handlers(self, handler_dict={}):
         self.error_handlers.update(handler_dict)
