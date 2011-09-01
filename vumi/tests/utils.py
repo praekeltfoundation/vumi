@@ -9,11 +9,11 @@ from contextlib import contextmanager
 
 import pytz
 import txamqp
-from txamqp.client import TwistedDelegate
 from twisted.internet import defer
 
 from vumi.utils import make_vumi_path_abs
-from vumi.service import Worker, WorkerAMQClient
+from vumi.service import Worker
+from vumi.tests.fake_amqp import FakeAMQClient
 
 
 def setup_django_test_database():
@@ -112,7 +112,7 @@ def fake_amq_message(dictionary, delivery_tag='delivery_tag'):
 
 class TestQueue(object):
     """
-    A test queue that mimicks txAMQP's queue behaviour
+    A test queue that mimicks txAMQP's queue behaviour (DEPRECATED)
     """
     def __init__(self, queue, fake_broker=None):
         self.queue = queue
@@ -130,12 +130,14 @@ class TestQueue(object):
 
 
 class TestChannel(object):
+    "(DEPRECATED)"
+
     def __init__(self, channel_id=None, fake_broker=None):
         self.channel_id = channel_id
         self.fake_broker = fake_broker
         self.ack_log = []
         self.publish_log = []
-        self.publish_message_log = []
+        self.publish_message_log = self.publish_log  # TODO: Nuke
 
     def basic_ack(self, tag, multiple=False):
         self.ack_log.append((tag, multiple))
@@ -147,7 +149,6 @@ class TestChannel(object):
         return defer.succeed(None)
 
     def basic_publish(self, *args, **kwargs):
-        self.publish_message_log.append(kwargs)
         self.publish_log.append(kwargs)
         if self.fake_broker:
             self.fake_broker.publish(**kwargs)
@@ -156,104 +157,52 @@ class TestChannel(object):
         return defer.succeed(None)
 
     def exchange_declare(self, *args, **kwargs):
-        pass
+        if self.fake_broker:
+            self.fake_broker.exchange_declare(*args, **kwargs)
 
     def queue_declare(self, *args, **kwargs):
-        pass
+        if self.fake_broker:
+            self.fake_broker.queue_declare(*args, **kwargs)
 
     def queue_bind(self, *args, **kwargs):
-        pass
+        if self.fake_broker:
+            self.fake_broker.queue_bind(*args, **kwargs)
 
-    def basic_consume(self, *args, **kwargs):
-        klass = namedtuple('Reply', ['consumer_tag'])
-        return klass(consumer_tag=1)
+    def basic_consume(self, queue, **kwargs):
+        return namedtuple('Reply', ['consumer_tag'])(consumer_tag=queue)
 
     def close(self, *args, **kwargs):
         return True
 
 
-class StubbedAMQClient(WorkerAMQClient):
-    def __init__(self, queue):
-        self._queue = queue
-        self.vumi_options = {}
-
-    def get_channel(self):
-        return TestChannel()
-
-    def queue(self, *args, **kwargs):
-        return self._queue
-
-
-class TestWorker(Worker):
-    def __init__(self, queue, config=None):
-        if config is None:
-            config = {}
-        self._queue = queue
-        Worker.__init__(self, StubbedAMQClient(queue), config)
-
-
-class TestAMQClient(WorkerAMQClient):
-    def __init__(self, vumi_options=None, fake_broker=None):
-        spec = txamqp.spec.load(make_vumi_path_abs("config/amqp-spec-0-8.xml"))
-        WorkerAMQClient.__init__(self, TwistedDelegate(), '', spec)
-        if vumi_options is not None:
-            self.vumi_options = vumi_options
-        self.fake_broker = fake_broker
-
-    @defer.inlineCallbacks
-    def queue(self, key):
-        yield self.queueLock.acquire()
-        try:
-            try:
-                q = self.queues[key]
-            except KeyError:
-                q = TestQueue([], self.fake_broker)
-                self.queues[key] = q
-        finally:
-            self.queueLock.release()
-        defer.returnValue(q)
-
-    @defer.inlineCallbacks
-    def channel(self, id):
-        yield self.channelLock.acquire()
-        try:
-            try:
-                ch = self.channels[id]
-            except KeyError:
-                ch = TestChannel(id, self.fake_broker)
-                self.channels[id] = ch
-        finally:
-            self.channelLock.release()
-        defer.returnValue(ch)
-
-
-class FakeAMQBroker(object):
-    """
-    This is to allow us to actually route messages.
-
-    To begin with, it'll just stash them by routing key.
-    """
-    def __init__(self):
-        self.dispatched = {}
-        self._queues = {}
-
-    def publish(self, exchange, routing_key, content):
-        # For looking at later:
-        exch = self.dispatched.setdefault(exchange, {})
-        exch.setdefault(routing_key, []).append(content)
-        # For distribution:
-        exch = self._queues.setdefault(exchange, {})
-        exch.setdefault(routing_key, []).append(content)
-
-    def get_dispatched(self, exchange, routing_key):
-        return self.dispatched.get(exchange, {}).get(routing_key, [])
-
-
 def get_stubbed_worker(worker_class, config=None, broker=None):
-    amq_client = TestAMQClient(fake_broker=broker)
-    amq_client.vumi_options = {}
+    spec = txamqp.spec.load(make_vumi_path_abs("config/amqp-spec-0-8.xml"))
+    amq_client = FakeAMQClient(spec, {}, broker)
     worker = worker_class(amq_client, config)
     return worker
+
+
+def get_stubbed_channel(broker=None, id=0):
+    spec = txamqp.spec.load(make_vumi_path_abs("config/amqp-spec-0-8.xml"))
+    amq_client = FakeAMQClient(spec, {}, broker)
+    return amq_client.channel(id)
+
+
+class TestResourceWorker(Worker):
+    port = 9999
+    _resources = ()
+
+    def set_resources(self, resources):
+        self._resources = resources
+
+    def startWorker(self):
+        resources = [(cls(*args), path) for path, cls, args in self._resources]
+        self.resources = self.start_web_resources(resources, self.port)
+        return defer.succeed(None)
+
+    def stopWorker(self):
+        if self.resources:
+            self.resources.stopListening()
 
 
 class FakeRedis(object):
@@ -277,7 +226,7 @@ class FakeRedis(object):
         return self._data.get(key)
 
     def set(self, key, value):
-        value = str(value) # set() sets string value
+        value = str(value)  # set() sets string value
         self._data[key] = value
 
     def delete(self, key):

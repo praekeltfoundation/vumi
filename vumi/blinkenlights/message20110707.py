@@ -1,4 +1,4 @@
-# -*- test-case-name: vumi.blinkenlights.tests.test_message -*-
+# -*- test-case-name: vumi.blinkenlights.tests.test_message20110707 -*-
 
 from datetime import datetime
 

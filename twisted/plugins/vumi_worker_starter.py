@@ -38,6 +38,9 @@ class VumiService(Service):
             with file(config_file, 'r') as stream:
                 config.update(yaml.load(stream))
 
+        # add options set with --set-option
+        config.update(self.options.set_options)
+
         for k, v in self.options.items():
             if k.startswith("config_"):
                 config[k[7:]] = v
@@ -55,6 +58,7 @@ class BasicSet(Options):
     optParameters = Options.optParameters + [
         ["worker_class", None, None, "class of a worker to start"],
         ["config", None, None, "YAML config file to load"],
+        ["set-option", None, None, "Override a config file option"],
         ["config_smpp_increment", None, 1, "Increment for SMPP sequence number (must be >= number of SMPP workers on a single SMPP account)"],
         ["config_smpp_offset", None, 1, "Offset for this worker's SMPP sequence numbers (no duplicates on a single SMPP account and must be <= increment)"],
     ]

@@ -32,6 +32,15 @@ class Options(usage.Options):
         ["specfile", None, "config/amqp-spec-0-8.xml", "AMQP spec file"],
     ]
 
+    def __init__(self):
+        usage.Options.__init__(self)
+        self.set_options = {}
+
+    def opt_set_option(self, keyvalue):
+        """Set a VUMI option (overrides config file values)."""
+        key, _sep, value = keyvalue.partition(':')
+        self.set_options[key] = value
+
 
 class AmqpFactory(protocol.ReconnectingClientFactory):
 
@@ -408,7 +417,12 @@ class WorkerCreator(object):
 
         Return value is the AmqpFactory instance containing the worker.
         """
-        worker_class = load_class_by_string(worker_class)
+        return self.create_worker_by_class(
+            load_class_by_string(worker_class), config, timeout=timeout,
+            bindAddress=bindAddress)
+
+    def create_worker_by_class(self, worker_class, config, timeout=30,
+                               bindAddress=None):
         factory = AmqpFactory(worker_class, deepcopy(self.options), config)
         self._connect(factory, timeout=timeout, bindAddress=bindAddress)
         return factory

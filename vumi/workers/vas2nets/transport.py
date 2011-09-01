@@ -10,6 +10,7 @@ from twisted.python import log
 from twisted.internet.defer import inlineCallbacks, Deferred
 from twisted.internet.protocol import Protocol
 from twisted.internet import reactor
+from twisted.internet.error import ConnectionRefusedError
 
 from StringIO import StringIO
 from vumi.utils import StringProducer, normalize_msisdn
@@ -176,6 +177,7 @@ class HttpResponseHandler(Protocol):
 
 
 class Vas2NetsTransport(Worker):
+    SUPPRESS_EXCEPTIONS = True
 
     @inlineCallbacks
     def startWorker(self):
@@ -212,6 +214,8 @@ class Vas2NetsTransport(Worker):
         """Handle messages arriving meant for delivery via vas2nets"""
         def _send_failure(f):
             self.send_failure(message, f.getTraceback())
+            if self.SUPPRESS_EXCEPTIONS:
+                return None
             return f
         d = self._handle_outbound_message(message)
         d.addErrback(_send_failure)
@@ -248,14 +252,18 @@ class Vas2NetsTransport(Worker):
         log.msg('Hitting %s with %s' % (self.config['url'], default_params))
         log.msg(urlencode(default_params))
 
-        agent = Agent(reactor)
-        response = yield agent.request('POST', self.config['url'],
-            Headers({
-                'User-Agent': ['Vumi Vas2Net Transport'],
-                'Content-Type': ['application/x-www-form-urlencoded'],
-            }),
-            StringProducer(urlencode(default_params))
-        )
+        try:
+            agent = Agent(reactor)
+            response = yield agent.request(
+                'POST', self.config['url'], Headers({
+                        'User-Agent': ['Vumi Vas2Net Transport'],
+                        'Content-Type': ['application/x-www-form-urlencoded'],
+                        }),
+                StringProducer(urlencode(default_params)))
+        except ConnectionRefusedError:
+            log.msg("Connection failed sending message:", data)
+            self.send_failure(message, 'connection refused')
+            return
 
         deferred = Deferred()
         response.deliverBody(HttpResponseHandler(deferred))
@@ -263,6 +271,11 @@ class Vas2NetsTransport(Worker):
 
         log.msg('Headers', list(response.headers.getAllRawHeaders()))
         header = self.config.get('header', 'X-Nth-Smsid')
+
+        if response.code != 200:
+            self.send_failure(message, 'server error: HTTP %s: %s' % (
+                    response.code, response_content))
+            return
 
         if response.headers.hasHeader(header):
             transport_message_id = response.headers.getRawHeaders(header)[0]
@@ -289,5 +302,9 @@ class Vas2NetsTransport(Worker):
         try:
             self.failure_publisher.publish_message(Message(
                     message=message.payload, reason=reason))
+            self.failure_published()
         except Exception, e:
             log.msg("Error publishing failure:", message, reason, e)
+
+    def failure_published(self):
+        pass
