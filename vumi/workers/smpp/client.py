@@ -398,12 +398,13 @@ class EsmeTransceiver(Protocol):
         log.msg("%s#unacked: %s" % (
             self.r_prefix,
             self.r_server.llen("%s#unacked" % self.r_prefix)))
-        message_id = pdu.get('body',{}).get('mandatory_parameters',{}).get('message_id')
+        message_id = pdu.get('body', {}).get(
+                'mandatory_parameters', {}).get('message_id')
         self.__submit_sm_resp_callback(
-                sequence_number = pdu['header']['sequence_number'],
-                command_status = pdu['header']['command_status'],
-                command_id = pdu['header']['command_id'],
-                message_id = message_id)
+                sequence_number=pdu['header']['sequence_number'],
+                command_status=pdu['header']['command_status'],
+                command_id=pdu['header']['command_id'],
+                message_id=message_id)
         if pdu['header']['command_status'] == 'ESME_ROK':
             pass
 
@@ -428,25 +429,27 @@ class EsmeTransceiver(Protocol):
             sequence_number = pdu['header']['sequence_number']
             pdu_resp = DeliverSMResp(sequence_number, **self.defaults)
             self.sendPDU(pdu_resp)
-            delivery_report = re.search( # SMPP v3.4 Issue 1.2 pg. 167 is wrong on id length
-                       'id:(?P<id>\S{,65}) +sub:(?P<sub>...)'
-                    +' +dlvrd:(?P<dlvrd>...)'
-                    +' +submit date:(?P<submit_date>\d*)'
-                    +' +done date:(?P<done_date>\d*)'
-                    +' +stat:(?P<stat>[A-Z]{7})'
-                    +' +err:(?P<err>...)'
-                    +' +[Tt]ext:(?P<text>.{,20})'
-                    +'.*',
+            delivery_report = re.search(
+                    # SMPP v3.4 Issue 1.2 pg. 167 is wrong on id length
+                      'id:(?P<id>\S{,65}) +sub:(?P<sub>...)'
+                    + ' +dlvrd:(?P<dlvrd>...)'
+                    + ' +submit date:(?P<submit_date>\d*)'
+                    + ' +done date:(?P<done_date>\d*)'
+                    + ' +stat:(?P<stat>[A-Z]{7})'
+                    + ' +err:(?P<err>...)'
+                    + ' +[Tt]ext:(?P<text>.{,20})'
+                    + '.*',
                     pdu['body']['mandatory_parameters']['short_message'] or ''
                     )
             if delivery_report:
                 self.__delivery_report_callback(
-                        destination_addr = pdu['body']['mandatory_parameters']['destination_addr'],
-                        source_addr = pdu['body']['mandatory_parameters']['source_addr'],
-                        delivery_report = delivery_report.groupdict()
+                        destination_addr=pdu['body']['mandatory_parameters']['destination_addr'],
+                        source_addr=pdu['body']['mandatory_parameters']['source_addr'],
+                        delivery_report=delivery_report.groupdict()
                         )
             elif detect_multipart(pdu):
-                redis_key = "%s#multi_%s" % (self.r_prefix, multipart_key(detect_multipart(pdu)))
+                redis_key = "%s#multi_%s" % (
+                        self.r_prefix, multipart_key(detect_multipart(pdu)))
                 log.msg("Redis multipart key: %s" % (redis_key))
                 value = json.loads(self.r_server.get(redis_key) or 'null')
                 log.msg("Retrieved value: %s" % (repr(value)))
@@ -455,12 +458,12 @@ class EsmeTransceiver(Protocol):
                 completed = multi.get_completed()
                 if completed:
                     self.r_server.delete(redis_key)
-                    log.msg("Re-assembled Message: %s" % (completed['message']))
+                    log.msg("Reassembled Message: %s" % (completed['message']))
                     # and we can finally pass the whole message on
                     self.__deliver_sm_callback(
-                            destination_addr = completed['to_msisdn'],
-                            source_addr = completed['from_msisdn'],
-                            short_message = completed['message']
+                            destination_addr=completed['to_msisdn'],
+                            source_addr=completed['from_msisdn'],
+                            short_message=completed['message']
                             )
                 else:
                     self.r_server.set(redis_key, json.dumps(multi.get_array()))
@@ -507,7 +510,8 @@ class EsmeTransceiver(Protocol):
             sequence_number = self.getSeq()
             pdu = SubmitMulti(sequence_number, **dict(self.defaults, **kwargs))
             for item in dest_address:
-                if isinstance(item, str): # assume strings are addresses not lists
+                if isinstance(item, str):
+                    # assume strings are addresses not lists
                     pdu.addDestinationAddress(
                             item,
                             dest_addr_ton=self.defaults['dest_addr_ton'],
@@ -556,7 +560,8 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
     def __init__(self, config, vumi_options):
         self.config = config
         self.vumi_options = vumi_options
-        if int(self.config['smpp_increment']) < int(self.config['smpp_offset']):
+        if int(self.config['smpp_increment']) \
+                < int(self.config['smpp_offset']):
             raise Exception("increment may not be less than offset")
         if int(self.config['smpp_increment']) < 1:
             raise Exception("increment may not be less than 1")
@@ -569,7 +574,8 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
         self.__delivery_report_callback = None
         self.__deliver_sm_callback = None
         self.seq = [int(self.config['smpp_offset'])]
-        log.msg("Set sequence number: %s, config: %s" % (self.seq, self.config))
+        log.msg("Set sequence number: %s, config: %s" % (
+            self.seq, self.config))
         self.initialDelay = 30.0
         self.maxDelay = 45
         self.defaults = {
