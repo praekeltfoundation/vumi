@@ -23,26 +23,21 @@ class SmppTransport(Worker):
 
         # TODO: move this to a config file
         dbindex = get_deploy_int(self._amqp_client.vhost)
+        self.smpp_offset = int(self.config['smpp_offset'])
+        self.transport_name = self.config.get('TRANSPORT_NAME', 'fallback')
 
         # Connect to Redis
         self.r_server = redis.Redis("localhost", db=dbindex)
         self.r_prefix = "%(system_id)s@%(host)s:%(port)s" % self.config
         log.msg("Connected to Redis, prefix: %s" % self.r_prefix)
+        last_sequence_number = int(self.r_get_last_sequence() or self.smpp_offset)
+        log.msg("Last sequence_number: %s" % last_sequence_number)
 
         # start the Smpp transport
         factory = EsmeTransceiverFactory(self.config,
                                             self._amqp_client.vumi_options)
         factory.loadDefaults(self.config)
-
-        self.smpp_offset = self.config['smpp_offset']
-        self.transport_name = self.config.get('TRANSPORT_NAME', 'fallback')
-
-        self.sequence_key = "%s_%s#last_sequence_number" % (self.r_prefix,
-                                                            self.smpp_offset)
-        log.msg("sequence_key = %s" % (self.sequence_key))
-        last_sequence_number = int(self.r_server.get(self.sequence_key) or 0)
-
-        factory.setLatestSequenceNumber(last_sequence_number)
+        factory.setLastSequenceNumber(last_sequence_number)
         factory.setConnectCallback(self.esme_connected)
         factory.setDisconnectCallback(self.esme_disconnected)
         factory.setSubmitSMRespCallback(self.submit_sm_resp)
@@ -75,24 +70,36 @@ class SmppTransport(Worker):
     def consume_message(self, message):
         log.msg("Consumed outgoing message", message)
         sequence_number = self.send_smpp(**message.payload)
-        self.r_server.set("%s_%s#last_sequence_number" % (
-            self.r_prefix, self.smpp_offset),
-                sequence_number)
-        self.r_server.set("%s#%s" % (self.r_prefix, sequence_number),
-                message.payload.get("id"))
+        self.r_set_last_sequence(sequence_number)
+        self.r_set_id_for_sequence(sequence_number, message.payload.get("id"))
 
     @inlineCallbacks
     def esme_disconnected(self):
         log.msg("ESME Disconnected")
-        pass
+
+    def r_get_id_for_sequence(self, sequence_number):
+        return self.r_server.get("%s#%s" % (self.r_prefix, sequence_number))
+
+    def r_delete_for_sequence(self, sequence_number):
+        return self.r_server.delete("%s#%s" % (self.r_prefix, sequence_number))
+
+    def r_set_id_for_sequence(self, sequence_number, id):
+        self.r_server.set("%s#%s" % (self.r_prefix, sequence_number), id)
+
+    def r_get_last_sequence(self):
+        return self.r_server.get("%s_%s#last_sequence_number" % (
+            self.r_prefix, self.smpp_offset))
+
+    def r_set_last_sequence(self, sequence_number):
+        self.r_server.set("%s_%s#last_sequence_number" % (
+            self.r_prefix, self.smpp_offset),
+                sequence_number)
 
     @inlineCallbacks
     def submit_sm_resp(self, *args, **kwargs):
-        redis_key = "%s#%s" % (self.r_prefix, kwargs['sequence_number'])
-        log.msg("redis_key = %s" % redis_key)
-        sent_sms_id = self.r_server.get(redis_key)
         transport_msg_id = kwargs['message_id']
-        self.r_server.delete(redis_key)
+        sent_sms_id = self.r_get_id_for_sequence(kwargs['sequence_number'])
+        self.r_delete_for_sequence(kwargs['sequence_number'])
         log.msg("Mapping transport_msg_id=%s to sent_sms_id=%s" % (
             transport_msg_id, sent_sms_id))
         self.publisher.publish_message(Message(**{

@@ -23,9 +23,6 @@ from smpp.pdu_inspector import (MultipartMessage,
 
 from vumi.utils import get_deploy_int
 
-# for testing with trial
-#import sys
-#log.startLogging(sys.stdout)
 
 # TODO this will move to pdu_inspector in python-smpp
 ESME_command_status_map = {
@@ -93,6 +90,7 @@ class EsmeTransceiver(Protocol):
         self.config = config
         self.vumi_options = vumi_options
         self.inc = int(self.config['smpp_increment'])
+        self.incSeq()
         self.datastream = ''
         self.__connect_callback = None
         self.__submit_sm_resp_callback = None
@@ -115,9 +113,6 @@ class EsmeTransceiver(Protocol):
                 self.config['host'],
                 self.config['port'])
         log.msg("r_prefix = %s" % self.r_prefix)
-
-    def logmsg(selfm):
-        print n
 
     # Dummy error handler functions, just log invocation
     def dummy_ok(self, *args, **kwargs):
@@ -574,8 +569,7 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
         self.__delivery_report_callback = None
         self.__deliver_sm_callback = None
         self.seq = [int(self.config['smpp_offset'])]
-        log.msg("Set sequence number: %s, config: %s" % (
-            self.seq, self.config))
+        log.msg("Set sequence number: %s" % (self.seq))
         self.initialDelay = 30.0
         self.maxDelay = 45
         self.defaults = {
@@ -588,10 +582,9 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
     def loadDefaults(self, defaults):
         self.defaults = dict(self.defaults, **defaults)
 
-    def setLatestSequenceNumber(self, latest):
-        self.seq = [latest]
-        log.msg("Set sequence number: %s, config: %s" % (
-            self.seq, self.config))
+    def setLastSequenceNumber(self, last):
+        self.seq = [last]
+        log.msg("Set sequence number: %s" % (self.seq))
 
     def setConnectCallback(self, connect_callback):
         self.__connect_callback = connect_callback
