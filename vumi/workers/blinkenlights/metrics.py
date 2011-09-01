@@ -260,6 +260,7 @@ class GraphitePublisher(Publisher):
     durable = True
     auto_delete = False
     delivery_mode = 2
+    require_bind = False  # Graphite uses a topic exchange
 
     def _local_timestamp(self, timestamp):
         """Graphite requires local timestamps."""
