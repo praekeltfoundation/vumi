@@ -114,28 +114,32 @@ class TestAggregationSystem(TestCase):
     """Tests tying MetricTimeBucket and MetricAggregator together."""
 
     def setUp(self):
-        self._workers = []
-        self._broker = None
+        self.bucket_workers = []
+        self.aggregator_workers = []
+        self.broker = None
+        self.now = 0
+
+    def fake_time(self):
+        return self.now
 
     def send(self, datapoints):
-        self._broker.send_datapoints("vumi.metrics",
-                                     "vumi.metrics", datapoints)
+        self.broker.send_datapoints("vumi.metrics",
+                                    "vumi.metrics", datapoints)
 
     def recv(self):
-        return self._broker.recv_datapoints("vumi.metrics.aggregates",
-                                            "vumi.metrics.aggregates")
+        return self.broker.recv_datapoints("vumi.metrics.aggregates",
+                                           "vumi.metrics.aggregates")
 
     @inlineCallbacks
     def tearDown(self):
-        for worker in self._workers:
+        for worker in self.bucket_workers + self.aggregator_workers:
             yield worker.stopWorker()
 
     @inlineCallbacks
     def _setup_workers(self, bucketters, aggregators, bucket_size):
         broker = FakeAMQPBroker()
-        self._broker = BrokerWrapper(broker)
+        self.broker = BrokerWrapper(broker)
 
-        bucket_workers = []
         bucket_config = {
             'buckets': aggregators,
             'bucket_size': bucket_size,
@@ -145,9 +149,8 @@ class TestAggregationSystem(TestCase):
                                         config=bucket_config,
                                         broker=broker)
             yield worker.startWorker()
-            bucket_workers.append(worker)
+            self.bucket_workers.append(worker)
 
-        aggregator_workers = []
         aggregator_config = {
             'bucket_size': bucket_size,
             }
@@ -156,30 +159,28 @@ class TestAggregationSystem(TestCase):
             config['bucket'] = i
             worker = get_stubbed_worker(metrics.MetricAggregator,
                                         config=config, broker=broker)
+            worker._time = self.fake_time
             yield worker.startWorker()
-            aggregator_workers.append(worker)
-
-        self._workers.extend(bucket_workers)
-        self._workers.extend(aggregator_workers)
+            self.aggregator_workers.append(worker)
 
     # TODO: use parameteric test cases to test many combinations of workers
     @inlineCallbacks
     def test_aggregating_one_metric(self):
-        yield self._setup_workers(1, 1, 1)
+        yield self._setup_workers(1, 1, 5)
 
-        now = int(time.time())
-        datapoints = [("vumi.test.foo", ["sum"], [(now, 1.0), (now, 2.0)])]
+        datapoints = [("vumi.test.foo", ["sum"], [(12345, 1.0), (12346, 2.0)])]
         self.send(datapoints)
         self.send(datapoints)
 
-        yield self._broker.kick_delivery()  # deliver to bucketters
-        yield self._broker.kick_delivery()  # deliver to aggregators
-        time.sleep(1.1)  # wait for aggregators to do work
-        yield self._broker.kick_delivery()  # deliver
+        yield self.broker.kick_delivery()  # deliver to bucketters
+        yield self.broker.kick_delivery()  # deliver to aggregators
+        self.now = 12350
+        for worker in self.aggregator_workers:
+            worker.check_buckets()
 
         datapoints, = self.recv()
         self.assertEqual(datapoints, [
-            [u'vumi.test.foo.sum', u'', [[now, 6.0]]]
+            ["vumi.test.foo.sum", "", [[12345, 6.0]]]
             ])
 
 

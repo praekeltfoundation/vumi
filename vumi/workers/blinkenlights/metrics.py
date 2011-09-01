@@ -173,9 +173,15 @@ class MetricAggregator(Worker):
         its bucket number.
     bucket_size : int, in seconds
         The amount of time each time bucket represents.
+    lag : int, seconds, optional
+        The number of seconds after a bucket's time ends to wait
+        before processing the bucket. Default is 5s.
     """
 
     _time = time.time  # hook for faking time in tests
+
+    def _ts_key(self, time):
+        return int(time) / self.bucket_size
 
     @inlineCallbacks
     def startWorker(self):
@@ -184,10 +190,13 @@ class MetricAggregator(Worker):
         log.msg("MetricAggregator bucket %d" % bucket)
         self.bucket_size = int(self.config.get("bucket_size"))
         log.msg("Bucket size is %d seconds" % self.bucket_size)
+        self.lag = float(self.config.get("lag", 5.0))
 
         # ts_key -> { metric_name -> (aggregate_set, values) }
         # values is a list of (timestamp, value) pairs
         self.buckets = {}
+        # initialize last processed bucket
+        self._last_ts_key = self._ts_key(self._time() - self.lag) - 1
 
         self.publisher = yield self.start_publisher(AggregatedMetricPublisher)
         self.consumer = yield self.start_consumer(TimeBucketConsumer,
@@ -201,15 +210,15 @@ class MetricAggregator(Worker):
     def check_buckets(self):
         """Periodically clean out old buckets and calculate aggregates."""
         # key for previous bucket
-        prev_ts_key = (int(self._time()) / self.bucket_size) - 1
-        prev_ts = prev_ts_key * self.bucket_size
+        current_ts_key = self._ts_key(self._time() - self.lag)
         for ts_key in self.buckets.keys():
-            if ts_key < prev_ts_key:
+            if ts_key <= self._last_ts_key:
                 log.err(DiscardedMetricError("Throwing way old metric data: %r"
                                              % self.buckets[ts_key]))
                 del self.buckets[ts_key]
-            elif ts_key == prev_ts_key:
+            elif ts_key <= current_ts_key:
                 aggregates = []
+                ts = ts_key * self.bucket_size
                 items = self.buckets[ts_key].iteritems()
                 for metric_name, (agg_set, values) in items:
                     for agg_name in agg_set:
@@ -219,9 +228,10 @@ class MetricAggregator(Worker):
                         aggregates.append((agg_metric, agg_value))
 
                 for agg_metric, agg_value in aggregates:
-                    self.publisher.publish_aggregate(agg_metric, prev_ts,
+                    self.publisher.publish_aggregate(agg_metric, ts,
                                                      agg_value)
                 del self.buckets[ts_key]
+        self._last_ts_key = current_ts_key
 
     def consume_metric(self, metric_name, aggregates, values):
         if not values:
