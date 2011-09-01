@@ -264,8 +264,8 @@ class GraphitePublisher(Publisher):
 
     def _local_timestamp(self, timestamp):
         """Graphite requires local timestamps."""
-        # TODO: investigate whether graphite can be encourage to use UTC
-        #       timestamps
+        # TODO: Encourage graphite developers to switch to using UTC
+        #       timestamps (possibly by contributing code).
         return timestamp - time.timezone
 
     def publish_metric(self, metric, value, timestamp):
