@@ -356,6 +356,19 @@ class EsmeTransceiver(Protocol):
         #except:
             #pass
 
+    def disconnect(self):
+        """
+        Attempt gracefull disconnect
+        """
+        pass
+
+    def forceConnectionFailure(self):
+        """
+        For when the tcp socket stream gets corrupted
+        or something equally unrecoverable
+        """
+        pass
+
     def dataReceived(self, data):
         self.datastream += data
         data = self.popData()
