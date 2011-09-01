@@ -12,8 +12,8 @@ from vumi.tests.utils import TestPublisher, TestChannel, TestQueue, \
 from vumi.message import Message, VUMI_DATE_FORMAT
 from vumi.service import Consumer, Publisher, RoutingKeyError
 from vumi.workers.smpp.worker import SMSBatchConsumer, SMSReceiptConsumer, \
-    SMSKeywordConsumer, dynamically_create_keyword_consumer, SMSKeywordWorker, \
-    SMSReceiptWorker
+    SMSKeywordConsumer, dynamically_create_keyword_consumer, \
+    SMSKeywordWorker, SMSReceiptWorker
 
 from django.conf import settings
 
@@ -499,7 +499,6 @@ class FakeRedisRespTestCase(TestCase):
             "conn_tempfault": self.transport.conn_tempfault,
             "conn_throttle": self.transport.conn_throttle,
             })
-
 
     def tearDown(self):
         # no need to cleanup fake redis
