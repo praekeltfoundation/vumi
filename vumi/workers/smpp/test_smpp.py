@@ -341,6 +341,8 @@ import redis
             #)
    # 
 
+#import sys
+#log.startLogging(sys.stdout)
 
 class RedisTestEsmeTransceiver(EsmeTransceiver):
 
@@ -367,7 +369,11 @@ class RedisTestSmppTransport(SmppTransport):
         pass
 
     def mess_tempfault(self, *args, **kwargs):
-        #print kwargs.get('pdu')
+        pdu = kwargs.get('pdu')
+        sequence_number = pdu['header']['sequence_number']
+        id = self.r_get_id_for_sequence(sequence_number)
+        reason = pdu['header']['command_status']
+        self.send_failure(Message(id=id), reason)
         pass
 
     def conn_permfault(self, *args, **kwargs):
@@ -484,6 +490,17 @@ class FakeRedisRespTestCase(TestCase):
         self.transport.failure_publisher = TestPublisher()
         self.esme.setSubmitSMRespCallback(self.transport.submit_sm_resp)
 
+        # set error handlers
+        self.esme.update_error_handlers({
+            "ok": self.transport.ok,
+            "mess_permfault": self.transport.mess_permfault,
+            "mess_tempfault": self.transport.mess_tempfault,
+            "conn_permfault": self.transport.conn_permfault,
+            "conn_tempfault": self.transport.conn_tempfault,
+            "conn_throttle": self.transport.conn_throttle,
+            })
+
+
     def tearDown(self):
         # no need to cleanup fake redis
         pass
@@ -521,11 +538,13 @@ class FakeRedisRespTestCase(TestCase):
             to_msisdn="1111111111")
         sequence_num3 = self.esme.getSeq()
         response3 = SubmitSMResp(sequence_num3, "3rd_party_id_3",
-                command_status="ESME_RSYSERR")
+                command_status="ESME_RSUBMITFAIL")
         self.transport.consume_message(message3)
         self.esme.handleData(response3.get_bin())
         self.assertEquals(self.transport.publisher.queue[2][0].payload,
                 {'id': '446', 'transport_message_id': '3rd_party_id_3'})
+        self.assertEquals(self.transport.failure_publisher.queue.pop()[0],
+                Message(message={'id': '446'}, reason='ESME_RSUBMITFAIL'))
 
         message4 = Message(
             id=447,
@@ -533,11 +552,13 @@ class FakeRedisRespTestCase(TestCase):
             to_msisdn="1111111111")
         sequence_num4 = self.esme.getSeq()
         response4 = SubmitSMResp(sequence_num4, "3rd_party_id_4",
-                command_status="ESME_RTHROTTLED")
+                command_status="ESME_RX_T_APPN")
         self.transport.consume_message(message4)
         self.esme.handleData(response4.get_bin())
         self.assertEquals(self.transport.publisher.queue[3][0].payload,
                 {'id': '447', 'transport_message_id': '3rd_party_id_4'})
+        self.assertEquals(self.transport.failure_publisher.queue.pop()[0],
+                Message(message={'id': '447'}, reason='ESME_RX_T_APPN'))
 
         self.transport.send_failure(
                 Message(
@@ -545,21 +566,11 @@ class FakeRedisRespTestCase(TestCase):
                     message="hello world",
                     to_msisdn="1111111111"),
                 "testing")
-        self.assertEquals(self.transport.failure_publisher.queue[0][0],
+        self.assertEquals(self.transport.failure_publisher.queue.pop()[0],
                 Message(message={"id": 555,
                     "message": "hello world",
                     "to_msisdn": "1111111111"},
                     reason="testing"))
-
-        # test with error messages
-        self.esme.update_error_handlers({
-            "ok": self.transport.ok,
-            "mess_permfault": self.transport.mess_permfault,
-            "mess_tempfault": self.transport.mess_tempfault,
-            "conn_permfault": self.transport.conn_permfault,
-            "conn_tempfault": self.transport.conn_tempfault,
-            "conn_throttle": self.transport.conn_throttle,
-            })
 
         # Some error codes would occur on bind attempts
         bind_dispatch_methods = {
