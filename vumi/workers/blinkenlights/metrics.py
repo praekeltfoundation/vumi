@@ -174,6 +174,9 @@ class MetricAggregator(Worker):
     bucket_size : int, in seconds
         The amount of time each time bucket represents.
     """
+
+    _time = time.time  # hook for faking time in tests
+
     @inlineCallbacks
     def startWorker(self):
         log.msg("Starting a MetricAggregator with config: %s" % self.config)
@@ -198,7 +201,7 @@ class MetricAggregator(Worker):
     def check_buckets(self):
         """Periodically clean out old buckets and calculate aggregates."""
         # key for previous bucket
-        prev_ts_key = (int(time.time()) / self.bucket_size) - 1
+        prev_ts_key = (int(self._time()) / self.bucket_size) - 1
         prev_ts = prev_ts_key * self.bucket_size
         for ts_key in self.buckets.keys():
             if ts_key < prev_ts_key:
@@ -212,7 +215,7 @@ class MetricAggregator(Worker):
                     for agg_name in agg_set:
                         agg_metric = "%s.%s" % (metric_name, agg_name)
                         agg_func = Aggregator.from_name(agg_name)
-                        agg_value = agg_func(v[1] for v in values)
+                        agg_value = agg_func([v[1] for v in values])
                         aggregates.append((agg_metric, agg_value))
 
                 for agg_metric, agg_value in aggregates:

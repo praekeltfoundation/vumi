@@ -63,19 +63,54 @@ class TestMetricTimeBucket(TestCase):
 
 
 class TestMetricAggregator(TestCase):
+
+    def setUp(self):
+        self.now = 0
+
+    def fake_time(self):
+        return self.now
+
     @inlineCallbacks
     def test_aggregating(self):
         config = {'bucket': 3, 'bucket_size': 5}
         worker = get_stubbed_worker(metrics.MetricAggregator, config=config)
+        worker._time = self.fake_time
         broker = BrokerWrapper(worker._amqp_client.broker)
         yield worker.startWorker()
 
-        # TODO: publish some messages, check they get aggregated correctly
+        datapoints = [
+            ("vumi.test.foo", ("avg",), [(1235, 1.5), (1236, 2.0)]),
+            ("vumi.test.foo", ("sum",), [(1240, 1.0)]),
+            ]
+        broker.send_datapoints("vumi.metrics.buckets", "bucket.3", datapoints)
+        broker.send_datapoints("vumi.metrics.buckets", "bucket.3", datapoints)
+        broker.send_datapoints("vumi.metrics.buckets", "bucket.2", datapoints)
+        yield broker.kick_delivery()
+
+        def recv():
+            return broker.recv_datapoints("vumi.metrics.aggregates",
+                                          "vumi.metrics.aggregates")
+
+        expected = []
+        self.now = 1235
+        worker.check_buckets()
+        self.assertEqual(recv(), expected)
+
+        expected.append([["vumi.test.foo.avg", "", [[1235, 1.75]]]])
+        self.now = 1240
+        worker.check_buckets()
+        self.assertEqual(recv(), expected)
+
+        # skip a few checks
+        expected.append([["vumi.test.foo.sum", "", [[1240, 2.0]]]])
+        self.now = 1255
+        worker.check_buckets()
+        self.assertEqual(recv(), expected)
 
         yield worker.stopWorker()
 
 
-class TestMetricAggregation(TestCase):
+class TestAggregationSystem(TestCase):
     """Tests tying MetricTimeBucket and MetricAggregator together."""
 
     def setUp(self):
