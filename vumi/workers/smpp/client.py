@@ -247,7 +247,9 @@ class EsmeTransceiver(Protocol):
         method = self.ESME_command_status_dispatch_map.get(
                 pdu['header']['command_status'],
                 self.command_status_dispatch_ok)
-        return method(pdu)
+        handler = method(pdu)
+        log.msg("ERROR handler:%s pdu:%s" % (handler, pdu))
+        return handler
 
     '''This maps SMPP error states to VUMI error states
     For now assume VUMI understands:
