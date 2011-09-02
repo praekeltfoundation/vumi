@@ -159,7 +159,7 @@ class Metric(object):
 
     def set(self, value):
         """Append a value for later polling."""
-        self._values.append((time.time(), value))
+        self._values.append((int(time.time()), value))
 
     def poll(self):
         """Called periodically by the managing metric set."""

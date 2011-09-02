@@ -131,6 +131,7 @@ class CheckValuesMixin(object):
         datapoints = metric.poll()
         self.assertTrue(all(abs(d[0] - time.time()) <= 1.0
                             for d in datapoints))
+        self.assertTrue(all(isinstance(d[0], (int, long)) for d in datapoints))
         actual_values = [d[1] for d in datapoints]
         return actual_values
 
