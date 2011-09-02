@@ -386,7 +386,7 @@ class RedisTestSmppTransport(SmppTransport):
 
     def conn_throttle(self, *args, **kwargs):
         if kwargs.get('pdu'):
-            self.throttle_invoked = True
+            self.throttle_invoked_via_pdu = True
 
 
 class RedisRespTestCase(TestCase):
@@ -556,7 +556,7 @@ class FakeRedisRespTestCase(TestCase):
         self.esme.handleData(response4.get_bin())
         self.assertEquals(self.transport.publisher.queue[3][0].payload,
                 {'id': '447', 'transport_message_id': '3rd_party_id_4'})
-        self.assertTrue(self.transport.throttle_invoked)
+        self.assertTrue(self.transport.throttle_invoked_via_pdu)
 
         self.transport.send_failure(
                 Message(
