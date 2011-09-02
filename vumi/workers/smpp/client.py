@@ -486,7 +486,7 @@ class EsmeTransceiver(Protocol):
 
     def pop_unacked(self):
             self.r_server.lpop("%s#unacked" % self.r_prefix)
-            log.msg("%s#unackedi popped to: %s" % (
+            log.msg("%s#unacked popped to: %s" % (
                 self.r_prefix, self.get_unacked_count()))
 
     def submit_sm(self, **kwargs):

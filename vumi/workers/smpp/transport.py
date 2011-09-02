@@ -161,7 +161,8 @@ class SmppTransport(Worker):
         """Send a failure report."""
         log.msg("Failed to send: %s reason: %s" % (message, reason))
         self.failure_publisher.publish_message(Message(
-                message=message.payload, reason=reason))
+                message=message.payload, reason=reason), require_bind=False)
+        #TODO get rid of that require_bind=False
 
     def mess_tempfault(self, *args, **kwargs):
         pdu = kwargs.get('pdu')
