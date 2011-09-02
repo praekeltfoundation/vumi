@@ -96,13 +96,13 @@ class TestMetricAggregator(TestCase):
         worker.check_buckets()
         self.assertEqual(recv(), expected)
 
-        expected.append([["vumi.test.foo.avg", "", [[1235, 1.75]]]])
+        expected.append([["vumi.test.foo.avg", [], [[1235, 1.75]]]])
         self.now = 1240
         worker.check_buckets()
         self.assertEqual(recv(), expected)
 
         # skip a few checks
-        expected.append([["vumi.test.foo.sum", "", [[1240, 2.0]]]])
+        expected.append([["vumi.test.foo.sum", [], [[1240, 2.0]]]])
         self.now = 1255
         worker.check_buckets()
         self.assertEqual(recv(), expected)
@@ -180,7 +180,7 @@ class TestAggregationSystem(TestCase):
 
         datapoints, = self.recv()
         self.assertEqual(datapoints, [
-            ["vumi.test.foo.sum", "", [[12345, 6.0]]]
+            ["vumi.test.foo.sum", [], [[12345, 6.0]]]
             ])
 
 
@@ -192,8 +192,7 @@ class TestGraphitePublisher(TestCase):
         self.assertEqual(msg["exchange"], "graphite")
         content = msg["content"]
         self.assertEqual(content.properties, {"delivery mode": 2})
-        self.assertEqual(content.body, "%f %d" % (value,
-                                                  timestamp - time.timezone))
+        self.assertEqual(content.body, "%f %d" % (value, timestamp))
 
     def test_publish_metric(self):
         datapoint = ("vumi.test.v1", 1.0, 1234)
@@ -220,7 +219,7 @@ class TestGraphiteMetricsCollector(TestCase):
         parts = content.body.split()
         value, ts = float(parts[0]), int(parts[1])
         self.assertEqual(value, 1.5)
-        self.assertEqual(ts, 1234 - time.timezone)
+        self.assertEqual(ts, 1234)
 
 
 class TestRandomMetricsGenerator(TestCase):

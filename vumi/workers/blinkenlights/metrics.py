@@ -51,7 +51,7 @@ class AggregatedMetricPublisher(Publisher):
     def publish_aggregate(self, metric_name, timestamp, value):
         # TODO: perhaps change interface to publish multiple metrics?
         msg = MetricMessage()
-        msg.append((metric_name, "", [(timestamp, value)]))
+        msg.append((metric_name, (), [(timestamp, value)]))
         self.publish_message(msg)
 
 
@@ -111,7 +111,7 @@ class TimeBucketPublisher(Publisher):
     def publish_metric(self, metric_name, aggregates, values):
         timestamp_buckets = {}
         for timestamp, value in values:
-            ts_key = timestamp / self.bucket_size
+            ts_key = int(timestamp) / self.bucket_size
             ts_bucket = timestamp_buckets.get(ts_key)
             if ts_bucket is None:
                 ts_bucket = timestamp_buckets[ts_key] = []
@@ -236,7 +236,7 @@ class MetricAggregator(Worker):
     def consume_metric(self, metric_name, aggregates, values):
         if not values:
             return
-        ts_key = values[0][0] / self.bucket_size
+        ts_key = self._ts_key(values[0][0])
         metrics = self.buckets.get(ts_key, None)
         if metrics is None:
             metrics = self.buckets[ts_key] = {}
@@ -262,14 +262,7 @@ class GraphitePublisher(Publisher):
     delivery_mode = 2
     require_bind = False  # Graphite uses a topic exchange
 
-    def _local_timestamp(self, timestamp):
-        """Graphite requires local timestamps."""
-        # TODO: Encourage graphite developers to switch to using UTC
-        #       timestamps (possibly by contributing code).
-        return timestamp - time.timezone
-
     def publish_metric(self, metric, value, timestamp):
-        timestamp = self._local_timestamp(timestamp)
         self.publish_raw("%f %d" % (value, timestamp), routing_key=metric)
 
 
