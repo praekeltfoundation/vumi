@@ -56,6 +56,7 @@ class SmppTransport(Worker):
         self.esme_client = client
         self.esme_client.update_error_handlers({
             "mess_tempfault": self.mess_tempfault,
+            "conn_throttle": self.conn_throttle,
             })
 
         # Start the publisher
@@ -71,6 +72,9 @@ class SmppTransport(Worker):
 
     def consume_message(self, message):
         log.msg("Consumed outgoing message", message)
+        log.msg("Unacknowledged message count: %s" % (
+            self.esme_client.get_unacked_count()))
+        self.conn_throttle(unacked=self.esme_client.get_unacked_count())
         sequence_number = self.send_smpp(**message.payload)
         self.r_set_last_sequence(sequence_number)
         self.r_set_id_for_sequence(sequence_number, message.payload.get("id"))
@@ -165,3 +169,15 @@ class SmppTransport(Worker):
         id = self.r_get_id_for_sequence(sequence_number)
         reason = pdu['header']['command_status']
         self.send_failure(Message(id=id), reason)
+
+    def conn_throttle(self, *args, **kwargs):
+        log.msg("*********** conn_throttle: %s" % kwargs)
+        unacked = kwargs.get('unacked', 0)
+        if unacked > 100:
+            # do something
+            pass
+        pdu = kwargs.get('pdu')
+        if pdu:
+            # do as above
+            pass
+

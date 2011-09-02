@@ -386,10 +386,7 @@ class EsmeTransceiver(Protocol):
         log.msg(self.name, 'STATE :', self.state)
 
     def handle_submit_sm_resp(self, pdu):
-        self.r_server.lpop("%s#unacked" % self.r_prefix)
-        log.msg("%s#unacked: %s" % (
-            self.r_prefix,
-            self.r_server.llen("%s#unacked" % self.r_prefix)))
+        self.pop_unacked()
         message_id = pdu.get('body', {}).get(
                 'mandatory_parameters', {}).get('message_id')
         self.__submit_sm_resp_callback(
@@ -479,21 +476,26 @@ class EsmeTransceiver(Protocol):
         if pdu['header']['command_status'] == 'ESME_ROK':
             pass
 
+    def get_unacked_count(self):
+            return int(self.r_server.llen("%s#unacked" % self.r_prefix))
+
+    def push_unacked(self, sequence_number=-1):
+            self.r_server.lpush("%s#unacked" % self.r_prefix, sequence_number)
+            log.msg("%s#unacked pushed to: %s" % (
+                self.r_prefix, self.get_unacked_count()))
+
+    def pop_unacked(self):
+            self.r_server.lpop("%s#unacked" % self.r_prefix)
+            log.msg("%s#unackedi popped to: %s" % (
+                self.r_prefix, self.get_unacked_count()))
+
     def submit_sm(self, **kwargs):
         if self.state in ['BOUND_TX', 'BOUND_TRX']:
-            unacked = self.r_server.llen("%s#unacked" % self.r_prefix)
-            #log.msg("unacked: %s" % repr(unacked))
-            # if unacked >= 1000 don't send
-            # perhaps queue message for retry ?
-            # that would show up in metrics, which would be good
             sequence_number = self.getSeq()
             pdu = SubmitSM(sequence_number, **dict(self.defaults, **kwargs))
             self.incSeq()
             self.sendPDU(pdu)
-            self.r_server.lpush("%s#unacked" % self.r_prefix, 1)
-            log.msg("%s#unacked: %s" % (
-                self.r_prefix,
-                self.r_server.llen("%s#unacked" % self.r_prefix)))
+            self.push_unacked(sequence_number)
             return sequence_number
         return 0
 
