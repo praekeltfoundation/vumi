@@ -23,6 +23,8 @@ class MetricManager(Publisher):
         Prefix for the name of all metrics created by this metric set.
     publish_interval : int in seconds
         How often to publish the set of metrics.
+    on_publish : callback, f(metric_manager)
+        Function to call immediately after metrics after published.
     """
     exchange_name = "vumi.metrics"
     exchange_type = "direct"
@@ -31,18 +33,19 @@ class MetricManager(Publisher):
     auto_delete = False
     delivery_mode = 2
 
-    def __init__(self, prefix, publish_interval=5):
+    def __init__(self, prefix, publish_interval=5, on_publish=None):
         self.prefix = prefix
         self._metrics = []  # list of metric objects
         self._metrics_lookup = {}  # metric suffix -> metric
         self._publish_interval = publish_interval
         self._task = None  # created in .start()
+        self._on_publish = on_publish
 
     def start(self, channel):
         """Start publishing metrics in a loop."""
         super(MetricManager, self).start(channel)
         self._task = LoopingCall(self._publish_metrics)
-        done = self._task.start(self._publish_interval)
+        done = self._task.start(self._publish_interval, now=False)
         done.addErrback(lambda failure: log.err(failure,
                         "MetricManager publishing task died"))
 
@@ -56,6 +59,8 @@ class MetricManager(Publisher):
         for metric in self._metrics:
             msg.append((metric.name, metric.aggs, metric.poll()))
         self.publish_message(msg)
+        if self._on_publish is not None:
+            self._on_publish(self)
 
     def register(self, metric):
         """Register a new metric object to be managed by this metric set.

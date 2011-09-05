@@ -11,6 +11,19 @@ import time
 
 class TestMetricManager(TestCase):
 
+    def setUp(self):
+        self._next_publish = Deferred()
+
+    def tearDown(self):
+        self._next_publish.callback(None)
+
+    def on_publish(self, mm):
+        d, self._next_publish = self._next_publish, Deferred()
+        d.callback(mm)
+
+    def wait_publish(self):
+        return self._next_publish
+
     def _sleep(self, delay):
         d = Deferred()
         reactor.callLater(delay, lambda: d.callback(None))
@@ -18,6 +31,9 @@ class TestMetricManager(TestCase):
 
     def _check_msg(self, broker, metric, values):
         msgs = broker.get_dispatched("vumi.metrics", "vumi.metrics")
+        if values is None:
+            self.assertEqual(msgs, [])
+            return
         content = msgs[-1]
         name = metric.name
         self.assertEqual(content.properties, {"delivery mode": 2})
@@ -25,8 +41,14 @@ class TestMetricManager(TestCase):
         [datapoint] = msg.payload["datapoints"]
         self.assertEqual(datapoint[0], name)
         self.assertEqual(datapoint[1], list(metric.aggs))
-        self.assertTrue(all(abs(p[0] - time.time()) < 1.0
-                            for p in datapoint[2]))
+        # check datapoints within 2s of now -- the truncating of
+        # time.time() to an int for timestamps can cause a 1s
+        # difference by itself
+        now = time.time()
+        self.assertTrue(all(abs(p[0] - now) < 2.0
+                            for p in datapoint[2]),
+                        "Not all datapoints near now (%f): %r"
+                        % (now, datapoint))
         self.assertEqual([p[1] for p in datapoint[2]], values)
 
     def test_register(self):
@@ -46,20 +68,20 @@ class TestMetricManager(TestCase):
     def test_start(self):
         channel = yield get_stubbed_channel()
         broker = channel.broker
-        mm = metrics.MetricManager("vumi.test.", 0.1)
+        mm = metrics.MetricManager("vumi.test.", 0.1, self.on_publish)
         cnt = mm.register(metrics.Count("my.count"))
         mm.start(channel)
         try:
             self.assertTrue(mm._task is not None)
-            self._check_msg(broker, cnt, [])
+            self._check_msg(broker, cnt, None)
 
             cnt.inc()
-            yield self._sleep(0.1)
+            yield self.wait_publish()
             self._check_msg(broker, cnt, [1])
 
             cnt.inc()
             cnt.inc()
-            yield self._sleep(0.1)
+            yield self.wait_publish()
             self._check_msg(broker, cnt, [1, 1])
         finally:
             mm.stop()
@@ -69,17 +91,15 @@ class TestMetricManager(TestCase):
         worker = get_stubbed_worker(Worker)
         broker = worker._amqp_client.broker
         mm = yield worker.start_publisher(metrics.MetricManager,
-                                          "vumi.test.", 0.1)
+                                          "vumi.test.", 0.1, self.on_publish)
         acc = mm.register(metrics.Metric("my.acc"))
         try:
             self.assertTrue(mm._task is not None)
-
-            yield self._sleep(0.1)
-            self._check_msg(broker, acc, [])
+            self._check_msg(broker, acc, None)
 
             acc.set(1.5)
             acc.set(1.0)
-            yield self._sleep(0.1)
+            yield self.wait_publish()
             self._check_msg(broker, acc, [1.5, 1.0])
         finally:
             mm.stop()
@@ -88,16 +108,20 @@ class TestMetricManager(TestCase):
     def test_task_failure(self):
         channel = yield get_stubbed_channel()
         mm = metrics.MetricManager("vumi.test.", 0.1)
+        wait_error = Deferred()
 
         class BadMetricError(Exception):
             pass
 
         class BadMetric(metrics.Metric):
             def poll(self):
+                wait_error.callback(None)
                 raise BadMetricError("bad metric")
 
         mm.register(BadMetric("bad"))
         mm.start(channel)
+        yield wait_error
+        yield self._sleep(0)  # allow log message to be processed
         error, = self.flushLoggedErrors(BadMetricError)
         self.assertTrue(error.type is BadMetricError)
 
@@ -136,8 +160,14 @@ class CheckValuesMixin(object):
 
     def _check_poll_base(self, metric, n):
         datapoints = metric.poll()
-        self.assertTrue(all(abs(d[0] - time.time()) <= 1.0
-                            for d in datapoints))
+        # check datapoints within 2s of now -- the truncating of
+        # time.time() to an int for timestamps can cause a 1s
+        # difference by itself
+        now = time.time()
+        self.assertTrue(all(abs(d[0] - now) <= 2.0
+                            for d in datapoints),
+                        "Not all datapoints near now (%f): %r"
+                        % (now, datapoints))
         self.assertTrue(all(isinstance(d[0], (int, long)) for d in datapoints))
         actual_values = [d[1] for d in datapoints]
         return actual_values

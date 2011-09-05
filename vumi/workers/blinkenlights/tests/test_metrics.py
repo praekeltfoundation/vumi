@@ -6,8 +6,6 @@ from vumi.workers.blinkenlights import metrics
 from vumi.blinkenlights.message20110818 import MetricMessage
 from vumi.message import Message
 
-import time
-
 
 class BrokerWrapper(object):
     """Wrap utility methods around a FakeAMQPBroker."""
@@ -236,10 +234,9 @@ class TestRandomMetricsGenerator(TestCase):
         yield worker.wake_after_run()
         yield worker.wake_after_run()
 
-        datapoints1, datapoints2 = broker.recv_datapoints('vumi.metrics',
-                                                          'vumi.metrics')
-        self.assertEqual(datapoints1, [])
-        self.assertEqual(sorted(d[0] for d in datapoints2),
+        datapoints, = broker.recv_datapoints('vumi.metrics',
+                                             'vumi.metrics')
+        self.assertEqual(sorted(d[0] for d in datapoints),
                          ["vumi.random.count", "vumi.random.timer",
                           "vumi.random.value"])
 
