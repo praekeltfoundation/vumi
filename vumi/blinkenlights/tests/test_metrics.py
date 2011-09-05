@@ -35,6 +35,13 @@ class TestMetricManager(TestCase):
         self.assertEqual(cnt.name, "vumi.test.my.count")
         self.assertEqual(mm._metrics, [cnt])
 
+    def test_lookup(self):
+        mm = metrics.MetricManager("vumi.test.")
+        cnt = mm.register(metrics.Count("my.count"))
+        self.assertTrue("my.count" in mm)
+        self.assertTrue(mm["my.count"] is cnt)
+        self.assertEqual(mm["my.count"].name, "vumi.test.my.count")
+
     @inlineCallbacks
     def test_start(self):
         channel = yield get_stubbed_channel()

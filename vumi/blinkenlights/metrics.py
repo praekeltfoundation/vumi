@@ -34,6 +34,7 @@ class MetricManager(Publisher):
     def __init__(self, prefix, publish_interval=5):
         self.prefix = prefix
         self._metrics = []  # list of metric objects
+        self._metrics_lookup = {}  # metric suffix -> metric
         self._publish_interval = publish_interval
         self._task = None  # created in .start()
 
@@ -73,7 +74,17 @@ class MetricManager(Publisher):
         """
         metric.manage(self.prefix)
         self._metrics.append(metric)
+        if metric.name in self._metrics_lookup:
+            raise MetricRegistrationError("Duplicate metric name %s"
+                                          % metric.name)
+        self._metrics_lookup[metric.suffix] = metric
         return metric
+
+    def __getitem__(self, suffix):
+        return self._metrics_lookup[suffix]
+
+    def __contains__(self, suffix):
+        return suffix in self._metrics_lookup
 
 
 class AggregatorAlreadyDefinedError(Exception):
@@ -146,7 +157,7 @@ class Metric(object):
             aggregators = self.DEFAULT_AGGREGATORS
         self.name = None  # set when prefix is set
         self.aggs = tuple(sorted(agg.name for agg in aggregators))
-        self._suffix = suffix
+        self.suffix = suffix
         self._values = []  # list of unpolled values
 
     def manage(self, prefix):
@@ -154,8 +165,8 @@ class Metric(object):
         if self.name is not None:
             raise MetricRegistrationError("Metric %s%s already registered"
                                           " with a MetricManager." %
-                                          (prefix, self._suffix))
-        self.name = prefix + self._suffix
+                                          (prefix, self.suffix))
+        self.name = prefix + self.suffix
 
     def set(self, value):
         """Append a value for later polling."""
