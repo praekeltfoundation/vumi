@@ -1,5 +1,5 @@
 from twisted.trial.unittest import TestCase
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import inlineCallbacks, Deferred
 from vumi.tests.utils import TestChannel, get_stubbed_worker
 from vumi.tests.fake_amqp import FakeAMQPBroker
 from vumi.workers.blinkenlights import metrics
@@ -221,6 +221,20 @@ class TestGraphiteMetricsCollector(TestCase):
 
 
 class TestRandomMetricsGenerator(TestCase):
+
+    def setUp(self):
+        self._on_run = Deferred()
+
+    def tearDown(self):
+        self._on_run.callback(None)
+
+    def on_run(self, worker):
+        d, self._on_run = self._on_run, Deferred()
+        d.callback(None)
+
+    def wake_after_run(self):
+        return self._on_run
+
     @inlineCallbacks
     def test_one_run(self):
         worker = get_stubbed_worker(metrics.RandomMetricsGenerator,
@@ -228,11 +242,12 @@ class TestRandomMetricsGenerator(TestCase):
                                         "manager_period": "0.1",
                                         "generator_period": "0.1",
                                     })
+        worker.on_run = self.on_run
         broker = BrokerWrapper(worker._amqp_client.broker)
         yield worker.startWorker()
 
-        yield worker.wake_after_run()
-        yield worker.wake_after_run()
+        yield self.wake_after_run()
+        yield self.wake_after_run()
 
         datapoints, = broker.recv_datapoints('vumi.metrics',
                                              'vumi.metrics')

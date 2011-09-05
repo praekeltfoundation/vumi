@@ -300,6 +300,9 @@ class RandomMetricsGenerator(Worker):
         How often the random metric loop should send values to the
         metric manager. Default is 1s.
     """
+    # callback for tests, f(worker)
+    # (or anyone else that wants to be notified when metrics are generated)
+    on_run = None
 
     @inlineCallbacks
     def startWorker(self):
@@ -330,12 +333,8 @@ class RandomMetricsGenerator(Worker):
             wait = random.uniform(0.0, 0.1)
             reactor.callLater(wait, lambda: d.callback(None))
             yield d
-        done, self.next = self.next, Deferred()
-        done.callback(self)
-
-    def wake_after_run(self):
-        """Return a deferred that fires after the next run completes."""
-        return self.next
+        if self.on_run is not None:
+            self.on_run(self)
 
     def stopWorker(self):
         self.mm.stop()
