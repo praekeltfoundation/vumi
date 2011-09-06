@@ -57,7 +57,7 @@ class SmscServer(Protocol):
 
 
     def command_status(self, pdu):
-        if pdu['body']['mandatory_parameters']['short_message'][:5] == "ESME_":
+        if pdu['body']['mandatory_parameters']['short_message'].startswith("ESME_"):
             return pdu['body']['mandatory_parameters']['short_message'].split(' ')[0]
         else:
             return 'ESME_ROK'
