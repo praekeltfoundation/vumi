@@ -129,6 +129,12 @@ class DeliveryReceiptResource(Resource):
         try:
             request.setResponseCode(http.OK)
             request.setHeader('Content-Type', 'text/plain')
+            status = int(request.args['status'][0])
+            delivery_status = 'pending'
+            if status < 0:
+                delivery_status = 'failed'
+            elif status in [2, 14]:
+                delivery_status = 'delivered'
             yield self.publisher.publish_message(Message(**{
                 'transport_message_id': request.args['smsid'][0],
                 'transport_status': request.args['status'][0],
@@ -136,7 +142,8 @@ class DeliveryReceiptResource(Resource):
                 'transport_timestamp': iso8601(request.args['time'][0]),
                 'transport_network_id': request.args['provider'][0],
                 'to_msisdn': normalize_msisdn(request.args['sender'][0]),
-                'id': request.args['messageid'][0]
+                'id': request.args['messageid'][0],
+                'delivery_status': delivery_status,
             }), routing_key='sms.receipt.%(transport_name)s' % self.config)
         except KeyError, e:
             request.setResponseCode(http.BAD_REQUEST)
