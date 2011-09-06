@@ -382,7 +382,7 @@ class Publisher(object):
     def publish(self, message, **kwargs):
         exchange_name = kwargs.get('exchange_name') or self.exchange_name
         routing_key = kwargs.get('routing_key') or self.routing_key
-        require_bind = kwargs.get('require_bind') or self.require_bind
+        require_bind = kwargs.get('require_bind', self.require_bind)
         self.check_routing_key(routing_key, require_bind)
         return self.channel.basic_publish(exchange=exchange_name,
                                           content=message,

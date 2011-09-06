@@ -56,11 +56,20 @@ class SmscServer(Protocol):
             self.sendPDU(pdu_resp)
 
 
+    def command_status(self, pdu):
+        if pdu['body']['mandatory_parameters']['short_message'][:5] == "ESME_":
+            return pdu['body']['mandatory_parameters']['short_message'].split(' ')[0]
+        else:
+            return 'ESME_ROK'
+
+
+
     def handle_submit_sm(self, pdu):
         if pdu['header']['command_status'] == 'ESME_ROK':
             sequence_number = pdu['header']['sequence_number']
             message_id = str(uuid.uuid4())
-            pdu_resp = SubmitSMResp(sequence_number, message_id)
+            command_status = self.command_status(pdu)
+            pdu_resp = SubmitSMResp(sequence_number, message_id, command_status)
             self.sendPDU(pdu_resp)
             reactor.callLater(2, self.delivery_report, message_id)
             self.boomerang(pdu)
