@@ -104,6 +104,7 @@ class EsmeTransceiver(Protocol):
                 "conn_permfault": self.dummy_conn_permfault,
                 "conn_tempfault": self.dummy_conn_tempfault,
                 "conn_throttle": self.dummy_conn_throttle,
+                "unknown": self.dummy_unknown,
                 }
         self.r_server = redis.Redis("localhost",
                 db=get_deploy_int(self.vumi_options['vhost']))
@@ -167,6 +168,16 @@ class EsmeTransceiver(Protocol):
                 args,
                 kwargs)
             log.msg(m)
+
+    # Dummy error handler functions, just log invocation
+    def dummy_unknown(self, *args, **kwargs):
+            m = "%s.%s(*args=%s, **kwargs=%s)" % (
+                __name__,
+                "dummy_unknown",
+                args,
+                kwargs)
+            log.msg(m)
+
 
     def build_maps(self):
         self.ESME_command_status_dispatch_map = {
@@ -242,7 +253,7 @@ class EsmeTransceiver(Protocol):
     def command_status_dispatch(self, pdu):
         method = self.ESME_command_status_dispatch_map.get(
                 pdu['header']['command_status'],
-                self.dispatch_ok)
+                self.dispatch_unknown)
         handler = method()
         if pdu['header']['command_status'] != "ESME_ROK":
             log.msg("ERROR handler:%s pdu:%s" % (handler, pdu))
@@ -274,6 +285,9 @@ class EsmeTransceiver(Protocol):
 
     def update_error_handlers(self, handler_dict={}):
         self.error_handlers.update(handler_dict)
+
+    def dispatch_unknown(self):
+        return self.error_handlers.get("unknown")
 
     def getSeq(self):
         return self.seq[0]

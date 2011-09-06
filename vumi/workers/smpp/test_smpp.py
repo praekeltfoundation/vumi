@@ -643,15 +643,24 @@ class FakeRedisRespTestCase(TestCase):
             "ESME_RUNKNOWNERR"      : self.transport.mess_tempfault,
         }
 
+        newfangled_fake_error = {
+            "ESME_NEWFNGLEDFAKERR" : self.esme.dummy_unknown,
+        }
+
+
         for code, method in bind_dispatch_methods.items():
-            #print code, method
             response = BindTransceiverResp(1, code)
             # check the dispatcher returns the correct transport method
             self.assertEquals(method,
                     self.esme.command_status_dispatch(response.get_obj()))
 
         for code, method in submit_dispatch_methods.items():
-            #print code, method
+            response = SubmitSMResp(1, "2", code)
+            # check the dispatcher returns the correct transport method
+            self.assertEquals(method,
+                    self.esme.command_status_dispatch(response.get_obj()))
+
+        for code, method in newfangled_fake_error.items():
             response = SubmitSMResp(1, "2", code)
             # check the dispatcher returns the correct transport method
             self.assertEquals(method,
