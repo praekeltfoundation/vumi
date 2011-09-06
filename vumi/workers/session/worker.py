@@ -1,20 +1,13 @@
 import json
 import redis
-import yaml
 
 from twisted.python import log
-from twisted.python.log import logging
-from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.defer import inlineCallbacks
 
 from vumi.service import Worker, Consumer, Publisher
-from vumi.session import getVumiSession, delVumiSession, VumiSession, TraversedDecisionTree
-from vumi.message import Message, VUMI_DATE_FORMAT
+from vumi.session import getVumiSession, delVumiSession, TraversedDecisionTree
 from vumi.webapp.api import utils
-from vumi.utils import *
-
-from twisted.python import log
-from twisted.python.log import logging
-from twisted.internet.defer import inlineCallbacks, returnValue
+from vumi.utils import get_deploy_int
 
 
 class SessionConsumer(Consumer):
@@ -23,12 +16,11 @@ class SessionConsumer(Consumer):
     exchange_type = "direct"
     durable = True
     delivery_mode = 2
-    queue_name = "vumi.inbound.session.default" #TODO revise name
-    routing_key = "vumi.inbound.session.default" #TODO revise name
+    queue_name = "vumi.inbound.session.default"  # TODO revise name
+    routing_key = "vumi.inbound.session.default"  # TODO revise name
     yaml_template = None
-    data_url = {"username":None, "password":None, "url":None, "params":[]}
-    post_url = {"username":None, "password":None, "url":None, "params":[]}
-
+    data_url = {"username": None, "password": None, "url": None, "params": []}
+    post_url = {"username": None, "password": None, "url": None, "params": []}
 
     def __init__(self, publisher):
         self.publisher = publisher
@@ -45,12 +37,11 @@ class SessionConsumer(Consumer):
     def set_post_url(self, post_source):
         self.post_url = post_source
 
-
     def consume_message(self, message):
+        # TODO: Eep! This code is broken!
         log.msg("session message %s consumed by %s" % (
-            json.dumps(dictionary),self.__class__.__name__))
+            json.dumps(dictionary), self.__class__.__name__))
         #dictionary = message.get('short_message')
-
 
     def call_for_json(self, MSISDN):
         if self.data_url['url']:
@@ -62,13 +53,14 @@ class SessionConsumer(Consumer):
                 if self.data_url['password']:
                     auth_string += ":" + self.data_url['password']
                 auth_string += "@"
-            resp_url, resp = utils.callback("http://"+auth_string+url, params)
+            resp_url, resp = utils.callback("http://" + auth_string + url,
+                                            params)
             return resp
         return None
 
-
     def post_back_json(self, MSISDN):
-        session = getVumiSession(self.r_server, self.routing_key+'.'+MSISDN)
+        session = getVumiSession(self.r_server,
+                                 self.routing_key + '.' + MSISDN)
         if session and session.get_decision_tree():
             json_string = json.dumps(session.get_decision_tree().get_data())
             if self.post_url['url']:
@@ -80,13 +72,14 @@ class SessionConsumer(Consumer):
                     if self.post_url['password']:
                         auth_string += ":" + self.post_url['password']
                     auth_string += "@"
-                resp_url, resp = utils.callback("http://"+auth_string+url, params)
+                resp_url, resp = utils.callback("http://" + auth_string + url,
+                                                params)
                 return resp
         return None
 
-
     def get_session(self, MSISDN):
-        sess = getVumiSession(self.r_server, self.routing_key+'.'+MSISDN)
+        sess = getVumiSession(self.r_server,
+                              self.routing_key + '.' + MSISDN)
         if not sess.get_decision_tree():
             sess.set_decision_tree(self.setup_new_decision_tree(MSISDN))
         return sess
@@ -112,7 +105,6 @@ class SessionConsumer(Consumer):
         return decision_tree
 
 
-
 class SessionPublisher(Publisher):
     exchange_name = "vumi"
     exchange_type = "direct"
@@ -122,7 +114,8 @@ class SessionPublisher(Publisher):
     delivery_mode = 2
 
     def publish_message(self, message, **kwargs):
-        log.msg("Publishing Message %s with extra args: %s" % (message, kwargs))
+        log.msg("Publishing Message %s with extra args: %s"
+                % (message, kwargs))
         super(SessionPublisher, self).publish_message(message, **kwargs)
 
 
@@ -140,4 +133,3 @@ class SessionWorker(Worker):
 
     def stopWorker(self):
         log.msg("Stopping the SessionWorker")
-

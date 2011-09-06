@@ -56,7 +56,7 @@ class APIClientTestCase(TestCase):
         self.assertTrue(isinstance(resp, list))
         self.assertEquals(
             sorted(['27123456788', '27123456789']),
-            sorted([o.to_msisdn for o in resp])
+            sorted([o.to_msisdn for o in resp]),
         )
         self.assertTrue(all(o.from_msisdn == '27123456789' for o in resp))
         self.assertTrue(all(o.message == 'hello world' for o in resp))
@@ -68,7 +68,7 @@ class APIClientTestCase(TestCase):
             to_msisdns={
                 '27123456788': {
                     'name': 'Foo',
-                    'surname': 'Bar'
+                    'surname': 'Bar',
                 },
                 '27123456789': {
                     'name': 'Boo',
@@ -79,7 +79,7 @@ class APIClientTestCase(TestCase):
         self.assertTrue(isinstance(resp, list))
         self.assertEquals(
             set(['27123456788', '27123456789']),
-            set([o.to_msisdn for o in resp])
+            set([o.to_msisdn for o in resp]),
         )
         self.assertTrue(all(o.from_msisdn == '27123456789' for o in resp))
         self.assertEquals(set(o.message for o in resp),
@@ -143,7 +143,7 @@ class APIClientTestCase(TestCase):
             to_msisdn='27123456789',
             from_msisdn='27123456789',
             transport_name='Clickatell',
-            message='hello world'
+            message='hello world',
         )
         # reset the date to 1 month back, django automatically timestamps
         # for now() at creation
@@ -175,17 +175,17 @@ class APIClientTestCase(TestCase):
         # create
         callback_resp = self.client.set_callback(
             event='sms_received',
-            url=url
+            url=url,
         )
         self.assertTrue(callback_resp.url, url)
         # update
         callback_resp = self.client.update_callback(
             id=callback_resp.id,
-            url=url + '/update'
+            url=url + '/update',
         )
         self.assertTrue(callback_resp.url, url + '/update')
         # delete
         callback_resp = self.client.delete_callback(
-            id=callback_resp.id
+            id=callback_resp.id,
         )
         self.assertTrue(callback_resp.success)
