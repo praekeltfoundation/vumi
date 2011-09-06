@@ -85,7 +85,7 @@ class EsmeTransceiver(Protocol):
         log.msg('__init__ %s' % self.name)
         self.defaults = {}
         self.state = 'CLOSED'
-        log.msg('STATE :' % (self.name, self.state))
+        log.msg('%s STATE: %s' % (self.name, self.state))
         self.seq = seq
         self.config = config
         self.vumi_options = vumi_options
@@ -306,8 +306,8 @@ class EsmeTransceiver(Protocol):
 
     def handleData(self, data):
         pdu = unpack_pdu(data)
-        log.msg('INCOMING <<<<' % binascii.b2a_hex(data))
-        log.msg('INCOMING <<<<' % pdu)
+        log.msg('INCOMING <<<< %s' % binascii.b2a_hex(data))
+        log.msg('INCOMING <<<< %s' % pdu)
         error_handler = self.command_status_dispatch(pdu)
         error_handler(pdu=pdu)
         if pdu['header']['command_id'] == 'bind_transceiver_resp':
@@ -322,7 +322,7 @@ class EsmeTransceiver(Protocol):
             self.handle_enquire_link(pdu)
         if pdu['header']['command_id'] == 'enquire_link_resp':
             self.handle_enquire_link_resp(pdu)
-        log.msg('STATE :' % (self.name, self.state))
+        log.msg('%s STATE: %s' % (self.name, self.state))
 
     def loadDefaults(self, defaults):
         self.defaults = dict(self.defaults, **defaults)
@@ -344,7 +344,7 @@ class EsmeTransceiver(Protocol):
 
     def connectionMade(self):
         self.state = 'OPEN'
-        log.msg('STATE :' % (self.name, self.state))
+        log.msg('%s STATE: %s' % (self.name, self.state))
         pdu = BindTransceiver(self.getSeq(), **self.defaults)
         log.msg(pdu.get_obj())
         self.incSeq()
@@ -352,7 +352,7 @@ class EsmeTransceiver(Protocol):
 
     def connectionLost(self, *args, **kwargs):
         self.state = 'CLOSED'
-        log.msg('STATE :' % (self.name, self.state))
+        log.msg('%s STATE: %s' % (self.name, self.state))
         try:
             self.lc_enquire.stop()
             del self.lc_enquire
@@ -397,7 +397,7 @@ class EsmeTransceiver(Protocol):
             self.lc_enquire = LoopingCall(self.enquire_link)
             self.lc_enquire.start(55.0)
             self.__connect_callback(self)
-        log.msg('%s STATE : %s' %(self.name, self.state))
+        log.msg('%s STATE: %s' %(self.name, self.state))
 
     def handle_submit_sm_resp(self, pdu):
         self.pop_unacked()
