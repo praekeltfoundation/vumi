@@ -48,7 +48,7 @@ class SMSBatchTestCase(TestCase):
         user = User.objects.create(username='vumi')
         batch = SentSMSBatch(user=user, title='test batch')
         # create 3 test messages in this batch
-        recipients = [u'27123456789%s' % i for i in range(0,3)]
+        recipients = [u'27123456789%s' % i for i in range(0, 3)]
         for recipient in recipients:
             batch.sentsms_set.create(to_msisdn=recipient,
                 from_msisdn='27123456789', message='testing message',
@@ -60,12 +60,13 @@ class SMSBatchTestCase(TestCase):
 
         self.debatcher.consume_message(message)
         self.assertEquals(len(self.publisher.queue), 3)
-        self.assertEquals(set([m.payload['to_msisdn'] for m,kwargs in
+        self.assertEquals(set([m.payload['to_msisdn'] for m, kwargs in
                 self.publisher.queue]),
                 set(recipients))
         # ensure that the routing key is converted to lower case
         self.assertTrue(all(kwargs['routing_key'] == 'sms.outbound.transport'
-            for m,kwargs in self.publisher.queue))
+            for m, kwargs in self.publisher.queue))
+
 
 class SMSReceiptTestCase(TestCase):
 
@@ -88,14 +89,12 @@ class SMSReceiptTestCase(TestCase):
         self.assertEquals(sent_sms,
             self.receipt_consumer.find_sent_sms('TransportName', 'message_id'))
 
-
     def test_failure_to_find_sent_sms(self):
         """When no SentSMS or SMPPResp can be found it should raise a
         SentSMS.DoesNotExist exception"""
         self.assertRaises(SentSMS.DoesNotExist,
                 self.receipt_consumer.find_sent_sms,
-                'TransportName','unknown_message_id')
-
+                'TransportName', 'unknown_message_id')
 
     def test_receipt_processing(self):
         """Receipts can come from an a varying amount of transports, they are
@@ -116,7 +115,8 @@ class SMSReceiptTestCase(TestCase):
         delivery_timestamp = datetime.now()
 
         # set the expectation
-        with mocking(utils.callback).to_return(urlcallback.url,"OK") as mocked:
+        with mocking(utils.callback).to_return(
+                urlcallback.url, "OK") as mocked:
             message = Message(
                 transport_status='D',
                 transport_name='Opera',
@@ -143,7 +143,7 @@ class SMSReceiptTestCase(TestCase):
         Receipt consumers should be automatically created based on
         whatever transports are registered in the db
         """
-        for transport_name in ['TransportName%s' % i for i in range(0,5)]:
+        for transport_name in ['TransportName%s' % i for i in range(0, 5)]:
             Transport.objects.create(name=transport_name)
 
         class TestingSMSReceiptWorker(SMSReceiptWorker):
@@ -165,7 +165,8 @@ class SMSReceiptTestCase(TestCase):
         self.assertEquals(len(worker.log), 5)
         # transport name should be the part of the class name
         self.assertTrue(all([
-            re.match(r'TransportName[0-5]{1}_SMSReceiptConsumer', klass.__name__)
+            re.match(r'TransportName[0-5]{1}_SMSReceiptConsumer',
+                klass.__name__)
             for klass in worker.log]))
         # queue_name & routing_key should include the lowercased transport name
         self.assertTrue(all([
@@ -180,9 +181,10 @@ class SMSKeywordTestCase(TestCase):
 
     def setUp(self):
         self.test_db_args = setup_django_test_database()
-        consumer_class = dynamically_create_keyword_consumer('Testing',
-                                    queue_name='sms.inbound.testing.27123456780',
-                                    routing_key='sms.inbound.testing.27123456780')
+        consumer_class = dynamically_create_keyword_consumer(
+                'Testing',
+                queue_name='sms.inbound.testing.27123456780',
+                routing_key='sms.inbound.testing.27123456780')
         self.keyword_consumer = consumer_class()
 
     def tearDown(self):
@@ -195,25 +197,29 @@ class SMSKeywordTestCase(TestCase):
         user = User.objects.create(username='vumi')
         profile = user.get_profile()
         # create two callbacks, each should be called
-        urlcallback = profile.urlcallback_set.create(url='http://test.domain/1',
-                                                        name='sms_received')
-        urlcallback = profile.urlcallback_set.create(url='http://test.domain/2',
-                                                        name='sms_received')
+        urlcallback = profile.urlcallback_set.create(
+                url='http://test.domain/1',
+                name='sms_received')
+        urlcallback = profile.urlcallback_set.create(
+                url='http://test.domain/2',
+                name='sms_received')
         keyword = Keyword.objects.create(keyword='keyword', user=user)
         message = Message(
                     short_message="keyword message",
                     destination_addr="27123456780",
-                    source_addr='27123456789') # prefixed
+                    source_addr='27123456789')  # prefixed
 
         # make sure db is empty
         self.assertFalse(ReceivedSMS.objects.exists())
 
-        with mocking(utils.callback).to_return(urlcallback.url,"OK") as mocked:
+        with mocking(utils.callback).to_return(
+                urlcallback.url, "OK") as mocked:
             # consume the message with the callback mocked to return OK
             self.keyword_consumer.consume_message(message)
 
             # check for creation of 1 received sms
-            all_received_sms = ReceivedSMS.objects.filter(to_msisdn='27123456780')
+            all_received_sms = ReceivedSMS.objects.filter(
+                    to_msisdn='27123456780')
             self.assertEquals(all_received_sms.count(), 1)
 
             # check the data of the received sms
@@ -226,8 +232,10 @@ class SMSKeywordTestCase(TestCase):
             # check that the callback was actually fired
             self.assertEquals(mocked.called, 2)
             # test that both urlcallbacks where requested
-            self.assertEquals(mocked.history[0].args[0], 'http://test.domain/1')
-            self.assertEquals(mocked.history[1].args[0], 'http://test.domain/2')
+            self.assertEquals(mocked.history[0].args[0],
+                    'http://test.domain/1')
+            self.assertEquals(mocked.history[1].args[0],
+                    'http://test.domain/2')
 
             # check the vars posted to the url callback
             url, paramlist = mocked.args
@@ -271,13 +279,19 @@ class SMSKeywordTestCase(TestCase):
         network1_consumer = worker.log[0]
         network2_consumer = worker.log[1]
 
-        self.assertEquals(network1_consumer.__name__, 'network1_SMSKeywordConsumer')
-        self.assertEquals(network1_consumer.queue_name, 'sms.inbound.testing.27123456780')
-        self.assertEquals(network1_consumer.routing_key, 'sms.inbound.testing.27123456780')
+        self.assertEquals(network1_consumer.__name__,
+                'network1_SMSKeywordConsumer')
+        self.assertEquals(network1_consumer.queue_name,
+                'sms.inbound.testing.27123456780')
+        self.assertEquals(network1_consumer.routing_key,
+                'sms.inbound.testing.27123456780')
 
-        self.assertEquals(network2_consumer.__name__, 'network2_SMSKeywordConsumer')
-        self.assertEquals(network2_consumer.queue_name, 'sms.inbound.testing.27123456781')
-        self.assertEquals(network2_consumer.routing_key, 'sms.inbound.testing.27123456781')
+        self.assertEquals(network2_consumer.__name__,
+                'network2_SMSKeywordConsumer')
+        self.assertEquals(network2_consumer.queue_name,
+                'sms.inbound.testing.27123456781')
+        self.assertEquals(network2_consumer.routing_key,
+                'sms.inbound.testing.27123456781')
 
 
 class ConsumerTestCase(TestCase):
@@ -290,7 +304,6 @@ class ConsumerTestCase(TestCase):
 
             def consume_message(self, message):
                 self.log.append(message)
-
 
         self.consumer = TestConsumer()
         self.channel = TestChannel()
@@ -309,6 +322,7 @@ class ConsumerTestCase(TestCase):
         self.assertEquals(message.payload, {
             'key': 'value'
         })
+
 
 class PublisherTestCase(TestCase):
 
@@ -334,15 +348,12 @@ class PublisherTestCase(TestCase):
     def test_upper_case_routing_keys_exception(self):
         self.publisher.start(self.channel)
         self.assertRaises(
-            RoutingKeyError, # exception
-            self.publisher.publish_message, # callback
-            Message(testing="data"), # args
+            RoutingKeyError,  # exception
+            self.publisher.publish_message,  # callback
+            Message(testing="data"),  # args
             routing_key="IN.UPPER.CASE"
             )
 
-
-#import sys
-#log.startLogging(sys.stdout)
 
 class RedisTestEsmeTransceiver(EsmeTransceiver):
 
@@ -644,9 +655,8 @@ class FakeRedisRespTestCase(TestCase):
         }
 
         newfangled_fake_error = {
-            "ESME_NEWFNGLEDFAKERR" : self.esme.dummy_unknown,
+            "ESME_NEWFNGLEDFAKERR": self.esme.dummy_unknown,
         }
-
 
         for code, method in bind_dispatch_methods.items():
             response = BindTransceiverResp(1, code)
