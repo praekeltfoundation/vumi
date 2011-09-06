@@ -372,11 +372,9 @@ class RedisTestSmppTransport(SmppTransport):
         return sequence_number
 
     def ok(self, *args, **kwargs):
-        #print kwargs.get('pdu')
         pass
 
     def mess_permfault(self, *args, **kwargs):
-        #print kwargs.get('pdu')
         pass
 
     def mess_tempfault(self, *args, **kwargs):
@@ -388,11 +386,9 @@ class RedisTestSmppTransport(SmppTransport):
         pass
 
     def conn_permfault(self, *args, **kwargs):
-        #print kwargs.get('pdu')
         pass
 
     def conn_tempfault(self, *args, **kwargs):
-        #print kwargs.get('pdu')
         pass
 
     def conn_throttle(self, *args, **kwargs):
