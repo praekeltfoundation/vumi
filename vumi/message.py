@@ -10,6 +10,34 @@ VUMI_DATE_FORMAT = "%Y-%m-%d %H:%M:%S.%f"
 """This is the date format we work with internally"""
 
 
+def date_time_decoder(json_object):
+    for key, value in json_object.items():
+        try:
+            json_object[key] = datetime.strptime(value,
+                    VUMI_DATE_FORMAT)
+        except ValueError:
+            continue
+        except TypeError:
+            continue
+    return json_object
+
+
+class JSONMessageEncoder(json.JSONEncoder):
+    """A JSON encoder that is able to serialize datetime"""
+    def default(self, obj):
+        if isinstance(obj, datetime):
+            return obj.strftime(VUMI_DATE_FORMAT)
+        return super(json.JSONEncoder, self).default(obj)
+
+
+def from_json(json_string):
+    return json.loads(json_string, object_hook=date_time_decoder)
+
+
+def to_json(obj):
+    return json.dumps(obj, cls=JSONMessageEncoder)
+
+
 class Message(object):
     """
     Start of a somewhat unified message object to be
@@ -41,12 +69,11 @@ class Message(object):
             raise InvalidMessageField(field)
 
     def to_json(self):
-        return json.dumps(self.payload, cls=JSONMessageEncoder)
+        return to_json(self.payload)
 
     @classmethod
     def from_json(cls, json_string):
-        dictionary = json.loads(json_string, object_hook=date_time_decoder)
-        return cls(**dictionary)
+        return cls(**from_json(json_string))
 
     def __str__(self):
         return u"<Message payload=\"%s\">" % repr(self.payload)
@@ -55,7 +82,9 @@ class Message(object):
         return str(self)
 
     def __eq__(self, other):
-        return self.payload == other.payload
+        if isinstance(other, Message):
+            other = other.payload
+        return self.payload == other
 
     def __getitem__(self, key):
         return self.payload[key]
@@ -63,25 +92,11 @@ class Message(object):
     def __setitem__(self, key, value):
         self.payload[key] = value
 
+    def get(self, key, default=None):
+        return self.payload.get(key, default)
 
-def date_time_decoder(json_object):
-    for key, value in json_object.items():
-        try:
-            json_object[key] = datetime.strptime(value,
-                    VUMI_DATE_FORMAT)
-        except ValueError:
-            continue
-        except TypeError:
-            continue
-    return json_object
-
-
-class JSONMessageEncoder(json.JSONEncoder):
-    """A JSON encoder that is able to serialize datetime"""
-    def default(self, obj):
-        if isinstance(obj, datetime):
-            return obj.strftime(VUMI_DATE_FORMAT)
-        return super(json.JSONEncoder, self).default(obj)
+    def items(self):
+        return self.payload.items()
 
 
 class TransportMessage(Message):
