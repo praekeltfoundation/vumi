@@ -108,31 +108,44 @@ class SmppTransport(Worker):
         self.r_delete_for_sequence(kwargs['sequence_number'])
         log.msg("Mapping transport_msg_id=%s to sent_sms_id=%s" % (
             transport_msg_id, sent_sms_id))
-        self.publisher.publish_message(Message(**{
+        # TODO new message here
+        routing_key = 'sms.ack.%s' % (self.transport_name)
+        message = Message(**{
             'id': sent_sms_id,
             'transport_message_id': transport_msg_id
-            }), routing_key='sms.ack.%s' % self.transport_name)
-        yield log.msg("SUBMIT SM RESP %s" % repr(kwargs))
+            })
+        log.msg("PUBLISHING ACK: %s TO: %s" %(message, routing_key))
+        yield self.publisher.publish_message(
+                message,
+                routing_key=routing_key)
 
     @inlineCallbacks
     def delivery_report(self, *args, **kwargs):
-        log.msg("DELIVERY REPORT", kwargs)
-        dictionary = {
+        # TODO new message here
+        routing_key='sms.receipt.%s' % (self.transport_name)
+        message = Message(**{
             'transport_name': self.transport_name,
             'transport_msg_id': kwargs['delivery_report']['id'],
             'transport_status': kwargs['delivery_report']['stat'],
             'transport_delivered_at': datetime.strptime(
                 kwargs['delivery_report']['done_date'],
                 "%y%m%d%H%M%S")
-        }
-        yield self.publisher.publish_message(Message(**dictionary),
-            routing_key='sms.receipt.%s' % (self.transport_name,))
+            })
+        log.msg("PUBLISHING DELIV REPORT: %s TO: %s" %(message, routing_key))
+        yield self.publisher.publish_message(
+                message,
+                routing_key=routing_key)
 
     @inlineCallbacks
     def deliver_sm(self, *args, **kwargs):
-        yield self.publisher.publish_message(Message(**kwargs),
-            routing_key='sms.inbound.%s.%s' % (
-                self.transport_name, kwargs.get('destination_addr')))
+        # TODO new message here
+        routing_key='sms.inbound.%s.%s' % (
+                self.transport_name, kwargs.get('destination_addr'))
+        message = Message(**kwargs)
+        log.msg("PUBLISHING INBOUND: %s TO: %s" %(message, routing_key))
+        yield self.publisher.publish_message(
+                message,
+                routing_key=routing_key)
 
     def send_smpp(self, id, to_msisdn, message, *args, **kwargs):
         # TODO: Do we want this in the transport or should it be part of the
@@ -160,6 +173,7 @@ class SmppTransport(Worker):
     def send_failure(self, message, reason=None):
         """Send a failure report."""
         log.msg("Failed to send: %s reason: %s" % (message, reason))
+        # TODO new message here
         self.failure_publisher.publish_message(Message(
                 message=message.payload, reason=reason), require_bind=False)
         #TODO get rid of that require_bind=False
