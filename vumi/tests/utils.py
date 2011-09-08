@@ -34,11 +34,15 @@ def teardown_django_test_database(runner, config):
 
 class UTCNearNow(object):
     def __init__(self, offset=10):
-        self.now = datetime.utcnow().replace(tzinfo=pytz.UTC)
+        self.now = datetime.utcnow()
+        self.utcnow = self.now.replace(tzinfo=pytz.UTC)
         self.offset = timedelta(offset)
 
     def __eq__(self, other):
-        return (self.now - self.offset) < other < (self.now + self.offset)
+        now = self.now
+        if other.tzinfo:
+            now = self.utcnow
+        return (now - self.offset) < other < (now + self.offset)
 
 
 class Mocking(object):
