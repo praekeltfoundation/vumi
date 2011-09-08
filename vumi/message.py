@@ -141,17 +141,6 @@ class TransportSMSAck(TransportMessage):
         self.assert_field_present('transport_message_id')
 
 
-class TransportSMSAck(TransportMessage):
-    def process_fields(self, fields):
-        fields = super(TransportSMSAck, self).process_fields(fields)
-        fields['message_type'] = 'sms_ack'
-        return fields
-
-    def validate_fields(self):
-        super(TransportSMSAck, self).validate_fields
-        self.assert_field_present('transport_message_id')
-
-
 class TransportSMSDeliveryReport(TransportMessage):
     def process_fields(self, fields):
         fields = super(TransportSMSDeliveryReport, self).process_fields(fields)
