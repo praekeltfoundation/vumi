@@ -151,7 +151,7 @@ class SmppTransport(Worker):
 
     @inlineCallbacks
     def deliver_sm(self, *args, **kwargs):
-        routing_key = 'sms.inbound.%ss' % (self.transport_name)
+        routing_key = 'sms.inbound.%s' % (self.transport_name)
         message = TransportSMS(
                 transport=self.transport_name,
                 message_id=None,  #hasn't hit a datastore yet

@@ -201,7 +201,7 @@ class SMSAckConsumer(Consumer):
     def consume_message(self, message):
         dictionary = message.payload
         log.msg("Consuming message:", message)
-        id = dictionary['id']
+        id = dictionary['message_id']
         transport_message_id = dictionary['transport_message_id']
         try:
             sent_sms = SentSMS.objects.get(id=id)
@@ -236,6 +236,48 @@ class SMSAckWorker(Worker):
 
     def stopWorker(self):
         log.msg("Stopping the SMSAckWorker")
+
+
+#==================================================================================================
+
+class SMSInboundConsumer(Consumer):
+    exchange_name = "vumi"
+    exchange_type = "direct"
+    durable = True
+    delivery_mode = 2
+    queue_name = "" # overwritten by subclass
+    routing_key = "" # overwritten by subclass
+
+
+    def consume_message(self, message):
+        dictionary = message.payload
+        log.msg("Consuming message:", message)
+        log.msg("Inbound Message %s consumed by %s" % (repr(dictionary),self.__class__.__name__))
+
+
+def dynamically_create_inbound_consumer(name,**kwargs):
+    log.msg("Dynamically creating inbound consumer for %s with %s" % (name,
+        repr(kwargs)))
+    return type("%s_SMSInboundConsumer" % name, (SMSInboundConsumer,), kwargs)
+
+class SMSInboundWorker(Worker):
+    """
+    A worker that writes all inbound SMS's to the database
+    """
+
+    @inlineCallbacks
+    def startWorker(self):
+        for transport in Transport.objects.all():
+            log.msg("Starting the SMSInboundWorkers for: %s" % transport.name) 
+            yield self.start_consumer(
+                    dynamically_create_inbound_consumer(str(transport.name),
+                            routing_key='sms.inbound.%s' % transport.name.lower(),
+                            queue_name='sms.inbound.%s' % transport.name.lower()
+                        ))
+        
+
+    def stopWorker(self):
+        log.msg("Stopping the SMSInboundWorker")
 
 
 #==================================================================================================
