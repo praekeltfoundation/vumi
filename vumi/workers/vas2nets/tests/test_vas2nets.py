@@ -12,9 +12,10 @@ from twisted.python import log
 from twisted.internet.defer import inlineCallbacks
 from twisted.web.test.test_web import DummyRequest
 
-from vumi.tests.utils import get_stubbed_worker, TestResourceWorker
+from vumi.tests.utils import get_stubbed_worker, TestResourceWorker, UTCNearNow
 from vumi.tests.fake_amqp import FakeAMQPBroker
-from vumi.message import Message
+from vumi.message import (from_json, Message, TransportSMS, TransportSMSAck,
+                          TransportSMSDeliveryReport)
 from vumi.workers.vas2nets.transport import (
     ReceiveSMSResource, DeliveryReceiptResource, Vas2NetsTransport,
     validate_characters, Vas2NetsEncodingError, normalize_outbound_msisdn)
@@ -105,17 +106,39 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
         request.args = args
         return request
 
-    def mkmsg_in(self, **fields):
-        msg = {
-            'from_msisdn': '+41791234567',
-            'to_msisdn': '9292',
-            'transport_network_id': 'provider',
-            'transport_message_id': '1',
-            'transport_keyword': '',
-            'transport_timestamp': self.today.strftime('%Y-%m-%dT%H:%M:%S'),
-            'message': 'hello world',
-            }
-        msg.update(fields)
+    def make_delivery_message(self, status, tr_status, tr_message):
+        return TransportSMSDeliveryReport(
+            transport='vas2nets',
+            transport_message_id='1',
+            transport_metadata={
+               'delivery_status': tr_status,
+               'network_id': 'provider',
+               'timestamp': self.today.strftime('%Y-%m-%dT%H:%M:%S'),
+               'delivery_message': tr_message,
+               },
+            to_addr='+41791234567',
+            message_id='internal id',
+            delivery_status=status,
+            timestamp=UTCNearNow(),
+            )
+
+    def mkmsg_in(self):
+        msg = TransportSMS(
+            message_type='sms',
+            message_version='20110907',
+            from_addr='+41791234567',
+            to_addr='9292',
+            message_id='1',
+            transport='vas2nets',
+            transport_message_id='1',
+            transport_metadata={
+                'network_id': 'provider',
+                'keyword': '',
+                'timestamp': self.today.strftime('%Y-%m-%dT%H:%M:%S'),
+                },
+            message='hello world',
+            timestamp=UTCNearNow(),
+            )
         return msg
 
     def mkmsg_out(self, **fields):
@@ -148,10 +171,58 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
         msg = self.mkmsg_in()
 
         [smsg] = self.get_dispatched('sms.inbound.vas2nets.9292')
-        self.assertEquals(json.loads(smsg.body), msg)
+        self.assertEquals(msg.payload, from_json(smsg.body))
 
     @inlineCallbacks
-    def test_delivery_receipt(self):
+    def test_delivery_receipt_pending(self):
+        resource = DeliveryReceiptResource(self.config, self.publisher)
+
+        request = self.create_request({
+            'smsid': ['1'],
+            'messageid': ['internal id'],
+            'sender': ['+41791234567'],
+            'status': ['1'],
+            'text': ['Message submitted to Provider for delivery.'],
+        })
+        d = request.notifyFinish()
+        response = resource.render(request)
+        self.assertEquals(response, NOT_DONE_YET)
+        yield d
+        self.assertEquals('', ''.join(request.written))
+        self.assertEquals(request.outgoingHeaders['content-type'],
+                          'text/plain')
+        self.assertEquals(request.responseCode, http.OK)
+        msg = self.make_delivery_message(
+            'pending', '1', 'Message submitted to Provider for delivery.')
+        [smsg] = self.get_dispatched('sms.receipt.vas2nets')
+        self.assertEquals(Message.from_json(smsg.body), msg)
+
+    @inlineCallbacks
+    def test_delivery_receipt_failed(self):
+        resource = DeliveryReceiptResource(self.config, self.publisher)
+
+        request = self.create_request({
+            'smsid': ['1'],
+            'messageid': ['internal id'],
+            'sender': ['+41791234567'],
+            'status': ['-9'],
+            'text': ['Message could not be delivered.'],
+        })
+        d = request.notifyFinish()
+        response = resource.render(request)
+        self.assertEquals(response, NOT_DONE_YET)
+        yield d
+        self.assertEquals('', ''.join(request.written))
+        self.assertEquals(request.outgoingHeaders['content-type'],
+                          'text/plain')
+        self.assertEquals(request.responseCode, http.OK)
+        msg = self.make_delivery_message(
+            'failed', '-9', 'Message could not be delivered.')
+        [smsg] = self.get_dispatched('sms.receipt.vas2nets')
+        self.assertEquals(Message.from_json(smsg.body), msg)
+
+    @inlineCallbacks
+    def test_delivery_receipt_delivered(self):
         resource = DeliveryReceiptResource(self.config, self.publisher)
 
         request = self.create_request({
@@ -169,15 +240,8 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
         self.assertEquals(request.outgoingHeaders['content-type'],
                           'text/plain')
         self.assertEquals(request.responseCode, http.OK)
-        msg = Message(**{
-            'transport_message_id': '1',
-            'transport_status': '2',
-            'transport_network_id': 'provider',
-            'to_msisdn': '+41791234567',
-            'id': 'internal id',
-            'transport_timestamp': self.today.strftime('%Y-%m-%dT%H:%M:%S'),
-            'transport_status_message': 'Message delivered to MSISDN.',
-        })
+        msg = self.make_delivery_message(
+            'delivered', '2', 'Message delivered to MSISDN.')
         [smsg] = self.get_dispatched('sms.receipt.vas2nets')
         self.assertEquals(Message.from_json(smsg.body), msg)
 
@@ -206,10 +270,11 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
         yield self.worker.handle_outbound_message(Message(**self.mkmsg_out()))
 
         [smsg] = self.get_dispatched('sms.ack.vas2nets')
-        self.assertEqual(json.loads(smsg.body), {
-            'id': '1',
-            'transport_message_id': mocked_message_id,
-        })
+        self.assertEqual(TransportSMSAck(
+                message_id='1',
+                transport_message_id=mocked_message_id,
+                timestamp=UTCNearNow(),
+                ), from_json(smsg.body))
 
     @inlineCallbacks
     def test_send_sms_fail(self):

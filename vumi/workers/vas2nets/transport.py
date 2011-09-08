@@ -14,9 +14,10 @@ from twisted.internet.error import ConnectionRefusedError
 
 from StringIO import StringIO
 from vumi.utils import StringProducer, normalize_msisdn
-from vumi.message import Message
 from vumi.service import Worker
 from vumi.errors import VumiError
+from vumi.message import (Message, TransportSMS, TransportSMSAck,
+                          TransportSMSDeliveryReport)
 
 from urllib import urlencode
 from datetime import datetime
@@ -79,24 +80,27 @@ class ReceiveSMSResource(Resource):
     def __init__(self, config, publisher):
         self.config = config
         self.publisher = publisher
+        self.transport_name = self.config['transport_name']
 
     @inlineCallbacks
     def do_render(self, request):
         request.setResponseCode(http.OK)
         request.setHeader('Content-Type', 'text/plain')
         try:
-            yield self.publisher.publish_message(Message(**{
-                'transport_message_id': request.args['messageid'][0],
-                'transport_timestamp': iso8601(request.args['time'][0]),
-                'transport_network_id': request.args['provider'][0],
-                'transport_keyword': request.args['keyword'][0],
-                'to_msisdn': normalize_msisdn(request.args['destination'][0]),
-                'from_msisdn': normalize_msisdn(request.args['sender'][0]),
-                'message': request.args['text'][0]
-            }), routing_key='sms.inbound.%s.%s' % (
-                self.config.get('transport_name'),
-                request.args['destination'][0]
-            ))
+            yield self.publisher.publish_message(TransportSMS(
+                    transport=self.transport_name,
+                    message_id=request.args['messageid'][0],
+                    transport_message_id=request.args['messageid'][0],
+                    transport_metadata={
+                        'timestamp': iso8601(request.args['time'][0]),
+                        'network_id': request.args['provider'][0],
+                        'keyword': request.args['keyword'][0],
+                        },
+                    to_addr=normalize_msisdn(request.args['destination'][0]),
+                    from_addr=normalize_msisdn(request.args['sender'][0]),
+                    message=request.args['text'][0],
+                    ), routing_key='sms.inbound.%s.%s' % (
+                    self.transport_name, request.args['destination'][0]))
             log.msg("Enqueued.")
         except KeyError, e:
             request.setResponseCode(http.BAD_REQUEST)
@@ -109,6 +113,8 @@ class ReceiveSMSResource(Resource):
             msg = "ValueError: %s" % e
             log.msg('Returning %s: %s' % (http.BAD_REQUEST, msg))
             request.write(msg)
+        except Exception, e:
+            print "!!!", repr(e)
         request.finish()
 
     def render(self, request):
@@ -122,6 +128,7 @@ class DeliveryReceiptResource(Resource):
     def __init__(self, config, publisher):
         self.config = config
         self.publisher = publisher
+        self.transport_name = self.config['transport_name']
 
     @inlineCallbacks
     def do_render(self, request):
@@ -129,15 +136,25 @@ class DeliveryReceiptResource(Resource):
         try:
             request.setResponseCode(http.OK)
             request.setHeader('Content-Type', 'text/plain')
-            yield self.publisher.publish_message(Message(**{
-                'transport_message_id': request.args['smsid'][0],
-                'transport_status': request.args['status'][0],
-                'transport_status_message': request.args['text'][0],
-                'transport_timestamp': iso8601(request.args['time'][0]),
-                'transport_network_id': request.args['provider'][0],
-                'to_msisdn': normalize_msisdn(request.args['sender'][0]),
-                'id': request.args['messageid'][0]
-            }), routing_key='sms.receipt.%(transport_name)s' % self.config)
+            status = int(request.args['status'][0])
+            delivery_status = 'pending'
+            if status < 0:
+                delivery_status = 'failed'
+            elif status in [2, 14]:
+                delivery_status = 'delivered'
+            yield self.publisher.publish_message(TransportSMSDeliveryReport(
+                    transport=self.transport_name,
+                    message_id=request.args['messageid'][0],
+                    transport_message_id=request.args['smsid'][0],
+                    transport_metadata={
+                        'delivery_status': request.args['status'][0],
+                        'delivery_message': request.args['text'][0],
+                        'timestamp': iso8601(request.args['time'][0]),
+                        'network_id': request.args['provider'][0],
+                        },
+                    to_addr=normalize_msisdn(request.args['sender'][0]),
+                    delivery_status=delivery_status,
+                    ), routing_key='sms.receipt.%s' % (self.transport_name))
         except KeyError, e:
             request.setResponseCode(http.BAD_REQUEST)
             msg = "Need more request keys to complete this request. \n\n" \
@@ -189,7 +206,7 @@ class Vas2NetsTransport(Worker):
             'sms.inbound.%(transport_name)s.fallback' % self.config)
         self.consumer = yield self.consume(
             'sms.outbound.%(transport_name)s' % self.config,
-            self.handle_outbound_message)
+            self.handle_outbound_message, message_class=TransportSMS)
         # don't care about prefetch window size but only want one
         # message sent to me at a time, this'll throttle our output to
         # 1 msg at a time, which means 1 transport = 1 connection, 10
@@ -279,10 +296,10 @@ class Vas2NetsTransport(Worker):
 
         if response.headers.hasHeader(header):
             transport_message_id = response.headers.getRawHeaders(header)[0]
-            self.publisher.publish_message(Message(**{
-                'id': data['id'],
-                'transport_message_id': transport_message_id
-            }), routing_key='sms.ack.%(transport_name)s' % self.config)
+            self.publisher.publish_message(TransportSMSAck(
+                message_id=data['id'],
+                transport_message_id=transport_message_id,
+                ), routing_key='sms.ack.%(transport_name)s' % self.config)
         else:
             raise Vas2NetsTransportError('No SmsId Header, content: %s' %
                                             response_content)
