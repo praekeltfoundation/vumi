@@ -407,7 +407,7 @@ class EsmeTransceiver(Protocol):
             3: 'latin1',
             8: 'utf-16be',  # Actually UCS-2, but close enough.
             }.get(data_coding, None)
-        if codec is None:
+        if codec is None or message is None:
             log.msg("WARNING: Not decoding message with data_coding=%s" % (
                     data_coding,))
             return message

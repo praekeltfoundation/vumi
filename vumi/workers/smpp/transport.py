@@ -5,7 +5,8 @@ from twisted.internet.defer import inlineCallbacks
 from twisted.internet import reactor
 
 from vumi.service import Worker
-from vumi.message import Message
+from vumi.message import Message, \
+        TransportSMS, TransportSMSAck, TransportSMSDeliveryReport
 from vumi.workers.smpp.client import EsmeTransceiverFactory
 from vumi.utils import get_operator_number, get_deploy_int
 
@@ -108,36 +109,61 @@ class SmppTransport(Worker):
         self.r_delete_for_sequence(kwargs['sequence_number'])
         log.msg("Mapping transport_msg_id=%s to sent_sms_id=%s" % (
             transport_msg_id, sent_sms_id))
-        self.publisher.publish_message(Message(**{
-            'id': sent_sms_id,
-            'transport_message_id': transport_msg_id
-            }), routing_key='sms.ack.%s' % self.transport_name)
-        yield log.msg("SUBMIT SM RESP %s" % repr(kwargs))
+        routing_key = 'sms.ack.%s' % (self.transport_name)
+        message = TransportSMSAck(
+            transport=self.transport_name,
+            message_id=sent_sms_id,
+            transport_message_id=transport_msg_id)
+        log.msg("PUBLISHING ACK: %s TO: %s" %(message, routing_key))
+        yield self.publisher.publish_message(
+                message,
+                routing_key=routing_key)
+
+    def delivery_status(self, state):
+        if state in [
+                "DELIVRD"
+                ]:
+            return "delivered"
+        if state in [
+                "REJECTD"
+                ]:
+            return "failed"
+        return "pending"
 
     @inlineCallbacks
     def delivery_report(self, *args, **kwargs):
-        log.msg("DELIVERY REPORT", kwargs)
-        dictionary = {
-            'transport_name': self.transport_name,
-            'transport_msg_id': kwargs['delivery_report']['id'],
-            'transport_status': kwargs['delivery_report']['stat'],
-            'transport_delivered_at': datetime.strptime(
-                kwargs['delivery_report']['done_date'],
-                "%y%m%d%H%M%S")
-        }
-        yield self.publisher.publish_message(Message(**dictionary),
-            routing_key='sms.receipt.%s' % (self.transport_name,))
+        transport_metadata = {
+                "message": kwargs['delivery_report'],
+                "date": datetime.strptime(
+                    kwargs['delivery_report']['done_date'], "%y%m%d%H%M%S")
+                }
+        routing_key = 'sms.receipt.%s' % (self.transport_name)
+        message = TransportSMSDeliveryReport(
+                transport=self.transport_name,
+                transport_message_id=kwargs['delivery_report']['id'],
+                delivery_status=self.delivery_status(
+                    kwargs['delivery_report']['stat']),
+                transport_metadata=transport_metadata)
+        log.msg("PUBLISHING DELIV REPORT: %s TO: %s" %(message, routing_key))
+        yield self.publisher.publish_message(
+                message,
+                routing_key=routing_key)
 
     @inlineCallbacks
     def deliver_sm(self, *args, **kwargs):
-        yield self.publisher.publish_message(Message(**kwargs),
-            routing_key='sms.inbound.%s.%s' % (
-                self.transport_name, kwargs.get('destination_addr')))
+        routing_key = 'sms.inbound.%s' % (self.transport_name)
+        message = TransportSMS(
+                transport=self.transport_name,
+                message_id=None,  #hasn't hit a datastore yet
+                to_addr=kwargs.get('destination_addr'),
+                from_addr=kwargs.get('source_addr'),
+                message=kwargs.get('short_message'))
+        log.msg("PUBLISHING INBOUND: %s TO: %s" %(message, routing_key))
+        yield self.publisher.publish_message(
+                message,
+                routing_key=routing_key)
 
     def send_smpp(self, id, to_msisdn, message, *args, **kwargs):
-        # TODO: Do we want this in the transport or should it be part of the
-        #       campaign logic?
-
         log.msg("Sending SMPP to: %s message: %s" % (to_msisdn, repr(message)))
         # first do a lookup in our YAML to see if we've got a source_addr
         # defined for the given MT number, if not, trust the from_msisdn
@@ -160,6 +186,7 @@ class SmppTransport(Worker):
     def send_failure(self, message, reason=None):
         """Send a failure report."""
         log.msg("Failed to send: %s reason: %s" % (message, reason))
+        # TODO new message here
         self.failure_publisher.publish_message(Message(
                 message=message.payload, reason=reason), require_bind=False)
         #TODO get rid of that require_bind=False
