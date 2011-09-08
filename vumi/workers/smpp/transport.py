@@ -125,7 +125,7 @@ class SmppTransport(Worker):
                 ]:
             return "delivered"
         if state in [
-                "REJCTED"
+                "REJECTD"
                 ]:
             return "failed"
         return "pending"

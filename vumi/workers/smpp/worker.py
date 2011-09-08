@@ -114,21 +114,21 @@ class SMSReceiptConsumer(Consumer):
     def consume_message(self, message):
         dictionary = message.payload
         log.msg("Consuming message:", message)
-        status = dictionary['transport_status']
-        transport_name = dictionary['transport_name']
-        delivered_at = dictionary['transport_delivered_at']
-        message_id = dictionary['transport_msg_id']
+        delivery_status = dictionary['delivery_status']
+        transport = dictionary['transport']
+        timestamp = dictionary['timestamp']
+        transport_message_id = dictionary['transport_message_id']
         
         try:
-            sent_sms = self.find_sent_sms(transport_name, message_id)
+            sent_sms = self.find_sent_sms(transport, transport_message_id)
             log.msg('Processing receipt for', sent_sms, dictionary)
 
-            if sent_sms.transport_status == status:
+            if sent_sms.transport_status == delivery_status:
                 log.msg("Received duplicate receipt for", sent_sms, dictionary)
             else:
-                sent_sms.transport_status=status
-                sent_sms.transport_msg_id=message_id
-                sent_sms.delivered_at=delivered_at
+                sent_sms.transport_status=delivery_status
+                sent_sms.transport_msg_id=transport_message_id
+                sent_sms.delivered_at=timestamp
                 sent_sms.save() 
                 user = sent_sms.user
                 
