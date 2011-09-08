@@ -174,7 +174,8 @@ class Worker(object):
         return ''.join(map(lambda s: s.capitalize(), routing_key.split('.')))
 
     def consume(self, routing_key, callback, queue_name=None,
-                exchange_name='vumi', exchange_type='direct', durable=True):
+                exchange_name='vumi', exchange_type='direct', durable=True,
+                message_class=None):
 
         # use the routing key to generate the name for the class
         # amq.routing.key -> AmqRoutingKey
@@ -189,6 +190,8 @@ class Worker(object):
         }
         log.msg('Staring %s with %s' % (class_name, kwargs))
         klass = type(class_name, (DynamicConsumer,), kwargs)
+        if message_class is not None:
+            klass.message_class = message_class
         return self.start_consumer(klass, callback)
 
     def start_consumer(self, consumer_class, *args, **kw):
@@ -243,6 +246,8 @@ class Consumer(object):
     queue_name = "queue"
     routing_key = "routing_key"
 
+    message_class = Message
+
     @inlineCallbacks
     def start(self, channel, queue):
         self.channel = channel
@@ -265,7 +270,7 @@ class Consumer(object):
 
     @inlineCallbacks
     def consume(self, message):
-        result = yield self.consume_message(Message.from_json(
+        result = yield self.consume_message(self.message_class.from_json(
                                             message.content.body))
         if result is not False:
             returnValue(self.ack(message))
@@ -382,7 +387,7 @@ class Publisher(object):
     def publish(self, message, **kwargs):
         exchange_name = kwargs.get('exchange_name') or self.exchange_name
         routing_key = kwargs.get('routing_key') or self.routing_key
-        require_bind = kwargs.get('require_bind') or self.require_bind
+        require_bind = kwargs.get('require_bind', self.require_bind)
         self.check_routing_key(routing_key, require_bind)
         return self.channel.basic_publish(exchange=exchange_name,
                                           content=message,

@@ -18,7 +18,7 @@ class TwitterUSSDTransport(IntegratWorker):
                                        self.config['password'])
         self.consumer = yield self.consume('ussd.inbound.%s.%s' % (
             self.config['transport_name'],
-            safe_routing_key(self.config['ussd_code'])
+            safe_routing_key(self.config['ussd_code']),
         ), self.consume_message)
 
     def new_session(self, data):
@@ -36,5 +36,5 @@ class TwitterUSSDTransport(IntegratWorker):
             self.end(session_id, msg.title)
 
         yield self.twitter.search('@%s' % search_term, got_entry, {
-            'rpp': '1'
+            'rpp': '1',
         })

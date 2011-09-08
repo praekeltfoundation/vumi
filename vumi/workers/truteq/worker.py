@@ -30,13 +30,13 @@ class TruTeqConsumer(Consumer):
             response = {
                 'ussd_type': SessionType.EXISTING,
                 'msisdn': msisdn,
-                'message': "Hi! This is an echo service"
+                'message': "Hi! This is an echo service",
             }
         else:
             response = {
                 'ussd_type': SessionType.END,
                 'msisdn': msisdn,
-                'message': 'You said: %s' % message
+                'message': 'You said: %s' % message,
             }
         self.publisher.publish_message(Message(**response))
         return True

@@ -8,7 +8,8 @@ from vumi.utils import http_request
 from vumi.workers.integrat.worker import IntegratWorker
 from datetime import datetime, timedelta, date
 from urllib import urlopen, urlencode
-import json, base64
+import json
+import base64
 
 PATIENT_API_URL = 'http://qa.txtalert.praekeltfoundation.org/' \
                   'api/v1/patient.json'
@@ -16,6 +17,7 @@ REQUEST_CHANGE_URL = 'http://qa.txtalert.praekeltfoundation.org/' \
                     'api/v1/request/change.json'
 REQUEST_CALL_URL = 'http://qa.txtalert.praekeltfoundation.org/' \
                     'api/v1/request/call.json'
+
 
 def basic_auth_string(username, password):
     """
@@ -33,41 +35,45 @@ def get_patient(msisdn, patient_id):
         urlencode({'msisdn': msisdn, 'patient_id': patient_id}))
     return json.loads(urlopen(url).read())
 
+
 @inlineCallbacks
 def request_change(visit_id, change_type, headers):
     default_headers = {
-        'Content-Type': ['application/x-www-form-urlencoded']
+        'Content-Type': ['application/x-www-form-urlencoded'],
     }
     default_headers.update(headers)
-    
+
     response = yield http_request(REQUEST_CHANGE_URL, urlencode({
         'visit_id': visit_id,
-        'when': change_type
+        'when': change_type,
     }), headers=default_headers, method='POST')
     print 'response', response
     returnValue(response)
+
 
 def reschedule_earlier_date(visit_id, headers):
     log.msg("Rescheduling earlier date", visit_id)
     request_change(visit_id, 'earlier', headers)
 
+
 def reschedule_later_date(visit_id, headers):
     log.msg("Rescheduling later date", visit_id)
     request_change(visit_id, 'later', headers)
 
+
 @inlineCallbacks
 def call_request(msisdn, headers):
     default_headers = {
-        'Content-Type': ['application/x-www-form-urlencoded']
+        'Content-Type': ['application/x-www-form-urlencoded'],
     }
     default_headers.update(headers)
-    
+
     response = yield http_request(REQUEST_CALL_URL, urlencode({
-        'msisdn': msisdn
+        'msisdn': msisdn,
     }), headers=default_headers, method='POST')
     print 'response', response
     returnValue(response)
-    
+
 
 class Menu(object):
     def __init__(self, username, password):
@@ -137,14 +143,16 @@ class Menu(object):
             )
             if answer == '1':
                 reschedule_earlier_date(patient.get('visit_id'), {
-                    'Authorization': [basic_auth_string(self.username, self.password)]
+                    'Authorization': [basic_auth_string(self.username,
+                                                        self.password)],
                 })
                 yield self.close("Thanks! Your change request has been"
                                  " registered. You'll receive an SMS with"
                                  " your appointment information")
             elif answer == '2':
                 reschedule_later_date(patient.get('visit_id'), {
-                    'Authorization': [basic_auth_string(self.username, self.password)]
+                    'Authorization': [basic_auth_string(self.username,
+                                                        self.password)],
                 })
                 yield self.close("Thanks! Your change request has been"
                                  " registered. You'll receive an SMS with"
@@ -159,7 +167,8 @@ class Menu(object):
                             patient.get('missed', 0)))
         elif answer == '3':
             call_request(patient.get('msisdn'), {
-                'Authorization': [basic_auth_string(self.username, self.password)]
+                'Authorization': [basic_auth_string(self.username,
+                                                    self.password)],
             })
             yield self.close("Welcome to txtAlert. "
                         "You have requested a call from the clinic. "
@@ -260,7 +269,7 @@ class USSDBookingTool(IntegratWorker):
         self.sessions = {}
         self.consume('ussd.inbound.%s.%s' % (
             self.config['transport_name'],
-            safe_routing_key(self.config['ussd_code'])
+            safe_routing_key(self.config['ussd_code']),
         ), self.consume_message)
 
     def session_exists(self, uuid):

@@ -13,7 +13,7 @@ class APIClient(Client):
             and (self.username and self.password):
             b64 = base64.encodestring('%s:%s' % (
                 self.username,
-                self.password
+                self.password,
             )).strip()
             request.update({'HTTP_AUTHORIZATION': 'Basic %s' % b64})
         return super(APIClient, self).request(**request)

@@ -18,11 +18,11 @@ class OpenSearch(object):
             'action': 'opensearch',
             'limit': str(limit),
             'namespace': str(namespace),
-            'format': 'xml'
+            'format': 'xml',
         }
         url = '%s?%s' % (self.URL, urlencode(query_params))
         response = yield http_request(url, '', {
-            'User-Agent': 'Vumi HTTP Request'
+            'User-Agent': 'Vumi HTTP Request',
         }, method='GET')
         returnValue(self.parse_xml(response))
 
@@ -102,4 +102,5 @@ class WikipediaWorker(IntegratWorker):
     def close_session(self, data):
         self.SESSIONS.pop(data['transport_session_id'], None)
 
-# http://en.wikipedia.org/w/api.php?action=opensearch&search=Cell%20phone&limit=10&namespace=0&format=xmlfm
+# http://en.wikipedia.org/w/api.php?action=opensearch&search=Cell%20phone&
+# limit=10&namespace=0&format=xmlfm

@@ -101,7 +101,7 @@ class USSDTransport(Worker):
             # cache
             ussd_code = self.storage[msisdn] = message
             options = {
-                'routing_key': ussd_code_to_routing_key('ussd.%s' % ussd_code)
+                'routing_key': ussd_code_to_routing_key('ussd.%s' % ussd_code),
             }
 
         # If its the end of a session or a session has timed-out then we
@@ -118,14 +118,14 @@ class USSDTransport(Worker):
             # read cache
             ussd_code = self.storage.get(msisdn)
             options = {
-                'routing_key': ussd_code_to_routing_key('ussd.%s' % ussd_code)
+                'routing_key': ussd_code_to_routing_key('ussd.%s' % ussd_code),
             }
 
         self.publisher.publish_message(Message(**{
             'msisdn': msisdn,
             'ussd_type': ussd_type,
             'phase': phase,
-            'message': message
+            'message': message,
         }), **options)
 
     def send_ussd(self, msisdn, ussd_type, message):

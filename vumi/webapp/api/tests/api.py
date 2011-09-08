@@ -43,7 +43,7 @@ class BaseSMSHandlerTestCase(TestCase):
         resp = self.client.post(reverse('api:sms-send'), {
             'to_msisdn': ['27123456780', '27123456781', '27123456782'],
             'from_msisdn': '27123456789',
-            'message': 'yebo'
+            'message': 'yebo',
         })
         self.assertEquals(resp.status_code, 200)
         self.assertEquals(SentSMS.objects.count(), 3)
@@ -93,7 +93,7 @@ class BaseSentSMSStatusTestCase(TestCase):
         # write some new SMSs
         mock_sent_messages(self.user, count=50)
         resp = self.client.get(reverse('api:sms-status-list'), {
-            'since': january_2009
+            'since': january_2009,
         })
         from django.utils import simplejson
         data = simplejson.loads(resp.content)
@@ -108,7 +108,7 @@ class BaseSentSMSStatusTestCase(TestCase):
     def test_single_status(self):
         sent_sms = SentSMS.objects.latest('created_at')
         resp = self.client.get(reverse('api:sms-status', kwargs={
-            "sms_id": sent_sms.pk
+            "sms_id": sent_sms.pk,
         }))
         from django.utils import simplejson
         json_sms = simplejson.loads(resp.content)
@@ -124,7 +124,7 @@ class BaseSentSMSStatusTestCase(TestCase):
         sms_ids = map(lambda sms: int(sms.pk), smss)
         sms_ids.sort()
         resp = self.client.get(reverse('api:sms-status-list'), {
-            'id': sms_ids
+            'id': sms_ids,
         })
         from django.utils import simplejson
         json_smss = simplejson.loads(resp.content)
@@ -195,7 +195,7 @@ class URLCallbackHandlerTestCase(TestCase):
             'api_id': 'b' * 12,
             'text': 'hello world',
             # MySQL format:
-            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         })
         # this should show up in the testing log because pycurl can't
         # connect to the given host for the callback
@@ -205,7 +205,7 @@ class URLCallbackHandlerTestCase(TestCase):
         for name, urls in [
             ('sms_received', [
                 'http://localhost/url/sms/received/1',
-                'http://localhost/url/sms/received/2'
+                'http://localhost/url/sms/received/2',
             ]),
             ('sms_receipt', [
                 'http://localhost/url/sms/receipt/1',
@@ -214,7 +214,7 @@ class URLCallbackHandlerTestCase(TestCase):
             for url in urls:
                 resp = self.client.post(reverse('api:url-callbacks-list'), {
                     'name': name,
-                    'url': url
+                    'url': url,
                 })
                 self.assertEquals(resp.status_code, 200)
 
@@ -226,7 +226,7 @@ class URLCallbackHandlerTestCase(TestCase):
             'api_id': 'b' * 12,
             'text': 'hello world',
             # MySQL format
-            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         })
 
     def test_updating_callback_urls(self):
@@ -238,7 +238,7 @@ class URLCallbackHandlerTestCase(TestCase):
         self.assertEquals(URLCallback.objects.count(), 1)
         data = json.loads(resp.content)
         resp = self.client.put(reverse('api:url-callback', kwargs={
-                'callback_id': data['id']
+                'callback_id': data['id'],
             }), {
             'url': 'http://localhost/url/sms/receipt1'
         })
@@ -255,7 +255,7 @@ class URLCallbackHandlerTestCase(TestCase):
         data = json.loads(resp.content)
         self.assertEquals(URLCallback.objects.count(), 1)
         resp = self.client.delete(reverse('api:url-callback', kwargs={
-            'callback_id': data['id']
+            'callback_id': data['id'],
         }))
         self.assertEquals(resp.status_code, 204)
         self.assertEquals(resp.content, '')
