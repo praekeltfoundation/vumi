@@ -73,6 +73,9 @@ class SmscServer(Protocol):
             self.sendPDU(pdu_resp)
             reactor.callLater(2, self.delivery_report, message_id)
             self.boomerang(pdu)
+            newpdu = DeliverSM(4567,
+                    short_message = "Hi there, just a follow up")
+            self.sendPDU(newpdu)
 
 
     def delivery_report(self, message_id):

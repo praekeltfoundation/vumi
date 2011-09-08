@@ -5,7 +5,8 @@ from twisted.internet.defer import inlineCallbacks
 from twisted.internet import reactor
 
 from vumi.service import Worker
-from vumi.message import Message
+from vumi.message import Message, \
+        TransportSMS, TransportSMSAck, TransportSMSDeliveryReport
 from vumi.workers.smpp.client import EsmeTransceiverFactory
 from vumi.utils import get_operator_number, get_deploy_int
 
@@ -108,29 +109,41 @@ class SmppTransport(Worker):
         self.r_delete_for_sequence(kwargs['sequence_number'])
         log.msg("Mapping transport_msg_id=%s to sent_sms_id=%s" % (
             transport_msg_id, sent_sms_id))
-        # TODO new message here
         routing_key = 'sms.ack.%s' % (self.transport_name)
-        message = Message(**{
-            'id': sent_sms_id,
-            'transport_message_id': transport_msg_id
-            })
+        message = TransportSMSAck(
+            transport=self.transport_name,
+            message_id=sent_sms_id,
+            transport_message_id=transport_msg_id)
         log.msg("PUBLISHING ACK: %s TO: %s" %(message, routing_key))
         yield self.publisher.publish_message(
                 message,
                 routing_key=routing_key)
 
+    def delivery_status(self, state):
+        if state in [
+                "DELIVRD"
+                ]:
+            return "delivered"
+        if state in [
+                "REJCTED"
+                ]:
+            return "failed"
+        return "pending"
+
     @inlineCallbacks
     def delivery_report(self, *args, **kwargs):
-        # TODO new message here
-        routing_key='sms.receipt.%s' % (self.transport_name)
-        message = Message(**{
-            'transport_name': self.transport_name,
-            'transport_msg_id': kwargs['delivery_report']['id'],
-            'transport_status': kwargs['delivery_report']['stat'],
-            'transport_delivered_at': datetime.strptime(
-                kwargs['delivery_report']['done_date'],
-                "%y%m%d%H%M%S")
-            })
+        transport_metadata = {
+                "message": kwargs['delivery_report'],
+                "date": datetime.strptime(
+                    kwargs['delivery_report']['done_date'], "%y%m%d%H%M%S")
+                }
+        routing_key = 'sms.receipt.%s' % (self.transport_name)
+        message = TransportSMSDeliveryReport(
+                transport=self.transport_name,
+                transport_message_id=kwargs['delivery_report']['id'],
+                delivery_status=self.delivery_status(
+                    kwargs['delivery_report']['stat']),
+                transport_metadata=transport_metadata)
         log.msg("PUBLISHING DELIV REPORT: %s TO: %s" %(message, routing_key))
         yield self.publisher.publish_message(
                 message,
@@ -138,19 +151,20 @@ class SmppTransport(Worker):
 
     @inlineCallbacks
     def deliver_sm(self, *args, **kwargs):
-        # TODO new message here
-        routing_key='sms.inbound.%s.%s' % (
-                self.transport_name, kwargs.get('destination_addr'))
-        message = Message(**kwargs)
+        print kwargs
+        routing_key = 'sms.inbound.%ss' % (self.transport_name)
+        message = TransportSMS(
+                transport=self.transport_name,
+                message_id=None,  #hasn't hit a datastore yet
+                to_addr=kwargs.get('destination_addr'),
+                from_addr=kwargs.get('source_addr'),
+                message=kwargs.get('short_message'))
         log.msg("PUBLISHING INBOUND: %s TO: %s" %(message, routing_key))
         yield self.publisher.publish_message(
                 message,
                 routing_key=routing_key)
 
     def send_smpp(self, id, to_msisdn, message, *args, **kwargs):
-        # TODO: Do we want this in the transport or should it be part of the
-        #       campaign logic?
-
         log.msg("Sending SMPP to: %s message: %s" % (to_msisdn, repr(message)))
         # first do a lookup in our YAML to see if we've got a source_addr
         # defined for the given MT number, if not, trust the from_msisdn
