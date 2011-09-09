@@ -419,7 +419,6 @@ class EsmeTransceiver(Protocol):
             sequence_number = pdu['header']['sequence_number']
             message_id = str(uuid.uuid4())
             pdu_resp = DeliverSMResp(sequence_number,
-                    message_id=message_id,
                     **self.defaults)
             self.sendPDU(pdu_resp)
             delivery_report = re.search(
