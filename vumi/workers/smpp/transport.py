@@ -154,7 +154,8 @@ class SmppTransport(Worker):
         routing_key = 'sms.inbound.%s' % (self.transport_name)
         message = TransportSMS(
                 transport=self.transport_name,
-                message_id=None,  #hasn't hit a datastore yet
+                message_id=kwargs.get('message_id'),
+                transport_message_id=kwargs.get('message_id'),
                 to_addr=kwargs.get('destination_addr'),
                 from_addr=kwargs.get('source_addr'),
                 message=kwargs.get('short_message'))
