@@ -113,8 +113,6 @@ class ReceiveSMSResource(Resource):
             msg = "ValueError: %s" % e
             log.msg('Returning %s: %s' % (http.BAD_REQUEST, msg))
             request.write(msg)
-        except Exception, e:
-            print "!!!", repr(e)
         request.finish()
 
     def render(self, request):
@@ -254,13 +252,13 @@ class Vas2NetsTransport(Worker):
         }
 
         request_params = {
-            'call-number': normalize_outbound_msisdn(data['to_msisdn']),
-            'origin': data['from_msisdn'],
-            'messageid': data.get('reply_to', data['id']),
-            'provider': data['transport_network_id'],
+            'call-number': normalize_outbound_msisdn(data['to_addr']),
+            'origin': data['from_addr'],
+            'messageid': data.get('in_reply_to', data['message_id']),
+            'provider': data['transport_metadata']['network_id'],
             'tariff': data.get('tariff', 0),
             'text': validate_characters(data['message']),
-            'subservice': data.get('transport_keyword',
+            'subservice': data['transport_metadata'].get('keyword',
                             self.config['subservice'])
         }
 
@@ -296,10 +294,11 @@ class Vas2NetsTransport(Worker):
 
         if response.headers.hasHeader(header):
             transport_message_id = response.headers.getRawHeaders(header)[0]
-            self.publisher.publish_message(TransportSMSAck(
-                message_id=data['id'],
-                transport_message_id=transport_message_id,
-                ), routing_key='sms.ack.%(transport_name)s' % self.config)
+            yield self.publisher.publish_message(TransportSMSAck(
+                    transport=self.config['transport_name'],
+                    message_id=data['message_id'],
+                    transport_message_id=transport_message_id,
+                    ), routing_key='sms.ack.%(transport_name)s' % self.config)
         else:
             raise Vas2NetsTransportError('No SmsId Header, content: %s' %
                                             response_content)
