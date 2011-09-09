@@ -60,7 +60,7 @@ class SMSBatchTestCase(TestCase):
 
         self.debatcher.consume_message(message)
         self.assertEquals(len(self.publisher.queue), 3)
-        self.assertEquals(set([m.payload['to_msisdn'] for m,kwargs in
+        self.assertEquals(set([m.payload['to_addr'] for m,kwargs in
                 self.publisher.queue]),
                 set(recipients))
         # ensure that the routing key is converted to lower case
