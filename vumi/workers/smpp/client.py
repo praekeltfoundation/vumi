@@ -1,5 +1,6 @@
 import re
 import json
+import uuid
 import redis
 
 from twisted.python import log
@@ -416,7 +417,10 @@ class EsmeTransceiver(Protocol):
     def handle_deliver_sm(self, pdu):
         if pdu['header']['command_status'] == 'ESME_ROK':
             sequence_number = pdu['header']['sequence_number']
-            pdu_resp = DeliverSMResp(sequence_number, **self.defaults)
+            message_id = str(uuid.uuid4())
+            pdu_resp = DeliverSMResp(sequence_number,
+                    message_id=message_id,
+                    **self.defaults)
             self.sendPDU(pdu_resp)
             delivery_report = re.search(
                     # SMPP v3.4 Issue 1.2 pg. 167 is wrong on id length
@@ -452,7 +456,8 @@ class EsmeTransceiver(Protocol):
                     self.__deliver_sm_callback(
                             destination_addr=completed['to_msisdn'],
                             source_addr=completed['from_msisdn'],
-                            short_message=completed['message']
+                            short_message=completed['message'],
+                            message_id=message_id,
                             )
                 else:
                     self.r_server.set(redis_key, json.dumps(multi.get_array()))
@@ -464,6 +469,7 @@ class EsmeTransceiver(Protocol):
                         destination_addr=pdu_mp['destination_addr'],
                         source_addr=pdu_mp['source_addr'],
                         short_message=decoded_msg,
+                        message_id=message_id,
                         )
 
     def handle_enquire_link(self, pdu):
