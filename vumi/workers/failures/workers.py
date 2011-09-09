@@ -1,7 +1,6 @@
 # -*- test-case-name: vumi.workers.failures.tests.test_workers -*-
 
 import time
-import json
 from datetime import datetime
 from uuid import uuid4
 
@@ -12,6 +11,7 @@ from twisted.python import log
 
 from vumi.service import Worker
 from vumi.utils import get_deploy_int
+from vumi.message import to_json
 
 
 class FailureWorker(Worker):
@@ -101,7 +101,7 @@ class FailureWorker(Worker):
         message_json = message
         if not isinstance(message, basestring):
             # This isn't already JSON-encoded.
-            message_json = json.dumps(message)
+            message_json = to_json(message)
         key = self.failure_key()
         if not retry_delay:
             retry_delay = 0

@@ -1,8 +1,7 @@
 # encoding: utf-8
 import string
-from uuid import uuid1
+from uuid import uuid4
 from datetime import datetime
-import json
 
 from twisted.web import http
 from twisted.web.resource import Resource
@@ -14,7 +13,7 @@ from twisted.web.test.test_web import DummyRequest
 
 from vumi.tests.utils import get_stubbed_worker, TestResourceWorker, UTCNearNow
 from vumi.tests.fake_amqp import FakeAMQPBroker
-from vumi.message import (from_json, Message, TransportSMS, TransportSMSAck,
+from vumi.message import (from_json, TransportSMS, TransportSMSAck,
                           TransportSMSDeliveryReport)
 from vumi.workers.vas2nets.transport import (
     ReceiveSMSResource, DeliveryReceiptResource, Vas2NetsTransport,
@@ -24,10 +23,11 @@ from vumi.workers.vas2nets.transport import (
 class TestResource(Resource):
     isLeaf = True
 
-    def __init__(self, message_id, message, code=http.OK):
+    def __init__(self, message_id, message, code=http.OK, send_id=None):
         self.message_id = message_id
         self.message = message
         self.code = code
+        self.send_id = send_id
 
     def render_POST(self, request):
         log.msg(request.content.read())
@@ -41,6 +41,9 @@ class TestResource(Resource):
         for key in required_fields:
             log.msg('checking for %s' % key)
             assert key in request.args
+
+        if self.send_id is not None:
+            assert request.args['messageid'] == [self.send_id]
 
         if self.message_id:
             request.setHeader('X-Nth-Smsid', self.message_id)
@@ -76,9 +79,10 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
         for worker in self.workers:
             worker.stopWorker()
 
-    def make_resource_worker(self, msg_id, msg, code=http.OK):
+    def make_resource_worker(self, msg_id, msg, code=http.OK, send_id=None):
         w = get_stubbed_worker(TestResourceWorker, {})
-        w.set_resources([(self.path, TestResource, (msg_id, msg, code))])
+        w.set_resources([
+                (self.path, TestResource, (msg_id, msg, code, send_id))])
         self.workers.append(w)
         return w.startWorker()
 
@@ -92,7 +96,7 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
         request = DummyRequest(path)
         request.method = method
         args = {
-            'messageid': [str(uuid1())],
+            'messageid': [str(uuid4())],
             'time': [self.today.strftime('%Y.%m.%d %H:%M:%S')],
             'sender': ['0041791234567'],
             'destination': ['9292'],
@@ -141,16 +145,18 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
             )
         return msg
 
-    def mkmsg_out(self, **fields):
-        msg = {
-            'to_msisdn': '+27761234567',
-            'from_msisdn': '9292',
-            'id': '1',
-            'reply_to': '',
-            'transport_network_id': 'network-id',
-            'message': 'hello world',
-            }
-        msg.update(fields)
+    def mkmsg_out(self, in_reply_to=None):
+        msg = TransportSMS(
+            transport='vas2nets',
+            to_addr='+27761234567',
+            from_addr='9292',
+            message_id='1',
+            in_reply_to=in_reply_to,
+            transport_metadata={
+               'network_id': 'network-id',
+               },
+            message='hello world',
+            )
         return msg
 
     @inlineCallbacks
@@ -195,7 +201,7 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
         msg = self.make_delivery_message(
             'pending', '1', 'Message submitted to Provider for delivery.')
         [smsg] = self.get_dispatched('sms.receipt.vas2nets')
-        self.assertEquals(Message.from_json(smsg.body), msg)
+        self.assertEquals(msg, from_json(smsg.body))
 
     @inlineCallbacks
     def test_delivery_receipt_failed(self):
@@ -219,7 +225,7 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
         msg = self.make_delivery_message(
             'failed', '-9', 'Message could not be delivered.')
         [smsg] = self.get_dispatched('sms.receipt.vas2nets')
-        self.assertEquals(Message.from_json(smsg.body), msg)
+        self.assertEquals(from_json(smsg.body), msg)
 
     @inlineCallbacks
     def test_delivery_receipt_delivered(self):
@@ -243,7 +249,7 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
         msg = self.make_delivery_message(
             'delivered', '2', 'Message delivered to MSISDN.')
         [smsg] = self.get_dispatched('sms.receipt.vas2nets')
-        self.assertEquals(Message.from_json(smsg.body), msg)
+        self.assertEquals(from_json(smsg.body), msg)
 
     def test_validate_characters(self):
         self.assertRaises(Vas2NetsEncodingError, validate_characters,
@@ -259,7 +265,7 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
 
     @inlineCallbacks
     def test_send_sms_success(self):
-        mocked_message_id = str(uuid1())
+        mocked_message_id = str(uuid4())
         mocked_message = "Result_code: 00, Message OK"
 
         # open an HTTP resource that mocks the Vas2Nets response for the
@@ -267,13 +273,37 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
         yield self.make_resource_worker(mocked_message_id, mocked_message)
         yield self.worker.startWorker()
 
-        yield self.worker.handle_outbound_message(Message(**self.mkmsg_out()))
+        yield self.worker.handle_outbound_message(self.mkmsg_out())
 
         [smsg] = self.get_dispatched('sms.ack.vas2nets')
         self.assertEqual(TransportSMSAck(
                 message_id='1',
                 transport_message_id=mocked_message_id,
                 timestamp=UTCNearNow(),
+                transport='vas2nets',
+                ), from_json(smsg.body))
+
+    @inlineCallbacks
+    def test_send_sms_reply_success(self):
+        mocked_message_id = str(uuid4())
+        reply_to_msgid = str(uuid4())
+        mocked_message = "Result_code: 00, Message OK"
+
+        # open an HTTP resource that mocks the Vas2Nets response for the
+        # duration of this test
+        yield self.make_resource_worker(mocked_message_id, mocked_message,
+                                        send_id=reply_to_msgid)
+        yield self.worker.startWorker()
+
+        yield self.worker.handle_outbound_message(self.mkmsg_out(
+                    in_reply_to=reply_to_msgid))
+
+        [smsg] = self.get_dispatched('sms.ack.vas2nets')
+        self.assertEqual(TransportSMSAck(
+                message_id='1',
+                transport_message_id=mocked_message_id,
+                timestamp=UTCNearNow(),
+                transport='vas2nets',
                 ), from_json(smsg.body))
 
     @inlineCallbacks
@@ -285,11 +315,11 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
         yield self.worker.startWorker()
 
         msg = self.mkmsg_out()
-        deferred = self.worker.handle_outbound_message(Message(**msg))
+        deferred = self.worker.handle_outbound_message(msg)
         yield deferred
         [fmsg] = self.get_dispatched('sms.outbound.vas2nets.failures')
-        fmsg = json.loads(fmsg.body)
-        self.assertEqual(msg, fmsg['message'])
+        fmsg = from_json(fmsg.body)
+        self.assertEqual(msg.payload, fmsg['message'])
         self.assertTrue(
             "Vas2NetsTransportError: No SmsId Header" in fmsg['reason'])
 
@@ -298,10 +328,10 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
         yield self.worker.startWorker()
 
         msg = self.mkmsg_out()
-        deferred = self.worker.handle_outbound_message(Message(**msg))
+        deferred = self.worker.handle_outbound_message(msg)
         yield deferred
         [fmsg] = self.get_dispatched('sms.outbound.vas2nets.failures')
-        fmsg = json.loads(fmsg.body)
+        fmsg = from_json(fmsg.body)
         self.assertEqual(msg, fmsg['message'])
         self.assertEqual("connection refused", fmsg['reason'])
 
@@ -312,10 +342,10 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
         yield self.worker.startWorker()
 
         msg = self.mkmsg_out()
-        deferred = self.worker.handle_outbound_message(Message(**msg))
+        deferred = self.worker.handle_outbound_message(msg)
         yield deferred
         [fmsg] = self.get_dispatched('sms.outbound.vas2nets.failures')
-        fmsg = json.loads(fmsg.body)
+        fmsg = from_json(fmsg.body)
         self.assertEqual(msg, fmsg['message'])
         self.assertTrue(fmsg['reason'].startswith("server error"))
 
