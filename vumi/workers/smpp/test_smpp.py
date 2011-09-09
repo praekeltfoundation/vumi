@@ -60,7 +60,7 @@ class SMSBatchTestCase(TestCase):
 
         self.debatcher.consume_message(message)
         self.assertEquals(len(self.publisher.queue), 3)
-        self.assertEquals(set([m.payload['to_msisdn'] for m,kwargs in
+        self.assertEquals(set([m.payload['to_addr'] for m,kwargs in
                 self.publisher.queue]),
                 set(recipients))
         # ensure that the routing key is converted to lower case
@@ -352,10 +352,13 @@ class RedisTestEsmeTransceiver(EsmeTransceiver):
 
 class RedisTestSmppTransport(SmppTransport):
 
-    def send_smpp(self, id, to_msisdn, message, *args, **kwargs):
+    def send_smpp(self, message):
+        to_addr = message.payload.get('to_addr')
+        from_addr = message.payload.get('from_addr')
+        text = message.payload['message']
         sequence_number = self.esme_client.submit_sm(
-                short_message=message.encode('utf-8'),
-                destination_addr=str(to_msisdn),
+                short_message=text.encode('utf-8'),
+                destination_addr=str(to_addr),
                 source_addr="1234567890",
                 )
         return sequence_number
@@ -448,17 +451,17 @@ class FakeRedisRespTestCase(TestCase):
 
     def test_match_resp(self):
         message1 = Message(
-            id=444,
+            message_id=444,
             message="hello world",
-            to_msisdn="1111111111")
+            to_addr="1111111111")
         sequence_num1 = self.esme.getSeq()
         response1 = SubmitSMResp(sequence_num1, "3rd_party_id_1")
         self.transport.consume_message(message1)
 
         message2 = Message(
-            id=445,
+            message_id=445,
             message="hello world",
-            to_msisdn="1111111111")
+            to_addr="1111111111")
         sequence_num2 = self.esme.getSeq()
         response2 = SubmitSMResp(sequence_num2, "3rd_party_id_2")
         self.transport.consume_message(message2)
@@ -496,9 +499,9 @@ class FakeRedisRespTestCase(TestCase):
             ))
 
         message3 = Message(
-            id=446,
+            message_id=446,
             message="hello world",
-            to_msisdn="1111111111")
+            to_addr="1111111111")
         sequence_num3 = self.esme.getSeq()
         response3 = SubmitSMResp(sequence_num3, "3rd_party_id_3",
                 command_status="ESME_RSUBMITFAIL")
@@ -521,9 +524,9 @@ class FakeRedisRespTestCase(TestCase):
                 Message(message={'id': '446'}, reason='ESME_RSUBMITFAIL'))
 
         message4 = Message(
-            id=447,
+            message_id=447,
             message="hello world",
-            to_msisdn="1111111111")
+            to_addr="1111111111")
         sequence_num4 = self.esme.getSeq()
         response4 = SubmitSMResp(sequence_num4, "3rd_party_id_4",
                 command_status="ESME_RTHROTTLED")

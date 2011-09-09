@@ -75,10 +75,10 @@ class SmppTransport(Worker):
         log.msg("Consumed outgoing message", message)
         log.msg("Unacknowledged message count: %s" % (
             self.esme_client.get_unacked_count()))
-        self.conn_throttle(unacked=self.esme_client.get_unacked_count())
-        sequence_number = self.send_smpp(**message.payload)
+        #self.conn_throttle(unacked=self.esme_client.get_unacked_count())
+        sequence_number = self.send_smpp(message)
         self.r_set_last_sequence(sequence_number)
-        self.r_set_id_for_sequence(sequence_number, message.payload.get("id"))
+        self.r_set_id_for_sequence(sequence_number, message.payload.get("message_id"))
 
     @inlineCallbacks
     def esme_disconnected(self):
@@ -163,19 +163,21 @@ class SmppTransport(Worker):
                 message,
                 routing_key=routing_key)
 
-    def send_smpp(self, id, to_msisdn, message, *args, **kwargs):
-        log.msg("Sending SMPP to: %s message: %s" % (to_msisdn, repr(message)))
+    def send_smpp(self, message):
+        log.msg("Sending SMPP message: %s" % (message))
         # first do a lookup in our YAML to see if we've got a source_addr
-        # defined for the given MT number, if not, trust the from_msisdn
+        # defined for the given MT number, if not, trust the from_addr
         # in the message
-        route = get_operator_number(to_msisdn,
+        to_addr = message.payload.get('to_addr')
+        from_addr = message.payload.get('from_addr')
+        text = message.payload['message']
+        route = get_operator_number(to_addr,
                 self.config.get('COUNTRY_CODE', ''),
                 self.config.get('OPERATOR_PREFIX', {}),
-                self.config.get('OPERATOR_NUMBER', {})) \
-            or kwargs.get('from_msisdn', '')
+                self.config.get('OPERATOR_NUMBER', {})) or from_addr
         sequence_number = self.esme_client.submit_sm(
-                short_message=message.encode('utf-8'),
-                destination_addr=str(to_msisdn),
+                short_message=text.encode('utf-8'),
+                destination_addr=str(to_addr),
                 source_addr=route,
                 )
         return sequence_number
