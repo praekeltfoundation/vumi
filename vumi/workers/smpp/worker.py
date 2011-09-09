@@ -2,7 +2,7 @@ from twisted.python import log
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.service import Worker, Consumer, Publisher
-from vumi.message import Message, VUMI_DATE_FORMAT
+from vumi.message import Message, VUMI_DATE_FORMAT, TransportSMS
 from vumi.webapp.api import utils
 from vumi.webapp.api.models import Keyword, SentSMS, Transport
 
@@ -306,19 +306,16 @@ class SMSBatchConsumer(Consumer):
         if kwargs:
             pk = kwargs.get('pk')
             for o in models.SentSMS.objects.filter(batch=pk):
-                mess = {
-                        'transport_name': o.transport_name,
-                        'batch': o.batch_id,
-                        'from_msisdn': o.from_msisdn,
-                        'user': o.user_id,
-                        'to_msisdn': o.to_msisdn,
-                        'message': o.message,
-                        'id': o.id
-                        }
-                self.publisher.publish_message(Message(**mess),
+                message = TransportSMS(
+                        transport=o.transport_name,
+                        from_addr=o.from_msisdn,
+                        to_addr=o.to_msisdn,
+                        message=o.message,
+                        message_id=o.id
+                        )
+                self.publisher.publish_message(message,
                         routing_key='sms.outbound.%s' % (
-                            o.transport_name.lower()),
-                        require_bind='ANY')
+                            o.transport_name.lower()))
 
 
 class IndivPublisher(Publisher):
