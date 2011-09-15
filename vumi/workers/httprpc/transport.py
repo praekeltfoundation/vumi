@@ -95,3 +95,68 @@ class HttpRpcTransport(Worker):
 
     def stopWorker(self):
         log.msg("Stopping the HttpRpcTransport")
+
+
+class DummyRpcWorker(Worker):
+    @inlineCallbacks
+    def startWorker(self):
+        log.msg("Starting DummyRpcWorker with config: %s" % (self.config))
+        self.publish_key = self.config['consume_key']  # Swap consume and
+        self.consume_key = self.config['publish_key']  # publish keys
+
+        self.publisher = yield self.publish_to(self.publish_key)
+        self.consume(self.consume_key, self.consume_message)
+
+    def consume_message(self, message):
+        hi = '''
+<request>
+    <headertext>Welcome to Vodacom Ikhwezi!</headertext>
+    <options>
+        <option
+            command="1"
+            order="1"
+            callback="http://vumi.praekeltfoundation.org/api/v1/ussd/ikhwezi/"
+            display="True">finish session.</option>
+        <option
+            command="2"
+            order="2"
+            callback="http://vumi.praekeltfoundation.org/api/v1/ussd/ikhwezi/"
+            display="True">return to this screen.</option>
+        <option
+            command="3"
+            order="3"
+            callback="http://vumi.praekeltfoundation.org/api/v1/ussd/ikhwezi/"
+            display="True">continue to next screen.</option>
+    </options>
+</request>'''
+        cont = '''
+<request>
+    <headertext>Nothing to see yet</headertext>
+    <options>
+        <option
+            command="1"
+            order="1"
+            callback="http://vumi.praekeltfoundation.org/api/v1/ussd/ikhwezi/"
+            display="True">finish session.</option>
+    </options>
+</request>'''
+        bye = '''
+<request>
+    <headertext>Goodbye!</headertext>
+</request>'''
+
+        log.msg("DummyRpcWorker consuming on %s: %s" % (
+            self.consume_key,
+            repr(message.payload)))
+        reply = hi
+        if message.payload['message']['args'].get('request',[''])[0] == "1":
+            reply = bye
+        if message.payload['message']['args'].get('request',[''])[0] == "3":
+            reply = cont
+        self.publisher.publish_message(Message(
+                uuid=message.payload['uuid'],
+                message=reply),
+            routing_key = message.payload['return_path'].pop())
+
+    def stopWorker(self):
+        log.msg("Stopping the MenuWorker")
