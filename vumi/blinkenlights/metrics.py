@@ -17,13 +17,14 @@ import time
 class MetricManager(Publisher):
     """Utility for creating and monitoring a set of metrics.
 
-    Parameters
-    ----------
-    prefix : str
-        Prefix for the name of all metrics created by this metric set.
-    publish_interval : int in seconds
+    :type prefix: str
+    :param prefix:
+        Prefix for the name of all metrics registered with this manager.
+    :type publish_interval: int in seconds
+    :param publish_interval:
         How often to publish the set of metrics.
-    on_publish : callback, f(metric_manager)
+    :type on_publish: f(metric_manager)
+    :param on_publish:
         Function to call immediately after metrics after published.
     """
     exchange_name = "vumi.metrics"
@@ -65,16 +66,13 @@ class MetricManager(Publisher):
     def register(self, metric):
         """Register a new metric object to be managed by this metric set.
 
-        A metric can be registered with only on metric set.
+        A metric can be registered with only one metric set.
 
-        Parameters
-        ----------
-        metric : instance of :class:`Metric`
-            Metric object to register. Will have prefix added to name.
-
-        Returns
-        -------
-        metric : instance of :class:`Metric`
+        :type metric: :class:`Metric`
+        :param metric:
+            Metric object to register. Will have the manager's prefix
+            added to its name.
+        :rtype:
             For convenience, returns the metric passed in.
         """
         metric.manage(self.prefix)
@@ -99,10 +97,13 @@ class AggregatorAlreadyDefinedError(Exception):
 class Aggregator(object):
     """Registry of aggregate functions for metrics.
 
-    Parameters
-    ----------
-    name : str
+    :type name: str
+    :param name:
        Short name for the aggregator.
+    :type func: f(list of values) -> float
+    :param func:
+       The aggregation function. Should return a default value
+       if the list of values is empty (usually this default is 0.0).
     """
 
     REGISTRY = {}
@@ -139,22 +140,26 @@ class Metric(object):
     Values set are collected and polled periodically by the metric
     manager.
 
-    Parameters
-    ----------
-    suffix : str
+    :type suffix: str
+    :param suffix:
         Suffix to append to the :class:`MetricManager`
         prefix to create the metric name.
-    aggregators : list of aggregators, optional
+    :type aggregators: list of aggregators, optional
+    :param aggregators:
         List of aggregation functions to request
-        eventually be applied to this metric.
+        eventually be applied to this metric. The
+        default is to average the value.
 
-    Examples
-    --------
+    Examples:
+
     >>> mm = MetricManager('vumi.worker0.')
     >>> my_val = mm.register(Metric('my.value'))
     >>> my_val.set(1.5)
+    >>> my_val.name
+    'vumi.worker0.my.value'
     """
 
+    #: Default aggregators are [:data:`AVG`]
     DEFAULT_AGGREGATORS = [AVG]
 
     def __init__(self, suffix, aggregators=None):
@@ -178,7 +183,7 @@ class Metric(object):
         self._values.append((int(time.time()), value))
 
     def poll(self):
-        """Called periodically by the managing metric set."""
+        """Called periodically by the :class:`MetricManager`."""
         values, self._values = self._values, []
         return values
 
@@ -186,19 +191,14 @@ class Metric(object):
 class Count(Metric):
     """A simple counter.
 
-    Parameters
-    ----------
-    suffix : str
-        Suffix to append to the :class:`MetricManager`
-        prefix to create the metric name.
+    Examples:
 
-    Examples
-    --------
     >>> mm = MetricManager('vumi.worker0.')
     >>> my_count = mm.register(Count('my.count'))
     >>> my_count.inc()
     """
 
+    #: Default aggregators are [:data:`SUM`]
     DEFAULT_AGGREGATORS = [SUM]
 
     def inc(self):
@@ -213,14 +213,8 @@ class TimerAlreadyStartedError(Exception):
 class Timer(Metric):
     """A metric that records time spent on operations.
 
-    Parameters
-    ----------
-    suffix : str
-        Suffix to append to the :class:`MetricManager`
-        prefix to create the metric name.
+    Examples:
 
-    Examples
-    --------
     >>> mm = MetricManager('vumi.worker0.')
     >>> my_timer = mm.register(Timer('hard.work'))
 
@@ -238,6 +232,7 @@ class Timer(Metric):
     >>>     my_timer.stop()
     """
 
+    #: Default aggregators are [:data:`AVG`]
     DEFAULT_AGGREGATORS = [AVG]
 
     def __init__(self, *args, **kws):
@@ -268,9 +263,8 @@ class Timer(Metric):
 class MetricsConsumer(Consumer):
     """Utility for consuming metrics published by :class:`MetricManager`s.
 
-    Parameters
-    ----------
-    callback : function, f(metric_name, aggregators, values)
+    :type callback: f(metric_name, aggregators, values)
+    :param callback:
         Called for each metric datapoint as it arrives.
         The parameters are metric_name (str),
         aggregator (list of aggregator names) and values (a
