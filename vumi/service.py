@@ -65,6 +65,7 @@ class AmqpFactory(protocol.ReconnectingClientFactory):
         self.config = config
         self.spec = get_spec(make_vumi_path_abs(options['specfile']))
         self.delegate = TwistedDelegate()
+        self.worker = None
         self.worker_class = worker_class
 
     def buildProtocol(self, addr):
@@ -80,13 +81,15 @@ class AmqpFactory(protocol.ReconnectingClientFactory):
 
     def clientConnectionFailed(self, connector, reason):
         log.err("Connection failed.", reason)
-        self.worker.stopWorker()
+        if self.worker is not None:
+            self.worker.stopWorker()
         protocol.ReconnectingClientFactory.clientConnectionFailed(self,
                 connector, reason)
 
     def clientConnectionLost(self, connector, reason):
         log.err("Client connection lost.", reason)
-        self.worker.stopWorker()
+        if self.worker is not None:
+            self.worker.stopWorker()
         protocol.ReconnectingClientFactory.clientConnectionLost(self,
                 connector, reason)
 
