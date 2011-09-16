@@ -31,7 +31,8 @@ class SmppTransport(Worker):
         self.r_server = redis.Redis("localhost", db=dbindex)
         self.r_prefix = "%(system_id)s@%(host)s:%(port)s" % self.config
         log.msg("Connected to Redis, prefix: %s" % self.r_prefix)
-        last_sequence_number = int(self.r_get_last_sequence() or self.smpp_offset)
+        last_sequence_number = int(self.r_get_last_sequence()
+                                   or self.smpp_offset)
         log.msg("Last sequence_number: %s" % last_sequence_number)
 
         # start the Smpp transport
@@ -78,7 +79,8 @@ class SmppTransport(Worker):
         #self.conn_throttle(unacked=self.esme_client.get_unacked_count())
         sequence_number = self.send_smpp(message)
         self.r_set_last_sequence(sequence_number)
-        self.r_set_id_for_sequence(sequence_number, message.payload.get("message_id"))
+        self.r_set_id_for_sequence(sequence_number,
+                                   message.payload.get("message_id"))
 
     @inlineCallbacks
     def esme_disconnected(self):
@@ -114,7 +116,7 @@ class SmppTransport(Worker):
             transport=self.transport_name,
             message_id=sent_sms_id,
             transport_message_id=transport_msg_id)
-        log.msg("PUBLISHING ACK: %s TO: %s" %(message, routing_key))
+        log.msg("PUBLISHING ACK: %s TO: %s" % (message, routing_key))
         yield self.publisher.publish_message(
                 message,
                 routing_key=routing_key)
@@ -144,7 +146,7 @@ class SmppTransport(Worker):
                 delivery_status=self.delivery_status(
                     kwargs['delivery_report']['stat']),
                 transport_metadata=transport_metadata)
-        log.msg("PUBLISHING DELIV REPORT: %s TO: %s" %(message, routing_key))
+        log.msg("PUBLISHING DELIV REPORT: %s TO: %s" % (message, routing_key))
         yield self.publisher.publish_message(
                 message,
                 routing_key=routing_key)
@@ -159,7 +161,7 @@ class SmppTransport(Worker):
                 to_addr=kwargs.get('destination_addr'),
                 from_addr=kwargs.get('source_addr'),
                 message=kwargs.get('short_message'))
-        log.msg("PUBLISHING INBOUND: %s TO: %s" %(message, routing_key))
+        log.msg("PUBLISHING INBOUND: %s TO: %s" % (message, routing_key))
         yield self.publisher.publish_message(
                 message,
                 routing_key=routing_key)
@@ -211,4 +213,3 @@ class SmppTransport(Worker):
         if pdu:
             # do as above
             pass
-
