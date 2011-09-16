@@ -19,6 +19,7 @@ Contents:
    keywords.rst
    transports.rst
    how-we-do-releases.rst
+   coding-guidelines.rst
 
 Indices and tables
 ==================
