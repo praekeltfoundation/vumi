@@ -26,7 +26,7 @@ Set the version number in the develop branch *if necessary*.
 
 Push your changes to Github::
 
-    $ git push origin release/0.1.x
+    $ git push origin release/$SERIES
 
 
 Tag the release
