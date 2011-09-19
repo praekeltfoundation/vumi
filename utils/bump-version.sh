@@ -8,4 +8,4 @@ then
     exit 1
 fi
 
-sed -i".bak" -e "s/\(version\s*=\s*[\"']\)\(.*\)\([\"'].*\)/\1${VER}\3/" setup.py
+sed -i".bak" -e "s/\(version[ ]*=[ ]*[\"']\)\(.*\)\([\"'].*\)/\1${VER}\3/" setup.py
