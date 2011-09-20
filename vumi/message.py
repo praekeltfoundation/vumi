@@ -1,6 +1,7 @@
 # -*- test-case-name: vumi.tests.test_message -*-
 
 import json
+from uuid import uuid4
 from datetime import datetime
 
 from errors import MissingMessageField, InvalidMessageField
@@ -106,6 +107,7 @@ class TransportMessage(Message):
         fields.setdefault('metadata', {})
         fields.setdefault('transport_metadata', {})
         fields.setdefault('message', '')
+        fields.setdefault('message_id', uuid4().get_hex())
         return fields
 
     def validate_fields(self):

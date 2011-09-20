@@ -1,5 +1,6 @@
 from twisted.trial.unittest import TestCase
 
+from vumi.tests.utils import RegexMatcher
 from vumi.message import (TransportMessage, TransportSMS, TransportSMSAck,
                           TransportSMSDeliveryReport)
 
@@ -19,6 +20,20 @@ class MessageTest(TestCase):
         self.assertEqual('20110907', msg['message_version'])
         self.assertEqual('heya', msg['message'])
         self.assertEqual('sphex', msg['transport'])
+
+    def test_basic_transport_message_no_id(self):
+        msg = TransportMessage(
+            message_type='sms',
+            to_addr='+27831234567',
+            from_addr='12345',
+            message='heya',
+            transport='sphex',
+            )
+        self.assertEqual('sms', msg['message_type'])
+        self.assertEqual('20110907', msg['message_version'])
+        self.assertEqual('heya', msg['message'])
+        self.assertEqual('sphex', msg['transport'])
+        self.assertEqual(RegexMatcher('^[01-9a-fA-F]{32}'), msg['message_id'])
 
     def test_basic_transport_sms(self):
         msg = TransportSMS(

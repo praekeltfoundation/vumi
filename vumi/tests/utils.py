@@ -1,5 +1,6 @@
 # -*- test-case-name: vumi.tests.test_testutils -*-
 
+import re
 import json
 import importlib
 import fnmatch
@@ -42,6 +43,14 @@ class UTCNearNow(object):
         if other.tzinfo:
             now = self.utcnow
         return (now - self.offset) < other < (now + self.offset)
+
+
+class RegexMatcher(object):
+    def __init__(self, regex):
+        self.regex = re.compile(regex)
+
+    def __eq__(self, other):
+        return self.regex.match(other)
 
 
 class Mocking(object):
