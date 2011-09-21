@@ -143,3 +143,31 @@ class VodacomMessagingResponseTest(TestCase):
             '''
         self.assertEquals(self.stdXML(vmr), self.stdXML(ref))
 
+        vmr.set_context('pickcard')
+        ref = '''
+            <request>
+                <headertext>Pick a card</headertext>
+                <options>
+                    <option
+                        callback="http://vumi.p.org/api/v1/ussd/vmes/?context=pickcard"
+                        command="1"
+                        display="True"
+                        order="1"
+                        >King of spades</option>
+                    <option
+                        callback="http://vumi.p.org/api/v1/ussd/vmes/?context=pickcard"
+                        command="2"
+                        display="True"
+                        order="2"
+                        >Queen of diamonds</option>
+                    <option
+                        callback="http://vumi.p.org/api/v1/ussd/vmes/?context=pickcard"
+                        command="3"
+                        display="True"
+                        order="3"
+                        >Joker</option>
+                </options>
+            </request>
+            '''
+        self.assertEquals(self.stdXML(vmr), self.stdXML(ref))
+
