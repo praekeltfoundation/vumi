@@ -215,14 +215,14 @@ class DummyRpcWorker(Worker):
             self.consume_key,
             repr(message.payload)))
         reply = hi
-        if message.payload['message']['args'].get('request',[''])[0] == "1":
+        if message.payload['message']['args'].get('request', [''])[0] == "1":
             reply = bye
-        if message.payload['message']['args'].get('request',[''])[0] == "3":
+        if message.payload['message']['args'].get('request', [''])[0] == "3":
             reply = cont
         self.publisher.publish_message(Message(
                 uuid=message.payload['uuid'],
                 message=reply),
-            routing_key = message.payload['return_path'].pop())
+            routing_key=message.payload['return_path'].pop())
 
     def stopWorker(self):
         log.msg("Stopping the MenuWorker")
