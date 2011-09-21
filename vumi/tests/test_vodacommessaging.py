@@ -170,4 +170,3 @@ class VodacomMessagingResponseTest(TestCase):
             </request>
             '''
         self.assertEquals(self.stdXML(vmr), self.stdXML(ref))
-
