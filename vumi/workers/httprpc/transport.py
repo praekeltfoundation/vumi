@@ -97,6 +97,59 @@ class HttpRpcTransport(Worker):
         log.msg("Stopping the HttpRpcTransport")
 
 
+class VodacomMessagingResponse(object):
+    def __init__(self, config):
+        self.config = config
+        self.context = ''
+        self.option_list = []
+
+    def set_headertext(self, headertext):
+        self.headertext = headertext
+
+    def set_context(self, context):
+        """
+        context is a unique identifier for the state that generated
+        the message the user is responding to
+        """
+        self.context = context
+
+    def add_option(self, dict):
+        dict['order'] = len(self.option_list) + 1
+        dict.update({
+            'web_path': self.config['web_path'],
+            'web_host': self.config['web_host'],
+            'context': self.context})
+        self.option_list.append(dict)
+
+    def numbered_option_string(self, dict):
+        template_string = '''<option
+            command="%(order)s"
+            order="%(order)s"
+            callback="http://%(web_host)s%(web_path)s?context=%(context)s"
+            display="True"
+            >%(text)s</option>'''
+        return template_string % dict
+
+    def get_response_string(self):
+        options = '<options>'
+        for o in self.option_list:
+            options += self.numbered_option_string(o)
+        options += '</options>'
+        response = options
+        return response
+
+vmr = VodacomMessagingResponse({
+    'web_host': 'vumi.praekeltfoundation.org',
+    'web_path': '/api/v1/ussd/vodacommessaging_112233/'})
+vmr.set_context("start")
+vmr.set_headertext("hi there")
+vmr.add_option({'text': "ho hum"})
+vmr.add_option({'text': "dfsdd"})
+vmr.add_option({'text': "sfsdf"})
+print vmr.get_response_string()
+
+
+
 class DummyRpcWorker(Worker):
     @inlineCallbacks
     def startWorker(self):
