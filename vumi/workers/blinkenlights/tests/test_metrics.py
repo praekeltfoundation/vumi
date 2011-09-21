@@ -64,14 +64,27 @@ class TestMetricAggregator(TestCase):
 
     def setUp(self):
         self.now = 0
+        self.workers = []
+
+    @inlineCallbacks
+    def tearDown(self):
+        for worker in self.workers:
+            yield worker.stopWorker()
 
     def fake_time(self):
         return self.now
 
+    def get_worker(self, cls, config=None):
+        if config is None:
+            config = {}
+        worker = get_stubbed_worker(cls, config=config)
+        self.workers.append(worker)
+        return worker
+
     @inlineCallbacks
     def test_aggregating(self):
         config = {'bucket': 3, 'bucket_size': 5}
-        worker = get_stubbed_worker(metrics.MetricAggregator, config=config)
+        worker = self.get_worker(metrics.MetricAggregator, config=config)
         worker._time = self.fake_time
         broker = BrokerWrapper(worker._amqp_client.broker)
         yield worker.startWorker()
@@ -90,22 +103,57 @@ class TestMetricAggregator(TestCase):
                                           "vumi.metrics.aggregates")
 
         expected = []
-        self.now = 1235
+        self.now = 1241
         worker.check_buckets()
         self.assertEqual(recv(), expected)
 
         expected.append([["vumi.test.foo.avg", [], [[1235, 1.75]]]])
-        self.now = 1240
+        self.now = 1246
         worker.check_buckets()
         self.assertEqual(recv(), expected)
 
         # skip a few checks
         expected.append([["vumi.test.foo.sum", [], [[1240, 2.0]]]])
-        self.now = 1255
+        self.now = 1261
         worker.check_buckets()
         self.assertEqual(recv(), expected)
 
-        yield worker.stopWorker()
+    @inlineCallbacks
+    def test_aggregating_lag(self):
+        config = {'bucket': 3, 'bucket_size': 5, 'lag': 1}
+        worker = self.get_worker(metrics.MetricAggregator, config=config)
+        worker._time = self.fake_time
+        broker = BrokerWrapper(worker._amqp_client.broker)
+        yield worker.startWorker()
+
+        datapoints = [
+            ("vumi.test.foo", ("avg",), [(1235, 1.5), (1236, 2.0)]),
+            ("vumi.test.foo", ("sum",), [(1240, 1.0)]),
+            ]
+        broker.send_datapoints("vumi.metrics.buckets", "bucket.3", datapoints)
+        broker.send_datapoints("vumi.metrics.buckets", "bucket.3", datapoints)
+        broker.send_datapoints("vumi.metrics.buckets", "bucket.2", datapoints)
+        yield broker.kick_delivery()
+
+        def recv():
+            return broker.recv_datapoints("vumi.metrics.aggregates",
+                                          "vumi.metrics.aggregates")
+
+        expected = []
+        self.now = 1237
+        worker.check_buckets()
+        self.assertEqual(recv(), expected)
+
+        expected.append([["vumi.test.foo.avg", [], [[1235, 1.75]]]])
+        self.now = 1242
+        worker.check_buckets()
+        self.assertEqual(recv(), expected)
+
+        # skip a few checks
+        expected.append([["vumi.test.foo.sum", [], [[1240, 2.0]]]])
+        self.now = 1257
+        worker.check_buckets()
+        self.assertEqual(recv(), expected)
 
 
 class TestAggregationSystem(TestCase):
@@ -172,7 +220,7 @@ class TestAggregationSystem(TestCase):
 
         yield self.broker.kick_delivery()  # deliver to bucketters
         yield self.broker.kick_delivery()  # deliver to aggregators
-        self.now = 12350
+        self.now = 12355
         for worker in self.aggregator_workers:
             worker.check_buckets()
 

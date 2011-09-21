@@ -5,6 +5,7 @@ from twisted.internet import reactor
 from vumi.service import Worker, Consumer, Publisher
 from vumi.workers.smpp.server import SmscServerFactory
 
+
 class SmppServiceConsumer(Consumer):
     exchange_name = "vumi"
     exchange_type = "direct"
@@ -39,7 +40,5 @@ class SmppService(Worker):
         factory = SmscServerFactory()
         reactor.listenTCP(2772, factory)
 
-
     def stopWorker(self):
         log.msg("Stopping the SmppService")
-

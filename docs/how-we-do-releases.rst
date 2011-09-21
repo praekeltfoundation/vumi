@@ -26,7 +26,7 @@ Set the version number in the develop branch *if necessary*.
 
 Push your changes to Github::
 
-    $ git push origin release/0.1.x
+    $ git push origin release/$SERIES
 
 
 Tag the release
@@ -56,7 +56,10 @@ Merge to master *if this is a tag off the latest release series*::
 
     $ git checkout master
     $ git merge vumi-$VER
-    $ git commit -m "Merge $VER to master."
 
-Push your changes to Github (don't forget to push the new
-tag). Declare victory.
+Push your changes to Github (don't forget to push the new tag)::
+
+    $ git push
+    $ git push tag refs/tags/vumi-$VER
+
+Declare victory.

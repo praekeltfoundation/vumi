@@ -84,15 +84,19 @@ class SmscServer(Protocol):
 
     def delivery_report(self, message_id):
         sequence_number = 1
-        short_message = 'id:%s sub:001 dlvrd:001 submit date:%s done date:%s stat:DELIVRD err:000 text:' % (
-                message_id, datetime.now().strftime("%y%m%d%H%M%S"), datetime.now().strftime("%y%m%d%H%M%S"))
+        short_message = ('id:%s sub:001 dlvrd:001 submit date:%s'
+                         ' done date:%s stat:DELIVRD err:000 text:' % (
+                         message_id, datetime.now().strftime("%y%m%d%H%M%S"),
+                         datetime.now().strftime("%y%m%d%H%M%S")))
         pdu = DeliverSM(sequence_number, short_message=short_message)
         self.sendPDU(pdu)
 
     def boomerang(self, pdu):
         if pdu['body']['mandatory_parameters']['short_message'] == "boomerang":
-            destination_addr = pdu['body']['mandatory_parameters']['source_addr']
-            source_addr = pdu['body']['mandatory_parameters']['destination_addr']
+            destination_addr = (pdu['body']['mandatory_parameters']
+                                   ['source_addr'])
+            source_addr = (pdu['body']['mandatory_parameters']
+                              ['destination_addr'])
 
             sequence_number = 1
             short_message1 = "\x05\x00\x03\xff\x03\x01back"

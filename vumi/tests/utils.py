@@ -8,11 +8,10 @@ from collections import namedtuple
 from contextlib import contextmanager
 
 import pytz
-import txamqp
 from twisted.internet import defer
 
 from vumi.utils import make_vumi_path_abs
-from vumi.service import Worker
+from vumi.service import get_spec, Worker
 from vumi.tests.fake_amqp import FakeAMQClient
 
 
@@ -180,14 +179,14 @@ class TestChannel(object):
 
 
 def get_stubbed_worker(worker_class, config=None, broker=None):
-    spec = txamqp.spec.load(make_vumi_path_abs("config/amqp-spec-0-8.xml"))
+    spec = get_spec(make_vumi_path_abs("config/amqp-spec-0-8.xml"))
     amq_client = FakeAMQClient(spec, {}, broker)
     worker = worker_class(amq_client, config)
     return worker
 
 
 def get_stubbed_channel(broker=None, id=0):
-    spec = txamqp.spec.load(make_vumi_path_abs("config/amqp-spec-0-8.xml"))
+    spec = get_spec(make_vumi_path_abs("config/amqp-spec-0-8.xml"))
     amq_client = FakeAMQClient(spec, {}, broker)
     return amq_client.channel(id)
 

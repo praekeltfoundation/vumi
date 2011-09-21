@@ -9,6 +9,8 @@ DATABASES = {}
 def setup_db(name, *args, **kw):
     if DATABASES.get(name, None):
         raise ValueError("Database %s already exists." % (name,))
+    # See twisted ticket #2680 for this.
+    adbapi.ConnectionPool.shutdownID = None
     # Hardcoding this, because we currently only support one db.
     db = adbapi.ConnectionPool('psycopg2', *args, **kw)
     DATABASES[name] = db
