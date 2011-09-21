@@ -101,7 +101,20 @@ class VodacomMessagingResponse(object):
     def __init__(self, config):
         self.config = config
         self.context = ''
+        self.freetext_option = None
+        self.template_freetext_option_string = '<option' \
+            + ' command="1"' \
+            + ' order="1"' \
+            + ' callback="http://%(web_host)s%(web_path)s?context=%(context)s"' \
+            + ' display="False"' \
+            + ' ></option>'
         self.option_list = []
+        self.template_numbered_option_string = '<option' \
+            + ' command="%(order)s"' \
+            + ' order="%(order)s"' \
+            + ' callback="http://%(web_host)s%(web_path)s?context=%(context)s"' \
+            + ' display="True"' \
+            + ' >%(text)s</option>'
 
     def set_headertext(self, headertext):
         self.headertext = headertext
@@ -112,8 +125,16 @@ class VodacomMessagingResponse(object):
         the message the user is responding to
         """
         self.context = context
+        if self.freetext_option:
+            self.accept_freetext()
+        count = 0
+        while count < len(self.option_list):
+            self.option_list[count].update({'context': self.context})
+            count += 1
 
-    def add_option(self, dict):
+    def add_option(self, text):
+        self.freetext_option = None
+        dict = {'text': str(text)}
         dict['order'] = len(self.option_list) + 1
         dict.update({
             'web_path': self.config['web_path'],
@@ -121,33 +142,25 @@ class VodacomMessagingResponse(object):
             'context': self.context})
         self.option_list.append(dict)
 
-    def numbered_option_string(self, dict):
-        template_string = '''<option
-            command="%(order)s"
-            order="%(order)s"
-            callback="http://%(web_host)s%(web_path)s?context=%(context)s"
-            display="True"
-            >%(text)s</option>'''
-        return template_string % dict
+    def accept_freetext(self):
+        self.option_list = []
+        self.freetext_option = self.template_freetext_option_string % {
+            'web_path': self.config['web_path'],
+            'web_host': self.config['web_host'],
+            'context': self.context}
 
-    def get_response_string(self):
-        options = '<options>'
-        for o in self.option_list:
-            options += self.numbered_option_string(o)
-        options += '</options>'
-        response = options
+    def __str__(self):
+        headertext = '\t<headertext>%s</headertext>\n' % self.headertext
+        options = ''
+        if self.freetext_option or len(self.option_list) > 0:
+            options = '\t<options>\n'
+            for o in self.option_list:
+                options += '\t\t' + self.template_numbered_option_string % o + '\n'
+            if self.freetext_option:
+                options += '\t\t' + self.freetext_option + '\n'
+            options += '\t</options>\n'
+        response = '<request>\n' + headertext + options + '</request>'
         return response
-
-vmr = VodacomMessagingResponse({
-    'web_host': 'vumi.praekeltfoundation.org',
-    'web_path': '/api/v1/ussd/vodacommessaging_112233/'})
-vmr.set_context("start")
-vmr.set_headertext("hi there")
-vmr.add_option({'text': "ho hum"})
-vmr.add_option({'text': "dfsdd"})
-vmr.add_option({'text': "sfsdf"})
-print vmr.get_response_string()
-
 
 
 class DummyRpcWorker(Worker):
