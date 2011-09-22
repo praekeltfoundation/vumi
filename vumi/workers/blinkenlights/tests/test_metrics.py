@@ -4,7 +4,6 @@ from vumi.tests.utils import TestChannel, get_stubbed_worker
 from vumi.tests.fake_amqp import FakeAMQPBroker
 from vumi.workers.blinkenlights import metrics
 from vumi.blinkenlights.message20110818 import MetricMessage
-from vumi.message import Message
 
 
 class BrokerWrapper(object):
@@ -23,8 +22,7 @@ class BrokerWrapper(object):
 
     def recv_datapoints(self, exchange, queue):
         """Retrieve datapoints from a broker."""
-        contents = self._broker.get_dispatched(exchange, queue)
-        vumi_msgs = [Message.from_json(content.body) for content in contents]
+        vumi_msgs = self._broker.get_messages(exchange, queue)
         msgs = [MetricMessage.from_dict(vm.payload) for vm in vumi_msgs]
         return [msg.datapoints() for msg in msgs]
 
