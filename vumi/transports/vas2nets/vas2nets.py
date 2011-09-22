@@ -1,6 +1,12 @@
 # -*- test-case-name: vumi.transports.vas2nets.tests.test_vas2nets -*-
 # -*- encoding: utf-8 -*-
 
+from urllib import urlencode
+from datetime import datetime
+import string
+import warnings
+from StringIO import StringIO
+
 from twisted.web import http
 from twisted.web.resource import Resource
 from twisted.web.server import NOT_DONE_YET
@@ -12,15 +18,9 @@ from twisted.internet.protocol import Protocol
 from twisted.internet import reactor
 from twisted.internet.error import ConnectionRefusedError
 
-from StringIO import StringIO
 from vumi.utils import StringProducer, normalize_msisdn
 from vumi.transports.base import Transport
 from vumi.errors import VumiError
-
-from urllib import urlencode
-from datetime import datetime
-import string
-import warnings
 
 
 def iso8601(vas2nets_timestamp):
@@ -116,7 +116,6 @@ class ReceiveSMSResource(Resource):
         except Exception, e:
             request.setResponseCode(http.INTERNAL_SERVER_ERROR)
             log.err("Error processing request: %s" % (request,))
-            print "dr8", repr(e)
         request.finish()
 
     def render(self, request):
@@ -171,7 +170,6 @@ class DeliveryReceiptResource(Resource):
         except Exception, e:
             request.setResponseCode(http.INTERNAL_SERVER_ERROR)
             log.err("Error processing request: %s" % (request,))
-            print "dr8", e
         request.finish()
 
     def render(self, request):

@@ -15,7 +15,7 @@ from twisted.web.test.test_web import DummyRequest
 
 from vumi.tests.utils import get_stubbed_worker
 from vumi.service import Worker
-from vumi.workers.vas2nets.transport_stubs import (
+from vumi.transports.vas2nets.transport_stubs import (
     FakeVas2NetsHandler, FakeVas2NetsWorker)
 from vumi.utils import StringProducer
 

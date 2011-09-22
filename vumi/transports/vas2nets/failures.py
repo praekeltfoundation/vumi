@@ -1,6 +1,6 @@
-# -*- test-case-name: vumi.workers.vas2nets.tests.test_failures -*-
+# -*- test-case-name: vumi.transports.vas2nets.tests.test_failures -*-
 
-from vumi.workers.failures.workers import FailureWorker
+from vumi.transports.failures import FailureWorker
 
 
 class Vas2NetsFailureWorker(FailureWorker):

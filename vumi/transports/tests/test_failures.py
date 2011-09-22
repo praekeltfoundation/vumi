@@ -6,7 +6,7 @@ from twisted.trial import unittest
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.tests.utils import get_stubbed_worker, FakeRedis
-from vumi.workers.failures.workers import FailureWorker
+from vumi.transports.failures import FailureWorker
 
 
 def mktimestamp(delta=0):

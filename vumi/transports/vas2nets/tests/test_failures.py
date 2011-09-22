@@ -6,11 +6,11 @@ from twisted.web.resource import Resource
 from twisted.trial import unittest
 from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
 
+from vumi.message import TransportUserMessage, from_json
 from vumi.tests.utils import get_stubbed_worker, FakeRedis, TestResourceWorker
 from vumi.tests.fake_amqp import FakeAMQPBroker
-from vumi.message import from_json, TransportSMS
-from vumi.workers.vas2nets.transport import Vas2NetsTransport
-from vumi.workers.vas2nets.failures import Vas2NetsFailureWorker
+from vumi.transports.vas2nets.vas2nets import Vas2NetsTransport
+from vumi.transports.vas2nets.failures import Vas2NetsFailureWorker
 
 
 class BadVas2NetsResource(Resource):
@@ -63,8 +63,8 @@ class Vas2NetsFailureWorkerTestCase(unittest.TestCase):
         }
         self.fail_config = {
             'transport_name': 'vas2nets',
-            'retry_routing_key': 'sms.outbound.%(transport_name)s',
-            'failures_routing_key': 'sms.outbound.%(transport_name)s.failures',
+            'retry_routing_key': '%(transport_name)s.outbound',
+            'failures_routing_key': '%(transport_name)s.failures',
             }
         self.workers = []
         self.broker = FakeAMQPBroker()
@@ -115,18 +115,18 @@ class Vas2NetsFailureWorkerTestCase(unittest.TestCase):
         return retry_keys
 
     def mkmsg_out(self, in_reply_to=None):
-        msg = TransportSMS(
-            transport='vas2nets',
-            to_addr='+27761234567',
+        return TransportUserMessage(
+            to_addr='+41791234567',
             from_addr='9292',
             message_id='1',
-            in_reply_to=in_reply_to,
+            transport_name='vas2nets',
+            transport_type='sms',
             transport_metadata={
                'network_id': 'network-id',
                },
-            message='hello world',
+            content='hello world',
+            in_reply_to=in_reply_to,
             )
-        return msg
 
     def assert_dispatched_count(self, count, routing_key):
         self.assertEqual(count, len(self.get_dispatched(routing_key)))
@@ -134,9 +134,9 @@ class Vas2NetsFailureWorkerTestCase(unittest.TestCase):
     @inlineCallbacks
     def test_send_sms_success(self):
         yield self.mk_resource_worker("Result_code: 00, Message OK")
-        yield self.worker.handle_outbound_message(self.mkmsg_out())
-        self.assert_dispatched_count(1, 'sms.ack.vas2nets')
-        self.assert_dispatched_count(0, 'sms.failures.vas2nets')
+        yield self.worker._process_message(self.mkmsg_out())
+        self.assert_dispatched_count(1, 'vas2nets.events')
+        self.assert_dispatched_count(0, 'vas2nets.failures')
 
     @inlineCallbacks
     def test_send_sms_fail(self):
@@ -144,15 +144,15 @@ class Vas2NetsFailureWorkerTestCase(unittest.TestCase):
         A 'No SmsId Header' error should not be retried.
         """
         self.worker.failure_published = FailureCounter(1)
-        self.worker.SUPPRESS_EXCEPTIONS = True
         yield self.mk_resource_worker("Result_code: 04, Internal system error "
                                       "occurred while processing message",
                                       {})
-        yield self.worker.handle_outbound_message(self.mkmsg_out())
+        yield self.worker._process_message(self.mkmsg_out())
         yield self.worker.failure_published.deferred
-        self.assert_dispatched_count(0, 'sms.ack.vas2nets')
-        self.assert_dispatched_count(1, 'sms.outbound.vas2nets.failures')
-        [fmsg] = self.get_dispatched('sms.outbound.vas2nets.failures')
+        yield self.broker.kick_delivery()
+        self.assert_dispatched_count(0, 'vas2nets.events')
+        self.assert_dispatched_count(1, 'vas2nets.failures')
+        [fmsg] = self.get_dispatched('vas2nets.failures')
         fmsg = from_json(fmsg.body)
         self.assertTrue(
             "Vas2NetsTransportError: No SmsId Header" in fmsg['reason'])
@@ -167,13 +167,12 @@ class Vas2NetsFailureWorkerTestCase(unittest.TestCase):
         A 'connection refused' error should be retried.
         """
         self.worker.failure_published = FailureCounter(1)
-        self.worker.SUPPRESS_EXCEPTIONS = True
         msg = self.mkmsg_out()
-        yield self.worker.handle_outbound_message(msg)
+        yield self.worker._process_message(msg)
         yield self.worker.failure_published.deferred
-        self.assert_dispatched_count(0, 'sms.ack.vas2nets')
-        self.assert_dispatched_count(1, 'sms.outbound.vas2nets.failures')
-        [fmsg] = self.get_dispatched('sms.outbound.vas2nets.failures')
+        self.assert_dispatched_count(0, 'vas2nets.events')
+        self.assert_dispatched_count(1, 'vas2nets.failures')
+        [fmsg] = self.get_dispatched('vas2nets.failures')
         fmsg = from_json(fmsg.body)
         self.assertEqual(msg, fmsg['message'])
         self.assertEqual("connection refused", fmsg['reason'])
