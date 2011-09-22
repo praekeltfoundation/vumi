@@ -19,6 +19,7 @@ Contents:
    keywords.rst
    transports.rst
    metrics.rst
+   routing-naming-conventions.rst
    how-we-do-releases.rst
    coding-guidelines.rst
 
