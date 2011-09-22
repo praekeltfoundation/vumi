@@ -1,4 +1,4 @@
-# -*- test-case-name: vumi.workers.failures.tests.test_workers -*-
+# -*- test-case-name: vumi.transports.tests.test_failures -*-
 
 import time
 from datetime import datetime
@@ -11,7 +11,22 @@ from twisted.python import log
 
 from vumi.service import Worker
 from vumi.utils import get_deploy_int
-from vumi.message import to_json
+from vumi.message import TransportMessage, to_json
+
+
+class FailureMessage(TransportMessage):
+    MESSAGE_TYPE = 'failure_message'
+
+    def process_fields(self, fields):
+        fields = super(FailureMessage, self).process_fields(fields)
+        return fields
+
+    def validate_fields(self):
+        super(FailureMessage, self).validate_fields()
+        self.assert_field_present(
+            'message',
+            'reason',
+            )
 
 
 class FailureWorker(Worker):
@@ -35,7 +50,8 @@ class FailureWorker(Worker):
         retry_rkey = self.get_rkey('retry')
         failures_rkey = self.get_rkey('failures')
         self.retry_publisher = yield self.publish_to(retry_rkey)
-        self.consumer = yield self.consume(failures_rkey, self.process_message)
+        self.consumer = yield self.consume(failures_rkey, self.process_message,
+                                           message_class=FailureMessage)
         self.start_retry_delivery()
 
     def stopWorker(self):

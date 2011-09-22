@@ -1,4 +1,4 @@
-# -*- test-case-name: vumi.workers.vas2nets.tests.test_vas2nets_stubs -*-
+# -*- test-case-name: vumi.transports.vas2nets.tests.test_vas2nets_stubs -*-
 
 import uuid
 import random

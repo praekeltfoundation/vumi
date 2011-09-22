@@ -2,7 +2,8 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.trial import unittest
 
 from vumi.tests.fake_amqp import FakeAMQPBroker
-from vumi.tests.utils import get_stubbed_worker
+from vumi.tests.utils import get_stubbed_worker, UTCNearNow, RegexMatcher
+from vumi.message import TransportUserMessage, TransportEvent
 from vumi.transports.base import Transport
 
 
@@ -14,6 +15,7 @@ class TransportTestCase(unittest.TestCase):
     """
 
     transport_name = "sphex"
+    transport_type = None
     transport_class = None
 
     def setUp(self):
@@ -59,6 +61,73 @@ class TransportTestCase(unittest.TestCase):
         self.assert_rkey_attr('inbound', transport.message_publisher)
         self.assert_rkey_attr('failures', transport.failure_publisher)
         self.assert_rkey_attr('outbound', transport.message_consumer)
+
+    def mkmsg_ack(self, user_message_id='1', sent_message_id='abc',
+                  transport_metadata=None):
+        if transport_metadata is None:
+            transport_metadata = {}
+        return TransportEvent(
+            event_id=RegexMatcher(r'^[0-9a-fA-F]{32}$'),
+            event_type='ack',
+            user_message_id=user_message_id,
+            sent_message_id=sent_message_id,
+            timestamp=UTCNearNow(),
+            transport_name=self.transport_name,
+            transport_metadata=transport_metadata,
+            )
+
+    def mkmsg_delivery(self, status='delivered', user_message_id='abc',
+                       transport_metadata=None):
+        if transport_metadata is None:
+            transport_metadata = {}
+        return TransportEvent(
+            event_id=RegexMatcher(r'^[0-9a-fA-F]{32}$'),
+            event_type='delivery_report',
+            transport_name=self.transport_name,
+            user_message_id=user_message_id,
+            delivery_status=status,
+            to_addr='+41791234567',
+            timestamp=UTCNearNow(),
+            transport_metadata=transport_metadata,
+            )
+
+    def mkmsg_in(self, content='hello world', message_id='abc',
+                 transport_type=None, transport_metadata=None):
+        if transport_type is None:
+            transport_type = self.transport_type
+        if transport_metadata is None:
+            transport_metadata = {}
+        return TransportUserMessage(
+            from_addr='+41791234567',
+            to_addr='9292',
+            message_id=message_id,
+            transport_name=self.transport_name,
+            transport_type=transport_type,
+            transport_metadata=transport_metadata,
+            content=content,
+            timestamp=UTCNearNow(),
+            )
+
+    def mkmsg_out(self, content='hello world', message_id='1',
+                  in_reply_to=None, transport_type=None,
+                  transport_metadata=None, stubs=False):
+        if transport_type is None:
+            transport_type = self.transport_type
+        if transport_metadata is None:
+            transport_metadata = {}
+        params = dict(
+            to_addr='+41791234567',
+            from_addr='9292',
+            message_id=message_id,
+            transport_name=self.transport_name,
+            transport_type=transport_type,
+            transport_metadata=transport_metadata,
+            content=content,
+            in_reply_to=in_reply_to,
+            )
+        if stubs:
+            params['timestamp'] = UTCNearNow()
+        return TransportUserMessage(**params)
 
 
 class BaseTransportTestCase(TransportTestCase):

@@ -27,7 +27,7 @@ class JSONMessageEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, datetime):
             return obj.strftime(VUMI_DATE_FORMAT)
-        return super(json.JSONEncoder, self).default(obj)
+        return super(JSONMessageEncoder, self).default(obj)
 
 
 def from_json(json_string):
@@ -210,6 +210,7 @@ class TransportEvent(TransportMessage):
         return fields
 
     def validate_fields(self):
+        super(TransportEvent, self).validate_fields()
         self.assert_field_present(
             'user_message_id',
             'event_id',

@@ -12,6 +12,7 @@ from twisted.python import log
 from vumi.errors import ConfigError
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.service import Worker
+from vumi.transports.failures import FailureMessage
 
 
 class Transport(Worker):
@@ -94,13 +95,13 @@ class Transport(Worker):
     def send_failure(self, message, reason):
         """Send a failure report."""
         # TODO: Make the failure handling code smarter.
-        from vumi.message import Message
         try:
-            self.failure_publisher.publish_message(Message(
+            self.failure_publisher.publish_message(FailureMessage(
                     message=message.payload, reason=reason))
             self.failure_published()
-        except Exception, e:
-            log.msg("Error publishing failure:", message, reason, e)
+        except:
+            log.err("Error publishing failure: %s, %s" % (message, reason))
+            raise
 
     def failure_published(self):
         pass
@@ -115,11 +116,13 @@ class Transport(Worker):
     def publish_ack(self, **kw):
         kw.setdefault('event_type', 'ack')
         kw.setdefault('transport_name', self.transport_name)
+        kw.setdefault('transport_metadata', {})
         return self.publish_event(**kw)
 
     def publish_delivery_report(self, **kw):
         kw.setdefault('event_type', 'delivery_report')
         kw.setdefault('transport_name', self.transport_name)
+        kw.setdefault('transport_metadata', {})
         return self.publish_event(**kw)
 
     def _process_message(self, message):

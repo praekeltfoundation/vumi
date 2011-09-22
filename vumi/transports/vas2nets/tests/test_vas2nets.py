@@ -6,15 +6,14 @@ from datetime import datetime
 from twisted.web import http
 from twisted.web.resource import Resource
 from twisted.web.server import NOT_DONE_YET
-from twisted.trial import unittest
 from twisted.python import log
 from twisted.internet.defer import inlineCallbacks
 from twisted.web.test.test_web import DummyRequest
 
-from vumi.tests.utils import (get_stubbed_worker, TestResourceWorker,
-                              UTCNearNow, RegexMatcher)
+from vumi.transports.tests.test_base import TransportTestCase
+from vumi.tests.utils import get_stubbed_worker, TestResourceWorker
 from vumi.tests.fake_amqp import FakeAMQPBroker
-from vumi.message import from_json, TransportUserMessage, TransportEvent
+from vumi.message import from_json
 from vumi.transports.vas2nets.vas2nets import (
     ReceiveSMSResource, DeliveryReceiptResource, Vas2NetsTransport,
     validate_characters, Vas2NetsEncodingError, normalize_outbound_msisdn)
@@ -50,7 +49,10 @@ class TestResource(Resource):
         return self.message
 
 
-class Vas2NetsTransportTestCase(unittest.TestCase):
+class Vas2NetsTransportTestCase(TransportTestCase):
+
+    transport_name = 'vas2nets'
+    transport_type = 'sms'
 
     @inlineCallbacks
     def setUp(self):
@@ -112,65 +114,38 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
         request.args = args
         return request
 
-    def make_ack(self, sent_message_id):
-        return TransportEvent(
-            event_id=RegexMatcher(r'^[0-9a-fA-F]{32}$'),
-            event_type='ack',
-            user_message_id='1',
-            sent_message_id=sent_message_id,
-            timestamp=UTCNearNow(),
-            transport_name='vas2nets',
-            )
-
-    def make_delivery_message(self, status, tr_status, tr_message):
-        return TransportEvent(
-            event_id=RegexMatcher(r'^[0-9a-fA-F]{32}$'),
-            event_type='delivery_report',
-            transport_name='vas2nets',
-            user_message_id='vas2nets.abc',
-            delivery_status=status,
-            transport_metadata={
-               'delivery_status': tr_status,
-               'network_id': 'provider',
-               'timestamp': self.today.strftime('%Y-%m-%dT%H:%M:%S'),
-               'delivery_message': tr_message,
-               },
-            to_addr='+41791234567',
-            timestamp=UTCNearNow(),
-            )
+    def mkmsg_delivery(self, status, tr_status, tr_message):
+        transport_metadata = {
+            'delivery_message': tr_message,
+            'delivery_status': tr_status,
+            'network_id': 'provider',
+            'timestamp': self.today.strftime('%Y-%m-%dT%H:%M:%S'),
+            }
+        return super(Vas2NetsTransportTestCase, self).mkmsg_delivery(
+            status, user_message_id='vas2nets.abc',
+            transport_metadata=transport_metadata)
 
     def mkmsg_in(self):
-        msg = TransportUserMessage(
-            from_addr='+41791234567',
-            to_addr='9292',
-            message_id='vas2nets.abc',
-            transport_name='vas2nets',
-            transport_type='sms',
-            transport_metadata={
-                'original_message_id': 'vas2nets.abc',
-                'network_id': 'provider',
-                'keyword': '',
-                'timestamp': self.today.strftime('%Y-%m-%dT%H:%M:%S'),
-                },
-            content='hello world',
-            timestamp=UTCNearNow(),
-            )
-        return msg
+        transport_metadata = {
+            'original_message_id': 'vas2nets.abc',
+            'keyword': '',
+            'network_id': 'provider',
+            'timestamp': self.today.strftime('%Y-%m-%dT%H:%M:%S'),
+            }
+        return super(Vas2NetsTransportTestCase, self).mkmsg_in(
+            message_id='vas2nets.abc', transport_metadata=transport_metadata)
 
-    def mkmsg_out(self, in_reply_to=None):
-        msg = TransportUserMessage(
-            transport_name='vas2nets',
-            transport_type='sms',
-            to_addr='+27761234567',
-            from_addr='9292',
-            message_id='1',
-            in_reply_to=in_reply_to,
-            transport_metadata={
-                'network_id': 'network-id',
-                },
-            content='hello world',
-            )
-        return msg
+    def mkmsg_out(self, **kw):
+        transport_metadata = {
+            'original_message_id': 'vas2nets.def',
+            'keyword': '',
+            'network_id': 'provider',
+            'timestamp': self.today.strftime('%Y-%m-%dT%H:%M:%S'),
+            }
+        kw.setdefault('transport_metadata', transport_metadata)
+        # kw.setdefault('message_id', 'vas2nets.abc')
+        kw.setdefault('stubs', False)
+        return super(Vas2NetsTransportTestCase, self).mkmsg_out(**kw)
 
     @inlineCallbacks
     def test_receive_sms(self):
@@ -212,7 +187,7 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
         self.assertEqual(request.outgoingHeaders['content-type'],
                           'text/plain')
         self.assertEqual(request.responseCode, http.OK)
-        msg = self.make_delivery_message(
+        msg = self.mkmsg_delivery(
             'pending', '1', 'Message submitted to Provider for delivery.')
         [smsg] = self.get_dispatched('vas2nets.events')
         self.assertEqual(msg, from_json(smsg.body))
@@ -237,7 +212,7 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
         self.assertEqual(request.outgoingHeaders['content-type'],
                           'text/plain')
         self.assertEqual(request.responseCode, http.OK)
-        msg = self.make_delivery_message(
+        msg = self.mkmsg_delivery(
             'failed', '-9', 'Message could not be delivered.')
         [smsg] = self.get_dispatched('vas2nets.events')
         self.assertEqual(from_json(smsg.body), msg)
@@ -262,7 +237,7 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
         self.assertEqual(request.outgoingHeaders['content-type'],
                           'text/plain')
         self.assertEqual(request.responseCode, http.OK)
-        msg = self.make_delivery_message(
+        msg = self.mkmsg_delivery(
             'delivered', '2', 'Message delivered to MSISDN.')
         [smsg] = self.get_dispatched('vas2nets.events')
         self.assertEqual(from_json(smsg.body), msg)
@@ -292,7 +267,7 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
         yield self.worker._process_message(self.mkmsg_out())
 
         [smsg] = self.get_dispatched('vas2nets.events')
-        self.assertEqual(self.make_ack(mocked_message_id),
+        self.assertEqual(self.mkmsg_ack(sent_message_id=mocked_message_id),
                          from_json(smsg.body))
 
     @inlineCallbacks
@@ -311,7 +286,7 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
                     in_reply_to=reply_to_msgid))
 
         [smsg] = self.get_dispatched('vas2nets.events')
-        self.assertEqual(self.make_ack(mocked_message_id),
+        self.assertEqual(self.mkmsg_ack(sent_message_id=mocked_message_id),
                          from_json(smsg.body))
 
     @inlineCallbacks
