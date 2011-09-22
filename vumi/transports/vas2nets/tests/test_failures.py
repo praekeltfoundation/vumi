@@ -135,7 +135,7 @@ class Vas2NetsFailureWorkerTestCase(unittest.TestCase):
     def test_send_sms_success(self):
         yield self.mk_resource_worker("Result_code: 00, Message OK")
         yield self.worker._process_message(self.mkmsg_out())
-        self.assert_dispatched_count(1, 'vas2nets.events')
+        self.assert_dispatched_count(1, 'vas2nets.event')
         self.assert_dispatched_count(0, 'vas2nets.failures')
 
     @inlineCallbacks
@@ -150,7 +150,7 @@ class Vas2NetsFailureWorkerTestCase(unittest.TestCase):
         yield self.worker._process_message(self.mkmsg_out())
         yield self.worker.failure_published.deferred
         yield self.broker.kick_delivery()
-        self.assert_dispatched_count(0, 'vas2nets.events')
+        self.assert_dispatched_count(0, 'vas2nets.event')
         self.assert_dispatched_count(1, 'vas2nets.failures')
         [fmsg] = self.get_dispatched('vas2nets.failures')
         fmsg = from_json(fmsg.body)
@@ -170,7 +170,7 @@ class Vas2NetsFailureWorkerTestCase(unittest.TestCase):
         msg = self.mkmsg_out()
         yield self.worker._process_message(msg)
         yield self.worker.failure_published.deferred
-        self.assert_dispatched_count(0, 'vas2nets.events')
+        self.assert_dispatched_count(0, 'vas2nets.event')
         self.assert_dispatched_count(1, 'vas2nets.failures')
         [fmsg] = self.get_dispatched('vas2nets.failures')
         fmsg = from_json(fmsg.body)

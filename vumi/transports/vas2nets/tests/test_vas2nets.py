@@ -73,7 +73,7 @@ class Vas2NetsTransportTestCase(TransportTestCase):
         self.broker = FakeAMQPBroker()
         w = get_stubbed_worker(Vas2NetsTransport, self.config, self.broker)
         w.transport_name = 'vas2nets'
-        w.event_publisher = yield w.publish_rkey('events')
+        w.event_publisher = yield w.publish_rkey('event')
         w.message_publisher = yield w.publish_rkey('inbound')
         self.workers = [w]
         self.worker = w
@@ -189,7 +189,7 @@ class Vas2NetsTransportTestCase(TransportTestCase):
         self.assertEqual(request.responseCode, http.OK)
         msg = self.mkmsg_delivery(
             'pending', '1', 'Message submitted to Provider for delivery.')
-        [smsg] = self.get_dispatched('vas2nets.events')
+        [smsg] = self.get_dispatched('vas2nets.event')
         self.assertEqual(msg, from_json(smsg.body))
 
     @inlineCallbacks
@@ -214,7 +214,7 @@ class Vas2NetsTransportTestCase(TransportTestCase):
         self.assertEqual(request.responseCode, http.OK)
         msg = self.mkmsg_delivery(
             'failed', '-9', 'Message could not be delivered.')
-        [smsg] = self.get_dispatched('vas2nets.events')
+        [smsg] = self.get_dispatched('vas2nets.event')
         self.assertEqual(from_json(smsg.body), msg)
 
     @inlineCallbacks
@@ -239,7 +239,7 @@ class Vas2NetsTransportTestCase(TransportTestCase):
         self.assertEqual(request.responseCode, http.OK)
         msg = self.mkmsg_delivery(
             'delivered', '2', 'Message delivered to MSISDN.')
-        [smsg] = self.get_dispatched('vas2nets.events')
+        [smsg] = self.get_dispatched('vas2nets.event')
         self.assertEqual(from_json(smsg.body), msg)
 
     def test_validate_characters(self):
@@ -266,7 +266,7 @@ class Vas2NetsTransportTestCase(TransportTestCase):
 
         yield self.worker._process_message(self.mkmsg_out())
 
-        [smsg] = self.get_dispatched('vas2nets.events')
+        [smsg] = self.get_dispatched('vas2nets.event')
         self.assertEqual(self.mkmsg_ack(sent_message_id=mocked_message_id),
                          from_json(smsg.body))
 
@@ -285,7 +285,7 @@ class Vas2NetsTransportTestCase(TransportTestCase):
         yield self.worker._process_message(self.mkmsg_out(
                     in_reply_to=reply_to_msgid))
 
-        [smsg] = self.get_dispatched('vas2nets.events')
+        [smsg] = self.get_dispatched('vas2nets.event')
         self.assertEqual(self.mkmsg_ack(sent_message_id=mocked_message_id),
                          from_json(smsg.body))
 

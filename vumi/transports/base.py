@@ -86,7 +86,7 @@ class Transport(Worker):
 
     @inlineCallbacks
     def _setup_event_publisher(self):
-        self.event_publisher = yield self.publish_rkey('events')
+        self.event_publisher = yield self.publish_rkey('event')
 
     @inlineCallbacks
     def _setup_failure_publisher(self):
