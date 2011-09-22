@@ -27,7 +27,7 @@ class ApplicationWorker(Worker):
         self.transport_consumer = yield self.consume(
             '%(transport_name)s.inbound' % self.config,
             self.dispatch_user_message)
-        self.transport_consumer = yield self.consume(
+        self.transport_event_consumer = yield self.consume(
             '%(transport_name)s.event' % self.config,
             self.dispatch_event)
 
