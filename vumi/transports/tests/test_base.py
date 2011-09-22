@@ -57,7 +57,7 @@ class TransportTestCase(unittest.TestCase):
         self.assertEqual("%s.%s" % (tr_name, rkey_suffix), obj.routing_key)
 
     def assert_basic_rkeys(self, transport):
-        self.assert_rkey_attr('events', transport.event_publisher)
+        self.assert_rkey_attr('event', transport.event_publisher)
         self.assert_rkey_attr('inbound', transport.message_publisher)
         self.assert_rkey_attr('failures', transport.failure_publisher)
         self.assert_rkey_attr('outbound', transport.message_consumer)
