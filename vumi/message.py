@@ -156,7 +156,7 @@ class TransportUserMessage(TransportMessage):
             'in_reply_to',
             'session_event',
             'content',
-            'transport',
+            'transport_name',
             'transport_type',
             'transport_metadata',
             'helper_metadata',
@@ -175,8 +175,9 @@ class TransportUserMessage(TransportMessage):
             from_addr=self['to_addr'],
             in_reply_to=self['message_id'],
             content=content,
+            transport_name=self['transport_name'],
+            transport_type=self['transport_type'],
             transport_metadata=self['transport_metadata'],
-            transport=self['transport_name'],
             helper_metadata=self['helper_metadata'],
             **kw)
         return out_msg
