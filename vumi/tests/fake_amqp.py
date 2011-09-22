@@ -195,6 +195,18 @@ class FakeAMQPBroker(object):
     def _kick_delivery(self, d):
         reactor.callLater(0, self.deliver_to_channels, d)
 
+    def wait_messages(self, exchange, rkey, n):
+        def check(d):
+            msgs = self.get_messages(exchange, rkey)
+            if len(msgs) >= n:
+                d.callback(msgs)
+            else:
+                reactor.callLater(0, check, d)
+
+        done = Deferred()
+        reactor.callLater(0, check, done)
+        return done
+
     def get_dispatched(self, exchange, rkey):
         return self.dispatched.get(exchange, {}).get(rkey, [])
 
