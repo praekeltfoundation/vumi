@@ -9,6 +9,7 @@ from txamqp.client import TwistedDelegate
 from txamqp.content import Content
 
 from vumi.service import WorkerAMQClient
+from vumi.message import Message as VumiMessage
 
 
 def gen_id(prefix=''):
@@ -199,7 +200,8 @@ class FakeAMQPBroker(object):
 
     def get_messages(self, exchange, rkey):
         contents = self.get_dispatched(exchange, rkey)
-        messages = [Message.from_json(content.body) for content in contents]
+        messages = [VumiMessage.from_json(content.body)
+                    for content in contents]
         return messages
 
     def publish_message(self, exchange, routing_key, message):
