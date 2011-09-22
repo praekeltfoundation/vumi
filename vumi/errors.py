@@ -16,3 +16,7 @@ class MissingMessageField(InvalidMessage):
 
 class InvalidMessageField(InvalidMessage):
     pass
+
+
+class ConfigError(VumiError):
+    pass
