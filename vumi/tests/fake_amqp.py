@@ -197,6 +197,11 @@ class FakeAMQPBroker(object):
     def get_dispatched(self, exchange, rkey):
         return self.dispatched.get(exchange, {}).get(rkey, [])
 
+    def get_messages(self, exchange, rkey):
+        contents = self.get_dispatched(exchange, rkey)
+        messages = [Message.from_json(content.body) for content in contents]
+        return messages
+
     def publish_message(self, exchange, routing_key, message):
         return self.publish_raw(exchange, routing_key, message.to_json())
 
