@@ -174,12 +174,13 @@ class TransportUserMessage(TransportMessage):
         return self['from_addr']
 
     def reply(self, content, continue_session=True, **kw):
-        # TODO: decide whether session event should default to 'close'
+        session_event = None if continue_session else self.SESSION_CLOSE
         out_msg = TransportUserMessage(
             to_addr=self['from_addr'],
             from_addr=self['to_addr'],
             in_reply_to=self['message_id'],
             content=content,
+            session_event=session_event,
             transport_name=self['transport_name'],
             transport_type=self['transport_type'],
             transport_metadata=self['transport_metadata'],
