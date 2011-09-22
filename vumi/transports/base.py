@@ -15,6 +15,8 @@ from vumi.service import Worker
 
 
 class Transport(Worker):
+    SUPPRESS_FAILURE_EXCEPTIONS = True
+
     transport_name = None
 
     @inlineCallbacks
@@ -92,7 +94,7 @@ class Transport(Worker):
     def send_failure(self, message, reason):
         """Send a failure report."""
         # TODO: Make the failure handling code smarter.
-        from message import Message
+        from vumi.message import Message
         try:
             self.failure_publisher.publish_message(Message(
                     message=message.payload, reason=reason))
@@ -110,11 +112,10 @@ class Transport(Worker):
     def publish_event(self, **kw):
         return self.event_publisher.publish_message(TransportEvent(**kw))
 
-    @inlineCallbacks
     def _process_message(self, message):
         def _send_failure(f):
             self.send_failure(message, f.getTraceback())
-            if self.SUPPRESS_EXCEPTIONS:
+            if self.SUPPRESS_FAILURE_EXCEPTIONS:
                 return None
             return f
         d = maybeDeferred(self.handle_outbound_message, message)
