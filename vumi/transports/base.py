@@ -112,6 +112,16 @@ class Transport(Worker):
     def publish_event(self, **kw):
         return self.event_publisher.publish_message(TransportEvent(**kw))
 
+    def publish_ack(self, **kw):
+        kw.setdefault('event_type', 'ack')
+        kw.setdefault('transport_name', self.transport_name)
+        return self.publish_event(**kw)
+
+    def publish_delivery_report(self, **kw):
+        kw.setdefault('event_type', 'delivery_report')
+        kw.setdefault('transport_name', self.transport_name)
+        return self.publish_event(**kw)
+
     def _process_message(self, message):
         def _send_failure(f):
             self.send_failure(message, f.getTraceback())

@@ -147,8 +147,6 @@ class DeliveryReceiptResource(Resource):
             elif status in [2, 14]:
                 delivery_status = 'delivered'
             yield self.publish_func(
-                event_type='delivery_report',
-                transport_name=self.transport_name,
                 user_message_id=message_id,
                 delivery_status=delivery_status,
                 transport_metadata={
@@ -216,7 +214,8 @@ class Vas2NetsTransport(Transport):
         self.config.setdefault('web_health_path', 'health')
         resources = [
             self.mkres(ReceiveSMSResource, self.publish_message, 'receive'),
-            self.mkres(DeliveryReceiptResource, self.publish_event, 'receipt'),
+            self.mkres(DeliveryReceiptResource, self.publish_delivery_report,
+                       'receipt'),
             self.mkres(HealthResource, None, 'health'),
             ]
         self.receipt_resource = yield self.start_web_resources(
@@ -285,9 +284,7 @@ class Vas2NetsTransport(Transport):
 
         if response.headers.hasHeader(header):
             transport_message_id = response.headers.getRawHeaders(header)[0]
-            yield self.publish_event(
-                event_type='ack',
-                transport_name=self.transport_name,
+            yield self.publish_ack(
                 user_message_id=message['message_id'],
                 sent_message_id=transport_message_id,
                 )

@@ -195,7 +195,7 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
     @inlineCallbacks
     def test_delivery_receipt_pending(self):
         resource = DeliveryReceiptResource(self.config,
-                                           self.worker.publish_event)
+                                           self.worker.publish_delivery_report)
 
         request = self.create_request({
             'smsid': ['1'],
@@ -220,7 +220,7 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
     @inlineCallbacks
     def test_delivery_receipt_failed(self):
         resource = DeliveryReceiptResource(self.config,
-                                           self.worker.publish_event)
+                                           self.worker.publish_delivery_report)
 
         request = self.create_request({
             'smsid': ['1'],
@@ -245,7 +245,7 @@ class Vas2NetsTransportTestCase(unittest.TestCase):
     @inlineCallbacks
     def test_delivery_receipt_delivered(self):
         resource = DeliveryReceiptResource(self.config,
-                                           self.worker.publish_event)
+                                           self.worker.publish_delivery_report)
 
         request = self.create_request({
             'smsid': ['1'],
