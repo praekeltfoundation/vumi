@@ -83,7 +83,15 @@ class TestApplicationWorker(TestCase):
             del self.worker.record[:]
 
     def test_user_message_dispatch(self):
-        pass
+        messages = [
+            ('user_message', FakeUserMessage()),
+            ('unknown_message', TransportEvent(event_type='ack',
+                                               user_message_id='ack-uuid')),
+            ]
+        for name, message in messages:
+            yield self.send(message)
+            self.assertEqual(self.worker.record, [(name, message)])
+            del self.worker.record[:]
 
     def test_reply_to(self):
         pass
