@@ -70,18 +70,20 @@ class Transport(Worker):
     def _setup_message_publisher(self):
         self.message_publisher = yield self.publish_rkey('inbound')
 
+    @inlineCallbacks
     def _setup_message_consumer(self):
         self.message_consumer = yield self.consume(
-            self.get_rkey('outbound'), message_class=TransportUserMessage)
+            self.get_rkey('outbound'), self._process_message,
+            message_class=TransportUserMessage)
 
         # Apply concurrency throttling if we need to.
         if self.concurrent_sends is not None:
-            self.message_consumer.channel.basic_qos(
+            yield self.message_consumer.channel.basic_qos(
                 0, int(self.concurrent_sends), False)
 
     @inlineCallbacks
     def _setup_event_publisher(self):
-        self.failure_publisher = yield self.publish_rkey('events')
+        self.event_publisher = yield self.publish_rkey('events')
 
     @inlineCallbacks
     def _setup_failure_publisher(self):
@@ -101,16 +103,19 @@ class Transport(Worker):
     def failure_published(self):
         pass
 
-    def handle_outbound_message(self, message):
-        """
-        This must be overridden to read outbound messages and do the right
-        thing with them.
-        """
-        raise NotImplementedError()
-
     def publish_message(self, **kw):
         return self.message_publisher.publish_message(
             TransportUserMessage(**kw))
 
     def publish_event(self, **kw):
         return self.event_publisher.publish_message(TransportEvent(**kw))
+
+    def _process_message(self, message):
+        return self.handle_outbound_message(message)
+
+    def handle_outbound_message(self, message):
+        """
+        This must be overridden to read outbound messages and do the right
+        thing with them.
+        """
+        raise NotImplementedError()
