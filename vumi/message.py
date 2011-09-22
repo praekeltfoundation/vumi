@@ -4,7 +4,7 @@ import json
 from uuid import uuid4
 from datetime import datetime
 
-from errors import MissingMessageField, InvalidMessageField, InvalidMessageType
+from errors import MissingMessageField, InvalidMessageField
 
 # This is the date format we work with internally
 VUMI_DATE_FORMAT = "%Y-%m-%d %H:%M:%S.%f"
@@ -128,6 +128,9 @@ class TransportUserMessage(TransportMessage):
     """Message to or from a user.
 
     transport_type = sms, ussd, etc
+    helper_metadata = for use by dispathers and off-to-the-side
+                      components like failure workers (not for use
+                      by transports or message workers).
     """
 
     MESSAGE_TYPE = 'user_message'
@@ -141,6 +144,7 @@ class TransportUserMessage(TransportMessage):
         fields.setdefault('in_reply_to', None)
         fields.setdefault('session_event', None)
         fields.setdefault('content', None)
+        fields.setdefault('helper_metadata', {})
         return fields
 
     def validate_fields(self):
@@ -155,6 +159,7 @@ class TransportUserMessage(TransportMessage):
             'transport',
             'transport_type',
             'transport_metadata',
+            'helper_metadata',
             )
         if self['session_event'] not in self.SESSION_EVENTS:
             raise InvalidMessageField("Invalid session_event %r"
@@ -163,7 +168,7 @@ class TransportUserMessage(TransportMessage):
     def user(self):
         return self['from_addr']
 
-    def reply(self, content, **kw):
+    def reply(self, content, continue_session=True, **kw):
         # TODO: decide whether session event should default to 'close'
         out_msg = TransportUserMessage(
             to_addr=self['from_addr'],
@@ -172,6 +177,7 @@ class TransportUserMessage(TransportMessage):
             content=content,
             transport_metadata=self['transport_metadata'],
             transport=self['transport_name'],
+            helper_metadata=self['helper_metadata'],
             **kw)
         return out_msg
 
@@ -198,7 +204,7 @@ class TransportEvent(TransportMessage):
 
     def validate_fields(self):
         self.assert_field_present(
-            'transport_message_id',
+            'user_message_id',
             'event_id',
             'event_type',
             )
