@@ -1,5 +1,5 @@
 from twisted.trial.unittest import TestCase
-from vumi.demos.wikipedia import OpenSearch, pretty_print_results
+from vumi.campaigns.wikipedia import OpenSearch, pretty_print_results
 
 
 class WikipediaTestCase(TestCase):
@@ -50,9 +50,9 @@ class WikipediaTestCase(TestCase):
             'url': 'http://en.wikipedia.org/wiki/Africa',
             'image': {
                 'source': 'http://upload.wikimedia.org/wikipedia/commons/'
-                          'thumb/8/86/Africa_%28orthographic_projection'
-                          '%29.svg/50px-Africa_%28orthographic_projection'
-                          '%29.svg.png',
+                          'thumb/8/86/Africa_%28orthographic_projection%29'
+                          '.svg/50px-Africa_%28orthographic_projection%29'
+                          '.svg.png',
                 'width': '50',
                 'height': '50'
             }
