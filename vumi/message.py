@@ -213,7 +213,7 @@ class TransportEvent(TransportMessage):
         event_type = self.payload['event_type']
         if event_type not in self.EVENT_TYPES:
             raise InvalidMessageField("Unknown event_type %r" % (event_type,))
-        for extra_field, check in self.EVENT_TYPES[event_type]:
+        for extra_field, check in self.EVENT_TYPES[event_type].items():
             self.assert_field_present(extra_field)
             if not check(self[extra_field]):
                 raise InvalidMessageField(extra_field)
