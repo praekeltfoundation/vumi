@@ -108,7 +108,7 @@ class TransportMessage(Message):
     MESSAGE_TYPE = None
     MESSAGE_VERSION = '20110921'
 
-    def process_field(self, fields):
+    def process_fields(self, fields):
         fields.setdefault('message_version', self.MESSAGE_VERSION)
         fields.setdefault('message_type', self.MESSAGE_TYPE)
         fields.setdefault('timestamp', datetime.utcnow())
@@ -202,6 +202,7 @@ class TransportEvent(TransportMessage):
     def process_fields(self, fields):
         fields = super(TransportEvent, self).process_fields(fields)
         fields.setdefault('event_id', uuid4().get_hex())
+        return fields
 
     def validate_fields(self):
         self.assert_field_present(
@@ -212,7 +213,7 @@ class TransportEvent(TransportMessage):
         event_type = self.payload['event_type']
         if event_type not in self.EVENT_TYPES:
             raise InvalidMessageField("Unknown event_type %r" % (event_type,))
-        for extra_field, check in self.EVENT_TYPES[event_type].values():
+        for extra_field, check in self.EVENT_TYPES[event_type]:
             self.assert_field_present(extra_field)
             if not check(self[extra_field]):
                 raise InvalidMessageField(extra_field)

@@ -1,3 +1,5 @@
+# -*- test-case-name: vumi.application.tests.test_base -*-
+
 """Basic tools for building a vumi ApplicationWorker."""
 
 from twisted.internet.defer import inlineCallbacks
@@ -33,10 +35,11 @@ class ApplicationWorker(Worker):
 
     def dispatch_event(self, event):
         """Dispatch to event_type specific handlers."""
-        event_type = event.get('event_type')
-        handler = self._event_handlers.get(event_type)
-        if handler is None:
+        if event.get('message_type') != TransportEvent.MESSAGE_TYPE:
             return self.consume_unknown_event(event)
+        event_type = event.get('event_type')
+        handler = self._event_handlers.get(event_type,
+                                           self.consume_unknown_event)
         return handler(event)
 
     def consume_unknown_event(self, event):
@@ -52,7 +55,7 @@ class ApplicationWorker(Worker):
 
     def dispatch_user_message(self, message):
         if message.get('message_type') != TransportUserMessage.MESSAGE_TYPE:
-            return self.consume_bad_user_message(message)
+            return self.consume_unknown_message(message)
         return self.consume_user_message(message)
 
     def consume_unknown_message(self, message):
