@@ -1,6 +1,8 @@
+# -*- test-case-name: vumi.demos.tests.test_wikipedia -*-
+
 from twisted.python import log
 from twisted.internet.defer import inlineCallbacks, returnValue
-from vumi.workers.integrat.worker import IntegratWorker
+from vumi.application import ApplicationWorker
 from vumi.utils import http_request
 from xml.etree import ElementTree
 from urllib import urlencode
@@ -59,7 +61,7 @@ def pretty_print_results(results, start=1):
                       for idx, result in enumerate(results, start)])
 
 
-class WikipediaWorker(IntegratWorker):
+class WikipediaWorker(ApplicationWorker):
 
     SESSIONS = {}
 
