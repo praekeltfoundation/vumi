@@ -1,11 +1,6 @@
 from twisted.trial.unittest import TestCase
-from twisted.internet.defer import inlineCallbacks, Deferred
-from vumi.tests.utils import TestChannel, get_stubbed_worker
-from vumi.tests.fake_amqp import FakeAMQPBroker
-from vumi.workers.blinkenlights import metrics
-from vumi.blinkenlights.message20110818 import MetricMessage
-from vumi.message import Message
-
+from twisted.internet.defer import inlineCallbacks
+from vumi.tests.utils import get_stubbed_worker
 
 from vumi.application.base import ApplicationWorker
 from vumi.message import TransportUserMessage, TransportEvent
@@ -28,9 +23,6 @@ class DummyApplicationWorker(ApplicationWorker):
 
     def consume_user_message(self, message):
         self.record.append(('user_message', message))
-
-    def consume_unknown_message(self, message):
-        self.record.append(('unknown_message', message))
 
 
 class FakeUserMessage(TransportUserMessage):
@@ -70,16 +62,10 @@ class TestApplicationWorker(TestCase):
 
     def recv(self, routing_suffix='outbound'):
         routing_key = "%s.%s" % (self.transport_name, routing_suffix)
-        contents = self.broker.get_dispatched("vumi", routing_key)
-        return [Message.from_json(content.body) for content in contents]
+        return self.broker.get_messages("vumi", routing_key)
 
     @inlineCallbacks
     def test_event_dispatch(self):
-        bad_event1 = TransportEvent(event_type='ack',
-                                    sent_message_id='remote-id',
-                                    user_message_id='bad-uuid')
-        bad_event1['event_type'] = 'eep'
-        bad_event2 = FakeUserMessage()
         events = [
             ('ack', TransportEvent(event_type='ack',
                                    sent_message_id='remote-id',
@@ -87,8 +73,6 @@ class TestApplicationWorker(TestCase):
             ('delivery_report', TransportEvent(event_type='delivery_report',
                                                delivery_status='pending',
                                                user_message_id='dr-uuid')),
-            ('unknown_event', bad_event1),
-            ('unknown_event', bad_event2),
             ]
         for name, event in events:
             yield self.send_event(event)
@@ -96,17 +80,20 @@ class TestApplicationWorker(TestCase):
             del self.worker.record[:]
 
     @inlineCallbacks
+    def test_unknown_event_dispatch(self):
+        # temporarily pretend the worker doesn't know about acks
+        del self.worker._event_handlers['ack']
+        bad_event = TransportEvent(event_type='ack',
+                                   sent_message_id='remote-id',
+                                   user_message_id='bad-uuid')
+        yield self.send_event(bad_event)
+        self.assertEqual(self.worker.record, [('unknown_event', bad_event)])
+
+    @inlineCallbacks
     def test_user_message_dispatch(self):
-        messages = [
-            ('user_message', FakeUserMessage()),
-            ('unknown_message', TransportEvent(event_type='ack',
-                                               sent_message_id='remote-id',
-                                               user_message_id='ack-uuid')),
-            ]
-        for name, message in messages:
-            yield self.send(message)
-            self.assertEqual(self.worker.record, [(name, message)])
-            del self.worker.record[:]
+        message = FakeUserMessage()
+        yield self.send(message)
+        self.assertEqual(self.worker.record, [('user_message', message)])
 
     def test_reply_to(self):
         msg = FakeUserMessage()
@@ -135,4 +122,3 @@ class TestApplicationWorker(TestCase):
         worker.consume_delivery_report(dr)
         worker.consume_unknown_event(FakeUserMessage())
         worker.consume_user_message(FakeUserMessage())
-        worker.consume_unknown_message(ack)

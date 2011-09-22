@@ -28,19 +28,20 @@ class ApplicationWorker(Worker):
             '%(transport_name)s.outbound' % self.config)
         self.transport_consumer = yield self.consume(
             '%(transport_name)s.inbound' % self.config,
-            self.dispatch_user_message)
+            self.consume_user_message,
+            message_class=TransportUserMessage)
         self.transport_event_consumer = yield self.consume(
             '%(transport_name)s.event' % self.config,
-            self.dispatch_event)
+            self.dispatch_event,
+            message_class=TransportEvent)
 
+    @inlineCallbacks
     def dispatch_event(self, event):
         """Dispatch to event_type specific handlers."""
-        if event.get('message_type') != TransportEvent.MESSAGE_TYPE:
-            return self.consume_unknown_event(event)
         event_type = event.get('event_type')
         handler = self._event_handlers.get(event_type,
                                            self.consume_unknown_event)
-        return handler(event)
+        yield handler(event)
 
     def consume_unknown_event(self, event):
         log.msg("Unknown event type in message %r" % (event,))
@@ -52,14 +53,6 @@ class ApplicationWorker(Worker):
     def consume_delivery_report(self, event):
         """Handle a delivery report."""
         pass
-
-    def dispatch_user_message(self, message):
-        if message.get('message_type') != TransportUserMessage.MESSAGE_TYPE:
-            return self.consume_unknown_message(message)
-        return self.consume_user_message(message)
-
-    def consume_unknown_message(self, message):
-        log.err("Unexpected message type in message %r" % (message,))
 
     def consume_user_message(self, message):
         """Respond to user message."""
