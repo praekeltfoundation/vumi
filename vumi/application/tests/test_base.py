@@ -27,6 +27,16 @@ class DummyApplicationWorker(ApplicationWorker):
         self.record.append(('delivery_report', event))
 
 
+class FakeUserMessage(TransportUserMessage):
+    def __init__(self, **kw):
+        kw['to_addr'] = 'to'
+        kw['from_addr'] = 'from'
+        kw['transport_name'] = 'test'
+        kw['transport_type'] = 'fake'
+        kw['transport_metadata'] = {}
+        super(FakeUserMessage, self).__init__(**kw)
+
+
 class TestApplicationWorker(TestCase):
 
     @inlineCallbacks
@@ -52,21 +62,20 @@ class TestApplicationWorker(TestCase):
     def send_event(self, event):
         yield self.send(event, 'event')
 
-    def test_unknown_event_dispatch(self):
-        pass
-
     @inlineCallbacks
     def test_event_dispatch(self):
-        bad_event = TransportEvent(event_type='ack',
-                                   user_message_id='bad-uuid')
-        bad_event['event_type'] = 'eep'
+        bad_event1 = TransportEvent(event_type='ack',
+                                    user_message_id='bad-uuid')
+        bad_event1['event_type'] = 'eep'
+        bad_event2 = FakeUserMessage()
         events = [
             ('ack', TransportEvent(event_type='ack',
                                    user_message_id='ack-uuid')),
             ('delivery_report', TransportEvent(event_type='delivery_report',
                                                delivery_status='pending',
                                                user_message_id='dr-uuid')),
-            ('unknown', bad_event),
+            ('unknown', bad_event1),
+            ('unknown', bad_event2),
             ]
         for name, event in events:
             yield self.send_event(event)
