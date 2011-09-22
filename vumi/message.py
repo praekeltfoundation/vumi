@@ -135,8 +135,13 @@ class TransportUserMessage(TransportMessage):
 
     MESSAGE_TYPE = 'user_message'
 
+    # session event constants
+    SESSION_NONE, SESSION_NEW, SESSION_RESUME, SESSION_CLOSE = (
+        None, 'new', 'resume', 'close')
+
     # list of valid session events
-    SESSION_EVENTS = frozenset([None, 'new', 'resume', 'close'])
+    SESSION_EVENTS = frozenset([SESSION_NONE, SESSION_NEW, SESSION_RESUME,
+                                SESSION_CLOSE])
 
     def process_fields(self, fields):
         fields = super(TransportUserMessage, self).process_fields(fields)
