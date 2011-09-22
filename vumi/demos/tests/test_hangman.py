@@ -1,3 +1,5 @@
+"""Tests for vumi.demos.hangman."""
+
 from twisted.trial import unittest
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet import reactor
@@ -9,24 +11,6 @@ from vumi.tests.utils import get_stubbed_worker, FakeRedis
 from vumi.demos.hangman import HangmanGame, HangmanWorker
 
 import string
-
-
-class WorkerStubMixin(object):
-    def _get_replies(self):
-        if not hasattr(self, '_replies'):
-            self._replies = []
-        return self._replies
-
-    def _set_replies(self, value):
-        self._replies = value
-
-    replies = property(fget=_get_replies, fset=_set_replies)
-
-    def reply(self, sid, message):
-        self.replies.append(('reply', sid, message))
-
-    def end(self, sid, message):
-        self.replies.append(('end', sid, message))
 
 
 class TestHangmanGame(unittest.TestCase):
@@ -144,10 +128,6 @@ class TestHangmanGame(unittest.TestCase):
         self.assertTrue(game.won())
 
 
-class HangmanWorkerStub(WorkerStubMixin, HangmanWorker):
-    pass
-
-
 class TestHangmanWorker(unittest.TestCase):
     @inlineCallbacks
     def setUp(self):
@@ -160,7 +140,7 @@ class TestHangmanWorker(unittest.TestCase):
         addr = self.webserver.getHost()
         random_word_url = "http://%s:%s/word" % (addr.host, addr.port)
 
-        self.worker = get_stubbed_worker(HangmanWorkerStub, {
+        self.worker = get_stubbed_worker(HangmanWorker, {
                 'transport_name': 'foo',
                 'ussd_code': '99999',
                 'random_word_url': random_word_url,
