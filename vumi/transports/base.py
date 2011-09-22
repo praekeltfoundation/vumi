@@ -6,7 +6,7 @@ Common infrastructure for transport workers.
 This is likely to get used heavily fast, so try get your changes in early.
 """
 
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import inlineCallbacks, maybeDeferred
 from twisted.python import log
 
 from vumi.errors import ConfigError
@@ -110,8 +110,16 @@ class Transport(Worker):
     def publish_event(self, **kw):
         return self.event_publisher.publish_message(TransportEvent(**kw))
 
+    @inlineCallbacks
     def _process_message(self, message):
-        return self.handle_outbound_message(message)
+        def _send_failure(f):
+            self.send_failure(message, f.getTraceback())
+            if self.SUPPRESS_EXCEPTIONS:
+                return None
+            return f
+        d = maybeDeferred(self.handle_outbound_message, message)
+        d.addErrback(_send_failure)
+        return d
 
     def handle_outbound_message(self, message):
         """

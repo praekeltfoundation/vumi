@@ -9,6 +9,8 @@ from vumi.transports.base import Transport
 class TransportTestCase(unittest.TestCase):
     """
     This is a base class for testing transports.
+
+    Not to be confused with BaseTransportTestCase below.
     """
 
     transport_name = "sphex"
@@ -60,6 +62,12 @@ class TransportTestCase(unittest.TestCase):
 
 
 class BaseTransportTestCase(TransportTestCase):
+    """
+    This is a test for the base Transport class.
+
+    Not to be confused with TransportTestCase above.
+    """
+
     transport_name = 'carrier_pigeon'
     transport_class = Transport
 
