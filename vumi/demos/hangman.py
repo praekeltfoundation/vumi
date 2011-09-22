@@ -127,8 +127,8 @@ class HangmanWorker(ApplicationWorker):
        -------------
        transport_name : str
            Name of the transport.
-       ussd_code : str
-           USSD code.
+       worker_name : str
+           Name of this set of hangman workers.
        random_word_url : URL
            Page to GET a random word from.
            E.g. http://randomword.setgetgo.com/get.php
@@ -143,7 +143,7 @@ class HangmanWorker(ApplicationWorker):
         log.msg("Connected to Redis")
         self.r_prefix = "hangman:%s:%s" % (
                 self.config['transport_name'],
-                safe_routing_key(self.config['ussd_code']))
+                self.config['worker_name'])
         log.msg("r_prefix = %s" % self.r_prefix)
         self.random_word_url = self.config['random_word_url']
         log.msg("random_word_url = %s" % self.random_word_url)
@@ -201,40 +201,37 @@ class HangmanWorker(ApplicationWorker):
         self.r_server.delete(game_key)
 
     @inlineCallbacks
-    def new_session(self, data):
-        """Find or creating hangman game for this player.
+    def consume_user_message(self, msg):
+        """Find or create a hangman game for this player.
 
-           Sends current state.
-           """
-        log.msg("New session:", data)
-        session_id = data['transport_session_id']
-        msisdn = data['sender']
-        game = self.load_game(msisdn)
+        Then process the user's message.
+        """
+        log.msg("User message: %s" % msg['content'])
+        if msg['session_event'] == msg.SESSION_CLOSE:
+            return
+
+        user_id = msg.user()
+        game = self.load_game(user_id)
         if game is None:
-            game = yield self.new_game(msisdn)
-            self.save_game(msisdn, game)
-        self.reply(session_id, game.draw_board())
+            game = yield self.new_game(user_id)
+            self.save_game(user_id, game)
 
-    def close_session(self, data):
-        # Hangman games intentionally stick around
-        # and can be picked up again later.
-        pass
+        if msg['content'] is None:
+            # new session
+            self.reply_to(msg, game.draw_board(), True)
+            return
 
-    @inlineCallbacks
-    def resume_session(self, data):
-        log.msg("Resume session:", data)
-        session_id = data['transport_session_id']
-        msisdn = data['sender']
-        message = data['message'].strip()
-        game = self.load_game(msisdn)
+        message = msg['content'].strip()
         game.event(message)
+
+        continue_session = True
         if game.exit_code == game.DONE:
-            self.delete_game(msisdn)
-            self.end(session_id, game.draw_board())
+            self.delete_game(user_id)
+            continue_session = False
         elif game.exit_code == game.DONE_WANTS_NEW:
-            game = yield self.new_game(msisdn)
-            self.save_game(msisdn, game)
-            self.reply(session_id, game.draw_board())
+            game = yield self.new_game(user_id)
+            self.save_game(user_id, game)
         else:
-            self.save_game(msisdn, game)
-            self.reply(session_id, game.draw_board())
+            self.save_game(user_id, game)
+
+        self.reply_to(msg, game.draw_board(), continue_session)

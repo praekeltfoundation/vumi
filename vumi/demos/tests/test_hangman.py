@@ -1,7 +1,7 @@
 """Tests for vumi.demos.hangman."""
 
 from twisted.trial import unittest
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet import reactor
 from twisted.web.server import Site
 from twisted.web.resource import Resource
@@ -9,6 +9,7 @@ from twisted.web.static import Data
 
 from vumi.tests.utils import get_stubbed_worker, FakeRedis
 from vumi.demos.hangman import HangmanGame, HangmanWorker
+from vumi.message import TransportUserMessage
 
 import string
 
@@ -140,13 +141,39 @@ class TestHangmanWorker(unittest.TestCase):
         addr = self.webserver.getHost()
         random_word_url = "http://%s:%s/word" % (addr.host, addr.port)
 
+        self.transport_name = 'test_transport'
         self.worker = get_stubbed_worker(HangmanWorker, {
-                'transport_name': 'foo',
-                'ussd_code': '99999',
+                'transport_name': self.transport_name,
+                'worker_name': 'test_hangman',
                 'random_word_url': random_word_url,
                 })
+        self.broker = self.worker._amqp_client.broker
         yield self.worker.startWorker()
         self.worker.r_server = FakeRedis()
+
+    @inlineCallbacks
+    def send(self, content, session_event=None):
+        msg = TransportUserMessage(content=content,
+                                   session_event=session_event,
+                                   from_addr='+1234', to_addr='+134567',
+                                   transport_name='test',
+                                   transport_type='fake',
+                                   transport_metadata={})
+        self.broker.publish_message('vumi', '%s.inbound' % self.transport_name,
+                                    msg)
+        yield self.broker.kick_delivery()
+
+    @inlineCallbacks
+    def recv(self, n=0):
+        msgs = yield self.broker.wait_messages('vumi', '%s.outbound'
+                                                % self.transport_name, n)
+
+        def reply_code(msg):
+            if msg['session_event'] == TransportUserMessage.SESSION_CLOSE:
+                return 'end'
+            return 'reply'
+
+        returnValue([(reply_code(msg), msg['content']) for msg in msgs])
 
     @inlineCallbacks
     def tearDown(self):
@@ -154,13 +181,13 @@ class TestHangmanWorker(unittest.TestCase):
 
     @inlineCallbacks
     def test_new_session(self):
-        yield self.worker.new_session({'transport_session_id': 'sp1',
-                                       'sender': '+134567'})
-        self.assertEqual(len(self.worker.replies), 1)
+        yield self.send(None, TransportUserMessage.SESSION_NEW)
+        replies = yield self.recv(1)
+        self.assertEqual(len(replies), 1)
 
-        reply = self.worker.replies[0]
-        self.assertEqual(reply[:2], ('reply', 'sp1'))
-        self.assertEqual(reply[2],
+        reply = replies[0]
+        self.assertEqual(reply[0], 'reply')
+        self.assertEqual(reply[1],
                          "New game!\n"
                          "Word: ________\n"
                          "Letters guessed so far: \n"
@@ -173,47 +200,39 @@ class TestHangmanWorker(unittest.TestCase):
 
     @inlineCallbacks
     def test_full_session(self):
-        session_data = {
-            'transport_session_id': 'sp1',
-            'sender': '+134567',
-            }
-
-        def resume(event):
-            data = session_data.copy()
-            data['message'] = event
-            return self.worker.resume_session(data)
-
-        yield self.worker.new_session(session_data)
+        yield self.send(None, TransportUserMessage.SESSION_NEW)
         for event in ('e', 'l', 'p', 'h', 'a', 'n', 'o', 't'):
-            yield resume(event)
+            yield self.send(event, TransportUserMessage.SESSION_RESUME)
 
-        self.assertEqual(len(self.worker.replies), 9)
+        replies = yield self.recv(9)
+        self.assertEqual(len(replies), 9)
 
-        last_reply = self.worker.replies[-1]
-        self.assertEqual(last_reply[:2], ('reply', 'sp1'))
-        self.assertEqual(last_reply[2],
+        last_reply = replies[-1]
+        self.assertEqual(last_reply[0], 'reply')
+        self.assertEqual(last_reply[1],
                          "Epic victory!\n"
                          "Word: elephant\n"
                          "Letters guessed so far: aehlnopt\n"
                          "Enter anything to start a new game (0 to quit):\n")
 
-        yield resume('1')
-
-        last_reply = self.worker.replies[-1]
-        self.assertEqual(last_reply[:2], ('reply', 'sp1'))
-        self.assertEqual(last_reply[2],
+        yield self.send('1')
+        replies = yield self.recv(10)
+        last_reply = replies[-1]
+        self.assertEqual(last_reply[0], 'reply')
+        self.assertEqual(last_reply[1],
                          "New game!\n"
                          "Word: ________\n"
                          "Letters guessed so far: \n"
                          "Enter next guess (0 to quit):\n")
 
-        yield resume('0')
-        last_reply = self.worker.replies[-1]
-        self.assertEqual(last_reply[:2], ('end', 'sp1'))
-        self.assertEqual(last_reply[2], "Adieu!")
+        yield self.send('0')
+        replies = yield self.recv(11)
+        last_reply = replies[-1]
+        self.assertEqual(last_reply[0], 'end')
+        self.assertEqual(last_reply[1], "Adieu!")
 
     @inlineCallbacks
     def test_close_session(self):
-        yield self.worker.close_session({'transport_session_id': 'sp1',
-                                       'sender': '+134567'})
-        self.assertEqual(self.worker.replies, [])
+        yield self.send(None, TransportUserMessage.SESSION_CLOSE)
+        replies = yield self.recv()
+        self.assertEqual(replies, [])
