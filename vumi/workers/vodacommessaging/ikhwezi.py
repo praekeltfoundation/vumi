@@ -1,23 +1,32 @@
-import yaml
 import random
 
 from twisted.internet.defer import inlineCallbacks
 from twisted.python import log
 from vumi.message import Message
 from vumi.service import Worker
-from vumi.workers.vodacommessaging.utils import VodacomMessagingResponse
 
 
 QUIZ = '''
+continue:
+  English:
+    options:
+      1:
+        text: Continue
+      2:
+        text: Finish
 demographic1:
   English:
     headertext: 'Thnx 4 taking the Quiz! Answer easy questions and be 1 of 5000 lucky
       winners.  Pick your language:'
     options:
-      1: {text: English}
-      2: {text: Zulu}
-      3: {text: Afrikaans}
-      4: {text: Sotho}
+      1:
+        text: English
+      2:
+        text: Zulu
+      3:
+        text: Afrikaans
+      4:
+        text: Sotho
 demographic2:
   Afrikaans:
     headertext: ''
@@ -73,11 +82,15 @@ question1:
   Afrikaans:
     headertext: ''
     options:
-    - {answer: '', text: ''}
+        1:
+            text: ''
+            reply: '22222222'
   English:
     headertext: ''
     options:
-    - {answer: '', text: ''}
+        1:
+            text: ''
+            reply: '11111111'
   Sotho:
     headertext: ''
     options:
@@ -318,7 +331,6 @@ class IkhweziQuiz():
                 d_ans.append(key)
         return {'q_un': q_un, 'q_ans': q_ans, 'd_un': d_un, 'd_ans': d_ans}
 
-
     def select_contextual_question(self):
         context = None
         question = None
@@ -338,31 +350,17 @@ class IkhweziQuiz():
         print context, question
         return context, question
 
+    def answer_contextual_question(self, context, answer):
+        answer = int(answer)
+        if context == 'demographic1':
+            demographic1_answer = answer
+        else:
+            demographic1_answer = self.answers.get('demographic1')
+        question = self.quiz.get(context)[self.language.get(str(
+            demographic1_answer))]
+        self.answers[context] = answer
+        return question['options'][answer].get('reply')
 
-quiz = yaml.load(QUIZ)
-config = {
-        'web_host': 'vumi.p.org',
-        'web_path': '/api/v1/ussd/vmes/'}
-ds = {}
-ik = IkhweziQuiz(quiz, '111', ds)
-ik = IkhweziQuiz(quiz, '111', ds)
-ik = IkhweziQuiz(quiz, '211', ds)
-
-print yaml.dump(ik.quiz)
-context, question = ik.select_contextual_question()
-vmr = VodacomMessagingResponse(config)
-vmr.set_context(context)
-vmr.set_headertext(question['headertext'])
-#for option in question['options']:
-    #vmr.add_option(option['text'])
-#print vmr
-
-#for msisdn,ans in ds.items():
-    #print msisdn, ans
-
-#print yaml.dump(IkhweziQuiz.quiz)
-#print yaml.dump(IkhweziQuiz.language)
-#print yaml.dump(ik.quiz)
 
 class IkhweziQuizWorker(Worker):
     @inlineCallbacks
