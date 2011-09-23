@@ -4,7 +4,7 @@ from twisted.web.resource import Resource
 
 from vumi.utils import http_request, normalize_msisdn
 from vumi.message import TransportUserMessage
-from vumi.workers.integrat.utils import HigateXMLParser
+from vumi.transports.integrat.utils import HigateXMLParser
 from vumi.transports import Transport
 
 hxg = HigateXMLParser()

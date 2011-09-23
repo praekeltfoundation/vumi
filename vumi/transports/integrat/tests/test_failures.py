@@ -56,8 +56,7 @@ class IntegratFailureWorkerTestCase(unittest.TestCase):
             'owner': 'owner',
             'service': 'service',
             'subservice': 'subservice',
-            'web_receive_path': '/receive',
-            'web_receipt_path': '/receipt',
+            'web_path': '/receive',
             'web_port': 9998,
         }
         self.fail_config = {
