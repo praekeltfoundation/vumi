@@ -6,252 +6,153 @@ from vumi.message import Message
 from vumi.service import Worker
 
 
+TRANSLATIONS = '''
+'''
+
 QUIZ = '''
 continue:
-  English:
     options:
-      1:
-        text: Continue
-      2:
-        text: Finish
+        1:
+            text: "Continue to win!"
+        2:
+            text: "Exit the quiz"
+
 demographic1:
-  English:
-    headertext: 'Thnx 4 taking the Quiz! Answer easy questions and be 1 of 5000 lucky
-      winners.  Pick your language:'
+    headertext: "Thnx 4 taking the Quiz! Answer easy questions and be 1 of 5000
+                lucky winners.  Pick your language:"
     options:
-      1:
-        text: English
-      2:
-        text: Zulu
-      3:
-        text: Afrikaans
-      4:
-        text: Sotho
+        1:
+            text: "English"
+        2:
+            text: "Zulu"
+        3:
+            text: "Afrikaans"
+        4:
+            text: "Sotho"
+
 demographic2:
-  Afrikaans:
-    headertext: ''
+    headertext: "header"
     options:
-    - {answer: '', text: ''}
-  English:
-    headertext: ''
-    options:
-    - {answer: '', text: ''}
-  Sotho:
-    headertext: ''
-    options:
-    - {answer: '', text: ''}
-  Zulu:
-    headertext: ''
-    options:
-    - {answer: '', text: ''}
+        1:
+            text: "que 1"
+        2:
+            text: "que 2"
+
 demographic3:
-  Afrikaans:
-    headertext: ''
+    headertext: "header"
     options:
-    - {answer: '', text: ''}
-  English:
-    headertext: ''
-    options:
-    - {answer: '', text: ''}
-  Sotho:
-    headertext: ''
-    options:
-    - {answer: '', text: ''}
-  Zulu:
-    headertext: ''
-    options:
-    - {answer: '', text: ''}
+        1:
+            text: "que 1"
+        2:
+            text: "que 2"
+
 demographic4:
-  Afrikaans:
-    headertext: ''
+    headertext: "header"
     options:
-    - {answer: '', text: ''}
-  English:
-    headertext: ''
-    options:
-    - {answer: '', text: ''}
-  Sotho:
-    headertext: ''
-    options:
-    - {answer: '', text: ''}
-  Zulu:
-    headertext: ''
-    options:
-    - {answer: '', text: ''}
+        1:
+            text: "que 1"
+        2:
+            text: "que 2"
+
 question1:
-  Afrikaans:
-    headertext: ''
+    headertext: "header"
     options:
         1:
-            text: ''
-            reply: '22222222'
-  English:
-    headertext: ''
-    options:
-        1:
-            text: ''
-            reply: '11111111'
-  Sotho:
-    headertext: ''
-    options:
-    - {answer: '', text: ''}
-  Zulu:
-    headertext: ''
-    options:
-    - {answer: '', text: ''}
-question10:
-  Afrikaans:
-    headertext: ''
-    options:
-    - {answer: '', text: ''}
-  English:
-    headertext: ''
-    options:
-    - {answer: '', text: ''}
-  Sotho:
-    headertext: ''
-    options:
-    - {answer: '', text: ''}
-  Zulu:
-    headertext: ''
-    options:
-    - {answer: '', text: ''}
+            text: "que 1"
+            reply: "reply 1"
+        2:
+            text: "que 2"
+            reply: "reply 2"
+
 question2:
-  Afrikaans:
-    headertext: ''
+    headertext: "header"
     options:
-    - {answer: '', text: ''}
-  English:
-    headertext: ''
-    options:
-    - {answer: '', text: ''}
-  Sotho:
-    headertext: ''
-    options:
-    - {answer: '', text: ''}
-  Zulu:
-    headertext: ''
-    options:
-    - {answer: '', text: ''}
+        1:
+            text: "que 1"
+            reply: "reply 1"
+        2:
+            text: "que 2"
+            reply: "reply 2"
+
 question3:
-  Afrikaans:
-    headertext: ''
+    headertext: "header"
     options:
-    - {answer: '', text: ''}
-  English:
-    headertext: ''
-    options:
-    - {answer: '', text: ''}
-  Sotho:
-    headertext: ''
-    options:
-    - {answer: '', text: ''}
-  Zulu:
-    headertext: ''
-    options:
-    - {answer: '', text: ''}
+        1:
+            text: "que 1"
+            reply: "reply 1"
+        2:
+            text: "que 2"
+            reply: "reply 2"
+
 question4:
-  Afrikaans:
-    headertext: ''
+    headertext: "header"
     options:
-    - {answer: '', text: ''}
-  English:
-    headertext: ''
-    options:
-    - {answer: '', text: ''}
-  Sotho:
-    headertext: ''
-    options:
-    - {answer: '', text: ''}
-  Zulu:
-    headertext: ''
-    options:
-    - {answer: '', text: ''}
+        1:
+            text: "que 1"
+            reply: "reply 1"
+        2:
+            text: "que 2"
+            reply: "reply 2"
+
 question5:
-  Afrikaans:
-    headertext: ''
+    headertext: "header"
     options:
-    - {answer: '', text: ''}
-  English:
-    headertext: ''
-    options:
-    - {answer: '', text: ''}
-  Sotho:
-    headertext: ''
-    options:
-    - {answer: '', text: ''}
-  Zulu:
-    headertext: ''
-    options:
-    - {answer: '', text: ''}
+        1:
+            text: "que 1"
+            reply: "reply 1"
+        2:
+            text: "que 2"
+            reply: "reply 2"
+
 question6:
-  Afrikaans:
-    headertext: ''
+    headertext: "header"
     options:
-    - {answer: '', text: ''}
-  English:
-    headertext: ''
-    options:
-    - {answer: '', text: ''}
-  Sotho:
-    headertext: ''
-    options:
-    - {answer: '', text: ''}
-  Zulu:
-    headertext: ''
-    options:
-    - {answer: '', text: ''}
+        1:
+            text: "que 1"
+            reply: "reply 1"
+        2:
+            text: "que 2"
+            reply: "reply 2"
+
 question7:
-  Afrikaans:
-    headertext: ''
+    headertext: "header"
     options:
-    - {answer: '', text: ''}
-  English:
-    headertext: ''
-    options:
-    - {answer: '', text: ''}
-  Sotho:
-    headertext: ''
-    options:
-    - {answer: '', text: ''}
-  Zulu:
-    headertext: ''
-    options:
-    - {answer: '', text: ''}
+        1:
+            text: "que 1"
+            reply: "reply 1"
+        2:
+            text: "que 2"
+            reply: "reply 2"
+
 question8:
-  Afrikaans:
-    headertext: ''
+    headertext: "header"
     options:
-    - {answer: '', text: ''}
-  English:
-    headertext: ''
-    options:
-    - {answer: '', text: ''}
-  Sotho:
-    headertext: ''
-    options:
-    - {answer: '', text: ''}
-  Zulu:
-    headertext: ''
-    options:
-    - {answer: '', text: ''}
+        1:
+            text: "que 1"
+            reply: "reply 1"
+        2:
+            text: "que 2"
+            reply: "reply 2"
+
 question9:
-  Afrikaans:
-    headertext: ''
+    headertext: "header"
     options:
-    - {answer: '', text: ''}
-  English:
-    headertext: ''
+        1:
+            text: "que 1"
+            reply: "reply 1"
+        2:
+            text: "que 2"
+            reply: "reply 2"
+
+question10:
+    headertext: "header"
     options:
-    - {answer: '', text: ''}
-  Sotho:
-    headertext: ''
-    options:
-    - {answer: '', text: ''}
-  Zulu:
-    headertext: ''
-    options:
-    - {answer: '', text: ''}
+        1:
+            text: "que 1"
+            reply: "reply 1"
+        2:
+            text: "que 2"
+            reply: "reply 2"
 '''
 
 
@@ -262,7 +163,9 @@ class IkhweziQuiz():
         msisdn = str(msisdn)
         self.datastore = datastore
         self.retrieve_entrant(msisdn) or self.new_entrant(msisdn)
-        self.language = {
+
+    def lang(self, lang):
+        langs = {
                 "English": "1",
                 "Zulu": "2",
                 "Afrikaans": "3",
@@ -272,6 +175,7 @@ class IkhweziQuiz():
                 "3": "Afrikaans",
                 "4": "Sotho"
                 }
+        return langs.get(str(lang))
 
     def retrieve_entrant(self, msisdn):
         answers = self.datastore.get(msisdn)
@@ -337,7 +241,7 @@ class IkhweziQuiz():
         demographic1_answer = self.answers.get('demographic1')
         if not demographic1_answer:
             context = 'demographic1'
-            question = self.quiz.get(context)['English']
+            question = self.quiz.get(context)
         else:
             ans_lists = self.answered_lists()
             print ans_lists
@@ -345,8 +249,7 @@ class IkhweziQuiz():
                 context = random.choice(ans_lists['q_un'])
             else:
                 context = random.choice(ans_lists['d_un'])
-            question = self.quiz.get(context)[self.language.get(str(
-                            demographic1_answer))]
+            question = self.quiz.get(context)
         print context, question
         return context, question
 
@@ -356,8 +259,7 @@ class IkhweziQuiz():
             demographic1_answer = answer
         else:
             demographic1_answer = self.answers.get('demographic1')
-        question = self.quiz.get(context)[self.language.get(str(
-            demographic1_answer))]
+        question = self.quiz.get(context)
         self.answers[context] = answer
         return question['options'][answer].get('reply')
 
