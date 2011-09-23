@@ -3,11 +3,12 @@ from  xml.etree import ElementTree
 
 from twisted.python import log
 from twisted.trial.unittest import TestCase
-from vumi.workers.httprpc.transport import VodacomMessagingResponse
+from vumi.workers.vodacommessaging.utils import VodacomMessagingResponse
 
 
 class VodacomMessagingResponseTest(TestCase):
     '''
+    Test the construction of XML replies for Vodacom Messaging
     '''
 
     def setUp(self):
