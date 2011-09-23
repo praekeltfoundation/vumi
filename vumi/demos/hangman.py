@@ -4,8 +4,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.python import log
 
 from vumi.application import ApplicationWorker
-from vumi.utils import (safe_routing_key, get_deploy_int,
-                        http_request, normalize_msisdn)
+from vumi.utils import get_deploy_int, http_request
 
 import redis
 import string
@@ -163,11 +162,10 @@ class HangmanWorker(ApplicationWorker):
             return word
         return d.addCallback(_decode)
 
-    def game_key(self, msisdn):
+    def game_key(self, user_id):
         "Key for looking up a users game in data store."""
-        msisdn = normalize_msisdn(msisdn)
-        userid = msisdn.lstrip('+')
-        return "%s#%s" % (self.r_prefix, userid)
+        user_id = user_id.lstrip('+')
+        return "%s#%s" % (self.r_prefix, user_id)
 
     def load_game(self, msisdn):
         """Fetch a game for the given user ID.
@@ -207,8 +205,6 @@ class HangmanWorker(ApplicationWorker):
         Then process the user's message.
         """
         log.msg("User message: %s" % msg['content'])
-        if msg['session_event'] == msg.SESSION_CLOSE:
-            return
 
         user_id = msg.user()
         game = self.load_game(user_id)
@@ -217,7 +213,7 @@ class HangmanWorker(ApplicationWorker):
             self.save_game(user_id, game)
 
         if msg['content'] is None:
-            # new session
+            # probably new session -- just send the user the board
             self.reply_to(msg, game.draw_board(), True)
             return
 
@@ -235,3 +231,7 @@ class HangmanWorker(ApplicationWorker):
             self.save_game(user_id, game)
 
         self.reply_to(msg, game.draw_board(), continue_session)
+
+    def close_session(self, msg):
+        """We ignore session closing and wait for the user to return."""
+        pass
