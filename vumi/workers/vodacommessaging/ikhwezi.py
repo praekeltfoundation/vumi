@@ -260,7 +260,8 @@ class IkhweziQuiz():
     def answer_contextual_question(self, context, answer):
         answer = int(answer)
         question = self.quiz.get(context)
-        self.answers[context] = answer
+        if context in self.answers.keys():
+            self.answers[context] = answer
         #import yaml
         #print yaml.dump({self.answers['msisdn']: self.answers.items()})
         reply = question['options'][answer].get('reply')

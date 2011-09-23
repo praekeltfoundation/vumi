@@ -20,9 +20,16 @@ ik = IkhweziQuiz(config, quiz, translations, ds, '08212345670')
 
 print "\n\n################################################\n\n"
 def respond(context, answer):
+    ik = IkhweziQuiz(config, quiz, translations, ds, '08212345670')
     resp = ik.formulate_response(context, answer)
+    context = resp.context
+    answer = random.choice(resp.option_list)['order']
+    if context == "demographic1":
+        answer = 1
+    if context == "continue":
+        answer = 1
     print "\n", resp
-    respond(resp.context, random.choice(resp.option_list)['order'])
+    respond(context, answer)
 
 respond(None, None)
 
