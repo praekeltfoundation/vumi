@@ -6,6 +6,6 @@ This is where all transports that are part of core vumi live.
    Anything in :mod:`vumi.workers` is deprecated and needs to be migrated.
 """
 
-from vumi.transport.base import Transport
+from vumi.transports.base import Transport
 
 __all__ = ['Transport']
