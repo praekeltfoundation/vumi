@@ -34,10 +34,13 @@ class VodacomMessagingResponse(object):
             self.option_list[count].update({'context': self.context})
             count += 1
 
-    def add_option(self, text):
+    def add_option(self, text, order=None):
         self.freetext_option = None
         dict = {'text': str(text)}
-        dict['order'] = len(self.option_list) + 1
+        if order:
+            dict['order'] = int(order)
+        else:
+            dict['order'] = len(self.option_list) + 1
         dict.update({
             'web_path': self.config['web_path'],
             'web_host': self.config['web_host'],

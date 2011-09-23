@@ -1,3 +1,5 @@
+import yaml
+import random
 
 from twisted.internet.defer import inlineCallbacks
 from twisted.python import log
@@ -6,531 +8,257 @@ from vumi.service import Worker
 from vumi.workers.vodacommessaging.utils import VodacomMessagingResponse
 
 
+QUIZ = '''
+demographic1:
+  English:
+    headertext: 'Thnx 4 taking the Quiz! Answer easy questions and be 1 of 5000 lucky
+      winners.  Pick your language:'
+    options:
+      1: {text: English}
+      2: {text: Zulu}
+      3: {text: Afrikaans}
+      4: {text: Sotho}
+demographic2:
+  Afrikaans:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+  English:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+  Sotho:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+  Zulu:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+demographic3:
+  Afrikaans:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+  English:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+  Sotho:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+  Zulu:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+demographic4:
+  Afrikaans:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+  English:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+  Sotho:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+  Zulu:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+question1:
+  Afrikaans:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+  English:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+  Sotho:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+  Zulu:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+question10:
+  Afrikaans:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+  English:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+  Sotho:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+  Zulu:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+question2:
+  Afrikaans:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+  English:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+  Sotho:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+  Zulu:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+question3:
+  Afrikaans:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+  English:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+  Sotho:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+  Zulu:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+question4:
+  Afrikaans:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+  English:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+  Sotho:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+  Zulu:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+question5:
+  Afrikaans:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+  English:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+  Sotho:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+  Zulu:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+question6:
+  Afrikaans:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+  English:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+  Sotho:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+  Zulu:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+question7:
+  Afrikaans:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+  English:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+  Sotho:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+  Zulu:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+question8:
+  Afrikaans:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+  English:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+  Sotho:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+  Zulu:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+question9:
+  Afrikaans:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+  English:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+  Sotho:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+  Zulu:
+    headertext: ''
+    options:
+    - {answer: '', text: ''}
+'''
+
+
 class IkhweziQuiz():
 
-    LANGUAGE = {
-            "English": "1",
-            "Zulu": "2",
-            "Afrikaans": "3",
-            "Sotho": "4",
-            "1": "English",
-            "2": "Zulu",
-            "3": "Afrikaans",
-            "4": "Sotho"
-            }
-
-    QUIZ = {
-            "question1": {
-                "English": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    },
-                "Zulu": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    },
-                "Afrikaans": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    },
-                "Sotho": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    }
-                },
-            "question2": {
-                "English": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    },
-                "Zulu": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    },
-                "Afrikaans": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    },
-                "Sotho": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    }
-                },
-            "question3": {
-                "English": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    },
-                "Zulu": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    },
-                "Afrikaans": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    },
-                "Sotho": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    }
-                },
-            "question4": {
-                "English": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    },
-                "Zulu": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    },
-                "Afrikaans": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    },
-                "Sotho": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    }
-                },
-            "question5": {
-                "English": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    },
-                "Zulu": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    },
-                "Afrikaans": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    },
-                "Sotho": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    }
-                },
-            "question6": {
-                "English": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    },
-                "Zulu": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    },
-                "Afrikaans": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    },
-                "Sotho": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    }
-                },
-            "question7": {
-                "English": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    },
-                "Zulu": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    },
-                "Afrikaans": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    },
-                "Sotho": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    }
-                },
-            "question8": {
-                "English": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    },
-                "Zulu": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    },
-                "Afrikaans": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    },
-                "Sotho": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    }
-                },
-            "question9": {
-                "English": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    },
-                "Zulu": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    },
-                "Afrikaans": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    },
-                "Sotho": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    }
-                },
-            "question10": {
-                "English": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    },
-                "Zulu": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    },
-                "Afrikaans": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    },
-                "Sotho": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    }
-                },
-            "demographic1": {
-                "English": {
-                    "headertext": "Thnx 4 taking the Quiz! Answer easy questions and be 1 of 5000 lucky winners.  Pick your language:",
-                    "options": [
-                        "English",
-                        "Zulu",
-                        "Afrikaans",
-                        "Sotho"
-                        ]
-                    }
-                },
-            "demographic2": {
-                "English": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    },
-                "Zulu": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    },
-                "Afrikaans": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    },
-                "Sotho": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    }
-                },
-            "demographic3": {
-                "English": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    },
-                "Zulu": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    },
-                "Afrikaans": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    },
-                "Sotho": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    }
-                },
-            "demographic4": {
-                "English": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    },
-                "Zulu": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    },
-                "Afrikaans": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    },
-                "Sotho": {
-                    "headertext": "",
-                    "options": [
-                        {
-                            "text": "",
-                            "answer": ""
-                            },
-                        ]
-                    }
-                }
-        }
-
-    def __init__(self, msisdn, datastore=None):
+    def __init__(self, quiz, msisdn, datastore=None):
+        self.quiz = quiz
         msisdn = str(msisdn)
         self.datastore = datastore
         self.retrieve_entrant(msisdn) or self.new_entrant(msisdn)
+        self.language = {
+                "English": "1",
+                "Zulu": "2",
+                "Afrikaans": "3",
+                "Sotho": "4",
+                "1": "English",
+                "2": "Zulu",
+                "3": "Afrikaans",
+                "4": "Sotho"
+                }
 
     def retrieve_entrant(self, msisdn):
         answers = self.datastore.get(msisdn)
@@ -542,7 +270,7 @@ class IkhweziQuiz():
     def new_entrant(self, msisdn):
         self.answers = {
                 'msisdn': None,
-                'first_contact_timestamp': None,
+                'm_timestamp': None,
                 'question1': None,
                 'question2': None,
                 'question3': None,
@@ -553,77 +281,88 @@ class IkhweziQuiz():
                 'question8': None,
                 'question9': None,
                 'question10': None,
-                'question1_timestamp': None,
-                'question2_timestamp': None,
-                'question3_timestamp': None,
-                'question4_timestamp': None,
-                'question5_timestamp': None,
-                'question6_timestamp': None,
-                'question7_timestamp': None,
-                'question8_timestamp': None,
-                'question9_timestamp': None,
-                'question10_timestamp': None,
+                'q1_timestamp': None,
+                'q2_timestamp': None,
+                'q3_timestamp': None,
+                'q4_timestamp': None,
+                'q5_timestamp': None,
+                'q6_timestamp': None,
+                'q7_timestamp': None,
+                'q8_timestamp': None,
+                'q9_timestamp': None,
+                'q10_timestamp': None,
                 'demographic1': None,
                 'demographic2': None,
                 'demographic3': None,
                 'demographic4': None,
-                'demographic1_timestamp': None,
-                'demographic2_timestamp': None,
-                'demographic3_timestamp': None,
-                'demographic4_timestamp': None}
+                'd1_timestamp': None,
+                'd2_timestamp': None,
+                'd3_timestamp': None,
+                'd4_timestamp': None}
         self.datastore[msisdn] = self.answers
         return True
 
+    def answered_lists(self):
+        q_un = []
+        q_ans = []
+        d_un = []
+        d_ans = []
+        for key, val in self.answers.items():
+            if key.startswith('question') and val == None:
+                q_un.append(key)
+            if key.startswith('question') and val != None:
+                q_ans.append(key)
+            if key.startswith('demographic') and val == None:
+                d_un.append(key)
+            if key.startswith('demographic') and val != None:
+                d_ans.append(key)
+        return {'q_un': q_un, 'q_ans': q_ans, 'd_un': d_un, 'd_ans': d_ans}
+
+
     def select_contextual_question(self):
+        context = None
+        question = None
         demographic1_answer = self.answers.get('demographic1')
-        ########### testing #############
-        demographic1_answer = self.LANGUAGE['English']
-        import random
-        ########### testing #############
         if not demographic1_answer:
-            return 'demographic1', self.QUIZ.get('demographic1', {}).get('English')
+            context = 'demographic1'
+            question = self.quiz.get(context)['English']
         else:
-            demo = 0
-            for key, val in self.answers.items():
-                if val and self.QUIZ.get(key):
-                    if key.startswith('demo'):
-                        demo += 1
-                    else:
-                        demo -= 1
-                    print demo
-            prefix = 'quest'
-            if demo < 1:
-                prefix = 'demo'
+            ans_lists = self.answered_lists()
+            print ans_lists
+            if len(ans_lists['d_ans']) > len(ans_lists['q_ans']):
+                context = random.choice(ans_lists['q_un'])
+            else:
+                context = random.choice(ans_lists['d_un'])
+            question = self.quiz.get(context)[self.language.get(str(
+                            demographic1_answer))]
+        print context, question
+        return context, question
 
-            question_list = []
-            for key, val in self.answers.items():
-                if val == None and self.QUIZ.get(key) and key.startswith(
-                        prefix):
-                    question_list.append({
-                        'context': key,
-                        'question': self.QUIZ.get(key)[self.LANGUAGE.get(
-                            demographic1_answer)]})
-            choice = random.choice(question_list)
-            return choice['context'], choice['question']
 
+quiz = yaml.load(QUIZ)
 config = {
         'web_host': 'vumi.p.org',
         'web_path': '/api/v1/ussd/vmes/'}
 ds = {}
-ik = IkhweziQuiz('111', ds)
-ik = IkhweziQuiz('111', ds)
-ik = IkhweziQuiz('211', ds)
+ik = IkhweziQuiz(quiz, '111', ds)
+ik = IkhweziQuiz(quiz, '111', ds)
+ik = IkhweziQuiz(quiz, '211', ds)
+
+print yaml.dump(ik.quiz)
 context, question = ik.select_contextual_question()
 vmr = VodacomMessagingResponse(config)
 vmr.set_context(context)
 vmr.set_headertext(question['headertext'])
-for option in question['options']:
-    vmr.add_option(option['text'])
-print vmr
+#for option in question['options']:
+    #vmr.add_option(option['text'])
+#print vmr
 
-for msisdn,ans in ds.items():
-    print msisdn, ans
+#for msisdn,ans in ds.items():
+    #print msisdn, ans
 
+#print yaml.dump(IkhweziQuiz.quiz)
+#print yaml.dump(IkhweziQuiz.language)
+#print yaml.dump(ik.quiz)
 
 class IkhweziQuizWorker(Worker):
     @inlineCallbacks
