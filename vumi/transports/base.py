@@ -16,9 +16,20 @@ from vumi.transports.failures import FailureMessage
 
 
 class Transport(Worker):
+    """
+    Base class for transport workers.
+
+    The following attributes are available for subclasses to control behaviour:
+
+    * :attr:`start_message_consumer` -- Set to ``False`` if the message
+      consumer should not be started. The subclass is responsible for starting
+      it in this case.
+    """
+
     SUPPRESS_FAILURE_EXCEPTIONS = True
 
     transport_name = None
+    start_message_consumer = True
 
     @inlineCallbacks
     def startWorker(self):
@@ -30,6 +41,11 @@ class Transport(Worker):
         self._consumers = []
 
         self._validate_config()
+        if 'TRANSPORT_NAME' in self.config:
+            log.msg("NOTE: 'TRANSPORT_NAME' in config is deprecated. "
+                    "Use 'transport_name' instead.")
+            self.config.setdefault('transport_name',
+                                   self.config['TRANSPORT_NAME'])
         self.transport_name = self.config['transport_name']
         self.concurrent_sends = self.config.get('concurrent_sends')
 
@@ -39,7 +55,8 @@ class Transport(Worker):
 
         yield self.setup_transport()
 
-        yield self._setup_message_consumer()
+        if self.start_consumer:
+            yield self._setup_message_consumer()
 
     @inlineCallbacks
     def stopWorker(self):
@@ -60,12 +77,16 @@ class Transport(Worker):
     def validate_config(self):
         """
         Transport-specific config validation happens in here.
+
+        Subclasses may override this method to perform extra config validation.
         """
         pass
 
     def setup_transport(self):
         """
         All transport_specific setup should happen in here.
+
+        Subclasses should override this method to perform extra setup.
         """
         pass
 
@@ -107,23 +128,43 @@ class Transport(Worker):
         pass
 
     def publish_message(self, **kw):
+        """
+        Publish a :class:`TransportUserMessage` message.
+
+        Some default parameters are handled, so subclasses don't have
+        to provide a lot of boilerplate.
+        """
+        kw.setdefault('transport_name', self.transport_name)
+        kw.setdefault('transport_metadata', {})
         return self.message_publisher.publish_message(
             TransportUserMessage(**kw))
 
     def publish_event(self, **kw):
+        """
+        Publish a :class:`TransportEvent` message.
+
+        Some default parameters are handled, so subclasses don't have
+        to provide a lot of boilerplate.
+        """
+        kw.setdefault('transport_name', self.transport_name)
+        kw.setdefault('transport_metadata', {})
         return self.event_publisher.publish_message(TransportEvent(**kw))
 
-    def publish_ack(self, **kw):
-        kw.setdefault('event_type', 'ack')
-        kw.setdefault('transport_name', self.transport_name)
-        kw.setdefault('transport_metadata', {})
-        return self.publish_event(**kw)
+    def publish_ack(self, user_message_id, sent_message_id, **kw):
+        """
+        Helper method for publishing an ``ack`` event.
+        """
+        return self.publish_event(user_message_id=user_message_id,
+                                  sent_message_id=sent_message_id,
+                                  event_type='ack', **kw)
 
-    def publish_delivery_report(self, **kw):
-        kw.setdefault('event_type', 'delivery_report')
-        kw.setdefault('transport_name', self.transport_name)
-        kw.setdefault('transport_metadata', {})
-        return self.publish_event(**kw)
+    def publish_delivery_report(self, user_message_id, delivery_status, **kw):
+        """
+        Helper method for publishing a ``delivery_report`` event.
+        """
+        return self.publish_event(user_message_id=user_message_id,
+                                  delivery_status=delivery_status,
+                                  event_type='delivery_report', **kw)
 
     def _process_message(self, message):
         def _send_failure(f):

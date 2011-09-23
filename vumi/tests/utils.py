@@ -242,7 +242,7 @@ class FakeRedis(object):
         self._data[key] = value
 
     def delete(self, key):
-        del self._data[key]
+        self._data.pop(key, None)
 
     # Hash operations
 

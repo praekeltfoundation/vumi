@@ -2,7 +2,7 @@ from twisted.trial import unittest
 from smpp.pdu_builder import DeliverSM
 from smpp.pdu import unpack_pdu
 
-from vumi.workers.smpp.client import EsmeTransceiver
+from vumi.transports.smpp.client import EsmeTransceiver
 
 
 class FakeEsmeTransceiver(EsmeTransceiver):

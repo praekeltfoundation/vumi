@@ -1,30 +1,27 @@
 import os
 os.environ['DJANGO_SETTINGS_MODULE'] = 'vumi.webapp.settings'
 
-from twisted.trial.unittest import TestCase
-from twisted.internet import defer
-from vumi.tests.utils import TestPublisher, TestChannel, TestQueue, \
-                            fake_amq_message, mocking, \
-                            setup_django_test_database, \
-                            teardown_django_test_database, FakeRedis
-from vumi.message import Message, TransportSMSDeliveryReport
-from vumi.service import Consumer, Publisher, RoutingKeyError
-from vumi.workers.smpp.worker import SMSBatchConsumer, SMSReceiptConsumer, \
-    dynamically_create_keyword_consumer, \
-    SMSKeywordWorker, SMSReceiptWorker
-
-from django.contrib.auth.models import User
-from vumi.webapp.api.models import SentSMSBatch, SentSMS, Keyword, \
-                                   ReceivedSMS, Transport
-from vumi.webapp.api import utils
-
 from datetime import datetime
 import re
 
+from twisted.trial.unittest import TestCase
+from twisted.internet import defer
+from django.contrib.auth.models import User
 from smpp.pdu_builder import SubmitSMResp, BindTransceiverResp
-from vumi.workers.smpp.client import EsmeTransceiver
-from vumi.workers.smpp.transport import SmppTransport
-import redis
+
+from vumi.tests.utils import (
+    TestPublisher, mocking, setup_django_test_database,
+    teardown_django_test_database, FakeRedis)
+from vumi.message import TransportUserMessage, TransportEvent, Message
+from vumi.webapp.api.models import (SentSMSBatch, SentSMS, Keyword,
+                                    ReceivedSMS, Transport)
+from vumi.webapp.api import utils
+from vumi.transports.smpp.client import EsmeTransceiver
+from vumi.transports.smpp.transport import SmppTransport
+from vumi.transports.smpp.worker import (
+    SMSBatchConsumer, SMSReceiptConsumer, dynamically_create_keyword_consumer,
+    SMSKeywordWorker, SMSReceiptWorker)
+from vumi.transports.tests.test_base import TransportTestCase
 
 
 class SMSBatchTestCase(TestCase):
@@ -59,9 +56,6 @@ class SMSBatchTestCase(TestCase):
         self.assertEquals(set([m.payload['to_addr'] for m, kwargs in
                 self.publisher.queue]),
                 set(recipients))
-        # ensure that the routing key is converted to lower case
-        self.assertTrue(all(kwargs['routing_key'] == 'sms.outbound.transport'
-            for m, kwargs in self.publisher.queue))
 
 
 class SMSReceiptTestCase(TestCase):
@@ -113,11 +107,12 @@ class SMSReceiptTestCase(TestCase):
         # set the expectation
         with mocking(utils.callback).to_return(urlcallback.url,
                                                "OK") as mocked:
-            message = TransportSMSDeliveryReport(
+            message = TransportEvent(
+                event_type='delivery_report',
                 delivery_status='delivered',
-                transport='Opera',
+                transport_name='Opera',
                 timestamp=delivery_timestamp,
-                transport_message_id='message_id')
+                user_message_id='message_id')
             self.receipt_consumer.consume_message(message)
 
             # test that it was called
@@ -196,11 +191,14 @@ class SMSKeywordTestCase(TestCase):
                             url='http://test.domain/1', name='sms_received')
         urlcallback = profile.urlcallback_set.create(
                             url='http://test.domain/2', name='sms_received')
-        keyword = Keyword.objects.create(keyword='keyword', user=user)
-        message = Message(
-                    short_message="keyword message",
-                    destination_addr="27123456780",
-                    source_addr='27123456789')  # prefixed
+        Keyword.objects.create(keyword='keyword', user=user)
+        message = TransportUserMessage(
+            transport_name='sphex',
+            transport_type='sms',
+            transport_metadata={},
+            content="keyword message",
+            to_addr="27123456780",
+            from_addr='27123456789')  # prefixed
 
         # make sure db is empty
         self.assertFalse(ReceivedSMS.objects.exists())
@@ -287,70 +285,6 @@ class SMSKeywordTestCase(TestCase):
                           'sms.inbound.testing.27123456781')
 
 
-class ConsumerTestCase(TestCase):
-
-    def setUp(self):
-
-        class TestConsumer(Consumer):
-            def __init__(self):
-                self.log = []
-
-            def consume_message(self, message):
-                self.log.append(message)
-
-        self.consumer = TestConsumer()
-        self.channel = TestChannel()
-
-    def tearDown(self):
-        pass
-
-    @defer.inlineCallbacks
-    def test_starting_consumer(self):
-        queue = TestQueue([fake_amq_message({
-            'key': 'value'
-        })])
-        self.consumer.start(self.channel, queue)
-        yield self.consumer.stop()
-        message = self.consumer.log.pop()
-        self.assertEquals(message.payload, {
-            'key': 'value'
-        })
-
-
-class PublisherTestCase(TestCase):
-
-    def setUp(self):
-        self.publisher = Publisher()
-        self.channel = TestChannel()
-
-    def tearDown(self):
-        pass
-
-    def test_publish(self):
-        self.publisher.start(self.channel)
-        self.publisher.publish_message(Message(testing="data"),
-            exchange_name="custom_exchange", routing_key="custom_routing_key")
-
-        published_msg = self.channel.publish_log.pop()
-        content = published_msg['content']
-        self.assertEquals(published_msg['exchange'], "custom_exchange")
-        self.assertEquals(published_msg['routing_key'], "custom_routing_key")
-        self.assertEquals(content.body, '{"testing": "data"}')
-        self.assertEquals(content.properties, {'delivery mode': 2})
-
-    def test_upper_case_routing_keys_exception(self):
-        self.publisher.start(self.channel)
-        self.assertRaises(
-            RoutingKeyError,  # exception
-            self.publisher.publish_message,  # callback
-            Message(testing="data"),  # args
-            routing_key="IN.UPPER.CASE",
-            )
-
-
-#import sys
-#log.startLogging(sys.stdout)
-
 class RedisTestEsmeTransceiver(EsmeTransceiver):
 
     def sendPDU(self, pdu):
@@ -360,9 +294,8 @@ class RedisTestEsmeTransceiver(EsmeTransceiver):
 class RedisTestSmppTransport(SmppTransport):
 
     def send_smpp(self, message):
-        to_addr = message.payload.get('to_addr')
-        from_addr = message.payload.get('from_addr')
-        text = message.payload['message']
+        to_addr = message['to_addr']
+        text = message['content']
         sequence_number = self.esme_client.submit_sm(
                 short_message=text.encode('utf-8'),
                 destination_addr=str(to_addr),
@@ -410,9 +343,14 @@ def payload_equal_except_timestamp(dict1, dict2):
     return return_value
 
 
-class FakeRedisRespTestCase(TestCase):
+class FakeRedisRespTestCase(TransportTestCase):
 
+    transport_name = "redis_testing_transport"
+    transport_class = RedisTestSmppTransport
+
+    @defer.inlineCallbacks
     def setUp(self):
+        super(FakeRedisRespTestCase, self).setUp()
         self.seq = [123456]
         self.config = {
                 "system_id": "vumitest-vumitest-vumitest",
@@ -430,16 +368,9 @@ class FakeRedisRespTestCase(TestCase):
         self.esme = RedisTestEsmeTransceiver(
                 self.seq, self.config, self.vumi_options)
         self.esme.state = 'BOUND_TRX'
-        self.transport = RedisTestSmppTransport(None, self.config)
+        self.transport = yield self.get_transport(self.config, start=False)
         self.transport.esme_client = self.esme
-        self.transport.smpp_offset = self.config['smpp_offset']
-        self.transport.transport_name = self.config.get('TRANSPORT_NAME',
-                'fallback')
         self.transport.r_server = FakeRedis()
-        self.transport.r_prefix = "%(system_id)s@%(host)s:%(port)s" % (
-                self.config)
-        self.transport.publisher = TestPublisher()
-        self.transport.failure_publisher = TestPublisher()
         self.esme.setSubmitSMRespCallback(self.transport.submit_sm_resp)
 
         # set error handlers
@@ -452,191 +383,139 @@ class FakeRedisRespTestCase(TestCase):
             "conn_throttle": self.transport.conn_throttle,
             })
 
-    def tearDown(self):
-        # no need to cleanup fake redis
-        pass
+        yield self.transport.startWorker()
 
+    @defer.inlineCallbacks
     def test_match_resp(self):
-        message1 = Message(
-            message_id=444,
-            message="hello world",
+        message1 = self.mkmsg_out(
+            message_id='444',
+            content="hello world",
             to_addr="1111111111")
         sequence_num1 = self.esme.getSeq()
         response1 = SubmitSMResp(sequence_num1, "3rd_party_id_1")
-        self.transport.consume_message(message1)
+        yield self.transport._process_message(message1)
 
-        message2 = Message(
-            message_id=445,
-            message="hello world",
+        message2 = self.mkmsg_out(
+            message_id='445',
+            content="hello world",
             to_addr="1111111111")
         sequence_num2 = self.esme.getSeq()
         response2 = SubmitSMResp(sequence_num2, "3rd_party_id_2")
-        self.transport.consume_message(message2)
+        yield self.transport._process_message(message2)
 
         # respond out of order - just to keep things interesting
         self.esme.handleData(response2.get_bin())
         self.esme.handleData(response1.get_bin())
 
-        self.assertTrue(payload_equal_except_timestamp(
-            self.transport.publisher.queue[0][0].payload,
-            {
-                'transport_message_id': '3rd_party_id_2',
-                'message_version': '20110907',
-                'message': '',
-                'transport_metadata': {},
-                'message_type': 'sms_ack',
-                'message_id': '445',
-                'transport': 'redis_testing_transport',
-                'metadata': {}
-                }
-            ))
+        self.assertEqual([
+                self.mkmsg_ack('445', '3rd_party_id_2'),
+                self.mkmsg_ack('444', '3rd_party_id_1'),
+                ], self.get_dispatched_events())
 
-        self.assertTrue(payload_equal_except_timestamp(
-            self.transport.publisher.queue[1][0].payload,
-            {
-                'transport_message_id': '3rd_party_id_1',
-                'message_version': '20110907',
-                'message': '',
-                'transport_metadata': {},
-                'message_type': 'sms_ack',
-                'message_id': '444',
-                'transport': 'redis_testing_transport',
-                'metadata': {}
-                }
-            ))
-
-        message3 = Message(
+        message3 = self.mkmsg_out(
             message_id=446,
-            message="hello world",
+            content="hello world",
             to_addr="1111111111")
         sequence_num3 = self.esme.getSeq()
         response3 = SubmitSMResp(sequence_num3, "3rd_party_id_3",
                 command_status="ESME_RSUBMITFAIL")
-        self.transport.consume_message(message3)
+        self.transport._process_message(message3)
         self.esme.handleData(response3.get_bin())
-        self.assertTrue(payload_equal_except_timestamp(
-            self.transport.publisher.queue[2][0].payload,
-            {
-                'transport_message_id': '3rd_party_id_3',
-                'message_version': '20110907',
-                'message': '',
-                'transport_metadata': {},
-                'message_type': 'sms_ack',
-                'message_id': '446',
-                'transport': 'redis_testing_transport',
-                'metadata': {}
-                }
-            ))
-        self.assertEquals(self.transport.failure_publisher.queue.pop()[0],
-                Message(message={'id': '446'}, reason='ESME_RSUBMITFAIL'))
+        self.assertEqual([self.mkmsg_ack('446', '3rd_party_id_3')],
+                         self.get_dispatched_events()[2:])
 
-        message4 = Message(
+        self.assertEqual([self.mkmsg_fail({'id': '446'}, 'ESME_RSUBMITFAIL')],
+                         self.get_dispatched_failures())
+
+        message4 = self.mkmsg_out(
             message_id=447,
-            message="hello world",
+            content="hello world",
             to_addr="1111111111")
         sequence_num4 = self.esme.getSeq()
         response4 = SubmitSMResp(sequence_num4, "3rd_party_id_4",
                 command_status="ESME_RTHROTTLED")
-        self.transport.consume_message(message4)
+        self.transport._process_message(message4)
         self.esme.handleData(response4.get_bin())
-        self.assertTrue(payload_equal_except_timestamp(
-            self.transport.publisher.queue[3][0].payload,
-            {
-                'transport_message_id': '3rd_party_id_4',
-                'message_version': '20110907',
-                'message': '',
-                'transport_metadata': {},
-                'message_type': 'sms_ack',
-                'message_id': '447',
-                'transport': 'redis_testing_transport',
-                'metadata': {}
-                }
-            ))
+        self.assertEqual([self.mkmsg_ack('447', '3rd_party_id_4')],
+                         self.get_dispatched_events()[3:])
         self.assertTrue(self.transport.throttle_invoked_via_pdu)
 
-        self.transport.send_failure(
-                Message(
-                    id=555,
-                    message="hello world",
-                    to_msisdn="1111111111"),
-                "testing")
-        self.assertEquals(self.transport.failure_publisher.queue.pop()[0],
-                Message(message={"id": 555,
-                    "message": "hello world",
-                    "to_msisdn": "1111111111"},
-                    reason="testing"))
+        fail_msg = self.mkmsg_out(
+            message_id=555,
+            content="hello world",
+            to_addr="1111111111")
+        self.transport.send_failure(fail_msg, "testing")
+
+        self.assertEqual([self.mkmsg_fail(fail_msg.payload, "testing")],
+                         self.get_dispatched_failures()[1:])
 
         # Some error codes would occur on bind attempts
         bind_dispatch_methods = {
-            "ESME_ROK"              : self.transport.ok,
-            "ESME_RINVBNDSTS"       : self.transport.conn_tempfault,
-            "ESME_RALYBND"          : self.transport.conn_tempfault,
-
-            "ESME_RSYSERR"          : self.transport.conn_permfault,
-
-            "ESME_RBINDFAIL"        : self.transport.conn_permfault,
-            "ESME_RINVPASWD"        : self.transport.conn_permfault,
-            "ESME_RINVSYSID"        : self.transport.conn_permfault,
-
-            "ESME_RINVSERTYP"       : self.transport.conn_permfault,
-
+            "ESME_ROK": self.transport.ok,
+            "ESME_RINVBNDSTS": self.transport.conn_tempfault,
+            "ESME_RALYBND": self.transport.conn_tempfault,
+            "ESME_RSYSERR": self.transport.conn_permfault,
+            "ESME_RBINDFAIL": self.transport.conn_permfault,
+            "ESME_RINVPASWD": self.transport.conn_permfault,
+            "ESME_RINVSYSID": self.transport.conn_permfault,
+            "ESME_RINVSERTYP": self.transport.conn_permfault,
         }
 
         # Some error codes would occur post bind i.e. on submission attempts
         submit_dispatch_methods = {
-            "ESME_RINVMSGLEN"       : self.transport.mess_permfault,
-            "ESME_RINVCMDLEN"       : self.transport.mess_permfault,
-            "ESME_RINVCMDID"        : self.transport.mess_permfault,
+            "ESME_RINVMSGLEN": self.transport.mess_permfault,
+            "ESME_RINVCMDLEN": self.transport.mess_permfault,
+            "ESME_RINVCMDID": self.transport.mess_permfault,
 
-            "ESME_RINVPRTFLG"       : self.transport.mess_permfault,
-            "ESME_RINVREGDLVFLG"    : self.transport.mess_permfault,
+            "ESME_RINVPRTFLG": self.transport.mess_permfault,
+            "ESME_RINVREGDLVFLG": self.transport.mess_permfault,
 
-            "ESME_RINVSRCADR"       : self.transport.mess_permfault,
-            "ESME_RINVDSTADR"       : self.transport.mess_permfault,
-            "ESME_RINVMSGID"        : self.transport.mess_permfault,
+            "ESME_RINVSRCADR": self.transport.mess_permfault,
+            "ESME_RINVDSTADR": self.transport.mess_permfault,
+            "ESME_RINVMSGID": self.transport.mess_permfault,
 
-            "ESME_RCANCELFAIL"      : self.transport.mess_permfault,
-            "ESME_RREPLACEFAIL"     : self.transport.mess_permfault,
+            "ESME_RCANCELFAIL": self.transport.mess_permfault,
+            "ESME_RREPLACEFAIL": self.transport.mess_permfault,
 
-            "ESME_RMSGQFUL"         : self.transport.conn_throttle,
+            "ESME_RMSGQFUL": self.transport.conn_throttle,
 
-            "ESME_RINVNUMDESTS"     : self.transport.mess_permfault,
-            "ESME_RINVDLNAME"       : self.transport.mess_permfault,
-            "ESME_RINVDESTFLAG"     : self.transport.mess_permfault,
-            "ESME_RINVSUBREP"       : self.transport.mess_permfault,
-            "ESME_RINVESMCLASS"     : self.transport.mess_permfault,
-            "ESME_RCNTSUBDL"        : self.transport.mess_permfault,
+            "ESME_RINVNUMDESTS": self.transport.mess_permfault,
+            "ESME_RINVDLNAME": self.transport.mess_permfault,
+            "ESME_RINVDESTFLAG": self.transport.mess_permfault,
+            "ESME_RINVSUBREP": self.transport.mess_permfault,
+            "ESME_RINVESMCLASS": self.transport.mess_permfault,
+            "ESME_RCNTSUBDL": self.transport.mess_permfault,
 
-            "ESME_RSUBMITFAIL"      : self.transport.mess_tempfault,
+            "ESME_RSUBMITFAIL": self.transport.mess_tempfault,
 
-            "ESME_RINVSRCTON"       : self.transport.mess_permfault,
-            "ESME_RINVSRCNPI"       : self.transport.mess_permfault,
-            "ESME_RINVDSTTON"       : self.transport.mess_permfault,
-            "ESME_RINVDSTNPI"       : self.transport.mess_permfault,
-            "ESME_RINVSYSTYP"       : self.transport.conn_permfault,
-            "ESME_RINVREPFLAG"      : self.transport.mess_permfault,
+            "ESME_RINVSRCTON": self.transport.mess_permfault,
+            "ESME_RINVSRCNPI": self.transport.mess_permfault,
+            "ESME_RINVDSTTON": self.transport.mess_permfault,
+            "ESME_RINVDSTNPI": self.transport.mess_permfault,
+            "ESME_RINVSYSTYP": self.transport.conn_permfault,
+            "ESME_RINVREPFLAG": self.transport.mess_permfault,
 
-            "ESME_RINVNUMMSGS"      : self.transport.mess_tempfault,
+            "ESME_RINVNUMMSGS": self.transport.mess_tempfault,
 
-            "ESME_RTHROTTLED"       : self.transport.conn_throttle,
+            "ESME_RTHROTTLED": self.transport.conn_throttle,
 
-            "ESME_RINVSCHED"        : self.transport.mess_permfault,
-            "ESME_RINVEXPIRY"       : self.transport.mess_permfault,
-            "ESME_RINVDFTMSGID"     : self.transport.mess_permfault,
+            "ESME_RINVSCHED": self.transport.mess_permfault,
+            "ESME_RINVEXPIRY": self.transport.mess_permfault,
+            "ESME_RINVDFTMSGID": self.transport.mess_permfault,
 
-            "ESME_RX_T_APPN"        : self.transport.mess_tempfault,
+            "ESME_RX_T_APPN": self.transport.mess_tempfault,
 
-            "ESME_RX_P_APPN"        : self.transport.mess_permfault,
-            "ESME_RX_R_APPN"        : self.transport.mess_permfault,
-            "ESME_RQUERYFAIL"       : self.transport.mess_permfault,
-            "ESME_RINVOPTPARSTREAM" : self.transport.mess_permfault,
-            "ESME_ROPTPARNOTALLWD"  : self.transport.mess_permfault,
-            "ESME_RINVPARLEN"       : self.transport.mess_permfault,
-            "ESME_RMISSINGOPTPARAM" : self.transport.mess_permfault,
-            "ESME_RINVOPTPARAMVAL"  : self.transport.mess_permfault,
+            "ESME_RX_P_APPN": self.transport.mess_permfault,
+            "ESME_RX_R_APPN": self.transport.mess_permfault,
+            "ESME_RQUERYFAIL": self.transport.mess_permfault,
+            "ESME_RINVOPTPARSTREAM": self.transport.mess_permfault,
+            "ESME_ROPTPARNOTALLWD": self.transport.mess_permfault,
+            "ESME_RINVPARLEN": self.transport.mess_permfault,
+            "ESME_RMISSINGOPTPARAM": self.transport.mess_permfault,
+            "ESME_RINVOPTPARAMVAL": self.transport.mess_permfault,
 
-            "ESME_RDELIVERYFAILURE" : self.transport.mess_tempfault,
-            "ESME_RUNKNOWNERR"      : self.transport.mess_tempfault,
+            "ESME_RDELIVERYFAILURE": self.transport.mess_tempfault,
+            "ESME_RUNKNOWNERR": self.transport.mess_tempfault,
         }
 
         for code, method in bind_dispatch_methods.items():
@@ -652,56 +531,3 @@ class FakeRedisRespTestCase(TestCase):
             # check the dispatcher returns the correct transport method
             self.assertEquals(method,
                     self.esme.command_status_dispatch(response.get_obj()))
-
-
-class RedisRespTestCase(FakeRedisRespTestCase):
-
-    def setUp(self):
-        self.seq = [123456]
-        self.config = {
-                "system_id": "vumitest-vumitest-vumitest",
-                "host": "host",
-                "port": "port",
-                "smpp_increment": 10,
-                "smpp_offset": 6,
-                "TRANSPORT_NAME": "redis_testing_transport",
-                }
-        self.vumi_options = {
-                "vhost": "develop",
-                }
-
-        # hack a lot of transport setup
-        self.esme = RedisTestEsmeTransceiver(
-                self.seq, self.config, self.vumi_options)
-        self.esme.state = 'BOUND_TRX'
-        self.transport = RedisTestSmppTransport(None, self.config)
-        self.transport.esme_client = self.esme
-        self.transport.smpp_offset = self.config['smpp_offset']
-        self.transport.transport_name = self.config.get('TRANSPORT_NAME',
-                'fallback')
-        self.transport.r_server = redis.Redis("localhost", db=7)
-        self.transport.r_prefix = "%(system_id)s@%(host)s:%(port)s" % (
-                self.config)
-        self.transport.publisher = TestPublisher()
-        self.transport.failure_publisher = TestPublisher()
-        self.esme.setSubmitSMRespCallback(self.transport.submit_sm_resp)
-
-        # set error handlers
-        self.esme.update_error_handlers({
-            "ok": self.transport.ok,
-            "mess_permfault": self.transport.mess_permfault,
-            "mess_tempfault": self.transport.mess_tempfault,
-            "conn_permfault": self.transport.conn_permfault,
-            "conn_tempfault": self.transport.conn_tempfault,
-            "conn_throttle": self.transport.conn_throttle,
-            })
-
-    def tearDown(self):
-        # still need to clean out all redis keys which starting with:
-        # "vumitest-vumitest-vumitest"
-        keys = self.transport.r_server.keys(self.config["system_id"] + "*")
-        if len(keys) and type(keys) is str:
-            keys = keys.split(' ')
-        if len(keys):
-            for k in keys:
-                self.transport.r_server.delete(k)

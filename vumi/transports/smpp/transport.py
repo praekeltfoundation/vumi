@@ -1,53 +1,57 @@
-# -*- test-case-name: vumi.workers.smpp.test.test_smpp_transport -*-
+# -*- test-case-name: vumi.transports.smpp.test_smpp -*-
 
+from datetime import datetime
+
+import redis
 from twisted.python import log
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet import reactor
 
-from vumi.service import Worker
-from vumi.message import Message, \
-        TransportSMS, TransportSMSAck, TransportSMSDeliveryReport
-from vumi.workers.smpp.client import EsmeTransceiverFactory
+# from vumi.service import Worker
 from vumi.utils import get_operator_number, get_deploy_int
+from vumi.transports.base import Transport
+from vumi.transports.smpp.client import EsmeTransceiverFactory
+from vumi.message import Message
 
-from datetime import datetime
-import redis
 
-
-class SmppTransport(Worker):
+class SmppTransport(Transport):
     """
     The SmppTransport
     """
 
-    def startWorker(self):
+    start_consumer = False
+
+    def setup_transport(self):
         log.msg("Starting the SmppTransport with %s" % self.config)
 
         # TODO: move this to a config file
         dbindex = get_deploy_int(self._amqp_client.vhost)
         self.smpp_offset = int(self.config['smpp_offset'])
-        self.transport_name = self.config.get('TRANSPORT_NAME', 'fallback')
 
         # Connect to Redis
-        self.r_server = redis.Redis("localhost", db=dbindex)
+        if not hasattr(self, 'r_server'):
+            # Only set up redis if we don't have a test stub already
+            self.r_server = redis.Redis("localhost", db=dbindex)
         self.r_prefix = "%(system_id)s@%(host)s:%(port)s" % self.config
         log.msg("Connected to Redis, prefix: %s" % self.r_prefix)
         last_sequence_number = int(self.r_get_last_sequence()
                                    or self.smpp_offset)
         log.msg("Last sequence_number: %s" % last_sequence_number)
 
-        # start the Smpp transport
-        factory = EsmeTransceiverFactory(self.config,
-                                            self._amqp_client.vumi_options)
-        factory.loadDefaults(self.config)
-        factory.setLastSequenceNumber(last_sequence_number)
-        factory.setConnectCallback(self.esme_connected)
-        factory.setDisconnectCallback(self.esme_disconnected)
-        factory.setSubmitSMRespCallback(self.submit_sm_resp)
-        factory.setDeliveryReportCallback(self.delivery_report)
-        factory.setDeliverSMCallback(self.deliver_sm)
-        factory.setSendFailureCallback(self.send_failure)
-        log.msg(factory.defaults)
-        reactor.connectTCP(
+        if not hasattr(self, 'esme_client'):
+            # start the Smpp transport (if we don't have one)
+            factory = EsmeTransceiverFactory(self.config,
+                                             self._amqp_client.vumi_options)
+            factory.loadDefaults(self.config)
+            factory.setLastSequenceNumber(last_sequence_number)
+            factory.setConnectCallback(self.esme_connected)
+            factory.setDisconnectCallback(self.esme_disconnected)
+            factory.setSubmitSMRespCallback(self.submit_sm_resp)
+            factory.setDeliveryReportCallback(self.delivery_report)
+            factory.setDeliverSMCallback(self.deliver_sm)
+            factory.setSendFailureCallback(self.send_failure)
+            log.msg(factory.defaults)
+            reactor.connectTCP(
                 factory.defaults['host'],
                 factory.defaults['port'],
                 factory)
@@ -61,18 +65,10 @@ class SmppTransport(Worker):
             "conn_throttle": self.conn_throttle,
             })
 
-        # Start the publisher
-        self.publisher = yield self.publish_to('smpp.fallback')
-
-        # Start the failure publisher
-        rkey = 'sms.outbound.%s.failures' % self.transport_name
-        self.failure_publisher = yield self.publish_to(rkey)
-
         # Start the consumer
-        yield self.consume('sms.outbound.%s' % self.transport_name,
-                self.consume_message)
+        return self._setup_message_consumer()
 
-    def consume_message(self, message):
+    def handle_outbound_message(self, message):
         log.msg("Consumed outgoing message", message)
         log.msg("Unacknowledged message count: %s" % (
             self.esme_client.get_unacked_count()))
@@ -104,22 +100,16 @@ class SmppTransport(Worker):
             self.r_prefix, self.smpp_offset),
                 sequence_number)
 
-    @inlineCallbacks
     def submit_sm_resp(self, *args, **kwargs):
         transport_msg_id = kwargs['message_id']
         sent_sms_id = self.r_get_id_for_sequence(kwargs['sequence_number'])
         self.r_delete_for_sequence(kwargs['sequence_number'])
         log.msg("Mapping transport_msg_id=%s to sent_sms_id=%s" % (
             transport_msg_id, sent_sms_id))
-        routing_key = 'sms.ack.%s' % (self.transport_name)
-        message = TransportSMSAck(
-            transport=self.transport_name,
-            message_id=sent_sms_id,
-            transport_message_id=transport_msg_id)
-        log.msg("PUBLISHING ACK: %s TO: %s" % (message, routing_key))
-        yield self.publisher.publish_message(
-                message,
-                routing_key=routing_key)
+        log.msg("PUBLISHING ACK: (%s -> %s)" % (sent_sms_id, transport_msg_id))
+        return self.publish_ack(
+            user_message_id=sent_sms_id,
+            sent_message_id=transport_msg_id)
 
     def delivery_status(self, state):
         if state in [
@@ -132,48 +122,39 @@ class SmppTransport(Worker):
             return "failed"
         return "pending"
 
-    @inlineCallbacks
     def delivery_report(self, *args, **kwargs):
         transport_metadata = {
                 "message": kwargs['delivery_report'],
                 "date": datetime.strptime(
                     kwargs['delivery_report']['done_date'], "%y%m%d%H%M%S")
                 }
-        routing_key = 'sms.receipt.%s' % (self.transport_name)
-        message = TransportSMSDeliveryReport(
-                transport=self.transport_name,
-                transport_message_id=kwargs['delivery_report']['id'],
-                delivery_status=self.delivery_status(
-                    kwargs['delivery_report']['stat']),
-                transport_metadata=transport_metadata)
-        log.msg("PUBLISHING DELIV REPORT: %s TO: %s" % (message, routing_key))
-        yield self.publisher.publish_message(
-                message,
-                routing_key=routing_key)
+        delivery_status = self.delivery_status(
+            kwargs['delivery_report']['stat']),
+        message_id = kwargs['delivery_report']['id'],
+        log.msg("PUBLISHING DELIV REPORT: %s %s" % (message_id,
+                                                    delivery_status))
+        return self.publish_delivery_report(
+            user_message_id=message_id,
+            delivery_status=delivery_status,
+            transport_metadata=transport_metadata)
 
-    @inlineCallbacks
     def deliver_sm(self, *args, **kwargs):
-        routing_key = 'sms.inbound.%s' % (self.transport_name)
-        message = TransportSMS(
-                transport=self.transport_name,
+        message = dict(
                 message_id=kwargs.get('message_id'),
-                transport_message_id=kwargs.get('message_id'),
                 to_addr=kwargs.get('destination_addr'),
                 from_addr=kwargs.get('source_addr'),
-                message=kwargs.get('short_message'))
-        log.msg("PUBLISHING INBOUND: %s TO: %s" % (message, routing_key))
-        yield self.publisher.publish_message(
-                message,
-                routing_key=routing_key)
+                content=kwargs.get('short_message'))
+        log.msg("PUBLISHING INBOUND: %s" % (message,))
+        return self.publish_message(**message)
 
     def send_smpp(self, message):
         log.msg("Sending SMPP message: %s" % (message))
         # first do a lookup in our YAML to see if we've got a source_addr
         # defined for the given MT number, if not, trust the from_addr
         # in the message
-        to_addr = message.payload.get('to_addr')
-        from_addr = message.payload.get('from_addr')
-        text = message.payload['message']
+        to_addr = message['to_addr']
+        from_addr = message['from_addr']
+        text = message['content']
         route = get_operator_number(to_addr,
                 self.config.get('COUNTRY_CODE', ''),
                 self.config.get('OPERATOR_PREFIX', {}),
@@ -187,20 +168,19 @@ class SmppTransport(Worker):
 
     def stopWorker(self):
         log.msg("Stopping the SMPPTransport")
+        return super(SmppTransport, self).stopWorker()
 
     def send_failure(self, message, reason=None):
         """Send a failure report."""
         log.msg("Failed to send: %s reason: %s" % (message, reason))
-        # TODO new message here
-        self.failure_publisher.publish_message(Message(
-                message=message.payload, reason=reason), require_bind=False)
-        #TODO get rid of that require_bind=False
+        return super(SmppTransport, self).send_failure(message, reason)
 
     def mess_tempfault(self, *args, **kwargs):
         pdu = kwargs.get('pdu')
         sequence_number = pdu['header']['sequence_number']
         id = self.r_get_id_for_sequence(sequence_number)
         reason = pdu['header']['command_status']
+        # TODO: Get real message here.
         self.send_failure(Message(id=id), reason)
 
     def conn_throttle(self, *args, **kwargs):

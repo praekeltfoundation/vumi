@@ -1,15 +1,16 @@
-from twisted.python import log
-from twisted.internet.defer import inlineCallbacks
-
-from vumi.service import Worker, Consumer, Publisher
-from vumi.message import Message, VUMI_DATE_FORMAT, TransportSMS
-from vumi.webapp.api import utils
-from vumi.webapp.api.models import Keyword, SentSMS, Transport
+# -*- test-case-name: vumi.transports.smpp.test_smpp -*-
 
 import json
 from datetime import datetime
 
+from twisted.python import log
+from twisted.internet.defer import inlineCallbacks
+
+from vumi.service import Worker, Consumer, Publisher
+from vumi.webapp.api import utils
+from vumi.webapp.api.models import Keyword, SentSMS, Transport
 from vumi.webapp.api import models
+from vumi.message import TransportUserMessage, VUMI_DATE_FORMAT
 
 
 class SMSKeywordConsumer(Consumer):
@@ -21,17 +22,15 @@ class SMSKeywordConsumer(Consumer):
     routing_key = ""  # overwritten by subclass
 
     def consume_message(self, message):
-        dictionary = message.payload
-        message = dictionary.get('short_message')
-        head = message.split(' ')[0]
+        head = message['content'].split(' ')[0]
         try:
             keyword = Keyword.objects.get(keyword=head.lower())
             user = keyword.user
             received_sms = models.ReceivedSMS()
             received_sms.user = user
-            received_sms.to_msisdn = dictionary.get('destination_addr')
-            received_sms.from_msisdn = dictionary.get('source_addr')
-            received_sms.message = dictionary.get('short_message')
+            received_sms.to_msisdn = message['to_addr']
+            received_sms.from_msisdn = message['from_addr']
+            received_sms.message = message['content']
             # FIXME: this is hacky
             received_sms.transport_name = self.queue_name.split('.')[-2]
             # FIXME: EsmeTransceiver doesn't publish these over JSON / AMQP
@@ -51,11 +50,9 @@ class SMSKeywordConsumer(Consumer):
                     log.msg('URL: %s' % urlcallback.url)
                     params = [
                             ("callback_name", "sms_received"),
-                            ("to_msisdn", str(dictionary.get(
-                                'destination_addr'))),
-                            ("from_msisdn", str(dictionary.get(
-                                'source_addr'))),
-                            ("message", str(dictionary.get('short_message')))
+                            ("to_msisdn", message['to_addr']),
+                            ("from_msisdn", message['from_addr']),
+                            ("message", message['content']),
                             ]
                     url, resp = utils.callback(url, params)
                     log.msg('RESP: %s' % repr(resp))
@@ -64,7 +61,7 @@ class SMSKeywordConsumer(Consumer):
         except Keyword.DoesNotExist:
             log.msg("Couldn't find keyword for message: %s" % message)
         log.msg("DELIVER SM %s consumed by %s" % (
-            json.dumps(dictionary), self.__class__.__name__))
+            message, self.__class__.__name__))
         return True
 
 
@@ -112,21 +109,20 @@ class SMSReceiptConsumer(Consumer):
                 transport_msg_id=message_id)
 
     def consume_message(self, message):
-        dictionary = message.payload
         log.msg("Consuming message:", message)
-        delivery_status = dictionary['delivery_status']
-        transport = dictionary['transport']
-        timestamp = dictionary['timestamp']
-        transport_message_id = dictionary['transport_message_id']
+        delivery_status = message['delivery_status']
+        transport = message['transport_name']
+        timestamp = message['timestamp']
+        message_id = message['user_message_id']
         try:
-            sent_sms = self.find_sent_sms(transport, transport_message_id)
-            log.msg('Processing receipt for', sent_sms, dictionary)
+            sent_sms = self.find_sent_sms(transport, message_id)
+            log.msg('Processing receipt for', sent_sms, message)
 
             if sent_sms.transport_status == delivery_status:
-                log.msg("Received duplicate receipt for", sent_sms, dictionary)
+                log.msg("Received duplicate receipt for", sent_sms, message)
             else:
                 sent_sms.transport_status = delivery_status
-                sent_sms.transport_msg_id = transport_message_id
+                sent_sms.transport_msg_id = message_id
                 sent_sms.delivered_at = timestamp
                 sent_sms.save()
                 user = sent_sms.user
@@ -159,7 +155,7 @@ class SMSReceiptConsumer(Consumer):
         except Exception, e:
             log.err()
         log.msg("RECEIPT SM %s consumed by %s" % (
-            repr(dictionary), self.__class__.__name__))
+            message, self.__class__.__name__))
 
 
 def dynamically_create_receipt_consumer(name, **kwargs):
@@ -306,15 +302,17 @@ class SMSBatchConsumer(Consumer):
         if kwargs:
             pk = kwargs.get('pk')
             for o in models.SentSMS.objects.filter(batch=pk):
-                message = TransportSMS(
-                        transport=o.transport_name,
-                        from_addr=o.from_msisdn,
-                        to_addr=o.to_msisdn,
-                        message=o.message,
-                        message_id=o.id
-                        )
+                message = TransportUserMessage(
+                    transport_type='sms',
+                    transport_metadata={},
+                    transport_name=o.transport_name,
+                    from_addr=o.from_msisdn,
+                    to_addr=o.to_msisdn,
+                    content=o.message,
+                    message_id=o.id,
+                    )
                 self.publisher.publish_message(message,
-                        routing_key='sms.outbound.%s' % (
+                        routing_key='%s.outbound' % (
                             o.transport_name.lower()))
 
 
