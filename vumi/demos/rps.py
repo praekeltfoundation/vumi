@@ -1,10 +1,9 @@
-# -*- test-case-name: vumi.demos.tests.test_hangman -*-
+# -*- test-case-name: vumi.demos.tests.test_rps -*-
 
 from twisted.internet.defer import inlineCallbacks
 from twisted.python import log
 
 from vumi.application import ApplicationWorker
-from vumi.utils import safe_routing_key
 
 
 class MultiPlayerGameWorker(ApplicationWorker):
@@ -15,12 +14,7 @@ class MultiPlayerGameWorker(ApplicationWorker):
         self.games = {}
         self.open_game = None
         self.game_setup()
-        self.publisher = yield self.publish_to(
-            'ussd.outbound.%(transport_name)s' % self.config)
-        self.consumer = yield self.consume('ussd.inbound.%s.%s' % (
-            self.config['transport_name'],
-            safe_routing_key(self.config['ussd_code']),
-        ), self.consume_message)
+        yield super(MultiPlayerGameWorker, self).startWorker()
 
     def new_session(self, data):
         log.msg("New session:", data)
