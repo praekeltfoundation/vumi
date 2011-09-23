@@ -1,5 +1,5 @@
 from twisted.trial.unittest import TestCase
-from vumi.campaigns.wikipedia import OpenSearch, pretty_print_results
+from vumi.demos.wikipedia import OpenSearch, pretty_print_results
 
 
 class WikipediaTestCase(TestCase):
