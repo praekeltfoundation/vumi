@@ -9,6 +9,8 @@ Transports use the following routing key convention:
   (from vumi applications).
 * `<transport_name>.event` for sending message-related events
   (e.g. acknowledgements, delivery reports) to vumi applications.
+* `<transport_name>.failures` for sending failed messages to failure
+  workers.
 
 Exchanges are `direct` unless otherwise specified.
 
