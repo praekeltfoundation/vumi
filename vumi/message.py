@@ -136,6 +136,15 @@ class TransportUserMessage(TransportMessage):
     MESSAGE_TYPE = 'user_message'
 
     # session event constants
+    #
+    # SESSION_NONE, SESSION_NEW, SESSION_RESUME, and SESSION_CLOSE
+    # may be sent from the transport to a worker. SESSION_NONE indicates
+    # there is no relevant session for this message.
+    #
+    # SESSION_NONE and SESSION_CLOSE may be sent from the worker to
+    # the transport. SESSION_NONE indicates any existing session
+    # should be continued. SESSION_CLOSE indicates that any existing
+    # session should be terminated after sending the message.
     SESSION_NONE, SESSION_NEW, SESSION_RESUME, SESSION_CLOSE = (
         None, 'new', 'resume', 'close')
 

@@ -2,7 +2,7 @@ from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
 from vumi.tests.utils import get_stubbed_worker
 
-from vumi.application.base import ApplicationWorker
+from vumi.application.base import ApplicationWorker, SESSION_NEW, SESSION_CLOSE
 from vumi.message import TransportUserMessage, TransportEvent
 
 
@@ -23,6 +23,12 @@ class DummyApplicationWorker(ApplicationWorker):
 
     def consume_user_message(self, message):
         self.record.append(('user_message', message))
+
+    def new_session(self, message):
+        self.record.append(('new_session', message))
+
+    def close_session(self, message):
+        self.record.append(('close_session', message))
 
 
 class FakeUserMessage(TransportUserMessage):
@@ -91,9 +97,15 @@ class TestApplicationWorker(TestCase):
 
     @inlineCallbacks
     def test_user_message_dispatch(self):
-        message = FakeUserMessage()
-        yield self.send(message)
-        self.assertEqual(self.worker.record, [('user_message', message)])
+        messages = [
+            ('user_message', FakeUserMessage()),
+            ('new_session', FakeUserMessage(session_event=SESSION_NEW)),
+            ('close_session', FakeUserMessage(session_event=SESSION_CLOSE)),
+            ]
+        for name, message in messages:
+            yield self.send(message)
+            self.assertEqual(self.worker.record, [(name, message)])
+            del self.worker.record[:]
 
     def test_reply_to(self):
         msg = FakeUserMessage()
@@ -122,3 +134,5 @@ class TestApplicationWorker(TestCase):
         worker.consume_delivery_report(dr)
         worker.consume_unknown_event(FakeUserMessage())
         worker.consume_user_message(FakeUserMessage())
+        worker.new_session(FakeUserMessage())
+        worker.close_session(FakeUserMessage())
