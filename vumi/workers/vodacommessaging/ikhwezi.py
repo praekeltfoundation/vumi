@@ -4,6 +4,7 @@ from twisted.internet.defer import inlineCallbacks
 from twisted.python import log
 from vumi.message import Message
 from vumi.service import Worker
+from vumi.workers.vodacommessaging.utils import VodacomMessagingResponse
 
 
 TRANSLATIONS = '''
@@ -158,10 +159,12 @@ question10:
 
 class IkhweziQuiz():
 
-    def __init__(self, quiz, msisdn, datastore=None):
+    def __init__(self, config, quiz, translations, datastore, msisdn):
+        self.config = config
         self.quiz = quiz
-        msisdn = str(msisdn)
+        self.translations = translations
         self.datastore = datastore
+        msisdn = str(msisdn)
         self.retrieve_entrant(msisdn) or self.new_entrant(msisdn)
 
     def lang(self, lang):
@@ -181,12 +184,14 @@ class IkhweziQuiz():
         answers = self.datastore.get(msisdn)
         if answers:
             self.answers = answers
+            self.language = self.lang(answers['demographic1'])
             return True
         return False
 
     def new_entrant(self, msisdn):
+        self.language = "English"
         self.answers = {
-                'msisdn': None,
+                'msisdn': str(msisdn),
                 'm_timestamp': None,
                 'question1': None,
                 'question2': None,
@@ -235,33 +240,57 @@ class IkhweziQuiz():
                 d_ans.append(key)
         return {'q_un': q_un, 'q_ans': q_ans, 'd_un': d_un, 'd_ans': d_ans}
 
-    def select_contextual_question(self):
+    def next_context_and_question(self):
         context = None
         question = None
-        demographic1_answer = self.answers.get('demographic1')
-        if not demographic1_answer:
+        if not self.answers.get('demographic1'):
             context = 'demographic1'
             question = self.quiz.get(context)
         else:
             ans_lists = self.answered_lists()
-            print ans_lists
+            #print ans_lists
             if len(ans_lists['d_ans']) > len(ans_lists['q_ans']):
                 context = random.choice(ans_lists['q_un'])
             else:
                 context = random.choice(ans_lists['d_un'])
             question = self.quiz.get(context)
-        print context, question
+        #print context, question
         return context, question
 
     def answer_contextual_question(self, context, answer):
         answer = int(answer)
-        if context == 'demographic1':
-            demographic1_answer = answer
-        else:
-            demographic1_answer = self.answers.get('demographic1')
         question = self.quiz.get(context)
         self.answers[context] = answer
-        return question['options'][answer].get('reply')
+        #import yaml
+        #print yaml.dump({self.answers['msisdn']: self.answers.items()})
+        reply = question['options'][answer].get('reply')
+        return reply
+
+    def formulate_response(self, context, answer):
+        print context, answer
+        reply = None
+        if context and answer:
+            reply = self.answer_contextual_question(context, answer)
+        if reply:
+            context = 'continue'
+            question = self.quiz.get(context)
+            vmr = VodacomMessagingResponse(self.config)
+            vmr.set_context(context)
+            vmr.set_headertext(reply)
+            for key, val in question['options'].items():
+                vmr.add_option(val['text'], key)
+            return vmr
+        else:
+            context, question = self.next_context_and_question()
+            vmr = VodacomMessagingResponse(self.config)
+            vmr.set_context(context)
+            vmr.set_headertext(question['headertext'])
+            for key, val in question['options'].items():
+                vmr.add_option(val['text'], key)
+            return vmr
+
+
+
 
 
 class IkhweziQuizWorker(Worker):

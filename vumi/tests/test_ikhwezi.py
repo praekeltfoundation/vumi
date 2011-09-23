@@ -1,37 +1,41 @@
 import yaml
+import random
 
 from twisted.python import log
 from twisted.trial.unittest import TestCase
 from vumi.workers.vodacommessaging.utils import VodacomMessagingResponse
 from vumi.workers.vodacommessaging.ikhwezi import (
-        QUIZ, IkhweziQuiz, IkhweziQuizWorker)
+        TRANSLATIONS, QUIZ, IkhweziQuiz, IkhweziQuizWorker)
 
 quiz = yaml.load(QUIZ)
+translations = yaml.load(TRANSLATIONS)
+
 config = {
         'web_host': 'vumi.p.org',
         'web_path': '/api/v1/ussd/vmes/'}
+
 ds = {}
-ik = IkhweziQuiz(quiz, '111', ds)
-ik = IkhweziQuiz(quiz, '111', ds)
-ik = IkhweziQuiz(quiz, '211', ds)
 
-context, question = ik.select_contextual_question()
-vmr = VodacomMessagingResponse(config)
-vmr.set_context(context)
-vmr.set_headertext(question['headertext'])
-for key, val in question['options'].items():
-    vmr.add_option(val['text'], key)
-print vmr
+ik = IkhweziQuiz(config, quiz, translations, ds, '08212345670')
 
-ik = IkhweziQuiz(quiz, '211', ds)
-print ik.answer_contextual_question("demographic1", "1")
+print "\n\n################################################\n\n"
+def respond(context, answer):
+    resp = ik.formulate_response(context, answer)
+    print "\n", resp
+    respond(resp.context, random.choice(resp.option_list)['order'])
 
-ik = IkhweziQuiz(quiz, '211', ds)
-print ik.answer_contextual_question("question1", "1")
+respond(None, None)
 
-for msisdn,ans in ds.items():
-    print msisdn, ans
+#print ik.formulate_response(None, None)
+#print ik.formulate_response("demographic1", "1")
+#print ik.formulate_response("question1", "1")
+#print ik.formulate_response("continue", "1")
 
-#print yaml.dump(IkhweziQuiz.quiz)
-#print yaml.dump(IkhweziQuiz.language)
-#print yaml.dump(ik.quiz)
+
+#resp = ik.formulate_response(None, None)
+#print resp.context
+#print random.choice(resp.option_list)['order']
+
+#for msisdn,ans in ds.items():
+    #print msisdn, ans
+
