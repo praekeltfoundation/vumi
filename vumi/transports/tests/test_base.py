@@ -5,6 +5,7 @@ from vumi.tests.fake_amqp import FakeAMQPBroker
 from vumi.tests.utils import get_stubbed_worker, UTCNearNow, RegexMatcher
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.transports.base import Transport
+from vumi.transports.failures import FailureMessage
 
 
 class TransportTestCase(unittest.TestCase):
@@ -25,6 +26,9 @@ class TransportTestCase(unittest.TestCase):
     def tearDown(self):
         for worker in self._workers:
             worker.stopWorker()
+
+    def rkey(self, name):
+        return "%s.%s" % (self.transport_name, name)
 
     @inlineCallbacks
     def get_transport(self, config, cls=None, start=True):
@@ -109,6 +113,7 @@ class TransportTestCase(unittest.TestCase):
             )
 
     def mkmsg_out(self, content='hello world', message_id='1',
+                  to_addr='+41791234567', from_addr='9292',
                   in_reply_to=None, transport_type=None,
                   transport_metadata=None, stubs=False):
         if transport_type is None:
@@ -116,8 +121,8 @@ class TransportTestCase(unittest.TestCase):
         if transport_metadata is None:
             transport_metadata = {}
         params = dict(
-            to_addr='+41791234567',
-            from_addr='9292',
+            to_addr=to_addr,
+            from_addr=from_addr,
             message_id=message_id,
             transport_name=self.transport_name,
             transport_type=transport_type,
@@ -128,6 +133,22 @@ class TransportTestCase(unittest.TestCase):
         if stubs:
             params['timestamp'] = UTCNearNow()
         return TransportUserMessage(**params)
+
+    def mkmsg_fail(self, message, reason):
+        return FailureMessage(
+            timestamp=UTCNearNow(),
+            message=message,
+            reason=reason,
+            )
+
+    def get_dispatched_events(self):
+        return self._amqp.get_messages('vumi', self.rkey('event'))
+
+    def get_dispatched_messages(self):
+        return self._amqp.get_messages('vumi', self.rkey('inbound'))
+
+    def get_dispatched_failures(self):
+        return self._amqp.get_messages('vumi', self.rkey('failures'))
 
 
 class BaseTransportTestCase(TransportTestCase):
