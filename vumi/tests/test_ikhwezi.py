@@ -7,7 +7,9 @@ from vumi.workers.vodacommessaging.utils import VodacomMessagingResponse
 from vumi.workers.vodacommessaging.ikhwezi import (
         TRANSLATIONS, QUIZ, IkhweziQuiz, IkhweziQuizWorker)
 
+
 quiz = yaml.load(QUIZ)
+
 translations = yaml.load(TRANSLATIONS)
 
 config = {
@@ -16,33 +18,50 @@ config = {
 
 ds = {}
 
-ik = IkhweziQuiz(config, quiz, translations, ds, '08212345670')
+max_cycles = [90]
 
-print "\n\n################################################\n\n"
+xml_samples = {}
+
+print ""
+print "################################################"
+print "################################################"
+print "################################################"
+print "################################################"
+print ""
+
 def respond(context, answer):
+    print max_cycles
+    print context, "--> ",  answer
     ik = IkhweziQuiz(config, quiz, translations, ds, '08212345670')
     resp = ik.formulate_response(context, answer)
-    context = resp.context
-    answer = random.choice(resp.option_list)['order']
-    if context == "demographic1":
-        answer = 1
-    if context == "continue":
-        answer = 1
     print "\n", resp
-    respond(context, answer)
+    xml_samples[str(resp)] = True
+    context = resp.context
+    answer = None
+    if len(resp.option_list):
+        answer = str(random.choice(resp.option_list)['order'])
+        if context == "demographic1":
+            answer = 1
+        if context == "continue":
+            answer = random.choice([1, 1, 2])
+        max_cycles[0] -= 1
+        if max_cycles[0]:
+                respond(context, answer)
+
 
 respond(None, None)
 
-#print ik.formulate_response(None, None)
-#print ik.formulate_response("demographic1", "1")
-#print ik.formulate_response("question1", "1")
-#print ik.formulate_response("continue", "1")
+ik = IkhweziQuiz(config, quiz, translations, ds, '08212345670')
 
+print ""
+print "################################################"
+print "################################################"
+print "################################################"
+print "################################################"
+print ""
 
-#resp = ik.formulate_response(None, None)
-#print resp.context
-#print random.choice(resp.option_list)['order']
+print ''
+for k, v in ik.answers.items():
+    print "%s: %s" % (k, v)
 
-#for msisdn,ans in ds.items():
-    #print msisdn, ans
 
