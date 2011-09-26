@@ -1,3 +1,5 @@
+# -*- test-case-name: vumi.transports.integrat.tests.test_utils -*-
+
 from  xml.etree import ElementTree
 
 

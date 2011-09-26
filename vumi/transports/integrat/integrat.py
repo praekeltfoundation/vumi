@@ -1,3 +1,5 @@
+# -*- test-case-name: vumi.transports.integrat.tests.test_integrat -*-
+
 from twisted.internet.defer import inlineCallbacks
 from twisted.web import http
 from twisted.web.resource import Resource
