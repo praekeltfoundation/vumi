@@ -45,6 +45,7 @@ def respond(context, answer):
         if context == "continue":
             answer = random.choice([1, 1, 2])
         max_cycles[0] -= 1
+        answer = random.choice([answer, answer, answer, None])
         if max_cycles[0]:
                 respond(context, answer)
 
@@ -61,7 +62,7 @@ print "################################################"
 print ""
 
 print ''
-for k, v in ik.answers.items():
+for k, v in ik.data.items():
     print "%s: %s" % (k, v)
 
 

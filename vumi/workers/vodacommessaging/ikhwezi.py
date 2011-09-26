@@ -194,6 +194,13 @@ class IkhweziQuiz():
         msisdn = str(msisdn)
         self.retrieve_entrant(msisdn) or self.new_entrant(msisdn)
 
+    def ds_set(self):
+        self.datastore[self.data['msisdn']] = self.data
+
+    def ds_get(self, msisdn):
+        data = self.datastore.get(msisdn)
+        return data
+
     def lang(self, lang):
         langs = {
                 "English": "1",
@@ -208,16 +215,16 @@ class IkhweziQuiz():
         return langs.get(str(lang))
 
     def retrieve_entrant(self, msisdn):
-        answers = self.datastore.get(msisdn)
-        if answers:
-            self.answers = answers
-            self.language = self.lang(answers['demographic1'])
+        data = self.ds_get(msisdn)
+        if data:
+            self.data = data
+            self.language = self.lang(data['demographic1'])
             return True
         return False
 
     def new_entrant(self, msisdn):
         self.language = "English"
-        self.answers = {
+        self.data = {
                 'msisdn': str(msisdn),
                 'm_timestamp': None,
                 'question1': None,
@@ -248,7 +255,7 @@ class IkhweziQuiz():
                 'd2_timestamp': None,
                 'd3_timestamp': None,
                 'd4_timestamp': None}
-        self.datastore[msisdn] = self.answers
+        self.ds_set()
         return True
 
     def answered_lists(self):
@@ -256,7 +263,7 @@ class IkhweziQuiz():
         q_ans = []
         d_un = []
         d_ans = []
-        for key, val in self.answers.items():
+        for key, val in self.data.items():
             if key.startswith('question') and val == None:
                 q_un.append(key)
             if key.startswith('question') and val != None:
@@ -270,16 +277,19 @@ class IkhweziQuiz():
     def exit_suffix(self, context=None, answer=None):
         ans_lists = self.answered_lists()
         if len(ans_lists['q_un']) == 0 or (
-                context == 'continue' and int(answer) == 2):
+                context == 'continue' and answer and int(answer) == 2):
             context = 'exit'
             text = self.quiz.get(context).get('headertext')
             return text
         return False
 
-    def next_context_and_question(self):
+    def next_context_and_question(self, repeat_context=None):
         context = None
         question = None
-        if not self.answers.get('demographic1'):
+        if repeat_context:
+            context = repeat_context
+            question = self.quiz.get(context)
+        elif not self.data.get('demographic1'):
             context = 'demographic1'
             question = self.quiz.get(context)
         else:
@@ -299,17 +309,29 @@ class IkhweziQuiz():
     def answer_contextual_question(self, context, answer):
         answer = int(answer)
         question = self.quiz.get(context)
-        if context in self.answers.keys():
-            self.answers[context] = answer
+        if context in self.data.keys():
+            self.data[context] = answer
         reply = question['options'][answer].get('reply')
         return reply
 
     def formulate_response(self, context, answer):
         reply = None
+        repeat_context = None
 
         if context and answer:
             reply = self.answer_contextual_question(context, answer)
         exit = self.exit_suffix(context, answer)
+
+        if context and not answer:  # we couldn't handle the response
+            if context.startswith('demographic') \
+                    or context.startswith('question'):
+                # repeat question
+                repeat_context = context
+            elif context == 'continue':
+                # default to keep going on continue questions
+                exit = self.exit_suffix("continue", 1)
+            else:
+                exit = self.exit_suffix("continue", 2)
 
         if exit:
             context = 'exit'
@@ -330,7 +352,7 @@ class IkhweziQuiz():
             return vmr
 
         else:
-            context, question = self.next_context_and_question()
+            context, question = self.next_context_and_question(repeat_context)
             vmr = VodacomMessagingResponse(self.config)
             vmr.set_context(context)
             vmr.set_headertext(question['headertext'])
