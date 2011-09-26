@@ -13,6 +13,7 @@ hxg = HigateXMLParser()
 
 
 class IntegratHttpResource(Resource):
+    isLeaf = True
 
     # map events to session event types
     EVENT_TYPE_MAP = {
@@ -27,13 +28,19 @@ class IntegratHttpResource(Resource):
     EVENTS_TO_SKIP = set(['new'])
 
     def __init__(self, publish_message):
-        self.publish_message
+        self.publish_message = publish_message
 
     def render(self, request):
         request.setResponseCode(http.OK)
         request.setHeader('Content-Type', 'text/plain')
         hxg_msg = hxg.parse(request.content.read())
+
+        if hxg_msg.get('Type') != 'OnUSSEvent':
+            # TODO: add support for non-USSD messages
+            return ''
+
         text = hxg_msg.get('USSText', '').strip()
+
         if hxg_msg['EventType'] == 'Request':
             if text == 'REQ':
                 session_event = TransportUserMessage.SESSION_NEW
@@ -46,12 +53,15 @@ class IntegratHttpResource(Resource):
             session_event = self.EVENT_TYPE_MAP.get(event_type,
                     TransportUserMessage.SESSION_RESUME)
 
+        if session_event != TransportUserMessage.SESSION_RESUME:
+            text = None
+
         transport_metadata = {
             'session_id': hxg_msg['SessionID'],
             }
         self.publish_message(
             from_addr=normalize_msisdn(hxg_msg['MSISDN']),
-            to_addr=normalize_msisdn(hxg_msg['ConnStr']),
+            to_addr=hxg_msg['ConnStr'],
             session_event=session_event,
             content=text,
             transport_metadata=transport_metadata,
