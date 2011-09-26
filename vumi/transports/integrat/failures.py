@@ -1,4 +1,4 @@
-# -*- test-case-name: vumi.transports.intergrat.tests.test_failures -*-
+# -*- test-case-name: vumi.transports.integrat.tests.test_failures -*-
 
 from vumi.transports.failures import FailureWorker
 
