@@ -1,6 +1,8 @@
 from twisted.trial import unittest
 
+from vumi.message import TransportUserMessage
 from vumi.tests.utils import get_stubbed_worker
+from vumi.tests.fake_amqp import FakeAMQPBroker
 from vumi.demos.rps import RockPaperScissorsGame, RockPaperScissorsWorker
 
 
@@ -57,39 +59,71 @@ class TestRockPaperScissorsGame(unittest.TestCase):
 
 
 class TestRockPaperScissorsWorker(unittest.TestCase):
+    def setUp(self):
+        self._amqp = FakeAMQPBroker()
+        self._workers = []
+
+    def tearDown(self):
+        for worker in self._workers:
+            worker.stopWorker()
+
     def get_worker(self):
         worker = get_stubbed_worker(RockPaperScissorsWorker, {
                 'transport_name': 'foo',
                 'ussd_code': '99999',
-                })
+                }, self._amqp)
+        self._workers.append(worker)
         worker.startWorker()
         return worker
+
+    def mkmsg(self, from_addr, sid, content='', sev=None):
+        if sev is None:
+            sev = TransportUserMessage.SESSION_RESUME
+        return TransportUserMessage(
+            transport_name='sphex',
+            transport_type='ussd',
+            transport_metadata={},
+            from_addr=from_addr,
+            to_addr='12345',
+            content=content,
+            session_id=sid,
+            session_event=sev,
+            )
+
+    def get_msgs(self):
+        return self._amqp.get_messages('vumi', 'foo.outbound')
 
     def test_new_sessions(self):
         worker = self.get_worker()
         self.assertEquals({}, worker.games)
         self.assertEquals(None, worker.open_game)
 
-        worker.new_session({'transport_session_id': 'sp1'})
+        worker.dispatch_user_message(self.mkmsg(
+                '+27831234567', 'sp1', sev=TransportUserMessage.SESSION_NEW))
         self.assertNotEquals(None, worker.open_game)
         game = worker.open_game
         self.assertEquals({'sp1': game}, worker.games)
 
-        worker.new_session({'transport_session_id': 'sp2'})
+        worker.dispatch_user_message(self.mkmsg(
+                '+27831234568', 'sp2', sev=TransportUserMessage.SESSION_NEW))
         self.assertEquals(None, worker.open_game)
         self.assertEquals({'sp1': game, 'sp2': game}, worker.games)
 
-        self.assertEquals(2, len(worker.replies))
+        self.assertEquals(2, len(self.get_msgs()))
 
     def test_moves(self):
         worker = self.get_worker()
-        worker.new_session({'transport_session_id': 'sp1'})
+        worker.dispatch_user_message(self.mkmsg(
+                '+27831234567', 'sp1', sev=TransportUserMessage.SESSION_NEW))
         game = worker.open_game
-        worker.new_session({'transport_session_id': 'sp2'})
-        worker.replies = []
+        worker.dispatch_user_message(self.mkmsg(
+                '+27831234568', 'sp2', sev=TransportUserMessage.SESSION_NEW))
 
-        worker.resume_session({'transport_session_id': 'sp2', 'message': '1'})
-        self.assertEquals([], worker.replies)
-        worker.resume_session({'transport_session_id': 'sp1', 'message': '2'})
-        self.assertEquals(2, len(worker.replies))
+        self.assertEquals(2, len(self.get_msgs()))
+        worker.dispatch_user_message(self.mkmsg(
+                '+27831234568', 'sp2', content='1'))
+        self.assertEquals(2, len(self.get_msgs()))
+        worker.dispatch_user_message(self.mkmsg(
+                '+27831234567', 'sp1', content='2'))
+        self.assertEquals(4, len(self.get_msgs()))
         self.assertEquals((0, 1), game.scores)
