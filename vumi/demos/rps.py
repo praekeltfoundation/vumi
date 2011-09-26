@@ -14,13 +14,15 @@ class MultiPlayerGameWorker(ApplicationWorker):
         self.games = {}
         self.open_game = None
         self.game_setup()
+        self.messages = {}
         yield super(MultiPlayerGameWorker, self).startWorker()
 
     def new_session(self, data):
         log.msg("New session:", data)
         log.msg("Open game:", self.open_game)
         log.msg("Games:", self.games)
-        session_id = data['transport_session_id']
+        session_id = data['session_id']
+        self.messages[data['session_id']] = data
         if self.open_game:
             game = self.open_game
             if not self.add_player_to_game(game, session_id):
@@ -32,7 +34,7 @@ class MultiPlayerGameWorker(ApplicationWorker):
 
     def close_session(self, data):
         log.msg("Close session:", data)
-        game = self.games.get(data['transport_session_id'])
+        game = self.games.get(data['session_id'])
         if game:
             if self.open_game == game:
                 self.open_game = None
@@ -42,14 +44,16 @@ class MultiPlayerGameWorker(ApplicationWorker):
                     self.games.pop(sid, None)
                     msg = "Game terminated due to remote player disconnect."
                     self.end(sid, msg)
+        self.messages.pop(data['session_id'], None)
 
-    def resume_session(self, data):
+    def consume_user_message(self, data):
         log.msg("Resume session:", data)
-        session_id = data['transport_session_id']
+        self.messages[data['session_id']] = data
+        session_id = data['session_id']
         if session_id not in self.games:
             return
         game = self.games[session_id]
-        self.continue_game(game, session_id, data['message'])
+        self.continue_game(game, session_id, data['content'])
 
     def game_setup(self):
         pass
@@ -65,6 +69,13 @@ class MultiPlayerGameWorker(ApplicationWorker):
 
     def continue_game(self, game, session_id, message):
         pass
+
+    def reply(self, player, content):
+        orig = self.messages.pop(player, None)
+        if orig is None:
+            log.msg("Can't reply to %s, no stored message.")
+            return
+        return self.reply_to(orig, content, continue_session=True)
 
 
 class RockPaperScissorsGame(object):
@@ -172,6 +183,7 @@ class RockPaperScissorsWorker(MultiPlayerGameWorker):
             return int(char)
         return None
 
+    @inlineCallbacks
     def turn_reply(self, game):
         if game.check_win():
             if game.scores[0] > game.scores[1]:
@@ -181,5 +193,5 @@ class RockPaperScissorsWorker(MultiPlayerGameWorker):
                 self.end(game.player_1, "You lost. :-(")
                 self.end(game.player_2, "You won! :-)")
             return
-        self.reply(game.player_1, game.draw_board(game.player_1))
-        self.reply(game.player_2, game.draw_board(game.player_2))
+        yield self.reply(game.player_1, game.draw_board(game.player_1))
+        yield self.reply(game.player_2, game.draw_board(game.player_2))
