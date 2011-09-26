@@ -12,14 +12,17 @@ hxg = HigateXMLParser()
 
 class IntegratHttpResource(Resource):
 
-    # TODO: if both open and new are sent by integrat,
-    #       do we need to remove one of them?
+    # map events to session event types
     EVENT_TYPE_MAP = {
-        'new': TransportUserMessage.SESSION_NEW,
         'open': TransportUserMessage.SESSION_NEW,
         'close': TransportUserMessage.SESSION_CLOSE,
         'resume': TransportUserMessage.SESSION_RESUME,
         }
+
+    # Integrat sends both 'new' and 'open' events but
+    # we only pass 'open' events on ('open' is the more
+    # complete and reliable of the two in Integrat's case).
+    EVENTS_TO_SKIP = set(['new'])
 
     def __init__(self, publish_message):
         self.publish_message
@@ -36,6 +39,8 @@ class IntegratHttpResource(Resource):
                 session_event = TransportUserMessage.SESSION_RESUME
         else:
             event_type = hxg_msg['EventType'].lower()
+            if event_type in self.EVENTS_TO_SKIP:
+                return ''
             session_event = self.EVENT_TYPE_MAP.get(event_type,
                     TransportUserMessage.SESSION_RESUME)
 
