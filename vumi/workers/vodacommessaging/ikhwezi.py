@@ -295,12 +295,15 @@ class IkhweziQuiz():
         return context, question
 
     def answer_contextual_question(self, context, answer):
+        reply = None
         question = self.quiz.get(context)
-        if context in self.data.keys() and context in self.data['order']:
+        if context in self.data.keys() \
+                and answer in question['options'].keys() \
+                and context in self.data['order']:
+            reply = question['options'][answer].get('reply')
             self.data[context] = answer
             self.data['order'].pop(0)
             self.ds_set()
-        reply = question['options'][answer].get('reply')
         return reply
 
     def formulate_response(self, context, answer):
