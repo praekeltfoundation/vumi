@@ -15,42 +15,35 @@ config = {
         'web_host': 'vumi.p.org',
         'web_path': '/api/v1/ussd/vmes/'}
 ds = {}
+order = []
 answers = []
 max_cycles = [99]
 
 def respond(context, answer):
-    test_answer = answer
-    if context and context.startswith('demographic') and answer != None:
-        test_answer = 'demo'
-    answers.append(test_answer)
+    #print context, answer
+    answers.append(answer)
     ik = IkhweziQuiz(config, quiz, translations, ds, '08212345670')
+    if context == None:
+        for o in ik.data['order']:
+            order.append(o)
+    #print ik.data['order']
     resp = ik.formulate_response(context, answer)
+    #print ik.data['order']
+    #print resp
     context = resp.context
     answer = None
     if len(resp.option_list):
         answer = str(random.choice(resp.option_list)['order'])
-        if context == "demographic1":
-            answer = 1
         if context == "continue":
-            answer = random.choice([1, 1, 2])
+            answer = random.choice([1, 1, 1, 2])
         max_cycles[0] -= 1
         answer = random.choice([answer, answer, answer, None])
         if max_cycles[0]:
                 respond(context, answer)
 
 respond(None, None)
+#print order
 #print answers
-ik = IkhweziQuiz(config, quiz, translations, ds, '08212345670')
-o = ik.random_ordering()
-print o
-o.pop(0)
-print o
-o.pop(0)
-print o
-o.pop(0)
-print o
-o.pop(0)
-print o
 ########################################
 
 
