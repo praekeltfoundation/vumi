@@ -14,6 +14,7 @@ from vumi.transports.tests.test_base import TransportTestCase
 from vumi.tests.utils import get_stubbed_worker, TestResourceWorker
 from vumi.tests.fake_amqp import FakeAMQPBroker
 from vumi.message import from_json
+from vumi.transports.base import FailureMessage
 from vumi.transports.vas2nets.vas2nets import (
     ReceiveSMSResource, DeliveryReceiptResource, Vas2NetsTransport,
     validate_characters, Vas2NetsEncodingError, normalize_outbound_msisdn)
@@ -316,7 +317,9 @@ class Vas2NetsTransportTestCase(TransportTestCase):
         [fmsg] = self.get_dispatched('vas2nets.failures')
         fmsg = from_json(fmsg.body)
         self.assertEqual(msg, fmsg['message'])
-        self.assertEqual("connection refused", fmsg['reason'])
+        self.assertEqual(fmsg['failure_code'],
+                         FailureMessage.FC_TEMPORARY)
+        self.assertTrue(fmsg['reason'].strip().endswith("connection refused"))
 
     @inlineCallbacks
     def test_send_sms_not_OK(self):
@@ -330,7 +333,10 @@ class Vas2NetsTransportTestCase(TransportTestCase):
         [fmsg] = self.get_dispatched('vas2nets.failures')
         fmsg = from_json(fmsg.body)
         self.assertEqual(msg, fmsg['message'])
-        self.assertTrue(fmsg['reason'].startswith("server error"))
+        self.assertEqual(fmsg['failure_code'],
+                         FailureMessage.FC_PERMANENT)
+        self.assertTrue(fmsg['reason'].strip()
+                        .endswith("server error: HTTP 404: Page not found."))
 
     def test_normalize_outbound_msisdn(self):
         self.assertEqual(normalize_outbound_msisdn('+27761234567'),

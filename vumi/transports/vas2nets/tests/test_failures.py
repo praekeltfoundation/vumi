@@ -9,6 +9,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
 from vumi.message import TransportUserMessage, from_json
 from vumi.tests.utils import get_stubbed_worker, FakeRedis, TestResourceWorker
 from vumi.tests.fake_amqp import FakeAMQPBroker
+from vumi.transports.failures import FailureMessage
 from vumi.transports.vas2nets.vas2nets import Vas2NetsTransport
 from vumi.transports.vas2nets.failures import Vas2NetsFailureWorker
 
@@ -175,7 +176,9 @@ class Vas2NetsFailureWorkerTestCase(unittest.TestCase):
         [fmsg] = self.get_dispatched('vas2nets.failures')
         fmsg = from_json(fmsg.body)
         self.assertEqual(msg, fmsg['message'])
-        self.assertEqual("connection refused", fmsg['reason'])
+        self.assertEqual(FailureMessage.FC_TEMPORARY,
+                         fmsg['failure_code'])
+        self.assertTrue(fmsg['reason'].strip().endswith("connection refused"))
 
         yield self.broker.kick_delivery()
         [key] = self.fail_worker.get_failure_keys()

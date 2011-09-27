@@ -120,15 +120,18 @@ class Transport(Worker):
     def _setup_failure_publisher(self):
         self.failure_publisher = yield self.publish_rkey('failures')
 
-    def send_failure(self, message, reason):
+    def send_failure(self, message, exception, traceback):
         """Send a failure report."""
-        # TODO: Make the failure handling code smarter.
         try:
+            failure_code = getattr(exception, "failure_code",
+                                   FailureMessage.FC_UNSPECIFIED)
             self.failure_publisher.publish_message(FailureMessage(
-                    message=message.payload, reason=reason))
+                    message=message.payload, failure_code=failure_code,
+                    reason=traceback))
             self.failure_published()
         except:
-            log.err("Error publishing failure: %s, %s" % (message, reason))
+            log.err("Error publishing failure: %s, %s, %s"
+                    % (message, exception, traceback))
             raise
 
     def failure_published(self):
@@ -175,7 +178,7 @@ class Transport(Worker):
 
     def _process_message(self, message):
         def _send_failure(f):
-            self.send_failure(message, f.getTraceback())
+            self.send_failure(message, f.value, f.getTraceback())
             if self.SUPPRESS_FAILURE_EXCEPTIONS:
                 return None
             return f

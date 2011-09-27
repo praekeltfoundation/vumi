@@ -17,6 +17,9 @@ from vumi.message import TransportMessage, to_json
 class FailureMessage(TransportMessage):
     MESSAGE_TYPE = 'failure_message'
 
+    FC_UNSPECIFIED, FC_PERMANENT, FC_TEMPORARY = (None, 'permanent',
+                                                  'temporary')
+
     def process_fields(self, fields):
         fields = super(FailureMessage, self).process_fields(fields)
         return fields
@@ -25,8 +28,30 @@ class FailureMessage(TransportMessage):
         super(FailureMessage, self).validate_fields()
         self.assert_field_present(
             'message',
+            'failure_code',
             'reason',
             )
+
+
+class FailureCodeException(Exception):
+    """Base class for exceptions encoding failure types."""
+    def __init__(self, failure_code, msg):
+        super(FailureCodeException, self).__init__(msg)
+        self.failure_code = failure_code
+
+
+class PermanentFailure(FailureCodeException):
+    """Raise this failure if re-trying seems unlikely to succeed."""
+    def __init__(self, msg):
+        super(PermanentFailure, self).__init__(FailureMessage.FC_PERMANENT,
+                                               msg)
+
+
+class TemporaryFailure(FailureCodeException):
+    """Raise this failure if re-trying might succeed."""
+    def __init__(self, msg):
+        super(TemporaryFailure, self).__init__(FailureMessage.FC_TEMPORARY,
+                                               msg)
 
 
 class FailureWorker(Worker):
@@ -194,11 +219,12 @@ class FailureWorker(Worker):
             }
         return message
 
-    def handle_failure(self, message, reason):
+    def handle_failure(self, message, failure_code, reason):
         """
         Handle a failed message from a transport.
 
         :param message: The failed message, as a dict.
+        :param failure_code: The failure code.
         :param reason: A string containing the reason for the failure.
 
         This method should be implemented in subclasses to handle
@@ -208,5 +234,6 @@ class FailureWorker(Worker):
 
     def process_message(self, failure_message):
         message = failure_message.payload['message']
+        failure_code = failure_message.payload['failure_code']
         reason = failure_message.payload['reason']
-        self.handle_failure(message, reason)
+        self.handle_failure(message, failure_code, reason)

@@ -20,6 +20,7 @@ from twisted.internet.error import ConnectionRefusedError
 
 from vumi.utils import StringProducer, normalize_msisdn
 from vumi.transports.base import Transport
+from vumi.transports.failures import TemporaryFailure, PermanentFailure
 from vumi.errors import VumiError
 
 
@@ -265,8 +266,7 @@ class Vas2NetsTransport(Transport):
                 StringProducer(urlencode(params)))
         except ConnectionRefusedError:
             log.msg("Connection failed sending message:", message)
-            self.send_failure(message, 'connection refused')
-            return
+            raise TemporaryFailure('connection refused')
 
         d = Deferred()
         response.deliverBody(HttpResponseHandler(d))
@@ -276,9 +276,8 @@ class Vas2NetsTransport(Transport):
         header = self.config.get('header', 'X-Nth-Smsid')
 
         if response.code != 200:
-            self.send_failure(message, 'server error: HTTP %s: %s' % (
-                    response.code, response_content))
-            return
+            raise PermanentFailure('server error: HTTP %s: %s'
+                                   % (response.code, response_content))
 
         if response.headers.hasHeader(header):
             transport_message_id = response.headers.getRawHeaders(header)[0]
