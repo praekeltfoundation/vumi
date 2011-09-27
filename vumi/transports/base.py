@@ -62,6 +62,7 @@ class Transport(Worker):
     def stopWorker(self):
         for consumer in self._consumers:
             yield consumer.stop()
+        yield self.teardown_transport()
 
     def get_rkey(self, mtype):
         return '%s.%s' % (self.transport_name, mtype)
@@ -87,6 +88,12 @@ class Transport(Worker):
         All transport_specific setup should happen in here.
 
         Subclasses should override this method to perform extra setup.
+        """
+        pass
+
+    def teardown_transport(self):
+        """
+        Clean-up of setup done in setup_transport should happen here.
         """
         pass
 
