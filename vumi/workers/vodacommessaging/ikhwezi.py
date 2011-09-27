@@ -276,7 +276,7 @@ class IkhweziQuiz():
 
     def exit_suffix(self, context=None, answer=None):
         ans_lists = self.answered_lists()
-        if len(ans_lists['q_un']) == 0 or (
+        if (context == 'continue' and len(ans_lists['q_un']) == 0) or (
                 context == 'continue' and answer and int(answer) == 2):
             context = 'exit'
             text = self.quiz.get(context).get('headertext')
