@@ -40,6 +40,17 @@ def respond(context, answer):
 
 respond(None, None)
 #print answers
+ik = IkhweziQuiz(config, quiz, translations, ds, '08212345670')
+o = ik.random_ordering()
+print o
+o.pop(0)
+print o
+o.pop(0)
+print o
+o.pop(0)
+print o
+o.pop(0)
+print o
 ########################################
 
 

@@ -222,6 +222,32 @@ class IkhweziQuiz():
             return True
         return False
 
+    def random_ordering(self):
+        order = ['demographic1']
+        demographics = [
+                'demographic2',
+                'demographic3',
+                'demographic4',
+                ]
+        random.shuffle(demographics)
+        questions = [
+                'question1',
+                'question2',
+                'question3',
+                'question4',
+                'question5',
+                'question6',
+                'question7',
+                'question8',
+                'question9',
+                'question10']
+        random.shuffle(questions)
+        while len(questions):
+            order.append(questions.pop())
+            if len(demographics):
+                order.append(demographics.pop())
+        return order
+
     def new_entrant(self, msisdn):
         self.language = "English"
         self.data = {
@@ -254,7 +280,8 @@ class IkhweziQuiz():
                 'd1_timestamp': None,
                 'd2_timestamp': None,
                 'd3_timestamp': None,
-                'd4_timestamp': None}
+                'd4_timestamp': None,
+                'order': self.random_ordering}
         self.ds_set()
         return True
 
