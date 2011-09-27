@@ -74,12 +74,14 @@ def call_request(msisdn, headers):
     print 'response', response
     returnValue(response)
 
+class RestartConversationException(Exception): pass
 
 class Menu(object):
     def __init__(self, username, password):
         self.username = username
         self.password = password
         self.finished = False
+        self.msisdn = None
 
     def ask(self, q):
         return q
@@ -97,12 +99,12 @@ class Menu(object):
 
     def run(self):
         # we're expecting the client to initiate
-        msisdn = yield
-        self.log('Starting new session for %s' % msisdn)
+        self.msisdn = yield
+        self.log('Starting new session for %s' % self.msisdn)
         patient_id = yield self.ask('Welcome to txtAlert. '
                                     'Please respond with your patient id.')
         self.log('patient_id: %s' % patient_id)
-        patient = get_patient(msisdn, patient_id)
+        patient = get_patient(self.msisdn, patient_id)
         self.log('patient: %s' % patient)
 
         # check for a known patient
@@ -146,34 +148,64 @@ class Menu(object):
                     'Authorization': [basic_auth_string(self.username,
                                                         self.password)],
                 })
-                yield self.close("Thanks! Your change request has been"
-                                 " registered. You'll receive an SMS with"
-                                 " your appointment information")
+                answer = yield self.choice("Thanks! Your change request has "
+                                "been registered. You'll receive an SMS with"
+                                 " your appointment information", choices=(
+                                    ('0', 'Return to main menu.'),
+                                    ('1', 'Exit.'),
+                                 ))
+                if answer == '0':
+                    raise RestartConversationException
+                else:
+                    yield self.close('Thank you and good bye!')
+                
             elif answer == '2':
                 reschedule_later_date(patient.get('visit_id'), {
                     'Authorization': [basic_auth_string(self.username,
                                                         self.password)],
                 })
-                yield self.close("Thanks! Your change request has been"
-                                 " registered. You'll receive an SMS with"
-                                 " your appointment information")
+                answer = yield self.choice("Thanks! Your change request has "
+                                "been registered. You'll receive an SMS with"
+                                 " your appointment information", choices=(
+                                    ('0', 'Return to main menu.'),
+                                    ('1', 'Exit.'),
+                                 ))
+                if answer == '0':
+                    raise RestartConversationException
+                else:
+                    yield self.close('Thank you and good bye!')
         elif answer == '2':
-            yield self.close("Welcome to txtAlert.\n"
+            answer = yield self.choice("Welcome to txtAlert.\n"
                         "You have attended %s%% of your appointments. \n"
-                        "%s appointments have been rescheduled.\n"
-                        "%s appointments missed.\n" % (
+                        "%s appointment(s) have been rescheduled.\n"
+                        "%s appointment(s) missed.\n" % (
                             patient.get('attendance', 0),
                             patient.get('rescheduled', 0),
-                            patient.get('missed', 0)))
+                            patient.get('missed', 0)), choices=(
+                                ('0', 'Return to main menu.'),
+                                ('1', 'Exit.'),
+                            ))
+            if answer == '0':
+                raise RestartConversationException
+            else:
+                yield self.close('Thank you and good bye!')
+            
         elif answer == '3':
             call_request(patient.get('msisdn'), {
                 'Authorization': [basic_auth_string(self.username,
                                                     self.password)],
             })
-            yield self.close("Welcome to txtAlert. "
+            answer = yield self.choice("Welcome to txtAlert. "
                         "You have requested a call from the clinic. "
-                        "You will be called as soon as possible.")
-
+                        "You will be called as soon as possible.", choices=(
+                            ('0', 'Return to main menu.'),
+                            ('1', 'Exit.'),
+                        ))
+            if answer == '0':
+                raise RestartConversationException
+            else:
+                yield self.close('Thank you and good bye!')
+        
         # always close with this when this is reached, under normal conditions
         # it should never get here.
         yield self.close('Sorry, that wasn\'t what I expected. '
@@ -236,12 +268,15 @@ class BookingTool(Worker):
     def resume_existing_session(self, uuid, message):
         # grab from memory
         menu, coroutine = self.get_session(uuid)
-        response = coroutine.send(message)
-        if menu.finished:
-            menu, coroutine = self.end_session(uuid)
-        else:
-            self.save_session(uuid, menu, coroutine)
-        return response
+        try:
+            response = coroutine.send(message)
+            if menu.finished:
+                menu, coroutine = self.end_session(uuid)
+            else:
+                self.save_session(uuid, menu, coroutine)
+            return response
+        except RestartConversationException:
+            return self.start_new_session(uuid, menu.msisdn)
 
     def consume_message(self, message):
         log.msg('Active sessions:', self.sessions.keys())
@@ -313,13 +348,17 @@ class USSDBookingTool(IntegratWorker):
         message = data['message']
 
         menu, coroutine = self.get_session(session_id)
-        response = coroutine.send(message)
+        try:
+            response = coroutine.send(message)
 
-        if menu.finished:
-            self.end(session_id, response)
-        else:
-            self.save_session(session_id, menu, coroutine)
-            self.reply(session_id, response)
+            if menu.finished:
+                self.end(session_id, response)
+            else:
+                self.save_session(session_id, menu, coroutine)
+                self.reply(session_id, response)
+        except RestartConversationException:
+            return self.new_session(data)
+
 
     def open_session(self, data):
         pass
