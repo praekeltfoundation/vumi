@@ -7,5 +7,6 @@ This is where all transports that are part of core vumi live.
 """
 
 from vumi.transports.base import Transport
+from vumi.transports.failures import FailureWorker
 
-__all__ = ['Transport']
+__all__ = ['Transport', 'FailureWorker']

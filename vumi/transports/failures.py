@@ -227,10 +227,17 @@ class FailureWorker(Worker):
         :param failure_code: The failure code.
         :param reason: A string containing the reason for the failure.
 
-        This method should be implemented in subclasses to handle
-        failures specific to particular transports.
+        This method should be overriden in subclasses to implement
+        transport specific failure handling if needed.
         """
-        raise NotImplementedError()
+        if failure_code == FailureMessage.FC_TEMPORARY:
+            self.do_retry(message, reason)
+        else:
+            self.store_failure(message, reason)
+
+    def do_retry(self, message, reason):
+        message = self.update_retry_metadata(message)
+        self.store_failure(message, reason, message['retry_metadata']['delay'])
 
     def process_message(self, failure_message):
         message = failure_message.payload['message']

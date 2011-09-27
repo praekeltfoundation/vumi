@@ -9,9 +9,8 @@ from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
 from vumi.message import TransportUserMessage, from_json
 from vumi.tests.utils import get_stubbed_worker, FakeRedis, TestResourceWorker
 from vumi.tests.fake_amqp import FakeAMQPBroker
-from vumi.transports.failures import FailureMessage
+from vumi.transports.failures import FailureMessage, FailureWorker
 from vumi.transports.vas2nets.vas2nets import Vas2NetsTransport
-from vumi.transports.vas2nets.failures import Vas2NetsFailureWorker
 
 
 class BadVas2NetsResource(Resource):
@@ -87,7 +86,7 @@ class Vas2NetsFailureWorkerTestCase(unittest.TestCase):
 
     @inlineCallbacks
     def mk_failure_worker(self, config, broker, redis):
-        w = get_stubbed_worker(Vas2NetsFailureWorker, config, broker)
+        w = get_stubbed_worker(FailureWorker, config, broker)
         self.workers.append(w)
         yield w.startWorker()
         w.retry_publisher = yield self.worker.publish_to("foo")
