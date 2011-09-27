@@ -1,9 +1,11 @@
 import random
+import json
 
 from twisted.internet.defer import inlineCallbacks
 from twisted.python import log
 from vumi.message import Message
 from vumi.service import Worker
+from vumi.tests.utils import FakeRedis
 from vumi.workers.vodacommessaging.utils import VodacomMessagingResponse
 
 
@@ -186,6 +188,8 @@ question10:
 
 class IkhweziQuiz():
 
+    REDIS_PREFIX = "vumi_vodacom_ikhwezi"
+
     def __init__(self, config, quiz, translations, datastore, msisdn):
         self.config = config
         self.quiz = quiz
@@ -195,11 +199,15 @@ class IkhweziQuiz():
         self.retrieve_entrant(msisdn) or self.new_entrant(msisdn)
 
     def ds_set(self):
-        self.datastore[self.data['msisdn']] = self.data
+        self.datastore.set("%s#%s" % (
+            self.REDIS_PREFIX, self.data['msisdn']), json.dumps(self.data))
 
     def ds_get(self, msisdn):
-        data = self.datastore.get(msisdn)
-        return data
+        data_string = self.datastore.get("%s#%s" % (
+            self.REDIS_PREFIX, msisdn))
+        if data_string:
+            return json.loads(data_string)
+        return None
 
     def lang(self, lang):
         langs = {
@@ -247,6 +255,10 @@ class IkhweziQuiz():
             if len(demographics):
                 order.append(demographics.pop())
         return order
+
+    def force_order(self, order):
+        self.data['order'] = order
+        self.ds_set()
 
     def new_entrant(self, msisdn):
         self.language = "English"
