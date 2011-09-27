@@ -1,7 +1,7 @@
 from django.db import models
 from django.contrib import admin
 
-# Create your models here.
+
 class Registrant(models.Model):
     """Someone who signed up prelaunch"""
     full_name = models.CharField(blank=True, max_length=255)

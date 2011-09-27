@@ -8,11 +8,10 @@ from collections import namedtuple
 from contextlib import contextmanager
 
 import pytz
-import txamqp
 from twisted.internet import defer
 
 from vumi.utils import make_vumi_path_abs
-from vumi.service import Worker
+from vumi.service import get_spec, Worker
 from vumi.tests.fake_amqp import FakeAMQClient
 
 
@@ -34,11 +33,15 @@ def teardown_django_test_database(runner, config):
 
 class UTCNearNow(object):
     def __init__(self, offset=10):
-        self.now = datetime.utcnow().replace(tzinfo=pytz.UTC)
+        self.now = datetime.utcnow()
+        self.utcnow = self.now.replace(tzinfo=pytz.UTC)
         self.offset = timedelta(offset)
 
     def __eq__(self, other):
-        return (self.now - self.offset) < other < (self.now + self.offset)
+        now = self.now
+        if other.tzinfo:
+            now = self.utcnow
+        return (now - self.offset) < other < (now + self.offset)
 
 
 class Mocking(object):
@@ -176,14 +179,14 @@ class TestChannel(object):
 
 
 def get_stubbed_worker(worker_class, config=None, broker=None):
-    spec = txamqp.spec.load(make_vumi_path_abs("config/amqp-spec-0-8.xml"))
+    spec = get_spec(make_vumi_path_abs("config/amqp-spec-0-8.xml"))
     amq_client = FakeAMQClient(spec, {}, broker)
     worker = worker_class(amq_client, config)
     return worker
 
 
 def get_stubbed_channel(broker=None, id=0):
-    spec = txamqp.spec.load(make_vumi_path_abs("config/amqp-spec-0-8.xml"))
+    spec = get_spec(make_vumi_path_abs("config/amqp-spec-0-8.xml"))
     amq_client = FakeAMQClient(spec, {}, broker)
     return amq_client.channel(id)
 

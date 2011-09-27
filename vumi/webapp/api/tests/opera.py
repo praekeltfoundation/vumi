@@ -102,7 +102,7 @@ class OperaSMSHandlerTestCase(TestCase):
         sms = ReceivedSMS.objects.latest()
         self.assertEquals(
             sms.received_at.strftime('%Y-%m-%d %H:%M:%S +0000'),
-            '2010-06-04 15:51:25 +0000'
+            '2010-06-04 15:51:25 +0000',
         )
         self.assertEquals(sms.from_msisdn, '+27831234567')
         self.assertEquals(sms.to_msisdn, '*32323')

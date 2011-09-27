@@ -196,7 +196,7 @@ class MetricAggregator(Worker):
         # values is a list of (timestamp, value) pairs
         self.buckets = {}
         # initialize last processed bucket
-        self._last_ts_key = self._ts_key(self._time() - self.lag) - 1
+        self._last_ts_key = self._ts_key(self._time() - self.lag) - 2
 
         self.publisher = yield self.start_publisher(AggregatedMetricPublisher)
         self.consumer = yield self.start_consumer(TimeBucketConsumer,
@@ -210,7 +210,7 @@ class MetricAggregator(Worker):
     def check_buckets(self):
         """Periodically clean out old buckets and calculate aggregates."""
         # key for previous bucket
-        current_ts_key = self._ts_key(self._time() - self.lag)
+        current_ts_key = self._ts_key(self._time() - self.lag) - 1
         for ts_key in self.buckets.keys():
             if ts_key <= self._last_ts_key:
                 log.err(DiscardedMetricError("Throwing way old metric data: %r"

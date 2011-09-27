@@ -19,6 +19,22 @@ from vumi.webapp.api import utils
 from vumi.utils import load_class_by_string, make_vumi_path_abs
 
 
+SPECS = {}
+
+
+def get_spec(specfile):
+    """
+    Cache the generated part of txamqp, because generating it is expensive.
+
+    This is important for tests, which create lots of txamqp clients,
+    and therefore generate lots of specs. Just doing this results in a
+    decidedly happy test run time reduction.
+    """
+    if specfile not in SPECS:
+        SPECS[specfile] = txamqp.spec.load(specfile)
+    return SPECS[specfile]
+
+
 class Options(usage.Options):
     """
     Default options for all workers created
@@ -47,8 +63,9 @@ class AmqpFactory(protocol.ReconnectingClientFactory):
     def __init__(self, worker_class, options, config):
         self.options = options
         self.config = config
-        self.spec = txamqp.spec.load(make_vumi_path_abs(options['specfile']))
+        self.spec = get_spec(make_vumi_path_abs(options['specfile']))
         self.delegate = TwistedDelegate()
+        self.worker = None
         self.worker_class = worker_class
 
     def buildProtocol(self, addr):
@@ -64,13 +81,15 @@ class AmqpFactory(protocol.ReconnectingClientFactory):
 
     def clientConnectionFailed(self, connector, reason):
         log.err("Connection failed.", reason)
-        self.worker.stopWorker()
+        if self.worker is not None:
+            self.worker.stopWorker()
         protocol.ReconnectingClientFactory.clientConnectionFailed(self,
                 connector, reason)
 
     def clientConnectionLost(self, connector, reason):
         log.err("Client connection lost.", reason)
-        self.worker.stopWorker()
+        if self.worker is not None:
+            self.worker.stopWorker()
         protocol.ReconnectingClientFactory.clientConnectionLost(self,
                 connector, reason)
 
@@ -174,7 +193,8 @@ class Worker(object):
         return ''.join(map(lambda s: s.capitalize(), routing_key.split('.')))
 
     def consume(self, routing_key, callback, queue_name=None,
-                exchange_name='vumi', exchange_type='direct', durable=True):
+                exchange_name='vumi', exchange_type='direct', durable=True,
+                message_class=None):
 
         # use the routing key to generate the name for the class
         # amq.routing.key -> AmqRoutingKey
@@ -189,6 +209,8 @@ class Worker(object):
         }
         log.msg('Staring %s with %s' % (class_name, kwargs))
         klass = type(class_name, (DynamicConsumer,), kwargs)
+        if message_class is not None:
+            klass.message_class = message_class
         return self.start_consumer(klass, callback)
 
     def start_consumer(self, consumer_class, *args, **kw):
@@ -243,6 +265,8 @@ class Consumer(object):
     queue_name = "queue"
     routing_key = "routing_key"
 
+    message_class = Message
+
     @inlineCallbacks
     def start(self, channel, queue):
         self.channel = channel
@@ -265,7 +289,7 @@ class Consumer(object):
 
     @inlineCallbacks
     def consume(self, message):
-        result = yield self.consume_message(Message.from_json(
+        result = yield self.consume_message(self.message_class.from_json(
                                             message.content.body))
         if result is not False:
             returnValue(self.ack(message))
