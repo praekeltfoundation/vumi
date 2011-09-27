@@ -27,7 +27,8 @@ class IntegratHttpResource(Resource):
     # complete and reliable of the two in Integrat's case).
     EVENTS_TO_SKIP = set(['new'])
 
-    def __init__(self, publish_message):
+    def __init__(self, transport_name, publish_message):
+        self.transport_name = transport_name
         self.publish_message = publish_message
 
     def render(self, request):
@@ -64,6 +65,8 @@ class IntegratHttpResource(Resource):
             to_addr=hxg_msg['ConnStr'],
             session_event=session_event,
             content=text,
+            transport_name=self.transport_name,
+            transport_type="ussd",
             transport_metadata=transport_metadata,
             )
         return ''
@@ -84,22 +87,28 @@ class IntegratTransport(Transport):
         Transport-specific config validation happens in here.
         """
         self.web_path = self.config['web_path']
-        self.web_port = self.config['web_port']
+        self.web_port = int(self.config['web_port'])
         self.integrat_url = self.config['url']
         self.integrat_username = self.config['username']
         self.integrat_password = self.config['password']
 
+    @inlineCallbacks
     def setup_transport(self):
         """
         All transport_specific setup should happen in here.
         """
         self.web_resource = yield self.start_web_resources(
             [
-                (IntegratHttpResource(self.publish_message), self.web_path),
+                (IntegratHttpResource(self.transport_name,
+                                      self.publish_message), self.web_path),
                 (HealthResource(), 'health'),
             ],
             self.web_port,
         )
+
+    @inlineCallbacks
+    def teardown_transport(self):
+        yield self.web_resource.loseConnection()
 
     @inlineCallbacks
     def handle_outbound_message(self, message):
