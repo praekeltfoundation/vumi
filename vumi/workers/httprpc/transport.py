@@ -35,8 +35,8 @@ class HttpRpcResource(Resource):
         md['args'] = request.args
         md['content'] = request.content.read()
         md['path'] = request.path
-        if logmsg:
-            log.msg("HttpRpcResource", logmsg, "Message.message:", repr(md))
+        #if logmsg:
+        log.msg("HttpRpcResource", logmsg, "Message.message:", repr(md))
         message = Message(message=md, uuid=uu,
                           return_path=[self.transport.consume_key])
         self.transport.publisher.publish_message(message)
