@@ -136,6 +136,7 @@ class OperaTransportTestCase(unittest.TestCase):
 
         consumer = transport.OperaConsumer(publisher=TestPublisher(),
                 config={'url': 'http://localhost'})
+        consumer._testing = False
         consumer.consume_message = error_raiser(ExpectedException,
                                                 'this is expected')
         consumer.ack = error_raiser(UnexpectedException,

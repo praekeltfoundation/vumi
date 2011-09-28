@@ -92,6 +92,7 @@ class FakeAMQPBroker(object):
         self.exchanges = {}
         self.channels = []
         self.dispatched = {}
+        self._delivering = None
 
     def _get_queue(self, queue):
         assert queue in self.queues
@@ -162,33 +163,46 @@ class FakeAMQPBroker(object):
         return None
 
     def deliver_to_channels(self, d):
+        if self._delivering is None:
+            # The delivery run we were asked to start is already finished.
+            return
         if any([self.try_deliver_to_channel(channel)
                 for channel in self.channels]):
             self._kick_delivery(d)
         else:
-            d.callback(None)
+            self.message_processed()
 
     def try_deliver_to_channel(self, channel):
         if not channel.deliverable():
             return False
+        delivered = False
         for ctag, queue in channel.consumers.items():
             dtag, msg = self._get_queue(queue).get_message()
-            if dtag is not None:
+            while dtag is not None:
                 dmsg = mk_deliver(msg['content'], msg['exchange'],
                                   msg['routing_key'], ctag, dtag)
                 channel.deliver_message(dmsg, queue)
-                return True
-            return False
+                self._delivering['count'] += 1
+                delivered = True
+                dtag, msg = self._get_queue(queue).get_message()
+        return delivered
 
     def kick_delivery(self):
         """
         Schedule a message delivery run.
 
-        Returns a deferred that will fire when there are no more
-        deliverable messages. This is useful for manually triggering a
-        delivery run from inside a test.
+        Returns a deferred that will fire when all deliverable
+        messages have been delivered and processed by their consumers.
+        This is useful for manually triggering a delivery run from
+        inside a test.
         """
-        d = Deferred()
+        if self._delivering is None:
+            self._delivering = {
+                'deferred': Deferred(),
+                'count': 0,
+                }
+        self._delivering['count'] += 1  # To handle the no-deliveries case.
+        d = self._delivering['deferred']
         self._kick_delivery(d)
         return d
 
@@ -220,8 +234,17 @@ class FakeAMQPBroker(object):
         return self.publish_raw(exchange, routing_key, message.to_json())
 
     def publish_raw(self, exchange, routing_key, data):
+        assert exchange in self.exchanges
         amq_message = Content(data)
         return self.basic_publish(exchange, routing_key, amq_message)
+
+    def message_processed(self):
+        assert self._delivering is not None
+        self._delivering['count'] -= 1
+        if self._delivering['count'] <= 0:
+            d = self._delivering['deferred']
+            self._delivering = None
+            d.callback(None)
 
 
 class FakeAMQPChannel(object):
@@ -289,6 +312,13 @@ class FakeAMQPChannel(object):
             return mk_get_ok(msg['content'], msg['exchange'],
                              msg['routing_key'], dtag)
         return Message(mkMethod("get-empty", 72))
+
+    def message_processed(self):
+        """
+        Notify the broker that a message has been processed, in order
+        to make delivery sane.
+        """
+        self.broker.message_processed()
 
 
 class FakeAMQPExchange(object):
