@@ -29,6 +29,9 @@ continue:
 exit:
     headertext: "Thnx for taking the quiz.  We'll let U know if U R a lucky winner within 48 hours."
 
+completed:
+    headertext: "Thank you, you've completed the HIV quiz and will be notified via SMS if you've won airtime prize."
+
 demographic1:
     headertext: "Thnx 4 taking the Quiz! Answer easy questions and be 1 of 5000 lucky winners.  Pick your language:"
     options:
@@ -264,6 +267,7 @@ class IkhweziQuiz():
         self.language = "English"
         self.data = {
                 'msisdn': str(msisdn),
+                'attempts': 0,
                 'm_timestamp': None,
                 'question1': None,
                 'question2': None,
@@ -297,7 +301,7 @@ class IkhweziQuiz():
         self.ds_set()
         return True
 
-    def next_context_and_question(self, repeat_context=None):
+    def next_context_and_question(self):
         context = None
         question = None
         order = self.data['order']
@@ -324,6 +328,20 @@ class IkhweziQuiz():
         except Exception, e:
             log.msg(e)
             answer = None
+
+        if context == None:  # new session
+            self.data['attempts'] += 1
+            self.ds_set()
+            print self.data
+
+        if self.data['attempts'] > 4:
+            # terminate interaction
+            context = 'completed'
+            question = self.quiz.get(context)
+            vmr = VodacomMessagingResponse(self.config)
+            vmr.set_context(context)
+            vmr.set_headertext(question['headertext'])
+            return vmr
 
         reply = None
         if context and answer:

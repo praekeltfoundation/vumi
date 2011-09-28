@@ -1,5 +1,6 @@
 import yaml
 import random
+import redis
 
 from twisted.python import log
 from twisted.trial.unittest import TestCase
@@ -9,7 +10,7 @@ from vumi.workers.vodacommessaging.ikhwezi import (
 from vumi.tests.utils import FakeRedis
 
 
-class InputSequenceTest(TestCase):
+class RedisInputSequenceTest(TestCase):
 
     def setUp(self):
         self.msisdn = '0821234567'
@@ -18,7 +19,7 @@ class InputSequenceTest(TestCase):
         self.config = {
                 'web_host': 'vumi.p.org',
                 'web_path': '/api/v1/ussd/vmes/'}
-        self.ds = FakeRedis()
+        self.set_ds()
 
     def get_quiz_entry(self):
         ik = IkhweziQuiz(
@@ -29,11 +30,20 @@ class InputSequenceTest(TestCase):
                 self.msisdn)
         return ik
 
+    def tearDown(self):
+        keys = self.ds.keys("vumi_vodacom_ikhwezi*")
+        if len(keys) and type(keys) is str:
+            keys = keys.split(' ')
+        if len(keys):
+            for k in keys:
+                #print self.ds.get(k)
+                self.ds.delete(k)
+
+    def set_ds(self):
+        self.ds = redis.Redis("localhost", db=7)
+
     def exit_text(self):
         return self.quiz['exit']['headertext']
-
-    def tearDown(self):
-        pass
 
     def runInputSequence(self, inputs, context=None):
         user_in = inputs.pop(0)
@@ -128,4 +138,36 @@ class InputSequenceTest(TestCase):
         inputs = [1]
         resp = self.runInputSequence(inputs, resp.context)
         self.assertEqual(2, len(resp.option_list))
+        inputs = [1]
+        resp = self.runInputSequence(inputs, resp.context)
+        print resp
+        self.assertEqual(2, len(resp.option_list))
 
+        # simulate resume
+        inputs = [None]
+        resp = self.runInputSequence(inputs)
+        print resp
+        self.assertEqual(2, len(resp.option_list))
+
+        # and 3 more attempts
+        inputs = [None]
+        resp = self.runInputSequence(inputs)
+        print resp
+        self.assertEqual(2, len(resp.option_list))
+        inputs = [None]
+        resp = self.runInputSequence(inputs)
+        print resp
+        self.assertEqual(2, len(resp.option_list))
+        inputs = [None]
+        resp = self.runInputSequence(inputs)
+        print resp
+        self.assertEqual(0, len(resp.option_list))
+
+
+class FakeRedisInputSequenceTest(RedisInputSequenceTest):
+
+    def tearDown(self):
+        pass
+
+    def set_ds(self):
+        self.ds = FakeRedis()
