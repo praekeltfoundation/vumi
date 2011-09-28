@@ -380,11 +380,25 @@ class IkhweziQuizWorker(Worker):
         self.publisher = yield self.publish_to(self.publish_key)
         self.consume(self.consume_key, self.consume_message)
 
+        self.quiz = yaml.load(QUIZ)
+        self.translations = yaml.load(TRANSLATIONS)
+        self.ds = FakeRedis()
+
     def consume_message(self, message):
         log.msg("IkhweziQuizWorker consuming on %s: %s" % (
             self.consume_key,
             repr(message.payload)))
-        reply = "inspect message and create reply"  #TODO
+        request = message.payload['message']['args'].get('request', [None])[0]
+        context = message.payload['message']['args'].get('context', [None])[0]
+        msisdn = message.payload['message']['args'].get('msisdn', [None])[0]
+        ik = IkhweziQuiz(
+                self.config,
+                self.quiz,
+                self.translations,
+                self.ds,
+                msisdn)
+        resp = ik.formulate_response(context, request)
+        reply = str(resp)
         self.publisher.publish_message(Message(
                 uuid=message.payload['uuid'],
                 message=reply),
