@@ -339,14 +339,14 @@ class IkhweziQuiz():
             vmr.set_headertext(question['headertext'])
             return vmr
 
-        elif reply and len(self.data['order']) == 0:
-            # correct answer and exit
-            context = 'exit'
-            question = self.quiz.get(context)
-            vmr = VodacomMessagingResponse(self.config)
-            vmr.set_context(context)
-            vmr.set_headertext("%s  %s" % (reply, question['headertext']))
-            return vmr
+        #elif reply and len(self.data['order']) == 0:
+            ## correct answer and exit
+            #context = 'exit'
+            #question = self.quiz.get(context)
+            #vmr = VodacomMessagingResponse(self.config)
+            #vmr.set_context(context)
+            #vmr.set_headertext("%s  %s" % (reply, question['headertext']))
+            #return vmr
 
         elif reply:
             # correct answer and offer to continue
