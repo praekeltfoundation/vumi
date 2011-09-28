@@ -272,6 +272,7 @@ class Consumer(object):
         self.channel = channel
         self.queue = queue
         self.keep_consuming = True
+        self._testing = hasattr(channel, 'message_processed')
 
         @inlineCallbacks
         def read_messages():
@@ -291,6 +292,8 @@ class Consumer(object):
     def consume(self, message):
         result = yield self.consume_message(self.message_class.from_json(
                                             message.content.body))
+        if self._testing:
+            self.channel.message_processed()
         if result is not False:
             returnValue(self.ack(message))
         else:
