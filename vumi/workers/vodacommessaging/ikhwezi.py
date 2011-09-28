@@ -1,5 +1,6 @@
 import random
 import json
+import yaml
 
 from twisted.internet.defer import inlineCallbacks
 from twisted.python import log
