@@ -97,35 +97,35 @@ class InputSequenceTest(TestCase):
                 None, '1', 1, '1', None, '2', 'bye']
         self.finishInputSequence(inputs)
 
-    #def testSequence3(self):
-        #inputs = [None, 'demo', '2', None, 'demo', None, None, None, None,
-                #'2', None, 'demo', '2', None, None, 'demo', '2', 1, None,
-                #None, '1', None, '2', None, '2', None, '2', None, '2', 2]
-        #self.finishInputSequence(inputs)
+    def testSequence3(self):
+        inputs = [None, 'demo', '2', None, 'demo', None, None, None, None,
+                '2', None, 'demo', '2', None, None, 'demo', '2', 1, None,
+                None, '1', None, '2', None, '2', None, '2', None, '2', 2]
+        self.finishInputSequence(inputs)
 
-    #def testWithForcedOrder(self):
-        #self.get_quiz_entry().force_order([
-            #'demographic1',
-            #'question10',
-            #'demographic2',
-            #'question7',
-            #'demographic4',
-            #'question9',
-            #'demographic3',
-            #'question2',
-            #'question6',
-            #'question1',
-            #'question4',
-            #'question5',
-            #'question3',
-            #'question8'])
-        #inputs = [None]
-        #resp = self.runInputSequence(inputs)
-        #self.assertEqual(4, len(resp.option_list))
-        #inputs = [1]
-        #resp = self.runInputSequence(inputs, resp.context)
-        #self.assertEqual(2, len(resp.option_list))
-        #inputs = [1]
-        #resp = self.runInputSequence(inputs, resp.context)
-        #self.assertEqual(2, len(resp.option_list))
+    def testWithForcedOrder(self):
+        self.get_quiz_entry().force_order([
+            'demographic1',
+            'question10',
+            'demographic2',
+            'question7',
+            'demographic4',
+            'question9',
+            'demographic3',
+            'question2',
+            'question6',
+            'question1',
+            'question4',
+            'question5',
+            'question3',
+            'question8'])
+        inputs = [None]
+        resp = self.runInputSequence(inputs)
+        self.assertEqual(4, len(resp.option_list))
+        inputs = [1]
+        resp = self.runInputSequence(inputs, resp.context)
+        self.assertEqual(2, len(resp.option_list))
+        inputs = [1]
+        resp = self.runInputSequence(inputs, resp.context)
+        self.assertEqual(2, len(resp.option_list))
 
