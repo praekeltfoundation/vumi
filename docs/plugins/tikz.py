@@ -93,6 +93,7 @@ def render_tikz(self, rel_fname, tikz, libs):
     relfn = posixpath.join(self.builder.imgpath, rel_fname)
     srcfn = path.join(self.builder.srcdir, local_fname)
     outfn = path.join(self.builder.outdir, '_images', local_fname)
+    ensuredir(path.dirname(outfn))
 
     # check for cached image
     hashkey = tikz.encode('utf-8')
@@ -107,7 +108,6 @@ def render_tikz(self, rel_fname, tikz, libs):
     if hasattr(self.builder, '_tikz_warned'):
         return None
 
-    ensuredir(path.dirname(outfn))
     curdir = getcwd()
 
     latex = DOC_HEAD % libs
