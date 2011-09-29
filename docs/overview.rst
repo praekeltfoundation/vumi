@@ -4,6 +4,7 @@ Vumi Overview
 =============
 
 .. tikz:: A simple Vumi worker setup
+   :filename: images/tikz/vumi-simple-setup.png
    :libs: arrows,shadows,decorations.pathmorphing,shapes,positioning
 
    \tikzstyle{place}=[double copy shadow,
@@ -19,14 +20,13 @@ Vumi Overview
    \tikzstyle{rabbit}=[->,
                        >=stealth,
                        line width=0.2ex,
-                       decorate,
-                       decoration={snake,pre length=1mm,post length=1mm},
                        auto,
                        ];
 
    \tikzstyle{route}=[sloped,midway,above=0.1em];
    \tikzstyle{outbound}=[draw=black!50]
    \tikzstyle{inbound}=[draw=black]
+   \tikzstyle{failure}=[draw=black, decorate, decoration={snake,pre length=1mm,post length=1mm}]
 
    \definecolor{darkred}{rgb}{0.5,0,0}
    \definecolor{darkgreen}{rgb}{0,0.5,0}
@@ -40,5 +40,5 @@ Vumi Overview
    \draw[rabbit,inbound,bend right] (transport) to node [route] {event} (app_worker);
    \draw[rabbit,outbound,bend right] (app_worker) to node [route] {outbound} (transport);
 
-   \draw[rabbit,inbound,bend right] (transport) to node [route] {failure} (failure_worker);
+   \draw[rabbit,failure,bend right] (transport) to node [route] {failure} (failure_worker);
    \draw[rabbit,outbound,bend right] (failure_worker) to node [route] {outbound} (transport);

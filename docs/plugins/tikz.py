@@ -48,18 +48,22 @@ class TikzExtError(SphinxError):
 class tikz(nodes.General, nodes.Element):
     pass
 
+
 class TikzDirective(Directive):
     has_content = True
     required_arguments = 0
     optional_arguments = 1
     final_argument_whitespace = True
-    option_spec = {'libs':directives.unchanged}
+    option_spec = {'libs': directives.unchanged,
+                   'filename': directives.unchanged,
+                   }
 
     def run(self):
         node = tikz()
         node['tikz'] = '\n'.join(self.content)
         node['caption'] = '\n'.join(self.arguments)
         node['libs'] = self.options.get('libs', '')
+        node['fname'] = self.options.get('filename', '')
         return [node]
 
 DOC_HEAD = r'''
@@ -83,18 +87,26 @@ DOC_BODY = r'''
 \end{document}
 '''
 
-def render_tikz(self,tikz,libs):
-    hashkey = tikz.encode('utf-8')
-    fname = 'tikz-%s.png' % (sha(hashkey).hexdigest())
-    relfn = posixpath.join(self.builder.imgpath, fname)
-    outfn = path.join(self.builder.outdir, '_images', fname)
 
-    if path.isfile(outfn):
-        return relfn
+def render_tikz(self, rel_fname, tikz, libs):
+    local_fname = path.join(*rel_fname.split('/'))
+    relfn = posixpath.join(self.builder.imgpath, rel_fname)
+    srcfn = path.join(self.builder.srcdir, local_fname)
+    outfn = path.join(self.builder.outdir, '_images', local_fname)
+
+    # check for cached image
+    hashkey = tikz.encode('utf-8')
+    hashvalue = sha(hashkey).hexdigest()
+    hashfn = path.join(self.builder.srcdir, local_fname + ".hash")
+    if path.isfile(hashfn):
+        oldhashvalue = open(hashfn).read()
+        if oldhashvalue == hashvalue:
+            shutil.copy(srcfn, outfn)
+            return
 
     if hasattr(self.builder, '_tikz_warned'):
         return None
-    
+
     ensuredir(path.dirname(outfn))
     curdir = getcwd()
 
@@ -190,10 +202,19 @@ def render_tikz(self,tikz,libs):
         self.builder._tikz_warned = True
         raise TikzExtError('pnmtopng exited with error:\n[stderr]\n%s'
                            % (stderr2))
-    f = open(outfn,'wb')
+    f = open(outfn, 'wb')
     f.write(pngdata)
     f.close()
     chdir(curdir)
+
+    f = open(srcfn, 'wb')
+    f.write(pngdata)
+    f.close()
+
+    f = open(hashfn, 'wb')
+    f.write(hashvalue)
+    f.close()
+
     return relfn
 
 def html_visit_tikz(self,node):
@@ -215,7 +236,7 @@ def html_visit_tikz(self,node):
     libs = libs.replace(' ', '').replace('\t', '').strip(', ')
 
     try:
-        fname = render_tikz(self,node['tikz'],libs)
+        fname = render_tikz(self, node['fname'], node['tikz'], libs)
     except TikzExtError, exc:
         info = str(exc)[str(exc).find('!'):-1]
         sm = nodes.system_message(info, type='WARNING', level=2,
