@@ -28,15 +28,15 @@ class HttpRpcResource(Resource):
         self.transport = transport
         Resource.__init__(self)
 
-    def render_(self, request, logmsg=None):
+    def render_(self, request, http_action=None):
         request.setHeader("content-type", "text/plain")
         uu = str(uuid.uuid4())
         md = {}
         md['args'] = request.args
         md['content'] = request.content.read()
         md['path'] = request.path
-        #if logmsg:
-        log.msg("HttpRpcResource", logmsg, "Message.message:", repr(md))
+        log.msg("HttpRpcResource HTTP Action: %s  Message.message: %s" % (
+            http_action, repr(md)))
         message = Message(message=md, uuid=uu,
                           return_path=[self.transport.consume_key])
         self.transport.publisher.publish_message(message)
