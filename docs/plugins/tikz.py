@@ -103,7 +103,7 @@ def render_tikz(self, rel_fname, tikz, libs):
         oldhashvalue = open(hashfn).read()
         if oldhashvalue == hashvalue:
             shutil.copy(srcfn, outfn)
-            return
+            return relfn
 
     if hasattr(self.builder, '_tikz_warned'):
         return None
