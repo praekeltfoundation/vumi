@@ -244,7 +244,7 @@ class Worker(object):
         root = Resource()
         # sort by ascending path length to make sure we create
         # resources lower down in the path earlier
-        resource = sorted(resources, key=lambda r: len(r[1]))
+        resources = sorted(resources, key=lambda r: len(r[1]))
         for resource, path in resources:
             request_path = filter(None, path.split('/'))
             nodes, leaf = request_path[0:-1], request_path[-1]
@@ -280,6 +280,7 @@ class Consumer(object):
         self.channel = channel
         self.queue = queue
         self.keep_consuming = True
+        self._testing = hasattr(channel, 'message_processed')
 
         @inlineCallbacks
         def read_messages():
@@ -299,6 +300,8 @@ class Consumer(object):
     def consume(self, message):
         result = yield self.consume_message(self.message_class.from_json(
                                             message.content.body))
+        if self._testing:
+            self.channel.message_processed()
         if result is not False:
             returnValue(self.ack(message))
         else:
