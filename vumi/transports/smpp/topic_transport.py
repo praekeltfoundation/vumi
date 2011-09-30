@@ -1,7 +1,7 @@
 from twisted.internet.defer import inlineCallbacks
 from twisted.python import log
 
-from vumi.workers.smpp.transport import SmppTransport
+from vumi.transports.smpp.transport import SmppTransport
 
 
 class TopicSmppTransport(SmppTransport):
