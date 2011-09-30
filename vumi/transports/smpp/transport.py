@@ -19,8 +19,6 @@ class SmppTransport(Transport):
     The SmppTransport
     """
 
-    start_consumer = False
-
     def setup_transport(self):
         log.msg("Starting the SmppTransport with %s" % self.config)
 
@@ -170,10 +168,11 @@ class SmppTransport(Transport):
         log.msg("Stopping the SMPPTransport")
         return super(SmppTransport, self).stopWorker()
 
-    def send_failure(self, message, reason=None):
+    def send_failure(self, message, exception, reason):
         """Send a failure report."""
         log.msg("Failed to send: %s reason: %s" % (message, reason))
-        return super(SmppTransport, self).send_failure(message, reason)
+        return super(SmppTransport, self).send_failure(message,
+                                                       exception, reason)
 
     def mess_tempfault(self, *args, **kwargs):
         pdu = kwargs.get('pdu')
