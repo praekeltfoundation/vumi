@@ -134,9 +134,11 @@ class TransportTestCase(unittest.TestCase):
             params['timestamp'] = UTCNearNow()
         return TransportUserMessage(**params)
 
-    def mkmsg_fail(self, message, reason):
+    def mkmsg_fail(self, message, reason,
+                   failure_code=FailureMessage.FC_UNSPECIFIED):
         return FailureMessage(
             timestamp=UTCNearNow(),
+            failure_code=failure_code,
             message=message,
             reason=reason,
             )
