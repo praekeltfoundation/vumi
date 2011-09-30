@@ -54,7 +54,6 @@ class SmppTransport(Transport):
                 factory.defaults['port'],
                 factory)
 
-    @inlineCallbacks
     def esme_connected(self, client):
         log.msg("ESME Connected, adding handlers")
         self.esme_client = client
