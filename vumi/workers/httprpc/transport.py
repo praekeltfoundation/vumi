@@ -6,6 +6,7 @@ from twisted.web import http
 from twisted.web.resource import Resource
 from twisted.web.server import NOT_DONE_YET
 from vumi.message import Message
+from vumi.transports.base import Transport
 from vumi.service import Worker
 
 
@@ -38,8 +39,8 @@ class HttpRpcResource(Resource):
         log.msg("HttpRpcResource HTTP Action: %s  Message.message: %s" % (
             http_action, repr(md)))
         message = Message(message=md, uuid=uu,
-                          return_path=[self.transport.consume_key])
-        self.transport.publisher.publish_message(message)
+                          return_path=[self.transport.get_rkey('outbound')])
+        self.transport.publish_message(message=message)
         self.transport.requests[uu] = request
         return NOT_DONE_YET
 
@@ -50,20 +51,20 @@ class HttpRpcResource(Resource):
         return self.render_(request, "render_POST")
 
 
-class HttpRpcTransport(Worker):
+class HttpRpcTransport(Transport):
 
     @inlineCallbacks
     def startWorker(self):
         self.uuid = uuid.uuid4()
         log.msg("Starting HttpRpcTransport %s config: %s" % (self.uuid,
                                                              self.config))
-        self.publish_key = self.config['publish_key']
-        self.consume_key = self.config['consume_key']
+        #self.publish_key = self.config['publish_key']
+        #self.consume_key = self.config['consume_key']
 
         self.requests = {}
 
-        self.publisher = yield self.publish_to(self.publish_key)
-        self.consume(self.consume_key, self.consume_message)
+        #self.publisher = yield self.publish_to(self.publish_key)
+        #self.consume(self.consume_key, self.consume_message)
 
         # start receipt web resource
         self.receipt_resource = yield self.start_web_resources(
@@ -108,54 +109,12 @@ class DummyRpcWorker(Worker):
         self.consume(self.consume_key, self.consume_message)
 
     def consume_message(self, message):
-        hi = '''
-<request>
-    <headertext>Welcome to Vodacom Ikhwezi!</headertext>
-    <options>
-        <option
-            command="1"
-            order="1"
-            callback="http://vumi.praekeltfoundation.org/api/v1/ussd/ikhwezi/"
-            display="True">finish session.</option>
-        <option
-            command="2"
-            order="2"
-            callback="http://vumi.praekeltfoundation.org/api/v1/ussd/ikhwezi/"
-            display="True">return to this screen.</option>
-        <option
-            command="3"
-            order="3"
-            callback="http://vumi.praekeltfoundation.org/api/v1/ussd/ikhwezi/"
-            display="True">continue to next screen.</option>
-    </options>
-</request>'''
-        cont = '''
-<request>
-    <headertext>Nothing to see yet</headertext>
-    <options>
-        <option
-            command="1"
-            order="1"
-            callback="http://vumi.praekeltfoundation.org/api/v1/ussd/ikhwezi/"
-            display="True">finish session.</option>
-    </options>
-</request>'''
-        bye = '''
-<request>
-    <headertext>Goodbye!</headertext>
-</request>'''
-
         log.msg("DummyRpcWorker consuming on %s: %s" % (
             self.consume_key,
             repr(message.payload)))
-        reply = hi
-        if message.payload['message']['args'].get('request', [''])[0] == "1":
-            reply = bye
-        if message.payload['message']['args'].get('request', [''])[0] == "3":
-            reply = cont
         self.publisher.publish_message(Message(
                 uuid=message.payload['uuid'],
-                message=reply),
+                message="OK"),
             routing_key=message.payload['return_path'].pop())
 
     def stopWorker(self):
