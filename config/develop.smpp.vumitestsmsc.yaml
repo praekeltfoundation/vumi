@@ -9,6 +9,7 @@ dest_addr_npi: 1
 registered_delivery: 1
 
 TRANSPORT_NAME: vumitestsmsc
+transport_name: vumitestsmsc
 
 # Number Recognition
 COUNTRY_CODE: "27"

@@ -124,6 +124,14 @@ class WorkerAMQClient(AMQClient):
         """
         return (max(self.channels) + 1) if self.channels else 0
 
+    def _declare_exchange(self, source, channel):
+        # get the details for AMQP
+        exchange_name = source.exchange_name
+        exchange_type = source.exchange_type
+        durable = source.durable
+        return channel.exchange_declare(exchange=exchange_name,
+                                        type=exchange_type, durable=durable)
+
     @inlineCallbacks
     def start_consumer(self, consumer_class, *args, **kwargs):
         channel = yield self.get_channel()
@@ -132,14 +140,12 @@ class WorkerAMQClient(AMQClient):
 
         # get the details for AMQP
         exchange_name = consumer.exchange_name
-        exchange_type = consumer.exchange_type
         durable = consumer.durable
         queue_name = consumer.queue_name
         routing_key = consumer.routing_key
 
         # declare the exchange, doesn't matter if it already exists
-        yield channel.exchange_declare(exchange=exchange_name,
-                                        type=exchange_type, durable=durable)
+        yield self._declare_exchange(consumer, channel)
 
         # declare the queue
         yield channel.queue_declare(queue=queue_name, durable=durable)
@@ -162,6 +168,8 @@ class WorkerAMQClient(AMQClient):
         # start the publisher
         publisher = publisher_class(*args, **kwargs)
         publisher.vumi_options = self.vumi_options
+        # declare the exchange, doesn't matter if it already exists
+        yield self._declare_exchange(publisher, channel)
         # start!
         yield publisher.start(channel)
         # return the publisher
@@ -236,7 +244,7 @@ class Worker(object):
         root = Resource()
         # sort by ascending path length to make sure we create
         # resources lower down in the path earlier
-        resource = sorted(resources, key=lambda r: len(r[1]))
+        resources = sorted(resources, key=lambda r: len(r[1]))
         for resource, path in resources:
             request_path = filter(None, path.split('/'))
             nodes, leaf = request_path[0:-1], request_path[-1]
@@ -272,6 +280,7 @@ class Consumer(object):
         self.channel = channel
         self.queue = queue
         self.keep_consuming = True
+        self._testing = hasattr(channel, 'message_processed')
 
         @inlineCallbacks
         def read_messages():
@@ -291,6 +300,8 @@ class Consumer(object):
     def consume(self, message):
         result = yield self.consume_message(self.message_class.from_json(
                                             message.content.body))
+        if self._testing:
+            self.channel.message_processed()
         if result is not False:
             returnValue(self.ack(message))
         else:

@@ -1,5 +1,6 @@
 # -*- test-case-name: vumi.tests.test_testutils -*-
 
+import re
 import json
 import importlib
 import fnmatch
@@ -42,6 +43,14 @@ class UTCNearNow(object):
         if other.tzinfo:
             now = self.utcnow
         return (now - self.offset) < other < (now + self.offset)
+
+
+class RegexMatcher(object):
+    def __init__(self, regex):
+        self.regex = re.compile(regex)
+
+    def __eq__(self, other):
+        return self.regex.match(other)
 
 
 class Mocking(object):
@@ -233,7 +242,7 @@ class FakeRedis(object):
         self._data[key] = value
 
     def delete(self, key):
-        del self._data[key]
+        self._data.pop(key, None)
 
     # Hash operations
 
