@@ -574,7 +574,8 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
         self.__deliver_sm_callback = None
         self.seq = [int(self.config['smpp_offset'])]
         log.msg("Set sequence number: %s" % (self.seq))
-        self.initialDelay = 30.0
+        self.initialDelay = float(
+            self.config.get('initial_reconnect_delay', 5))
         self.maxDelay = 45
         self.defaults = {
                 'host': '127.0.0.1',
