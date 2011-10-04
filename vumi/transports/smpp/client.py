@@ -576,7 +576,7 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
         log.msg("Set sequence number: %s" % (self.seq))
         self.initialDelay = float(
             self.config.get('initial_reconnect_delay', 5))
-        self.maxDelay = 45
+        self.maxDelay = max(45, self.initialDelay)
         self.defaults = {
                 'host': '127.0.0.1',
                 'port': 2775,
