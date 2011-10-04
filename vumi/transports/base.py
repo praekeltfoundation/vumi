@@ -55,7 +55,7 @@ class Transport(Worker):
 
         yield self.setup_transport()
 
-        if self.start_consumer:
+        if self.start_message_consumer:
             yield self._setup_message_consumer()
 
     @inlineCallbacks
