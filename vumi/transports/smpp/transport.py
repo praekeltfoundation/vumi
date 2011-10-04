@@ -4,7 +4,6 @@ from datetime import datetime
 
 import redis
 from twisted.python import log
-from twisted.internet.defer import inlineCallbacks
 from twisted.internet import reactor
 
 # from vumi.service import Worker
@@ -75,7 +74,6 @@ class SmppTransport(Transport):
         self.r_set_id_for_sequence(sequence_number,
                                    message.payload.get("message_id"))
 
-    @inlineCallbacks
     def esme_disconnected(self):
         log.msg("ESME Disconnected")
 
