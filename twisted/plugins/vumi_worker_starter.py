@@ -7,6 +7,7 @@ from twisted.plugin import IPlugin
 from vumi.service import Options, WorkerCreator
 from vumi.errors import VumiError
 
+
 # This is the actual service that is started, this the thing that runs
 # in the background and starts a worker.
 class VumiService(Service):
@@ -29,7 +30,7 @@ class VumiService(Service):
         # or a worker that loads new workers.
         worker_class = self.options.pop("worker_class")
         if not worker_class:
-            raise VumiError, "please specify --worker_class"
+            raise VumiError("please specify --worker_class")
 
         config = {}
         # load the config file if specified
@@ -52,16 +53,20 @@ class VumiService(Service):
         log.msg("Stopping VumiService")
 
 
-
 # Extend the default Vumi options with whatever options your service needs
 class BasicSet(Options):
     optParameters = Options.optParameters + [
         ["worker_class", None, None, "class of a worker to start"],
         ["config", None, None, "YAML config file to load"],
         ["set-option", None, None, "Override a config file option"],
-        ["config_smpp_increment", None, 1, "Increment for SMPP sequence number (must be >= number of SMPP workers on a single SMPP account)"],
-        ["config_smpp_offset", None, 1, "Offset for this worker's SMPP sequence numbers (no duplicates on a single SMPP account and must be <= increment)"],
+        ["config_smpp_increment", None, 1,
+         "Increment for SMPP sequence number (must be >= number of"
+         " SMPP workers on a single SMPP account)"],
+        ["config_smpp_offset", None, 1,
+         "Offset for this worker's SMPP sequence numbers (no duplicates"
+         " on a single SMPP account and must be <= increment)"],
     ]
+
 
 # This create the service, runnable on command line with twistd
 class VumiServiceMaker(object):
