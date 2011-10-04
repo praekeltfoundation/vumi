@@ -391,16 +391,18 @@ class Publisher(object):
             return True
         if (len(self.bound_routing_keys) == 1 and
             self.bound_routing_keys.get("bindings") == "undetected"):
-            log.msg("No bindings detected, is the RabbitMQ Management plugin"
-                    " installed?")
+            # The following is very noisy in the logs:
+            # log.msg("No bindings detected, is the RabbitMQ Management plugin"
+            #         " installed?")
             return True
         if key in self.bound_routing_keys.keys():
             return True
         self.bound_routing_keys = self.list_bindings()
         if (len(self.bound_routing_keys) == 1 and
             self.bound_routing_keys.get("bindings") == "undetected"):
-            log.msg("No bindings detected, is the RabbitMQ Management plugin"
-                    " installed?")
+            # The following is very noisy in the logs:
+            # log.msg("No bindings detected, is the RabbitMQ Management plugin"
+            #         " installed?")
             return True
         return key in self.bound_routing_keys.keys()
 
