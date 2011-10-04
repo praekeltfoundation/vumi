@@ -265,7 +265,7 @@ class Vas2NetsTransportTestCase(TransportTestCase):
         yield self.make_resource_worker(mocked_message_id, mocked_message)
         yield self.worker.startWorker()
 
-        yield self.worker._process_message(self.mkmsg_out())
+        yield self.dispatch(self.mkmsg_out())
 
         [smsg] = self.get_dispatched('vas2nets.event')
         self.assertEqual(self.mkmsg_ack(sent_message_id=mocked_message_id),
@@ -283,8 +283,7 @@ class Vas2NetsTransportTestCase(TransportTestCase):
                                         send_id=reply_to_msgid)
         yield self.worker.startWorker()
 
-        yield self.worker._process_message(self.mkmsg_out(
-                    in_reply_to=reply_to_msgid))
+        yield self.dispatch(self.mkmsg_out(in_reply_to=reply_to_msgid))
 
         [smsg] = self.get_dispatched('vas2nets.event')
         self.assertEqual(self.mkmsg_ack(sent_message_id=mocked_message_id),
@@ -299,7 +298,7 @@ class Vas2NetsTransportTestCase(TransportTestCase):
         yield self.worker.startWorker()
 
         msg = self.mkmsg_out()
-        d = self.worker._process_message(msg)
+        d = self.dispatch(msg)
         yield d
         [fmsg] = self.get_dispatched('vas2nets.failures')
         fmsg = from_json(fmsg.body)
@@ -312,7 +311,7 @@ class Vas2NetsTransportTestCase(TransportTestCase):
         yield self.worker.startWorker()
 
         msg = self.mkmsg_out()
-        d = self.worker._process_message(msg)
+        d = self.dispatch(msg)
         yield d
         [fmsg] = self.get_dispatched('vas2nets.failures')
         fmsg = from_json(fmsg.body)
@@ -328,7 +327,7 @@ class Vas2NetsTransportTestCase(TransportTestCase):
         yield self.worker.startWorker()
 
         msg = self.mkmsg_out()
-        deferred = self.worker._process_message(msg)
+        deferred = self.dispatch(msg)
         yield deferred
         [fmsg] = self.get_dispatched('vas2nets.failures')
         fmsg = from_json(fmsg.body)

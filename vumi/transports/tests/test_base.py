@@ -152,6 +152,12 @@ class TransportTestCase(unittest.TestCase):
     def get_dispatched_failures(self):
         return self._amqp.get_messages('vumi', self.rkey('failures'))
 
+    def dispatch(self, message, rkey=None, exchange='vumi'):
+        if rkey is None:
+            rkey = self.rkey('outbound')
+        self.broker.publish_message(exchange, rkey, message)
+        return self.broker.kick_delivery()
+
 
 class BaseTransportTestCase(TransportTestCase):
     """
