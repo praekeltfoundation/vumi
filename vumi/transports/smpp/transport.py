@@ -138,6 +138,7 @@ class SmppTransport(Transport):
                 message_id=kwargs.get('message_id'),
                 to_addr=kwargs.get('destination_addr'),
                 from_addr=kwargs.get('source_addr'),
+                transport_type='sms',
                 content=kwargs.get('short_message'))
         log.msg("PUBLISHING INBOUND: %s" % (message,))
         return self.publish_message(**message)
