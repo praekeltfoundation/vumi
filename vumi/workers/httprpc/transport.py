@@ -52,19 +52,14 @@ class HttpRpcResource(Resource):
 
 
 class HttpRpcTransport(Transport):
+    self.start_consumer = False
 
     @inlineCallbacks
-    def startWorker(self):
+    def setup_transport(self):
         self.uuid = uuid.uuid4()
         log.msg("Starting HttpRpcTransport %s config: %s" % (self.uuid,
                                                              self.config))
-        #self.publish_key = self.config['publish_key']
-        #self.consume_key = self.config['consume_key']
-
         self.requests = {}
-
-        #self.publisher = yield self.publish_to(self.publish_key)
-        #self.consume(self.consume_key, self.consume_message)
 
         # start receipt web resource
         self.receipt_resource = yield self.start_web_resources(
