@@ -201,8 +201,8 @@ class SmppTransport(Transport):
                     kwargs['delivery_report']['done_date'], "%y%m%d%H%M%S")
                 }
         delivery_status = self.delivery_status(
-            kwargs['delivery_report']['stat']),
-        message_id = kwargs['delivery_report']['id'],
+            kwargs['delivery_report']['stat'])
+        message_id = kwargs['delivery_report']['id']
         log.msg("PUBLISHING DELIV REPORT: %s %s" % (message_id,
                                                     delivery_status))
         return self.publish_delivery_report(
