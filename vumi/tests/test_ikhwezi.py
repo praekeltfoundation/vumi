@@ -140,27 +140,27 @@ class RedisInputSequenceTest(TestCase):
         self.assertEqual(2, len(resp.option_list))
         inputs = [1]
         resp = self.runInputSequence(inputs, resp.context)
-        print resp
+        #print resp
         self.assertEqual(2, len(resp.option_list))
 
         # simulate resume
         inputs = [None]
         resp = self.runInputSequence(inputs)
-        print resp
+        #print resp
         self.assertEqual(2, len(resp.option_list))
 
         # and 3 more attempts
         inputs = [None]
         resp = self.runInputSequence(inputs)
-        print resp
+        #print resp
         self.assertEqual(2, len(resp.option_list))
         inputs = [None]
         resp = self.runInputSequence(inputs)
-        print resp
+        #print resp
         self.assertEqual(2, len(resp.option_list))
         inputs = [None]
         resp = self.runInputSequence(inputs)
-        print resp
+        #print resp
         self.assertEqual(0, len(resp.option_list))
 
 

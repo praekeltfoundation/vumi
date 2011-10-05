@@ -333,7 +333,6 @@ class IkhweziQuiz():
         if context == None:  # new session
             self.data['attempts'] += 1
             self.ds_set()
-            print self.data
 
         if self.data['attempts'] > 4:
             # terminate interaction
