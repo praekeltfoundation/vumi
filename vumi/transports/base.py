@@ -49,14 +49,14 @@ class Transport(Worker):
         self.transport_name = self.config['transport_name']
         self.concurrent_sends = self.config.get('concurrent_sends')
 
+        if self.start_message_consumer:
+            yield self._setup_message_consumer()
+
         yield self._setup_failure_publisher()
         yield self._setup_message_publisher()
         yield self._setup_event_publisher()
 
         yield self.setup_transport()
-
-        if self.start_message_consumer:
-            yield self._setup_message_consumer()
 
     @inlineCallbacks
     def stopWorker(self):

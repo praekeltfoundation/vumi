@@ -31,16 +31,21 @@ class HttpRpcResource(Resource):
 
     def render_(self, request, http_action=None):
         request.setHeader("content-type", "text/plain")
-        uu = str(uuid.uuid4())
+        uu = str(uuid.uuid4().get_hex())
         md = {}
         md['args'] = request.args
         md['content'] = request.content.read()
         md['path'] = request.path
         log.msg("HttpRpcResource HTTP Action: %s  Message.message: %s" % (
             http_action, repr(md)))
-        message = Message(message=md, uuid=uu,
-                          return_path=[self.transport.get_rkey('outbound')])
-        self.transport.publish_message(message=message)
+        self.transport.publish_message(
+                message_id=uu,
+                content=md,
+                to_addr='',
+                from_addr='',
+                transport_name=self.transport.config.get('transport_name'),
+                transport_type=self.transport.config.get('transport_type')
+                )
         self.transport.requests[uu] = request
         return NOT_DONE_YET
 
@@ -52,7 +57,6 @@ class HttpRpcResource(Resource):
 
 
 class HttpRpcTransport(Transport):
-    self.start_consumer = False
 
     @inlineCallbacks
     def setup_transport(self):
@@ -70,14 +74,12 @@ class HttpRpcTransport(Transport):
             self.config['web_port'])
         print self.receipt_resource
 
-    def consume_message(self, message):
-        log.msg("HttpRpcTransport consuming on %s: %s" % (
-            self.consume_key,
-            repr(message.payload)))
-        if message.payload.get('uuid') and 'message' in message.payload:
+    def handle_outbound_message(self, message):
+        log.msg("HttpRpcTransport consuming %s" % (message))
+        if message.payload.get('in_reply_to') and 'content' in message.payload:
             self.finishRequest(
-                    message.payload['uuid'],
-                    message.payload['message'])
+                    message.payload['in_reply_to'],
+                    message.payload['content'])
 
     def finishRequest(self, uuid, message=''):
         data = str(message)

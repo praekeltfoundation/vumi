@@ -4,7 +4,7 @@ import yaml
 
 from twisted.internet.defer import inlineCallbacks
 from twisted.python import log
-from vumi.message import Message
+from vumi.message import Message, TransportUserMessage
 from vumi.service import Worker
 from vumi.tests.utils import FakeRedis
 from vumi.workers.vodacommessaging.utils import VodacomMessagingResponse
@@ -393,8 +393,8 @@ class IkhweziQuizWorker(Worker):
     @inlineCallbacks
     def startWorker(self):
         log.msg("Starting IkhweziQuizWorker with config: %s" % (self.config))
-        self.publish_key = self.config['consume_key']  # Swap consume and
-        self.consume_key = self.config['publish_key']  # publish keys
+        self.publish_key = self.config['publish_key']
+        self.consume_key = self.config['consume_key']
 
         self.publisher = yield self.publish_to(self.publish_key)
         self.consume(self.consume_key, self.consume_message)
@@ -407,9 +407,10 @@ class IkhweziQuizWorker(Worker):
         log.msg("IkhweziQuizWorker consuming on %s: %s" % (
             self.consume_key,
             repr(message.payload)))
-        request = message.payload['message']['args'].get('request', [None])[0]
-        context = message.payload['message']['args'].get('context', [None])[0]
-        msisdn = message.payload['message']['args'].get('msisdn', [None])[0]
+        user_m = TransportUserMessage(**message.payload)
+        request = user_m.payload['content']['args'].get('request', [None])[0]
+        context = user_m.payload['content']['args'].get('context', [None])[0]
+        msisdn = user_m.payload['content']['args'].get('msisdn', [None])[0]
         ik = IkhweziQuiz(
                 self.config,
                 self.quiz,
@@ -417,11 +418,8 @@ class IkhweziQuizWorker(Worker):
                 self.ds,
                 msisdn)
         resp = ik.formulate_response(context, request)
-        reply = str(resp)
-        self.publisher.publish_message(Message(
-                uuid=message.payload['uuid'],
-                message=reply),
-            routing_key=message.payload['return_path'].pop())
+        reply = user_m.reply(str(resp))
+        self.publisher.publish_message(reply)
 
     def stopWorker(self):
         log.msg("Stopping the MenuWorker")
