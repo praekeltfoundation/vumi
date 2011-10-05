@@ -99,8 +99,8 @@ class DummyRpcWorker(Worker):
     @inlineCallbacks
     def startWorker(self):
         log.msg("Starting DummyRpcWorker with config: %s" % (self.config))
-        self.publish_key = self.config['consume_key']  # Swap consume and
-        self.consume_key = self.config['publish_key']  # publish keys
+        self.publish_key = self.config['publish_key']
+        self.consume_key = self.config['consume_key']
 
         self.publisher = yield self.publish_to(self.publish_key)
         self.consume(self.consume_key, self.consume_message)
@@ -109,10 +109,9 @@ class DummyRpcWorker(Worker):
         log.msg("DummyRpcWorker consuming on %s: %s" % (
             self.consume_key,
             repr(message.payload)))
-        self.publisher.publish_message(Message(
-                uuid=message.payload['uuid'],
-                message="OK"),
-            routing_key=message.payload['return_path'].pop())
+        user_m = TransportUserMessage(**message.payload)
+        reply = user_m.reply("OK")
+        self.publisher.publish_message(reply)
 
     def stopWorker(self):
-        log.msg("Stopping the MenuWorker")
+        log.msg("Stopping the DummyRpcWorker")

@@ -422,4 +422,4 @@ class IkhweziQuizWorker(Worker):
         self.publisher.publish_message(reply)
 
     def stopWorker(self):
-        log.msg("Stopping the MenuWorker")
+        log.msg("Stopping the IkhweziQuizWorker")
