@@ -4,8 +4,8 @@ import redis
 
 from twisted.python import log
 from twisted.trial.unittest import TestCase
-from vumi.workers.vodacommessaging.utils import VodacomMessagingResponse
-from vumi.workers.vodacommessaging.ikhwezi import (
+from vumi.transports.vodacommessaging.utils import VodacomMessagingResponse
+from vumi.workers.ikhwezi.ikhwezi import (
         TRANSLATIONS, QUIZ, IkhweziQuiz, IkhweziQuizWorker)
 from vumi.tests.utils import FakeRedis
 

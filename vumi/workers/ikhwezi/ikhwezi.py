@@ -7,7 +7,7 @@ from twisted.python import log
 from vumi.message import Message, TransportUserMessage
 from vumi.service import Worker
 from vumi.tests.utils import FakeRedis
-from vumi.workers.vodacommessaging.utils import VodacomMessagingResponse
+from vumi.transports.vodacommessaging.utils import VodacomMessagingResponse
 
 
 TRANSLATIONS = '''
