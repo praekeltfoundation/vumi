@@ -52,7 +52,7 @@ class SmppTransport(Transport):
     :type initial_reconnect_delay: int, optional
     :param initial_reconnect_delay:
         Number of seconds to delay before reconnecting to the server after
-        being disconnected. Default is .... Some WASPs, e.g. Clickatell,
+        being disconnected. Default is 5s. Some WASPs, e.g. Clickatell,
         require a 30s delay before reconnecting. In these cases a 45s
         initial_reconnect_delay is recommended.
 
