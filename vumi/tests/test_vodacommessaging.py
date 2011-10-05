@@ -171,3 +171,37 @@ class VodacomMessagingResponseTest(TestCase):
             </request>
             '''
         self.assertEquals(self.stdXML(vmr), self.stdXML(ref))
+
+    def testMakeOrderedOptionMessage(self):
+        vmr = VodacomMessagingResponse(self.config)
+        vmr.set_headertext("Pick a card")
+        vmr.accept_freetext()
+        vmr.add_option("3 of hearts", 3)
+        vmr.add_option("2 of clubs", 2)
+        vmr.add_option("Ace of diamonds", 1)
+        ref = '''
+            <request>
+                <headertext>Pick a card</headertext>
+                <options>
+                    <option
+                        command="3"
+                        order="3"
+                        callback="http://vumi.p.org/api/v1/ussd/vmes/?context="
+                        display="True"
+                        >3 of hearts</option>
+                    <option
+                        command="2"
+                        order="2"
+                        callback="http://vumi.p.org/api/v1/ussd/vmes/?context="
+                        display="True"
+                        >2 of clubs</option>
+                    <option
+                        command="1"
+                        order="1"
+                        callback="http://vumi.p.org/api/v1/ussd/vmes/?context="
+                        display="True"
+                        >Ace of diamonds</option>
+                </options>
+            </request>
+            '''
+        self.assertEquals(self.stdXML(vmr), self.stdXML(ref))
