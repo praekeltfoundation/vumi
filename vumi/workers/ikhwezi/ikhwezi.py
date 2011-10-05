@@ -298,7 +298,8 @@ class IkhweziQuiz():
                 'd2_timestamp': None,
                 'd3_timestamp': None,
                 'd4_timestamp': None,
-                'order': self.random_ordering()}
+                'order': self.random_ordering(),
+                'context': None}
         self.ds_set()
         return True
 
@@ -324,6 +325,11 @@ class IkhweziQuiz():
         return reply
 
     def formulate_response(self, context, answer):
+        if answer == None:
+            context = None
+        else:
+            context = self.data['context']
+
         try:
             answer = int(answer)
         except Exception, e:
@@ -337,6 +343,8 @@ class IkhweziQuiz():
         if self.data['attempts'] > 4:
             # terminate interaction
             context = 'completed'
+            self.data['context'] = context
+            self.ds_set()
             question = self.quiz.get(context)
             vmr = VodacomMessagingResponse(self.config)
             vmr.set_context(context)
@@ -351,6 +359,8 @@ class IkhweziQuiz():
                 answer == 2 or len(self.data['order']) == 0):
             # don't continue, show exit
             context = 'exit'
+            self.data['context'] = context
+            self.ds_set()
             question = self.quiz.get(context)
             vmr = VodacomMessagingResponse(self.config)
             vmr.set_context(context)
@@ -369,6 +379,8 @@ class IkhweziQuiz():
         elif reply:
             # correct answer and offer to continue
             context = 'continue'
+            self.data['context'] = context
+            self.ds_set()
             question = self.quiz.get(context)
             vmr = VodacomMessagingResponse(self.config)
             vmr.set_context(context)
@@ -380,6 +392,8 @@ class IkhweziQuiz():
         else:
             # ask another question
             context, question = self.next_context_and_question()
+            self.data['context'] = context
+            self.ds_set()
             vmr = VodacomMessagingResponse(self.config)
             vmr.set_context(context)
             vmr.set_headertext(question['headertext'])
@@ -407,9 +421,10 @@ class IkhweziQuizWorker(Worker):
             self.consume_key,
             repr(message.payload)))
         user_m = TransportUserMessage(**message.payload)
-        request = user_m.payload['content']['args'].get('request', [None])[0]
-        context = user_m.payload['content']['args'].get('context', [None])[0]
-        msisdn = user_m.payload['content']['args'].get('msisdn', [None])[0]
+        request = user_m.payload['content']
+        context = None
+        msisdn = user_m.payload['from_addr']
+        session = user_m.payload['to_addr']
         ik = IkhweziQuiz(
                 self.config,
                 self.quiz,

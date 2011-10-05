@@ -82,7 +82,7 @@ class RedisInputSequenceTest(TestCase):
         self.finishInputSequence(inputs)
 
     def testAnswerWrongType2(self):
-        inputs = [None, 1, None, 1, 2]
+        inputs = [None, 1, 55, 1, 2]
         self.finishInputSequence(inputs)
 
     def testAnswerWrongType3(self):
@@ -93,8 +93,8 @@ class RedisInputSequenceTest(TestCase):
         self.finishInputSequence(inputs)
 
     def testSequence1(self):
-        inputs = [None, 'blah', None, '1', 1, None, None, 'blah',
-                '1', 1, None, 'blah', None, '1', 2, 2]
+        inputs = [None, 'blah', 55, '1', 1, 55, 55, 'blah',
+                '1', 1, 55, 'blah', 55, '1', 2, 2]
         self.finishInputSequence(inputs)
 
     def testSequence2(self):
@@ -102,15 +102,15 @@ class RedisInputSequenceTest(TestCase):
         This sequence answers all questions,
         forcing an exit response to the final continure question
         """
-        inputs = [None, 1, '1', None, 2, '1', None, 1, '1',
-                None, 2, None, '2', 1, '1', 1, '1', 1, None, '2',
-                None, '1', 1, '1', None, '2', 'bye']
+        inputs = [None, 1, '1', 55, 2, '1', 55, 1, '1',
+                55, 2, 55, '2', 1, '1', 1, '1', 1, 55, '2',
+                55, '1', 1, '1', 55, '2', 'bye']
         self.finishInputSequence(inputs)
 
     def testSequence3(self):
-        inputs = [None, 'demo', '2', None, 'demo', None, None, None, None,
-                '2', None, 'demo', '2', None, None, 'demo', '2', 1, None,
-                None, '1', None, '2', None, '2', None, '2', None, '2', 2]
+        inputs = [None, 'demo', '2', 55, 'demo', 55, 55, 55, 55,
+                '2', 55, 'demo', '2', 55, 55, 'demo', '2', 1, 55,
+                55, '1', 55, '2', 55, '2', 55, '2', 55, '2', 2]
         self.finishInputSequence(inputs)
 
     def testWithForcedOrder(self):
