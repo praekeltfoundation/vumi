@@ -4,7 +4,6 @@ from datetime import datetime
 
 import redis
 from twisted.python import log
-from twisted.internet.defer import inlineCallbacks
 from twisted.internet import reactor
 
 # from vumi.service import Worker
@@ -16,7 +15,84 @@ from vumi.message import Message
 
 class SmppTransport(Transport):
     """
-    The SmppTransport
+    An SMPP transport.
+
+    The SMPP transport has many configuration parameters. These are
+    divided up into sections below.
+
+    SMPP sequence number configuration options:
+
+    :type smpp_increment: int
+    :param smpp_increment:
+        Increment for SMPP sequence number (must be >= number of
+        SMPP workers on a single SMPP account).
+    :type smpp_offset: int
+    :param smpp_offset:
+        Offset for this worker's SMPP sequence numbers (no duplicates
+        on a single SMPP account and must be <= increment)
+
+    SMPP server account configuration options:
+
+    :type system_id: str
+    :param system_id:
+        User id used to connect to the SMPP server.
+    :type password: str
+    :param password:
+        Password for the system id.
+    :type system_type: str, optional
+    :param system_type:
+        Additional system metadata that is passed through to the SMPP server
+        on connect.
+    :type host: str
+    :param host:
+        Hostname of the SMPP server.
+    :type port: int
+    :param port:
+        Port the SMPP server is listening on.
+    :type initial_reconnect_delay: int, optional
+    :param initial_reconnect_delay:
+        Number of seconds to delay before reconnecting to the server after
+        being disconnected. Default is 5s. Some WASPs, e.g. Clickatell,
+        require a 30s delay before reconnecting. In these cases a 45s
+        initial_reconnect_delay is recommended.
+
+    SMPP protocol configuration options:
+
+    :type interface_version: str, optional
+    :param interface_version:
+        SMPP protocol version. Default is '34' (i.e. version 3.4).
+    :type dest_addr_ton:
+    :param dest_addr_ton:
+        Destination TON (type of number). Default .
+    :type dest_addr_npi:
+    :param dest_addr_npi:
+        Destination NPI (number plan identifier). Default 1 (ISDN/E.164/E.163).
+    :type registered_delivery:
+    :param registered_delivery:
+        Whether to ask for delivery reports. Default 1 (request delivery
+        reports).
+
+    The list of SMPP protocol configuration options given above is not
+    exhaustive. Any other options specified are passed through to the
+    python-smpp library PDU (protocol data unit) builder.
+
+    Cellphone number routing options:
+
+    :type COUNTRY_CODE: str, optional
+    :param COUNTRY_CODE:
+        Used to translate a leading zero in a destination MSISDN into a
+        country code. Default '',
+    :type OPERATOR_PREFIX: str, optional
+    :param OPERATOR_PREFIX:
+        Nested dictionary of prefix to network name mappings. Default {} (set
+        network to 'UNKNOWN'). E.g. { '27': { '27761': 'NETWORK1' }}.
+    :type OPERATOR_NUMBER:
+    :param OPERATOR_NUMBER:
+        Dictionary of source MSISDN to use for each network listed in
+        OPERATOR_PREFIX. If a network is not listed, the source MSISDN
+        specified by the message sender is used. Default {} (always used the
+        from address specified by the message sender). E.g. { 'NETWORK1':
+        '27761234567'}.
     """
 
     def setup_transport(self):
@@ -75,7 +151,6 @@ class SmppTransport(Transport):
         self.r_set_id_for_sequence(sequence_number,
                                    message.payload.get("message_id"))
 
-    @inlineCallbacks
     def esme_disconnected(self):
         log.msg("ESME Disconnected")
 
@@ -140,6 +215,7 @@ class SmppTransport(Transport):
                 message_id=kwargs.get('message_id'),
                 to_addr=kwargs.get('destination_addr'),
                 from_addr=kwargs.get('source_addr'),
+                transport_type='sms',
                 content=kwargs.get('short_message'))
         log.msg("PUBLISHING INBOUND: %s" % (message,))
         return self.publish_message(**message)

@@ -270,9 +270,13 @@ class TestRandomMetricsGenerator(TestCase):
 
     def setUp(self):
         self._on_run = Deferred()
+        self._workers = []
 
+    @inlineCallbacks
     def tearDown(self):
         self._on_run.callback(None)
+        for worker in self._workers:
+            yield worker.stopWorker()
 
     def on_run(self, worker):
         d, self._on_run = self._on_run, Deferred()
@@ -288,6 +292,7 @@ class TestRandomMetricsGenerator(TestCase):
                                         "manager_period": "0.1",
                                         "generator_period": "0.1",
                                     })
+        self._workers.append(worker)
         worker.on_run = self.on_run
         broker = BrokerWrapper(worker._amqp_client.broker)
         yield worker.startWorker()
@@ -300,5 +305,3 @@ class TestRandomMetricsGenerator(TestCase):
         self.assertEqual(sorted(d[0] for d in datapoints),
                          ["vumi.random.count", "vumi.random.timer",
                           "vumi.random.value"])
-
-        yield worker.stopWorker()
