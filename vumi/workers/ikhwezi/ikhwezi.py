@@ -11,6 +11,292 @@ from vumi.transports.vodacommessaging.utils import VodacomMessagingResponse
 
 
 TRANSLATIONS = '''
+-
+    English: "Thnx 4 taking the Quiz.  U have won R12 airtime! We will send U your airtime voucher. For more info about HIV/AIDS pls phone Aids Helpline 0800012322"
+    Zulu: "Siyabonga ngokuphendula ngeHIV. Uwinile! Uzothola i-SMS ne-airtime voucher. Ukuthola okwengeziwe ngeHIV/AIDS shayela i-Aids Helpline 0800012322"
+    Afrikaans: "Dankie vir jou deelname aan die vasvra! Jy het R12 lugtyd gewen! Jou lugtyd koepon is oppad! Vir meer inligting oor MIV/Vigs, bel die Vigs-hulplyn 0800012322"
+    Sotho: "Rea o leboha ka ho nka karolo ho HIV Quiz. O mohlodi! SMS e tla romelwa le voutjhara ya moya. Lesedi le leng ka HIV/AIDS, letsetsa Aids Helpline 0800012322"
+-
+    English: "Thnx 4 taking the HIV Quiz.  Unfortunately U are not a lucky winner. For more info about HIV/AIDS, phone Aids Helpline 0800012322"
+    Zulu: "Siyabonga ngokuphendula imibuzo ngeHIV. Ngeshwa awuphumelelanga. Ukuthola okwengeziwe ngeHIV/AIDS, shayela Aids Helpline 0800012322"
+    Afrikaans: "Dankie vir jou deelname aan die vasvra! Jy is ongelukkig nie 'n gelukkige  wenner nie. Vir meer inligting oor MIV/Vigs, bel Vigs Hulplyn 0800012322"
+    Sotho: "Rea o leboha ka ho nka karolo ho HIV Quiz. HA O mohlodi, re tshepa hore o ithutile! Lesedi le leng ka HIV/AIDS, letsetsa Aids Helpline 0800012322"
+-
+    English: "Continue to win!"
+    Zulu: "Qhubeka ukuze uwine!"
+    Afrikaans: "Gaan voort om te wen!"
+    Sotho: "E ya potsong e latelang"
+-
+    English: "Exit the quiz"
+    Zulu: "Phuma kwi-quiz"
+    Afrikaans: "Stop die vasvra"
+    Sotho: "E tswa ho quiz"
+-
+    English: "Thnx for taking the quiz.  We'll let U know if U R a lucky winner within 48 hours."
+    Zulu: "Siyabonga ngokuphendula. Sizokwazisa uma uwinile emahoreni angu-48."
+    Afrikaans: "Dankie dat jy aan die vasvra deelgeneem het. Ons sal jou binne 48 uur laat weet indien jy 'n wenner is."
+    Sotho: "Rea o leboha ka quiz. Re tla o tsebisa haeba o le mohlodi dihoreng tse 48"
+-
+    English: "Thank you, you've completed the HIV quiz and will be notified via SMS if you've won airtime prize."
+    Zulu:
+    Afrikaans:
+    Sotho:
+-
+    English: "Thnx 4 taking the Quiz! Answer easy questions and be 1 of 5000 lucky winners.  Pick your language:"
+    Zulu:
+    Afrikaans:
+    Sotho:
+-
+    English: "Please pick your gender"
+    Zulu: "Sicela ukhethe ubulili bakho"
+    Afrikaans: "Kies asseblief jou geslag"
+    Sotho: "Hle, kgetha bong ba hao"
+-
+    English: "Male"
+    Zulu: "Uma ungowesilisa"
+    Afrikaans: "Manlik"
+    Sotho: "E Motona"
+-
+    English: "Female"
+    Zulu: "Uma ungowesifazane"
+    Afrikaans: "Vroulik"
+    Sotho: "E Motshehadi"
+-
+    English: "Please pick your province"
+    Zulu: "Khetha isifundazwe sakho"
+    Afrikaans: "Kies asseblief jou provinsie"
+    Sotho: "Hle, kgetha provinse"
+-
+    English: "Gauteng"
+    Zulu: "Gauteng"
+    Afrikaans: "Gauteng"
+    Sotho: "Gauteng"
+-
+    English: "Kwazulu Natal"
+    Zulu: "Kwazulu Natal"
+    Afrikaans: "Kwazulu Natal"
+    Sotho: "Kwazulu Natal"
+-
+    English: "Limpopo"
+    Zulu: "Limpopo"
+    Afrikaans: "Limpopo"
+    Sotho: "Limpopo"
+-
+    English: "Eastern Cape"
+    Zulu: "Mpumakoloni"
+    Afrikaans: "Oos-Kaap"
+    Sotho: "Eastern Cape"
+-
+    English: "Mpumalanga"
+    Zulu: "Mpumalanga"
+    Afrikaans: "Mpumalanga"
+    Sotho: "Mpumalanga"
+-
+    English: "Northern Cape"
+    Zulu: "Nyakatho Kapa"
+    Afrikaans: "Noord-Kaap"
+    Sotho: "Northern Cape"
+-
+    English: "Western Cape"
+    Zulu: "Ntshonakoloni"
+    Afrikaans: "Wes-Kaap"
+    Sotho: "Western Cape"
+-
+    English: "Free State"
+    Zulu: "Free State"
+    Afrikaans: "Vrystaat"
+    Sotho: "Free State"
+-
+    English: "North West"
+    Zulu: "North West"
+    Afrikaans: "Noord-Wes"
+    Sotho: "North West"
+-
+    English: "Please pick your age group"
+    Zulu: "Khetha ubudala bakho"
+    Afrikaans: "Kies asseblief jou ouderdomsgroep"
+    Sotho: "Kgetha dilemo tsa hao"
+-
+    English: "younger than 20"
+    Zulu: "Uma ungaphansi kweminyaka engu- 20"
+    Afrikaans: "Jonger as 20"
+    Sotho: "Ka tlase ho 20"
+-
+    English: "between 20-29"
+    Zulu: "Phakathi kuka-20-29"
+    Afrikaans: "Tussen 20-29"
+    Sotho: "Pakeng tsa 20-29"
+-
+    English: "between 30-39"
+    Zulu: "Phakathi kuka-30-39"
+    Afrikaans: "Tussen 30-39"
+    Sotho: "Pakeng tsa 30 - 39"
+-
+    English: "40 or older"
+    Zulu: "Ngaphezu kuka-40"
+    Afrikaans: "40 en ouer"
+    Sotho: "40 kapa ho feta"
+-
+    English: "Can U get HIV/AIDS by having sex without a condom?"
+    Zulu: "Ungaba sengozini ye-HIV/AIDS uma uya ocansini ungafakanga ikhondomu?"
+    Afrikaans: "Kan jy MIV/Vigs kry deur seks sonder 'n kondoom te he?"
+    Sotho: "Thobalano ntle ho khondomo e kotsi bakeng sa HIV/AIDS?"
+-
+    English: "Yes"
+    Zulu: "Yebo"
+    Afrikaans: "Ja"
+    Sotho: "E"
+-
+    English: "Correct, U can get HIV/AIDS by having sex without a condom."
+    Zulu: "Uqinisile, ungangenwa yiHIV ngocansi ngaphandle kwekhondomu."
+    Afrikaans: "Jy is reg. Jy kan MIV/Vigs kry deur seks sonder 'n kondoom te he."
+    Sotho: "E, thobalano ntle ho khondomo ke kotsi ya HIV."
+-
+    English: "No"
+    Zulu: "Cha"
+    Afrikaans: "Nee"
+    Sotho: "Tjhe"
+-
+    English: "Please note: U can get HIV/AIDS by having sex without a condom."
+    Zulu: "Sicela uqaphele: Ukuya ocansini ngaphandle kwe khondomu kukubeka engozini yokungenwa igciwane le HIV."
+    Afrikaans: "Onthou: Jy kan MIV/Vigs kry deur seks sonder 'n kondoom te he."
+    Sotho: "Lemoha: Thobalano ntle ho khonodomo ke kotsi ya HIV."
+-
+    English: "Can traditional medicine cure HIV/AIDS?"
+    Zulu: "Amakhambi endabuko angayelapha iHIV/AIDS?"
+    Afrikaans: "Kan tradisionele medisyne MIV/VIGS genees?"
+    Sotho: "Na moriana wa setso o fodisa HIV/AIDS?"
+-
+    English: "Please note: Traditional medicine cannot cure HIV/AIDS. There is no cure for HIV/AIDS."
+    Zulu: "Qaphela, Amakhambi endabuko awayelaphi i-HIV/AIDS. Alikh' ikhambi leHIV/AIDS."
+    Afrikaans: "Onthou: tradisionele medisyne kan nie MIV/Vigs genees nie. Daar is geen kuur 140 vir MIV/Vigs nie."
+    Sotho: "Lemoha: Moriana wa setso ha se pheko ya HIV/AIDS. Ha ho na pheko ya HIV/AIDS."
+-
+    English: "Correct, traditional medicine can not cure HIV/AIDS.  There is no cure for HIV/AIDS."
+    Zulu: "Ushaye khona, Amakhambi endabuko angeke ayelaphe i-HIV/AIDS. Alikho ikhambi leHIV/AIDS."
+    Afrikaans: "Jy is reg: tradisionele medisyne kan nie MIV/Vigs genees nie. Daar is geen kuur vir MIV en Vigs nie."
+    Sotho: "E, Moriana wa setso ha se pheko ya HIV/AIDS. Ha ho na pheko ya HIV/AIDS."
+-
+    English: "Is an HIV test at any government clinic free of charge?"
+    Zulu: "Kumahhala yini ukuhlolelwa iHIV emtholampilo kahulumeni?"
+    Afrikaans: "Is 'n MIV-toets by enige regeringskliniek gratis?"
+    Sotho: "Na teko ya HIV tliniking ke mahala?"
+-
+    English: "Correct, an HV test at any government clinic is free of charge."
+    Zulu: "Uqinisile, ukuhlolelwa iHIV emtholampilo kahulumeni kumahhala."
+    Afrikaans: "Jy is reg: 'n MIV-toets by enige regeringskliniek is gratis."
+    Sotho: "E, Teko ya HIV ke mahala tliniking"
+-
+    English: "Please Note: an HIV test at any government clinic is free of charge."
+    Zulu: "Qaphela: ukuhlolelwa iHIV emtholampilo kahulumeni kumahhala."
+    Afrikaans: "Onthou: 'n MIV-toets by enige regeringskliniek is gratis."
+    Sotho: "Lemoha: Teko ya HIV ke mahala tliniking"
+-
+    English: "Is it possible for a person newly infected with HIV, to test HIV negative?"
+    Zulu: "Ingaba kuyenzeka ukuthi imiphumela ye HIV/AIDS yomuntu oqeda kuthola igciwane ithi akanalo?"
+    Afrikaans: "s dit moontlik vir 'n persoon, wat nuut-geinfekteer is met MIV, om MIV negatief te toets?"
+    Sotho: "Ekaba ho a etsahala hore motho ya qetang hokenwa ke HIV/AIDS, diteko tsa hae dire ha ana yona?"
+-
+    English: "Correct, a newly-infected HIV positive person can test HIV-negative.  This is due to a person testing for HIV in the 'window period'"
+    Zulu: "Uqinisile, umuntu osanda kuthola i-HIV angase ahlolwe bese imiphumela ithi akanayo i-HIV. Lokhu kubangelwa ukuthi usuke eseku-'window period'"
+    Afrikaans: "Korrek, dit is moontlik vir iemand wat nuut-geinfekteer is met MIV, om MIV negatief te toets. Dit is as gevolg van die venster tydperk."
+    Sotho: "O nepile, motho wa tshwaetso ya HIV la pele a ka hloka HIV morao. Hona ke hobane a bile le diteko 'nakong ya kemelo'"
+-
+    English: "Please Note: a newly-infected HIV positive person can test HIV-negative.  This is due to a person testing for HIV in the 'window period'"
+    Zulu: "Qaphela: umuntu osanda kuthola i-HIV angase ahlolwe bese imiphumela ithi akanayo i-HIV. Lokhu kubangelwa ukuthi usuke eseku-'window period'"
+    Afrikaans: "Onthou, dit is moontlik vir iemand wat nuut-geinfekteer is met MIV, om MIV negatief te toets. Dit is as gevolg van die venster tydperk."
+    Sotho: "Lemoha: motho wa tshwaetso ya HIV la pele a ka hloka HIV morao. Hona ke hobane a bile le diteko 'nakong ya kemelo'"
+-
+    English: "Can HIV be transmitted by sweat?"
+    Zulu: "I-HIV ingathelelwana yini ngomjuluko?"
+    Afrikaans: "Kan MIV deur iemand se sweet oorgedra word?"
+    Sotho: "Na HIV e ka fetiswa ka mofufutso?"
+-
+    English: "Please note, HIV can not be transmitted by sweat."
+    Zulu: "Qaphela, i-HIV ngeke idluliselwe ngomjuluko."
+    Afrikaans: "Onthou, MIV kan nie deur iemand se sweet oorgedra word nie"
+    Sotho: "Lemoha: HIV e ke ke ya fetiswa ka mofufutso"
+-
+    English: "Correct, HIV can not be transmitted by sweat."
+    Zulu: "Uqinisile, i-HIV ngeke idluliselwe ngomjuluko."
+    Afrikaans: "Korrek, MIV kan nie deur iemand se sweet oorgedra word nie"
+    Sotho: "O nepile, HIV e ke ke ya fetiswa ka mofufutso"
+-
+    English: "Is there a herbal medication that can cure HIV/AIDS?"
+    Zulu: "Ingabe ukhona umuthi wesintu ongelapha i-HIV/AIDS?"
+    Afrikaans: "Is daar kruie-medisyne wat MIV/Vigs kan genees?"
+    Sotho: "Na ho na le moriana wa ditlamatlama o ka phekolang HIV/AIDS?"
+-
+    English: "Please note, there are no herbal medications that can cure HIV/AIDS.  There is no cure for HIV/AIDS."
+    Zulu: "Qaphela, awukho umuthi wesintu ongelapha i-HIV/AIDS. Alikho ikhambi le-HIV/AIDS."
+    Afrikaans: "Onthou, daar is geen kruie-medisyne wat MIV/Vigs kan genees nie. Daar is geen kuur vir MIV/Vigs nie."
+    Sotho: "Lemoha: Ha ho na le meriana ya ditlamatlama e ka phekolang HIV/AIDS? Ha ho na pheko bakeng sa HIV/AIDS."
+-
+    English: "Correct, there are no herbal medications that can cure HIV/AIDS.  There is no cure for HIV/AIDS."
+    Zulu: "Uqinisile, awukho umuthi wesintu ongelapha i-HIV/AIDS. Alikho ikhambi le-HIV/AIDS."
+    Afrikaans: "Korrek, daar is geen kruie-medisyne wat MIV/Vigs kan genees nie. Daar is geen kuur vir MIV/Vigs nie."
+    Sotho: "O nepile, Na ho na le moriana wa ditlamatlama o ka phekolang HIV/AIDS? Ha ho na pheko bakeng sa HIV/AIDS."
+-
+    English: "Does a CD4-count tell the strength of a person's immune system?"
+    Zulu: "Ingabe i-CD4-count iveza ukuqina kwamasosha omzimba omuntu?"
+    Afrikaans: "Dui 'n CD4-telling aan hoe sterk of hoe swak iemand se immuunstelsel is?"
+    Sotho: "Na CD4-count e ka bolela matla a masole a mmele wa motho?"
+-
+    English: "Correct, a CD4-count does tell the strength of a person's immune system."
+    Zulu: "Uqinisile, i-CD4-count iveza ukuqina kwamasosha omzimba omuntu."
+    Afrikaans: "Korrek, 'n CD4-telling dui aan hoe sterk of hoe swak iemand se immuunstelsel is"
+    Sotho: "O nepile, ehlile CD4-count e bolela matla a masole a mmele wa motho"
+-
+    English: "Please note, a CD4-count does tell the strength of a person's immune system."
+    Zulu: "Qaphela, i-CD4-count iveza ukuqina kwamasosha omzimba omuntu."
+    Afrikaans: "Onthou, 'n CD4-telling dui aan hoe sterk of hoe swak iemand se immuunstelsel is."
+    Sotho: "Lemoha: ehlile, CD4-count e bolela matla a masole a mmele wa motho"
+-
+    English: "Can HIV be transmitted through a mother's breast milk?"
+    Zulu: "Ingabe i-HIV ingadluliselwa ngobisi lwebele likamama? "
+    Afrikaans: "Kan MIV oorgedra word deur 'n ma se borsmelk? "
+    Sotho: "Na HIV e ka fetiswa ka lebese la mme la letswele. "
+-
+    English: "Correct, HIV can be transmitted via a mother's breast milk."
+    Zulu: "Uqinisile, i-HIV ingadluliselwa ngobisi lwebele likamama."
+    Afrikaans: "Korrek, MIV kan oorgedra word deur 'n ma se borsmelk."
+    Sotho: "O nepile, HIV e ka fetiswa ka lebese la mme la letswele."
+-
+    English: "Please note, HIV can be transmitted via a mother's breast milk."
+    Zulu: "Qaphela, i-HIV ingadluliselwa ngobisi lwebele likamama."
+    Afrikaans: "Onthou, MIV kan oorgedra word deur 'n ma se borsmelk."
+    Sotho: "Lemoha, HIV e ka fetiswa ka lebese la mme la letswele."
+-
+    English: "Is it possible for an HIV positive woman to deliver an HIV negative baby?"
+    Zulu: "Kungenzeka yini ukuba owesifazane one-HIV abelethe umntwana ongenayo i-HIV?"
+    Afrikaans: "Is dit moontlik vir 'n MIV-positiewe ma, om geboorte te skenk aan 'n MIV-negatiewe baba?"
+    Sotho: "Na ho a kgoneha hore mme ya nang le tshwaetso ya HIV a pepe lesea le senang tshwaetso ya HIV?"
+-
+    English: "Correct, with treatment and planning, it is possible for an HIV positive mother to deliver an HIV-negative baby."
+    Zulu: "Uqinisile, ngokwelashwa nangokuhlela, kungenzeka ukuba umama one-HIV athole umntwana ongenayo i-HIV."
+    Afrikaans: "Korrek, met medikasie en beplanning is dit moontlik vir 'n MIV-positiewe ma om geboorte te skenk aan 'n MIV-negatiewe baba."
+    Sotho: "O nepile, ka kalafo le tlhophiso mme ya nang le tshwaetso ya HIV a kgona ho pepa lesea le senang tshwaetso ya HIV."
+-
+    English: "Please note, with treatment and planning, it is possible for an HIV positive mother to deliver an HIV-negative baby."
+    Zulu: "Qaphela, ngokwelashwa nangokuhlela, kungenzeka ukuba umama one-HIV athole umntwana ongenayo i-HIV."
+    Afrikaans: "Onthou, met medikasie en beplanning is dit moontlik vir 'n MIV-positiewe ma om geboorte te skenk aan 'n MIV-negatiewe baba."
+    Sotho: "Lemoha, ka kalafo le tlhophiso mme ya nang le tshwaetso ya HIV a kgona ho pepa lesea le senang tshwaetso ya HIV."
+-
+    English: "Do you immediately have to start ARVs when you test HIV positive?"
+    Zulu: "Ingabe kudingeka uqale ama-ARV ngokushesha lapho uhlolwa uthola ukuthi une-HIV?"
+    Afrikaans: "Moet 'n mens dadelik met anti-tetroviale middels begin as jy MIV-positief toets?"
+    Sotho: "Na o tlameha ho qala hanghang ka diARV ha diteko di re o na le HIV?"
+-
+    English: "Please note, once testing positive for HIV, you first have to get your CD4 test done, to determine if you qualify for ARVs."
+    Zulu: "Qaphela, uma usuhloliwe wathola ukuthi une-HIV, kufanele uqale uhlolwe i-CD4-count, ukuze kutholakale ukuthi uyafaneleka yini ukuthola ama-ARV."
+    Afrikaans: "Onthou, nadat 'n mens positief toets, moet 'n CD4-telling eers geneem word om te bepaal of mens vir Anti-retroviale middels gekwalifiseer"
+    Sotho: "Lemoha, ha diteko di re o na le HIV, etsa pele diteko tsa hao tsa CD4, ho fumana hore na o loketse ho fumana diARV."
+-
+    English: "Correct, once testing positive for HIV, you first have to get your CD4 test done, to determine if you qualify for ARVs."
+    Zulu: "Uqinisile, uma usuhloliwe wathola ukuthi une-HIV, kufanele uqale uhlolwe i-CD4-count, ukuze kutholakale ukuthi uyafaneleka yini ukuthola ama-ARV."
+    Afrikaans: "Korrek, nadat 'n mens positief toets, moet 'n CD4-telling eers geneem word om te bepaal of mens vir Anti-retroviale middels"
+    Sotho: "O nepile, ha diteko di re o na le HIV, etsa pele diteko tsa hao tsa CD4, ho fumana hore na o loketse ho fumana diARV."
+
 '''
 
 QUIZ = '''
@@ -185,8 +471,8 @@ question10:
             reply: "Please note, once testing positive for HIV, you first have to get your CD4 test done, to determine if you qualify for ARVs."
         2:
             text: "No"
-            reply: "Correct, once testing positive for HIV, you first have to get your CD4 test done, to determine if you qualify for ARVs.
-1. Continue to win!"
+            reply: "Correct, once testing positive for HIV, you first have to get your CD4 test done, to determine if you qualify for ARVs."
+
 '''
 
 
@@ -240,13 +526,19 @@ class IkhweziQuiz():
         return False
 
     def random_ordering(self):
-        order = ['demographic1']
-        demographics = [
+        #order = ['demographic1']
+        #demographics = [
+                #'demographic2',
+                #'demographic3',
+                #'demographic4',
+                #]
+        order = [
+                'demographic1',
                 'demographic2',
                 'demographic3',
-                'demographic4',
+                'demographic4'
                 ]
-        random.shuffle(demographics)
+        #random.shuffle(demographics)
         questions = [
                 'question1',
                 'question2',
@@ -262,8 +554,8 @@ class IkhweziQuiz():
         while len(questions):
             order.append(questions.pop())
             order.append('continue')
-            if len(demographics):
-                order.append(demographics.pop())
+            #if len(demographics):
+                #order.append(demographics.pop())
         return order
 
     def force_order(self, order):
