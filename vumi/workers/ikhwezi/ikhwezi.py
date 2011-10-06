@@ -195,17 +195,14 @@ class IkhweziQuiz():
     REDIS_PREFIX = "vumi_vodacom_ikhwezi"
 
     def __init__(self, config, quiz, translations, datastore,
-            msisdn, session, provider=None):
+            msisdn, session_event=None, provider=None):
         self.config = config
         self.quiz = quiz
         self.translations = translations
         self.datastore = datastore
         msisdn = str(msisdn)
-        self.retrieve_entrant(msisdn) or self.new_entrant(msisdn)
-        old_session = self.data['session']
-        self.data['session'] = session
-        self.data['provider'] = provider
-        if old_session != session:  # new session
+        self.retrieve_entrant(msisdn) or self.new_entrant(msisdn, provider)
+        if session_event and session_event == 'new':
             self.data['attempts'] += 1
             self.data['context'] = None
         self.ds_set()
@@ -272,14 +269,13 @@ class IkhweziQuiz():
         self.data['order'] = order
         self.ds_set()
 
-    def new_entrant(self, msisdn):
+    def new_entrant(self, msisdn, provider=None):
         self.language = "English"
         self.data = {
                 'msisdn': str(msisdn),
-                'session': None,
-                'provider': None,
+                'provider': provider,
                 'attempts': 0,
-                'm_timestamp': None,
+                #'m_timestamp': None,
                 'question1': None,
                 'question2': None,
                 'question3': None,
@@ -290,24 +286,24 @@ class IkhweziQuiz():
                 'question8': None,
                 'question9': None,
                 'question10': None,
-                'q1_timestamp': None,
-                'q2_timestamp': None,
-                'q3_timestamp': None,
-                'q4_timestamp': None,
-                'q5_timestamp': None,
-                'q6_timestamp': None,
-                'q7_timestamp': None,
-                'q8_timestamp': None,
-                'q9_timestamp': None,
-                'q10_timestamp': None,
+                #'q1_timestamp': None,
+                #'q2_timestamp': None,
+                #'q3_timestamp': None,
+                #'q4_timestamp': None,
+                #'q5_timestamp': None,
+                #'q6_timestamp': None,
+                #'q7_timestamp': None,
+                #'q8_timestamp': None,
+                #'q9_timestamp': None,
+                #'q10_timestamp': None,
                 'demographic1': None,
                 'demographic2': None,
                 'demographic3': None,
                 'demographic4': None,
-                'd1_timestamp': None,
-                'd2_timestamp': None,
-                'd3_timestamp': None,
-                'd4_timestamp': None,
+                #'d1_timestamp': None,
+                #'d2_timestamp': None,
+                #'d3_timestamp': None,
+                #'d4_timestamp': None,
                 'order': self.random_ordering(),
                 'context': None}
         self.ds_set()
@@ -426,15 +422,15 @@ class IkhweziQuizWorker(Worker):
         user_m = TransportUserMessage(**message.payload)
         request = user_m.payload['content']
         msisdn = user_m.payload['from_addr']
-        session = user_m.payload['helper_metadata'].get('session')
-        provider = user_m.payload['helper_metadata'].get('provider')
+        session_event = user_m.payload.get('session_event')
+        provider = user_m.payload.get('provider')
         ik = IkhweziQuiz(
                 self.config,
                 self.quiz,
                 self.translations,
                 self.ds,
                 msisdn,
-                session,
+                session_event,
                 provider)
         resp = ik.formulate_response(request)
         reply = user_m.reply(str(resp))

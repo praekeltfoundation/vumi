@@ -14,7 +14,7 @@ class RedisInputSequenceTest(TestCase):
 
     def setUp(self):
         self.msisdn = '0821234567'
-        self.session = 'first'
+        self.session_event = 'new'
         self.provider = 'test'
         self.quiz = yaml.load(QUIZ)
         self.translations = yaml.load(TRANSLATIONS)
@@ -30,7 +30,7 @@ class RedisInputSequenceTest(TestCase):
                 self.translations,
                 self.ds,
                 self.msisdn,
-                self.session,
+                self.session_event,
                 self.provider)
         return ik
 
@@ -49,12 +49,16 @@ class RedisInputSequenceTest(TestCase):
     def exit_text(self):
         return self.quiz['exit']['headertext']
 
-    def runInputSequence(self, inputs):
+    def runInputSequence(self, inputs, force_order=None):
         user_in = inputs.pop(0)
         #print ''
-        #print context
+        #print self.session_event
         #print user_in
         ik = self.get_quiz_entry()
+        if force_order:
+            ik.force_order(force_order)
+        self.session_event = 'resume'
+        #print self.session_event
         resp = ik.formulate_response(user_in)
         #print resp
         if len(inputs):
@@ -118,7 +122,7 @@ class RedisInputSequenceTest(TestCase):
         self.finishInputSequence(inputs)
 
     def testWithForcedOrder(self):
-        self.get_quiz_entry().force_order([
+        force_order = [
             'demographic1',
             'question10',
             'demographic2',
@@ -132,9 +136,9 @@ class RedisInputSequenceTest(TestCase):
             'question4',
             'question5',
             'question3',
-            'question8'])
+            'question8']
         inputs = [None]
-        resp = self.runInputSequence(inputs)
+        resp = self.runInputSequence(inputs, force_order)
         self.assertEqual(4, len(resp.option_list))
         inputs = [1]
         resp = self.runInputSequence(inputs)
@@ -149,24 +153,24 @@ class RedisInputSequenceTest(TestCase):
 
         # simulate resume
         inputs = [None]
-        self.session = 'second'
+        self.session_event = 'new'
         resp = self.runInputSequence(inputs)
         #print resp
         self.assertEqual(2, len(resp.option_list))
 
         # and 3 more attempts
         inputs = [1]
-        self.session = 'third'
+        self.session_event = 'new'
         resp = self.runInputSequence(inputs)
         #print resp
         self.assertEqual(2, len(resp.option_list))
         inputs = [1]
-        self.session = 'forth'
+        self.session_event = 'new'
         resp = self.runInputSequence(inputs)
         #print resp
         self.assertEqual(2, len(resp.option_list))
         inputs = [None]
-        self.session = 'fifth'
+        self.session_event = 'new'
         resp = self.runInputSequence(inputs)
         #print resp
         self.assertEqual(0, len(resp.option_list))
