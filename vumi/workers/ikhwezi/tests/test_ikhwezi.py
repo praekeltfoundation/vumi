@@ -14,6 +14,8 @@ class RedisInputSequenceTest(TestCase):
 
     def setUp(self):
         self.msisdn = '0821234567'
+        self.session = 'first'
+        self.provider = 'test'
         self.quiz = yaml.load(QUIZ)
         self.translations = yaml.load(TRANSLATIONS)
         self.config = {
@@ -27,7 +29,9 @@ class RedisInputSequenceTest(TestCase):
                 self.quiz,
                 self.translations,
                 self.ds,
-                self.msisdn)
+                self.msisdn,
+                self.session,
+                self.provider)
         return ik
 
     def tearDown(self):
@@ -45,16 +49,16 @@ class RedisInputSequenceTest(TestCase):
     def exit_text(self):
         return self.quiz['exit']['headertext']
 
-    def runInputSequence(self, inputs, context=None):
+    def runInputSequence(self, inputs):
         user_in = inputs.pop(0)
         #print ''
         #print context
         #print user_in
         ik = self.get_quiz_entry()
-        resp = ik.formulate_response(context, user_in)
+        resp = ik.formulate_response(user_in)
         #print resp
         if len(inputs):
-            return self.runInputSequence(inputs, resp.context)
+            return self.runInputSequence(inputs)
         return resp
 
     def finishInputSequence(self, inputs):
@@ -133,32 +137,36 @@ class RedisInputSequenceTest(TestCase):
         resp = self.runInputSequence(inputs)
         self.assertEqual(4, len(resp.option_list))
         inputs = [1]
-        resp = self.runInputSequence(inputs, resp.context)
+        resp = self.runInputSequence(inputs)
         self.assertEqual(2, len(resp.option_list))
         inputs = [1]
-        resp = self.runInputSequence(inputs, resp.context)
+        resp = self.runInputSequence(inputs)
         self.assertEqual(2, len(resp.option_list))
         inputs = [1]
-        resp = self.runInputSequence(inputs, resp.context)
+        resp = self.runInputSequence(inputs)
         #print resp
         self.assertEqual(2, len(resp.option_list))
 
         # simulate resume
         inputs = [None]
+        self.session = 'second'
         resp = self.runInputSequence(inputs)
         #print resp
         self.assertEqual(2, len(resp.option_list))
 
         # and 3 more attempts
-        inputs = [None]
+        inputs = [1]
+        self.session = 'third'
+        resp = self.runInputSequence(inputs)
+        #print resp
+        self.assertEqual(2, len(resp.option_list))
+        inputs = [1]
+        self.session = 'forth'
         resp = self.runInputSequence(inputs)
         #print resp
         self.assertEqual(2, len(resp.option_list))
         inputs = [None]
-        resp = self.runInputSequence(inputs)
-        #print resp
-        self.assertEqual(2, len(resp.option_list))
-        inputs = [None]
+        self.session = 'fifth'
         resp = self.runInputSequence(inputs)
         #print resp
         self.assertEqual(0, len(resp.option_list))

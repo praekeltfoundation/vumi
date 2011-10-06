@@ -194,13 +194,21 @@ class IkhweziQuiz():
 
     REDIS_PREFIX = "vumi_vodacom_ikhwezi"
 
-    def __init__(self, config, quiz, translations, datastore, msisdn):
+    def __init__(self, config, quiz, translations, datastore,
+            msisdn, session, provider=None):
         self.config = config
         self.quiz = quiz
         self.translations = translations
         self.datastore = datastore
         msisdn = str(msisdn)
         self.retrieve_entrant(msisdn) or self.new_entrant(msisdn)
+        old_session = self.data['session']
+        self.data['session'] = session
+        self.data['provider'] = provider
+        if old_session != session:  # new session
+            self.data['attempts'] += 1
+            self.data['context'] = None
+        self.ds_set()
 
     def ds_set(self):
         self.datastore.set("%s#%s" % (
@@ -268,6 +276,8 @@ class IkhweziQuiz():
         self.language = "English"
         self.data = {
                 'msisdn': str(msisdn),
+                'session': None,
+                'provider': None,
                 'attempts': 0,
                 'm_timestamp': None,
                 'question1': None,
@@ -324,21 +334,14 @@ class IkhweziQuiz():
             self.ds_set()
         return reply
 
-    def formulate_response(self, context, answer):
-        if answer == None:
-            context = None
-        else:
-            context = self.data['context']
+    def formulate_response(self, answer):
+        context = self.data['context']
 
         try:
             answer = int(answer)
         except Exception, e:
             log.msg(e)
             answer = None
-
-        if context == None:  # new session
-            self.data['attempts'] += 1
-            self.ds_set()
 
         if self.data['attempts'] > 4:
             # terminate interaction
@@ -422,16 +425,18 @@ class IkhweziQuizWorker(Worker):
             repr(message.payload)))
         user_m = TransportUserMessage(**message.payload)
         request = user_m.payload['content']
-        context = None
         msisdn = user_m.payload['from_addr']
-        session = user_m.payload['to_addr']
+        session = user_m.payload['helper_metadata'].get('session')
+        provider = user_m.payload['helper_metadata'].get('provider')
         ik = IkhweziQuiz(
                 self.config,
                 self.quiz,
                 self.translations,
                 self.ds,
-                msisdn)
-        resp = ik.formulate_response(context, request)
+                msisdn,
+                session,
+                provider)
+        resp = ik.formulate_response(request)
         reply = user_m.reply(str(resp))
         self.publisher.publish_message(reply)
 

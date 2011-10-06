@@ -21,11 +21,13 @@ class VodaMessHttpRpcResource(HttpRpcResource):
         content = str(request.args.get('request', [None])[0])
         msisdn = str(request.args.get('msisdn', [None])[0])
         session = str(request.args.get('ussdSessionId', [None])[0])
+        provider = str(request.args.get('provider', [None])[0])
         self.transport.publish_message(
                 message_id=uu,
                 content=content,
-                to_addr=session,
+                to_addr='',
                 from_addr=msisdn,
+                helper_metadata={'session': session, 'provider': provider},
                 transport_name=self.transport.config.get('transport_name'),
                 transport_type=self.transport.config.get('transport_type')
                 )
