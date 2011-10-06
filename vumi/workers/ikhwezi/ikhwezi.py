@@ -196,6 +196,7 @@ class IkhweziQuiz():
 
     def __init__(self, config, quiz, translations, datastore,
             msisdn, session_event=None, provider=None):
+        #print "\n__INIT__", msisdn, session_event
         self.config = config
         self.quiz = quiz
         self.translations = translations
@@ -204,8 +205,7 @@ class IkhweziQuiz():
         self.retrieve_entrant(msisdn) or self.new_entrant(msisdn, provider)
         if session_event and session_event == 'new':
             self.data['attempts'] += 1
-            self.data['context'] = None
-        self.ds_set()
+            self.ds_set()
 
     def ds_set(self):
         self.datastore.set("%s#%s" % (
@@ -261,6 +261,7 @@ class IkhweziQuiz():
         random.shuffle(questions)
         while len(questions):
             order.append(questions.pop())
+            order.append('continue')
             if len(demographics):
                 order.append(demographics.pop())
         return order
@@ -304,34 +305,32 @@ class IkhweziQuiz():
                 #'d2_timestamp': None,
                 #'d3_timestamp': None,
                 #'d4_timestamp': None,
-                'order': self.random_ordering(),
-                'context': None}
+                'order': self.random_ordering()}
         self.ds_set()
         return True
 
-    def next_context_and_question(self):
-        context = None
-        question = None
-        order = self.data['order']
-        if len(order):
-            context = order[0]
-            question = self.quiz.get(context)
-        return context, question
-
-    def answer_contextual_question(self, context, answer):
+    def answer_question(self, question_name, answer):
         reply = None
-        question = self.quiz.get(context)
-        if context in self.data.keys() \
-                and answer in question['options'].keys() \
-                and context in self.data['order']:
+        question = self.quiz.get(question_name)
+        if question_name in self.data.keys() \
+                and answer in question['options'].keys():
             reply = question['options'][answer].get('reply')
-            self.data[context] = answer
+            self.data[question_name] = answer
             self.data['order'].pop(0)
             self.ds_set()
         return reply
 
+    def do_continue(self, answer):
+        exit = False
+        self.data['order'].pop(0)
+        self.ds_set()
+        if answer == 2 or len(self.data['order']) == 0:
+            exit = True
+        return exit
+
     def formulate_response(self, answer):
-        context = self.data['context']
+        question_name = self.data['order'][0]
+        #print "FORMULATE_RESPONSE", question_name, answer
 
         try:
             answer = int(answer)
@@ -341,48 +340,30 @@ class IkhweziQuiz():
 
         if self.data['attempts'] > 4:
             # terminate interaction
-            context = 'completed'
-            self.data['context'] = context
-            self.ds_set()
-            question = self.quiz.get(context)
+            question = self.quiz.get('completed')
             vmr = VodacomMessagingResponse(self.config)
-            vmr.set_context(context)
             vmr.set_headertext(question['headertext'])
             return vmr
 
         reply = None
-        if context and answer:
-            reply = self.answer_contextual_question(context, answer)
+        if question_name != 'continue':
+            reply = self.answer_question(question_name, answer)
 
-        if (context == 'continue' or context == None) and (
-                answer == 2 or len(self.data['order']) == 0):
+        exit = False
+        if question_name == 'continue':
+            exit = self.do_continue(answer)
+
+        if exit:
             # don't continue, show exit
-            context = 'exit'
-            self.data['context'] = context
-            self.ds_set()
-            question = self.quiz.get(context)
+            question = self.quiz.get('exit')
             vmr = VodacomMessagingResponse(self.config)
-            vmr.set_context(context)
             vmr.set_headertext(question['headertext'])
             return vmr
 
-        #elif reply and len(self.data['order']) == 0:
-            ## correct answer and exit
-            #context = 'exit'
-            #question = self.quiz.get(context)
-            #vmr = VodacomMessagingResponse(self.config)
-            #vmr.set_context(context)
-            #vmr.set_headertext("%s  %s" % (reply, question['headertext']))
-            #return vmr
-
         elif reply:
             # correct answer and offer to continue
-            context = 'continue'
-            self.data['context'] = context
-            self.ds_set()
-            question = self.quiz.get(context)
+            question = self.quiz.get('continue')
             vmr = VodacomMessagingResponse(self.config)
-            vmr.set_context(context)
             vmr.set_headertext(reply)
             for key, val in question['options'].items():
                 vmr.add_option(val['text'], key)
@@ -390,11 +371,9 @@ class IkhweziQuiz():
 
         else:
             # ask another question
-            context, question = self.next_context_and_question()
-            self.data['context'] = context
-            self.ds_set()
+            question_name = self.data['order'][0]
+            question = self.quiz.get(question_name)
             vmr = VodacomMessagingResponse(self.config)
-            vmr.set_context(context)
             vmr.set_headertext(question['headertext'])
             for key, val in question['options'].items():
                 vmr.add_option(val['text'], key)
