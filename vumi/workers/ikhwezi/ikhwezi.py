@@ -633,7 +633,9 @@ class IkhweziQuiz():
         return exit
 
     def formulate_response(self, answer):
-        question_name = self.data['order'][0]
+        question_name = None
+        if len(self.data['order']):
+            question_name = self.data['order'][0]
         #print "FORMULATE_RESPONSE", question_name, answer
 
         try:
@@ -642,7 +644,7 @@ class IkhweziQuiz():
             log.msg(e)
             answer = None
 
-        if self.data['attempts'] > 4:
+        if self.data['attempts'] > 4 or question_name == None:
             # terminate interaction
             question = self.quiz.get('completed')
             vmr = VodacomMessagingResponse(self.config)
