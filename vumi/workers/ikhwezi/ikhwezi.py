@@ -517,11 +517,22 @@ class IkhweziQuiz():
                 }
         return langs.get(str(lang))
 
+    def gettext(self, string):
+        trans = self.translations.get(self.language)
+        if trans == None:
+            return string
+        else:
+            newstring = trans.get(string)
+            if newstring == None:
+                return string
+            else:
+                return newstring
+
     def retrieve_entrant(self, msisdn):
         data = self.ds_get(msisdn)
         if data:
             self.data = data
-            self.language = self.lang(data['demographic1'])
+            self.language = self.lang(data['demographic1'] or 1)
             return True
         return False
 
@@ -610,6 +621,7 @@ class IkhweziQuiz():
             self.data[question_name] = answer
             self.data['order'].pop(0)
             self.ds_set()
+            self.language = self.lang(self.data['demographic1'] or 1)
         return reply
 
     def do_continue(self, answer):
@@ -634,7 +646,7 @@ class IkhweziQuiz():
             # terminate interaction
             question = self.quiz.get('completed')
             vmr = VodacomMessagingResponse(self.config)
-            vmr.set_headertext(question['headertext'])
+            vmr.set_headertext(self.gettext(question['headertext']))
             return vmr
 
         reply = None
@@ -649,16 +661,16 @@ class IkhweziQuiz():
             # don't continue, show exit
             question = self.quiz.get('exit')
             vmr = VodacomMessagingResponse(self.config)
-            vmr.set_headertext(question['headertext'])
+            vmr.set_headertext(self.gettext(question['headertext']))
             return vmr
 
         elif reply:
             # correct answer and offer to continue
             question = self.quiz.get('continue')
             vmr = VodacomMessagingResponse(self.config)
-            vmr.set_headertext(reply)
+            vmr.set_headertext(self.gettext(reply))
             for key, val in question['options'].items():
-                vmr.add_option(val['text'], key)
+                vmr.add_option(self.gettext(val['text']), key)
             return vmr
 
         else:
@@ -666,9 +678,9 @@ class IkhweziQuiz():
             question_name = self.data['order'][0]
             question = self.quiz.get(question_name)
             vmr = VodacomMessagingResponse(self.config)
-            vmr.set_headertext(question['headertext'])
+            vmr.set_headertext(self.gettext(question['headertext']))
             for key, val in question['options'].items():
-                vmr.add_option(val['text'], key)
+                vmr.add_option(self.gettext(val['text']), key)
             return vmr
 
 
@@ -683,7 +695,12 @@ class IkhweziQuizWorker(Worker):
         self.consume(self.consume_key, self.consume_message)
 
         self.quiz = yaml.load(QUIZ)
-        self.translations = yaml.load(TRANSLATIONS)
+        trans = yaml.load(TRANSLATIONS)
+        self.translations = {'Zulu': {}, 'Sotho': {}, 'Afrikaans': {}}
+        for t in trans:
+            self.translations['Zulu'][t['English']] = t['Zulu']
+            self.translations['Sotho'][t['English']] = t['Sotho']
+            self.translations['Afrikaans'][t['English']] = t['Afrikaans']
         self.ds = FakeRedis()
 
     def consume_message(self, message):
