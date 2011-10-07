@@ -517,7 +517,7 @@ class IkhweziQuiz():
                 }
         return langs.get(str(lang))
 
-    def gettext(self, string):
+    def _(self, string):
         trans = self.translations.get(self.language)
         if trans == None:
             return string
@@ -648,7 +648,7 @@ class IkhweziQuiz():
             # terminate interaction
             question = self.quiz.get('completed')
             vmr = VodacomMessagingResponse(self.config)
-            vmr.set_headertext(self.gettext(question['headertext']))
+            vmr.set_headertext(self._(question['headertext']))
             return vmr
 
         reply = None
@@ -663,16 +663,16 @@ class IkhweziQuiz():
             # don't continue, show exit
             question = self.quiz.get('exit')
             vmr = VodacomMessagingResponse(self.config)
-            vmr.set_headertext(self.gettext(question['headertext']))
+            vmr.set_headertext(self._(question['headertext']))
             return vmr
 
         elif reply:
             # correct answer and offer to continue
             question = self.quiz.get('continue')
             vmr = VodacomMessagingResponse(self.config)
-            vmr.set_headertext(self.gettext(reply))
+            vmr.set_headertext(self._(reply))
             for key, val in question['options'].items():
-                vmr.add_option(self.gettext(val['text']), key)
+                vmr.add_option(self._(val['text']), key)
             return vmr
 
         else:
@@ -680,9 +680,9 @@ class IkhweziQuiz():
             question_name = self.data['order'][0]
             question = self.quiz.get(question_name)
             vmr = VodacomMessagingResponse(self.config)
-            vmr.set_headertext(self.gettext(question['headertext']))
+            vmr.set_headertext(self._(question['headertext']))
             for key, val in question['options'].items():
-                vmr.add_option(self.gettext(val['text']), key)
+                vmr.add_option(self._(val['text']), key)
             return vmr
 
 
