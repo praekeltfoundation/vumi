@@ -10,6 +10,7 @@ from wokkel.xmppim import (RosterClientProtocol, MessageProtocol,
                            PresenceClientProtocol)
 
 from vumi.service import Worker
+from vumi.transports.base import Transport
 from vumi.message import Message
 
 
@@ -40,9 +41,10 @@ class TransportPresenceClientProtocol(PresenceClientProtocol):
 
 
 class XMPPTransportProtocol(MessageProtocol):
-    def __init__(self, jid, publisher):
+    def __init__(self, jid, callback):
         super(MessageProtocol, self).__init__()
-        self.publisher = publisher
+        self.jid = jid
+        self.callback = callback
 
     def reply(self, jid, content):
         message = domish.Element((None, "message"))
@@ -59,37 +61,31 @@ class XMPPTransportProtocol(MessageProtocol):
         is done in this function."""
         if not isinstance(message.body, DomishElement):
             return None
-
-        # sender = JID(message['from']).userhost()
+        
         text = unicode(message.body).encode('utf-8').strip()
-        self.publisher.publish_message(Message(sender=message['from'],
-                                               message=text))
+        self.callback(to_addr=self.jid.userhost(), from_addr=message['from'],
+            content=text, transport_type='xmpp', )
 
 
-class XMPPTransport(Worker):
+class XMPPTransport(Transport):
     """
     The XMPPTransport for Gtalk
     """
 
-    @inlineCallbacks
-    def startWorker(self):
-        log.msg("Starting the XMPPTransport for %s" % self.config['username'])
-
+    def setup_transport(self):
+        log.msg("Starting XMPPTransport: %s" % self.transport_name)
         username = self.config.pop('username')
         password = self.config.pop('password')
         status = {None: self.config.pop('status')}
         host = self.config.pop('host')
         port = self.config.pop('port')
 
-        self.publisher = yield self.publish_to(
-            'xmpp.inbound.gtalk.%s' % username)
-
-        s = MultiService()
+        self.xmpp_service = MultiService()
 
         jid = JID(username)
         xmpp_client = client.XMPPClient(jid, password, host, port)
         xmpp_client.logTraffic = self.config.get('debug')
-        xmpp_client.setServiceParent(s)
+        xmpp_client.setServiceParent(self.xmpp_service)
 
         presence = TransportPresenceClientProtocol()
         presence.setHandlerParent(xmpp_client)
@@ -98,27 +94,26 @@ class XMPPTransport(Worker):
         roster = TransportRosterClientProtocol()
         roster.setHandlerParent(xmpp_client)
 
-        self.xmpp_protocol = XMPPTransportProtocol(jid, self.publisher)
+        self.xmpp_protocol = XMPPTransportProtocol(jid, self.publish_message)
         self.xmpp_protocol.setHandlerParent(xmpp_client)
 
-        self.consume("xmpp.outbound.gtalk.%s" % jid.userhost(),
-                                self.consume_message)
+        self.xmpp_service.startService()
 
-        s.startService()
-
-        log.msg("XMPPTransport started.")
-
-    def consume_message(self, message):
+        log.msg("XMPPTransport %s started." % self.transport_name)
+    
+    def teardown_transport(self):
+        self.xmpp_service.stopService()
+    
+    def handle_outbound_message(self, message):
         log.msg("Consumed Message %s" % message)
-        dictionary = message.payload
-        jid = JID(dictionary.get('recipient')).userhost()
-        text = dictionary.get('message', '')
+        recipient = message['to_addr']
+        text = message['content']
 
+        jid = JID(recipient).userhost()
+        
         if not self.xmpp_protocol.xmlstream:
             log.err("Outbound undeliverable, XMPP not initialized yet.")
             return False
         else:
             self.xmpp_protocol.reply(jid, text)
 
-    def stopWorker(self):
-        log.msg("Stopping the XMPPTransport")

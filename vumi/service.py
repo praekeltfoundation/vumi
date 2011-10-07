@@ -225,7 +225,7 @@ class Worker(object):
         return self._amqp_client.start_consumer(consumer_class, *args, **kw)
 
     def publish_to(self, routing_key, exchange_name='vumi',
-                   exchange_type='direct', delivery_mode=2):
+                   exchange_type='direct', durable=True, delivery_mode=2):
         class_name = self.routing_key_to_class_name(routing_key)
         publisher_class = type("%sDynamicPublisher" % class_name, (Publisher,),
             {
@@ -233,6 +233,7 @@ class Worker(object):
                 "exchange_name": exchange_name,
                 "exchange_type": exchange_type,
                 "delivery_mode": delivery_mode,
+                "durable": durable,
             })
         return self.start_publisher(publisher_class)
 
