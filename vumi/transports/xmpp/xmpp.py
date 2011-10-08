@@ -1,3 +1,6 @@
+# -*- test-case-name: vumi.transports.xmpp.tests.test_xmpp -*-
+# -*- encoding: utf-8 -*-
+
 from twisted.python import log
 from twisted.internet.defer import inlineCallbacks
 from twisted.words.protocols.jabber.jid import JID
@@ -61,7 +64,6 @@ class XMPPTransportProtocol(MessageProtocol):
         is done in this function."""
         if not isinstance(message.body, DomishElement):
             return None
-        
         text = unicode(message.body).encode('utf-8').strip()
         self.callback(to_addr=self.jid.userhost(), from_addr=message['from'],
             content=text, transport_type='xmpp', message_id=message['id'])
@@ -76,7 +78,7 @@ class XMPPTransport(Transport):
         log.msg("Starting XMPPTransport: %s" % self.transport_name)
         username = self.config.pop('username')
         password = self.config.pop('password')
-        status = {None: self.config.pop('status')}
+        status = {None: self.config.pop('status','')}
         host = self.config.pop('host')
         port = self.config.pop('port')
 
