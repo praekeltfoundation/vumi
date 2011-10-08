@@ -1,4 +1,5 @@
-from twisted.internet.defer import inlineCallbacks
+"""Demo ApplicationWorkers that perform simple text manipulations."""
+
 from twisted.python import log
 
 from vumi.message import Message
@@ -14,7 +15,6 @@ class SimpleAppWorker(ApplicationWorker):
            Name of the transport.
        """
 
-    @inlineCallbacks
     def consume_user_message(self, msg):
         """Find or create a hangman game for this player.
 
