@@ -64,7 +64,7 @@ class XMPPTransportProtocol(MessageProtocol):
         
         text = unicode(message.body).encode('utf-8').strip()
         self.callback(to_addr=self.jid.userhost(), from_addr=message['from'],
-            content=text, transport_type='xmpp', )
+            content=text, transport_type='xmpp', message_id=message['id'])
 
 
 class XMPPTransport(Transport):
@@ -103,9 +103,9 @@ class XMPPTransport(Transport):
     
     def teardown_transport(self):
         self.xmpp_service.stopService()
+        log.msg("XMPPTransport %s stopped." % self.transport_name)
     
     def handle_outbound_message(self, message):
-        log.msg("Consumed Message %s" % message)
         recipient = message['to_addr']
         text = message['content']
 
