@@ -13,8 +13,14 @@ from vumi.message import TransportUserMessage
 class TelnetTransportProtocol(TelnetProtocol):
     """Extends Twisted's TelnetProtocol for the Telnet transport."""
 
-    def __init__(self, input_handler):
-        self.input_handler = input_handler
+    def __init__(self, vumi_transport):
+        self.vumi_transport = vumi_transport
+
+    def connectionMade(self):
+        self.vumi_transport.register_client(self)
+
+    def connectionLost(self, reason):
+        self.vumi_transport.deregister_client(self)
 
     def dataReceived(self, data):
         data = data.rstrip('\r\n')
@@ -22,41 +28,59 @@ class TelnetTransportProtocol(TelnetProtocol):
             self.loseConnection()
         else:
             self.transport.write("-> %s\r\n" % data)
-            self.input_handler(self, data)
+            self.vumi_transport.handle_input(self, data)
 
 
 class TelnetServerTransport(Transport):
 
     def validate_config(self):
-        print "VALID"
         self.telnet_port = int(self.config['telnet_port'])
 
     @inlineCallbacks
     def setup_transport(self):
+        self._clients = {}
+
+        def protocol():
+            return TelnetTransport(TelnetTransportProtocol, self)
+
         factory = ServerFactory()
-        factory.protocol = lambda: TelnetTransport(TelnetTransportProtocol,
-                                                   self.handle_input)
+        factory.protocol = protocol
         self.telnet_server = yield reactor.listenTCP(self.telnet_port,
                                                      factory)
-        import pdb; pdb.set_trace()
-        self._to_addr = self._format_addr(self.telnet_server.port)
+        self._to_addr = self._format_addr(self.telnet_server.getHost())
 
     @inlineCallbacks
     def teardown_transport(self):
         if hasattr(self, 'telnet_server'):
             yield self.telnet_server.loseConnection()
 
-    def _format_addr(self, port):
-        return "foo"
+    def _format_addr(self, addr):
+        return "%s:%s" % (addr.host, addr.port)
 
-    def handle_input(self, protocol, text):
-        transport_metadata = {
-            }
-        import pdb; pdb.set_trace()
+    def register_client(self, client):
+        client_addr = self._format_addr(client.transport.getPeer())
+        log.msg("Registering client connected from %r" % client_addr)
+        self._clients[id(client)] = client
+        self.send_inbound_message(client, None,
+                                  TransportUserMessage.SESSION_NEW)
+
+    def deregister_client(self, client):
+        log.msg("Deregistering client.")
+        self.send_inbound_message(client, None,
+                                  TransportUserMessage.SESSION_CLOSE)
+        del self._clients[id(client)]
+
+    def handle_input(self, client, text):
+        self.send_inbound_message(client, text,
+                                  TransportUserMessage.SESSION_RESUME)
+
+    def send_inbound_message(self, client, text, session_event):
+        from_addr = str(client.transport.getPeer().host)
+        transport_metadata = {'session_id': id(client)}
         self.publish_message(
-            from_addr="TODO",
+            from_addr=from_addr,
             to_addr=self._to_addr,
-            session_event=TransportUserMessage.SESSION_RESUME,
+            session_event=session_event,
             content=text,
             transport_name=self.transport_name,
             transport_type="telnet",
@@ -65,10 +89,20 @@ class TelnetServerTransport(Transport):
 
     @inlineCallbacks
     def handle_outbound_message(self, message):
+        client_id = message['transport_metadata']['session_id']
+        client = self._clients.get(client_id)
+        if client is None:
+            # client gone, don't deliver
+            return
+
         text = message['content']
         if text is None:
             text = ''
-        print text
-        # session_id = message['transport_metadata']['session_id']
-        # lookup transport
-        # transport.write("%s\r\n" % text)
+        else:
+            text = text.encode("UTF-8")
+
+        text = "\r\n".join(text.splitlines())
+        yield client.transport.write("%s\r\n" % text)
+
+        if message['session_event'] == TransportUserMessage.SESSION_CLOSE:
+            yield client.transport.loseConnection()
