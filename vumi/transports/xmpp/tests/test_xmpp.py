@@ -30,6 +30,8 @@ class XMPPTransportTestCase(TransportTestCase):
         transport.xmpp_protocol = test_protocol
         transport.xmpp_service = MultiService()
         transport.transport_name = 'test_xmpp'
+        # set _consumers, `stopWorker()` expects it to be there.
+        transport._consumers = []
         # start the publisher, we need that one eventhough we do not
         # connect to an XMPP server
         yield transport._setup_message_publisher()

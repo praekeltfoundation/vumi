@@ -60,9 +60,8 @@ class Transport(Worker):
 
     @inlineCallbacks
     def stopWorker(self):
-        if hasattr(self, '_consumers'):
-            for consumer in self._consumers:
-                yield consumer.stop()
+        for consumer in self._consumers:
+            yield consumer.stop()
         yield self.teardown_transport()
 
     def get_rkey(self, mtype):
