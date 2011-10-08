@@ -2,7 +2,6 @@
 # -*- encoding: utf-8 -*-
 
 from twisted.python import log
-from twisted.internet.defer import inlineCallbacks
 from twisted.words.protocols.jabber.jid import JID
 from twisted.words.xish import domish
 from twisted.words.xish.domish import Element as DomishElement
@@ -12,9 +11,7 @@ from wokkel import client
 from wokkel.xmppim import (RosterClientProtocol, MessageProtocol,
                            PresenceClientProtocol)
 
-from vumi.service import Worker
 from vumi.transports.base import Transport
-from vumi.message import Message
 
 
 class TransportRosterClientProtocol(RosterClientProtocol):
