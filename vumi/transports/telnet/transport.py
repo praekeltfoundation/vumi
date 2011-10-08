@@ -27,7 +27,6 @@ class TelnetTransportProtocol(TelnetProtocol):
         if data.lower() == '/quit':
             self.loseConnection()
         else:
-            self.transport.write("-> %s\r\n" % data)
             self.vumi_transport.handle_input(self, data)
 
 
