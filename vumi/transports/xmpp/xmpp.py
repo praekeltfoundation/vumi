@@ -78,7 +78,9 @@ class XMPPTransport(Transport):
         log.msg("Starting XMPPTransport: %s" % self.transport_name)
         username = self.config.pop('username')
         password = self.config.pop('password')
-        status = {None: self.config.pop('status','')}
+        status = {
+            None: self.config.pop('status', ''),
+        }
         host = self.config.pop('host')
         port = self.config.pop('port')
 
@@ -102,20 +104,19 @@ class XMPPTransport(Transport):
         self.xmpp_service.startService()
 
         log.msg("XMPPTransport %s started." % self.transport_name)
-    
+
     def teardown_transport(self):
         self.xmpp_service.stopService()
         log.msg("XMPPTransport %s stopped." % self.transport_name)
-    
+
     def handle_outbound_message(self, message):
         recipient = message['to_addr']
         text = message['content']
 
         jid = JID(recipient).userhost()
-        
+
         if not self.xmpp_protocol.xmlstream:
             log.err("Outbound undeliverable, XMPP not initialized yet.")
             return False
         else:
             self.xmpp_protocol.reply(jid, text)
-

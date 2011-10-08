@@ -1,5 +1,6 @@
 from vumi.transports.xmpp import xmpp
 
+
 class TestXMLStream(object):
 
     def __init__(self):
@@ -10,9 +11,7 @@ class TestXMLStream(object):
 
 
 class TestXMPPTransportProtocol(xmpp.XMPPTransportProtocol):
-    
+
     def __init__(self, *args, **kwargs):
         xmpp.XMPPTransportProtocol.__init__(self, *args, **kwargs)
         self.xmlstream = TestXMLStream()
-    
-
