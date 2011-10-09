@@ -24,13 +24,17 @@ class SimpleAppWorker(ApplicationWorker):
         log.msg("User message: %s" % msg['content'])
         text = msg['content']
         if text is None:
-            return
-        reply = self.process_message(text)
+            reply = self.get_help()
+        else:
+            reply = self.process_message(text)
         self.reply_to(msg, reply)
 
     def process_message(self, text):
         raise NotImplementedError("Sub-classes should implement"
                                   " process_message.")
+
+    def get_help(self):
+        return "Enter text:"
 
 
 class EchoWorker(SimpleAppWorker):
@@ -39,12 +43,18 @@ class EchoWorker(SimpleAppWorker):
     def process_message(self, data):
         return data
 
+    def get_help(self):
+        return "Enter text to echo:"
+
 
 class ReverseWorker(SimpleAppWorker):
     """Replies with reversed text."""
 
     def process_message(self, data):
         return data[::-1]
+
+    def get_help(self):
+        return "Enter text to reverse:"
 
 
 class WordCountWorker(SimpleAppWorker):
@@ -57,3 +67,6 @@ class WordCountWorker(SimpleAppWorker):
         chars = len(data)
         response.append("%s char%s" % (chars, "s" * (chars != 1)))
         return ', '.join(response)
+
+    def get_help(self):
+        return "Enter text to return word and character counts for:"

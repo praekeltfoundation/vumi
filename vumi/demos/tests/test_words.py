@@ -13,14 +13,9 @@ from vumi.demos.words import (SimpleAppWorker, EchoWorker, ReverseWorker,
 from vumi.message import TransportUserMessage
 
 
-class SimpleAppRecorder(SimpleAppWorker):
-    """Test worker that records calls to process_message."""
-    msgs = None
-
+class EchoTestApp(SimpleAppWorker):
+    """Test worker that echos calls to process_message."""
     def process_message(self, data):
-        if self.msgs is None:
-            self.msgs = []
-        self.msgs.append(data)
         return 'echo:%s' % data
 
 
@@ -28,7 +23,7 @@ class TestSimpleAppWorker(unittest.TestCase):
     @inlineCallbacks
     def setUp(self):
         self.transport_name = 'test_transport'
-        self.worker = get_stubbed_worker(SimpleAppRecorder, {
+        self.worker = get_stubbed_worker(EchoTestApp, {
                 'transport_name': self.transport_name})
         self.broker = self.worker._amqp_client.broker
         yield self.worker.startWorker()
@@ -62,10 +57,11 @@ class TestSimpleAppWorker(unittest.TestCase):
         yield self.worker.stopWorker()
 
     @inlineCallbacks
-    def test_content_none(self):
+    def test_help(self):
         yield self.send(None, TransportUserMessage.SESSION_NEW)
-        replies = yield self.recv()
-        self.assertEqual(replies, [])
+        reply, = yield self.recv(1)
+        self.assertEqual(reply[0], 'reply')
+        self.assertEqual(reply[1], 'Enter text:')
 
     @inlineCallbacks
     def test_content_text(self):
@@ -73,6 +69,11 @@ class TestSimpleAppWorker(unittest.TestCase):
         reply, = yield self.recv(1)
         self.assertEqual(reply[0], 'reply')
         self.assertEqual(reply[1], 'echo:test')
+
+    def test_base_process_message(self):
+        worker = get_stubbed_worker(SimpleAppWorker, {
+                'transport_name': self.transport_name})
+        self.assertRaises(NotImplementedError, worker.process_message, 'foo')
 
 
 class TestEchoWorker(unittest.TestCase):
@@ -84,6 +85,9 @@ class TestEchoWorker(unittest.TestCase):
     def test_process_message(self):
         self.assertEqual(self.worker.process_message("foo"), "foo")
 
+    def test_help(self):
+        self.assertEqual(self.worker.get_help(), "Enter text to echo:")
+
 
 class TestReverseWorker(unittest.TestCase):
 
@@ -93,6 +97,9 @@ class TestReverseWorker(unittest.TestCase):
 
     def test_process_message(self):
         self.assertEqual(self.worker.process_message("foo"), "oof")
+
+    def test_help(self):
+        self.assertEqual(self.worker.get_help(), "Enter text to reverse:")
 
 
 class TestWordCountWorker(unittest.TestCase):
@@ -108,3 +115,7 @@ class TestWordCountWorker(unittest.TestCase):
     def test_singular(self):
         self.assertEqual(self.worker.process_message("f"),
                          "1 word, 1 char")
+
+    def test_help(self):
+        self.assertEqual(self.worker.get_help(), "Enter text to return word"
+                         " and character counts for:")
