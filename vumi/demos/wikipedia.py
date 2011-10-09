@@ -151,7 +151,6 @@ class SessionApplicationWorker(ApplicationWorker):
         
         """
         ukey = self.r_key('session', user_id)
-        log.msg('%s expires in %s' % (ukey, timeout))
         self.r_server.expire(ukey, timeout)
     
     def create_session(self, user_id):
@@ -166,7 +165,6 @@ class SessionApplicationWorker(ApplicationWorker):
         return session
 
     def clear_session(self, user_id):
-        log.msg('clearing session for %s' % user_id)
         ukey = self.r_key('session', user_id)
         self.r_server.delete(ukey)
 
@@ -194,6 +192,12 @@ class SessionApplicationWorker(ApplicationWorker):
 class WikipediaWorker(SessionApplicationWorker):
     
     MAX_SESSION_LENGTH = 3 * 60
+    
+    @inlineCallbacks
+    def startWorker(self):
+        gc = task.LoopingCall(lambda: self.active_sessions())
+        gc.start(1)
+        yield super(WikipediaWorker, self).startWorker()
     
     def consume_user_message(self, msg):
         user_id = msg.user()
