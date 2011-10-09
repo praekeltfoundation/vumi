@@ -1,8 +1,9 @@
+# -*- test-case-name: vumi.demos.tests.test_words -*-
+
 """Demo ApplicationWorkers that perform simple text manipulations."""
 
 from twisted.python import log
 
-from vumi.message import Message
 from vumi.application import ApplicationWorker
 
 
@@ -26,13 +27,6 @@ class SimpleAppWorker(ApplicationWorker):
             return
         reply = self.process_message(text)
         self.reply_to(msg, reply)
-
-    def consume_message(self, message):
-        log.msg("Consumed message %s" % message)
-        data = self.process_message(message.payload['message'])
-        if data:
-            self.publisher.publish_message(Message(recipient=self.name,
-                                                   message=data))
 
     def process_message(self, text):
         raise NotImplementedError("Sub-classes should implement"
