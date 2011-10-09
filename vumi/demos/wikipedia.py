@@ -92,65 +92,108 @@ def pretty_print_results(results, start=1):
     return '\n'.join(['%s. %s' % (idx, result['text'])
                       for idx, result in enumerate(results, start)])
 
-
-class WikipediaWorker(ApplicationWorker):
+class SessionApplicationWorker(ApplicationWorker):
     
-    MAX_SESSION_LENGTH = timedelta(minutes=3)
+    # How long a session is allowed to last in seconds. Defaults to `None` 
+    # which means sessions never expire
+    MAX_SESSION_LENGTH = None
     
     @inlineCallbacks
     def startWorker(self):
         # Connect to Redis
         redis_conf = self.config.get('redis', {})
-        self.r_server = redis.Redis(redis_conf.get('host', 'localhost'),
-                                db=get_deploy_int(self._amqp_client.vhost))
-        self.r_server.flushdb()
-        log.msg("Connected to Redis")
-        self.r_prefix = "wikipedia:%s" % (self.config['transport_name'],)
+        self.r_server = redis.Redis(
+            db=get_deploy_int(self._amqp_client.vhost), **redis_conf)
+        self.r_prefix = "%(worker_name)s:%(transport_name)s" % self.config
         
-        self.gc = task.LoopingCall(self.garbage_collect_expired_sessions)
-        self.gc.start(1)
-        
-        yield super(WikipediaWorker, self).startWorker()
+        yield super(SessionApplicationWorker, self).startWorker()
     
-    def garbage_collect_expired_sessions(self):
+    def active_sessions(self):
+        """
+        Return a list of active user_ids and associated sessions. Loops over
+        known active_sessions, some of which might have auto expired. 
+        Implements lazy garbage collection, for each entry it checks if 
+        the user's session still exists, if not it is removed from the set.
+        """
         skey = self.r_key('active_sessions')
         for user_id in self.r_server.smembers(skey):
-            session = self.load_session(user_id)
-            timestamp = datetime.fromtimestamp(float(session['created_at']))
-            expiry = datetime.now() - self.MAX_SESSION_LENGTH
-            if timestamp < expiry:
-                self.clear_session(user_id)
+            ukey = self.r_key('session', user_id)
+            if self.r_server.exists(ukey):
+                yield user_id, self.load_session(user_id)
             else:
-                log.msg('%s left for %s' % (timestamp - expiry, user_id))
+                self.r_server.srem(skey, user_id)
     
     def r_key(self, *args):
+        """
+        Generate a keyname using this workers prefix
+        """
         parts = [self.r_prefix]
         parts.extend(args)
         return ":".join(parts)
-    
+
     def load_session(self, user_id):
+        """
+        Load session data from Redis
+        """
         ukey = self.r_key('session', user_id)
         return self.r_server.hgetall(ukey)
+
+    def schedule_session_expiry(self, user_id, timeout):
+        """
+        Schedule a session to timeout
+        
+        Parameters
+        ----------
+        user_id : str
+            The user's id.
+        timeout : int
+            The number of seconds after which this session should expire
+        
+        """
+        ukey = self.r_key('session', user_id)
+        log.msg('%s expires in %s' % (ukey, timeout))
+        self.r_server.expire(ukey, timeout)
     
     def create_session(self, user_id):
-        return self.save_session(user_id, {
+        """
+        Create a new session using the given user_id
+        """
+        session = self.save_session(user_id, {
             'created_at': time.time()
         })
-    
+        if self.MAX_SESSION_LENGTH:
+            self.schedule_session_expiry(user_id, self.MAX_SESSION_LENGTH)
+        return session
+
     def clear_session(self, user_id):
         log.msg('clearing session for %s' % user_id)
         ukey = self.r_key('session', user_id)
         self.r_server.delete(ukey)
-        skey = self.r_key('active_sessions')
-        self.r_server.srem(skey, user_id)
-    
+
     def save_session(self, user_id, session):
+        """
+        Save a session
+        
+        Parameters
+        ----------
+        user_id : str
+            The user's id.
+        session : dict
+            The session info, nested dictionaries are not supported. Any 
+            values that are dictionaries are converted to strings by Redis.
+        
+        """
         ukey = self.r_key('session', user_id)
         for s_key, s_value in session.items():
             self.r_server.hset(ukey, s_key, s_value)
         skey = self.r_key('active_sessions')
         self.r_server.sadd(skey, user_id)
         return session
+
+
+class WikipediaWorker(SessionApplicationWorker):
+    
+    MAX_SESSION_LENGTH = 3 * 60
     
     def consume_user_message(self, msg):
         user_id = msg.user()
@@ -195,7 +238,3 @@ class WikipediaWorker(ApplicationWorker):
             self.reply_to(msg,
                      'Sorry, invalid selection. Please dial in again', False)
         self.clear_session(msg.user())
-
-
-# http://en.wikipedia.org/w/api.php?action=opensearch&search=Cell%20phone&
-# limit=10&namespace=0&format=xmlfm
