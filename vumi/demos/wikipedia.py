@@ -240,5 +240,6 @@ class WikipediaWorker(SessionApplicationWorker):
                      (interest['text'], interest['description'][:100]), False)
         except (KeyError, IndexError):
             self.reply_to(msg,
-                     'Sorry, invalid selection. Please dial in again', False)
+                'Sorry, invalid selection. Please restart and try again',
+                False)
         self.clear_session(msg.user())
