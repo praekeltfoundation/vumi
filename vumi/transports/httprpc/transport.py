@@ -63,7 +63,6 @@ class HttpRpcTransport(Transport):
                 (HttpRpcHealthResource(self), 'health'),
             ],
             self.config['web_port'])
-        print self.receipt_resource
 
     def handle_outbound_message(self, message):
         log.msg("HttpRpcTransport consuming %s" % (message))
