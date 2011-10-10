@@ -1,5 +1,5 @@
 """Telnet server transport."""
 
-from vumi.transports.telnet.transport import TelnetServerTransport
+from vumi.transports.telnet.telnet import TelnetServerTransport
 
 __all__ = ['TelnetServerTransport']
