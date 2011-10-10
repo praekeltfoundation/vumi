@@ -1,9 +1,8 @@
 import re
 from  xml.etree import ElementTree
 
-from twisted.python import log
 from twisted.trial.unittest import TestCase
-from vumi.transports.vodacommessaging.utils import VodacomMessagingResponse
+from vumi.transports.httprpc.vodacom_messaging import VodacomMessagingResponse
 
 
 class VodacomMessagingResponseTest(TestCase):
