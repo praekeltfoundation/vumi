@@ -70,12 +70,12 @@ class Mocking(object):
     def __enter__(self):
         """Overwrite whatever module the function is part of"""
         self.mod = importlib.import_module(self.function.__module__)
-        setattr(self.mod, self.function.func_name, self)
+        setattr(self.mod, self.function.__name__, self)
         return self
 
     def __exit__(self, *exc_info):
         """Reset to whatever the function was originally when done"""
-        setattr(self.mod, self.function.func_name, self.function)
+        setattr(self.mod, self.function.__name__, self.function)
 
     def __call__(self, *args, **kwargs):
         """Return the return value when called, store the args & kwargs
