@@ -155,8 +155,8 @@ class TransportTestCase(unittest.TestCase):
     def dispatch(self, message, rkey=None, exchange='vumi'):
         if rkey is None:
             rkey = self.rkey('outbound')
-        self.broker.publish_message(exchange, rkey, message)
-        return self.broker.kick_delivery()
+        self._amqp.publish_message(exchange, rkey, message)
+        return self._amqp.kick_delivery()
 
 
 class BaseTransportTestCase(TransportTestCase):
