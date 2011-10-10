@@ -4,7 +4,6 @@ from vumi.tests.utils import TestChannel, get_stubbed_worker
 from vumi.tests.fake_amqp import FakeAMQPBroker
 from vumi.workers.blinkenlights import metrics
 from vumi.blinkenlights.message20110818 import MetricMessage
-from vumi.message import Message
 
 
 class BrokerWrapper(object):
@@ -23,8 +22,7 @@ class BrokerWrapper(object):
 
     def recv_datapoints(self, exchange, queue):
         """Retrieve datapoints from a broker."""
-        contents = self._broker.get_dispatched(exchange, queue)
-        vumi_msgs = [Message.from_json(content.body) for content in contents]
+        vumi_msgs = self._broker.get_messages(exchange, queue)
         msgs = [MetricMessage.from_dict(vm.payload) for vm in vumi_msgs]
         return [msg.datapoints() for msg in msgs]
 
@@ -272,9 +270,13 @@ class TestRandomMetricsGenerator(TestCase):
 
     def setUp(self):
         self._on_run = Deferred()
+        self._workers = []
 
+    @inlineCallbacks
     def tearDown(self):
         self._on_run.callback(None)
+        for worker in self._workers:
+            yield worker.stopWorker()
 
     def on_run(self, worker):
         d, self._on_run = self._on_run, Deferred()
@@ -290,6 +292,7 @@ class TestRandomMetricsGenerator(TestCase):
                                         "manager_period": "0.1",
                                         "generator_period": "0.1",
                                     })
+        self._workers.append(worker)
         worker.on_run = self.on_run
         broker = BrokerWrapper(worker._amqp_client.broker)
         yield worker.startWorker()
@@ -297,10 +300,11 @@ class TestRandomMetricsGenerator(TestCase):
         yield self.wake_after_run()
         yield self.wake_after_run()
 
-        datapoints, = broker.recv_datapoints('vumi.metrics',
-                                             'vumi.metrics')
+        datasets = broker.recv_datapoints('vumi.metrics',
+                                          'vumi.metrics')
+        # there should be a least one but there may be more
+        # than one if the tests are running slowly
+        datapoints = datasets[0]
         self.assertEqual(sorted(d[0] for d in datapoints),
                          ["vumi.random.count", "vumi.random.timer",
                           "vumi.random.value"])
-
-        yield worker.stopWorker()

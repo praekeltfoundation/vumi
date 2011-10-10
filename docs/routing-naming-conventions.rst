@@ -1,6 +1,17 @@
 Routing Naming Conventions
 ==========================
 
+Transports use the following routing key convention:
+
+* `<transport_name>.inbound` for sending messages from users (to vumi
+  applications).
+* `<transport_name>.outbound` for receiving messages to send to users
+  (from vumi applications).
+* `<transport_name>.event` for sending message-related events
+  (e.g. acknowledgements, delivery reports) to vumi applications.
+* `<transport_name>.failures` for sending failed messages to failure
+  workers.
+
 Exchanges are `direct` unless otherwise specified.
 
 .. csv-table:: Routing Naming Conventions

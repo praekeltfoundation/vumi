@@ -74,7 +74,10 @@ def call_request(msisdn, headers):
     print 'response', response
     returnValue(response)
 
-class RestartConversationException(Exception): pass
+
+class RestartConversationException(Exception):
+    pass
+
 
 class Menu(object):
     def __init__(self, username, password):
@@ -158,7 +161,7 @@ class Menu(object):
                     raise RestartConversationException
                 else:
                     yield self.close('Thank you and good bye!')
-                
+
             elif answer == '2':
                 reschedule_later_date(patient.get('visit_id'), {
                     'Authorization': [basic_auth_string(self.username,
@@ -189,7 +192,7 @@ class Menu(object):
                 raise RestartConversationException
             else:
                 yield self.close('Thank you and good bye!')
-            
+
         elif answer == '3':
             call_request(patient.get('msisdn'), {
                 'Authorization': [basic_auth_string(self.username,
@@ -205,7 +208,7 @@ class Menu(object):
                 raise RestartConversationException
             else:
                 yield self.close('Thank you and good bye!')
-        
+
         # always close with this when this is reached, under normal conditions
         # it should never get here.
         yield self.close('Sorry, that wasn\'t what I expected. '
@@ -358,7 +361,6 @@ class USSDBookingTool(IntegratWorker):
                 self.reply(session_id, response)
         except RestartConversationException:
             return self.new_session(data)
-
 
     def open_session(self, data):
         pass

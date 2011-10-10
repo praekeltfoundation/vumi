@@ -11,6 +11,7 @@ Contents:
 .. toctree::
    :maxdepth: 1
 
+   overview.rst
    roadmap.rst
    installation.rst
    api.rst
@@ -19,6 +20,12 @@ Contents:
    keywords.rst
    transports.rst
    metrics.rst
+
+For developers:
+
+.. toctree::
+   :maxdepth: 1
+
    routing-naming-conventions.rst
    how-we-do-releases.rst
    coding-guidelines.rst

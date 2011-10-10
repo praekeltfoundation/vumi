@@ -1,5 +1,6 @@
 # -*- test-case-name: vumi.tests.test_testutils -*-
 
+import re
 import json
 import importlib
 import fnmatch
@@ -44,6 +45,14 @@ class UTCNearNow(object):
         return (now - self.offset) < other < (now + self.offset)
 
 
+class RegexMatcher(object):
+    def __init__(self, regex):
+        self.regex = re.compile(regex)
+
+    def __eq__(self, other):
+        return self.regex.match(other)
+
+
 class Mocking(object):
 
     class HistoryItem(object):
@@ -61,12 +70,12 @@ class Mocking(object):
     def __enter__(self):
         """Overwrite whatever module the function is part of"""
         self.mod = importlib.import_module(self.function.__module__)
-        setattr(self.mod, self.function.func_name, self)
+        setattr(self.mod, self.function.__name__, self)
         return self
 
     def __exit__(self, *exc_info):
         """Reset to whatever the function was originally when done"""
-        setattr(self.mod, self.function.func_name, self.function)
+        setattr(self.mod, self.function.__name__, self.function)
 
     def __call__(self, *args, **kwargs):
         """Return the return value when called, store the args & kwargs
@@ -233,7 +242,7 @@ class FakeRedis(object):
         self._data[key] = value
 
     def delete(self, key):
-        del self._data[key]
+        self._data.pop(key, None)
 
     # Hash operations
 
