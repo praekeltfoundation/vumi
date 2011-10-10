@@ -1,6 +1,6 @@
 """Tests for vumi.transports.telnet.transport."""
 
-from twisted.internet.defer import (inlineCallbacks, Deferred, DeferredQueue,
+from twisted.internet.defer import (inlineCallbacks, DeferredQueue,
                                     returnValue)
 from twisted.protocols.basic import LineReceiver
 from twisted.internet import reactor, protocol
@@ -8,18 +8,12 @@ from twisted.internet import reactor, protocol
 from vumi.message import TransportUserMessage
 from vumi.transports.telnet import TelnetServerTransport
 from vumi.transports.tests.test_base import TransportTestCase
-from vumi.tests.utils import get_stubbed_worker
-from vumi.tests.fake_amqp import FakeAMQPBroker
 
 
 class ClientProtocol(LineReceiver):
 
     def __init__(self):
         self.queue = DeferredQueue()
-
-    #def dataReceived(self, raw):
-    #    print "RAW:", repr(raw)
-    #    return LineReceiver.dataRecevied(self, raw)
 
     def lineReceived(self, line):
         self.queue.put(line)
