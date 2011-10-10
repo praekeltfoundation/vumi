@@ -516,6 +516,7 @@ class FakeRedisRespTestCase(TransportTestCase):
             "ESME_RUNKNOWNERR": self.transport.mess_tempfault,
         }
 
+        # Also have unknown error codes
         newfangled_fake_error = {
             "ESME_NEWFNGLEDFAKERR": self.esme.dummy_unknown,
         }
