@@ -1,4 +1,6 @@
-"""Transport that writes to and from a console."""
+# -*- test-case-name: vumi.transports.telnet.tests.test_transport -*-
+
+"""Transport that sends and receives to telnet clients."""
 
 from twisted.internet import reactor
 from twisted.internet.protocol import ServerFactory
@@ -86,7 +88,6 @@ class TelnetServerTransport(Transport):
             transport_metadata=transport_metadata,
             )
 
-    @inlineCallbacks
     def handle_outbound_message(self, message):
         client_id = message['transport_metadata']['session_id']
         client = self._clients.get(client_id)
@@ -100,8 +101,8 @@ class TelnetServerTransport(Transport):
         else:
             text = text.encode("UTF-8")
 
-        text = "\r\n".join(text.splitlines())
-        yield client.transport.write("%s\r\n" % text)
+        text = "\n".join(text.splitlines())
+        client.transport.write("%s\n" % text)
 
         if message['session_event'] == TransportUserMessage.SESSION_CLOSE:
-            yield client.transport.loseConnection()
+            client.transport.loseConnection()

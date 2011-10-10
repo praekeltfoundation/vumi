@@ -11,6 +11,8 @@ from vumi.transports.xmpp.tests import test_xmpp_stubs
 
 class XMPPTransportTestCase(TransportTestCase):
 
+    transport_name = 'test_xmpp'
+
     @inlineCallbacks
     def mk_transport(self):
         transport = yield self.get_transport({
@@ -22,6 +24,13 @@ class XMPPTransportTestCase(TransportTestCase):
             'transport_name': 'test_xmpp',
             'transport_type': 'xmpp',
         }, XMPPTransport, start=False)
+        transport.transport_name = 'test_xmpp'
+        transport.concurrent_sends = None
+        
+        yield transport._setup_failure_publisher()
+        yield transport._setup_message_publisher()
+        yield transport._setup_event_publisher()
+        
         # stubbing so I can test without an actual XMPP server
         self.jid = JID('user@xmpp.domain.com')
 
@@ -35,15 +44,17 @@ class XMPPTransportTestCase(TransportTestCase):
         # start the publisher, we need that one eventhough we do not
         # connect to an XMPP server
         yield transport._setup_message_publisher()
+        yield transport._setup_message_consumer()
         returnValue(transport)
 
     @inlineCallbacks
     def test_outbound_message(self):
         transport = yield self.mk_transport()
-        transport.handle_outbound_message(TransportUserMessage(
+        yield self.dispatch(TransportUserMessage(
             to_addr='user@xmpp.domain.com', from_addr='test@case.com',
             content='hello world', transport_name='test_xmpp',
-            transport_type='xmpp', transport_metadata={}))
+            transport_type='xmpp', transport_metadata={}),
+            rkey='test_xmpp.outbound')
 
         xmlstream = transport.xmpp_protocol.xmlstream
         self.assertEqual(len(xmlstream.outbox), 1)
