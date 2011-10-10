@@ -346,25 +346,6 @@ class EsmeTransceiver(Protocol):
             log.msg(self.name, 'stop & del enquire link looping call')
         except:
             pass
-        #try:
-            #self.lc_query.stop()
-            #del self.lc_query
-            #print self.name, 'stop & del query sm looping call'
-        #except:
-            #pass
-
-    def disconnect(self):
-        """
-        Attempt gracefull disconnect
-        """
-        pass
-
-    def forceConnectionFailure(self):
-        """
-        For when the tcp socket stream gets corrupted
-        or something equally unrecoverable
-        """
-        pass
 
     def dataReceived(self, data):
         self.datastream += data
