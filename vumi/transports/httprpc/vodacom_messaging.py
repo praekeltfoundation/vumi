@@ -1,24 +1,8 @@
-from twisted.internet.defer import inlineCallbacks
 from vumi.message import TransportUserMessage
-from vumi.transports.httprpc.transport import (
-        HttpRpcTransport,
-        HttpRpcHealthResource,
-        HttpRpcResource)
+from vumi.transports.httprpc.transport import HttpRpcTransport
 
 
 class VodaMessHttpRpcTransport(HttpRpcTransport):
-
-    @inlineCallbacks
-    def setup_transport(self):
-        self.requests = {}
-
-        # start receipt web resource
-        self.receipt_resource = yield self.start_web_resources(
-            [
-                (HttpRpcResource(self), self.config['web_path']),
-                (HttpRpcHealthResource(self), 'health'),
-            ],
-            self.config['web_port'])
 
     def handle_raw_inbound_message(self, msgid, request):
         content = str(request.args.get('request', [None])[0])
