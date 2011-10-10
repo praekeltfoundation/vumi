@@ -54,9 +54,6 @@ class HttpRpcTransport(Transport):
 
     @inlineCallbacks
     def setup_transport(self):
-        self.uuid = uuid.uuid4()
-        log.msg("Starting HttpRpcTransport %s config: %s" % (self.uuid,
-                                                             self.config))
         self.requests = {}
 
         # start receipt web resource
