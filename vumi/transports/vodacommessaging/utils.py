@@ -5,18 +5,18 @@ class VodacomMessagingResponse(object):
         self.context = ''
         self.freetext_option = None
         self.template_freetext_option_string = '<option' \
-            + ' command="1"' \
-            + ' order="1"' \
-            + ' callback="http://%(web_host)s%(web_path)s?context=%(context)s"' \
-            + ' display="False"' \
-            + ' ></option>'
+                ' command="1"' \
+                ' order="1"' \
+                ' callback="http://%(web_host)s%(web_path)s?context=%(context)s"' \
+                ' display="False"' \
+                ' ></option>'
         self.option_list = []
         self.template_numbered_option_string = '<option' \
-            + ' command="%(order)s"' \
-            + ' order="%(order)s"' \
-            + ' callback="http://%(web_host)s%(web_path)s?context=%(context)s"' \
-            + ' display="True"' \
-            + ' >%(text)s</option>'
+                ' command="%(order)s"' \
+                ' order="%(order)s"' \
+                ' callback="http://%(web_host)s%(web_path)s?context=%(context)s"' \
+                ' display="True"' \
+                ' >%(text)s</option>'
 
     def set_headertext(self, headertext):
         self.headertext = headertext
