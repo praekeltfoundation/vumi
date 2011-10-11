@@ -108,8 +108,10 @@ class TestVodaMessHttpRpcTransport(TestCase):
         self.assertEqual(payload['content'], '*120*666')
         tum = TransportUserMessage(**payload)
         rep = tum.reply("OK")
-        self.broker.publish_message("vumi", "test_vodacom_messaging.outbound", rep)
-        result = yield d
+        self.broker.publish_message("vumi", "test_vodacom_messaging.outbound",
+                rep)
+        response = yield d
+        self.assertEqual(response, 'OK')
 
     @inlineCallbacks
     def test_inbound_resume(self):
@@ -129,8 +131,11 @@ class TestVodaMessHttpRpcTransport(TestCase):
         self.assertEqual(payload['content'], '1')
         tum = TransportUserMessage(**payload)
         rep = tum.reply("OK")
-        self.broker.publish_message("vumi", "test_vodacom_messaging.outbound", rep)
-        result = yield d
+        self.broker.publish_message("vumi", "test_vodacom_messaging.outbound",
+                rep)
+        response = yield d
+        self.assertEqual(response, 'OK')
+
 
 
 class VodacomMessagingResponseTest(TestCase):
