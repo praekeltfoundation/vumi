@@ -300,8 +300,11 @@ class TestRandomMetricsGenerator(TestCase):
         yield self.wake_after_run()
         yield self.wake_after_run()
 
-        datapoints, = broker.recv_datapoints('vumi.metrics',
-                                             'vumi.metrics')
+        datasets = broker.recv_datapoints('vumi.metrics',
+                                          'vumi.metrics')
+        # there should be a least one but there may be more
+        # than one if the tests are running slowly
+        datapoints = datasets[0]
         self.assertEqual(sorted(d[0] for d in datapoints),
                          ["vumi.random.count", "vumi.random.timer",
                           "vumi.random.value"])
