@@ -304,11 +304,9 @@ class RedisTestSmppTransport(SmppTransport):
         return sequence_number
 
     def ok(self, *args, **kwargs):
-        #print kwargs.get('pdu')
         pass
 
     def mess_permfault(self, *args, **kwargs):
-        #print kwargs.get('pdu')
         pass
 
     def mess_tempfault(self, *args, **kwargs):
@@ -321,11 +319,9 @@ class RedisTestSmppTransport(SmppTransport):
         pass
 
     def conn_permfault(self, *args, **kwargs):
-        #print kwargs.get('pdu')
         pass
 
     def conn_tempfault(self, *args, **kwargs):
-        #print kwargs.get('pdu')
         pass
 
     def conn_throttle(self, *args, **kwargs):
@@ -520,15 +516,24 @@ class FakeRedisRespTestCase(TransportTestCase):
             "ESME_RUNKNOWNERR": self.transport.mess_tempfault,
         }
 
+        # Also have unknown error codes
+        newfangled_fake_error = {
+            "ESME_NEWFNGLEDFAKERR": self.esme.dummy_unknown,
+        }
+
         for code, method in bind_dispatch_methods.items():
-            #print code, method
             response = BindTransceiverResp(1, code)
             # check the dispatcher returns the correct transport method
             self.assertEquals(method,
                     self.esme.command_status_dispatch(response.get_obj()))
 
         for code, method in submit_dispatch_methods.items():
-            #print code, method
+            response = SubmitSMResp(1, "2", code)
+            # check the dispatcher returns the correct transport method
+            self.assertEquals(method,
+                    self.esme.command_status_dispatch(response.get_obj()))
+
+        for code, method in newfangled_fake_error.items():
             response = SubmitSMResp(1, "2", code)
             # check the dispatcher returns the correct transport method
             self.assertEquals(method,
