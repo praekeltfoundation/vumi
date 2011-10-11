@@ -1,16 +1,13 @@
 # -*- test-case-name: vumi.demos.tests.test_wikipedia -*-
 
-from twisted.python import log
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet import task
 from vumi.application import ApplicationWorker
 from vumi.utils import http_request, get_deploy_int
 from xml.etree import ElementTree
 from urllib import urlencode
-from datetime import timedelta, datetime
 import time
 import redis
-import time
 import json
 
 
@@ -26,9 +23,9 @@ class OpenSearch(object):
     @inlineCallbacks
     def search(self, query, limit=10, namespace=0):
         """
-        Perform a query and returns a list of dictionaries with results 
+        Perform a query and returns a list of dictionaries with results
         matching the query.
-        
+
         Parameters
         ----------
         query : str
@@ -38,7 +35,6 @@ class OpenSearch(object):
         namespace : int, optional
             The namespace of the OpenSearch Suggestions extention, defaults
             to 0
-        
         """
         query_params = {
             'search': query.encode('utf-8'),
@@ -55,7 +51,7 @@ class OpenSearch(object):
 
     def parse_xml(self, xml):
         """
-        Parse the OpenSearch SearchSuggest XML result response and return a 
+        Parse the OpenSearch SearchSuggest XML result response and return a
         list of dictionaries containing the results.
         """
         root = ElementTree.fromstring(xml)
@@ -92,12 +88,13 @@ def pretty_print_results(results, start=1):
     return '\n'.join(['%s. %s' % (idx, result['text'])
                       for idx, result in enumerate(results, start)])
 
+
 class SessionApplicationWorker(ApplicationWorker):
-    
-    # How long a session is allowed to last in seconds. Defaults to `None` 
+
+    # How long a session is allowed to last in seconds. Defaults to `None`
     # which means sessions never expire
     MAX_SESSION_LENGTH = None
-    
+
     @inlineCallbacks
     def startWorker(self):
         # Connect to Redis
@@ -105,14 +102,14 @@ class SessionApplicationWorker(ApplicationWorker):
         self.r_server = redis.Redis(
             db=get_deploy_int(self._amqp_client.vhost), **redis_conf)
         self.r_prefix = "%(worker_name)s:%(transport_name)s" % self.config
-        
+
         yield super(SessionApplicationWorker, self).startWorker()
-    
+
     def active_sessions(self):
         """
         Return a list of active user_ids and associated sessions. Loops over
-        known active_sessions, some of which might have auto expired. 
-        Implements lazy garbage collection, for each entry it checks if 
+        known active_sessions, some of which might have auto expired.
+        Implements lazy garbage collection, for each entry it checks if
         the user's session still exists, if not it is removed from the set.
         """
         skey = self.r_key('active_sessions')
@@ -122,7 +119,7 @@ class SessionApplicationWorker(ApplicationWorker):
                 yield user_id, self.load_session(user_id)
             else:
                 self.r_server.srem(skey, user_id)
-    
+
     def r_key(self, *args):
         """
         Generate a keyname using this workers prefix
@@ -141,18 +138,17 @@ class SessionApplicationWorker(ApplicationWorker):
     def schedule_session_expiry(self, user_id, timeout):
         """
         Schedule a session to timeout
-        
+
         Parameters
         ----------
         user_id : str
             The user's id.
         timeout : int
             The number of seconds after which this session should expire
-        
         """
         ukey = self.r_key('session', user_id)
         self.r_server.expire(ukey, timeout)
-    
+
     def create_session(self, user_id):
         """
         Create a new session using the given user_id
@@ -171,15 +167,15 @@ class SessionApplicationWorker(ApplicationWorker):
     def save_session(self, user_id, session):
         """
         Save a session
-        
+
         Parameters
         ----------
         user_id : str
             The user's id.
         session : dict
-            The session info, nested dictionaries are not supported. Any 
+            The session info, nested dictionaries are not supported. Any
             values that are dictionaries are converted to strings by Redis.
-        
+
         """
         ukey = self.r_key('session', user_id)
         for s_key, s_value in session.items():
@@ -190,15 +186,15 @@ class SessionApplicationWorker(ApplicationWorker):
 
 
 class WikipediaWorker(SessionApplicationWorker):
-    
+
     MAX_SESSION_LENGTH = 3 * 60
-    
+
     @inlineCallbacks
     def startWorker(self):
         gc = task.LoopingCall(lambda: self.active_sessions())
         gc.start(1)
         yield super(WikipediaWorker, self).startWorker()
-    
+
     def consume_user_message(self, msg):
         user_id = msg.user()
         session = self.load_session(user_id)
@@ -207,7 +203,7 @@ class WikipediaWorker(SessionApplicationWorker):
         else:
             session = self.create_session(user_id)
             self.new_wikipedia_session(msg, session)
-    
+
     def new_wikipedia_session(self, msg, session):
         self.reply_to(msg, "What would you like to search Wikipedia for?",
             True)
@@ -227,7 +223,7 @@ class WikipediaWorker(SessionApplicationWorker):
             self.reply_to(msg, pretty_print_results(results), True)
             self.save_session(msg.user(), session)
         else:
-            self.reply_to(msg, 'Sorry, no Wikipedia results for %s' % query, 
+            self.reply_to(msg, 'Sorry, no Wikipedia results for %s' % query,
                 False)
             self.clear_session(msg.user())
 
