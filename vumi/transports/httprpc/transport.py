@@ -57,7 +57,7 @@ class HttpRpcTransport(Transport):
         self.requests = {}
 
         # start receipt web resource
-        self.receipt_resource = yield self.start_web_resources(
+        self.web_resource = yield self.start_web_resources(
             [
                 (HttpRpcResource(self), self.config['web_path']),
                 (HttpRpcHealthResource(self), 'health'),
