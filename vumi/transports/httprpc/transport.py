@@ -64,6 +64,10 @@ class HttpRpcTransport(Transport):
             ],
             self.config['web_port'])
 
+    @inlineCallbacks
+    def teardown_transport(self):
+        yield self.web_resource.loseConnection()
+
     def handle_outbound_message(self, message):
         log.msg("HttpRpcTransport consuming %s" % (message))
         if message.payload.get('in_reply_to') and 'content' in message.payload:
@@ -84,6 +88,3 @@ class HttpRpcTransport(Transport):
             request.write(data)
             request.finish()
             del self.requests[uuid]
-
-    def stopWorker(self):
-        log.msg("Stopping the HttpRpcTransport")
