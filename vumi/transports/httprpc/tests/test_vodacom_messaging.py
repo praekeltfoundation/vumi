@@ -137,7 +137,6 @@ class TestVodaMessHttpRpcTransport(TestCase):
         self.assertEqual(response, 'OK')
 
 
-
 class VodacomMessagingResponseTest(TestCase):
     '''
     Test the construction of XML replies for Vodacom Messaging
