@@ -83,10 +83,10 @@ class EsmeTransceiver(Protocol):
     def __init__(self, seq, config, vumi_options):
         self.build_maps()
         self.name = 'Proto' + str(seq)
-        log.msg('__init__', self.name)
+        log.msg('__init__ %s' % self.name)
         self.defaults = {}
         self.state = 'CLOSED'
-        log.msg(self.name, 'STATE :', self.state)
+        log.msg('%s STATE: %s' % (self.name, self.state))
         self.seq = seq
         self.config = config
         self.vumi_options = vumi_options
@@ -105,6 +105,7 @@ class EsmeTransceiver(Protocol):
                 "conn_permfault": self.dummy_conn_permfault,
                 "conn_tempfault": self.dummy_conn_tempfault,
                 "conn_throttle": self.dummy_conn_throttle,
+                "unknown": self.dummy_unknown,
                 }
         self.r_server = redis.Redis("localhost",
                 db=get_deploy_int(self.vumi_options['vhost']))
@@ -168,6 +169,16 @@ class EsmeTransceiver(Protocol):
                 args,
                 kwargs)
             log.msg(m)
+
+    # Dummy error handler functions, just log invocation
+    def dummy_unknown(self, *args, **kwargs):
+            m = "%s.%s(*args=%s, **kwargs=%s)" % (
+                __name__,
+                "dummy_unknown",
+                args,
+                kwargs)
+            log.msg(m)
+
 
     def build_maps(self):
         self.ESME_command_status_dispatch_map = {
@@ -243,7 +254,7 @@ class EsmeTransceiver(Protocol):
     def command_status_dispatch(self, pdu):
         method = self.ESME_command_status_dispatch_map.get(
                 pdu['header']['command_status'],
-                self.dispatch_ok)
+                self.dispatch_unknown)
         handler = method()
         if pdu['header']['command_status'] != "ESME_ROK":
             log.msg("ERROR handler:%s pdu:%s" % (handler, pdu))
@@ -276,6 +287,9 @@ class EsmeTransceiver(Protocol):
     def update_error_handlers(self, handler_dict={}):
         self.error_handlers.update(handler_dict)
 
+    def dispatch_unknown(self):
+        return self.error_handlers.get("unknown")
+
     def getSeq(self):
         return self.seq[0]
 
@@ -293,8 +307,8 @@ class EsmeTransceiver(Protocol):
 
     def handleData(self, data):
         pdu = unpack_pdu(data)
-        log.msg('INCOMING <<<<', binascii.b2a_hex(data))
-        log.msg('INCOMING <<<<', pdu)
+        log.msg('INCOMING <<<< %s' % binascii.b2a_hex(data))
+        log.msg('INCOMING <<<< %s' % pdu)
         error_handler = self.command_status_dispatch(pdu)
         error_handler(pdu=pdu)
         if pdu['header']['command_id'] == 'bind_transceiver_resp':
@@ -309,7 +323,7 @@ class EsmeTransceiver(Protocol):
             self.handle_enquire_link(pdu)
         if pdu['header']['command_id'] == 'enquire_link_resp':
             self.handle_enquire_link_resp(pdu)
-        log.msg(self.name, 'STATE :', self.state)
+        log.msg('%s STATE: %s' % (self.name, self.state))
 
     def loadDefaults(self, defaults):
         self.defaults = dict(self.defaults, **defaults)
@@ -331,7 +345,7 @@ class EsmeTransceiver(Protocol):
 
     def connectionMade(self):
         self.state = 'OPEN'
-        log.msg(self.name, 'STATE :', self.state)
+        log.msg('%s STATE: %s' % (self.name, self.state))
         pdu = BindTransceiver(self.getSeq(), **self.defaults)
         log.msg(pdu.get_obj())
         self.incSeq()
@@ -339,11 +353,11 @@ class EsmeTransceiver(Protocol):
 
     def connectionLost(self, *args, **kwargs):
         self.state = 'CLOSED'
-        log.msg(self.name, 'STATE :', self.state)
+        log.msg('%s STATE: %s' % (self.name, self.state))
         try:
             self.lc_enquire.stop()
             del self.lc_enquire
-            log.msg(self.name, 'stop & del enquire link looping call')
+            log.msg('%s stop & del enquire link looping call' % self.name)
         except:
             pass
 
@@ -356,7 +370,7 @@ class EsmeTransceiver(Protocol):
 
     def sendPDU(self, pdu):
         data = pdu.get_bin()
-        log.msg('OUTGOING >>>>', unpack_pdu(data))
+        log.msg('OUTGOING >>>> %s' % unpack_pdu(data))
         self.transport.write(data)
 
     def handle_bind_transceiver_resp(self, pdu):
@@ -365,7 +379,7 @@ class EsmeTransceiver(Protocol):
             self.lc_enquire = LoopingCall(self.enquire_link)
             self.lc_enquire.start(55.0)
             self.__connect_callback(self)
-        log.msg(self.name, 'STATE :', self.state)
+        log.msg('%s STATE: %s' %(self.name, self.state))
 
     def handle_submit_sm_resp(self, pdu):
         self.pop_unacked()

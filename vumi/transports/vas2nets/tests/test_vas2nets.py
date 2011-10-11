@@ -71,8 +71,8 @@ class Vas2NetsTransportTestCase(TransportTestCase):
             'web_receipt_path': '/receipt',
             'web_port': 9998,
         }
-        self.broker = FakeAMQPBroker()
-        w = get_stubbed_worker(Vas2NetsTransport, self.config, self.broker)
+        self._amqp = FakeAMQPBroker()
+        w = get_stubbed_worker(Vas2NetsTransport, self.config, self._amqp)
         w.transport_name = 'vas2nets'
         w.event_publisher = yield w.publish_rkey('event')
         w.message_publisher = yield w.publish_rkey('inbound')
@@ -92,7 +92,7 @@ class Vas2NetsTransportTestCase(TransportTestCase):
         return w.startWorker()
 
     def get_dispatched(self, rkey):
-        return self.broker.get_dispatched('vumi', rkey)
+        return self._amqp.get_dispatched('vumi', rkey)
 
     def create_request(self, dictionary={}, path='/', method='POST'):
         """
