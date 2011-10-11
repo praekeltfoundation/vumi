@@ -11,6 +11,7 @@ from twisted.internet.base import DelayedCall
 from vumi.utils import http_request
 from vumi.transports.httprpc.vodacom_messaging import VodacomMessagingResponse
 from vumi.transports.httprpc.vodacom_messaging import VodaMessHttpRpcTransport
+from vumi.message import TransportUserMessage
 from vumi.tests.utils import get_stubbed_worker
 
 
@@ -53,12 +54,14 @@ class TestVodaMessHttpRpcTransport(TestCase):
 
     @inlineCallbacks
     def setUp(self):
-        #DelayedCall.debug = True
+        DelayedCall.debug = True
         self.vodacom_messaging_calls = DeferredQueue()
         self.mock_vodacom_messaging = MockHttpServer(self.handle_request)
         yield self.mock_vodacom_messaging.start()
         config = {
             'transport_name': 'test_vodacom_messaging',
+            'transport_type': 'ussd',
+            'ussd_string_prefix': '*120*666',
             'web_path': "foo",
             'web_port': 0,
             'url': self.mock_vodacom_messaging.url,
@@ -85,22 +88,49 @@ class TestVodaMessHttpRpcTransport(TestCase):
         result = yield http_request(self.worker_url + "health", "",
                                     method='GET')
         self.assertEqual(result, "pReq:0")
+        #import pdb; pdb.set_trace()
 
-    #@inlineCallbacks
-    #def test_inbound(self):
-        #xml = "XXXXXXXXXXXXXXXXXXX"
-        #yield http_request(self.worker_url + "foo", xml, method='GET')
-        #msg, = yield self.broker.wait_messages("vumi", "testgrat.inbound", 1)
-        #payload = msg.payload
-        #self.assertEqual(payload['transport_name'], "testgrat")
-        #self.assertEqual(payload['transport_type'], "ussd")
-        #self.assertEqual(payload['transport_metadata'],
-                         #{"session_id": "sess1234"})
-        #self.assertEqual(payload['session_event'],
-                         #TransportUserMessage.SESSION_RESUME)
-        #self.assertEqual(payload['from_addr'], '27345')
-        #self.assertEqual(payload['to_addr'], '*120*99#')
-        #self.assertEqual(payload['content'], 'foobar')
+    @inlineCallbacks
+    def test_inbound_new(self):
+        args = "/?ussdSessionId=123&msisdn=555&provider=web&request=*120*666"
+        d = http_request(self.worker_url + "foo" + args, '', method='GET')
+        msg, = yield self.broker.wait_messages("vumi",
+            "test_vodacom_messaging.inbound", 1)
+        payload = msg.payload
+        self.assertEqual(payload['transport_name'], "test_vodacom_messaging")
+        self.assertEqual(payload['transport_type'], "ussd")
+        self.assertEqual(payload['transport_metadata'],
+                         {"session_id": "123"})
+        self.assertEqual(payload['session_event'],
+                         TransportUserMessage.SESSION_NEW)
+        self.assertEqual(payload['from_addr'], '555')
+        self.assertEqual(payload['to_addr'], '*120*666')
+        self.assertEqual(payload['content'], '*120*666')
+        tum = TransportUserMessage(**payload)
+        rep = tum.reply("OK")
+        self.broker.publish_message("vumi", "test_vodacom_messaging.outbound", rep)
+        result = yield d
+
+    @inlineCallbacks
+    def test_inbound_resume(self):
+        args = "/?ussdSessionId=123&msisdn=555&provider=web&request=1"
+        d = http_request(self.worker_url + "foo" + args, '', method='GET')
+        msg, = yield self.broker.wait_messages("vumi",
+            "test_vodacom_messaging.inbound", 1)
+        payload = msg.payload
+        self.assertEqual(payload['transport_name'], "test_vodacom_messaging")
+        self.assertEqual(payload['transport_type'], "ussd")
+        self.assertEqual(payload['transport_metadata'],
+                         {"session_id": "123"})
+        self.assertEqual(payload['session_event'],
+                         TransportUserMessage.SESSION_RESUME)
+        self.assertEqual(payload['from_addr'], '555')
+        self.assertEqual(payload['to_addr'], '')
+        self.assertEqual(payload['content'], '1')
+        tum = TransportUserMessage(**payload)
+        rep = tum.reply("OK")
+        self.broker.publish_message("vumi", "test_vodacom_messaging.outbound", rep)
+        result = yield d
 
 
 class VodacomMessagingResponseTest(TestCase):
