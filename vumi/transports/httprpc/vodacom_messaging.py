@@ -9,14 +9,14 @@ class VodaMessHttpRpcTransport(HttpRpcTransport):
         msisdn = str(request.args.get('msisdn', [None])[0])
         ussd_session_id = str(request.args.get('ussdSessionId', [None])[0])
         provider = str(request.args.get('provider', [None])[0])
-        if content.startswith(self.transport.config.get('ussd_string_prefix')):
+        if content.startswith(self.config.get('ussd_string_prefix')):
             session_event = TransportUserMessage.SESSION_NEW
             to_addr = content
         else:
             session_event = TransportUserMessage.SESSION_RESUME
             to_addr = ''
         transport_metadata = {'session_id': ussd_session_id}
-        self.transport.publish_message(
+        self.publish_message(
                 message_id=msgid,
                 content=content,
                 to_addr=to_addr,
