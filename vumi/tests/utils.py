@@ -246,6 +246,26 @@ class FakeRedis(object):
 
     # Hash operations
 
+    def hset(self, key, field, value):
+        mapping = self._data.setdefault(key, {})
+        new_field = field not in mapping
+        mapping[field] = value
+        return int(new_field)
+
+    def hget(self, key, field):
+        return self._data.get(key, {}).get(field)
+
+    def hdel(self, key, *fields):
+        mapping = self._data.get(key)
+        if mapping is None:
+            return 0
+        deleted = 0
+        for field in fields:
+            if field in mapping:
+                del mapping[field]
+                deleted += 1
+        return deleted
+
     def hmset(self, key, mapping):
         hval = self._data.setdefault(key, {})
         hval.update(mapping)
