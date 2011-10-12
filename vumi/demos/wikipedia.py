@@ -89,21 +89,35 @@ def pretty_print_results(results, start=1):
                       for idx, result in enumerate(results, start)])
 
 
-class SessionApplicationWorker(ApplicationWorker):
+class SessionManager(object):
+    """A manager for sessions.
 
-    # How long a session is allowed to last in seconds. Defaults to `None`
-    # which means sessions never expire
-    MAX_SESSION_LENGTH = None
+    :type prefix: str
+    :param prefix:
+        Prefix to use for Redis keys.
+    :type db: int
+    :param db:
+        Redis db number.
+    :type redis_config: dict
+    :param redis_config:
+        Configuration options for redis.Redis. Default is None (no options).
+    :type max_session_length: float
+    :param max_session_length:
+        Time before a session expires. Default is None (never expire).
+    :type gc_period: float
+    :param gc_period:
+        Time in seconds between checking for session expiry.
+    """
 
-    @inlineCallbacks
-    def startWorker(self):
-        # Connect to Redis
-        redis_conf = self.config.get('redis', {})
-        self.r_server = redis.Redis(
-            db=get_deploy_int(self._amqp_client.vhost), **redis_conf)
-        self.r_prefix = "%(worker_name)s:%(transport_name)s" % self.config
+    def __init__(self, db, prefix, redis_config=None, max_session_length=None,
+                 gc_period=1.0):
+        self.max_session_length = max_session_length
+        redis_config = redis_config if redis_config is not None else {}
+        self.r_server = redis.Redis(db, **redis_config)
+        self.r_prefix = prefix
 
-        yield super(SessionApplicationWorker, self).startWorker()
+        gc = task.LoopingCall(lambda: self.active_sessions())
+        gc.start(gc_period)
 
     def active_sessions(self):
         """
@@ -185,23 +199,25 @@ class SessionApplicationWorker(ApplicationWorker):
         return session
 
 
-class WikipediaWorker(SessionApplicationWorker):
+class WikipediaWorker(ApplicationWorker):
 
     MAX_SESSION_LENGTH = 3 * 60
 
     @inlineCallbacks
     def startWorker(self):
-        gc = task.LoopingCall(lambda: self.active_sessions())
-        gc.start(1)
+        self.session_manager = SessionManager(
+            get_deploy_int(self._amqp_client.vhost),
+            "%(worker_name)s:%(transport_name)s" % self.config)
+
         yield super(WikipediaWorker, self).startWorker()
 
     def consume_user_message(self, msg):
         user_id = msg.user()
-        session = self.load_session(user_id)
+        session = self.session_manager.load_session(user_id)
         if session:
             self.resume_wikipedia_session(msg, session)
         else:
-            session = self.create_session(user_id)
+            session = self.session_manager.create_session(user_id)
             self.new_wikipedia_session(msg, session)
 
     def new_wikipedia_session(self, msg, session):
@@ -221,11 +237,11 @@ class WikipediaWorker(SessionApplicationWorker):
         if results:
             session['results'] = json.dumps(results)
             self.reply_to(msg, pretty_print_results(results), True)
-            self.save_session(msg.user(), session)
+            self.session_manager.save_session(msg.user(), session)
         else:
             self.reply_to(msg, 'Sorry, no Wikipedia results for %s' % query,
                 False)
-            self.clear_session(msg.user())
+            self.session_manager.clear_session(msg.user())
 
     def handle_selection(self, msg, session, number):
         try:
@@ -238,4 +254,4 @@ class WikipediaWorker(SessionApplicationWorker):
             self.reply_to(msg,
                 'Sorry, invalid selection. Please restart and try again',
                 False)
-        self.clear_session(msg.user())
+        self.session_manager.clear_session(msg.user())
