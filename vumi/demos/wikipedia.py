@@ -207,7 +207,8 @@ class WikipediaWorker(ApplicationWorker):
     def startWorker(self):
         self.session_manager = SessionManager(
             get_deploy_int(self._amqp_client.vhost),
-            "%(worker_name)s:%(transport_name)s" % self.config)
+            "%(worker_name)s:%(transport_name)s" % self.config,
+            max_session_length=self.MAX_SESSION_LENGTH)
 
         yield super(WikipediaWorker, self).startWorker()
 
