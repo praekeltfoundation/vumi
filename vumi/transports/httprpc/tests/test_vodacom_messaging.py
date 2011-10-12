@@ -88,7 +88,6 @@ class TestVodaMessHttpRpcTransport(TestCase):
         result = yield http_request(self.worker_url + "health", "",
                                     method='GET')
         self.assertEqual(result, "pReq:0")
-        #import pdb; pdb.set_trace()
 
     @inlineCallbacks
     def test_inbound_new(self):
