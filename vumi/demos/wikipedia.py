@@ -92,12 +92,12 @@ def pretty_print_results(results, start=1):
 class SessionManager(object):
     """A manager for sessions.
 
-    :type prefix: str
-    :param prefix:
-        Prefix to use for Redis keys.
     :type db: int
     :param db:
         Redis db number.
+    :type prefix: str
+    :param prefix:
+        Prefix to use for Redis keys.
     :type redis_config: dict
     :param redis_config:
         Configuration options for redis.Redis. Default is None (no options).
@@ -116,8 +116,11 @@ class SessionManager(object):
         self.r_server = redis.Redis(db, **redis_config)
         self.r_prefix = prefix
 
-        gc = task.LoopingCall(lambda: self.active_sessions())
-        gc.start(gc_period)
+        self.gc = task.LoopingCall(lambda: self.active_sessions())
+        self.gc.start(gc_period)
+
+    def stop(self):
+        return self.gc.stop()
 
     def active_sessions(self):
         """
@@ -170,8 +173,8 @@ class SessionManager(object):
         session = self.save_session(user_id, {
             'created_at': time.time()
         })
-        if self.MAX_SESSION_LENGTH:
-            self.schedule_session_expiry(user_id, self.MAX_SESSION_LENGTH)
+        if self.max_session_length:
+            self.schedule_session_expiry(user_id, self.max_session_length)
         return session
 
     def clear_session(self, user_id):
@@ -211,6 +214,11 @@ class WikipediaWorker(ApplicationWorker):
             max_session_length=self.MAX_SESSION_LENGTH)
 
         yield super(WikipediaWorker, self).startWorker()
+
+    @inlineCallbacks
+    def stopWorker(self):
+        yield self.session_manager.stop()
+        yield super(WikipediaWorker, self).stopWorker()
 
     def consume_user_message(self, msg):
         user_id = msg.user()
