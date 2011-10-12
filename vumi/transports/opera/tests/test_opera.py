@@ -11,7 +11,7 @@ from twisted.web.test.test_web import DummyRequest
 os.environ['DJANGO_SETTINGS_MODULE'] = 'vumi.webapp.settings'
 
 from vumi.message import Message
-from vumi.workers.opera import transport
+from vumi.transports.opera import opera
 from vumi.tests.utils import TestPublisher
 # from vumi.webapp.api.models import *
 
@@ -21,7 +21,7 @@ class OperaTransportTestCase(unittest.TestCase):
     def test_receipt_processing(self):
         """it should be able to process an incoming XML receipt via HTTP"""
         publisher = TestPublisher()
-        resource = transport.OperaReceiptResource(publisher)
+        resource = opera.OperaReceiptResource(publisher)
         request = DummyRequest('/api/v1/sms/opera/receipt.xml')
         request.content = StringIO("""
         <?xml version="1.0"?>
@@ -53,7 +53,7 @@ class OperaTransportTestCase(unittest.TestCase):
         it should be able to process in incoming sms as XML delivered via HTTP
         """
         publisher = TestPublisher()
-        resource = transport.OperaReceiveResource(publisher)
+        resource = opera.OperaReceiveResource(publisher)
         request = DummyRequest('/api/v1/sms/opera/receive.xml')
         request.content = StringIO("""
         <?xml version="1.0"?>
@@ -134,7 +134,7 @@ class OperaTransportTestCase(unittest.TestCase):
                 return d
             return all_ok_cb
 
-        consumer = transport.OperaConsumer(publisher=TestPublisher(),
+        consumer = opera.OperaConsumer(publisher=TestPublisher(),
                 config={'url': 'http://localhost'})
         consumer._testing = False
         consumer.consume_message = error_raiser(ExpectedException,
