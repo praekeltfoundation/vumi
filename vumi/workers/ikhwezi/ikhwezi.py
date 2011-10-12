@@ -1,6 +1,7 @@
 import random
 import json
 import yaml
+from datetime import datetime
 
 from twisted.internet.defer import inlineCallbacks
 from twisted.python import log
@@ -496,6 +497,8 @@ class IkhweziQuiz():
     def ds_set(self):
         self.datastore.set("%s#%s" % (
             self.REDIS_PREFIX, self.data['msisdn']), json.dumps(self.data))
+        for k, v in self.data.items():
+            print "%s: %s" % (k, v)
 
     def ds_get(self, msisdn):
         data_string = self.datastore.get("%s#%s" % (
@@ -579,7 +582,8 @@ class IkhweziQuiz():
                 'msisdn': str(msisdn),
                 'provider': provider,
                 'attempts': 0,
-                #'m_timestamp': None,
+                'msisdn_timestamp': datetime.utcnow().strftime(
+                    "%Y-%m-%d %H:%M:%S+00"),
                 'question1': None,
                 'question2': None,
                 'question3': None,
@@ -590,24 +594,24 @@ class IkhweziQuiz():
                 'question8': None,
                 'question9': None,
                 'question10': None,
-                #'q1_timestamp': None,
-                #'q2_timestamp': None,
-                #'q3_timestamp': None,
-                #'q4_timestamp': None,
-                #'q5_timestamp': None,
-                #'q6_timestamp': None,
-                #'q7_timestamp': None,
-                #'q8_timestamp': None,
-                #'q9_timestamp': None,
-                #'q10_timestamp': None,
+                'question1_timestamp': None,
+                'question2_timestamp': None,
+                'question3_timestamp': None,
+                'question4_timestamp': None,
+                'question5_timestamp': None,
+                'question6_timestamp': None,
+                'question7_timestamp': None,
+                'question8_timestamp': None,
+                'question9_timestamp': None,
+                'question10_timestamp': None,
                 'demographic1': None,
                 'demographic2': None,
                 'demographic3': None,
                 'demographic4': None,
-                #'d1_timestamp': None,
-                #'d2_timestamp': None,
-                #'d3_timestamp': None,
-                #'d4_timestamp': None,
+                'demographic1_timestamp': None,
+                'demographic2_timestamp': None,
+                'demographic3_timestamp': None,
+                'demographic4_timestamp': None,
                 'order': self.random_ordering()}
         self.ds_set()
         return True
@@ -619,6 +623,8 @@ class IkhweziQuiz():
                 and answer in question['options'].keys():
             reply = question['options'][answer].get('reply')
             self.data[question_name] = answer
+            self.data[question_name + '_timestamp'] = \
+                    datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S+00")
             self.data['order'].pop(0)
             self.ds_set()
             self.language = self.lang(self.data['demographic1'] or 1)
