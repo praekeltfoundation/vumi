@@ -5,8 +5,7 @@ from twisted.python import log
 from twisted.web import http
 from twisted.web.resource import Resource
 from twisted.web.server import NOT_DONE_YET
-from vumi.message import Message
-from vumi.service import Worker
+from vumi.transports.base import Transport
 
 
 class HttpRpcHealthResource(Resource):
@@ -28,19 +27,12 @@ class HttpRpcResource(Resource):
         self.transport = transport
         Resource.__init__(self)
 
-    def render_(self, request, logmsg=None):
+    def render_(self, request, http_action=None):
+        log.msg("HttpRpcResource HTTP Action: %s" % (request,))
         request.setHeader("content-type", "text/plain")
-        uu = str(uuid.uuid4())
-        md = {}
-        md['args'] = request.args
-        md['content'] = request.content.read()
-        md['path'] = request.path
-        if logmsg:
-            log.msg("HttpRpcResource", logmsg, "Message.message:", repr(md))
-        message = Message(message=md, uuid=uu,
-                          return_path=[self.transport.consume_key])
-        self.transport.publisher.publish_message(message)
+        uu = str(uuid.uuid4().get_hex())
         self.transport.requests[uu] = request
+        self.transport.handle_raw_inbound_message(uu, request)
         return NOT_DONE_YET
 
     def render_GET(self, request):
@@ -50,38 +42,42 @@ class HttpRpcResource(Resource):
         return self.render_(request, "render_POST")
 
 
-class HttpRpcTransport(Worker):
+class HttpRpcTransport(Transport):
+    """Base class for synchronous HTTP transports.
+
+    Because a reply from an application worker is needed before the HTTP
+    response can be completed, a reply needs to be returned to the same
+    transport worker that generated the inbound message. This means that
+    currently there many only be one transport worker for each instance
+    of this transport of a given name.
+    """
 
     @inlineCallbacks
-    def startWorker(self):
-        self.uuid = uuid.uuid4()
-        log.msg("Starting HttpRpcTransport %s config: %s" % (self.uuid,
-                                                             self.config))
-        self.publish_key = self.config['publish_key']
-        self.consume_key = self.config['consume_key']
-
+    def setup_transport(self):
         self.requests = {}
 
-        self.publisher = yield self.publish_to(self.publish_key)
-        self.consume(self.consume_key, self.consume_message)
-
         # start receipt web resource
-        self.receipt_resource = yield self.start_web_resources(
+        self.web_resource = yield self.start_web_resources(
             [
                 (HttpRpcResource(self), self.config['web_path']),
                 (HttpRpcHealthResource(self), 'health'),
             ],
             self.config['web_port'])
-        print self.receipt_resource
 
-    def consume_message(self, message):
-        log.msg("HttpRpcTransport consuming on %s: %s" % (
-            self.consume_key,
-            repr(message.payload)))
-        if message.payload.get('uuid') and 'message' in message.payload:
+    @inlineCallbacks
+    def teardown_transport(self):
+        yield self.web_resource.loseConnection()
+
+    def handle_outbound_message(self, message):
+        log.msg("HttpRpcTransport consuming %s" % (message))
+        if message.payload.get('in_reply_to') and 'content' in message.payload:
             self.finishRequest(
-                    message.payload['uuid'],
-                    message.payload['message'])
+                    message.payload['in_reply_to'],
+                    message.payload['content'])
+
+    def handle_raw_inbound_message(self, msgid, request):
+        raise NotImplementedError("Sub-classes should implement"
+                                  " handle_raw_inbound_message.")
 
     def finishRequest(self, uuid, message=''):
         data = str(message)
@@ -92,6 +88,3 @@ class HttpRpcTransport(Worker):
             request.write(data)
             request.finish()
             del self.requests[uuid]
-
-    def stopWorker(self):
-        log.msg("Stopping the HttpRpcTransport")
