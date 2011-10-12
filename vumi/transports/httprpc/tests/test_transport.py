@@ -13,6 +13,7 @@ from vumi.transports.httprpc.transport import HttpRpcTransport
 from vumi.message import TransportUserMessage
 from vumi.tests.utils import get_stubbed_worker
 
+
 class OkTransport(HttpRpcTransport):
 
     def handle_raw_inbound_message(self, msgid, request):
@@ -27,6 +28,7 @@ class OkTransport(HttpRpcTransport):
                 transport_type=self.config.get('transport_type'),
                 transport_metadata={},
                 )
+
 
 class MockResource(Resource):
     isLeaf = True
@@ -114,4 +116,3 @@ class TestTransport(TestCase):
                 rep)
         response = yield d
         self.assertEqual(response, 'OK')
-
