@@ -1,4 +1,4 @@
-# -*- test-case-name: vumi.workers.opera.test_opera -*-
+# -*- test-case-name: vumi.transports.opera.tests.test_opera -*-
 # -*- coding: utf-8 -*-
 
 from datetime import datetime, timedelta
