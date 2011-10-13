@@ -528,22 +528,22 @@ class IkhweziModel(UglyModel):
         return None
 
     @classmethod
-    def create_item(cls, txn, msisdn):
-        params = {'msisdn': msisdn}
+    def create_item(cls, txn, params):
         txn.execute(cls.insert_values_query(**params), params)
         txn.execute("SELECT lastval()")
         return txn.fetchone()[0]
 
     @classmethod
-    def update_query(cls, msisdn, **kw):
+    def update_query(cls, **kw):
+        msisdn = kw.pop('msisdn')
         valuespecs = ", ".join(["%s = %s" % (
             k, repr(v)) for k, v in kw.items()])
         return "UPDATE %s SET %s WHERE msisdn = %s" (
             cls.get_table_name(), valuespecs, msisdn)
 
     @classmethod
-    def update_item(cls, txn, msisdn, other={}):
-        txn.execute(cls.insert_values_query(**params), params)
+    def update_item(cls, txn, params):
+        txn.execute(cls.update_query(**params))
         txn.execute("SELECT lastval()")
         return txn.fetchone()[0]
 
