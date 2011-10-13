@@ -95,6 +95,9 @@ class SmppTransport(Transport):
         '27761234567'}.
     """
 
+    # We only want to start this after we finish connecting to SMPP.
+    start_message_consumer = False
+
     def setup_transport(self):
         log.msg("Starting the SmppTransport with %s" % self.config)
 
