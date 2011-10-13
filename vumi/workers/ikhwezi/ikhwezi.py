@@ -518,6 +518,39 @@ class IkhweziModel(UglyModel):
         ('demographic4_timestamp', 'timestamp'),
         ('remaining_questions', 'varchar')
         )
+    indexes = [
+        'provider',
+        'attempts',
+        'msisdn_timestamp',
+        'question1',
+        'question2',
+        'question3',
+        'question4',
+        'question5',
+        'question6',
+        'question7',
+        'question8',
+        'question9',
+        'question10',
+        #'question1_timestamp',
+        #'question2_timestamp',
+        #'question3_timestamp',
+        #'question4_timestamp',
+        #'question5_timestamp',
+        #'question6_timestamp',
+        #'question7_timestamp',
+        #'question8_timestamp',
+        #'question9_timestamp',
+        #'question10_timestamp',
+        'demographic1',
+        'demographic2',
+        'demographic3',
+        'demographic4',
+        #'demographic1_timestamp',
+        #'demographic2_timestamp',
+        #'demographic3_timestamp',
+        #'demographic4_timestamp'
+        ]
 
     @classmethod
     def get_item(cls, txn, msisdn):

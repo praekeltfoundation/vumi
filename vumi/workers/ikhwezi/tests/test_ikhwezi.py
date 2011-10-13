@@ -36,6 +36,7 @@ from vumi.database.base import (setup_db, get_db, close_db, UglyModel,
 class IkhweziModelBaseTest(TestCase):
 
     def ri(self, *args, **kw):
+        print dir(self.db)
         return self.db.runInteraction(*args, **kw)
 
     def _sdb(self, dbname, **kw):
@@ -91,7 +92,8 @@ class IkhweziModelTest(IkhweziModelBaseTest):
         return self.setup_db(IkhweziModel)
 
     def tearDown(self):
-        return self.shutdown_db()
+        #return self.shutdown_db()
+        pass
 
     def test_setup_and_teardown(self):
         self.assertTrue(True)
