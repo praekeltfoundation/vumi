@@ -12,7 +12,7 @@ from twisted.web.resource import Resource
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.webapp.api.gateways.opera import utils
-from vumi.utils import safe_routing_key
+from vumi.utils import safe_routing_key, normalize_msisdn
 from vumi.message import Message, JSONMessageEncoder
 from vumi.service import Worker, Consumer, Publisher
 from vumi.transports import Transport
@@ -34,9 +34,7 @@ class OperaReceiptResource(Resource):
 
     def render_POST(self, request):
         receipts = utils.parse_receipts_xml(request.content.read())
-        data = []
         for receipt in receipts:
-            log.msg('Received delivery receipt: %s' % repr(receipt))
 
             # convert delivery receipt status values
             status_map = {
@@ -52,42 +50,27 @@ class OperaReceiptResource(Resource):
             
             internal_status = status_map.get(receipt.status, 'failed')
             self.callback(receipt.reference, internal_status)
-            # dictionary = {
-            #     'transport_name': 'Opera',
-            #     'transport_msg_id': receipt.reference,
-            #     'transport_status': receipt.status,
-            #     'transport_delivered_at': datetime.strptime(
-            #         receipt.timestamp,
-            #         utils.OPERA_TIMESTAMP_FORMAT
-            #     )
-            # }
-            # message = Message(**dictionary)
-            # self.publisher.publish_message(message,
-            #                                routing_key='sms.receipt.opera')
-            # data.append(dictionary)
 
         request.setResponseCode(http.OK)
-        request.setHeader('Content-Type', 'application/json; charset-utf-8')
-        return json.dumps(data, cls=JSONMessageEncoder)
+        return ''
 
 
 class OperaReceiveResource(Resource):
 
-    def __init__(self, publisher):
-        self.publisher = publisher
+    def __init__(self, callback):
+        self.callback = callback
         Resource.__init__(self)
 
     def render_POST(self, request):
         content = request.content.read()
         sms = utils.parse_post_event_xml(content)
-        self.publisher.publish_message(Message(**{
-            'to_msisdn': sms['Local'],
-            'from_msisdn': sms['Remote'],
-            'message': sms['Text'],
-            'transport_name': 'Opera',
-            'received_at': iso8601.parse_date(sms['ReceiveDate'])
-        }), routing_key='sms.inbound.opera.%s' % safe_routing_key(
-                sms['Local']))
+        self.callback(
+            to_addr=normalize_msisdn(sms['Local'], country_code='27'), 
+            from_addr=normalize_msisdn(sms['Remote'], country_code='27'), 
+            content=sms['Text'], transport_type='sms', 
+            message_id=sms['MessageID'], transport_metadata={
+                'provider': sms['MobileNetwork']
+            })
         request.setResponseCode(http.OK)
         request.setHeader('Content-Type', 'text/xml; charset=utf8')
         return content
@@ -140,6 +123,7 @@ class OperaOutboundTransport(Transport):
         self.opera_channel = self.config['channel']
         self.opera_password = self.config['password']
         self.opera_service = self.config['service']
+        self.transport_name = self.config['transport_name']
     
     def setup_transport(self):
         log.msg("Starting the OperaOutboundTransport: %s" % self.transport_name)

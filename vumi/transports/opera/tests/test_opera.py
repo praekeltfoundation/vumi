@@ -24,6 +24,13 @@ from vumi.transports.tests.test_base import TransportTestCase
 
 class OperaTransportTestCase(TransportTestCase):
 
+    @inlineCallbacks
+    def setUp(self):
+        self.port = 9999
+        self.host = "localhost"
+        self.url = 'http://%s:%s' % (self.host, self.port)
+        yield super(OperaTransportTestCase, self).setUp()
+
     def mk_transport(self, cls=OperaOutboundTransport, **config):
         default_config = {
             'url': 'http://testing.domain',
@@ -51,7 +58,7 @@ class OperaTransportTestCase(TransportTestCase):
         """it should be able to process an incoming XML receipt via HTTP"""
         transport = yield self.mk_transport(cls=OperaInboundTransport, 
             web_receipt_path='/receipt.xml', web_receive_path='/receive.xml',
-            web_port=9999)
+            web_port=self.port)
         
         xml_data = """
         <?xml version="1.0"?>
@@ -67,45 +74,26 @@ class OperaTransportTestCase(TransportTestCase):
           </receipt>
         </receipts>
         """.strip()
-        resp = yield http_request('http://localhost:9999/receipt.xml', xml_data)
-        # print resp
+        resp = yield http_request('%s/receipt.xml' % self.url, xml_data)
+        self.assertEqual([], self.get_dispatched_failures())
+        self.assertEqual([], self.get_dispatched_messages())
+        [event] = self.get_dispatched_events()
+        self.assertEqual(event['delivery_status'], 'delivered')
+        self.assertEqual(event['message_type'], 'event')
+        self.assertEqual(event['event_type'], 'delivery_report')
+        # this is failing because I need to stash the mapping in Redis
+        # self.assertEqual(event['transport_message_id'], '001efc31')
 
-        # publisher = TestPublisher()
-        # resource = opera.OperaReceiptResource(publisher)
-        # request = DummyRequest('/api/v1/sms/opera/receipt.xml')
-        # request.content = StringIO("""
-        # <?xml version="1.0"?>
-        # <!DOCTYPE receipts>
-        # <receipts>
-        #   <receipt>
-        #     <msgid>26567958</msgid>
-        #     <reference>001efc31</reference>
-        #     <msisdn>+27123456789</msisdn>
-        #     <status>D</status>
-        #     <timestamp>20080831T15:59:24</timestamp>
-        #     <billed>NO</billed>
-        #   </receipt>
-        # </receipts>
-        # """.strip())
-        # resource.render_POST(request)
-        # self.assertEquals(publisher.queue.pop(), (Message(**{
-        #         'transport_name': 'Opera',
-        #         'transport_msg_id': '001efc31',
-        #         'transport_status': 'D',  # OK / delivered, opera specific
-        #         'transport_delivered_at': datetime(2008, 8, 31, 15, 59, 24),
-        #     }), {
-        #         'routing_key': 'sms.receipt.opera'
-        #     })
-        # )
-
+    @inlineCallbacks
     def test_incoming_sms_processing(self):
         """
         it should be able to process in incoming sms as XML delivered via HTTP
         """
-        publisher = TestPublisher()
-        resource = opera.OperaReceiveResource(publisher)
-        request = DummyRequest('/api/v1/sms/opera/receive.xml')
-        request.content = StringIO("""
+        transport = yield self.mk_transport(cls=OperaInboundTransport, 
+            web_receipt_path='/receipt.xml', web_receive_path='/receive.xml',
+            web_port=self.port)
+
+        xml_data = """
         <?xml version="1.0"?>
         <!DOCTYPE bspostevent>
         <bspostevent>
@@ -139,17 +127,22 @@ class OperaTransportTestCase(TransportTestCase):
           <field name="ServiceEndDate" type = "string">2010-06-30 07:47:00 +0200</field>
           <field name="Now" type = "date">2010-06-04 15:51:27 +0000</field>
         </bspostevent>
-        """.strip())
-        resource.render_POST(request)
-        self.assertEquals(publisher.queue.pop(), (Message(**{
-                'to_msisdn': '*32323',
-                'from_msisdn': '+27831234567',
-                'message': 'Hello World',
-                'transport_name': 'Opera',
-                'received_at': iso8601.parse_date('2010-06-04 15:51:25 +0000'),
-            }), {
-                'routing_key': 'sms.inbound.opera.s32323'  # * -> s
-            }))
+        """.strip()
+
+        resp = yield http_request('%s/receive.xml' % self.url, xml_data)
+
+        self.assertEqual([], self.get_dispatched_failures())
+        self.assertEqual([], self.get_dispatched_events())
+        [msg] = self.get_dispatched_messages()
+        self.assertEqual(msg['message_id'], '373736741')
+        self.assertEqual(msg['to_addr'], '32323')
+        self.assertEqual(msg['from_addr'], '+27831234567')
+        self.assertEqual(msg['content'], 'Hello World')
+        self.assertEqual(msg['transport_metadata'], {
+            'provider': 'mtn-za'
+        })
+
+        self.assertEqual(resp, xml_data)
     
     @inlineCallbacks
     def test_outbound_ok(self):
