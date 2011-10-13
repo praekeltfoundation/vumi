@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from StringIO import StringIO
 import os
 
@@ -7,16 +7,20 @@ from twisted.trial import unittest
 from twisted.python import failure
 from twisted.internet import defer
 from twisted.web.test.test_web import DummyRequest
+from twisted.web import xmlrpc
 
 os.environ['DJANGO_SETTINGS_MODULE'] = 'vumi.webapp.settings'
 
-from vumi.message import Message
+from vumi.message import Message, TransportUserMessage
 from vumi.transports.opera import opera
 from vumi.tests.utils import TestPublisher
+from vumi.transports.opera.tests.test_opera_stubs import FakeXMLRPCService
+from vumi.transports.opera import OperaOutboundTransport
+from vumi.transports.tests.test_base import TransportTestCase
 # from vumi.webapp.api.models import *
 
 
-class OperaTransportTestCase(unittest.TestCase):
+class OperaTransportTestCase(TransportTestCase):
 
     def test_receipt_processing(self):
         """it should be able to process an incoming XML receipt via HTTP"""
@@ -100,54 +104,131 @@ class OperaTransportTestCase(unittest.TestCase):
             }), {
                 'routing_key': 'sms.inbound.opera.s32323'  # * -> s
             }))
+    
+    def mk_transport(self, cls=OperaOutboundTransport, **config):
+        default_config = {
+            'url': 'http://testing.domain',
+            'channel': 'channel',
+            'service': 'service',
+            'password': 'password',
+        }
+        default_config.update(config)
+        return self.get_transport(default_config, cls)
 
-    # @defer.inlineCallbacks
-    def test_delivery_crash(self):
+    def mk_msg(self, **kwargs):
+        defaults = {
+            'to_addr': '27761234567',
+            'from_addr': '27761234567',
+            'content': 'hello world',
+            'transport_name': self.transport_name,
+            'transport_type': 'sms',
+            'transport_metadata': {}
+        }
+        defaults.update(kwargs)
+        return TransportUserMessage(**defaults)
+
+    @defer.inlineCallbacks
+    def test_outbound_ok(self):
+        """
+        Outbound message we send should hit the XML-RPC service with the correct
+        parameters
+        """
+
+        transport = yield self.mk_transport()
+
+        def _cb(method_called, xmlrpc_payload):
+            self.assertEqual(method_called, 'EAPIGateway.SendSMS')
+            self.assertEqual(xmlrpc_payload['Priority'], 'standard')
+            self.assertEqual(xmlrpc_payload['SMSText'], 'hello world')
+            self.assertEqual(xmlrpc_payload['Service'], 'service')
+            self.assertEqual(xmlrpc_payload['Receipt'], 'Y')
+            self.assertEqual(xmlrpc_payload['Numbers'], '27761234567')
+            self.assertEqual(xmlrpc_payload['Password'], 'password')
+            self.assertEqual(xmlrpc_payload['Channel'], 'channel')
+            now = datetime.utcnow()
+            tomorrow = now + timedelta(days=1)
+            self.assertEqual(xmlrpc_payload['Expiry'].hour, tomorrow.hour)
+            self.assertEqual(xmlrpc_payload['Expiry'].minute, tomorrow.minute)
+            self.assertEqual(xmlrpc_payload['Expiry'].date(), tomorrow.date())
+
+            self.assertEqual(xmlrpc_payload['Delivery'].hour, now.hour)
+            self.assertEqual(xmlrpc_payload['Delivery'].minute, now.minute)
+            self.assertEqual(xmlrpc_payload['Delivery'].date(), now.date())
+
+            return {
+                'Identifier': 'abc123'
+            }
+        
+        transport.proxy = FakeXMLRPCService(_cb)
+
+        msg = yield self.dispatch(self.mk_msg(), 
+            rkey='%s.outbound' % self.transport_name)
+        
+        self.assertEqual(self.get_dispatched_failures(), [])
+        self.assertEqual(self.get_dispatched_messages(), [])
+        [event_msg] = self.get_dispatched_events()
+        self.assertEqual(event_msg['message_type'], 'event')
+        self.assertEqual(event_msg['event_type'], 'ack')
+        self.assertEqual(event_msg['sent_message_id'], 'abc123')
+    
+
+    @defer.inlineCallbacks
+    def test_outbound_ok_with_metadata(self):
+        """
+        Outbound message we send should hit the XML-RPC service with the correct
+        parameters
+        """
+
+        transport = yield self.mk_transport()
+        fixed_date = datetime(2011,1,1,0,0,0)
+        
+        def _cb(method_called, xmlrpc_payload):
+            self.assertEqual(xmlrpc_payload['Delivery'], fixed_date)
+            self.assertEqual(xmlrpc_payload['Expiry'], fixed_date + timedelta(hours=1))
+            self.assertEqual(xmlrpc_payload['Priority'], 'high')
+            self.assertEqual(xmlrpc_payload['Receipt'], 'N')
+            return {
+                'Identifier': 'abc123'
+            }
+        
+        transport.proxy = FakeXMLRPCService(_cb)
+
+        msg = yield self.dispatch(self.mk_msg(transport_metadata={
+            'deliver_at': fixed_date,
+            'expire_at': fixed_date + timedelta(hours=1),
+            'priority': 'high',
+            'receipt': 'N',
+            }), 
+            rkey='%s.outbound' % self.transport_name)
+    
+
+    @defer.inlineCallbacks
+    def test_outbound_crash(self):
         """
         if for some reason the delivery of the SMS to opera crashes it
         shouldn't ACK the message over AMQ but leave it for a retry later
         """
 
-        from collections import namedtuple
-        Message = namedtuple('Message', ['content'])
-        Content = namedtuple('Content', ['body'])
+        transport = yield self.mk_transport()
 
-        fake_amqp_message = Message(content=Content(body='{"sample":"json"}'))
+        def _cb(*args, **kwargs):
+            """
+            Callback handler that raises an error when called
+            """
+            return defer.fail(xmlrpc.Fault(503, 'oh noes!'))
+        
+        # monkey patch so we can mock errors happening remotely
+        transport.proxy = FakeXMLRPCService(_cb)
 
-        class ExpectedException(failure.DefaultException):
-            pass
+        # send a message to the transport which'll hit the FakeXMLRPCService
+        # and as a result raise an error
+        msg = yield self.dispatch(self.mk_msg(),
+            rkey='%s.outbound' % self.transport_name)
 
-        class UnexpectedException(failure.DefaultException):
-            pass
-
-        def error_raiser(klass, message):
-            def raise_error(*args, **kwargs):
-                d = defer.Deferred()
-                d.errback(klass(message))
-                return d
-            return raise_error
-
-        def all_ok(message):
-            def all_ok_cb(*args, **kwargs):
-                d = defer.Deferred()
-                d.callback(message)
-                return d
-            return all_ok_cb
-
-        consumer = opera.OperaConsumer(publisher=TestPublisher(),
-                config={'url': 'http://localhost'})
-        consumer._testing = False
-        consumer.consume_message = error_raiser(ExpectedException,
-                                                'this is expected')
-        consumer.ack = error_raiser(UnexpectedException,
-                                    'this should not be called if consume '\
-                                        'message raises an error')
-        d = consumer.consume(fake_amqp_message)
-        d.addErrback(lambda f: f.trap(ExpectedException))
-
-        consumer.consume_message = all_ok("all is ok")
-        ack_history = []
-        consumer.ack = lambda *args, **kwargs: ack_history.append((args,
-            kwargs))
-        d = consumer.consume(fake_amqp_message)
-        d.addCallback(lambda f: self.assertTrue(ack_history))
+        self.assertEqual(self.get_dispatched_events(), [])
+        self.assertEqual(self.get_dispatched_messages(), [])
+        [failure] = self.get_dispatched_failures()
+        original_msg = failure['message']
+        self.assertEqual(original_msg['to_addr'], '27761234567')
+        self.assertEqual(original_msg['from_addr'], '27761234567')
+        self.assertEqual(original_msg['content'], 'hello world')

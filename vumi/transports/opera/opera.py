@@ -11,7 +11,6 @@ from twisted.web import xmlrpc, http
 from twisted.web.resource import Resource
 from twisted.internet.defer import inlineCallbacks, returnValue
 
-from vumi.webapp.api.models import SentSMS
 from vumi.webapp.api.gateways.opera import utils
 from vumi.utils import safe_routing_key
 from vumi.message import Message, JSONMessageEncoder
@@ -138,7 +137,7 @@ class OperaOutboundTransport(Transport):
     
     @inlineCallbacks
     def handle_outbound_message(self, message):
-        soap_payload = self.default_values.copy()
+        xmlrpc_payload = self.default_values.copy()
         metadata = message["transport_metadata"]
 
         delivery = metadata.get('deliver_at', datetime.utcnow())
@@ -151,17 +150,18 @@ class OperaOutboundTransport(Transport):
         if any(ord(c) > 127 for c in content):
             content = xmlrpclib.Binary(content.encode('utf-8'))
 
-        soap_payload['Numbers'] = message['to_addr']
-        soap_payload['SMSText'] = content
-        soap_payload['Delivery'] = delivery
-        soap_payload['Expiry'] = expiry
-        soap_payload['Priority'] = priority
-        soap_payload['Receipt'] = receipt
+        xmlrpc_payload['Numbers'] = message['to_addr']
+        xmlrpc_payload['SMSText'] = content
+        xmlrpc_payload['Delivery'] = delivery
+        xmlrpc_payload['Expiry'] = expiry
+        xmlrpc_payload['Priority'] = priority
+        xmlrpc_payload['Receipt'] = receipt
 
-        log.msg("Sending SMS via Opera: %s" % soap_payload)
+        log.msg("Sending SMS via Opera: %s" % xmlrpc_payload)
 
         proxy_response = yield self.proxy.callRemote('EAPIGateway.SendSMS',
-                soap_payload)
+            xmlrpc_payload)
+
         log.msg("Proxy response: %s" % proxy_response)
 
         yield self.publish_ack(
