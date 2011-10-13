@@ -10,9 +10,9 @@ from twisted.web import xmlrpc, http
 from twisted.web.resource import Resource
 from twisted.internet.defer import inlineCallbacks
 
-from vumi.webapp.api.gateways.opera import utils
 from vumi.utils import normalize_msisdn, get_deploy_int
 from vumi.transports import Transport
+from vumi.transports.opera import utils
 
 
 class OperaHealthResource(Resource):
@@ -60,8 +60,16 @@ class OperaReceiveResource(Resource):
 
 
 class OperaBase(Transport):
+    """
+    Base class that provides Redis mechanics for maintaining mapping
+    of internal vs external message ids, used to link a delivery
+    receipt back to the message of the message that was originally
+    sent out.
+    """
 
-    MESSAGE_ID_LIFETIME = 60 * 60 * 48
+    # After how many seconds should the transport expire keys
+    # and disregard delivery reports? Defaults to a week.
+    MESSAGE_ID_LIFETIME = 60 * 60 * 24 * 7
 
     def setup_transport(self):
         dbindex = get_deploy_int(self._amqp_client.vhost)
@@ -70,11 +78,31 @@ class OperaBase(Transport):
         self.r_prefix = "%(transport_name)s@%(url)s" % self.config
 
     def set_message_id_for_identifier(self, identifier, message_id):
+        """
+        Link an external message id, the identifier, to an internal
+        message id for `MAX_ID_LIFETIME` amount of seconds
+
+        :type identifier: str
+        :param identifier:
+            The message id we get back from Opera
+        :type message_id: str
+        :param message_id:
+            The internal message id that was used when the message was sent.
+        """
         rkey = '%s#%s' % (self.r_prefix, identifier)
         self.r_server.set(rkey, message_id)
         self.r_server.expire(rkey, self.MESSAGE_ID_LIFETIME)
 
     def get_message_id_for_identifier(self, identifier):
+        """
+        Get an internal message id for a given identifier
+
+        :type identifier: str
+        :param identifier:
+            The message id we originally got from Opera when the message
+            was accepted for delivery.
+
+        """
         rkey = '%s#%s' % (self.r_prefix, identifier)
         return self.r_server.get(rkey)
 
@@ -92,7 +120,8 @@ class OperaInboundTransport(OperaBase):
         self.transport_name = self.config['transport_name']
 
     def handle_raw_incoming_receipt(self, receipt):
-        # convert delivery receipt status values
+        # convert delivery receipt status values, anything not in
+        # this status map defaults to `failed`
         status_map = {
             'D': 'delivered',
             'd': 'delivered',
