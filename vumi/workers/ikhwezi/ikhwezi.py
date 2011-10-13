@@ -10,8 +10,7 @@ from vumi.message import Message, TransportUserMessage
 from vumi.service import Worker
 from vumi.tests.utils import FakeRedis
 from vumi.transports.httprpc.vodacom_messaging import VodacomMessagingResponse
-from vumi.database.base import (setup_db, get_db, close_db, UglyModel,
-                                TableNamePrefixFormatter)
+from vumi.database.base import (setup_db, get_db, close_db, UglyModel)
 
 
 TRANSLATIONS = '''
@@ -586,31 +585,41 @@ class IkhweziQuiz():
 
     REDIS_PREFIX = "vumi_vodacom_ikhwezi"
 
-    def __init__(self, config, quiz, translations, datastore,
+    def __init__(self, config, quiz, translations, db,
             msisdn, session_event=None, provider=None):
         self.config = config
         self.quiz = quiz
         self.translations = translations
-        self.datastore = datastore
+        self.db = db
         msisdn = str(msisdn)
         self.retrieve_entrant(msisdn) or self.new_entrant(msisdn, provider)
         if session_event and session_event == 'new':
             self.data['attempts'] += 1
             self.ds_set()
 
+    def ri(self, *args, **kw):
+        return self.db.runInteraction(*args, **kw)
+
     def ds_set(self):
         self.data['remaining_questions'] = json.dumps(self.remaining)
-        self.datastore.set("%s#%s" % (
-            self.REDIS_PREFIX, self.data['msisdn']), json.dumps(self.data))
-        #for k, v in self.data.items():
-            #print "%s: %s" % (k, v)
+        def _txn(txn):
+            IkhweziModel.update_item(txn, self.data['msisdn'], **self.data)
+        d = self.ri(_txn)
+        return d
 
     def ds_get(self, msisdn):
-        data_string = self.datastore.get("%s#%s" % (
-            self.REDIS_PREFIX, msisdn))
-        if data_string:
-            return json.loads(data_string)
-        return None
+        def _txn(txn):
+            item = IkhweziModel.get_item(txn, msisdn)
+            return item
+        d = self.ri(_txn)
+        return d
+
+    def ds_new(self, msisdn):
+        def _txn(txn):
+            item = IkhweziModel.create_item(txn, msisdn)
+            return item
+        d = self.ri(_txn)
+        return d
 
     def lang(self, lang):
         langs = {
@@ -636,13 +645,18 @@ class IkhweziQuiz():
             else:
                 return newstring
 
+    def printdef(d):
+        print "DDDDDDDDDDDDDDDDDDDDDDDD", d
+
     def retrieve_entrant(self, msisdn):
         data = self.ds_get(msisdn)
-        if data:
-            self.data = data
-            self.language = self.lang(data['demographic1'] or 1)
-            self.remaining = json.loads(self.data['remaining_questions'])
-            return True
+        data.addCallback(self.printdef)
+        print "EEEEEEEEEEEEEEEE", data
+        #if data:
+            #self.data = data
+            #self.language = self.lang(data['demographic1'] or 1)
+            #self.remaining = json.loads(self.data['remaining_questions'])
+            #return True
         return False
 
     def random_remaining_questionsing(self):
@@ -796,6 +810,9 @@ class IkhweziQuizWorker(Worker):
         self.publish_key = self.config['publish_key']
         self.consume_key = self.config['consume_key']
 
+        self.setup_db()
+        log.msg("DB setup with: %s" % (self.db))
+
         self.publisher = yield self.publish_to(self.publish_key)
         self.consume(self.consume_key, self.consume_message)
 
@@ -807,6 +824,19 @@ class IkhweziQuizWorker(Worker):
             self.translations['Sotho'][t['English']] = t['Sotho']
             self.translations['Afrikaans'][t['English']] = t['Afrikaans']
         self.ds = FakeRedis()
+
+    def setup_db(self):
+        dbname = 'ikhwezi'
+        try:
+            get_db(dbname)
+            close_db(dbname)
+        except:
+            pass
+        self.db = setup_db(dbname, database=dbname,
+                host='localhost',
+                user='vumi',
+                password='vumi')
+        return self.db.runQuery("SELECT 1")
 
     def consume_message(self, message):
         log.msg("IkhweziQuizWorker consuming on %s: %s" % (
@@ -821,7 +851,7 @@ class IkhweziQuizWorker(Worker):
                 self.config,
                 self.quiz,
                 self.translations,
-                self.ds,
+                self.db,
                 msisdn,
                 session_event,
                 provider)
