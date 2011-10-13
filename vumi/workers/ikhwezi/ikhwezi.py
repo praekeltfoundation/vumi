@@ -9,7 +9,7 @@ from twisted.python import log
 from vumi.message import Message, TransportUserMessage
 from vumi.service import Worker
 from vumi.tests.utils import FakeRedis
-from vumi.transports.vodacommessaging.utils import VodacomMessagingResponse
+from vumi.transports.httprpc.vodacom_messaging import VodacomMessagingResponse
 from vumi.database.base import (setup_db, get_db, close_db, UglyModel,
                                 TableNamePrefixFormatter)
 
