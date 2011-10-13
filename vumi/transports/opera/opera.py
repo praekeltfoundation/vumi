@@ -60,20 +60,17 @@ class OperaReceiveResource(Resource):
             })
         request.setResponseCode(http.OK)
         request.setHeader('Content-Type', 'text/xml; charset=utf8')
-        return content    
+        return content
 
-class OperaInboundTransport(Transport):
+class OperaBase(Transport):
 
-    def validate_config(self):
-        """
-        Transport-specific config validation happens in here.
-        """
-        self.web_receipt_path = self.config['web_receipt_path']
-        self.web_receive_path = self.config['web_receive_path']
-        self.web_port = int(self.config['web_port'])
-        self.opera_url = self.config['url']
-        self.transport_name = self.config['transport_name']
-        self.redis_config = self.config.get('redis', {})
+    MESSAGE_ID_LIFETIME = 60 * 60 * 48
+
+    def setup_transport(self):
+        dbindex = get_deploy_int(self._amqp_client.vhost)
+        redis_config = self.config.get('redis', {})
+        self.r_server = redis.Redis(db=dbindex, **redis_config)
+        self.r_prefix = "%(transport_name)s@%(url)s" % self.config
 
     def set_message_id_for_identifier(self, identifier, message_id):
         rkey = '%s#%s' % (self.r_prefix, identifier)
@@ -84,6 +81,19 @@ class OperaInboundTransport(Transport):
         rkey = '%s#%s' % (self.r_prefix, identifier)
         return self.r_server.get(rkey)
     
+
+class OperaInboundTransport(OperaBase):
+
+    def validate_config(self):
+        """
+        Transport-specific config validation happens in here.
+        """
+        self.web_receipt_path = self.config['web_receipt_path']
+        self.web_receive_path = self.config['web_receive_path']
+        self.web_port = int(self.config['web_port'])
+        self.opera_url = self.config['url']
+        self.transport_name = self.config['transport_name']
+
     def handle_raw_incoming_receipt(self, receipt):
         # convert delivery receipt status values
         status_map = {
@@ -104,10 +114,9 @@ class OperaInboundTransport(Transport):
     
     @inlineCallbacks
     def setup_transport(self):
+        super(OperaInboundTransport, self).setup_transport()
         log.msg('Starting the OperaInboundTransport config: %s' % self.transport_name)
         dbindex = get_deploy_int(self._amqp_client.vhost)
-        self.r_server = redis.Redis(db=dbindex, **self.redis_config)
-        self.r_prefix = "%(transport_name)s@%(url)s" % self.config
         # start receipt web resource
         self.web_resource = yield self.start_web_resources(
             [
@@ -126,7 +135,7 @@ class OperaInboundTransport(Transport):
 
 
 
-class OperaOutboundTransport(Transport):
+class OperaOutboundTransport(OperaBase):
     """
     This is a separate transport from the OperaInboundTransport because after
     having run this in production for a while it turned out that Opera was 
@@ -136,38 +145,23 @@ class OperaOutboundTransport(Transport):
     multiple HTTP Resources which we didn't need.
     """
 
-    MESSAGE_ID_LIFETIME = 60 * 60 * 48 # 48 hours
-
     def validate_config(self):
         self.opera_url = self.config['url']
         self.opera_channel = self.config['channel']
         self.opera_password = self.config['password']
         self.opera_service = self.config['service']
         self.transport_name = self.config['transport_name']
-        self.redis_config = self.config.get('redis', {})
-
     
     def setup_transport(self):
+        super(OperaOutboundTransport, self).setup_transport()
         log.msg("Starting the OperaOutboundTransport: %s" % self.transport_name)
         self.proxy = xmlrpc.Proxy(self.opera_url)
-        dbindex = get_deploy_int(self._amqp_client.vhost)
-        self.r_server = redis.Redis(db=dbindex, **self.redis_config)
-        self.r_prefix = "%(transport_name)s@%(url)s" % self.config
         self.default_values = {
             'Service': self.opera_service,
             'Password': self.opera_password,
             'Channel': self.opera_channel,
         }
     
-    def set_message_id_for_identifier(self, identifier, message_id):
-        rkey = '%s#%s' % (self.r_prefix, identifier)
-        self.r_server.set(rkey, message_id)
-        self.r_server.expire(rkey, self.MESSAGE_ID_LIFETIME)
-    
-    def get_message_id_for_identifier(self, identifier):
-        rkey = '%s#%s' % (self.r_prefix, identifier)
-        return self.r_server.get(rkey)
-
     @inlineCallbacks
     def handle_outbound_message(self, message):
         xmlrpc_payload = self.default_values.copy()

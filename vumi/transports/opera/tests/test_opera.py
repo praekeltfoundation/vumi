@@ -88,8 +88,12 @@ class OperaTransportTestCase(TransportTestCase):
         self.assertEqual(event['delivery_status'], 'delivered')
         self.assertEqual(event['message_type'], 'event')
         self.assertEqual(event['event_type'], 'delivery_report')
-        # this is failing because I need to stash the mapping in Redis
-        self.assertEqual(event['transport_message_id'], message_id)
+        self.assertEqual(event['user_message_id'], message_id)
+
+        # teardown fake redis, prevents DelayedCall's from leaving the reactor
+        # in a dirty state.
+        transport.r_server.teardown()
+
     
     @inlineCallbacks
     def test_incoming_sms_processing(self):
