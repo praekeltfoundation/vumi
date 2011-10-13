@@ -566,6 +566,7 @@ class IkhweziQuiz():
             self.ds_set()
 
     def ds_set(self):
+        self.data['remaining_questions'] = json.dumps(self.remaining)
         self.datastore.set("%s#%s" % (
             self.REDIS_PREFIX, self.data['msisdn']), json.dumps(self.data))
         #for k, v in self.data.items():
@@ -607,6 +608,7 @@ class IkhweziQuiz():
         if data:
             self.data = data
             self.language = self.lang(data['demographic1'] or 1)
+            self.remaining = json.loads(self.data['remaining_questions'])
             return True
         return False
 
@@ -635,10 +637,11 @@ class IkhweziQuiz():
         return remaining_questions
 
     def force_order(self, remaining_questions):
-        self.data['remaining_questions'] = remaining_questions
+        self.remaining = remaining_questions
         self.ds_set()
 
     def new_entrant(self, msisdn, provider=None):
+        self.remaining = self.random_remaining_questionsing()
         self.language = "English"
         self.data = {
                 'msisdn': str(msisdn),
@@ -674,7 +677,7 @@ class IkhweziQuiz():
                 'demographic2_timestamp': None,
                 'demographic3_timestamp': None,
                 'demographic4_timestamp': None,
-                'remaining_questions': self.random_remaining_questionsing()}
+                'remaining_questions': json.dumps(self.remaining)}
         self.ds_set()
         return True
 
@@ -687,23 +690,23 @@ class IkhweziQuiz():
             self.data[question_name] = answer
             self.data[question_name + '_timestamp'] = \
                     datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S+00")
-            self.data['remaining_questions'].pop(0)
+            self.remaining.pop(0)
             self.ds_set()
             self.language = self.lang(self.data['demographic1'] or 1)
         return reply
 
     def do_continue(self, answer):
         exit = False
-        self.data['remaining_questions'].pop(0)
+        self.remaining.pop(0)
         self.ds_set()
-        if answer == 2 or len(self.data['remaining_questions']) == 0:
+        if answer == 2 or len(self.remaining) == 0:
             exit = True
         return exit
 
     def formulate_response(self, answer):
         question_name = None
-        if len(self.data['remaining_questions']):
-            question_name = self.data['remaining_questions'][0]
+        if len(self.remaining):
+            question_name = self.remaining[0]
 
         try:
             answer = int(answer)
@@ -744,7 +747,7 @@ class IkhweziQuiz():
 
         else:
             # ask another question
-            question_name = self.data['remaining_questions'][0]
+            question_name = self.remaining[0]
             question = self.quiz.get(question_name)
             vmr = VodacomMessagingResponse(self.config)
             vmr.set_headertext(self._(question['headertext']))
