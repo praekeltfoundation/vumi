@@ -16,6 +16,7 @@ from vumi.webapp.api.gateways.opera import utils
 from vumi.utils import safe_routing_key
 from vumi.message import Message, JSONMessageEncoder
 from vumi.service import Worker, Consumer, Publisher
+from vumi.transports import Transport
 
 
 class OperaHealthResource(Resource):
@@ -78,104 +79,94 @@ class OperaReceiveResource(Resource):
         return content
 
 
-class OperaConsumer(Consumer):
-    exchange_name = "vumi"
-    exchange_type = "direct"
-    durable = True
-    queue_name = routing_key = "sms.outbound.opera"
 
-    def __init__(self, publisher, config):
-        self.publisher = publisher
-        self.proxy = xmlrpc.Proxy(config.get('url'))
-        self.default_values = {
-            'Service': config.get('service'),
-            'Password': config.get('password'),
-            'Channel': config.get('channel'),
-        }
+class OperaInboundTransport(Transport):
+
+    def validate_config(self):
+        """
+        Transport-specific config validation happens in here.
+        """
+        self.web_receipt_path = self.config['web_receipt_path']
+        self.web_receive_path = self.config['web_receive_path']
+        self.web_port = int(self.config['web_port'])
 
     @inlineCallbacks
-    def consume_message(self, message):
-        log.msg("Consumed Message %s" % message)
-        dictionary = self.default_values.copy()
-        payload = message.payload
-
-        delivery = payload.get('deliver_at', datetime.utcnow())
-        expiry = payload.get('expire_at', (delivery + timedelta(days=1)))
-
-        # check for non-ascii chars
-        message = payload.get('message')
-        if any(ord(c) > 127 for c in message):
-            message = xmlrpclib.Binary(message.encode('utf-8'))
-
-        dictionary['Numbers'] = (payload.get('to_msisdn') or
-                                 payload.get('recipient'))
-        dictionary['SMSText'] = message
-        dictionary['Delivery'] = delivery
-        dictionary['Expiry'] = expiry
-        dictionary['Priority'] = payload.get('priority', 'standard')
-        dictionary['Receipt'] = payload.get('receipt', 'Y')
-
-        log.msg("Sending SMS via Opera: %s" % dictionary)
-
-        proxy_response = yield self.proxy.callRemote('EAPIGateway.SendSMS',
-                dictionary)
-        log.msg("Proxy response: %s" % proxy_response)
-
-        if 'id' in payload:
-            sent_sms = SentSMS.objects.get(pk=payload['id'])
-            sent_sms.transport_msg_id = proxy_response.get('Identifier')
-            sent_sms.save()
-
-        returnValue(proxy_response)
-
-
-class OperaPublisher(Publisher):
-    exchange_name = "vumi"
-    exchange_type = "direct"
-    routing_key = "sms.inbound.opera.fallback"
-    durable = True
-    auto_delete = False
-    delivery_mode = 2  # save to disk
-
-    def publish_message(self, message, **kwargs):
-        log.msg("Publishing Message %s" % message)
-        super(OperaPublisher, self).publish_message(message, **kwargs)
-
-
-class OperaReceiptTransport(Worker):
-    @inlineCallbacks
-    def startWorker(self):
-        log.msg('Starting the OperaReceiptTransport config: %s' % self.config)
-        self.publisher = yield self.start_publisher(OperaPublisher)
+    def setup_transport(self):
+        log.msg('Starting the OperaInboundTransport config: %s' % self.transport_name)
         # start receipt web resource
-        self.receipt_resource = yield self.start_web_resources(
+        self.web_resource = yield self.start_web_resources(
             [
-                (OperaReceiptResource(self.publisher),
-                 self.config['web_receipt_path']),
-                (OperaReceiveResource(self.publisher),
-                 self.config['web_receive_path']),
+                (OperaReceiptResource(self.publish_message),
+                 self.web_receipt_path),
+                (OperaReceiveResource(self.publish_message),
+                 self.web_receive_path),
                 (OperaHealthResource(), 'health'),
             ],
-            self.config['web_port']
+            self.web_port
         )
 
-    def stopWorker(self):
-        log.msg('Stopping the OperaReceiptTransport')
-
-
-class OperaSMSTransport(Worker):
-
-    # inlineCallbacks, TwistedMatrix's fancy way of allowing you to write
-    # asynchronous code as if it was synchronous by the nifty use of
-    # coroutines.
     @inlineCallbacks
-    def startWorker(self):
-        log.msg("Starting the OperaSMSTransport config: %s" % self.config)
-        # create the publisher
-        self.publisher = yield self.start_publisher(OperaPublisher)
-        # when it's done, create the consumer and pass it the publisher
-        self.consumer = yield self.start_consumer(OperaConsumer,
-                                                  self.publisher, self.config)
+    def teardown_transport(self):
+        yield self.web_resource.loseConnection()
 
-    def stopWorker(self):
-        log.msg("Stopping the OperaSMSTransport")
+
+
+class OperaOutboundTransport(Transport):
+    """
+    This is a separate transport from the OperaInboundTransport because after
+    having run this in production for a while it turned out that Opera was 
+    quite slow and we needed to have concurrent outbound connections so we
+    could clear our queues in parallel. Having the inbound & outbound transports
+    be the same logic created problems as the inbound would try to create
+    multiple HTTP Resources which we didn't need.
+    """
+
+    def validate_config(self):
+        self.opera_url = self.config['url']
+        self.opera_channel = self.config['channel']
+        self.opera_password = self.config['password']
+        self.opera_service = self.config['service']
+    
+    def setup_transport(self):
+        log.msg("Starting the OperaOutboundTransport: %s" % self.transport_name)
+        self.proxy = xmlrpc.Proxy(self.opera_url)
+        self.default_values = {
+            'Service': self.opera_service,
+            'Password': self.opera_password,
+            'Channel': self.opera_channel,
+        }
+    
+    @inlineCallbacks
+    def handle_outbound_message(self, message):
+        soap_payload = self.default_values.copy()
+        metadata = message["transport_metadata"]
+
+        delivery = metadata.get('deliver_at', datetime.utcnow())
+        expiry = metadata.get('expire_at', (delivery + timedelta(days=1)))
+        priority = metadata.get('priority', 'standard')
+        receipt = metadata.get('receipt', 'Y')
+
+        # check for non-ascii chars
+        content = message["content"]
+        if any(ord(c) > 127 for c in content):
+            content = xmlrpclib.Binary(content.encode('utf-8'))
+
+        soap_payload['Numbers'] = message['to_addr']
+        soap_payload['SMSText'] = content
+        soap_payload['Delivery'] = delivery
+        soap_payload['Expiry'] = expiry
+        soap_payload['Priority'] = priority
+        soap_payload['Receipt'] = receipt
+
+        log.msg("Sending SMS via Opera: %s" % soap_payload)
+
+        proxy_response = yield self.proxy.callRemote('EAPIGateway.SendSMS',
+                soap_payload)
+        log.msg("Proxy response: %s" % proxy_response)
+
+        yield self.publish_ack(
+            user_message_id=message['message_id'],
+            sent_message_id=proxy_response.get('Identifier'))
+
+    def teardown_transport(self):
+        log.msg("Stopping the OperaOutboundTransport: %s" % self.transport_name)
