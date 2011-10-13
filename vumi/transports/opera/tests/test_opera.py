@@ -6,6 +6,7 @@ import iso8601
 from twisted.trial import unittest
 from twisted.python import failure
 from twisted.internet import defer
+from twisted.internet.defer import inlineCallbacks
 from twisted.web.test.test_web import DummyRequest
 from twisted.web import xmlrpc
 
@@ -14,20 +15,45 @@ os.environ['DJANGO_SETTINGS_MODULE'] = 'vumi.webapp.settings'
 from vumi.message import Message, TransportUserMessage
 from vumi.transports.opera import opera
 from vumi.tests.utils import TestPublisher
+from vumi.utils import http_request
 from vumi.transports.opera.tests.test_opera_stubs import FakeXMLRPCService
-from vumi.transports.opera import OperaOutboundTransport
+from vumi.transports.opera import OperaOutboundTransport, OperaInboundTransport
 from vumi.transports.tests.test_base import TransportTestCase
 # from vumi.webapp.api.models import *
 
 
 class OperaTransportTestCase(TransportTestCase):
 
+    def mk_transport(self, cls=OperaOutboundTransport, **config):
+        default_config = {
+            'url': 'http://testing.domain',
+            'channel': 'channel',
+            'service': 'service',
+            'password': 'password',
+        }
+        default_config.update(config)
+        return self.get_transport(default_config, cls)
+
+    def mk_msg(self, **kwargs):
+        defaults = {
+            'to_addr': '27761234567',
+            'from_addr': '27761234567',
+            'content': 'hello world',
+            'transport_name': self.transport_name,
+            'transport_type': 'sms',
+            'transport_metadata': {}
+        }
+        defaults.update(kwargs)
+        return TransportUserMessage(**defaults)
+    
+    @inlineCallbacks
     def test_receipt_processing(self):
         """it should be able to process an incoming XML receipt via HTTP"""
-        publisher = TestPublisher()
-        resource = opera.OperaReceiptResource(publisher)
-        request = DummyRequest('/api/v1/sms/opera/receipt.xml')
-        request.content = StringIO("""
+        transport = yield self.mk_transport(cls=OperaInboundTransport, 
+            web_receipt_path='/receipt.xml', web_receive_path='/receive.xml',
+            web_port=9999)
+        
+        xml_data = """
         <?xml version="1.0"?>
         <!DOCTYPE receipts>
         <receipts>
@@ -40,17 +66,37 @@ class OperaTransportTestCase(TransportTestCase):
             <billed>NO</billed>
           </receipt>
         </receipts>
-        """.strip())
-        resource.render_POST(request)
-        self.assertEquals(publisher.queue.pop(), (Message(**{
-                'transport_name': 'Opera',
-                'transport_msg_id': '001efc31',
-                'transport_status': 'D',  # OK / delivered, opera specific
-                'transport_delivered_at': datetime(2008, 8, 31, 15, 59, 24),
-            }), {
-                'routing_key': 'sms.receipt.opera'
-            })
-        )
+        """.strip()
+        resp = yield http_request('http://localhost:9999/receipt.xml', xml_data)
+        # print resp
+
+        # publisher = TestPublisher()
+        # resource = opera.OperaReceiptResource(publisher)
+        # request = DummyRequest('/api/v1/sms/opera/receipt.xml')
+        # request.content = StringIO("""
+        # <?xml version="1.0"?>
+        # <!DOCTYPE receipts>
+        # <receipts>
+        #   <receipt>
+        #     <msgid>26567958</msgid>
+        #     <reference>001efc31</reference>
+        #     <msisdn>+27123456789</msisdn>
+        #     <status>D</status>
+        #     <timestamp>20080831T15:59:24</timestamp>
+        #     <billed>NO</billed>
+        #   </receipt>
+        # </receipts>
+        # """.strip())
+        # resource.render_POST(request)
+        # self.assertEquals(publisher.queue.pop(), (Message(**{
+        #         'transport_name': 'Opera',
+        #         'transport_msg_id': '001efc31',
+        #         'transport_status': 'D',  # OK / delivered, opera specific
+        #         'transport_delivered_at': datetime(2008, 8, 31, 15, 59, 24),
+        #     }), {
+        #         'routing_key': 'sms.receipt.opera'
+        #     })
+        # )
 
     def test_incoming_sms_processing(self):
         """
@@ -105,29 +151,7 @@ class OperaTransportTestCase(TransportTestCase):
                 'routing_key': 'sms.inbound.opera.s32323'  # * -> s
             }))
     
-    def mk_transport(self, cls=OperaOutboundTransport, **config):
-        default_config = {
-            'url': 'http://testing.domain',
-            'channel': 'channel',
-            'service': 'service',
-            'password': 'password',
-        }
-        default_config.update(config)
-        return self.get_transport(default_config, cls)
-
-    def mk_msg(self, **kwargs):
-        defaults = {
-            'to_addr': '27761234567',
-            'from_addr': '27761234567',
-            'content': 'hello world',
-            'transport_name': self.transport_name,
-            'transport_type': 'sms',
-            'transport_metadata': {}
-        }
-        defaults.update(kwargs)
-        return TransportUserMessage(**defaults)
-
-    @defer.inlineCallbacks
+    @inlineCallbacks
     def test_outbound_ok(self):
         """
         Outbound message we send should hit the XML-RPC service with the correct
@@ -172,7 +196,7 @@ class OperaTransportTestCase(TransportTestCase):
         self.assertEqual(event_msg['sent_message_id'], 'abc123')
     
 
-    @defer.inlineCallbacks
+    @inlineCallbacks
     def test_outbound_ok_with_metadata(self):
         """
         Outbound message we send should hit the XML-RPC service with the correct
@@ -202,7 +226,7 @@ class OperaTransportTestCase(TransportTestCase):
             rkey='%s.outbound' % self.transport_name)
     
 
-    @defer.inlineCallbacks
+    @inlineCallbacks
     def test_outbound_crash(self):
         """
         if for some reason the delivery of the SMS to opera crashes it

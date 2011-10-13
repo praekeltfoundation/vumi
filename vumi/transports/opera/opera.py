@@ -28,28 +28,43 @@ class OperaHealthResource(Resource):
 
 class OperaReceiptResource(Resource):
 
-    def __init__(self, publisher):
-        self.publisher = publisher
+    def __init__(self, callback):
+        self.callback = callback
         Resource.__init__(self)
 
     def render_POST(self, request):
         receipts = utils.parse_receipts_xml(request.content.read())
         data = []
         for receipt in receipts:
-            log.msg('Received delivery receipt:', receipt)
-            dictionary = {
-                'transport_name': 'Opera',
-                'transport_msg_id': receipt.reference,
-                'transport_status': receipt.status,
-                'transport_delivered_at': datetime.strptime(
-                    receipt.timestamp,
-                    utils.OPERA_TIMESTAMP_FORMAT
-                )
+            log.msg('Received delivery receipt: %s' % repr(receipt))
+
+            # convert delivery receipt status values
+            status_map = {
+                'D': 'delivered',
+                'd': 'delivered',
+                'R': 'delivered',
+                'Q': 'pending',
+                'P': 'pending',
+                'B': 'pending',
+                'a': 'pending',
+                'u': 'pending'
             }
-            message = Message(**dictionary)
-            self.publisher.publish_message(message,
-                                           routing_key='sms.receipt.opera')
-            data.append(dictionary)
+            
+            internal_status = status_map.get(receipt.status, 'failed')
+            self.callback(receipt.reference, internal_status)
+            # dictionary = {
+            #     'transport_name': 'Opera',
+            #     'transport_msg_id': receipt.reference,
+            #     'transport_status': receipt.status,
+            #     'transport_delivered_at': datetime.strptime(
+            #         receipt.timestamp,
+            #         utils.OPERA_TIMESTAMP_FORMAT
+            #     )
+            # }
+            # message = Message(**dictionary)
+            # self.publisher.publish_message(message,
+            #                                routing_key='sms.receipt.opera')
+            # data.append(dictionary)
 
         request.setResponseCode(http.OK)
         request.setHeader('Content-Type', 'application/json; charset-utf-8')
@@ -95,7 +110,7 @@ class OperaInboundTransport(Transport):
         # start receipt web resource
         self.web_resource = yield self.start_web_resources(
             [
-                (OperaReceiptResource(self.publish_message),
+                (OperaReceiptResource(self.publish_delivery_report),
                  self.web_receipt_path),
                 (OperaReceiveResource(self.publish_message),
                  self.web_receive_path),
