@@ -48,15 +48,16 @@ class OperaReceiveResource(Resource):
         content = request.content.read()
         sms = utils.parse_post_event_xml(content)
         self.callback(
-            to_addr=normalize_msisdn(sms['Local'], country_code='27'), 
-            from_addr=normalize_msisdn(sms['Remote'], country_code='27'), 
-            content=sms['Text'], transport_type='sms', 
+            to_addr=normalize_msisdn(sms['Local'], country_code='27'),
+            from_addr=normalize_msisdn(sms['Remote'], country_code='27'),
+            content=sms['Text'], transport_type='sms',
             message_id=sms['MessageID'], transport_metadata={
                 'provider': sms['MobileNetwork']
             })
         request.setResponseCode(http.OK)
         request.setHeader('Content-Type', 'text/xml; charset=utf8')
         return content
+
 
 class OperaBase(Transport):
 
@@ -72,11 +73,11 @@ class OperaBase(Transport):
         rkey = '%s#%s' % (self.r_prefix, identifier)
         self.r_server.set(rkey, message_id)
         self.r_server.expire(rkey, self.MESSAGE_ID_LIFETIME)
-    
+
     def get_message_id_for_identifier(self, identifier):
         rkey = '%s#%s' % (self.r_prefix, identifier)
         return self.r_server.get(rkey)
-    
+
 
 class OperaInboundTransport(OperaBase):
 
@@ -102,16 +103,17 @@ class OperaInboundTransport(OperaBase):
             'a': 'pending',
             'u': 'pending'
         }
-        
+
         internal_status = status_map.get(receipt.status, 'failed')
-        internal_message_id = self.get_message_id_for_identifier(receipt.reference)
+        internal_message_id = self.get_message_id_for_identifier(
+            receipt.reference)
         self.publish_delivery_report(internal_message_id, internal_status)
 
-    
     @inlineCallbacks
     def setup_transport(self):
         super(OperaInboundTransport, self).setup_transport()
-        log.msg('Starting the OperaInboundTransport config: %s' % self.transport_name)
+        log.msg('Starting the OperaInboundTransport config: %s' %
+            self.transport_name)
         # start receipt web resource
         self.web_resource = yield self.start_web_resources(
             [
@@ -129,15 +131,14 @@ class OperaInboundTransport(OperaBase):
         yield self.web_resource.loseConnection()
 
 
-
 class OperaOutboundTransport(OperaBase):
     """
     This is a separate transport from the OperaInboundTransport because after
-    having run this in production for a while it turned out that Opera was 
+    having run this in production for a while it turned out that Opera was
     quite slow and we needed to have concurrent outbound connections so we
-    could clear our queues in parallel. Having the inbound & outbound transports
-    be the same logic created problems as the inbound would try to create
-    multiple HTTP Resources which we didn't need.
+    could clear our queues in parallel. Having the inbound & outbound
+    transports be the same logic created problems as the inbound would try
+    to create multiple HTTP Resources which we didn't need.
     """
 
     def validate_config(self):
@@ -146,17 +147,18 @@ class OperaOutboundTransport(OperaBase):
         self.opera_password = self.config['password']
         self.opera_service = self.config['service']
         self.transport_name = self.config['transport_name']
-    
+
     def setup_transport(self):
         super(OperaOutboundTransport, self).setup_transport()
-        log.msg("Starting the OperaOutboundTransport: %s" % self.transport_name)
+        log.msg("Starting the OperaOutboundTransport: %s" %
+            self.transport_name)
         self.proxy = xmlrpc.Proxy(self.opera_url)
         self.default_values = {
             'Service': self.opera_service,
             'Password': self.opera_password,
             'Channel': self.opera_channel,
         }
-    
+
     @inlineCallbacks
     def handle_outbound_message(self, message):
         xmlrpc_payload = self.default_values.copy()
@@ -187,7 +189,7 @@ class OperaOutboundTransport(OperaBase):
         log.msg("Proxy response: %s" % proxy_response)
         transport_message_id = proxy_response['Identifier']
 
-        self.set_message_id_for_identifier(transport_message_id, 
+        self.set_message_id_for_identifier(transport_message_id,
             message['message_id'])
 
         yield self.publish_ack(
@@ -195,4 +197,5 @@ class OperaOutboundTransport(OperaBase):
                 sent_message_id=transport_message_id)
 
     def teardown_transport(self):
-        log.msg("Stopping the OperaOutboundTransport: %s" % self.transport_name)
+        log.msg("Stopping the OperaOutboundTransport: %s" %
+            self.transport_name)

@@ -42,20 +42,20 @@ class OperaTransportTestCase(TransportTestCase):
         }
         defaults.update(kwargs)
         return TransportUserMessage(**defaults)
-    
+
     @inlineCallbacks
     def test_receipt_processing(self):
         """it should be able to process an incoming XML receipt via HTTP"""
-        transport = yield self.mk_transport(cls=OperaInboundTransport, 
+        transport = yield self.mk_transport(cls=OperaInboundTransport,
             web_receipt_path='/receipt.xml', web_receive_path='/receive.xml',
             web_port=self.port)
-        
+
         identifier = '001efc31'
         message_id = '123456'
         transport.r_server = FakeRedis()
-        # prime redis to match the incoming identifier to an internal message id
+        # prime redis to match the incoming identifier to an
+        # internal message id
         transport.set_message_id_for_identifier(identifier, message_id)
-
 
         xml_data = """
         <?xml version="1.0"?>
@@ -84,13 +84,12 @@ class OperaTransportTestCase(TransportTestCase):
         # in a dirty state.
         transport.r_server.teardown()
 
-    
     @inlineCallbacks
     def test_incoming_sms_processing(self):
         """
         it should be able to process in incoming sms as XML delivered via HTTP
         """
-        yield self.mk_transport(cls=OperaInboundTransport, 
+        yield self.mk_transport(cls=OperaInboundTransport,
             web_receipt_path='/receipt.xml', web_receive_path='/receive.xml',
             web_port=self.port)
 
@@ -144,7 +143,7 @@ class OperaTransportTestCase(TransportTestCase):
         })
 
         self.assertEqual(resp, xml_data)
-    
+
     @inlineCallbacks
     def test_outbound_ok(self):
         """
@@ -176,13 +175,13 @@ class OperaTransportTestCase(TransportTestCase):
             return {
                 'Identifier': 'abc123'
             }
-        
+
         transport.proxy = FakeXMLRPCService(_cb)
 
         msg = self.mk_msg()
-        yield self.dispatch(msg, 
+        yield self.dispatch(msg,
             rkey='%s.outbound' % self.transport_name)
-        
+
         self.assertEqual(self.get_dispatched_failures(), [])
         self.assertEqual(self.get_dispatched_messages(), [])
         [event_msg] = self.get_dispatched_events()
@@ -194,7 +193,6 @@ class OperaTransportTestCase(TransportTestCase):
         self.assertEqual(
             transport.get_message_id_for_identifier('abc123'),
             msg['message_id'])
-    
 
     @inlineCallbacks
     def test_outbound_ok_with_metadata(self):
@@ -204,8 +202,8 @@ class OperaTransportTestCase(TransportTestCase):
         """
 
         transport = yield self.mk_transport()
-        fixed_date = datetime(2011,1,1,0,0,0)
-        
+        fixed_date = datetime(2011, 1, 1, 0, 0, 0)
+
         def _cb(method_called, xmlrpc_payload):
             self.assertEqual(xmlrpc_payload['Delivery'], fixed_date)
             self.assertEqual(xmlrpc_payload['Expiry'], fixed_date + timedelta(hours=1))
@@ -214,7 +212,7 @@ class OperaTransportTestCase(TransportTestCase):
             return {
                 'Identifier': 'abc123'
             }
-        
+
         transport.proxy = FakeXMLRPCService(_cb)
 
         yield self.dispatch(self.mk_msg(transport_metadata={
@@ -222,9 +220,8 @@ class OperaTransportTestCase(TransportTestCase):
             'expire_at': fixed_date + timedelta(hours=1),
             'priority': 'high',
             'receipt': 'N',
-            }), 
+            }),
             rkey='%s.outbound' % self.transport_name)
-    
 
     @inlineCallbacks
     def test_outbound_crash(self):
@@ -240,7 +237,7 @@ class OperaTransportTestCase(TransportTestCase):
             Callback handler that raises an error when called
             """
             return defer.fail(xmlrpc.Fault(503, 'oh noes!'))
-        
+
         # monkey patch so we can mock errors happening remotely
         transport.proxy = FakeXMLRPCService(_cb)
 
