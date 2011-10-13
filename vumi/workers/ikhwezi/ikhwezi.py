@@ -483,7 +483,6 @@ class IkhweziQuiz():
 
     def __init__(self, config, quiz, translations, datastore,
             msisdn, session_event=None, provider=None):
-        #print "\n__INIT__", msisdn, session_event
         self.config = config
         self.quiz = quiz
         self.translations = translations
@@ -540,19 +539,12 @@ class IkhweziQuiz():
         return False
 
     def random_ordering(self):
-        #order = ['demographic1']
-        #demographics = [
-                #'demographic2',
-                #'demographic3',
-                #'demographic4',
-                #]
         order = [
                 'demographic1',
                 'demographic2',
                 'demographic3',
                 'demographic4'
                 ]
-        #random.shuffle(demographics)
         questions = [
                 'question1',
                 'question2',
@@ -568,8 +560,6 @@ class IkhweziQuiz():
         while len(questions):
             order.append(questions.pop())
             order.append('continue')
-            #if len(demographics):
-                #order.append(demographics.pop())
         return order
 
     def force_order(self, order):
@@ -642,7 +632,6 @@ class IkhweziQuiz():
         question_name = None
         if len(self.data['order']):
             question_name = self.data['order'][0]
-        #print "FORMULATE_RESPONSE", question_name, answer
 
         try:
             answer = int(answer)
