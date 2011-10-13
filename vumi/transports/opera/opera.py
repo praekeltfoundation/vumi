@@ -3,19 +3,15 @@
 
 from datetime import datetime, timedelta
 import xmlrpclib
-import json
 import redis
 
-import iso8601
 from twisted.python import log
 from twisted.web import xmlrpc, http
 from twisted.web.resource import Resource
-from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.defer import inlineCallbacks
 
 from vumi.webapp.api.gateways.opera import utils
-from vumi.utils import safe_routing_key, normalize_msisdn, get_deploy_int
-from vumi.message import Message, JSONMessageEncoder
-from vumi.service import Worker, Consumer, Publisher
+from vumi.utils import normalize_msisdn, get_deploy_int
 from vumi.transports import Transport
 
 
@@ -116,7 +112,6 @@ class OperaInboundTransport(OperaBase):
     def setup_transport(self):
         super(OperaInboundTransport, self).setup_transport()
         log.msg('Starting the OperaInboundTransport config: %s' % self.transport_name)
-        dbindex = get_deploy_int(self._amqp_client.vhost)
         # start receipt web resource
         self.web_resource = yield self.start_web_resources(
             [

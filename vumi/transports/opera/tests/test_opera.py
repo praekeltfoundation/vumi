@@ -1,25 +1,15 @@
 from datetime import datetime, timedelta
-from StringIO import StringIO
-import os
 
-import iso8601
-from twisted.trial import unittest
-from twisted.python import failure
 from twisted.internet import defer
 from twisted.internet.defer import inlineCallbacks
-from twisted.web.test.test_web import DummyRequest
 from twisted.web import xmlrpc
 
-os.environ['DJANGO_SETTINGS_MODULE'] = 'vumi.webapp.settings'
-
-from vumi.message import Message, TransportUserMessage
-from vumi.transports.opera import opera
-from vumi.tests.utils import TestPublisher, FakeRedis
+from vumi.message import TransportUserMessage
+from vumi.tests.utils import FakeRedis
 from vumi.utils import http_request
 from vumi.transports.opera.tests.test_opera_stubs import FakeXMLRPCService
 from vumi.transports.opera import OperaOutboundTransport, OperaInboundTransport
 from vumi.transports.tests.test_base import TransportTestCase
-# from vumi.webapp.api.models import *
 
 
 class OperaTransportTestCase(TransportTestCase):
@@ -81,7 +71,7 @@ class OperaTransportTestCase(TransportTestCase):
           </receipt>
         </receipts>
         """.strip() % identifier
-        resp = yield http_request('%s/receipt.xml' % self.url, xml_data)
+        yield http_request('%s/receipt.xml' % self.url, xml_data)
         self.assertEqual([], self.get_dispatched_failures())
         self.assertEqual([], self.get_dispatched_messages())
         [event] = self.get_dispatched_events()
@@ -100,7 +90,7 @@ class OperaTransportTestCase(TransportTestCase):
         """
         it should be able to process in incoming sms as XML delivered via HTTP
         """
-        transport = yield self.mk_transport(cls=OperaInboundTransport, 
+        yield self.mk_transport(cls=OperaInboundTransport, 
             web_receipt_path='/receipt.xml', web_receive_path='/receive.xml',
             web_port=self.port)
 
@@ -227,7 +217,7 @@ class OperaTransportTestCase(TransportTestCase):
         
         transport.proxy = FakeXMLRPCService(_cb)
 
-        msg = yield self.dispatch(self.mk_msg(transport_metadata={
+        yield self.dispatch(self.mk_msg(transport_metadata={
             'deliver_at': fixed_date,
             'expire_at': fixed_date + timedelta(hours=1),
             'priority': 'high',
@@ -256,7 +246,7 @@ class OperaTransportTestCase(TransportTestCase):
 
         # send a message to the transport which'll hit the FakeXMLRPCService
         # and as a result raise an error
-        msg = yield self.dispatch(self.mk_msg(),
+        yield self.dispatch(self.mk_msg(),
             rkey='%s.outbound' % self.transport_name)
 
         self.assertEqual(self.get_dispatched_events(), [])
