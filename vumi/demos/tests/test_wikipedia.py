@@ -76,11 +76,12 @@ class WikipediaTestCase(TestCase):
 
 class SessionManagerTestCase(TestCase):
     def setUp(self):
-        self.sm = SessionManager(db=0, prefix="test:")
+        self.sm = SessionManager(db=0, prefix="test")
         self.sm.r_server = FakeRedis()  # stub out redis
 
     def tearDown(self):
         self.sm.stop()
+        self.sm.r_server.teardown()  # teardown fake redis
 
     def test_active_sessions(self):
         def get_sessions():
