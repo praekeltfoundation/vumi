@@ -106,6 +106,7 @@ class IkhweziModelTest(IkhweziModelBaseTest):
             self.assertEqual('test_provider', item.provider)
             self.assertNotEqual('test', item.attempts)
         d = self.ri(_txn)
+        return d
 
     def test_insert_update_and_get_msisdn(self):
         def _txn(txn):
@@ -119,6 +120,7 @@ class IkhweziModelTest(IkhweziModelBaseTest):
             self.assertEqual(1, item.demographic1)
             self.assertNotEqual('test', item.attempts)
         d = self.ri(_txn)
+        return d
 
 class RedisInputSequenceTest(TestCase):
 
