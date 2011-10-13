@@ -516,7 +516,7 @@ class IkhweziModel(UglyModel):
         ('demographic2_timestamp', 'timestamp'),
         ('demographic3_timestamp', 'timestamp'),
         ('demographic4_timestamp', 'timestamp'),
-        ('order', 'varchar')
+        ('remaining_questions', 'varchar')
         )
 
     @classmethod
@@ -608,8 +608,8 @@ class IkhweziQuiz():
             return True
         return False
 
-    def random_ordering(self):
-        order = [
+    def random_remaining_questionsing(self):
+        remaining_questions = [
                 'demographic1',
                 'demographic2',
                 'demographic3',
@@ -628,12 +628,12 @@ class IkhweziQuiz():
                 'question10']
         random.shuffle(questions)
         while len(questions):
-            order.append(questions.pop())
-            order.append('continue')
-        return order
+            remaining_questions.append(questions.pop())
+            remaining_questions.append('continue')
+        return remaining_questions
 
-    def force_order(self, order):
-        self.data['order'] = order
+    def force_order(self, remaining_questions):
+        self.data['remaining_questions'] = remaining_questions
         self.ds_set()
 
     def new_entrant(self, msisdn, provider=None):
@@ -672,7 +672,7 @@ class IkhweziQuiz():
                 'demographic2_timestamp': None,
                 'demographic3_timestamp': None,
                 'demographic4_timestamp': None,
-                'order': self.random_ordering()}
+                'remaining_questions': self.random_remaining_questionsing()}
         self.ds_set()
         return True
 
@@ -685,23 +685,23 @@ class IkhweziQuiz():
             self.data[question_name] = answer
             self.data[question_name + '_timestamp'] = \
                     datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S+00")
-            self.data['order'].pop(0)
+            self.data['remaining_questions'].pop(0)
             self.ds_set()
             self.language = self.lang(self.data['demographic1'] or 1)
         return reply
 
     def do_continue(self, answer):
         exit = False
-        self.data['order'].pop(0)
+        self.data['remaining_questions'].pop(0)
         self.ds_set()
-        if answer == 2 or len(self.data['order']) == 0:
+        if answer == 2 or len(self.data['remaining_questions']) == 0:
             exit = True
         return exit
 
     def formulate_response(self, answer):
         question_name = None
-        if len(self.data['order']):
-            question_name = self.data['order'][0]
+        if len(self.data['remaining_questions']):
+            question_name = self.data['remaining_questions'][0]
 
         try:
             answer = int(answer)
@@ -742,7 +742,7 @@ class IkhweziQuiz():
 
         else:
             # ask another question
-            question_name = self.data['order'][0]
+            question_name = self.data['remaining_questions'][0]
             question = self.quiz.get(question_name)
             vmr = VodacomMessagingResponse(self.config)
             vmr.set_headertext(self._(question['headertext']))

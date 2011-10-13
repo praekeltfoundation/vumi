@@ -4,10 +4,14 @@ import redis
 
 from twisted.python import log
 from twisted.trial.unittest import TestCase
+from twisted.internet.defer import succeed
+
 from vumi.transports.vodacommessaging.utils import VodacomMessagingResponse
 from vumi.workers.ikhwezi.ikhwezi import (
-        TRANSLATIONS, QUIZ, IkhweziQuiz, IkhweziQuizWorker)
+        TRANSLATIONS, QUIZ, IkhweziQuiz, IkhweziQuizWorker, IkhweziModel)
 from vumi.tests.utils import FakeRedis
+from vumi.database.base import (setup_db, get_db, close_db, UglyModel,
+                                TableNamePrefixFormatter)
 
 
 #trans = yaml.load(TRANSLATIONS)
@@ -29,7 +33,64 @@ from vumi.tests.utils import FakeRedis
         #print '--->', kk
         #print ' L->', vv
 
+class IkhweziModelBaseTest(TestCase):
+    def _sdb(self, dbname, **kw):
+        self._dbname = dbname
+        try:
+            get_db(dbname)
+            close_db(dbname)
+        except:
+            pass
+        # TODO: Pull this out into some kind of config?
+        self.db = setup_db(dbname, database=dbname,
+                host='localhost',
+                user=kw.get('dbuser', 'vumi'),
+                password=kw.get('dbpassword', 'vumi'))
+        return self.db.runQuery("SELECT 1")
 
+    def setup_db(self, *tables, **kw):
+        dbname = kw.pop('dbname', 'test')
+        self._test_tables = tables
+
+        def _eb(f):
+            raise SkipTest("Unable to connect to test database: %s" % (
+                    f.getErrorMessage(),))
+        d = self._sdb(dbname)
+        d.addErrback(_eb)
+
+        def add_callback(func, *args, **kw):
+            # This function exists to create a closure around a
+            # variable in the correct scope. If we just add the
+            # callback directly in the loops below, we only get the
+            # final value of "table", not each intermediate value.
+            d.addCallback(lambda _: func(self.db, *args, **kw))
+        for table in reversed(tables):
+            add_callback(table.drop_table, cascade=True)
+        for table in tables:
+            add_callback(table.create_table)
+        return d
+
+    def shutdown_db(self):
+        d = succeed(None)
+        for tbl in reversed(self._test_tables):
+            d.addCallback(lambda _: tbl.drop_table(self.db))
+
+        def _cb(_):
+            close_db(self._dbname)
+            self.db = None
+        return d.addCallback(_cb)
+    pass
+
+class IkhweziModelTest(IkhweziModelBaseTest):
+
+    def setUp(self):
+        return self.setup_db(IkhweziModel)
+
+    def tearDown(self):
+        return self.shutdown_db()
+
+    def test_setup_and_teardown(self):
+        self.assertTrue(True)
 
 class RedisInputSequenceTest(TestCase):
 
