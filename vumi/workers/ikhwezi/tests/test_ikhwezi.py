@@ -34,6 +34,10 @@ from vumi.database.base import (setup_db, get_db, close_db, UglyModel,
         #print ' L->', vv
 
 class IkhweziModelBaseTest(TestCase):
+
+    def ri(self, *args, **kw):
+        return self.db.runInteraction(*args, **kw)
+
     def _sdb(self, dbname, **kw):
         self._dbname = dbname
         try:
@@ -91,6 +95,30 @@ class IkhweziModelTest(IkhweziModelBaseTest):
 
     def test_setup_and_teardown(self):
         self.assertTrue(True)
+
+    def test_insert_and_get_msisdn(self):
+        def _txn(txn):
+            self.assertEqual(0, IkhweziModel.count_rows(txn))
+            IkhweziModel.create_item(txn, '555', provider='test_provider')
+            self.assertEqual(1, IkhweziModel.count_rows(txn))
+            item = IkhweziModel.get_item(txn, '555')
+            self.assertEqual('555', item.msisdn)
+            self.assertEqual('test_provider', item.provider)
+            self.assertNotEqual('test', item.attempts)
+        d = self.ri(_txn)
+
+    def test_insert_update_and_get_msisdn(self):
+        def _txn(txn):
+            self.assertEqual(0, IkhweziModel.count_rows(txn))
+            IkhweziModel.create_item(txn, '555', provider='test_provider')
+            self.assertEqual(1, IkhweziModel.count_rows(txn))
+            IkhweziModel.update_item(txn, '555', provider='other', demographic1=1)
+            item = IkhweziModel.get_item(txn, '555')
+            self.assertEqual('555', item.msisdn)
+            self.assertEqual('other', item.provider)
+            self.assertEqual(1, item.demographic1)
+            self.assertNotEqual('test', item.attempts)
+        d = self.ri(_txn)
 
 class RedisInputSequenceTest(TestCase):
 

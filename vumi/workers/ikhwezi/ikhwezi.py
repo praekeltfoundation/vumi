@@ -528,7 +528,9 @@ class IkhweziModel(UglyModel):
         return None
 
     @classmethod
-    def create_item(cls, txn, params):
+    def create_item(cls, txn, msisdn, **params):
+        params.update({"msisdn": msisdn})
+        insert_stmt = cls.insert_values_query(**params)
         txn.execute(cls.insert_values_query(**params), params)
         txn.execute("SELECT lastval()")
         return txn.fetchone()[0]
@@ -538,12 +540,12 @@ class IkhweziModel(UglyModel):
         msisdn = kw.pop('msisdn')
         valuespecs = ", ".join(["%s = %s" % (
             k, repr(v)) for k, v in kw.items()])
-        return "UPDATE %s SET %s WHERE msisdn = %s" (
+        return "UPDATE %s SET %s WHERE msisdn = '%s'" % (
             cls.get_table_name(), valuespecs, msisdn)
 
     @classmethod
-    def update_item(cls, txn, params):
-        txn.execute(cls.update_query(**params))
+    def update_item(cls, txn, msisdn, **params):
+        txn.execute(cls.update_query(msisdn=msisdn, **params))
         txn.execute("SELECT lastval()")
         return txn.fetchone()[0]
 
@@ -566,8 +568,8 @@ class IkhweziQuiz():
     def ds_set(self):
         self.datastore.set("%s#%s" % (
             self.REDIS_PREFIX, self.data['msisdn']), json.dumps(self.data))
-        for k, v in self.data.items():
-            print "%s: %s" % (k, v)
+        #for k, v in self.data.items():
+            #print "%s: %s" % (k, v)
 
     def ds_get(self, msisdn):
         data_string = self.datastore.get("%s#%s" % (
