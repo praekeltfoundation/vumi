@@ -9,7 +9,7 @@ from collections import namedtuple
 from contextlib import contextmanager
 
 import pytz
-from twisted.internet import defer
+from twisted.internet import defer, reactor
 
 from vumi.utils import make_vumi_path_abs
 from vumi.service import get_spec, Worker
@@ -220,6 +220,16 @@ class TestResourceWorker(Worker):
 class FakeRedis(object):
     def __init__(self):
         self._data = {}
+        self._expiries = {}
+
+    def teardown(self):
+        self._clean_up_expires()
+
+    def _clean_up_expires(self):
+        for key in self._expiries.keys():
+            delayed = self._expiries.pop(key)
+            if not delayed.cancelled:
+                delayed.cancel()
 
     # Global operations
 
@@ -315,3 +325,15 @@ class FakeRedis(object):
         if stop == 0:
             stop = None
         return [val[1] for val in zval[start:stop]]
+
+    # Expiry operations
+
+    def expire(self, key, seconds):
+        self.persist(key)
+        delayed = reactor.callLater(seconds, self.delete, key)
+        self._expiries[key] = delayed
+
+    def persist(self, key):
+        delayed = self._expiries.get(key)
+        if delayed is not None and not delayed.cancelled:
+            delayed.cancel()
