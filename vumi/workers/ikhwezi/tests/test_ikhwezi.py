@@ -6,7 +6,7 @@ from twisted.python import log
 from twisted.trial.unittest import TestCase
 from twisted.internet.defer import succeed
 
-from vumi.transports.vodacommessaging.utils import VodacomMessagingResponse
+from vumi.transports.httprpc.vodacom_messaging import VodacomMessagingResponse
 from vumi.workers.ikhwezi.ikhwezi import (
         TRANSLATIONS, QUIZ, IkhweziQuiz, IkhweziQuizWorker, IkhweziModel)
 from vumi.tests.utils import FakeRedis
