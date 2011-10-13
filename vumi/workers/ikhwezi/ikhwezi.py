@@ -5,10 +5,13 @@ from datetime import datetime
 
 from twisted.internet.defer import inlineCallbacks
 from twisted.python import log
+
 from vumi.message import Message, TransportUserMessage
 from vumi.service import Worker
 from vumi.tests.utils import FakeRedis
 from vumi.transports.vodacommessaging.utils import VodacomMessagingResponse
+from vumi.database.base import (setup_db, get_db, close_db, UglyModel,
+                                TableNamePrefixFormatter)
 
 
 TRANSLATIONS = '''
@@ -476,6 +479,73 @@ question10:
 
 '''
 
+
+class IkhweziModel(UglyModel):
+    TABLE_NAME = 'ikhwezi_quiz'
+    fields = (
+        ('id', 'SERIAL PRIMARY KEY'),
+        ('msisdn', 'varchar UNIQUE NOT NULL'),
+        ('provider', 'varchar'),
+        ('attempts', 'integer'),
+        ('msisdn_timestamp', 'timestamp'),
+        ('question1', 'integer'),
+        ('question2', 'integer'),
+        ('question3', 'integer'),
+        ('question4', 'integer'),
+        ('question5', 'integer'),
+        ('question6', 'integer'),
+        ('question7', 'integer'),
+        ('question8', 'integer'),
+        ('question9', 'integer'),
+        ('question10', 'integer'),
+        ('question1_timestamp', 'timestamp'),
+        ('question2_timestamp', 'timestamp'),
+        ('question3_timestamp', 'timestamp'),
+        ('question4_timestamp', 'timestamp'),
+        ('question5_timestamp', 'timestamp'),
+        ('question6_timestamp', 'timestamp'),
+        ('question7_timestamp', 'timestamp'),
+        ('question8_timestamp', 'timestamp'),
+        ('question9_timestamp', 'timestamp'),
+        ('question10_timestamp', 'timestamp'),
+        ('demographic1', 'integer'),
+        ('demographic2', 'integer'),
+        ('demographic3', 'integer'),
+        ('demographic4', 'integer'),
+        ('demographic1_timestamp', 'timestamp'),
+        ('demographic2_timestamp', 'timestamp'),
+        ('demographic3_timestamp', 'timestamp'),
+        ('demographic4_timestamp', 'timestamp'),
+        ('order', 'varchar')
+        )
+
+    @classmethod
+    def get_item(cls, txn, msisdn):
+        items = cls.run_select(txn, "WHERE msisdn=%(msisdn)s",
+                                   {'msisdn': msisdn})
+        if items:
+            return cls(txn, *items[0])
+        return None
+
+    @classmethod
+    def create_item(cls, txn, msisdn):
+        params = {'msisdn': msisdn}
+        txn.execute(cls.insert_values_query(**params), params)
+        txn.execute("SELECT lastval()")
+        return txn.fetchone()[0]
+
+    @classmethod
+    def update_query(cls, msisdn, **kw):
+        valuespecs = ", ".join(["%s = %s" % (
+            k, repr(v)) for k, v in kw.items()])
+        return "UPDATE %s SET %s WHERE msisdn = %s" (
+            cls.get_table_name(), valuespecs, msisdn)
+
+    @classmethod
+    def update_item(cls, txn, msisdn, other={}):
+        txn.execute(cls.insert_values_query(**params), params)
+        txn.execute("SELECT lastval()")
+        return txn.fetchone()[0]
 
 class IkhweziQuiz():
 
