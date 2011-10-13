@@ -14,7 +14,7 @@ os.environ['DJANGO_SETTINGS_MODULE'] = 'vumi.webapp.settings'
 
 from vumi.message import Message, TransportUserMessage
 from vumi.transports.opera import opera
-from vumi.tests.utils import TestPublisher
+from vumi.tests.utils import TestPublisher, FakeRedis
 from vumi.utils import http_request
 from vumi.transports.opera.tests.test_opera_stubs import FakeXMLRPCService
 from vumi.transports.opera import OperaOutboundTransport, OperaInboundTransport
@@ -60,20 +60,27 @@ class OperaTransportTestCase(TransportTestCase):
             web_receipt_path='/receipt.xml', web_receive_path='/receive.xml',
             web_port=self.port)
         
+        identifier = '001efc31'
+        message_id = '123456'
+        transport.r_server = FakeRedis()
+        # prime redis to match the incoming identifier to an internal message id
+        transport.set_message_id_for_identifier(identifier, message_id)
+
+
         xml_data = """
         <?xml version="1.0"?>
         <!DOCTYPE receipts>
         <receipts>
           <receipt>
             <msgid>26567958</msgid>
-            <reference>001efc31</reference>
+            <reference>%s</reference>
             <msisdn>+27123456789</msisdn>
             <status>D</status>
             <timestamp>20080831T15:59:24</timestamp>
             <billed>NO</billed>
           </receipt>
         </receipts>
-        """.strip()
+        """.strip() % identifier
         resp = yield http_request('%s/receipt.xml' % self.url, xml_data)
         self.assertEqual([], self.get_dispatched_failures())
         self.assertEqual([], self.get_dispatched_messages())
@@ -82,8 +89,8 @@ class OperaTransportTestCase(TransportTestCase):
         self.assertEqual(event['message_type'], 'event')
         self.assertEqual(event['event_type'], 'delivery_report')
         # this is failing because I need to stash the mapping in Redis
-        # self.assertEqual(event['transport_message_id'], '001efc31')
-
+        self.assertEqual(event['transport_message_id'], message_id)
+    
     @inlineCallbacks
     def test_incoming_sms_processing(self):
         """
@@ -178,7 +185,8 @@ class OperaTransportTestCase(TransportTestCase):
         
         transport.proxy = FakeXMLRPCService(_cb)
 
-        msg = yield self.dispatch(self.mk_msg(), 
+        msg = self.mk_msg()
+        yield self.dispatch(msg, 
             rkey='%s.outbound' % self.transport_name)
         
         self.assertEqual(self.get_dispatched_failures(), [])
@@ -187,6 +195,11 @@ class OperaTransportTestCase(TransportTestCase):
         self.assertEqual(event_msg['message_type'], 'event')
         self.assertEqual(event_msg['event_type'], 'ack')
         self.assertEqual(event_msg['sent_message_id'], 'abc123')
+        # test that we've properly linked the identifier to our
+        # internal id of the given message
+        self.assertEqual(
+            transport.get_message_id_for_identifier('abc123'),
+            msg['message_id'])
     
 
     @inlineCallbacks

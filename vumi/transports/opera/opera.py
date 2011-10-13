@@ -4,6 +4,7 @@
 from datetime import datetime, timedelta
 import xmlrpclib
 import json
+import redis
 
 import iso8601
 from twisted.python import log
@@ -12,7 +13,7 @@ from twisted.web.resource import Resource
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.webapp.api.gateways.opera import utils
-from vumi.utils import safe_routing_key, normalize_msisdn
+from vumi.utils import safe_routing_key, normalize_msisdn, get_deploy_int
 from vumi.message import Message, JSONMessageEncoder
 from vumi.service import Worker, Consumer, Publisher
 from vumi.transports import Transport
@@ -35,21 +36,7 @@ class OperaReceiptResource(Resource):
     def render_POST(self, request):
         receipts = utils.parse_receipts_xml(request.content.read())
         for receipt in receipts:
-
-            # convert delivery receipt status values
-            status_map = {
-                'D': 'delivered',
-                'd': 'delivered',
-                'R': 'delivered',
-                'Q': 'pending',
-                'P': 'pending',
-                'B': 'pending',
-                'a': 'pending',
-                'u': 'pending'
-            }
-            
-            internal_status = status_map.get(receipt.status, 'failed')
-            self.callback(receipt.reference, internal_status)
+            self.callback(receipt)
 
         request.setResponseCode(http.OK)
         return ''
@@ -73,9 +60,7 @@ class OperaReceiveResource(Resource):
             })
         request.setResponseCode(http.OK)
         request.setHeader('Content-Type', 'text/xml; charset=utf8')
-        return content
-
-
+        return content    
 
 class OperaInboundTransport(Transport):
 
@@ -86,14 +71,47 @@ class OperaInboundTransport(Transport):
         self.web_receipt_path = self.config['web_receipt_path']
         self.web_receive_path = self.config['web_receive_path']
         self.web_port = int(self.config['web_port'])
+        self.opera_url = self.config['url']
+        self.transport_name = self.config['transport_name']
+        self.redis_config = self.config.get('redis', {})
 
+    def set_message_id_for_identifier(self, identifier, message_id):
+        rkey = '%s#%s' % (self.r_prefix, identifier)
+        self.r_server.set(rkey, message_id)
+        self.r_server.expire(rkey, self.MESSAGE_ID_LIFETIME)
+    
+    def get_message_id_for_identifier(self, identifier):
+        rkey = '%s#%s' % (self.r_prefix, identifier)
+        return self.r_server.get(rkey)
+    
+    def handle_raw_incoming_receipt(self, receipt):
+        # convert delivery receipt status values
+        status_map = {
+            'D': 'delivered',
+            'd': 'delivered',
+            'R': 'delivered',
+            'Q': 'pending',
+            'P': 'pending',
+            'B': 'pending',
+            'a': 'pending',
+            'u': 'pending'
+        }
+        
+        internal_status = status_map.get(receipt.status, 'failed')
+        internal_message_id = self.get_message_id_for_identifier(receipt.reference)
+        self.publish_delivery_report(internal_message_id, internal_status)
+
+    
     @inlineCallbacks
     def setup_transport(self):
         log.msg('Starting the OperaInboundTransport config: %s' % self.transport_name)
+        dbindex = get_deploy_int(self._amqp_client.vhost)
+        self.r_server = redis.Redis(db=dbindex, **self.redis_config)
+        self.r_prefix = "%(transport_name)s@%(url)s" % self.config
         # start receipt web resource
         self.web_resource = yield self.start_web_resources(
             [
-                (OperaReceiptResource(self.publish_delivery_report),
+                (OperaReceiptResource(self.handle_raw_incoming_receipt),
                  self.web_receipt_path),
                 (OperaReceiveResource(self.publish_message),
                  self.web_receive_path),
@@ -118,22 +136,38 @@ class OperaOutboundTransport(Transport):
     multiple HTTP Resources which we didn't need.
     """
 
+    MESSAGE_ID_LIFETIME = 60 * 60 * 48 # 48 hours
+
     def validate_config(self):
         self.opera_url = self.config['url']
         self.opera_channel = self.config['channel']
         self.opera_password = self.config['password']
         self.opera_service = self.config['service']
         self.transport_name = self.config['transport_name']
+        self.redis_config = self.config.get('redis', {})
+
     
     def setup_transport(self):
         log.msg("Starting the OperaOutboundTransport: %s" % self.transport_name)
         self.proxy = xmlrpc.Proxy(self.opera_url)
+        dbindex = get_deploy_int(self._amqp_client.vhost)
+        self.r_server = redis.Redis(db=dbindex, **self.redis_config)
+        self.r_prefix = "%(transport_name)s@%(url)s" % self.config
         self.default_values = {
             'Service': self.opera_service,
             'Password': self.opera_password,
             'Channel': self.opera_channel,
         }
     
+    def set_message_id_for_identifier(self, identifier, message_id):
+        rkey = '%s#%s' % (self.r_prefix, identifier)
+        self.r_server.set(rkey, message_id)
+        self.r_server.expire(rkey, self.MESSAGE_ID_LIFETIME)
+    
+    def get_message_id_for_identifier(self, identifier):
+        rkey = '%s#%s' % (self.r_prefix, identifier)
+        return self.r_server.get(rkey)
+
     @inlineCallbacks
     def handle_outbound_message(self, message):
         xmlrpc_payload = self.default_values.copy()
@@ -162,10 +196,14 @@ class OperaOutboundTransport(Transport):
             xmlrpc_payload)
 
         log.msg("Proxy response: %s" % proxy_response)
+        transport_message_id = proxy_response['Identifier']
+
+        self.set_message_id_for_identifier(transport_message_id, 
+            message['message_id'])
 
         yield self.publish_ack(
-            user_message_id=message['message_id'],
-            sent_message_id=proxy_response.get('Identifier'))
+                user_message_id=message['message_id'],
+                sent_message_id=transport_message_id)
 
     def teardown_transport(self):
         log.msg("Stopping the OperaOutboundTransport: %s" % self.transport_name)
