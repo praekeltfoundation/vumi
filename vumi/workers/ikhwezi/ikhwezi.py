@@ -568,18 +568,26 @@ class IkhweziModel(UglyModel):
         return txn.fetchone()[0]
 
     @classmethod
+    def param_format(cls, p):
+        s = json.dumps(p)
+        if s.startswith('"'):
+            s = "'%s'" % s[1:-1]
+        return s
+
+    @classmethod
     def update_query(cls, **kw):
         msisdn = kw.pop('msisdn')
         valuespecs = ", ".join(["%s = %s" % (
-            k, repr(v)) for k, v in kw.items()])
+            k, cls.param_format(v)) for k, v in kw.items()])
+        print valuespecs
         return "UPDATE %s SET %s WHERE msisdn = '%s'" % (
             cls.get_table_name(), valuespecs, msisdn)
 
     @classmethod
-    def update_item(cls, txn, msisdn, **params):
-        txn.execute(cls.update_query(msisdn=msisdn, **params))
-        txn.execute("SELECT lastval()")
-        return txn.fetchone()[0]
+    def update_item(cls, txn, **params):
+        txn.execute(cls.update_query(**params))
+        #txn.execute("SELECT lastval()")
+        #return txn.fetchone()[0]
 
 class IkhweziQuiz():
 
@@ -592,7 +600,8 @@ class IkhweziQuiz():
         self.translations = translations
         self.db = db
         msisdn = str(msisdn)
-        self.retrieve_entrant(msisdn) or self.new_entrant(msisdn, provider)
+        self.retrieve_entrant(msisdn, provider) \
+                or self.new_entrant(msisdn, provider)
         if session_event and session_event == 'new':
             self.data['attempts'] += 1
             self.ds_set()
@@ -603,7 +612,7 @@ class IkhweziQuiz():
     def ds_set(self):
         self.data['remaining_questions'] = json.dumps(self.remaining)
         def _txn(txn):
-            IkhweziModel.update_item(txn, self.data['msisdn'], **self.data)
+            IkhweziModel.update_item(txn, **self.data)
         d = self.ri(_txn)
         return d
 
@@ -645,13 +654,18 @@ class IkhweziQuiz():
             else:
                 return newstring
 
-    def printdef(d):
-        print "DDDDDDDDDDDDDDDDDDDDDDDD", d
+    def retrieve_entrant(self, msisdn, provider):
+        def handle_item(item):
+            if item == None:
+                self.new_entrant(msisdn, provider)
+            else:
+                for t in item.fields:
+                    self.data[t[0]] = getattr(item, t[0])
+                self.language = self.lang(self.data['demographic1'] or 1)
+                self.remaining = json.loads(self.data['remaining_questions'])
 
-    def retrieve_entrant(self, msisdn):
-        data = self.ds_get(msisdn)
-        data.addCallback(self.printdef)
-        print "EEEEEEEEEEEEEEEE", data
+        d = self.ds_get(msisdn)
+        d.addCallback(handle_item)
         #if data:
             #self.data = data
             #self.language = self.lang(data['demographic1'] or 1)
@@ -688,6 +702,7 @@ class IkhweziQuiz():
         self.ds_set()
 
     def new_entrant(self, msisdn, provider=None):
+        print "new_entrant"
         self.remaining = self.random_remaining_questionsing()
         self.language = "English"
         self.data = {
@@ -725,6 +740,7 @@ class IkhweziQuiz():
                 'demographic3_timestamp': None,
                 'demographic4_timestamp': None,
                 'remaining_questions': json.dumps(self.remaining)}
+        self.ds_new(msisdn)
         self.ds_set()
         return True
 

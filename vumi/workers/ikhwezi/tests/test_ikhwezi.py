@@ -108,19 +108,19 @@ class IkhweziModelTest(IkhweziModelBaseTest):
         #d = self.ri(_txn)
         #return d
 
-    #def test_insert_update_and_get_msisdn(self):
-        #def _txn(txn):
-            #self.assertEqual(0, IkhweziModel.count_rows(txn))
-            #IkhweziModel.create_item(txn, '555', provider='test_provider')
-            #self.assertEqual(1, IkhweziModel.count_rows(txn))
-            #IkhweziModel.update_item(txn, '555', provider='other', demographic1=1)
-            #item = IkhweziModel.get_item(txn, '555')
-            #self.assertEqual('555', item.msisdn)
-            #self.assertEqual('other', item.provider)
-            #self.assertEqual(1, item.demographic1)
-            #self.assertNotEqual('test', item.attempts)
-        #d = self.ri(_txn)
-        #return d
+    def test_insert_update_and_get_msisdn(self):
+        def _txn(txn):
+            self.assertEqual(0, IkhweziModel.count_rows(txn))
+            IkhweziModel.create_item(txn, '555', provider='test_provider')
+            self.assertEqual(1, IkhweziModel.count_rows(txn))
+            IkhweziModel.update_item(txn, msisdn='555', provider='other', demographic1=1)
+            item = IkhweziModel.get_item(txn, '555')
+            self.assertEqual('555', item.msisdn)
+            self.assertEqual('other', item.provider)
+            self.assertEqual(1, item.demographic1)
+            self.assertNotEqual('test', item.attempts)
+        d = self.ri(_txn)
+        return d
 
 class RedisInputSequenceTest(TestCase):
 
