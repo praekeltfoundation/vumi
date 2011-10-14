@@ -560,8 +560,7 @@ class IkhweziModel(UglyModel):
         return None
 
     @classmethod
-    def create_item(cls, txn, msisdn, **params):
-        params.update({"msisdn": msisdn})
+    def create_item(cls, txn, **params):
         insert_stmt = cls.insert_values_query(**params)
         txn.execute(cls.insert_values_query(**params), params)
         txn.execute("SELECT lastval()")
@@ -579,7 +578,6 @@ class IkhweziModel(UglyModel):
         msisdn = kw.pop('msisdn')
         valuespecs = ", ".join(["%s = %s" % (
             k, cls.param_format(v)) for k, v in kw.items()])
-        print valuespecs
         return "UPDATE %s SET %s WHERE msisdn = '%s'" % (
             cls.get_table_name(), valuespecs, msisdn)
 
@@ -594,17 +592,19 @@ class IkhweziQuiz():
     REDIS_PREFIX = "vumi_vodacom_ikhwezi"
 
     def __init__(self, config, quiz, translations, db,
-            msisdn, session_event=None, provider=None):
+            msisdn, session_event, provider, request, response_callback):
         self.config = config
         self.quiz = quiz
         self.translations = translations
         self.db = db
         msisdn = str(msisdn)
-        self.retrieve_entrant(msisdn, provider) \
-                or self.new_entrant(msisdn, provider)
-        if session_event and session_event == 'new':
-            self.data['attempts'] += 1
-            self.ds_set()
+        self.request = request
+        self.response_callback = response_callback
+        self.retrieve_entrant(msisdn, provider)
+        #if session_event and session_event == 'new':
+            #self.data['attempts'] += 1
+            #self.ds_set()
+        #response_callback(self.formulate_response(request))
 
     def ri(self, *args, **kw):
         return self.db.runInteraction(*args, **kw)
@@ -623,9 +623,9 @@ class IkhweziQuiz():
         d = self.ri(_txn)
         return d
 
-    def ds_new(self, msisdn):
+    def ds_new(self, **kwargs):
         def _txn(txn):
-            item = IkhweziModel.create_item(txn, msisdn)
+            item = IkhweziModel.create_item(txn, **kwargs)
             return item
         d = self.ri(_txn)
         return d
@@ -655,23 +655,20 @@ class IkhweziQuiz():
                 return newstring
 
     def retrieve_entrant(self, msisdn, provider):
+        print "retrieve_entrant"
         def handle_item(item):
             if item == None:
                 self.new_entrant(msisdn, provider)
             else:
+                self.data = {}
                 for t in item.fields:
                     self.data[t[0]] = getattr(item, t[0])
+                print self.data
                 self.language = self.lang(self.data['demographic1'] or 1)
                 self.remaining = json.loads(self.data['remaining_questions'])
-
+                self.response_callback(self.formulate_response(self.request))
         d = self.ds_get(msisdn)
         d.addCallback(handle_item)
-        #if data:
-            #self.data = data
-            #self.language = self.lang(data['demographic1'] or 1)
-            #self.remaining = json.loads(self.data['remaining_questions'])
-            #return True
-        return False
 
     def random_remaining_questionsing(self):
         remaining_questions = [
@@ -736,9 +733,11 @@ class IkhweziQuiz():
                 'demographic3_timestamp': None,
                 'demographic4_timestamp': None,
                 'remaining_questions': json.dumps(self.remaining)}
-        self.ds_new(msisdn)
-        self.ds_set()
-        return True
+        def on_new(item):
+            print "@@@@@@@@@@@@@@ on_new"
+            self.response_callback(self.formulate_response(self.request))
+        d = self.ds_new(**self.data)
+        d.addCallback(on_new)
 
     def answer_question(self, question_name, answer):
         reply = None
@@ -835,7 +834,6 @@ class IkhweziQuizWorker(Worker):
             self.translations['Zulu'][t['English']] = t['Zulu']
             self.translations['Sotho'][t['English']] = t['Sotho']
             self.translations['Afrikaans'][t['English']] = t['Afrikaans']
-        self.ds = FakeRedis()
 
     def setup_db(self):
         dbname = 'ikhwezi'
@@ -859,6 +857,9 @@ class IkhweziQuizWorker(Worker):
         msisdn = user_m.payload['from_addr']
         session_event = user_m.payload.get('session_event')
         provider = user_m.payload.get('provider')
+        def response_callback(resp):
+            reply = user_m.reply(str(resp))
+            self.publisher.publish_message(reply)
         ik = IkhweziQuiz(
                 self.config,
                 self.quiz,
@@ -866,10 +867,9 @@ class IkhweziQuizWorker(Worker):
                 self.db,
                 msisdn,
                 session_event,
-                provider)
-        resp = ik.formulate_response(request)
-        reply = user_m.reply(str(resp))
-        self.publisher.publish_message(reply)
+                provider,
+                request,
+                response_callback)
 
     def stopWorker(self):
         log.msg("Stopping the IkhweziQuizWorker")

@@ -1,6 +1,4 @@
 import yaml
-import random
-import redis
 
 from twisted.python import log
 from twisted.trial.unittest import TestCase
@@ -13,25 +11,6 @@ from vumi.tests.utils import FakeRedis
 from vumi.database.base import (setup_db, get_db, close_db, UglyModel,
                                 TableNamePrefixFormatter)
 
-
-#trans = yaml.load(TRANSLATIONS)
-#for t in trans:
-    #print ''
-    #for k, v in t.items():
-        #print k.ljust(12,'.'), v
-
-#translations = {'Zulu': {}, 'Sotho': {}, 'Afrikaans': {}}
-#for t in trans:
-    #translations['Zulu'][t['English']] = t['Zulu']
-    #translations['Sotho'][t['English']] = t['Sotho']
-    #translations['Afrikaans'][t['English']] = t['Afrikaans']
-
-#for k,v in translations.items():
-    #print ''
-    #print k
-    #for kk,vv in v.items():
-        #print '--->', kk
-        #print ' L->', vv
 
 class IkhweziModelBaseTest(TestCase):
 
@@ -93,20 +72,20 @@ class IkhweziModelTest(IkhweziModelBaseTest):
     def tearDown(self):
         return self.shutdown_db()
 
-    #def test_setup_and_teardown(self):
-        #self.assertTrue(True)
+    def test_setup_and_teardown(self):
+        self.assertTrue(True)
 
-    #def test_insert_and_get_msisdn(self):
-        #def _txn(txn):
-            #self.assertEqual(0, IkhweziModel.count_rows(txn))
-            #IkhweziModel.create_item(txn, '555', provider='test_provider')
-            #self.assertEqual(1, IkhweziModel.count_rows(txn))
-            #item = IkhweziModel.get_item(txn, '555')
-            #self.assertEqual('555', item.msisdn)
-            #self.assertEqual('test_provider', item.provider)
-            #self.assertNotEqual('test', item.attempts)
-        #d = self.ri(_txn)
-        #return d
+    def test_insert_and_get_msisdn(self):
+        def _txn(txn):
+            self.assertEqual(0, IkhweziModel.count_rows(txn))
+            IkhweziModel.create_item(txn, '555', provider='test_provider')
+            self.assertEqual(1, IkhweziModel.count_rows(txn))
+            item = IkhweziModel.get_item(txn, '555')
+            self.assertEqual('555', item.msisdn)
+            self.assertEqual('test_provider', item.provider)
+            self.assertNotEqual('test', item.attempts)
+        d = self.ri(_txn)
+        return d
 
     def test_insert_update_and_get_msisdn(self):
         def _txn(txn):
@@ -122,7 +101,7 @@ class IkhweziModelTest(IkhweziModelBaseTest):
         d = self.ri(_txn)
         return d
 
-class RedisInputSequenceTest(TestCase):
+class IkhweziQuizTest(TestCase):
 
     def setUp(self):
         self.msisdn = '0821234567'
@@ -136,35 +115,15 @@ class RedisInputSequenceTest(TestCase):
             self.translations['Sotho'][t['English']] = t['Sotho']
             self.translations['Afrikaans'][t['English']] = t['Afrikaans']
         self.language = 'English'
-        self.exit_text = None
-        self.completed_text = None
+        self.exit_text = self.quiz['exit']['headertext']
+        self.completed_text = self.quiz['completed']['headertext']
         self.config = {
                 'web_host': 'vumi.p.org',
                 'web_path': '/api/v1/ussd/vmes/'}
         self.setup_db()
 
-    def get_quiz_entry(self):
-        ik = IkhweziQuiz(
-                self.config,
-                self.quiz,
-                self.translations,
-                self.db,
-                self.msisdn,
-                self.session_event,
-                self.provider)
-        return ik
-
     def tearDown(self):
-        keys = self.ds.keys("vumi_vodacom_ikhwezi*")
-        if len(keys) and type(keys) is str:
-            keys = keys.split(' ')
-        if len(keys):
-            for k in keys:
-                #print self.ds.get(k)
-                self.ds.delete(k)
-
-    def set_ds(self):
-        self.ds = redis.Redis("localhost", db=7)
+        pass
 
     def setup_db(self):
         dbname = 'ikhwezi'
@@ -179,6 +138,17 @@ class RedisInputSequenceTest(TestCase):
                 password='vumi')
         return self.db.runQuery("SELECT 1")
 
+    def quiz_respond(self, session_event, request, response_callback):
+        ik = IkhweziQuiz(
+                self.config,
+                self.quiz,
+                self.translations,
+                self.db,
+                self.msisdn,
+                session_event,
+                self.provider,
+                request,
+                response_callback)
 
     def set_exit_text(self, fun):
         self.exit_text = fun(self.quiz['exit']['headertext'])
@@ -186,135 +156,160 @@ class RedisInputSequenceTest(TestCase):
     def set_completed_text(self, fun):
         self.completed_text = fun(self.quiz['completed']['headertext'])
 
-    def run_input_sequence(self, inputs):
-        user_in = inputs.pop(0)
-        #print ''
-        #print self.session_event
-        #print user_in
-        ik = self.get_quiz_entry()
-        self.session_event = 'resume'
-        #print self.session_event
-        resp = ik.formulate_response(user_in)
-        self.language = ik.language
-        self.set_completed_text(ik._)
-        self.set_exit_text(ik._)
-        #print resp
-        if len(inputs):
-            return self.run_input_sequence(inputs)
-        return resp
-
-    def finish_input_sequence(self, inputs):
-        resp = self.run_input_sequence(inputs)
-        final_headertext = resp.headertext
-        ref_text = self.exit_text
-        self.assertTrue(final_headertext.endswith(ref_text))
-
-    def completed_input_sequence(self, inputs):
-        resp = self.run_input_sequence(inputs)
-        final_headertext = resp.headertext
-        ref_text = self.completed_text
-        self.assertTrue(final_headertext.endswith(ref_text))
-
     def test_answer_out_of_range_1(self):
         """
         The 66 is impossible
         """
-        inputs = ['*120*112233#', 1, 66, 1, 1, 1, 1, 2]
-        self.finish_input_sequence(inputs)
+        inputs = [1, 66, 1, 1, 1, 1]
 
-    #def test_answer_out_of_range_2(self):
-        #"""
-        #The 22 is impossible
-        #"""
-        #inputs = ['*120*112233#', 22, 2, 2, 2, 2, 2, 2]
-        #self.finish_input_sequence(inputs)
+        def response_callback(resp):
+            pass
+        def finish_callback(resp):
+            self.assertTrue(resp.headertext.endswith(self.exit_text))
+        self.quiz_respond('new', '*120*112233#', response_callback)
+        for i in inputs:
+            self.quiz_respond('resume', i, response_callback)
+        return self.quiz_respond('resume', 2, finish_callback)
 
-    #def test_answer_wrong_type_1(self):
-        #inputs = ['*120*112233#', 1, "is there a 3rd option?", 1, 1, 1, 1, 2]
-        #self.finish_input_sequence(inputs)
 
-    #def test_answer_wrong_type_2(self):
-        #inputs = ['*120*112233#', 1, '*120*11223344#', 1, 1, 1, 2, 2]
-        #self.finish_input_sequence(inputs)
+    def test_answer_out_of_range_2(self):
+        """
+        The 22 is impossible
+        """
+        inputs = [22, 1, 2, 2, 2, 2]
 
-    #def test_answer_wrong_type_3(self):
-        #"""
-        #Mismatches on Continue question auto continue
-        #"""
-        #inputs = ['*120*112233#', 1, 1, "huh", 1, 2, 1, 'exit', 1, 2]
-        #self.finish_input_sequence(inputs)
+        def response_callback(resp):
+            pass
+        def finish_callback(resp):
+            self.assertTrue(resp.headertext.endswith(self.exit_text))
+        self.quiz_respond('new', '*120*112233#', response_callback)
+        for i in inputs:
+            self.quiz_respond('resume', i, response_callback)
+        self.quiz_respond('resume', 2, finish_callback)
 
-    #def test_sequence_1(self):
-        #inputs = ['*120*112233#', 'blah', 55, '1', 1, 55, 55, 'blah',
-                #'1', 1, 55, 'blah', 55, '1', 2, 2, 2]
-        #self.finish_input_sequence(inputs)
+    def test_answer_wrong_type_1(self):
+        inputs = [1, "is there a 3rd option?", 1, 1, 1, 1]
 
-    #def test_sequence_2(self):
-        #"""
-        #This sequence answers all questions,
-        #forcing an exit response to the final continure question
-        #"""
-        #inputs = ['*120*112233#', 1, '1', 55, 2, '1', 55, 1, '1',
-                #55, 2, 55, '2', 1, '1', 1, '1', 1, 55, '2',
-                #55, '1', 1, '1', 55, '2', 'bye', 'no', 1, 2]
-        #self.finish_input_sequence(inputs)
+        def response_callback(resp):
+            pass
+        def finish_callback(resp):
+            self.assertTrue(resp.headertext.endswith(self.exit_text))
+        self.quiz_respond('new', '*120*112233#', response_callback)
+        for i in inputs:
+            self.quiz_respond('resume', i, response_callback)
+        self.quiz_respond('resume', 2, finish_callback)
 
-    #def test_sequence_3(self):
-        #inputs = ['*120*112233#', 'demo', '2', 55, 'demo', 55, 55, 55, 55,
-                #'2', 55, 'demo', '2', 55, 55, 'demo', '2', 1, 55,
-                #55, '1', 55, '2', 55, '2', 55, '2', 55, '2', 2]
-        #self.finish_input_sequence(inputs)
 
-    #def test_sequence_4(self):
-        #"""
-        #Check the message on resuming after completion
-        #"""
-        #inputs = ['*120*112233#', 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-                #1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
-        #self.finish_input_sequence(inputs)
-        #self.session_event = 'new'
-        #inputs = ['*120*112233#']
-        #self.completed_input_sequence(inputs)
+    def test_answer_wrong_type_2(self):
+        inputs = [1, '*120*11223344#', 1, 1, 1, 2]
 
-    #def test_with_resumes(self):
-        #inputs = ['*120*112233#']
-        #resp = self.run_input_sequence(inputs)
-        #self.assertEqual(4, len(resp.option_list))
-        #inputs = [1]
-        #resp = self.run_input_sequence(inputs)
-        #self.assertEqual(2, len(resp.option_list))
-        #inputs = [1]
-        #resp = self.run_input_sequence(inputs)
-        #self.assertEqual(9, len(resp.option_list))
-        #inputs = [1]
-        #resp = self.run_input_sequence(inputs)
-        #self.assertEqual(4, len(resp.option_list))
+        def response_callback(resp):
+            pass
+        def finish_callback(resp):
+            self.assertTrue(resp.headertext.endswith(self.exit_text))
+        self.quiz_respond('new', '*120*112233#', response_callback)
+        for i in inputs:
+            self.quiz_respond('resume', i, response_callback)
+        self.quiz_respond('resume', 2, finish_callback)
+
+    def test_answer_wrong_type_3(self):
+        """
+        Mismatches on Continue question auto continue
+        """
+        inputs = [1, 1, "huh", 1, 2, 1, 'exit', 1]
+
+        def response_callback(resp):
+            pass
+        def finish_callback(resp):
+            self.assertTrue(resp.headertext.endswith(self.exit_text))
+        self.quiz_respond('new', '*120*112233#', response_callback)
+        for i in inputs:
+            self.quiz_respond('resume', i, response_callback)
+        self.quiz_respond('resume', 2, finish_callback)
+
+    def test_sequence_1(self):
+        inputs = ['blah', 55, '1', 1, 55, 55, 'blah',
+                '1', 1, 55, 'blah', 55, '1', 2, 2]
+
+        def response_callback(resp):
+            pass
+        def finish_callback(resp):
+            self.assertTrue(resp.headertext.endswith(self.exit_text))
+        self.quiz_respond('new', '*120*112233#', response_callback)
+        for i in inputs:
+            self.quiz_respond('resume', i, response_callback)
+        self.quiz_respond('resume', 2, finish_callback)
+
+    def test_sequence_2(self):
+        inputs = [1, '1', 55, 2, '1', 55, 1, '1',
+                55, 2, 55, '2', 1, '1', 1, '1', 1, 55, '2',
+                55, '1', 1, '1', 55, '2', 'bye', 'no', 1]
+
+        def response_callback(resp):
+            pass
+        def finish_callback(resp):
+            self.assertTrue(resp.headertext.endswith(self.exit_text))
+        self.quiz_respond('new', '*120*112233#', response_callback)
+        for i in inputs:
+            self.quiz_respond('resume', i, response_callback)
+        self.quiz_respond('resume', 2, finish_callback)
+
+    def test_sequence_3(self):
+        inputs = ['demo', '1', 55, 'demo', 55, 55, 55, 55,
+                '2', 55, 'demo', '2', 55, 55, 'demo', '2', 1, 55,
+                55, '1', 55, '2', 55, '2', 55, '2', 55, '2']
+
+        def response_callback(resp):
+            pass
+        def finish_callback(resp):
+            self.assertTrue(resp.headertext.endswith(self.exit_text))
+        self.quiz_respond('new', '*120*112233#', response_callback)
+        for i in inputs:
+            self.quiz_respond('resume', i, response_callback)
+        self.quiz_respond('resume', 2, finish_callback)
+
+    def test_sequence_4(self):
+        """
+        Check the message on resuming after completion
+        """
+        inputs = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+                1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+
+        def response_callback(resp):
+            pass
+        def finish_callback(resp):
+            self.assertTrue(resp.headertext.endswith(self.completed_text))
+        self.quiz_respond('new', '*120*112233#', response_callback)
+        for i in inputs:
+            self.quiz_respond('resume', i, response_callback)
+        self.quiz_respond('new', '*120:112233#', finish_callback)
+
+    def test_with_resumes(self):
+        def callback1(resp):
+            self.assertEqual(4, len(resp.option_list))
+        self.quiz_respond('new','*120*112233#', callback1)
+        def callback2(resp):
+            self.assertEqual(2, len(resp.option_list))
+        self.quiz_respond('resume', 1, callback2)
+        def callback3(resp):
+            self.assertEqual(9, len(resp.option_list))
+        self.quiz_respond('resume', 1, callback3)
+        def callback4(resp):
+            self.assertEqual(4, len(resp.option_list))
+        self.quiz_respond('resume', 1, callback4)
 
         ## simulate resume
-        #inputs = ['*120*112233#']
-        #self.session_event = 'new'
-        #resp = self.run_input_sequence(inputs)
-        #self.assertEqual(4, len(resp.option_list))
+        def callback5(resp):
+            self.assertEqual(4, len(resp.option_list))
+        self.quiz_respond('new', '*120*112233#', callback5)
 
         ## and 3 more attempts
-        #inputs = [1]
-        #self.session_event = 'new'
-        #resp = self.run_input_sequence(inputs)
-        #self.assertEqual(2, len(resp.option_list))
-        #inputs = [1]
-        #self.session_event = 'new'
-        #resp = self.run_input_sequence(inputs)
-        #self.assertEqual(2, len(resp.option_list))
-        #inputs = [None]
-        #self.session_event = 'new'
-        #resp = self.run_input_sequence(inputs)
-        #self.assertEqual(0, len(resp.option_list))
-
-
-#class FakeRedisInputSequenceTest(RedisInputSequenceTest):
-
-    #def tearDown(self):
-        #pass
-
-    #def set_ds(self):
-        #self.ds = FakeRedis()
+        def callback5(resp):
+            self.assertEqual(4, len(resp.option_list))
+        self.quiz_respond('new', '*120*112233#', callback5)
+        def callback5(resp):
+            self.assertEqual(4, len(resp.option_list))
+        self.quiz_respond('new', '*120*112233#', callback5)
+        def callback5(resp):
+            self.assertEqual(0, len(resp.option_list))
+        self.quiz_respond('new', '*120*112233#', callback5)
