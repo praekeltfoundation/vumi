@@ -398,6 +398,31 @@ class EsmeTransceiver(Protocol):
             pass
 
     def _decode_message(self, message, data_coding):
+        """
+        Messages can arrive with one of a number of specified
+        encodings. We only handle a subset of these.
+
+        From the SMPP spec:
+
+        00000000 (0) SMSC Default Alphabet
+        00000001 (1) IA5(CCITTT.50)/ASCII(ANSIX3.4)
+        00000010 (2) Octet unspecified (8-bit binary)
+        00000011 (3) Latin1(ISO-8859-1)
+        00000100 (4) Octet unspecified (8-bit binary)
+        00000101 (5) JIS(X0208-1990)
+        00000110 (6) Cyrllic(ISO-8859-5)
+        00000111 (7) Latin/Hebrew (ISO-8859-8)
+        00001000 (8) UCS2(ISO/IEC-10646)
+        00001001 (9) PictogramEncoding
+        00001010 (10) ISO-2022-JP(MusicCodes)
+        00001011 (11) reserved
+        00001100 (12) reserved
+        00001101 (13) Extended Kanji JIS(X 0212-1990)
+        00001110 (14) KSC5601
+        00001111 (15) reserved
+
+        Particularly problematic are the "Octet unspecified" encodings.
+        """
         codec = {
             1: 'ascii',
             3: 'latin1',
