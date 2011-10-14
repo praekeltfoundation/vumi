@@ -186,14 +186,12 @@ class RedisInputSequenceTest(TestCase):
     def set_completed_text(self, fun):
         self.completed_text = fun(self.quiz['completed']['headertext'])
 
-    def run_input_sequence(self, inputs, force_order=None):
+    def run_input_sequence(self, inputs):
         user_in = inputs.pop(0)
         #print ''
         #print self.session_event
         #print user_in
         ik = self.get_quiz_entry()
-        if force_order:
-            ik.force_order(force_order)
         self.session_event = 'resume'
         #print self.session_event
         resp = ik.formulate_response(user_in)
@@ -278,35 +276,9 @@ class RedisInputSequenceTest(TestCase):
         #inputs = ['*120*112233#']
         #self.completed_input_sequence(inputs)
 
-    #def test_with_forced_order(self):
-        #force_order = [
-            #'demographic1',
-            #'demographic2',
-            #'demographic3',
-            #'demographic4',
-            #'question7',
-            #'continue',
-            #'question9',
-            #'continue',
-            #'question10',
-            #'continue',
-            #'question2',
-            #'continue',
-            #'question6',
-            #'continue',
-            #'question1',
-            #'continue',
-            #'question4',
-            #'continue',
-            #'question5',
-            #'continue',
-            #'question3',
-            #'continue',
-            #'question8',
-            #'continue'
-            #]
+    #def test_with_resumes(self):
         #inputs = ['*120*112233#']
-        #resp = self.run_input_sequence(inputs, force_order)
+        #resp = self.run_input_sequence(inputs)
         #self.assertEqual(4, len(resp.option_list))
         #inputs = [1]
         #resp = self.run_input_sequence(inputs)

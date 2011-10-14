@@ -697,10 +697,6 @@ class IkhweziQuiz():
             remaining_questions.append('continue')
         return remaining_questions
 
-    def force_order(self, remaining_questions):
-        self.remaining = remaining_questions
-        self.ds_set()
-
     def new_entrant(self, msisdn, provider=None):
         print "new_entrant"
         self.remaining = self.random_remaining_questionsing()
