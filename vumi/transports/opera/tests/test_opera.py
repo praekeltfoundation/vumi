@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from datetime import datetime, timedelta
 
 from twisted.internet import defer
@@ -224,7 +225,7 @@ class OperaTransportTestCase(TransportTestCase):
             rkey='%s.outbound' % self.transport_name)
 
     @inlineCallbacks
-    def test_outbound_crash(self):
+    def test_outbound_temporary_failure(self):
         """
         if for some reason the delivery of the SMS to opera crashes it
         shouldn't ACK the message over AMQ but leave it for a retry later
@@ -249,7 +250,53 @@ class OperaTransportTestCase(TransportTestCase):
         self.assertEqual(self.get_dispatched_events(), [])
         self.assertEqual(self.get_dispatched_messages(), [])
         [failure] = self.get_dispatched_failures()
+        self.assertEqual(failure['failure_code'], 'temporary')
         original_msg = failure['message']
         self.assertEqual(original_msg['to_addr'], '27761234567')
         self.assertEqual(original_msg['from_addr'], '27761234567')
         self.assertEqual(original_msg['content'], 'hello world')
+    
+    @inlineCallbacks
+    def test_outbound_permanent_failure(self):
+        """
+        if for some reason the Opera XML-RPC service gives us something
+        other than a 200 response it should consider it a permanent
+        failure
+        """
+        transport = yield self.mk_transport()
+
+        def _cb(*args, **kwargs):
+            """
+            Callback handler that raises an error when called
+            """
+            return defer.fail(ValueError(402, 'Payment Required'))
+
+        # monkey patch so we can mock errors happening remotely
+        transport.proxy = FakeXMLRPCService(_cb)
+
+        # send a message to the transport which'll hit the FakeXMLRPCService
+        # and as a result raise an error
+        yield self.dispatch(self.mk_msg(),
+            rkey='%s.outbound' % self.transport_name)
+
+        [failure] = self.get_dispatched_failures()
+        self.assertEqual(failure['failure_code'], 'permanent')
+    
+    @inlineCallbacks
+    def test_outbound_unicode_encoding(self):
+        """
+        Opera supports unicode encoded SMS messages as long as they
+        encoded as xmlrpc.Binary, test that.
+        """
+
+        content = u'üïéßø'
+
+        def _cb(method_called, xmlrpc_payload):
+            self.assertEqual(xmlrpc_payload['content'],
+                xmlrpc.Binary(content.encode('utf-8')))
+            return {'Identifier': '1'}
+
+        transport = yield self.mk_transport()
+        transport.proxy = FakeXMLRPCService(_cb)
+        yield self.dispatch(self.mk_msg(content=content),
+            rkey='%s.outbound' % self.transport_name)

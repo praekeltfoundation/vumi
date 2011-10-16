@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 
 from datetime import datetime, timedelta
-import xmlrpclib
 import redis
+import xmlrpclib
 
 from twisted.python import log
 from twisted.web import xmlrpc, http
@@ -12,6 +12,7 @@ from twisted.internet.defer import inlineCallbacks
 
 from vumi.utils import normalize_msisdn, get_deploy_int
 from vumi.transports import Transport
+from vumi.transports.failures import TemporaryFailure, PermanentFailure
 from vumi.transports.opera import utils
 
 
@@ -201,7 +202,7 @@ class OperaOutboundTransport(OperaBase):
         # check for non-ascii chars
         content = message["content"]
         if any(ord(c) > 127 for c in content):
-            content = xmlrpclib.Binary(content.encode('utf-8'))
+            content = xmlrpc.Binary(content.encode('utf-8'))
 
         xmlrpc_payload['Numbers'] = message['to_addr']
         xmlrpc_payload['SMSText'] = content
@@ -212,8 +213,11 @@ class OperaOutboundTransport(OperaBase):
 
         log.msg("Sending SMS via Opera: %s" % xmlrpc_payload)
 
-        proxy_response = yield self.proxy.callRemote('EAPIGateway.SendSMS',
+        d = self.proxy.callRemote('EAPIGateway.SendSMS',
             xmlrpc_payload)
+        d.addErrback(self.handle_outbound_message_failure)
+
+        proxy_response = yield d
 
         log.msg("Proxy response: %s" % proxy_response)
         transport_message_id = proxy_response['Identifier']
@@ -224,6 +228,22 @@ class OperaOutboundTransport(OperaBase):
         yield self.publish_ack(
                 user_message_id=message['message_id'],
                 sent_message_id=transport_message_id)
+    
+    def handle_outbound_message_failure(self, failure):
+        """
+        Decide what to do on certain failure cases.
+        """
+        # If the XML-RPC service isn't behaving properly
+        if failure.check(xmlrpc.Fault):
+            raise TemporaryFailure(failure)
+        # If the HTTP protocol returns something other than 200
+        elif failure.check(ValueError):
+            # print 'raising perm'
+            raise PermanentFailure(failure)
+        else:
+            # unspecified
+            # print 'raising unspecified', failure
+            raise failure
 
     def teardown_transport(self):
         log.msg("Stopping the OperaOutboundTransport: %s" %
