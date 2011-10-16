@@ -15,11 +15,11 @@ from smpp.pdu_builder import (BindTransceiver,
                                 SubmitMulti,
                                 EnquireLink,
                                 EnquireLinkResp,
-                                QuerySM
+                                QuerySM,
                                 )
 from smpp.pdu_inspector import (MultipartMessage,
                                 detect_multipart,
-                                multipart_key
+                                multipart_key,
                                 )
 
 from vumi.utils import get_deploy_int
@@ -179,7 +179,6 @@ class EsmeTransceiver(Protocol):
                 kwargs)
             log.msg(m)
 
-
     def build_maps(self):
         self.ESME_command_status_dispatch_map = {
             "ESME_ROK"              : self.dispatch_ok,
@@ -260,12 +259,11 @@ class EsmeTransceiver(Protocol):
             log.msg("ERROR handler:%s pdu:%s" % (handler, pdu))
         return handler
 
-    '''This maps SMPP error states to VUMI error states
-    For now assume VUMI understands:
-    connection -> temp fault or permanent fault
-    message -> temp fault or permanent fault
-    and the need to throttle the traffic on the connection
-    '''
+    # This maps SMPP error states to VUMI error states
+    # For now assume VUMI understands:
+    # connection -> temp fault or permanent fault
+    # message -> temp fault or permanent fault
+    # and the need to throttle the traffic on the connection
     def dispatch_ok(self):
         return self.error_handlers.get("ok")
 
@@ -379,7 +377,7 @@ class EsmeTransceiver(Protocol):
             self.lc_enquire = LoopingCall(self.enquire_link)
             self.lc_enquire.start(55.0)
             self.__connect_callback(self)
-        log.msg('%s STATE: %s' %(self.name, self.state))
+        log.msg('%s STATE: %s' % (self.name, self.state))
 
     def handle_submit_sm_resp(self, pdu):
         self.pop_unacked()
@@ -451,13 +449,13 @@ class EsmeTransceiver(Protocol):
                     + ' +err:(?P<err>...)'
                     + ' +[Tt]ext:(?P<text>.{,20})'
                     + '.*',
-                    pdu['body']['mandatory_parameters']['short_message'] or ''
+                    pdu['body']['mandatory_parameters']['short_message'] or '',
                     )
             if delivery_report:
                 self.__delivery_report_callback(
                         destination_addr=pdu['body']['mandatory_parameters']['destination_addr'],
                         source_addr=pdu['body']['mandatory_parameters']['source_addr'],
-                        delivery_report=delivery_report.groupdict()
+                        delivery_report=delivery_report.groupdict(),
                         )
             elif detect_multipart(pdu):
                 redis_key = "%s#multi_%s" % (

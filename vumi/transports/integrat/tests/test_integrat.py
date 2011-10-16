@@ -20,7 +20,11 @@ XML_TEMPLATE = '''
         <Service>SERVICECODE</Service>
         <Network ID="1" MCC="655" MNC="001"/>
         <OnUSSEvent Type="%(ussd_type)s">
-            <USSContext SessionID="%(sid)s" NetworkSID="%(network_sid)s" MSISDN="%(msisdn)s" Script="testscript" ConnStr="%(connstr)s"/>
+            <USSContext SessionID="%(sid)s"
+                        NetworkSID="%(network_sid)s"
+                        MSISDN="%(msisdn)s"
+                        Script="testscript"
+                        ConnStr="%(connstr)s"/>
             <USSText Type="TEXT">%(text)s</USSText>
         </OnUSSEvent>
     </Response>
