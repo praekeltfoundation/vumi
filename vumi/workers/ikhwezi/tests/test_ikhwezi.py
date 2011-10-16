@@ -66,6 +66,7 @@ class IkhweziModelTest(IkhweziBaseTest):
 
     def tearDown(self):
         return self.shutdown_db()
+        #pass
 
     def test_setup_and_teardown(self):
         self.assertTrue(True)

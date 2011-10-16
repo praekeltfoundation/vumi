@@ -579,7 +579,6 @@ class IkhweziModel(UglyModel):
             k, cls.param_format(v)) for k, v in kw.items()])
         query = "UPDATE %s SET %s WHERE msisdn = '%s'" % (
             cls.get_table_name(), valuespecs, msisdn)
-        print query
         return query
 
     @classmethod
