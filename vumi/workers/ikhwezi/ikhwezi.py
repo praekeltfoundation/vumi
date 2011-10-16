@@ -485,7 +485,7 @@ class IkhweziModel(UglyModel):
         ('id', 'SERIAL PRIMARY KEY'),
         ('msisdn', 'varchar UNIQUE NOT NULL'),
         ('provider', 'varchar'),
-        ('attempts', 'integer'),
+        ('sessions', 'integer'),
         ('msisdn_timestamp', 'timestamp'),
         ('question1', 'integer'),
         ('question2', 'integer'),
@@ -521,7 +521,7 @@ class IkhweziModel(UglyModel):
         )
     indexes = [
         'provider',
-        'attempts',
+        'sessions',
         'msisdn_timestamp',
         'question1',
         'question2',
@@ -673,7 +673,7 @@ class IkhweziQuiz():
                 self.language = self.lang(self.data['demographic1'] or 1)
                 self.remaining = json.loads(self.data['remaining_questions'])
                 if self.session_event == 'new':
-                    self.data['attempts'] += 1
+                    self.data['sessions'] += 1
                 d = self.existing_respond()
                 return d
         d = self.ds_get()
@@ -710,7 +710,7 @@ class IkhweziQuiz():
         self.data = {
                 'msisdn': str(msisdn),
                 'provider': provider,
-                'attempts': 1,
+                'sessions': 1,
                 'msisdn_timestamp': datetime.utcnow().strftime(
                     "%Y-%m-%d %H:%M:%S+00"),
                 'question1': None,
@@ -780,7 +780,7 @@ class IkhweziQuiz():
         except Exception, e:
             answer = None
 
-        if self.data['attempts'] > 4 or question_name == None:
+        if self.data['sessions'] > 4 or question_name == None:
             # terminate interaction
             question = self.quiz.get('completed')
             vmr = VodacomMessagingResponse(self.config)

@@ -78,7 +78,7 @@ class IkhweziModelTest(IkhweziBaseTest):
             item = IkhweziModel.get_item(txn, '555')
             self.assertEqual('555', item.msisdn)
             self.assertEqual('test_provider', item.provider)
-            self.assertNotEqual('test', item.attempts)
+            self.assertNotEqual('test', item.sessions)
         d = self.ri(_txn)
         return d
 
@@ -92,7 +92,7 @@ class IkhweziModelTest(IkhweziBaseTest):
             self.assertEqual('555', item.msisdn)
             self.assertEqual('other', item.provider)
             self.assertEqual(1, item.demographic1)
-            self.assertNotEqual('test', item.attempts)
+            self.assertNotEqual('test', item.sessions)
         d = self.ri(_txn)
         return d
 
