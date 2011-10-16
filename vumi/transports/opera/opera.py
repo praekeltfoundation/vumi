@@ -233,16 +233,14 @@ class OperaOutboundTransport(OperaBase):
         """
         Decide what to do on certain failure cases.
         """
-        # If the XML-RPC service isn't behaving properly
         if failure.check(xmlrpc.Fault):
+            # If the XML-RPC service isn't behaving properly
             raise TemporaryFailure(failure)
-        # If the HTTP protocol returns something other than 200
         elif failure.check(ValueError):
-            # print 'raising perm'
+            # If the HTTP protocol returns something other than 200
             raise PermanentFailure(failure)
         else:
-            # unspecified
-            # print 'raising unspecified', failure
+            # Unspecified
             raise failure
 
     def teardown_transport(self):
