@@ -515,7 +515,9 @@ class IkhweziModel(UglyModel):
         ('demographic2_timestamp', 'timestamp'),
         ('demographic3_timestamp', 'timestamp'),
         ('demographic4_timestamp', 'timestamp'),
-        ('remaining_questions', 'varchar')
+        ('remaining_questions', 'varchar'),
+        ('winner', 'varchar'),
+        ('winner_timestamp', 'timestamp')
         )
     indexes = [
         'provider',
@@ -531,24 +533,11 @@ class IkhweziModel(UglyModel):
         'question8',
         'question9',
         'question10',
-        #'question1_timestamp',
-        #'question2_timestamp',
-        #'question3_timestamp',
-        #'question4_timestamp',
-        #'question5_timestamp',
-        #'question6_timestamp',
-        #'question7_timestamp',
-        #'question8_timestamp',
-        #'question9_timestamp',
-        #'question10_timestamp',
         'demographic1',
         'demographic2',
         'demographic3',
         'demographic4',
-        #'demographic1_timestamp',
-        #'demographic2_timestamp',
-        #'demographic3_timestamp',
-        #'demographic4_timestamp'
+        'winner'
         ]
 
     @classmethod
@@ -568,7 +557,13 @@ class IkhweziModel(UglyModel):
 
     @classmethod
     def param_format(cls, p):
-        s = json.dumps(p)
+        try:
+            s = json.dumps(p)
+        except:
+            try:
+                s = json.dumps(p.strftime("%Y-%m-%d %H:%M:%S+00"))
+            except:
+                s = json.dumps(str(p))
         if s.startswith('"'):
             s = "'%s'" % s[1:-1]
         return s
@@ -576,35 +571,47 @@ class IkhweziModel(UglyModel):
     @classmethod
     def update_query(cls, **kw):
         msisdn = kw.pop('msisdn')
+        try:
+            kw.pop('id')
+        except:
+            pass
         valuespecs = ", ".join(["%s = %s" % (
             k, cls.param_format(v)) for k, v in kw.items()])
-        return "UPDATE %s SET %s WHERE msisdn = '%s'" % (
+        query = "UPDATE %s SET %s WHERE msisdn = '%s'" % (
             cls.get_table_name(), valuespecs, msisdn)
+        print query
+        return query
 
     @classmethod
     def update_item(cls, txn, **params):
         txn.execute(cls.update_query(**params))
-        #txn.execute("SELECT lastval()")
-        #return txn.fetchone()[0]
+        return None
 
 class IkhweziQuiz():
 
-    REDIS_PREFIX = "vumi_vodacom_ikhwezi"
-
-    def __init__(self, config, quiz, translations, db,
-            msisdn, session_event, provider, request, response_callback):
+    def __init__(self, config, quiz, translations, db):
         self.config = config
         self.quiz = quiz
         self.translations = translations
         self.db = db
-        msisdn = str(msisdn)
+
+    def respond(self, msisdn, session_event, provider, request,
+            response_callback):
+        self.msisdn = str(msisdn)
+        self.session_event = session_event
+        self.provider = provider
         self.request = request
         self.response_callback = response_callback
-        self.retrieve_entrant(msisdn, provider)
-        #if session_event and session_event == 'new':
-            #self.data['attempts'] += 1
-            #self.ds_set()
-        #response_callback(self.formulate_response(request))
+        d = self.retrieve_entrant()
+        return d
+
+    def existing_respond(self, *args, **kwargs):
+        def send_response(*args, **kwargs):
+            self.response_callback(self.response)
+        self.response = self.formulate_response()
+        d = self.ds_set()
+        d.addCallback(send_response)
+        return d
 
     def ri(self, *args, **kw):
         return self.db.runInteraction(*args, **kw)
@@ -616,16 +623,16 @@ class IkhweziQuiz():
         d = self.ri(_txn)
         return d
 
-    def ds_get(self, msisdn):
+    def ds_get(self):
         def _txn(txn):
-            item = IkhweziModel.get_item(txn, msisdn)
+            item = IkhweziModel.get_item(txn, self.msisdn)
             return item
         d = self.ri(_txn)
         return d
 
-    def ds_new(self, **kwargs):
+    def ds_new(self):
         def _txn(txn):
-            item = IkhweziModel.create_item(txn, **kwargs)
+            item = IkhweziModel.create_item(txn, **self.data)
             return item
         d = self.ri(_txn)
         return d
@@ -654,23 +661,26 @@ class IkhweziQuiz():
             else:
                 return newstring
 
-    def retrieve_entrant(self, msisdn, provider):
-        print "retrieve_entrant"
+    def retrieve_entrant(self):
         def handle_item(item):
             if item == None:
-                self.new_entrant(msisdn, provider)
+                d = self.new_entrant(self.msisdn, self.provider)
+                return d
             else:
                 self.data = {}
                 for t in item.fields:
                     self.data[t[0]] = getattr(item, t[0])
-                print self.data
                 self.language = self.lang(self.data['demographic1'] or 1)
                 self.remaining = json.loads(self.data['remaining_questions'])
-                self.response_callback(self.formulate_response(self.request))
-        d = self.ds_get(msisdn)
+                if self.session_event == 'new':
+                    self.data['attempts'] += 1
+                d = self.existing_respond()
+                return d
+        d = self.ds_get()
         d.addCallback(handle_item)
+        return d
 
-    def random_remaining_questionsing(self):
+    def random_remaining_questions(self):
         remaining_questions = [
                 'demographic1',
                 'demographic2',
@@ -695,13 +705,12 @@ class IkhweziQuiz():
         return remaining_questions
 
     def new_entrant(self, msisdn, provider=None):
-        print "new_entrant"
-        self.remaining = self.random_remaining_questionsing()
+        self.remaining = self.random_remaining_questions()
         self.language = "English"
         self.data = {
                 'msisdn': str(msisdn),
                 'provider': provider,
-                'attempts': 0,
+                'attempts': 1,
                 'msisdn_timestamp': datetime.utcnow().strftime(
                     "%Y-%m-%d %H:%M:%S+00"),
                 'question1': None,
@@ -732,12 +741,14 @@ class IkhweziQuiz():
                 'demographic2_timestamp': None,
                 'demographic3_timestamp': None,
                 'demographic4_timestamp': None,
-                'remaining_questions': json.dumps(self.remaining)}
+                'remaining_questions': json.dumps(self.remaining),
+                'winner': None,
+                'winner_timestamp': None}
         def on_new(item):
-            print "@@@@@@@@@@@@@@ on_new"
-            self.response_callback(self.formulate_response(self.request))
-        d = self.ds_new(**self.data)
+            self.response_callback(self.formulate_response())
+        d = self.ds_new()
         d.addCallback(on_new)
+        return d
 
     def answer_question(self, question_name, answer):
         reply = None
@@ -749,27 +760,24 @@ class IkhweziQuiz():
             self.data[question_name + '_timestamp'] = \
                     datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S+00")
             self.remaining.pop(0)
-            self.ds_set()
             self.language = self.lang(self.data['demographic1'] or 1)
         return reply
 
     def do_continue(self, answer):
         exit = False
         self.remaining.pop(0)
-        self.ds_set()
         if answer == 2 or len(self.remaining) == 0:
             exit = True
         return exit
 
-    def formulate_response(self, answer):
+    def formulate_response(self):
         question_name = None
         if len(self.remaining):
             question_name = self.remaining[0]
 
         try:
-            answer = int(answer)
+            answer = int(self.request)
         except Exception, e:
-            log.msg(e)
             answer = None
 
         if self.data['attempts'] > 4 or question_name == None:
@@ -864,7 +872,8 @@ class IkhweziQuizWorker(Worker):
                 self.config,
                 self.quiz,
                 self.translations,
-                self.db,
+                self.db)
+        ik.respond(
                 msisdn,
                 session_event,
                 provider,
