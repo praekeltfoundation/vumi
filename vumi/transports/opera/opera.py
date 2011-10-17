@@ -3,7 +3,6 @@
 
 from datetime import datetime, timedelta
 import redis
-import xmlrpclib
 
 from twisted.python import log
 from twisted.web import xmlrpc, http
@@ -228,7 +227,7 @@ class OperaOutboundTransport(OperaBase):
         yield self.publish_ack(
                 user_message_id=message['message_id'],
                 sent_message_id=transport_message_id)
-    
+
     def handle_outbound_message_failure(self, failure):
         """
         Decide what to do on certain failure cases.

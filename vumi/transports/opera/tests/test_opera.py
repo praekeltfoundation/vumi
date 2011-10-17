@@ -103,7 +103,8 @@ class OperaTransportTestCase(TransportTestCase):
           <field name="RemoteNetwork" type = "string">mtn-za</field>
           <field name="BSDate-tomorrow" type = "string">20100605</field>
           <field name="BSDate-today" type = "string">20100604</field>
-          <field name="ReceiveDate" type = "date">2010-06-04 15:51:25 +0000</field>
+          <field name="ReceiveDate" type = "date">
+                 2010-06-04 15:51:25 +0000</field>
           <field name="Local" type = "string">*32323</field>
           <field name="ClientID" type = "string">4</field>
           <field name="ChannelID" type = "string">111</field>
@@ -125,7 +126,8 @@ class OperaTransportTestCase(TransportTestCase):
           <field name="Parsed" type = "string"></field>
           <field name="ServiceName" type = "string">Prktl Vumi</field>
           <field name="BSDate-thisweek" type = "string">20100531</field>
-          <field name="ServiceEndDate" type = "string">2010-06-30 07:47:00 +0200</field>
+          <field name="ServiceEndDate" type = "string">
+                 2010-06-30 07:47:00 +0200</field>
           <field name="Now" type = "date">2010-06-04 15:51:27 +0000</field>
         </bspostevent>
         """.strip()
@@ -148,8 +150,8 @@ class OperaTransportTestCase(TransportTestCase):
     @inlineCallbacks
     def test_outbound_ok(self):
         """
-        Outbound message we send should hit the XML-RPC service with the correct
-        parameters
+        Outbound message we send should hit the XML-RPC service with the
+        correct parameters
         """
 
         transport = yield self.mk_transport()
@@ -198,8 +200,8 @@ class OperaTransportTestCase(TransportTestCase):
     @inlineCallbacks
     def test_outbound_ok_with_metadata(self):
         """
-        Outbound message we send should hit the XML-RPC service with the correct
-        parameters
+        Outbound message we send should hit the XML-RPC service with the
+        correct parameters
         """
 
         transport = yield self.mk_transport()
@@ -207,7 +209,8 @@ class OperaTransportTestCase(TransportTestCase):
 
         def _cb(method_called, xmlrpc_payload):
             self.assertEqual(xmlrpc_payload['Delivery'], fixed_date)
-            self.assertEqual(xmlrpc_payload['Expiry'], fixed_date + timedelta(hours=1))
+            self.assertEqual(xmlrpc_payload['Expiry'],
+                             fixed_date + timedelta(hours=1))
             self.assertEqual(xmlrpc_payload['Priority'], 'high')
             self.assertEqual(xmlrpc_payload['Receipt'], 'N')
             return {
@@ -255,7 +258,7 @@ class OperaTransportTestCase(TransportTestCase):
         self.assertEqual(original_msg['to_addr'], '27761234567')
         self.assertEqual(original_msg['from_addr'], '27761234567')
         self.assertEqual(original_msg['content'], 'hello world')
-    
+
     @inlineCallbacks
     def test_outbound_permanent_failure(self):
         """
@@ -281,7 +284,7 @@ class OperaTransportTestCase(TransportTestCase):
 
         [failure] = self.get_dispatched_failures()
         self.assertEqual(failure['failure_code'], 'permanent')
-    
+
     @inlineCallbacks
     def test_outbound_unicode_encoding(self):
         """
