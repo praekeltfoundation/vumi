@@ -69,7 +69,14 @@ class OperaBase(Transport):
 
     # After how many seconds should the transport expire keys
     # and disregard delivery reports? Defaults to a week.
-    MESSAGE_ID_LIFETIME = 60 * 60 * 24 * 7
+    DEFAULT_MESSAGE_ID_LIFETIME = 60 * 60 * 24 * 7
+
+    def validate_config(self):
+        """
+        Transport-specific config validation happens in here.
+        """
+        self.message_id_lifetime = self.config.get('message_id_lifetime',
+                                           self.DEFAULT_MESSAGE_ID_LIFETIME)
 
     def setup_transport(self):
         dbindex = get_deploy_int(self._amqp_client.vhost)
@@ -91,7 +98,7 @@ class OperaBase(Transport):
         """
         rkey = '%s#%s' % (self.r_prefix, identifier)
         self.r_server.set(rkey, message_id)
-        self.r_server.expire(rkey, self.MESSAGE_ID_LIFETIME)
+        self.r_server.expire(rkey, self.message_id_lifetime)
 
     def get_message_id_for_identifier(self, identifier):
         """
@@ -113,6 +120,7 @@ class OperaInboundTransport(OperaBase):
         """
         Transport-specific config validation happens in here.
         """
+        super(OperaInboundTransport, self).validate_config()
         self.web_receipt_path = self.config['web_receipt_path']
         self.web_receive_path = self.config['web_receive_path']
         self.web_port = int(self.config['web_port'])
@@ -171,6 +179,7 @@ class OperaOutboundTransport(OperaBase):
     """
 
     def validate_config(self):
+        super(OperaOutboundTransport, self).validate_config()
         self.opera_url = self.config['url']
         self.opera_channel = self.config['channel']
         self.opera_password = self.config['password']
