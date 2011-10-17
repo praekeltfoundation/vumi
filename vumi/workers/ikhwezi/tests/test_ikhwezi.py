@@ -2,7 +2,7 @@ import yaml
 
 from twisted.python import log
 from twisted.trial.unittest import TestCase
-from twisted.internet.defer import succeed
+from twisted.internet.defer import succeed, inlineCallbacks
 
 from vumi.transports.httprpc.vodacom_messaging import VodacomMessagingResponse
 from vumi.workers.ikhwezi.ikhwezi import (
@@ -68,20 +68,20 @@ class IkhweziModelTest(IkhweziBaseTest):
         return self.shutdown_db()
         #pass
 
-    def test_setup_and_teardown(self):
-        self.assertTrue(True)
+    #def test_setup_and_teardown(self):
+        #self.assertTrue(True)
 
-    def test_insert_and_get_msisdn(self):
-        def _txn(txn):
-            self.assertEqual(0, IkhweziModel.count_rows(txn))
-            IkhweziModel.create_item(txn, msisdn='555', provider='test_provider')
-            self.assertEqual(1, IkhweziModel.count_rows(txn))
-            item = IkhweziModel.get_item(txn, '555')
-            self.assertEqual('555', item.msisdn)
-            self.assertEqual('test_provider', item.provider)
-            self.assertNotEqual('test', item.sessions)
-        d = self.ri(_txn)
-        return d
+    #def test_insert_and_get_msisdn(self):
+        #def _txn(txn):
+            #self.assertEqual(0, IkhweziModel.count_rows(txn))
+            #IkhweziModel.create_item(txn, msisdn='555', provider='test_provider')
+            #self.assertEqual(1, IkhweziModel.count_rows(txn))
+            #item = IkhweziModel.get_item(txn, '555')
+            #self.assertEqual('555', item.msisdn)
+            #self.assertEqual('test_provider', item.provider)
+            #self.assertNotEqual('test', item.sessions)
+        #d = self.ri(_txn)
+        #return d
 
     def test_insert_update_and_get_msisdn(self):
         def _txn(txn):
@@ -116,7 +116,8 @@ class IkhweziQuizTest(IkhweziBaseTest):
         self.config = {
                 'web_host': 'vumi.p.org',
                 'web_path': '/api/v1/ussd/vmes/'}
-        self.setup_db(IkhweziModel)
+        d = self.setup_db(IkhweziModel)
+        return d
 
     def tearDown(self):
         return self.shutdown_db()
@@ -140,6 +141,7 @@ class IkhweziQuizTest(IkhweziBaseTest):
     def set_completed_text(self, fun):
         self.completed_text = fun(self.quiz['completed']['headertext'])
 
+    @inlineCallbacks
     def test_answer_out_of_range_1(self):
         """
         The 66 is impossible
@@ -148,13 +150,16 @@ class IkhweziQuizTest(IkhweziBaseTest):
 
         def response_callback(resp):
             pass
+
         def finish_callback(resp):
             return self.assertTrue(resp.headertext.endswith(self.exit_text))
+
         self.quiz_respond('new', '*120*112233#', response_callback)
         for i in inputs:
-            self.quiz_respond('resume', i, response_callback)
-        d = self.quiz_respond('resume', 2, finish_callback)
-        return d
+            print "start"
+            yield self.quiz_respond('resume', i, response_callback)
+            print "finish"
+        yield self.quiz_respond('resume', 2, finish_callback)
 
     #def test_answer_out_of_range_2(self):
         #"""
