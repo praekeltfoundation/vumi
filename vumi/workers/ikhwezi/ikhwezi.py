@@ -663,7 +663,6 @@ class IkhweziQuiz():
     def retrieve_entrant(self):
         def handle_item(item):
             if item is None:
-                print "NEW" * 11
                 d = self.new_entrant(self.msisdn, self.provider)
                 return d
             else:

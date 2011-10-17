@@ -68,20 +68,20 @@ class IkhweziModelTest(IkhweziBaseTest):
         return self.shutdown_db()
         #pass
 
-    #def test_setup_and_teardown(self):
-        #self.assertTrue(True)
+    def test_setup_and_teardown(self):
+        self.assertTrue(True)
 
-    #def test_insert_and_get_msisdn(self):
-        #def _txn(txn):
-            #self.assertEqual(0, IkhweziModel.count_rows(txn))
-            #IkhweziModel.create_item(txn, msisdn='555', provider='test_provider')
-            #self.assertEqual(1, IkhweziModel.count_rows(txn))
-            #item = IkhweziModel.get_item(txn, '555')
-            #self.assertEqual('555', item.msisdn)
-            #self.assertEqual('test_provider', item.provider)
-            #self.assertNotEqual('test', item.sessions)
-        #d = self.ri(_txn)
-        #return d
+    def test_insert_and_get_msisdn(self):
+        def _txn(txn):
+            self.assertEqual(0, IkhweziModel.count_rows(txn))
+            IkhweziModel.create_item(txn, msisdn='555', provider='test_provider')
+            self.assertEqual(1, IkhweziModel.count_rows(txn))
+            item = IkhweziModel.get_item(txn, '555')
+            self.assertEqual('555', item.msisdn)
+            self.assertEqual('test_provider', item.provider)
+            self.assertNotEqual('test', item.sessions)
+        d = self.ri(_txn)
+        return d
 
     def test_insert_update_and_get_msisdn(self):
         def _txn(txn):
@@ -150,155 +150,160 @@ class IkhweziQuizTest(IkhweziBaseTest):
 
         def response_callback(resp):
             pass
-
         def finish_callback(resp):
             return self.assertTrue(resp.headertext.endswith(self.exit_text))
-
-        self.quiz_respond('new', '*120*112233#', response_callback)
+        yield self.quiz_respond('new', '*120*112233#', response_callback)
         for i in inputs:
-            print "start"
             yield self.quiz_respond('resume', i, response_callback)
-            print "finish"
         yield self.quiz_respond('resume', 2, finish_callback)
 
-    #def test_answer_out_of_range_2(self):
-        #"""
-        #The 22 is impossible
-        #"""
-        #inputs = [22, 1, 2, 2, 2, 2]
+    @inlineCallbacks
+    def test_answer_out_of_range_2(self):
+        """
+        The 22 is impossible
+        """
+        inputs = [22, 1, 2, 2, 2, 2]
 
-        #def response_callback(resp):
-            #pass
-        #def finish_callback(resp):
-            #self.assertTrue(resp.headertext.endswith(self.exit_text))
-        #self.quiz_respond('new', '*120*112233#', response_callback)
-        #for i in inputs:
-            #self.quiz_respond('resume', i, response_callback)
-        #self.quiz_respond('resume', 2, finish_callback)
+        def response_callback(resp):
+            pass
+        def finish_callback(resp):
+            self.assertTrue(resp.headertext.endswith(self.exit_text))
+        yield self.quiz_respond('new', '*120*112233#', response_callback)
+        for i in inputs:
+            yield self.quiz_respond('resume', i, response_callback)
+        yield self.quiz_respond('resume', 2, finish_callback)
 
-    #def test_answer_wrong_type_1(self):
-        #inputs = [1, "is there a 3rd option?", 1, 1, 1, 1]
+    @inlineCallbacks
+    def test_answer_wrong_type_1(self):
+        inputs = [1, "is there a 3rd option?", 1, 1, 1, 1]
 
-        #def response_callback(resp):
-            #pass
-        #def finish_callback(resp):
-            #self.assertTrue(resp.headertext.endswith(self.exit_text))
-        #self.quiz_respond('new', '*120*112233#', response_callback)
-        #for i in inputs:
-            #self.quiz_respond('resume', i, response_callback)
-        #self.quiz_respond('resume', 2, finish_callback)
+        def response_callback(resp):
+            pass
+        def finish_callback(resp):
+            self.assertTrue(resp.headertext.endswith(self.exit_text))
+        yield self.quiz_respond('new', '*120*112233#', response_callback)
+        for i in inputs:
+            yield self.quiz_respond('resume', i, response_callback)
+        yield self.quiz_respond('resume', 2, finish_callback)
 
 
-    #def test_answer_wrong_type_2(self):
-        #inputs = [1, '*120*11223344#', 1, 1, 1, 2]
+    @inlineCallbacks
+    def test_answer_wrong_type_2(self):
+        inputs = [1, '*120*11223344#', 1, 1, 1, 2]
 
-        #def response_callback(resp):
-            #pass
-        #def finish_callback(resp):
-            #self.assertTrue(resp.headertext.endswith(self.exit_text))
-        #self.quiz_respond('new', '*120*112233#', response_callback)
-        #for i in inputs:
-            #self.quiz_respond('resume', i, response_callback)
-        #self.quiz_respond('resume', 2, finish_callback)
+        def response_callback(resp):
+            pass
+        def finish_callback(resp):
+            self.assertTrue(resp.headertext.endswith(self.exit_text))
+        yield self.quiz_respond('new', '*120*112233#', response_callback)
+        for i in inputs:
+            yield self.quiz_respond('resume', i, response_callback)
+        yield self.quiz_respond('resume', 2, finish_callback)
 
-    #def test_answer_wrong_type_3(self):
-        #"""
-        #Mismatches on Continue question auto continue
-        #"""
-        #inputs = [1, 1, "huh", 1, 2, 1, 'exit', 1]
+    @inlineCallbacks
+    def test_answer_wrong_type_3(self):
+        """
+        Mismatches on Continue question auto continue
+        """
+        inputs = [1, 1, "huh", 1, 2, 1, 'exit', 1]
 
-        #def response_callback(resp):
-            #pass
-        #def finish_callback(resp):
-            #self.assertTrue(resp.headertext.endswith(self.exit_text))
-        #self.quiz_respond('new', '*120*112233#', response_callback)
-        #for i in inputs:
-            #self.quiz_respond('resume', i, response_callback)
-        #self.quiz_respond('resume', 2, finish_callback)
+        def response_callback(resp):
+            pass
+        def finish_callback(resp):
+            self.assertTrue(resp.headertext.endswith(self.exit_text))
+        yield self.quiz_respond('new', '*120*112233#', response_callback)
+        for i in inputs:
+            yield self.quiz_respond('resume', i, response_callback)
+        yield self.quiz_respond('resume', 2, finish_callback)
 
-    #def test_sequence_1(self):
-        #inputs = ['blah', 55, '1', 1, 55, 55, 'blah',
-                #'1', 1, 55, 'blah', 55, '1', 2, 2]
+    @inlineCallbacks
+    def test_sequence_1(self):
+        inputs = ['blah', 55, '1', 1, 55, 55, 'blah',
+                '1', 1, 55, 'blah', 55, '1', 2, 2]
 
-        #def response_callback(resp):
-            #pass
-        #def finish_callback(resp):
-            #self.assertTrue(resp.headertext.endswith(self.exit_text))
-        #self.quiz_respond('new', '*120*112233#', response_callback)
-        #for i in inputs:
-            #self.quiz_respond('resume', i, response_callback)
-        #self.quiz_respond('resume', 2, finish_callback)
+        def response_callback(resp):
+            pass
+        def finish_callback(resp):
+            self.assertTrue(resp.headertext.endswith(self.exit_text))
+        yield self.quiz_respond('new', '*120*112233#', response_callback)
+        for i in inputs:
+            yield self.quiz_respond('resume', i, response_callback)
+        yield self.quiz_respond('resume', 2, finish_callback)
 
-    #def test_sequence_2(self):
-        #inputs = [1, '1', 55, 2, '1', 55, 1, '1',
-                #55, 2, 55, '2', 1, '1', 1, '1', 1, 55, '2',
-                #55, '1', 1, '1', 55, '2', 'bye', 'no', 1]
+    @inlineCallbacks
+    def test_sequence_2(self):
+        inputs = [1, '1', 55, 2, '1', 55, 1, '1',
+                55, 2, 55, '2', 1, '1', 1, '1', 1, 55, '2',
+                55, '1', 1, '1', 55, '2', 'bye', 'no', 1]
 
-        #def response_callback(resp):
-            #pass
-        #def finish_callback(resp):
-            #self.assertTrue(resp.headertext.endswith(self.exit_text))
-        #self.quiz_respond('new', '*120*112233#', response_callback)
-        #for i in inputs:
-            #self.quiz_respond('resume', i, response_callback)
-        #self.quiz_respond('resume', 2, finish_callback)
+        def response_callback(resp):
+            pass
+        def finish_callback(resp):
+            self.assertTrue(resp.headertext.endswith(self.exit_text))
+        yield self.quiz_respond('new', '*120*112233#', response_callback)
+        for i in inputs:
+            yield self.quiz_respond('resume', i, response_callback)
+        yield self.quiz_respond('resume', 2, finish_callback)
 
-    #def test_sequence_3(self):
-        #inputs = ['demo', '1', 55, 'demo', 55, 55, 55, 55,
-                #'2', 55, 'demo', '2', 55, 55, 'demo', '2', 1, 55,
-                #55, '1', 55, '2', 55, '2', 55, '2', 55, '2']
+    @inlineCallbacks
+    def test_sequence_3(self):
+        inputs = ['demo', '1', 55, 'demo', 55, 55, 55, 55,
+                '2', 55, 'demo', '2', 55, 55, 'demo', '2', 1, 55,
+                55, '1', 55, '2', 55, '2', 55, '2', 55, '2']
 
-        #def response_callback(resp):
-            #pass
-        #def finish_callback(resp):
-            #self.assertTrue(resp.headertext.endswith(self.exit_text))
-        #self.quiz_respond('new', '*120*112233#', response_callback)
-        #for i in inputs:
-            #self.quiz_respond('resume', i, response_callback)
-        #self.quiz_respond('resume', 2, finish_callback)
+        def response_callback(resp):
+            pass
+        def finish_callback(resp):
+            self.assertTrue(resp.headertext.endswith(self.exit_text))
+        yield self.quiz_respond('new', '*120*112233#', response_callback)
+        for i in inputs:
+            yield self.quiz_respond('resume', i, response_callback)
+        yield self.quiz_respond('resume', 2, finish_callback)
 
-    #def test_sequence_4(self):
-        #"""
-        #Check the message on resuming after completion
-        #"""
-        #inputs = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-                #1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+    @inlineCallbacks
+    def test_sequence_4(self):
+        """
+        Check the message on resuming after completion
+        """
+        inputs = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+                1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
 
-        #def response_callback(resp):
-            #pass
-        #def finish_callback(resp):
-            #self.assertTrue(resp.headertext.endswith(self.completed_text))
-        #self.quiz_respond('new', '*120*112233#', response_callback)
-        #for i in inputs:
-            #self.quiz_respond('resume', i, response_callback)
-        #self.quiz_respond('new', '*120:112233#', finish_callback)
+        def response_callback(resp):
+            pass
+        def finish_callback(resp):
+            self.assertTrue(resp.headertext.endswith(self.completed_text))
+        yield self.quiz_respond('new', '*120*112233#', response_callback)
+        for i in inputs:
+            yield self.quiz_respond('resume', i, response_callback)
+        yield self.quiz_respond('new', '*120:112233#', finish_callback)
 
-    #def test_with_resumes(self):
-        #def callback1(resp):
-            #self.assertEqual(4, len(resp.option_list))
-        #self.quiz_respond('new','*120*112233#', callback1)
-        #def callback2(resp):
-            #self.assertEqual(2, len(resp.option_list))
-        #self.quiz_respond('resume', 1, callback2)
-        #def callback3(resp):
-            #self.assertEqual(9, len(resp.option_list))
-        #self.quiz_respond('resume', 1, callback3)
-        #def callback4(resp):
-            #self.assertEqual(4, len(resp.option_list))
-        #self.quiz_respond('resume', 1, callback4)
+    @inlineCallbacks
+    def test_with_resumes(self):
+        def callback1(resp):
+            self.assertEqual(4, len(resp.option_list))
+        yield self.quiz_respond('new','*120*112233#', callback1)
+        def callback2(resp):
+            self.assertEqual(2, len(resp.option_list))
+        yield self.quiz_respond('resume', 1, callback2)
+        def callback3(resp):
+            self.assertEqual(9, len(resp.option_list))
+        yield self.quiz_respond('resume', 1, callback3)
+        def callback4(resp):
+            self.assertEqual(4, len(resp.option_list))
+        yield self.quiz_respond('resume', 1, callback4)
 
-        ### simulate resume
-        #def callback5(resp):
-            #self.assertEqual(4, len(resp.option_list))
-        #self.quiz_respond('new', '*120*112233#', callback5)
+        ## simulate resume
+        def callback5(resp):
+            self.assertEqual(4, len(resp.option_list))
+        yield self.quiz_respond('new', '*120*112233#', callback5)
 
-        ### and 3 more attempts
-        #def callback5(resp):
-            #self.assertEqual(4, len(resp.option_list))
-        #self.quiz_respond('new', '*120*112233#', callback5)
-        #def callback5(resp):
-            #self.assertEqual(4, len(resp.option_list))
-        #self.quiz_respond('new', '*120*112233#', callback5)
-        #def callback5(resp):
-            #self.assertEqual(0, len(resp.option_list))
-        #self.quiz_respond('new', '*120*112233#', callback5)
+        ## and 3 more attempts
+        def callback5(resp):
+            self.assertEqual(4, len(resp.option_list))
+        yield self.quiz_respond('new', '*120*112233#', callback5)
+        def callback5(resp):
+            self.assertEqual(4, len(resp.option_list))
+        yield self.quiz_respond('new', '*120*112233#', callback5)
+        def callback5(resp):
+            self.assertEqual(0, len(resp.option_list))
+        yield self.quiz_respond('new', '*120*112233#', callback5)
