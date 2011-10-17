@@ -182,17 +182,17 @@ class VodacomMessagingResponseTest(TestCase):
         self.assertEquals(self.stdXML(vmr), self.stdXML(ref))
         vmr.set_context('username')
         ref = '''
-            <request>
-                <headertext>Please enter your name</headertext>
-                <options>
-                    <option
-                        callback="http://vumi.p.org/api/v1/ussd/vmes/?context=username"
-                        command="1"
-                        display="False"
-                        order="1" />
-                </options>
-            </request>
-            '''
+        <request>
+            <headertext>Please enter your name</headertext>
+            <options>
+            <option
+                callback="http://vumi.p.org/api/v1/ussd/vmes/?context=username"
+                command="1"
+                display="False"
+                order="1" />
+            </options>
+        </request>
+        '''
         self.assertEquals(self.stdXML(vmr), self.stdXML(ref))
 
     def testMakeOptionMessage(self):
@@ -276,30 +276,30 @@ class VodacomMessagingResponseTest(TestCase):
 
         vmr.set_context('pickcard')
         ref = '''
-            <request>
-                <headertext>Pick a card</headertext>
-                <options>
-                    <option
-                        callback="http://vumi.p.org/api/v1/ussd/vmes/?context=pickcard"
-                        command="1"
-                        display="True"
-                        order="1"
-                        >King of spades</option>
-                    <option
-                        callback="http://vumi.p.org/api/v1/ussd/vmes/?context=pickcard"
-                        command="2"
-                        display="True"
-                        order="2"
-                        >Queen of diamonds</option>
-                    <option
-                        callback="http://vumi.p.org/api/v1/ussd/vmes/?context=pickcard"
-                        command="3"
-                        display="True"
-                        order="3"
-                        >Joker</option>
-                </options>
-            </request>
-            '''
+        <request>
+            <headertext>Pick a card</headertext>
+            <options>
+            <option
+                callback="http://vumi.p.org/api/v1/ussd/vmes/?context=pickcard"
+                command="1"
+                display="True"
+                order="1"
+                >King of spades</option>
+            <option
+                callback="http://vumi.p.org/api/v1/ussd/vmes/?context=pickcard"
+                command="2"
+                display="True"
+                order="2"
+                >Queen of diamonds</option>
+            <option
+                callback="http://vumi.p.org/api/v1/ussd/vmes/?context=pickcard"
+                command="3"
+                display="True"
+                order="3"
+                >Joker</option>
+            </options>
+        </request>
+        '''
         self.assertEquals(self.stdXML(vmr), self.stdXML(ref))
 
     def testMakeOrderedOptionMessage(self):
