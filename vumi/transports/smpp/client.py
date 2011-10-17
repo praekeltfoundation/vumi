@@ -27,54 +27,56 @@ from vumi.utils import get_deploy_int
 
 # TODO this will move to pdu_inspector in python-smpp
 ESME_command_status_map = {
-    "ESME_ROK"              : "No Error",
-    "ESME_RINVMSGLEN"       : "Message Length is invalid",
-    "ESME_RINVCMDLEN"       : "Command Length is invalid",
-    "ESME_RINVCMDID"        : "Invalid Command ID",
-    "ESME_RINVBNDSTS"       : "Incorrect BIND Status for given command",
-    "ESME_RALYBND"          : "ESME Already in Bound State",
-    "ESME_RINVPRTFLG"       : "Invalid Priority Flag",
-    "ESME_RINVREGDLVFLG"    : "Invalid Registered Delivery Flag",
-    "ESME_RSYSERR"          : "System Error",
-    "ESME_RINVSRCADR"       : "Invalid Source Address",
-    "ESME_RINVDSTADR"       : "Invalid Dest Addr",
-    "ESME_RINVMSGID"        : "Message ID is invalid",
-    "ESME_RBINDFAIL"        : "Bind Failed",
-    "ESME_RINVPASWD"        : "Invalid Password",
-    "ESME_RINVSYSID"        : "Invalid System ID",
-    "ESME_RCANCELFAIL"      : "Cancel SM Failed",
-    "ESME_RREPLACEFAIL"     : "Replace SM Failed",
-    "ESME_RMSGQFUL"         : "Message Queue Full",
-    "ESME_RINVSERTYP"       : "Invalid Service Type",
-    "ESME_RINVNUMDESTS"     : "Invalid number of destinations",
-    "ESME_RINVDLNAME"       : "Invalid Distribution List name",
-    "ESME_RINVDESTFLAG"     : "Destination flag is invalid (submit_multi)",
-    "ESME_RINVSUBREP"       : "Invalid 'submit with replace' request (i.e. submit_sm with replace_if_present_flag set)",
-    "ESME_RINVESMCLASS"     : "Invalid esm_class field data",
-    "ESME_RCNTSUBDL"        : "Cannot Submit to Distribution List",
-    "ESME_RSUBMITFAIL"      : "submit_sm or submit_multi failed",
-    "ESME_RINVSRCTON"       : "Invalid Source address TON",
-    "ESME_RINVSRCNPI"       : "Invalid Source address NPI",
-    "ESME_RINVDSTTON"       : "Invalid Destination address TON",
-    "ESME_RINVDSTNPI"       : "Invalid Destination address NPI",
-    "ESME_RINVSYSTYP"       : "Invalid system_type field",
-    "ESME_RINVREPFLAG"      : "Invalid replace_if_present flag",
-    "ESME_RINVNUMMSGS"      : "Invalid number of messages",
-    "ESME_RTHROTTLED"       : "Throttling error (ESME has exceeded allowed message limits)",
-    "ESME_RINVSCHED"        : "Invalid Scheduled Delivery Time",
-    "ESME_RINVEXPIRY"       : "Invalid message validity period (Expiry time)",
-    "ESME_RINVDFTMSGID"     : "Predefined Message Invalid or Not Found",
-    "ESME_RX_T_APPN"        : "ESME Receiver Temporary App Error Code",
-    "ESME_RX_P_APPN"        : "ESME Receiver Permanent App Error Code",
-    "ESME_RX_R_APPN"        : "ESME Receiver Reject Message Error Code",
-    "ESME_RQUERYFAIL"       : "query_sm request failed",
-    "ESME_RINVOPTPARSTREAM" : "Error in the optional part of the PDU Body.",
-    "ESME_ROPTPARNOTALLWD"  : "Optional Parameter not allowed",
-    "ESME_RINVPARLEN"       : "Invalid Parameter Length.",
-    "ESME_RMISSINGOPTPARAM" : "Expected Optional Parameter missing",
-    "ESME_RINVOPTPARAMVAL"  : "Invalid Optional Parameter Value",
-    "ESME_RDELIVERYFAILURE" : "Delivery Failure (used for data_sm_resp)",
-    "ESME_RUNKNOWNERR"      : "Unknown Error",
+    "ESME_ROK": "No Error",
+    "ESME_RINVMSGLEN": "Message Length is invalid",
+    "ESME_RINVCMDLEN": "Command Length is invalid",
+    "ESME_RINVCMDID": "Invalid Command ID",
+    "ESME_RINVBNDSTS": "Incorrect BIND Status for given command",
+    "ESME_RALYBND": "ESME Already in Bound State",
+    "ESME_RINVPRTFLG": "Invalid Priority Flag",
+    "ESME_RINVREGDLVFLG": "Invalid Registered Delivery Flag",
+    "ESME_RSYSERR": "System Error",
+    "ESME_RINVSRCADR": "Invalid Source Address",
+    "ESME_RINVDSTADR": "Invalid Dest Addr",
+    "ESME_RINVMSGID": "Message ID is invalid",
+    "ESME_RBINDFAIL": "Bind Failed",
+    "ESME_RINVPASWD": "Invalid Password",
+    "ESME_RINVSYSID": "Invalid System ID",
+    "ESME_RCANCELFAIL": "Cancel SM Failed",
+    "ESME_RREPLACEFAIL": "Replace SM Failed",
+    "ESME_RMSGQFUL": "Message Queue Full",
+    "ESME_RINVSERTYP": "Invalid Service Type",
+    "ESME_RINVNUMDESTS": "Invalid number of destinations",
+    "ESME_RINVDLNAME": "Invalid Distribution List name",
+    "ESME_RINVDESTFLAG": "Destination flag is invalid (submit_multi)",
+    "ESME_RINVSUBREP": "Invalid 'submit with replace' request (i.e. submit_sm"
+                       " with replace_if_present_flag set)",
+    "ESME_RINVESMCLASS": "Invalid esm_class field data",
+    "ESME_RCNTSUBDL": "Cannot Submit to Distribution List",
+    "ESME_RSUBMITFAIL": "submit_sm or submit_multi failed",
+    "ESME_RINVSRCTON": "Invalid Source address TON",
+    "ESME_RINVSRCNPI": "Invalid Source address NPI",
+    "ESME_RINVDSTTON": "Invalid Destination address TON",
+    "ESME_RINVDSTNPI": "Invalid Destination address NPI",
+    "ESME_RINVSYSTYP": "Invalid system_type field",
+    "ESME_RINVREPFLAG": "Invalid replace_if_present flag",
+    "ESME_RINVNUMMSGS": "Invalid number of messages",
+    "ESME_RTHROTTLED": "Throttling error (ESME has exceeded allowed message"
+                       " limits)",
+    "ESME_RINVSCHED": "Invalid Scheduled Delivery Time",
+    "ESME_RINVEXPIRY": "Invalid message validity period (Expiry time)",
+    "ESME_RINVDFTMSGID": "Predefined Message Invalid or Not Found",
+    "ESME_RX_T_APPN": "ESME Receiver Temporary App Error Code",
+    "ESME_RX_P_APPN": "ESME Receiver Permanent App Error Code",
+    "ESME_RX_R_APPN": "ESME Receiver Reject Message Error Code",
+    "ESME_RQUERYFAIL": "query_sm request failed",
+    "ESME_RINVOPTPARSTREAM": "Error in the optional part of the PDU Body.",
+    "ESME_ROPTPARNOTALLWD": "Optional Parameter not allowed",
+    "ESME_RINVPARLEN": "Invalid Parameter Length.",
+    "ESME_RMISSINGOPTPARAM": "Expected Optional Parameter missing",
+    "ESME_RINVOPTPARAMVAL": "Invalid Optional Parameter Value",
+    "ESME_RDELIVERYFAILURE": "Delivery Failure (used for data_sm_resp)",
+    "ESME_RUNKNOWNERR": "Unknown Error",
 }
 
 
@@ -118,12 +120,7 @@ class EsmeTransceiver(Protocol):
 
     # Dummy error handler functions, just log invocation
     def dummy_ok(self, *args, **kwargs):
-            m = "%s.%s(*args=%s, **kwargs=%s)" % (
-                __name__,
-                "dummy_ok",
-                args,
-                kwargs)
-            #log.msg(m)
+        pass
 
     # Dummy error handler functions, just log invocation
     def dummy_mess_permfault(self, *args, **kwargs):
@@ -181,73 +178,73 @@ class EsmeTransceiver(Protocol):
 
     def build_maps(self):
         self.ESME_command_status_dispatch_map = {
-            "ESME_ROK"              : self.dispatch_ok,
-            "ESME_RINVMSGLEN"       : self.dispatch_mess_permfault,
-            "ESME_RINVCMDLEN"       : self.dispatch_mess_permfault,
-            "ESME_RINVCMDID"        : self.dispatch_mess_permfault,
+            "ESME_ROK": self.dispatch_ok,
+            "ESME_RINVMSGLEN": self.dispatch_mess_permfault,
+            "ESME_RINVCMDLEN": self.dispatch_mess_permfault,
+            "ESME_RINVCMDID": self.dispatch_mess_permfault,
 
-            "ESME_RINVBNDSTS"       : self.dispatch_conn_tempfault,
-            "ESME_RALYBND"          : self.dispatch_conn_tempfault,
+            "ESME_RINVBNDSTS": self.dispatch_conn_tempfault,
+            "ESME_RALYBND": self.dispatch_conn_tempfault,
 
-            "ESME_RINVPRTFLG"       : self.dispatch_mess_permfault,
-            "ESME_RINVREGDLVFLG"    : self.dispatch_mess_permfault,
+            "ESME_RINVPRTFLG": self.dispatch_mess_permfault,
+            "ESME_RINVREGDLVFLG": self.dispatch_mess_permfault,
 
-            "ESME_RSYSERR"          : self.dispatch_conn_permfault,
+            "ESME_RSYSERR": self.dispatch_conn_permfault,
 
-            "ESME_RINVSRCADR"       : self.dispatch_mess_permfault,
-            "ESME_RINVDSTADR"       : self.dispatch_mess_permfault,
-            "ESME_RINVMSGID"        : self.dispatch_mess_permfault,
+            "ESME_RINVSRCADR": self.dispatch_mess_permfault,
+            "ESME_RINVDSTADR": self.dispatch_mess_permfault,
+            "ESME_RINVMSGID": self.dispatch_mess_permfault,
 
-            "ESME_RBINDFAIL"        : self.dispatch_conn_permfault,
-            "ESME_RINVPASWD"        : self.dispatch_conn_permfault,
-            "ESME_RINVSYSID"        : self.dispatch_conn_permfault,
+            "ESME_RBINDFAIL": self.dispatch_conn_permfault,
+            "ESME_RINVPASWD": self.dispatch_conn_permfault,
+            "ESME_RINVSYSID": self.dispatch_conn_permfault,
 
-            "ESME_RCANCELFAIL"      : self.dispatch_mess_permfault,
-            "ESME_RREPLACEFAIL"     : self.dispatch_mess_permfault,
+            "ESME_RCANCELFAIL": self.dispatch_mess_permfault,
+            "ESME_RREPLACEFAIL": self.dispatch_mess_permfault,
 
-            "ESME_RMSGQFUL"         : self.dispatch_conn_throttle,
+            "ESME_RMSGQFUL": self.dispatch_conn_throttle,
 
-            "ESME_RINVSERTYP"       : self.dispatch_conn_permfault,
+            "ESME_RINVSERTYP": self.dispatch_conn_permfault,
 
-            "ESME_RINVNUMDESTS"     : self.dispatch_mess_permfault,
-            "ESME_RINVDLNAME"       : self.dispatch_mess_permfault,
-            "ESME_RINVDESTFLAG"     : self.dispatch_mess_permfault,
-            "ESME_RINVSUBREP"       : self.dispatch_mess_permfault,
-            "ESME_RINVESMCLASS"     : self.dispatch_mess_permfault,
-            "ESME_RCNTSUBDL"        : self.dispatch_mess_permfault,
+            "ESME_RINVNUMDESTS": self.dispatch_mess_permfault,
+            "ESME_RINVDLNAME": self.dispatch_mess_permfault,
+            "ESME_RINVDESTFLAG": self.dispatch_mess_permfault,
+            "ESME_RINVSUBREP": self.dispatch_mess_permfault,
+            "ESME_RINVESMCLASS": self.dispatch_mess_permfault,
+            "ESME_RCNTSUBDL": self.dispatch_mess_permfault,
 
-            "ESME_RSUBMITFAIL"      : self.dispatch_mess_tempfault,
+            "ESME_RSUBMITFAIL": self.dispatch_mess_tempfault,
 
-            "ESME_RINVSRCTON"       : self.dispatch_mess_permfault,
-            "ESME_RINVSRCNPI"       : self.dispatch_mess_permfault,
-            "ESME_RINVDSTTON"       : self.dispatch_mess_permfault,
-            "ESME_RINVDSTNPI"       : self.dispatch_mess_permfault,
+            "ESME_RINVSRCTON": self.dispatch_mess_permfault,
+            "ESME_RINVSRCNPI": self.dispatch_mess_permfault,
+            "ESME_RINVDSTTON": self.dispatch_mess_permfault,
+            "ESME_RINVDSTNPI": self.dispatch_mess_permfault,
 
-            "ESME_RINVSYSTYP"       : self.dispatch_conn_permfault,
+            "ESME_RINVSYSTYP": self.dispatch_conn_permfault,
 
-            "ESME_RINVREPFLAG"      : self.dispatch_mess_permfault,
+            "ESME_RINVREPFLAG": self.dispatch_mess_permfault,
 
-            "ESME_RINVNUMMSGS"      : self.dispatch_mess_tempfault,
+            "ESME_RINVNUMMSGS": self.dispatch_mess_tempfault,
 
-            "ESME_RTHROTTLED"       : self.dispatch_conn_throttle,
+            "ESME_RTHROTTLED": self.dispatch_conn_throttle,
 
-            "ESME_RINVSCHED"        : self.dispatch_mess_permfault,
-            "ESME_RINVEXPIRY"       : self.dispatch_mess_permfault,
-            "ESME_RINVDFTMSGID"     : self.dispatch_mess_permfault,
+            "ESME_RINVSCHED": self.dispatch_mess_permfault,
+            "ESME_RINVEXPIRY": self.dispatch_mess_permfault,
+            "ESME_RINVDFTMSGID": self.dispatch_mess_permfault,
 
-            "ESME_RX_T_APPN"        : self.dispatch_mess_tempfault,
+            "ESME_RX_T_APPN": self.dispatch_mess_tempfault,
 
-            "ESME_RX_P_APPN"        : self.dispatch_mess_permfault,
-            "ESME_RX_R_APPN"        : self.dispatch_mess_permfault,
-            "ESME_RQUERYFAIL"       : self.dispatch_mess_permfault,
-            "ESME_RINVOPTPARSTREAM" : self.dispatch_mess_permfault,
-            "ESME_ROPTPARNOTALLWD"  : self.dispatch_mess_permfault,
-            "ESME_RINVPARLEN"       : self.dispatch_mess_permfault,
-            "ESME_RMISSINGOPTPARAM" : self.dispatch_mess_permfault,
-            "ESME_RINVOPTPARAMVAL"  : self.dispatch_mess_permfault,
+            "ESME_RX_P_APPN": self.dispatch_mess_permfault,
+            "ESME_RX_R_APPN": self.dispatch_mess_permfault,
+            "ESME_RQUERYFAIL": self.dispatch_mess_permfault,
+            "ESME_RINVOPTPARSTREAM": self.dispatch_mess_permfault,
+            "ESME_ROPTPARNOTALLWD": self.dispatch_mess_permfault,
+            "ESME_RINVPARLEN": self.dispatch_mess_permfault,
+            "ESME_RMISSINGOPTPARAM": self.dispatch_mess_permfault,
+            "ESME_RINVOPTPARAMVAL": self.dispatch_mess_permfault,
 
-            "ESME_RDELIVERYFAILURE" : self.dispatch_mess_tempfault,
-            "ESME_RUNKNOWNERR"      : self.dispatch_mess_tempfault,
+            "ESME_RDELIVERYFAILURE": self.dispatch_mess_tempfault,
+            "ESME_RUNKNOWNERR": self.dispatch_mess_tempfault,
         }
 
     def command_status_dispatch(self, pdu):
@@ -439,6 +436,7 @@ class EsmeTransceiver(Protocol):
             pdu_resp = DeliverSMResp(sequence_number,
                     **self.defaults)
             self.sendPDU(pdu_resp)
+            pdu_params = pdu['body']['mandatory_parameters']
             delivery_report = re.search(
                     # SMPP v3.4 Issue 1.2 pg. 167 is wrong on id length
                       'id:(?P<id>\S{,65}) +sub:(?P<sub>...)'
@@ -449,12 +447,12 @@ class EsmeTransceiver(Protocol):
                     + ' +err:(?P<err>...)'
                     + ' +[Tt]ext:(?P<text>.{,20})'
                     + '.*',
-                    pdu['body']['mandatory_parameters']['short_message'] or '',
+                    pdu_params['short_message'] or ''
                     )
             if delivery_report:
                 self.__delivery_report_callback(
-                        destination_addr=pdu['body']['mandatory_parameters']['destination_addr'],
-                        source_addr=pdu['body']['mandatory_parameters']['source_addr'],
+                        destination_addr=pdu_params['destination_addr'],
+                        source_addr=pdu_params['source_addr'],
                         delivery_report=delivery_report.groupdict(),
                         )
             elif detect_multipart(pdu):
@@ -479,12 +477,11 @@ class EsmeTransceiver(Protocol):
                 else:
                     self.r_server.set(redis_key, json.dumps(multi.get_array()))
             else:
-                pdu_mp = pdu['body']['mandatory_parameters']
-                decoded_msg = self._decode_message(pdu_mp['short_message'],
-                                                   pdu_mp['data_coding'])
+                decoded_msg = self._decode_message(pdu_params['short_message'],
+                                                   pdu_params['data_coding'])
                 self.__deliver_sm_callback(
-                        destination_addr=pdu_mp['destination_addr'],
-                        source_addr=pdu_mp['source_addr'],
+                        destination_addr=pdu_params['destination_addr'],
+                        source_addr=pdu_params['source_addr'],
                         short_message=decoded_msg,
                         message_id=message_id,
                         )
