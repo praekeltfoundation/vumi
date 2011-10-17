@@ -680,6 +680,36 @@ class IkhweziQuiz():
         return d
 
     def random_remaining_questions(self):
+        rq = []
+        rq.append(['demographic1'])
+        demo = [
+                'demographic2',
+                'demographic3',
+                'demographic4'
+                ]
+        random.shuffle(demo)
+        for d in demo:
+            rq.append([d])
+        ques = [
+                'question1',
+                'question2',
+                'question3',
+                'question4',
+                'question5',
+                'question6',
+                'question7',
+                'question8',
+                'question9',
+                'question10']
+        random.shuffle(demo)
+        while len(ques):
+            for i in range(4):
+                try:
+                    rq[i].append(ques.pop())
+                    rq[i].append('continue')
+                except:
+                    pass
+        print rq
         remaining_questions = [
                 'demographic1',
                 'demographic2',
@@ -701,7 +731,8 @@ class IkhweziQuiz():
         while len(questions):
             remaining_questions.append(questions.pop())
             remaining_questions.append('continue')
-        return remaining_questions
+        #return remaining_questions
+        return rq
 
     def new_entrant(self, msisdn, provider=None):
         self.remaining = self.random_remaining_questions()
@@ -758,21 +789,30 @@ class IkhweziQuiz():
             self.data[question_name] = answer
             self.data[question_name + '_timestamp'] = \
                     datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S+00")
-            self.remaining.pop(0)
+            self.remaining_list().pop(0)
             self.language = self.lang(self.data['demographic1'] or 1)
         return reply
 
     def do_continue(self, answer):
         exit = False
-        self.remaining.pop(0)
-        if answer == 2 or len(self.remaining) == 0:
+        self.remaining_list().pop(0)
+        if answer == 2 or len(self.remaining_list()) == 0:
             exit = True
         return exit
 
+    def remaining_list(self):
+        r = []
+        try:
+            r = self.remaining[self.data['sessions']-1]
+        except:
+            pass
+        print r
+        return r
+
     def formulate_response(self):
         question_name = None
-        if len(self.remaining):
-            question_name = self.remaining[0]
+        if len(self.remaining_list()):
+            question_name = self.remaining_list()[0]
 
         try:
             answer = int(self.request)
@@ -812,7 +852,7 @@ class IkhweziQuiz():
 
         else:
             # ask another question
-            question_name = self.remaining[0]
+            question_name = self.remaining_list()[0]
             question = self.quiz.get(question_name)
             vmr = VodacomMessagingResponse(self.config)
             vmr.set_headertext(self._(question['headertext']))
