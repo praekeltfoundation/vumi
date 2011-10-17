@@ -16,3 +16,5 @@ include utils/*.sh
 include utils/*.py
 include puppet/*
 exclude *.egg-info/*
+recursive-include vumi *.xml
+global-exclude _notes/*.xml
