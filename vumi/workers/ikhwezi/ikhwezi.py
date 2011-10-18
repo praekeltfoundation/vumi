@@ -710,29 +710,6 @@ class IkhweziQuiz():
                     rq[i].append('continue')
                 except:
                     pass
-        print rq
-        remaining_questions = [
-                'demographic1',
-                'demographic2',
-                'demographic3',
-                'demographic4'
-                ]
-        questions = [
-                'question1',
-                'question2',
-                'question3',
-                'question4',
-                'question5',
-                'question6',
-                'question7',
-                'question8',
-                'question9',
-                'question10']
-        random.shuffle(questions)
-        while len(questions):
-            remaining_questions.append(questions.pop())
-            remaining_questions.append('continue')
-        #return remaining_questions
         return rq
 
     def new_entrant(self, msisdn, provider=None):
@@ -808,7 +785,6 @@ class IkhweziQuiz():
             r = self.remaining[self.data['sessions']-1]
         except:
             pass
-        print r
         return r
 
     def formulate_response(self):
