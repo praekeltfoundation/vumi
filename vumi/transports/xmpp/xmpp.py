@@ -79,7 +79,7 @@ class XMPPTransport(Transport):
             None: self.config.pop('status', ''),
         }
         host = self.config.pop('host')
-        port = self.config.pop('port')
+        port = int(self.config.pop('port'))
 
         self.xmpp_service = MultiService()
 
