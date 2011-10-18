@@ -1,4 +1,3 @@
-from vumi.transports.opera.opera import (OperaOutboundTransport,
-    OperaInboundTransport)
+from vumi.transports.opera.opera import OperaTransport
 
-__all__ = ['OperaOutboundTransport', 'OperaInboundTransport']
+__all__ = ['OperaTransport']

@@ -59,7 +59,7 @@ class OperaReceiveResource(Resource):
         return content
 
 
-class OperaBase(Transport):
+class OperaTransport(Transport):
     """
     Base class that provides Redis mechanics for maintaining mapping
     of internal vs external message ids, used to link a delivery
@@ -77,12 +77,14 @@ class OperaBase(Transport):
         """
         self.message_id_lifetime = self.config.get('message_id_lifetime',
                                            self.DEFAULT_MESSAGE_ID_LIFETIME)
-
-    def setup_transport(self):
-        dbindex = get_deploy_int(self._amqp_client.vhost)
-        redis_config = self.config.get('redis', {})
-        self.r_server = redis.Redis(db=dbindex, **redis_config)
-        self.r_prefix = "%(transport_name)s@%(url)s" % self.config
+        self.web_receipt_path = self.config['web_receipt_path']
+        self.web_receive_path = self.config['web_receive_path']
+        self.web_port = int(self.config['web_port'])
+        self.opera_url = self.config['url']
+        self.opera_channel = self.config['channel']
+        self.opera_password = self.config['password']
+        self.opera_service = self.config['service']
+        self.transport_name = self.config['transport_name']
 
     def set_message_id_for_identifier(self, identifier, message_id):
         """
@@ -113,20 +115,6 @@ class OperaBase(Transport):
         rkey = '%s#%s' % (self.r_prefix, identifier)
         return self.r_server.get(rkey)
 
-
-class OperaInboundTransport(OperaBase):
-
-    def validate_config(self):
-        """
-        Transport-specific config validation happens in here.
-        """
-        super(OperaInboundTransport, self).validate_config()
-        self.web_receipt_path = self.config['web_receipt_path']
-        self.web_receive_path = self.config['web_receive_path']
-        self.web_port = int(self.config['web_port'])
-        self.opera_url = self.config['url']
-        self.transport_name = self.config['transport_name']
-
     def handle_raw_incoming_receipt(self, receipt):
         # convert delivery receipt status values, anything not in
         # this status map defaults to `failed`
@@ -148,9 +136,21 @@ class OperaInboundTransport(OperaBase):
 
     @inlineCallbacks
     def setup_transport(self):
-        super(OperaInboundTransport, self).setup_transport()
         log.msg('Starting the OperaInboundTransport config: %s' %
             self.transport_name)
+
+        dbindex = get_deploy_int(self._amqp_client.vhost)
+        redis_config = self.config.get('redis', {})
+        self.r_server = yield redis.Redis(db=dbindex, **redis_config)
+        self.r_prefix = "%(transport_name)s@%(url)s" % self.config
+
+        self.proxy = xmlrpc.Proxy(self.opera_url)
+        self.default_values = {
+            'Service': self.opera_service,
+            'Password': self.opera_password,
+            'Channel': self.opera_channel,
+        }
+
         # start receipt web resource
         self.web_resource = yield self.start_web_resources(
             [
@@ -162,40 +162,6 @@ class OperaInboundTransport(OperaBase):
             ],
             self.web_port
         )
-
-    @inlineCallbacks
-    def teardown_transport(self):
-        yield self.web_resource.loseConnection()
-
-
-class OperaOutboundTransport(OperaBase):
-    """
-    This is a separate transport from the OperaInboundTransport because after
-    having run this in production for a while it turned out that Opera was
-    quite slow and we needed to have concurrent outbound connections so we
-    could clear our queues in parallel. Having the inbound & outbound
-    transports be the same logic created problems as the inbound would try
-    to create multiple HTTP Resources which we didn't need.
-    """
-
-    def validate_config(self):
-        super(OperaOutboundTransport, self).validate_config()
-        self.opera_url = self.config['url']
-        self.opera_channel = self.config['channel']
-        self.opera_password = self.config['password']
-        self.opera_service = self.config['service']
-        self.transport_name = self.config['transport_name']
-
-    def setup_transport(self):
-        super(OperaOutboundTransport, self).setup_transport()
-        log.msg("Starting the OperaOutboundTransport: %s" %
-            self.transport_name)
-        self.proxy = xmlrpc.Proxy(self.opera_url)
-        self.default_values = {
-            'Service': self.opera_service,
-            'Password': self.opera_password,
-            'Channel': self.opera_channel,
-        }
 
     @inlineCallbacks
     def handle_outbound_message(self, message):
@@ -251,6 +217,8 @@ class OperaOutboundTransport(OperaBase):
             # Unspecified
             raise failure
 
+    @inlineCallbacks
     def teardown_transport(self):
         log.msg("Stopping the OperaOutboundTransport: %s" %
             self.transport_name)
+        yield self.web_resource.loseConnection()

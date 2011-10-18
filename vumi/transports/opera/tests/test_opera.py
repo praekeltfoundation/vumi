@@ -9,7 +9,7 @@ from vumi.message import TransportUserMessage
 from vumi.tests.utils import FakeRedis
 from vumi.utils import http_request
 from vumi.transports.opera.tests.test_opera_stubs import FakeXMLRPCService
-from vumi.transports.opera import OperaOutboundTransport, OperaInboundTransport
+from vumi.transports.opera import OperaTransport
 from vumi.transports.tests.test_base import TransportTestCase
 
 
@@ -17,17 +17,21 @@ class OperaTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def setUp(self):
+        yield super(OperaTransportTestCase, self).setUp()
         self.port = 9999
         self.host = "localhost"
         self.url = 'http://%s:%s' % (self.host, self.port)
-        yield super(OperaTransportTestCase, self).setUp()
+        self.transport = yield self.mk_transport()
 
-    def mk_transport(self, cls=OperaOutboundTransport, **config):
+    def mk_transport(self, cls=OperaTransport, **config):
         default_config = {
             'url': 'http://testing.domain',
             'channel': 'channel',
             'service': 'service',
             'password': 'password',
+            'web_receipt_path': '/receipt.xml',
+            'web_receive_path': '/receive.xml',
+            'web_port': self.port
         }
         default_config.update(config)
         return self.get_transport(default_config, cls)
@@ -39,7 +43,7 @@ class OperaTransportTestCase(TransportTestCase):
             'content': 'hello world',
             'transport_name': self.transport_name,
             'transport_type': 'sms',
-            'transport_metadata': {}
+            'transport_metadata': {},
         }
         defaults.update(kwargs)
         return TransportUserMessage(**defaults)
@@ -47,16 +51,13 @@ class OperaTransportTestCase(TransportTestCase):
     @inlineCallbacks
     def test_receipt_processing(self):
         """it should be able to process an incoming XML receipt via HTTP"""
-        transport = yield self.mk_transport(cls=OperaInboundTransport,
-            web_receipt_path='/receipt.xml', web_receive_path='/receive.xml',
-            web_port=self.port)
 
         identifier = '001efc31'
         message_id = '123456'
-        transport.r_server = FakeRedis()
+        self.transport.r_server = FakeRedis()
         # prime redis to match the incoming identifier to an
         # internal message id
-        transport.set_message_id_for_identifier(identifier, message_id)
+        self.transport.set_message_id_for_identifier(identifier, message_id)
 
         xml_data = """
         <?xml version="1.0"?>
@@ -83,16 +84,13 @@ class OperaTransportTestCase(TransportTestCase):
 
         # teardown fake redis, prevents DelayedCall's from leaving the reactor
         # in a dirty state.
-        transport.r_server.teardown()
+        self.transport.r_server.teardown()
 
     @inlineCallbacks
     def test_incoming_sms_processing(self):
         """
         it should be able to process in incoming sms as XML delivered via HTTP
         """
-        yield self.mk_transport(cls=OperaInboundTransport,
-            web_receipt_path='/receipt.xml', web_receive_path='/receive.xml',
-            web_port=self.port)
 
         xml_data = """
         <?xml version="1.0"?>
@@ -154,8 +152,6 @@ class OperaTransportTestCase(TransportTestCase):
         correct parameters
         """
 
-        transport = yield self.mk_transport()
-
         def _cb(method_called, xmlrpc_payload):
             self.assertEqual(method_called, 'EAPIGateway.SendSMS')
             self.assertEqual(xmlrpc_payload['Priority'], 'standard')
@@ -179,7 +175,7 @@ class OperaTransportTestCase(TransportTestCase):
                 'Identifier': 'abc123'
             }
 
-        transport.proxy = FakeXMLRPCService(_cb)
+        self.transport.proxy = FakeXMLRPCService(_cb)
 
         msg = self.mk_msg()
         yield self.dispatch(msg,
@@ -194,7 +190,7 @@ class OperaTransportTestCase(TransportTestCase):
         # test that we've properly linked the identifier to our
         # internal id of the given message
         self.assertEqual(
-            transport.get_message_id_for_identifier('abc123'),
+            self.transport.get_message_id_for_identifier('abc123'),
             msg['message_id'])
 
     @inlineCallbacks
@@ -204,7 +200,6 @@ class OperaTransportTestCase(TransportTestCase):
         correct parameters
         """
 
-        transport = yield self.mk_transport()
         fixed_date = datetime(2011, 1, 1, 0, 0, 0)
 
         def _cb(method_called, xmlrpc_payload):
@@ -217,7 +212,7 @@ class OperaTransportTestCase(TransportTestCase):
                 'Identifier': 'abc123'
             }
 
-        transport.proxy = FakeXMLRPCService(_cb)
+        self.transport.proxy = FakeXMLRPCService(_cb)
 
         yield self.dispatch(self.mk_msg(transport_metadata={
             'deliver_at': fixed_date,
@@ -234,8 +229,6 @@ class OperaTransportTestCase(TransportTestCase):
         shouldn't ACK the message over AMQ but leave it for a retry later
         """
 
-        transport = yield self.mk_transport()
-
         def _cb(*args, **kwargs):
             """
             Callback handler that raises an error when called
@@ -243,7 +236,7 @@ class OperaTransportTestCase(TransportTestCase):
             return defer.fail(xmlrpc.Fault(503, 'oh noes!'))
 
         # monkey patch so we can mock errors happening remotely
-        transport.proxy = FakeXMLRPCService(_cb)
+        self.transport.proxy = FakeXMLRPCService(_cb)
 
         # send a message to the transport which'll hit the FakeXMLRPCService
         # and as a result raise an error
@@ -266,7 +259,6 @@ class OperaTransportTestCase(TransportTestCase):
         other than a 200 response it should consider it a permanent
         failure
         """
-        transport = yield self.mk_transport()
 
         def _cb(*args, **kwargs):
             """
@@ -275,7 +267,7 @@ class OperaTransportTestCase(TransportTestCase):
             return defer.fail(ValueError(402, 'Payment Required'))
 
         # monkey patch so we can mock errors happening remotely
-        transport.proxy = FakeXMLRPCService(_cb)
+        self.transport.proxy = FakeXMLRPCService(_cb)
 
         # send a message to the transport which'll hit the FakeXMLRPCService
         # and as a result raise an error
@@ -299,7 +291,6 @@ class OperaTransportTestCase(TransportTestCase):
                 xmlrpc.Binary(content.encode('utf-8')))
             return {'Identifier': '1'}
 
-        transport = yield self.mk_transport()
-        transport.proxy = FakeXMLRPCService(_cb)
+        self.transport.proxy = FakeXMLRPCService(_cb)
         yield self.dispatch(self.mk_msg(content=content),
             rkey='%s.outbound' % self.transport_name)
