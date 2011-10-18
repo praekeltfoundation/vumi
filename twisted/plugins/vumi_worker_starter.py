@@ -42,10 +42,6 @@ class VumiService(Service):
         # add options set with --set-option
         config.update(self.options.set_options)
 
-        for k, v in self.options.items():
-            if k.startswith("config_"):
-                config[k[7:]] = v
-
         worker_creator.create_worker(worker_class, config)
 
     # Twistd calls this method at shutdown
@@ -59,12 +55,6 @@ class BasicSet(Options):
         ["worker_class", None, None, "class of a worker to start"],
         ["config", None, None, "YAML config file to load"],
         ["set-option", None, None, "Override a config file option"],
-        ["config_smpp_increment", None, 1,
-         "Increment for SMPP sequence number (must be >= number of"
-         " SMPP workers on a single SMPP account)"],
-        ["config_smpp_offset", None, 1,
-         "Offset for this worker's SMPP sequence numbers (no duplicates"
-         " on a single SMPP account and must be <= increment)"],
     ]
 
 
