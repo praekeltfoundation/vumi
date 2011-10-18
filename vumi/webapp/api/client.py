@@ -255,7 +255,8 @@ class Client(object):
 
         :keyword template: a Mustache_ template
         :keyword from_msisdn: the MSISDN of the sender
-        :keyword to_msisdns: a dictionary where the key is the MSISDN and the values is the template context for that MSISDN
+        :keyword to_msisdns: a dictionary where the key is the MSISDN and the
+                             values is the template context for that MSISDN
 
         .. _Mustache: https://github.com/defunkt/pystache
 
