@@ -11,7 +11,8 @@ def parse_receipts_xml(receipt_xml_data):
 
 def receipt_element_to_dict(element):
     """
-    Turn an ElementTree element '<data><el>1</el></data>' into {el: 1}. Not recursive!
+    Turn an ElementTree element '<data><el>1</el></data>' into {el: 1}.
+    Not recursive!
 
     >>> data = ET.fromstring("<data><el>1</el></data>")
     >>> receipt_element_to_dict(data)
@@ -24,7 +25,8 @@ def receipt_element_to_dict(element):
 
 def receipt_to_namedtuple(element):
     """
-    Turn an ElementTree element into an object with named params. Not recursive!
+    Turn an ElementTree element into an object with named params.
+    Not recursive!
 
     >>> data = ET.fromstring("<data><el>1</el></data>")
     >>> receipt_to_namedtuple(data)

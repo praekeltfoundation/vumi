@@ -14,7 +14,7 @@ from vumi.webapp.api.utils import require_content_type
 
 import iso8601
 
-from utils import (parse_receipts_xml, parse_post_event_xml,
+from vumi.transports.opera.utils import (parse_receipts_xml, parse_post_event_xml,
                    OPERA_TIMESTAMP_FORMAT)
 
 
