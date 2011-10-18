@@ -1,3 +1,5 @@
+# -*- encoding: utf-8 -*-
+
 """Tests for vumi.demos.hangman."""
 
 from twisted.trial import unittest
@@ -236,3 +238,17 @@ class TestHangmanWorker(unittest.TestCase):
         yield self.send(None, TransportUserMessage.SESSION_CLOSE)
         replies = yield self.recv()
         self.assertEqual(replies, [])
+
+    @inlineCallbacks
+    def test_non_ascii_input(self):
+        yield self.send(None, TransportUserMessage.SESSION_NEW)
+        for event in (u'ü', u'æ'):
+            yield self.send(event, TransportUserMessage.SESSION_RESUME)
+
+        replies = yield self.recv(3)
+        self.assertEqual(len(replies), 3)
+
+        for reply in replies[1:]:
+            self.assertEqual(reply[0], 'reply')
+            self.assertTrue(reply[1].startswith(
+                'Letters of the alphabet only please.'))

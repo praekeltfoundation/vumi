@@ -1,3 +1,5 @@
+# -*- encoding: utf-8 -*-
+
 from twisted.trial.unittest import TestCase
 from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, DeferredQueue
@@ -242,3 +244,19 @@ class TestIntegratTransport(TestCase):
         self.assertEqual(payload['from_addr'], '27345')
         self.assertEqual(payload['to_addr'], '*120*99#')
         self.assertEqual(payload['content'], 'foobar')
+
+    @inlineCallbacks
+    def test_inbound_non_ascii(self):
+        xml = (XML_TEMPLATE % {
+            'ussd_type': 'Request',
+            'sid': 'sess1234',
+            'network_sid': "netsid12345",
+            'msisdn': '27345',
+            'connstr': '*120*99#',
+            'text': u'öæł',
+            }).encode("utf-8")
+        yield http_request(self.worker_url + "foo", xml, method='GET')
+        msg, = yield self.broker.wait_messages("vumi", "testgrat.inbound", 1)
+        payload = msg.payload
+        self.assertEqual(payload['content'], u'öæł')
+        print repr(payload['content'])
