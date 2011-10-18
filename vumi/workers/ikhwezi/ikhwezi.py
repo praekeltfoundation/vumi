@@ -378,6 +378,7 @@ demographic4:
 
 question1:
     headertext: "Can U get HIV/AIDS by having sex without a condom?"
+    correct_answer: 1
     options:
         1:
             text: "Yes"
@@ -388,6 +389,7 @@ question1:
 
 question2:
     headertext: "Can traditional medicine cure HIV/AIDS?"
+    correct_answer: 2
     options:
         1:
             text: "Yes"
@@ -398,6 +400,7 @@ question2:
 
 question3:
     headertext: "Is an HIV test at any government clinic free of charge?"
+    correct_answer: 1
     options:
         1:
             text: "Yes"
@@ -408,6 +411,7 @@ question3:
 
 question4:
     headertext: "Is it possible for a person newly infected with HIV, to test HIV negative?"
+    correct_answer: 1
     options:
         1:
             text: "Yes"
@@ -418,6 +422,7 @@ question4:
 
 question5:
     headertext: "Can HIV be transmitted by sweat?"
+    correct_answer: 2
     options:
         1:
             text: "Yes"
@@ -428,6 +433,7 @@ question5:
 
 question6:
     headertext: "Is there a herbal medication that can cure HIV/AIDS?"
+    correct_answer: 2
     options:
         1:
             text: "Yes"
@@ -438,6 +444,7 @@ question6:
 
 question7:
     headertext: "Does a CD4-count tell the strength of a person's immune system?"
+    correct_answer: 1
     options:
         1:
             text: "Yes"
@@ -448,6 +455,7 @@ question7:
 
 question8:
     headertext: "Can HIV be transmitted through a mother's breast milk?"
+    correct_answer: 1
     options:
         1:
             text: "Yes"
@@ -458,6 +466,7 @@ question8:
 
 question9:
     headertext: "Is it possible for an HIV positive woman to deliver an HIV negative baby?"
+    correct_answer: 1
     options:
         1:
             text: "Yes"
@@ -468,6 +477,7 @@ question9:
 
 question10:
     headertext: "Do you immediately have to start ARVs when you test HIV positive?"
+    correct_answer: 2
     options:
         1:
             text: "Yes"
@@ -497,6 +507,16 @@ class IkhweziModel(UglyModel):
         ('question8', 'integer'),
         ('question9', 'integer'),
         ('question10', 'integer'),
+        ('question1_correct', 'integer'),
+        ('question2_correct', 'integer'),
+        ('question3_correct', 'integer'),
+        ('question4_correct', 'integer'),
+        ('question5_correct', 'integer'),
+        ('question6_correct', 'integer'),
+        ('question7_correct', 'integer'),
+        ('question8_correct', 'integer'),
+        ('question9_correct', 'integer'),
+        ('question10_correct', 'integer'),
         ('question1_timestamp', 'timestamp'),
         ('question2_timestamp', 'timestamp'),
         ('question3_timestamp', 'timestamp'),
@@ -534,6 +554,16 @@ class IkhweziModel(UglyModel):
         'question8',
         'question9',
         'question10',
+        'question1_correct',
+        'question2_correct',
+        'question3_correct',
+        'question4_correct',
+        'question5_correct',
+        'question6_correct',
+        'question7_correct',
+        'question8_correct',
+        'question9_correct',
+        'question10_correct',
         'demographic1',
         'demographic2',
         'demographic3',
@@ -731,6 +761,16 @@ class IkhweziQuiz():
                 'question8': None,
                 'question9': None,
                 'question10': None,
+                'question1_correct': None,
+                'question2_correct': None,
+                'question3_correct': None,
+                'question4_correct': None,
+                'question5_correct': None,
+                'question6_correct': None,
+                'question7_correct': None,
+                'question8_correct': None,
+                'question9_correct': None,
+                'question10_correct': None,
                 'question1_timestamp': None,
                 'question2_timestamp': None,
                 'question3_timestamp': None,
@@ -768,6 +808,12 @@ class IkhweziQuiz():
             self.data[question_name] = answer
             self.data[question_name + '_timestamp'] = \
                     datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S+00")
+            correct_answer = question.get('correct_answer')
+            if correct_answer:
+                if correct_answer == answer:
+                    self.data[question_name + '_correct'] = 1
+                else:
+                    self.data[question_name + '_correct'] = -1
             self.remaining_list().pop(0)
             self.language = self.lang(self.data['demographic1'] or 1)
         return reply
