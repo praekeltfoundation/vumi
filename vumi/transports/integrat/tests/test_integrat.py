@@ -259,4 +259,3 @@ class TestIntegratTransport(TestCase):
         msg, = yield self.broker.wait_messages("vumi", "testgrat.inbound", 1)
         payload = msg.payload
         self.assertEqual(payload['content'], u'öæł')
-        print repr(payload['content'])
