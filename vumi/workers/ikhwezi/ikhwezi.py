@@ -516,6 +516,7 @@ class IkhweziModel(UglyModel):
         ('demographic3_timestamp', 'timestamp'),
         ('demographic4_timestamp', 'timestamp'),
         ('remaining_questions', 'varchar'),
+        ('original_questions', 'varchar'),
         ('winner', 'varchar'),
         ('winner_timestamp', 'timestamp')
         )
@@ -772,6 +773,7 @@ class IkhweziQuiz():
                 'demographic3_timestamp': None,
                 'demographic4_timestamp': None,
                 'remaining_questions': json.dumps(self.remaining),
+                'original_questions': json.dumps(self.remaining),
                 'winner': None,
                 'winner_timestamp': None}
         def on_new(item):
