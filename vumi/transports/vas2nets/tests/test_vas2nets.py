@@ -12,7 +12,6 @@ from twisted.web.test.test_web import DummyRequest
 
 from vumi.transports.tests.test_base import TransportTestCase
 from vumi.tests.utils import get_stubbed_worker, TestResourceWorker
-from vumi.tests.fake_amqp import FakeAMQPBroker
 from vumi.message import from_json
 from vumi.transports.base import FailureMessage
 from vumi.transports.vas2nets.vas2nets import (
@@ -54,9 +53,11 @@ class Vas2NetsTransportTestCase(TransportTestCase):
 
     transport_name = 'vas2nets'
     transport_type = 'sms'
+    transport_class = Vas2NetsTransport
 
     @inlineCallbacks
     def setUp(self):
+        yield super(Vas2NetsTransportTestCase, self).setUp()
         self.path = '/api/v1/sms/vas2nets/receive/'
         self.port = 9999
         self.config = {
@@ -71,24 +72,14 @@ class Vas2NetsTransportTestCase(TransportTestCase):
             'web_receipt_path': '/receipt',
             'web_port': 9998,
         }
-        self._amqp = FakeAMQPBroker()
-        w = get_stubbed_worker(Vas2NetsTransport, self.config, self._amqp)
-        w.transport_name = 'vas2nets'
-        w.event_publisher = yield w.publish_rkey('event')
-        w.message_publisher = yield w.publish_rkey('inbound')
-        self.workers = [w]
-        self.worker = w
+        self.worker = yield self.get_transport(self.config)
         self.today = datetime.utcnow().date()
-
-    def tearDown(self):
-        for worker in self.workers:
-            worker.stopWorker()
 
     def make_resource_worker(self, msg_id, msg, code=http.OK, send_id=None):
         w = get_stubbed_worker(TestResourceWorker, {})
         w.set_resources([
                 (self.path, TestResource, (msg_id, msg, code, send_id))])
-        self.workers.append(w)
+        self._workers.append(w)
         return w.startWorker()
 
     def get_dispatched(self, rkey):
@@ -263,7 +254,6 @@ class Vas2NetsTransportTestCase(TransportTestCase):
         # open an HTTP resource that mocks the Vas2Nets response for the
         # duration of this test
         yield self.make_resource_worker(mocked_message_id, mocked_message)
-        yield self.worker.startWorker()
 
         yield self.dispatch(self.mkmsg_out())
 
@@ -281,7 +271,6 @@ class Vas2NetsTransportTestCase(TransportTestCase):
         # duration of this test
         yield self.make_resource_worker(mocked_message_id, mocked_message,
                                         send_id=reply_to_msgid)
-        yield self.worker.startWorker()
 
         yield self.dispatch(self.mkmsg_out(in_reply_to=reply_to_msgid))
 
@@ -295,7 +284,6 @@ class Vas2NetsTransportTestCase(TransportTestCase):
         mocked_message = ("Result_code: 04, Internal system error occurred "
                           "while processing message")
         yield self.make_resource_worker(mocked_message_id, mocked_message)
-        yield self.worker.startWorker()
 
         msg = self.mkmsg_out()
         d = self.dispatch(msg)
@@ -308,8 +296,6 @@ class Vas2NetsTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_send_sms_noconn(self):
-        yield self.worker.startWorker()
-
         msg = self.mkmsg_out()
         d = self.dispatch(msg)
         yield d
@@ -324,7 +310,6 @@ class Vas2NetsTransportTestCase(TransportTestCase):
     def test_send_sms_not_OK(self):
         mocked_message = "Page not found."
         yield self.make_resource_worker(None, mocked_message, http.NOT_FOUND)
-        yield self.worker.startWorker()
 
         msg = self.mkmsg_out()
         deferred = self.dispatch(msg)

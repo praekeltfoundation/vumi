@@ -292,4 +292,4 @@ class Vas2NetsTransport(Transport):
     def stopWorker(self):
         """shutdown"""
         if hasattr(self, 'receipt_resource'):
-            self.receipt_resource.stopListening()
+            return self.receipt_resource.stopListening()
