@@ -1,3 +1,4 @@
+import sys
 import yaml
 from zope.interface import implements
 from twisted.python import log
@@ -5,6 +6,7 @@ from twisted.application.service import IServiceMaker, Service
 from twisted.plugin import IPlugin
 
 from vumi.service import Options, WorkerCreator
+from vumi.utils import load_class_by_string
 from vumi.errors import VumiError
 
 
@@ -51,12 +53,24 @@ class VumiService(Service):
 
 # Extend the default Vumi options with whatever options your service needs
 class BasicSet(Options):
+    optFlags = [
+        ["worker-help", None, "Print out a usage message for the worker_class"
+                              " and exit"]
+        ]
     optParameters = Options.optParameters + [
-        ["worker_class", None, None, "class of a worker to start"],
+        ["worker_class", None, None, "Class of a worker to start"],
         ["config", None, None, "YAML config file to load"],
         ["set-option", None, None, "Override a config file option"],
     ]
 
+    def opt_worker_help(self):
+        worker_class_name = self.opts.pop('worker_class')
+        if worker_class_name is None:
+            print "--worker-help requires --worker_class to be set too"
+        else:
+            worker_class = load_class_by_string(worker_class_name)
+            print worker_class.__doc__
+        sys.exit(0)
 
 # This create the service, runnable on command line with twistd
 class VumiServiceMaker(object):
