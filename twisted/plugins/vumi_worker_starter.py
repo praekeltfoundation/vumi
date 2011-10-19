@@ -33,7 +33,7 @@ class VumiService(Service):
         worker_class = self.options.pop("worker-class")
         if worker_class is None:
             # fallback to deprecated --worker_class option
-            worker_class = self.opts.pop('worker_class')
+            worker_class = self.options.pop('worker_class')
 
         if not worker_class:
             raise VumiError("please specify --worker_class")
