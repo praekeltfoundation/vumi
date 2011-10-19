@@ -142,6 +142,14 @@ class Vas2NetsTransportTestCase(TransportTestCase):
         return super(Vas2NetsTransportTestCase, self).mkmsg_out(**kw)
 
     @inlineCallbacks
+    def test_health_check(self):
+        url = "http://localhost:%s/health" % (self.config['web_port'],)
+        response = yield http_request_full(url)
+
+        self.assertEqual('OK', response.delivered_body)
+        self.assertEqual(response.code, http.OK)
+
+    @inlineCallbacks
     def test_receive_sms(self):
         response = yield self.make_request('/receive', {
                     'messageid': 'abc',
