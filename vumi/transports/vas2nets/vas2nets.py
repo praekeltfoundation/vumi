@@ -186,6 +186,7 @@ class HealthResource(Resource):
 
     def render(self, request):
         request.setResponseCode(http.OK)
+        request.do_not_log = True
         return 'OK'
 
 
@@ -202,20 +203,10 @@ class HttpResponseHandler(Protocol):
 
 
 class LogFilterSite(Site):
-    uris_to_filter = ()
-
     def log(self, request):
-        if request.uri in self.uris_to_filter:
+        if getattr(request, 'do_not_log'):
             return
         return super(LogFilterSite, self).log(request)
-
-
-def log_filter_site_factory(*uris_to_filter):
-    def log_filter_site(*args, **kw):
-        site = LogFilterSite(*args, **kw)
-        site.uris_to_filter = uris_to_filter
-        return site
-    return log_filter_site
 
 
 class Vas2NetsTransport(Transport):
@@ -228,7 +219,6 @@ class Vas2NetsTransport(Transport):
     def setup_transport(self):
         self._resources = []
         self.config.setdefault('web_health_path', 'health')
-        site_factory = log_filter_site_factory(self.config['web_health_path'])
         resources = [
             self.mkres(ReceiveSMSResource, self.publish_message, 'receive'),
             self.mkres(DeliveryReceiptResource, self.publish_delivery_report,
@@ -236,7 +226,7 @@ class Vas2NetsTransport(Transport):
             self.mkres(HealthResource, None, 'health'),
             ]
         self.receipt_resource = yield self.start_web_resources(
-            resources, self.config['web_port'], site_class=site_factory)
+            resources, self.config['web_port'], LogFilterSite)
 
     @inlineCallbacks
     def handle_outbound_message(self, message):
