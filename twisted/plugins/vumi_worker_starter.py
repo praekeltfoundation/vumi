@@ -30,7 +30,11 @@ class VumiService(Service):
         # We need an initial worker. This would either be a normal
         # worker class (if we're using the old one-per-process model)
         # or a worker that loads new workers.
-        worker_class = self.options.pop("worker_class")
+        worker_class = self.options.pop("worker-class")
+        if worker_class is None:
+            # fallback to deprecated --worker_class option
+            worker_class = self.opts.pop('worker_class')
+
         if not worker_class:
             raise VumiError("please specify --worker_class")
 
@@ -58,19 +62,24 @@ class BasicSet(Options):
                               " and exit"]
         ]
     optParameters = Options.optParameters + [
-        ["worker_class", None, None, "Class of a worker to start"],
+        ["worker-class", None, None, "Class of a worker to start"],
+        ["worker_class", None, None, "Deprecated. See --worker-class instead"],
         ["config", None, None, "YAML config file to load"],
         ["set-option", None, None, "Override a config file option"],
     ]
 
     def opt_worker_help(self):
-        worker_class_name = self.opts.pop('worker_class')
+        worker_class_name = self.opts.pop('worker-class')
         if worker_class_name is None:
-            print "--worker-help requires --worker_class to be set too"
+            # fallback to deprecated --worker_class option
+            worker_class_name = self.opts.pop('worker_class')
+        if worker_class_name is None:
+            print "--worker-help requires --worker-class to be set too"
         else:
             worker_class = load_class_by_string(worker_class_name)
             print worker_class.__doc__
         sys.exit(0)
+
 
 # This create the service, runnable on command line with twistd
 class VumiServiceMaker(object):
