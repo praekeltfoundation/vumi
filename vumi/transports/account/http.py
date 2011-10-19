@@ -68,7 +68,6 @@ class HttpTransport(Transport):
         content = str(request.args.get('content', [None])[0])
         to_addr = str(request.args.get('to_addr', [None])[0])
         from_addr = str(request.args.get('from_addr', [None])[0])
-        routing_key = str(request.args.get('routing_key', [None])[0])
 
         transport_metadata = {}
         self.publish_message(
@@ -76,7 +75,7 @@ class HttpTransport(Transport):
                 content=content,
                 to_addr=to_addr,
                 from_addr=from_addr,
-                provider='web',
+                provider='internet',
                 transport_name=self.transport_name,
                 transport_type=self.config.get('transport_type'),
                 )
