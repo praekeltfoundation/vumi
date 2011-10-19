@@ -13,38 +13,42 @@ from twisted.web.http_headers import Headers
 from twisted.web.iweb import IBodyProducer
 
 
-def http_request(url, data, headers={}, method='POST'):
-    # Construct an Agent.
-    agent = Agent(reactor)
+class SimplishReceiver(protocol.Protocol):
+    def __init__(self, response):
+        self.deferred = defer.Deferred()
+        self.response = response
+        self.response.delivered_body = ''
+        if response.code == 204:
+            self.deferred.callback(self.response)
+        else:
+            response.deliverBody(self)
 
+    def dataReceived(self, data):
+        self.response.delivered_body += data
+
+    def connectionLost(self, reason):
+        # TODO: test if reason is twisted.web.client.ResponseDone,
+        # if not, do an errback
+        self.deferred.callback(self.response)
+
+
+def http_request_full(url, data=None, headers={}, method='POST'):
+    agent = Agent(reactor)
     d = agent.request(method,
                       url,
                       Headers(headers),
                       StringProducer(data) if data else None)
 
     def handle_response(response):
-        if response.code == 204:
-            d = defer.succeed('')
-        else:
-            class SimpleReceiver(protocol.Protocol):
-                def __init__(s, d):
-                    s.buf = ''
-                    s.d = d
-
-                def dataReceived(s, data):
-                    s.buf += data
-
-                def connectionLost(s, reason):
-                    # TODO: test if reason is twisted.web.client.ResponseDone,
-                    # if not, do an errback
-                    s.d.callback(s.buf)
-
-            d = defer.Deferred()
-            response.deliverBody(SimpleReceiver(d))
-        return d
+        return SimplishReceiver(response).deferred
 
     d.addCallback(handle_response)
     return d
+
+
+def http_request(url, data, headers={}, method='POST'):
+    d = http_request_full(url, data, headers=headers, method=method)
+    return d.addCallback(lambda r: r.delivered_body)
 
 
 def normalize_msisdn(raw, country_code=''):

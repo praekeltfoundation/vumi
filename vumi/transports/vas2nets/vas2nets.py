@@ -204,9 +204,9 @@ class HttpResponseHandler(Protocol):
 
 class LogFilterSite(Site):
     def log(self, request):
-        if getattr(request, 'do_not_log'):
+        if getattr(request, 'do_not_log', None):
             return
-        return super(LogFilterSite, self).log(request)
+        return Site.log(self, request)
 
 
 class Vas2NetsTransport(Transport):
