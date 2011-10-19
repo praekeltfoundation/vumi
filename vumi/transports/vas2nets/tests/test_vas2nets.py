@@ -102,9 +102,11 @@ class Vas2NetsTransportTestCase(TransportTestCase):
             'keyword': '',
         }
         args.update(qparams)
-        url = "http://localhost:%s/%s?%s" % (
-            self.config['web_port'], path.lstrip('/'), urlencode(args))
-        return http_request_full(url)
+        url = "http://localhost:%s/%s" % (
+            self.config['web_port'], path.lstrip('/'))
+        return http_request_full(url, urlencode(args), {
+                'Content-Type': ['application/x-www-form-urlencoded'],
+                })
 
     def mkmsg_delivery(self, status, tr_status, tr_message):
         transport_metadata = {
