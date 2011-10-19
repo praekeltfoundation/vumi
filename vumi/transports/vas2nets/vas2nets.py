@@ -9,7 +9,7 @@ from StringIO import StringIO
 
 from twisted.web import http
 from twisted.web.resource import Resource
-from twisted.web.server import NOT_DONE_YET
+from twisted.web.server import Site, NOT_DONE_YET
 from twisted.web.client import Agent
 from twisted.web.http_headers import Headers
 from twisted.python import log
@@ -201,6 +201,23 @@ class HttpResponseHandler(Protocol):
         self.deferred.callback(self.stringio.getvalue())
 
 
+class LogFilterSite(Site):
+    uris_to_filter = ()
+
+    def log(self, request):
+        if request.uri in self.uris_to_filter:
+            return
+        return super(LogFilterSite, self).log(request)
+
+
+def log_filter_site_factory(*uris_to_filter):
+    def log_filter_site(*args, **kw):
+        site = LogFilterSite(*args, **kw)
+        site.uris_to_filter = uris_to_filter
+        return site
+    return log_filter_site
+
+
 class Vas2NetsTransport(Transport):
     def mkres(self, cls, publish_func, path_key):
         resource = cls(self.config, publish_func)
@@ -211,6 +228,7 @@ class Vas2NetsTransport(Transport):
     def setup_transport(self):
         self._resources = []
         self.config.setdefault('web_health_path', 'health')
+        site_factory = log_filter_site_factory(self.config['web_health_path'])
         resources = [
             self.mkres(ReceiveSMSResource, self.publish_message, 'receive'),
             self.mkres(DeliveryReceiptResource, self.publish_delivery_report,
@@ -218,7 +236,7 @@ class Vas2NetsTransport(Transport):
             self.mkres(HealthResource, None, 'health'),
             ]
         self.receipt_resource = yield self.start_web_resources(
-            resources, self.config['web_port'])
+            resources, self.config['web_port'], site_class=site_factory)
 
     @inlineCallbacks
     def handle_outbound_message(self, message):
