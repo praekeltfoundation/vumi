@@ -2,21 +2,21 @@
 import string
 from uuid import uuid4
 from datetime import datetime
+from urllib import urlencode
 
 from twisted.web import http
 from twisted.web.resource import Resource
-from twisted.web.server import NOT_DONE_YET
 from twisted.python import log
 from twisted.internet.defer import inlineCallbacks
-from twisted.web.test.test_web import DummyRequest
 
+from vumi.utils import http_request_full
 from vumi.transports.tests.test_base import TransportTestCase
 from vumi.tests.utils import get_stubbed_worker, TestResourceWorker
 from vumi.message import from_json
 from vumi.transports.base import FailureMessage
 from vumi.transports.vas2nets.vas2nets import (
-    ReceiveSMSResource, DeliveryReceiptResource, Vas2NetsTransport,
-    validate_characters, Vas2NetsEncodingError, normalize_outbound_msisdn)
+    Vas2NetsTransport, validate_characters, Vas2NetsEncodingError,
+    normalize_outbound_msisdn)
 
 
 class TestResource(Resource):
@@ -85,26 +85,27 @@ class Vas2NetsTransportTestCase(TransportTestCase):
     def get_dispatched(self, rkey):
         return self._amqp.get_dispatched('vumi', rkey)
 
-    def create_request(self, dictionary={}, path='/', method='POST'):
+    def make_request(self, path, qparams):
         """
-        Creates a dummy Vas2Nets request for testing our resources with
+        Builds a request URL with the appropriate params.
         """
-        request = DummyRequest(path)
-        request.method = method
         args = {
-            'messageid': [str(uuid4())],
-            'time': [self.today.strftime('%Y.%m.%d %H:%M:%S')],
-            'sender': ['0041791234567'],
-            'destination': ['9292'],
-            'provider': ['provider'],
-            'keyword': [''],
-            'header': [''],
-            'text': [''],
-            'keyword': [''],
+            'messageid': str(uuid4()),
+            'time': self.today.strftime('%Y.%m.%d %H:%M:%S'),
+            'sender': '0041791234567',
+            'destination': '9292',
+            'provider': 'provider',
+            'keyword': '',
+            'header': '',
+            'text': '',
+            'keyword': '',
         }
-        args.update(dictionary)
-        request.args = args
-        return request
+        args.update(qparams)
+        url = "http://localhost:%s/%s" % (
+            self.config['web_port'], path.lstrip('/'))
+        return http_request_full(url, urlencode(args), {
+                'Content-Type': ['application/x-www-form-urlencoded'],
+                })
 
     def mkmsg_delivery(self, status, tr_status, tr_message):
         transport_metadata = {
@@ -140,20 +141,24 @@ class Vas2NetsTransportTestCase(TransportTestCase):
         return super(Vas2NetsTransportTestCase, self).mkmsg_out(**kw)
 
     @inlineCallbacks
+    def test_health_check(self):
+        url = "http://localhost:%s/health" % (self.config['web_port'],)
+        response = yield http_request_full(url)
+
+        self.assertEqual('OK', response.delivered_body)
+        self.assertEqual(response.code, http.OK)
+
+    @inlineCallbacks
     def test_receive_sms(self):
-        resource = ReceiveSMSResource(self.config, self.worker.publish_message)
-        request = self.create_request({
-            'messageid': ['abc'],
-            'text': ['hello world'],
-        })
-        d = request.notifyFinish()
-        response = resource.render(request)
-        self.assertEqual(response, NOT_DONE_YET)
-        yield d
-        self.assertEqual('', ''.join(request.written))
-        self.assertEqual(request.outgoingHeaders['content-type'],
-                          'text/plain')
-        self.assertEqual(request.responseCode, http.OK)
+        response = yield self.make_request('/receive', {
+                    'messageid': 'abc',
+                    'text': 'hello world',
+                    })
+
+        self.assertEqual('', response.delivered_body)
+        self.assertEqual(response.headers.getRawHeaders('content-type'),
+                         ['text/plain'])
+        self.assertEqual(response.code, http.OK)
         msg = self.mkmsg_in()
 
         [smsg] = self.get_dispatched('vas2nets.inbound')
@@ -161,24 +166,17 @@ class Vas2NetsTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_delivery_receipt_pending(self):
-        resource = DeliveryReceiptResource(self.config,
-                                           self.worker.publish_delivery_report)
-
-        request = self.create_request({
-            'smsid': ['1'],
-            'messageid': ['abc'],
-            'sender': ['+41791234567'],
-            'status': ['1'],
-            'text': ['Message submitted to Provider for delivery.'],
+        response = yield self.make_request('/receipt', {
+            'smsid': '1',
+            'messageid': 'abc',
+            'sender': '+41791234567',
+            'status': '1',
+            'text': 'Message submitted to Provider for delivery.',
         })
-        d = request.notifyFinish()
-        response = resource.render(request)
-        self.assertEqual(response, NOT_DONE_YET)
-        yield d
-        self.assertEqual('', ''.join(request.written))
-        self.assertEqual(request.outgoingHeaders['content-type'],
-                          'text/plain')
-        self.assertEqual(request.responseCode, http.OK)
+        self.assertEqual('', response.delivered_body)
+        self.assertEqual(response.headers.getRawHeaders('content-type'),
+                         ['text/plain'])
+        self.assertEqual(response.code, http.OK)
         msg = self.mkmsg_delivery(
             'pending', '1', 'Message submitted to Provider for delivery.')
         [smsg] = self.get_dispatched('vas2nets.event')
@@ -186,24 +184,17 @@ class Vas2NetsTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_delivery_receipt_failed(self):
-        resource = DeliveryReceiptResource(self.config,
-                                           self.worker.publish_delivery_report)
-
-        request = self.create_request({
-            'smsid': ['1'],
-            'messageid': ['abc'],
-            'sender': ['+41791234567'],
-            'status': ['-9'],
-            'text': ['Message could not be delivered.'],
+        response = yield self.make_request('/receipt', {
+            'smsid': '1',
+            'messageid': 'abc',
+            'sender': '+41791234567',
+            'status': '-9',
+            'text': 'Message could not be delivered.',
         })
-        d = request.notifyFinish()
-        response = resource.render(request)
-        self.assertEqual(response, NOT_DONE_YET)
-        yield d
-        self.assertEqual('', ''.join(request.written))
-        self.assertEqual(request.outgoingHeaders['content-type'],
-                          'text/plain')
-        self.assertEqual(request.responseCode, http.OK)
+        self.assertEqual('', response.delivered_body)
+        self.assertEqual(response.headers.getRawHeaders('content-type'),
+                         ['text/plain'])
+        self.assertEqual(response.code, http.OK)
         msg = self.mkmsg_delivery(
             'failed', '-9', 'Message could not be delivered.')
         [smsg] = self.get_dispatched('vas2nets.event')
@@ -211,24 +202,17 @@ class Vas2NetsTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_delivery_receipt_delivered(self):
-        resource = DeliveryReceiptResource(self.config,
-                                           self.worker.publish_delivery_report)
-
-        request = self.create_request({
-            'smsid': ['1'],
-            'messageid': ['abc'],
-            'sender': ['+41791234567'],
-            'status': ['2'],
-            'text': ['Message delivered to MSISDN.'],
+        response = yield self.make_request('/receipt', {
+            'smsid': '1',
+            'messageid': 'abc',
+            'sender': '+41791234567',
+            'status': '2',
+            'text': 'Message delivered to MSISDN.',
         })
-        d = request.notifyFinish()
-        response = resource.render(request)
-        self.assertEqual(response, NOT_DONE_YET)
-        yield d
-        self.assertEqual('', ''.join(request.written))
-        self.assertEqual(request.outgoingHeaders['content-type'],
-                          'text/plain')
-        self.assertEqual(request.responseCode, http.OK)
+        self.assertEqual('', response.delivered_body)
+        self.assertEqual(response.headers.getRawHeaders('content-type'),
+                         ['text/plain'])
+        self.assertEqual(response.code, http.OK)
         msg = self.mkmsg_delivery(
             'delivered', '2', 'Message delivered to MSISDN.')
         [smsg] = self.get_dispatched('vas2nets.event')
