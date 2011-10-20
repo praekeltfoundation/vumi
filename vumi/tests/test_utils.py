@@ -2,8 +2,9 @@ import os.path
 
 from twisted.trial.unittest import TestCase
 from twisted.internet import reactor
-from twisted.internet.defer import inlineCallbacks
-from twisted.web.server import Site
+from twisted.internet.defer import Deferred, inlineCallbacks
+from twisted.internet.error import ConnectionDone
+from twisted.web.server import Site, NOT_DONE_YET
 from twisted.web.resource import Resource
 from twisted.web import http
 
@@ -52,6 +53,11 @@ class UtilsTestCase(TestCase):
 
 
 class HttpUtilsTestCase(TestCase):
+
+    class LoseConnection(Exception):
+        """Indicates that test server should drop client connection"""
+        pass
+
     @inlineCallbacks
     def setUp(self):
         self.root = Resource()
@@ -71,6 +77,9 @@ class HttpUtilsTestCase(TestCase):
             try:
                 data = f()
                 request.setResponseCode(http.OK)
+            except self.LoseConnection:
+                request.transport.loseConnection()
+                return NOT_DONE_YET
             except Exception, err:
                 data = str(err)
                 request.setResponseCode(http.INTERNAL_SERVER_ERROR)
@@ -91,6 +100,24 @@ class HttpUtilsTestCase(TestCase):
         self.set_render(err)
         data = yield http_request(self.url, '')
         self.assertEqual(data, "Bad")
+
+    @inlineCallbacks
+    def test_http_request_full_drop(self):
+        def lose():
+            raise self.LoseConnection()
+        self.set_render(lose)
+
+        done = Deferred()
+
+        def callback(reason):
+            self.assertTrue(
+                reason.check("twisted.web._newclient.ResponseFailed"))
+            done.callback(None)
+
+        d = http_request_full(self.url, '')
+        d.addBoth(callback)
+
+        yield done
 
     @inlineCallbacks
     def test_http_request_full_ok(self):
