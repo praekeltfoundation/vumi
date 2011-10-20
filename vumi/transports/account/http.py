@@ -75,8 +75,8 @@ class HttpTransport(Transport):
                 content=content,
                 to_addr=to_addr,
                 from_addr=from_addr,
-                provider='internet',
+                provider='vumi',
                 transport_name=self.transport_name,
-                transport_type=self.config.get('transport_type'),
+                transport_type='http_api',
                 transport_metadata={}
                 )
