@@ -54,8 +54,8 @@ class UtilsTestCase(TestCase):
 
 class HttpUtilsTestCase(TestCase):
 
-    class LoseConnection(Exception):
-        """Indicates that test server should drop client connection"""
+    class InterruptHttp(Exception):
+        """Indicates that test server should halt http reply"""
         pass
 
     @inlineCallbacks
@@ -71,14 +71,14 @@ class HttpUtilsTestCase(TestCase):
     def tearDown(self):
         yield self.webserver.loseConnection()
 
-    def set_render(self, f):
+    def set_render(self, f, d=None):
         def render(request):
             request.setHeader('Content-Type', 'text/plain')
             try:
                 data = f()
                 request.setResponseCode(http.OK)
-            except self.LoseConnection:
-                request.transport.loseConnection()
+            except self.InterruptHttp:
+                reactor.callLater(0, d.callback, request)
                 return NOT_DONE_YET
             except Exception, err:
                 data = str(err)
@@ -103,19 +103,25 @@ class HttpUtilsTestCase(TestCase):
 
     @inlineCallbacks
     def test_http_request_full_drop(self):
-        def lose():
-            raise self.LoseConnection()
-        self.set_render(lose)
+        def interrupt():
+            raise self.InterruptHttp()
+        got_request = Deferred()
+        self.set_render(interrupt, got_request)
 
-        done = Deferred()
+        got_data = http_request_full(self.url, '')
+
+        request = yield got_request
+        request.setResponseCode(http.OK)
+        request.write("Foo!")
+        request.transport.loseConnection()
 
         def callback(reason):
             self.assertTrue(
                 reason.check("twisted.web._newclient.ResponseFailed"))
             done.callback(None)
+        done = Deferred()
 
-        d = http_request_full(self.url, '')
-        d.addBoth(callback)
+        got_data.addBoth(callback)
 
         yield done
 
