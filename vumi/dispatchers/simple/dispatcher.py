@@ -2,7 +2,6 @@
 from twisted.python import log
 from twisted.internet.defer import inlineCallbacks
 
-#from vumi.message import Message, TransportUserMessage
 from vumi.service import Worker
 
 
@@ -18,7 +17,7 @@ class MessageHandler():
     def consume_message(self, message):
         log.msg("SimpleDispatcher consuming on %s: %s" % (
             self.queue_name,
-            repr(message.payload)))
+            repr(message)))
         for k in self.publish_keys:
             self.publisher.publish_message(message, routing_key=k)
 
