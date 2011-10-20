@@ -1,9 +1,15 @@
 import os.path
 
 from twisted.trial.unittest import TestCase
+from twisted.internet import reactor
+from twisted.internet.defer import inlineCallbacks
+from twisted.web.server import Site
+from twisted.web.resource import Resource
+from twisted.web import http
+
 
 from vumi.utils import (normalize_msisdn, make_vumi_path_abs, cleanup_msisdn,
-                        get_operator_name)
+                        get_operator_name, http_request, http_request_full)
 
 
 class UtilsTestCase(TestCase):
@@ -43,3 +49,61 @@ class UtilsTestCase(TestCase):
         self.assertEqual('MTN', get_operator_name('27831234567', mapping))
         self.assertEqual('VODACOM', get_operator_name('27821234567', mapping))
         self.assertEqual('UNKNOWN', get_operator_name('27801234567', mapping))
+
+
+class HttpUtilsTestCase(TestCase):
+    @inlineCallbacks
+    def setUp(self):
+        self.root = Resource()
+        self.root.isLeaf = True
+        site_factory = Site(self.root)
+        self.webserver = yield reactor.listenTCP(0, site_factory)
+        addr = self.webserver.getHost()
+        self.url = "http://%s:%s/" % (addr.host, addr.port)
+
+    @inlineCallbacks
+    def tearDown(self):
+        yield self.webserver.loseConnection()
+
+    def set_render(self, f):
+        def render(request):
+            request.setHeader('Content-Type', 'text/plain')
+            try:
+                data = f()
+                request.setResponseCode(http.OK)
+            except Exception, err:
+                data = str(err)
+                request.setResponseCode(http.INTERNAL_SERVER_ERROR)
+            return data
+
+        self.root.render = render
+
+    @inlineCallbacks
+    def test_http_request_ok(self):
+        self.set_render(lambda: "Yay")
+        data = yield http_request(self.url, '')
+        self.assertEqual(data, "Yay")
+
+    @inlineCallbacks
+    def test_http_request_err(self):
+        def err():
+            raise ValueError("Bad")
+        self.set_render(err)
+        data = yield http_request(self.url, '')
+        self.assertEqual(data, "Bad")
+
+    @inlineCallbacks
+    def test_http_request_full_ok(self):
+        self.set_render(lambda: "Yay")
+        request = yield http_request_full(self.url, '')
+        self.assertEqual(request.delivered_body, "Yay")
+        self.assertEqual(request.code, http.OK)
+
+    @inlineCallbacks
+    def test_http_request_full_err(self):
+        def err():
+            raise ValueError("Bad")
+        self.set_render(err)
+        request = yield http_request_full(self.url, '')
+        self.assertEqual(request.delivered_body, "Bad")
+        self.assertEqual(request.code, http.INTERNAL_SERVER_ERROR)
