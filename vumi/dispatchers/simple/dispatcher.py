@@ -35,4 +35,4 @@ class SimpleDispatcher(Worker):
             yield self.consume(queue_name, h.consume_message)
 
     def stopWorker(self):
-        log.msg("Stopping the IkhweziQuizWorker")
+        log.msg("Stopping SimpleDispatcher")
