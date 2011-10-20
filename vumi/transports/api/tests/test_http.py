@@ -85,7 +85,7 @@ class TestTransport(TestCase):
     @inlineCallbacks
     def test_inbound(self):
         args = '/?to_addr=555&from_addr=123&content=hello'
-        d = http_request(self.worker_url + "foo" + args, '', method='GET')
+        d = http_request(self.worker_url + "foo" + args, '', method='POST')
         msg, = yield self.broker.wait_messages("vumi",
             "test_http_transport.inbound", 1)
         payload = msg.payload

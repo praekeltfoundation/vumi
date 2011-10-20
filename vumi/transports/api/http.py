@@ -26,18 +26,12 @@ class HttpResource(Resource):
         self.transport = transport
         Resource.__init__(self)
 
-    def render_(self, request, http_action=None):
+    def render(self, request, http_action=None):
         log.msg("HttpRpcResource HTTP Action: %s" % (request,))
         request.setHeader("content-type", "text/plain")
-        uu = str(uuid.uuid4().get_hex())
+        uu = uuid.uuid4().get_hex()
         self.transport.handle_raw_inbound_message(uu, request)
         return '{"message_id": "%s"}' % (uu)
-
-    def render_GET(self, request):
-        return self.render_(request, "render_GET")
-
-    def render_POST(self, request):
-        return self.render_(request, "render_POST")
 
 
 class HttpTransport(Transport):
