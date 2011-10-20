@@ -7,8 +7,8 @@ import importlib
 from zope.interface import implements
 from twisted.internet import defer
 from twisted.internet import reactor, protocol
-from twisted.internet.defer import succeed
-from twisted.web.client import Agent
+from twisted.internet.defer import succeed, fail
+from twisted.web.client import Agent, ResponseDone
 from twisted.web.http_headers import Headers
 from twisted.web.iweb import IBodyProducer
 
@@ -27,9 +27,10 @@ class SimplishReceiver(protocol.Protocol):
         self.response.delivered_body += data
 
     def connectionLost(self, reason):
-        # TODO: test if reason is twisted.web.client.ResponseDone,
-        # if not, do an errback
-        self.deferred.callback(self.response)
+        if reason.check(ResponseDone):
+            self.deferred.callback(self.response)
+        else:
+            self.deferred.errback(reason)
 
 
 def http_request_full(url, data=None, headers={}, method='POST'):
