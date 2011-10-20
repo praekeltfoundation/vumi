@@ -82,15 +82,17 @@ class TestTransport(TestCase):
                                     method='GET')
         self.assertEqual(result, "OK")
 
-    #@inlineCallbacks
-    #def test_inbound(self):
-        #d = http_request(self.worker_url + "foo", '', method='GET')
-        #msg, = yield self.broker.wait_messages("vumi",
-            #"test_ok_transport.inbound", 1)
-        #payload = msg.payload
-        #tum = TransportUserMessage(**payload)
-        #rep = tum.reply("OK")
-        #self.broker.publish_message("vumi", "test_ok_transport.outbound",
-                #rep)
-        #response = yield d
-        #self.assertEqual(response, 'OK')
+    @inlineCallbacks
+    def test_inbound(self):
+        args = '/?to_addr=555&from_addr=123&content=hello'
+        d = http_request(self.worker_url + "foo" + args, '', method='GET')
+        msg, = yield self.broker.wait_messages("vumi",
+            "test_http_transport.inbound", 1)
+        payload = msg.payload
+        self.assertEqual(payload['transport_name'], "test_http_transport")
+        self.assertEqual(payload['to_addr'], "555")
+        self.assertEqual(payload['from_addr'], "123")
+        self.assertEqual(payload['content'], "hello")
+        expected_response = '{"message_id": "%s"}' % payload['message_id']
+        response = yield d
+        self.assertEqual(response, expected_response)

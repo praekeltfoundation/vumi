@@ -64,14 +64,14 @@ class HttpTransport(Transport):
     def handle_outbound_message(self, message):
         log.msg("HttpApiTransport consuming %s" % (message))
 
-    def handle_raw_inbound_message(self, msgid, request):
+    def handle_raw_inbound_message(self, message_id, request):
         content = str(request.args.get('content', [None])[0])
         to_addr = str(request.args.get('to_addr', [None])[0])
         from_addr = str(request.args.get('from_addr', [None])[0])
         log.msg("HttpApiTransport sending from %s to %s message \"%s\"" % (
             from_addr, to_addr, content))
         self.publish_message(
-                message_id=msgid,
+                message_id=message_id,
                 content=content,
                 to_addr=to_addr,
                 from_addr=from_addr,
