@@ -31,7 +31,7 @@ class HttpResource(Resource):
         request.setHeader("content-type", "text/plain")
         uu = str(uuid.uuid4().get_hex())
         self.transport.handle_raw_inbound_message(uu, request)
-        return "Message id: %s" % (uu)
+        return '{"message_id": "%s"}' % (uu)
 
     def render_GET(self, request):
         return self.render_(request, "render_GET")
@@ -62,14 +62,14 @@ class HttpTransport(Transport):
         yield self.web_resource.loseConnection()
 
     def handle_outbound_message(self, message):
-        log.msg("HttpRpcTransport consuming %s" % (message))
+        log.msg("HttpApiTransport consuming %s" % (message))
 
     def handle_raw_inbound_message(self, msgid, request):
         content = str(request.args.get('content', [None])[0])
         to_addr = str(request.args.get('to_addr', [None])[0])
         from_addr = str(request.args.get('from_addr', [None])[0])
-
-        transport_metadata = {}
+        log.msg("HttpApiTransport sending from %s to %s message \"%s\"" % (
+            from_addr, to_addr, content))
         self.publish_message(
                 message_id=msgid,
                 content=content,
@@ -78,4 +78,5 @@ class HttpTransport(Transport):
                 provider='internet',
                 transport_name=self.transport_name,
                 transport_type=self.config.get('transport_type'),
+                transport_metadata={}
                 )
