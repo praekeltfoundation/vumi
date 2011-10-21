@@ -4,7 +4,6 @@ from twisted.web.resource import Resource
 from twisted.internet.defer import inlineCallbacks, DeferredQueue
 from twisted.web.server import Site
 from twisted.internet import reactor
-from twisted.internet.base import DelayedCall
 
 from vumi.utils import http_request
 from vumi.transports.api.http import HttpTransport
@@ -16,8 +15,7 @@ class TestTransport(TestCase):
 
     @inlineCallbacks
     def setUp(self):
-        DelayedCall.debug = True
-        self.ok_transport_calls = DeferredQueue()
+        self.transport_calls = DeferredQueue()
         config = {
             'transport_name': 'test_http_transport',
             'web_path': "foo",
@@ -34,7 +32,7 @@ class TestTransport(TestCase):
         yield self.worker.stopWorker()
 
     def handle_request(self, request):
-        self.ok_transport_calls.put(request)
+        self.transport_calls.put(request)
         return ''
 
     @inlineCallbacks

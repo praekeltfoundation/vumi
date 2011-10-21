@@ -10,8 +10,7 @@ from vumi.transports.base import Transport
 class HttpHealthResource(Resource):
     isLeaf = True
 
-    def __init__(self, transport):
-        self.transport = transport
+    def __init__(self):
         Resource.__init__(self)
 
     def render_GET(self, request):
@@ -27,7 +26,7 @@ class HttpResource(Resource):
         Resource.__init__(self)
 
     def render(self, request, http_action=None):
-        log.msg("HttpRpcResource HTTP Action: %s" % (request,))
+        log.msg("HttpResource HTTP Action: %s" % (request,))
         request.setHeader("content-type", "text/plain")
         uu = uuid.uuid4().get_hex()
         self.transport.handle_raw_inbound_message(uu, request)
@@ -47,7 +46,7 @@ class HttpTransport(Transport):
         self.web_resource = yield self.start_web_resources(
             [
                 (HttpResource(self), self.config['web_path']),
-                (HttpHealthResource(self), 'health'),
+                (HttpHealthResource(), 'health'),
             ],
             self.config['web_port'])
 
@@ -70,7 +69,5 @@ class HttpTransport(Transport):
                 to_addr=to_addr,
                 from_addr=from_addr,
                 provider='vumi',
-                transport_name=self.transport_name,
                 transport_type='http_api',
-                transport_metadata={}
                 )
