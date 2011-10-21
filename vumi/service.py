@@ -241,7 +241,7 @@ class Worker(object):
     def start_publisher(self, publisher_class, *args, **kw):
         return self._amqp_client.start_publisher(publisher_class, *args, **kw)
 
-    def start_web_resources(self, resources, port):
+    def start_web_resources(self, resources, port, site_class=None):
         # start the HTTP server for receiving the receipts
         root = Resource()
         # sort by ascending path length to make sure we create
@@ -262,7 +262,9 @@ class Worker(object):
             parent = reduce(create_node, nodes, root)
             parent.putChild(leaf, resource)
 
-        site_factory = Site(root)
+        if site_class is None:
+            site_class = Site
+        site_factory = site_class(root)
         return reactor.listenTCP(port, site_factory)
 
 

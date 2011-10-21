@@ -9,16 +9,13 @@ from StringIO import StringIO
 
 from twisted.web import http
 from twisted.web.resource import Resource
-from twisted.web.server import NOT_DONE_YET
-from twisted.web.client import Agent
-from twisted.web.http_headers import Headers
+from twisted.web.server import Site, NOT_DONE_YET
 from twisted.python import log
-from twisted.internet.defer import inlineCallbacks, Deferred
+from twisted.internet.defer import inlineCallbacks
 from twisted.internet.protocol import Protocol
-from twisted.internet import reactor
 from twisted.internet.error import ConnectionRefusedError
 
-from vumi.utils import StringProducer, normalize_msisdn
+from vumi.utils import http_request_full, normalize_msisdn
 from vumi.transports.base import Transport
 from vumi.transports.failures import TemporaryFailure, PermanentFailure
 from vumi.errors import VumiError
@@ -186,6 +183,7 @@ class HealthResource(Resource):
 
     def render(self, request):
         request.setResponseCode(http.OK)
+        request.do_not_log = True
         return 'OK'
 
 
@@ -199,6 +197,13 @@ class HttpResponseHandler(Protocol):
 
     def connectionLost(self, reason):
         self.deferred.callback(self.stringio.getvalue())
+
+
+class LogFilterSite(Site):
+    def log(self, request):
+        if getattr(request, 'do_not_log', None):
+            return
+        return Site.log(self, request)
 
 
 class Vas2NetsTransport(Transport):
@@ -218,7 +223,7 @@ class Vas2NetsTransport(Transport):
             self.mkres(HealthResource, None, 'health'),
             ]
         self.receipt_resource = yield self.start_web_resources(
-            resources, self.config['web_port'])
+            resources, self.config['web_port'], LogFilterSite)
 
     @inlineCallbacks
     def handle_outbound_message(self, message):
@@ -257,27 +262,21 @@ class Vas2NetsTransport(Transport):
         log.msg(urlencode(params))
 
         try:
-            agent = Agent(reactor)
-            response = yield agent.request(
-                'POST', self.config['url'], Headers({
-                        'User-Agent': ['Vumi Vas2Net Transport'],
-                        'Content-Type': ['application/x-www-form-urlencoded'],
-                        }),
-                StringProducer(urlencode(params)))
+            response = yield http_request_full(
+                self.config['url'], urlencode(params), {
+                    'User-Agent': ['Vumi Vas2Net Transport'],
+                    'Content-Type': ['application/x-www-form-urlencoded'],
+                    }, 'POST')
         except ConnectionRefusedError:
             log.msg("Connection failed sending message:", message)
             raise TemporaryFailure('connection refused')
-
-        d = Deferred()
-        response.deliverBody(HttpResponseHandler(d))
-        response_content = yield d
 
         log.msg('Headers', list(response.headers.getAllRawHeaders()))
         header = self.config.get('header', 'X-Nth-Smsid')
 
         if response.code != 200:
             raise PermanentFailure('server error: HTTP %s: %s'
-                                   % (response.code, response_content))
+                                   % (response.code, response.delivered_body))
 
         if response.headers.hasHeader(header):
             transport_message_id = response.headers.getRawHeaders(header)[0]
@@ -287,7 +286,7 @@ class Vas2NetsTransport(Transport):
                 )
         else:
             raise Vas2NetsTransportError('No SmsId Header, content: %s' %
-                                         response_content)
+                                         response.delivered_body)
 
     def stopWorker(self):
         """shutdown"""
