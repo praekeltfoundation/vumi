@@ -37,6 +37,15 @@ class HttpTransport(Transport):
     """
     Strictly for internal testing only
     this has NO SECURITY!
+
+    Configuration Values
+    --------------------
+    web_path : str
+        The path relative to the host where this listens
+    web_port : int
+        The port this listens on
+    transport_name : str
+        The name this transport instance will use to create it's queues
     """
 
     @inlineCallbacks
