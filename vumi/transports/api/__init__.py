@@ -1,6 +1,6 @@
-"""Synchronous HTTP RPC-based message transports."""
+"""API transports to inject messages into VUMI."""
 
-from vumi.transports.httprpc.vodacom_messaging import (
-            VodaMessHttpRpcTransport, VodacomMessagingResponse)
+from vumi.transports.api.http import (
+            HttpTransport)
 
-__all__ = ['VodaMessHttpRpcTransport', 'VodacomMessagingResponse']
+__all__ = ['HttpTransport']
