@@ -12,54 +12,16 @@ from vumi.message import TransportUserMessage
 from vumi.tests.utils import get_stubbed_worker
 
 
-class MockResource(Resource):
-    isLeaf = True
-
-    def __init__(self, handler):
-        Resource.__init__(self)
-        self.handler = handler
-
-    def render_GET(self, request):
-        return self.handler(request)
-
-    def render_POST(self, request):
-        return self.handler(request)
-
-
-class MockHttpServer(object):
-
-    def __init__(self, handler):
-        self._handler = handler
-        self._webserver = None
-        self.addr = None
-        self.url = None
-
-    @inlineCallbacks
-    def start(self):
-        root = MockResource(self._handler)
-        site_factory = Site(root)
-        self._webserver = yield reactor.listenTCP(0, site_factory)
-        self.addr = self._webserver.getHost()
-        self.url = "http://%s:%s/" % (self.addr.host, self.addr.port)
-
-    @inlineCallbacks
-    def stop(self):
-        yield self._webserver.loseConnection()
-
-
 class TestTransport(TestCase):
 
     @inlineCallbacks
     def setUp(self):
         DelayedCall.debug = True
         self.ok_transport_calls = DeferredQueue()
-        self.mock_service = MockHttpServer(self.handle_request)
-        yield self.mock_service.start()
         config = {
             'transport_name': 'test_http_transport',
             'web_path': "foo",
             'web_port': 0,
-            'url': self.mock_service.url,
             }
         self.worker = get_stubbed_worker(HttpTransport, config)
         self.broker = self.worker._amqp_client.broker
@@ -70,7 +32,6 @@ class TestTransport(TestCase):
     @inlineCallbacks
     def tearDown(self):
         yield self.worker.stopWorker()
-        yield self.mock_service.stop()
 
     def handle_request(self, request):
         self.ok_transport_calls.put(request)
