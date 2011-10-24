@@ -97,6 +97,69 @@ class IkhweziModelTest(IkhweziBaseTest):
         d = self.ri(_txn)
         return d
 
+class IkhweziQuizCharacterTest(IkhweziBaseTest):
+
+    def setUp(self):
+        self.ussd_string_prefix = '*120*112233'
+        self.msisdn = '0821234567'
+        self.session_event = 'new'
+        self.provider = 'test'
+        self.quiz = yaml.load(QUIZ)
+        trans = yaml.load(TRANSLATIONS)
+        self.translations = {'Zulu': {}, 'Sotho': {}, 'Afrikaans': {}}
+        for t in trans:
+            self.translations['Zulu'][t['English']] = t['Zulu']
+            self.translations['Sotho'][t['English']] = t['Sotho']
+            self.translations['Afrikaans'][t['English']] = t['Afrikaans']
+        self.language = 'English'
+        self.exit_text = self.quiz['exit']['headertext']
+        self.completed_text = self.quiz['completed']['headertext']
+        self.config = {
+                'web_host': 'vumi.p.org',
+                'web_path': '/api/v1/ussd/vmes/'}
+        d = self.setup_db(IkhweziModel)
+        return d
+
+    def tearDown(self):
+        return self.shutdown_db()
+
+    def test_english_counts(self):
+        for k, v in self.quiz.items():
+            key = k
+            q = ''
+            if v.get('headertext'):
+                #print k
+                q += v['headertext']
+                for k, v in v.get('options', {}).items():
+                    q += "\n%s. %s" % (k, v['text'])
+                #print q
+                #print len(q)
+                if key.startswith('demographic'):
+                    #if len(q) > 140:
+                        #print "*"*42, 'LIMIT 140', "*"*42
+                    self.assertTrue(len(q) <= 140)
+                else:
+                    #if len(q) > 160:
+                        #print "*"*42, 'LIMIT 160', "*"*42
+                    self.assertTrue(len(q) <= 160)
+                #print ''
+
+        for k, v in self.quiz.items():
+            if k.startswith('question'):
+                key = k
+                for k, v in v.get('options', {}).items():
+                    q = ''
+                    #print key, k
+                    q += v['reply']
+                    for k, v in self.quiz['continue']['options'].items():
+                        q += "\n%s. %s" % (k, v['text'])
+                    #print q
+                    #print len(q)
+                    #if len(q) > 160:
+                        #print "*"*42, 'LIMIT 160', "*"*42
+                    self.assertTrue(len(q) <= 160)
+                    #print ''
+
 class IkhweziQuizTest(IkhweziBaseTest):
 
     def setUp(self):

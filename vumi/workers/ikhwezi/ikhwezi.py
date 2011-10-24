@@ -85,7 +85,7 @@ TRANSLATIONS = '''
     Afrikaans: "Limpopo"
     Sotho: "Limpopo"
 -
-    English: "Eastern Cape"
+    English: "E Cape"
     Zulu: "Mpumakoloni"
     Afrikaans: "Oos-Kaap"
     Sotho: "Eastern Cape"
@@ -95,12 +95,12 @@ TRANSLATIONS = '''
     Afrikaans: "Mpumalanga"
     Sotho: "Mpumalanga"
 -
-    English: "Northern Cape"
+    English: "N Cape"
     Zulu: "Nyakatho Kapa"
     Afrikaans: "Noord-Kaap"
     Sotho: "Northern Cape"
 -
-    English: "Western Cape"
+    English: "W Cape"
     Zulu: "Ntshonakoloni"
     Afrikaans: "Wes-Kaap"
     Sotho: "Western Cape"
@@ -200,12 +200,12 @@ TRANSLATIONS = '''
     Afrikaans: "s dit moontlik vir 'n persoon, wat nuut-geinfekteer is met MIV, om MIV negatief te toets?"
     Sotho: "Ekaba ho a etsahala hore motho ya qetang hokenwa ke HIV/AIDS, diteko tsa hae dire ha ana yona?"
 -
-    English: "Correct, a newly-infected HIV positive person can test HIV-negative.  This is due to a person testing for HIV in the 'window period'"
+    English: "Correct, a newly-infected HIV positive person can test HIV-negative, if they are tested for HIV in the 'window period'"
     Zulu: "Uqinisile, umuntu osanda kuthola i-HIV angase ahlolwe bese imiphumela ithi akanayo i-HIV. Lokhu kubangelwa ukuthi usuke eseku-'window period'"
     Afrikaans: "Korrek, dit is moontlik vir iemand wat nuut-geinfekteer is met MIV, om MIV negatief te toets. Dit is as gevolg van die venster tydperk."
     Sotho: "O nepile, motho wa tshwaetso ya HIV la pele a ka hloka HIV morao. Hona ke hobane a bile le diteko 'nakong ya kemelo'"
 -
-    English: "Please Note: a newly-infected HIV positive person can test HIV-negative.  This is due to a person testing for HIV in the 'window period'"
+    English: "Please Note: a newly-infected HIV positive person can test HIV-negative, if they are tested for HIV in the 'window period'"
     Zulu: "Qaphela: umuntu osanda kuthola i-HIV angase ahlolwe bese imiphumela ithi akanayo i-HIV. Lokhu kubangelwa ukuthi usuke eseku-'window period'"
     Afrikaans: "Onthou, dit is moontlik vir iemand wat nuut-geinfekteer is met MIV, om MIV negatief te toets. Dit is as gevolg van die venster tydperk."
     Sotho: "Lemoha: motho wa tshwaetso ya HIV la pele a ka hloka HIV morao. Hona ke hobane a bile le diteko 'nakong ya kemelo'"
@@ -352,13 +352,13 @@ demographic3:
         3:
             text: "Limpopo"
         4:
-            text: "Eastern Cape"
+            text: "E Cape"
         5:
             text: "Mpumalanga"
         6:
-            text: "Northern Cape"
+            text: "N Cape"
         7:
-            text: "Western Cape"
+            text: "W Cape"
         8:
             text: "Free State"
         9:
@@ -415,10 +415,10 @@ question4:
     options:
         1:
             text: "Yes"
-            reply: "Correct, a newly-infected HIV positive person can test HIV-negative.  This is due to a person testing for HIV in the 'window period'"
+            reply: "Correct, a newly-infected HIV positive person can test HIV-negative, if they are tested for HIV in the 'window period'"
         2:
             text: "No"
-            reply: "Please Note: a newly-infected HIV positive person can test HIV-negative.  This is due to a person testing for HIV in the 'window period'"
+            reply: "Please Note: a newly-infected HIV positive person can test HIV-negative, if they are tested for HIV in the 'window period'"
 
 question5:
     headertext: "Can HIV be transmitted by sweat?"
