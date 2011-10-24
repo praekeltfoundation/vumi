@@ -188,14 +188,14 @@ class TestChannel(object):
 
 
 def get_stubbed_worker(worker_class, config=None, broker=None):
-    spec = get_spec(make_vumi_path_abs("config/amqp-spec-0-8.xml"))
+    spec = get_spec(make_vumi_path_abs("amqp-spec-0-8.xml"))
     amq_client = FakeAMQClient(spec, {}, broker)
     worker = worker_class(amq_client, config)
     return worker
 
 
 def get_stubbed_channel(broker=None, id=0):
-    spec = get_spec(make_vumi_path_abs("config/amqp-spec-0-8.xml"))
+    spec = get_spec(make_vumi_path_abs("amqp-spec-0-8.xml"))
     amq_client = FakeAMQClient(spec, {}, broker)
     return amq_client.channel(id)
 

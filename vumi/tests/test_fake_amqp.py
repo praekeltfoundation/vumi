@@ -167,7 +167,7 @@ class FakeAMQPTestCase(TestCase):
 
     @inlineCallbacks
     def test_fake_amqclient(self):
-        spec = get_spec(make_vumi_path_abs("config/amqp-spec-0-8.xml"))
+        spec = get_spec(make_vumi_path_abs("amqp-spec-0-8.xml"))
         amq_client = fake_amqp.FakeAMQClient(spec, {}, self.broker)
         d = Deferred()
 
@@ -207,7 +207,7 @@ class FakeAMQPTestCase(TestCase):
     #         "username": "vumi",
     #         "password": "vumi",
     #         "vhost": "/develop",
-    #         "specfile": "config/amqp-spec-0-8.xml",
+    #         "specfile": "amqp-spec-0-8.xml",
     #         }
     #     wc = WorkerCreator(options)
     #     d = Deferred()

@@ -37,7 +37,7 @@ class UtilsTestCase(TestCase):
         vumi_tests_path = os.path.dirname(__file__)
         vumi_path = os.path.dirname(os.path.dirname(vumi_tests_path))
         self.assertEqual('/foo/bar', make_vumi_path_abs('/foo/bar'))
-        self.assertEqual(os.path.join(vumi_path, 'foo/bar'),
+        self.assertEqual(os.path.join(vumi_path, 'vumi/resources/foo/bar'),
                          make_vumi_path_abs('foo/bar'))
 
     def test_cleanup_msisdn(self):

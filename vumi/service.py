@@ -45,7 +45,7 @@ class Options(usage.Options):
         ["username", None, "vumi", "AMQP username"],
         ["password", None, "vumi", "AMQP password"],
         ["vhost", None, "/develop", "AMQP virtual host"],
-        ["specfile", None, "config/amqp-spec-0-8.xml", "AMQP spec file"],
+        ["specfile", None, "amqp-spec-0-8.xml", "AMQP spec file"],
     ]
 
     def __init__(self):
