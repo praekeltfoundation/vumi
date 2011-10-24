@@ -10,6 +10,7 @@ registered_delivery: 1
 
 TRANSPORT_NAME: vumitestsmsc
 transport_name: vumitestsmsc
+smpp_bind_timeout: 5
 
 # Number Recognition
 COUNTRY_CODE: "27"
