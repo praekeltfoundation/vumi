@@ -62,7 +62,7 @@ class TestVodaMessHttpRpcTransport(TestCase):
             'transport_name': 'test_vodacom_messaging',
             'transport_type': 'ussd',
             'ussd_string_prefix': '*120*666',
-            'web_path': "foo",
+            'web_path': "/foo",
             'web_host': "localhost",
             'web_port': 0,
             'url': self.mock_vodacom_messaging.url,
@@ -176,7 +176,7 @@ class VodacomMessagingResponseTest(TestCase):
 
     def setUp(self):
         self.web_host = 'vumi.p.org'
-        self.web_path = 'api/v1/ussd/vmes/'
+        self.web_path = '/api/v1/ussd/vmes/'
 
     def tearDown(self):
         pass
