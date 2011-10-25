@@ -16,7 +16,7 @@ from txamqp.protocol import AMQClient
 from vumi.errors import VumiError
 from vumi.message import Message
 from vumi.webapp.api import utils
-from vumi.utils import load_class_by_string, make_vumi_path_abs
+from vumi.utils import load_class_by_string, vumi_resource_path
 
 
 SPECS = {}
@@ -45,7 +45,7 @@ class Options(usage.Options):
         ["username", None, "vumi", "AMQP username"],
         ["password", None, "vumi", "AMQP password"],
         ["vhost", None, "/develop", "AMQP virtual host"],
-        ["specfile", None, "config/amqp-spec-0-8.xml", "AMQP spec file"],
+        ["specfile", None, "amqp-spec-0-8.xml", "AMQP spec file"],
     ]
 
     def __init__(self):
@@ -63,7 +63,7 @@ class AmqpFactory(protocol.ReconnectingClientFactory):
     def __init__(self, worker_class, options, config):
         self.options = options
         self.config = config
-        self.spec = get_spec(make_vumi_path_abs(options['specfile']))
+        self.spec = get_spec(vumi_resource_path(options['specfile']))
         self.delegate = TwistedDelegate()
         self.worker = None
         self.worker_class = worker_class
@@ -241,7 +241,7 @@ class Worker(object):
     def start_publisher(self, publisher_class, *args, **kw):
         return self._amqp_client.start_publisher(publisher_class, *args, **kw)
 
-    def start_web_resources(self, resources, port):
+    def start_web_resources(self, resources, port, site_class=None):
         # start the HTTP server for receiving the receipts
         root = Resource()
         # sort by ascending path length to make sure we create
@@ -262,7 +262,9 @@ class Worker(object):
             parent = reduce(create_node, nodes, root)
             parent.putChild(leaf, resource)
 
-        site_factory = Site(root)
+        if site_class is None:
+            site_class = Site
+        site_factory = site_class(root)
         return reactor.listenTCP(port, site_factory)
 
 

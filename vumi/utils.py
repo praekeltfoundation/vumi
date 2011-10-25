@@ -4,47 +4,53 @@ import os.path
 import re
 
 import importlib
+import pkg_resources
 from zope.interface import implements
 from twisted.internet import defer
 from twisted.internet import reactor, protocol
-from twisted.internet.defer import succeed
-from twisted.web.client import Agent
+from twisted.internet.defer import succeed, fail
+from twisted.web.client import Agent, ResponseDone
 from twisted.web.http_headers import Headers
 from twisted.web.iweb import IBodyProducer
 
 
-def http_request(url, data, headers={}, method='POST'):
-    # Construct an Agent.
-    agent = Agent(reactor)
+class SimplishReceiver(protocol.Protocol):
+    def __init__(self, response):
+        self.deferred = defer.Deferred()
+        self.response = response
+        self.response.delivered_body = ''
+        if response.code == 204:
+            self.deferred.callback(self.response)
+        else:
+            response.deliverBody(self)
 
+    def dataReceived(self, data):
+        self.response.delivered_body += data
+
+    def connectionLost(self, reason):
+        if reason.check(ResponseDone):
+            self.deferred.callback(self.response)
+        else:
+            self.deferred.errback(reason)
+
+
+def http_request_full(url, data=None, headers={}, method='POST'):
+    agent = Agent(reactor)
     d = agent.request(method,
                       url,
                       Headers(headers),
                       StringProducer(data) if data else None)
 
     def handle_response(response):
-        if response.code == 204:
-            d = defer.succeed('')
-        else:
-            class SimpleReceiver(protocol.Protocol):
-                def __init__(s, d):
-                    s.buf = ''
-                    s.d = d
-
-                def dataReceived(s, data):
-                    s.buf += data
-
-                def connectionLost(s, reason):
-                    # TODO: test if reason is twisted.web.client.ResponseDone,
-                    # if not, do an errback
-                    s.d.callback(s.buf)
-
-            d = defer.Deferred()
-            response.deliverBody(SimpleReceiver(d))
-        return d
+        return SimplishReceiver(response).deferred
 
     d.addCallback(handle_response)
     return d
+
+
+def http_request(url, data, headers={}, method='POST'):
+    d = http_request_full(url, data, headers=headers, method=method)
+    return d.addCallback(lambda r: r.delivered_body)
 
 
 def normalize_msisdn(raw, country_code=''):
@@ -87,18 +93,16 @@ class StringProducer(object):
         pass
 
 
-def make_vumi_path_abs(path):
+def vumi_resource_path(path):
     """
-    Return an absolute path by prepending the vumi "root" directory.
+    Return an absolute path to a Vumi package resource.
 
-    The "root" directory is the one containing the "vumi" package. If
-    the path is already absolute, it is returned as-is.
+    Vumi package resources are found in the vumi.resources package.
+    If the path is already absolute, it is returned unmodified.
     """
     if os.path.isabs(path):
         return path
-    # We know where this file is relative to the vumi "root"
-    this_path = os.path.dirname(os.path.dirname(__file__))
-    return os.path.join(this_path, path)
+    return pkg_resources.resource_filename("vumi.resources", path)
 
 
 def load_class(module_name, class_name):

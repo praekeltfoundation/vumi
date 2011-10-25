@@ -74,7 +74,8 @@ class HigateXMLTestCases(TestCase):
                     <Subscr Started="2008-09-15 15:59:52"
                             Category="BookClub"
                             Trigger=""/>
-                    <Content Type="TEXT">Test message from Higate Http client</Content>
+                    <Content Type="TEXT">Test message from Higate Http client
+                    </Content>
                 </SendSMS>
          </Request>
         </Message>
@@ -96,7 +97,8 @@ class HigateXMLTestCases(TestCase):
                          DataCoding="0">
                     <Reply Tag=""/>
                     <AdultRating>0</AdultRating>
-                    <Content Type="TEXT">Test message from Higate Http client</Content>
+                    <Content Type="TEXT">Test message from Higate Http client
+                    </Content>
                 </SendSMS>
          </Request>
         </Message>
@@ -159,7 +161,9 @@ class HigateXMLTestCases(TestCase):
                 <NetworkID>2</NetworkID>
                 <Flags>32</Flags>
                 <ResultCode>6</ResultCode>
-                <ResultText>An exception occured in : setErrorVaribles : ControlException on control eventChargeValidation[ORA-0</ResultText>
+                <ResultText>An exception occured in : setErrorVaribles :
+                  ControlException on control eventChargeValidation[ORA-0
+                </ResultText>
                 <OnOBSResponse Type="TEXT"></OnOBSResponse>
             </Response>
         </Message>
@@ -228,7 +232,9 @@ class HigateXMLTestCases(TestCase):
                 <Service>SERVICECODE</Service>
                 <Network ID="1" MCC="655" MNC="001"/>
                 <OnUSSEvent Type="Request">
-                    <USSContext SessionID="16502" NetworkSID="310941653" MSISDN="27821234567" Script="testscript" ConnStr="*120*99*123#"/>
+                    <USSContext SessionID="16502" NetworkSID="310941653"
+                                MSISDN="27821234567" Script="testscript"
+                                ConnStr="*120*99*123#"/>
                     <USSText Type="TEXT">REQ</USSText>
                 </OnUSSEvent>
             </Response>
@@ -258,7 +264,9 @@ class HigateXMLTestCases(TestCase):
                 <Service>SERVICECODE</Service>
                 <Network ID="1" MCC="655" MNC="001"/>
                 <OnUSSEvent Type="Open">
-                    <USSContext SessionID="16502" NetworkSID="310941653" MSISDN="27821234567" Script="testscript" ConnStr="*120*99*123#"/>
+                    <USSContext SessionID="16502" NetworkSID="310941653"
+                                MSISDN="27821234567" Script="testscript"
+                                ConnStr="*120*99*123#"/>
                 </OnUSSEvent>
             </Response>
         </Message>
@@ -285,7 +293,9 @@ class HigateXMLTestCases(TestCase):
                 <Service>LoginName</Service>
                 <Network ID="1" MCC="655" MNC="001"/>
                 <OnUSSEvent Type="Close">
-                    <USSContext SessionID="16502" NetworkSID="310941653" MSISDN="27821234567" Script="testscript" ConnStr="*120*99*123#"/>
+                    <USSContext SessionID="16502" NetworkSID="310941653"
+                                MSISDN="27821234567" Script="testscript"
+                                ConnStr="*120*99*123#"/>
                 </OnUSSEvent>
             </Response>
         </Message>

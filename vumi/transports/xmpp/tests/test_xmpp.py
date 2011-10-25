@@ -26,11 +26,11 @@ class XMPPTransportTestCase(TransportTestCase):
         }, XMPPTransport, start=False)
         transport.transport_name = 'test_xmpp'
         transport.concurrent_sends = None
-        
+
         yield transport._setup_failure_publisher()
         yield transport._setup_message_publisher()
         yield transport._setup_event_publisher()
-        
+
         # stubbing so I can test without an actual XMPP server
         self.jid = JID('user@xmpp.domain.com')
 

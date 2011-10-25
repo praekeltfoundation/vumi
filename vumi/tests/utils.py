@@ -9,9 +9,9 @@ from collections import namedtuple
 from contextlib import contextmanager
 
 import pytz
-from twisted.internet import defer
+from twisted.internet import defer, reactor
 
-from vumi.utils import make_vumi_path_abs
+from vumi.utils import vumi_resource_path
 from vumi.service import get_spec, Worker
 from vumi.tests.fake_amqp import FakeAMQClient
 
@@ -188,14 +188,14 @@ class TestChannel(object):
 
 
 def get_stubbed_worker(worker_class, config=None, broker=None):
-    spec = get_spec(make_vumi_path_abs("config/amqp-spec-0-8.xml"))
+    spec = get_spec(vumi_resource_path("amqp-spec-0-8.xml"))
     amq_client = FakeAMQClient(spec, {}, broker)
     worker = worker_class(amq_client, config)
     return worker
 
 
 def get_stubbed_channel(broker=None, id=0):
-    spec = get_spec(make_vumi_path_abs("config/amqp-spec-0-8.xml"))
+    spec = get_spec(vumi_resource_path("amqp-spec-0-8.xml"))
     amq_client = FakeAMQClient(spec, {}, broker)
     return amq_client.channel(id)
 
@@ -220,6 +220,16 @@ class TestResourceWorker(Worker):
 class FakeRedis(object):
     def __init__(self):
         self._data = {}
+        self._expiries = {}
+
+    def teardown(self):
+        self._clean_up_expires()
+
+    def _clean_up_expires(self):
+        for key in self._expiries.keys():
+            delayed = self._expiries.pop(key)
+            if not delayed.cancelled:
+                delayed.cancel()
 
     # Global operations
 
@@ -245,6 +255,26 @@ class FakeRedis(object):
         self._data.pop(key, None)
 
     # Hash operations
+
+    def hset(self, key, field, value):
+        mapping = self._data.setdefault(key, {})
+        new_field = field not in mapping
+        mapping[field] = value
+        return int(new_field)
+
+    def hget(self, key, field):
+        return self._data.get(key, {}).get(field)
+
+    def hdel(self, key, *fields):
+        mapping = self._data.get(key)
+        if mapping is None:
+            return 0
+        deleted = 0
+        for field in fields:
+            if field in mapping:
+                del mapping[field]
+                deleted += 1
+        return deleted
 
     def hmset(self, key, mapping):
         hval = self._data.setdefault(key, {})
@@ -295,3 +325,15 @@ class FakeRedis(object):
         if stop == 0:
             stop = None
         return [val[1] for val in zval[start:stop]]
+
+    # Expiry operations
+
+    def expire(self, key, seconds):
+        self.persist(key)
+        delayed = reactor.callLater(seconds, self.delete, key)
+        self._expiries[key] = delayed
+
+    def persist(self, key):
+        delayed = self._expiries.get(key)
+        if delayed is not None and not delayed.cancelled:
+            delayed.cancel()

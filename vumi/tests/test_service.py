@@ -65,7 +65,7 @@ class TestWorkerCreator(TestCase):
             "username": "vumitest",
             "password": "vumitest",
             "vhost": "/test",
-            "specfile": "config/amqp-spec-0-8.xml",
+            "specfile": "amqp-spec-0-8.xml",
             }
         vumi_options.update(options)
         return NoQueueWorkerCreator(vumi_options)

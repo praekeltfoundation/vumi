@@ -1,3 +1,5 @@
+# -*- encoding: utf-8 -*-
+
 """Tests for vumi.transports.telnet.transport."""
 
 from twisted.internet.defer import (inlineCallbacks, DeferredQueue,
@@ -73,6 +75,15 @@ class TelnetServerTransportTestCase(TransportTestCase):
         yield self._amqp.wait_messages('vumi', 'test.inbound', 2)
         [reg, msg] = self.get_messages('test.inbound')
         self.assertEqual(msg['content'], "foo")
+        self.assertEqual(msg['session_event'],
+                         TransportUserMessage.SESSION_RESUME)
+
+    @inlineCallbacks
+    def test_handle_non_ascii_input(self):
+        self.client.transport.write(u"öæł".encode("utf-8"))
+        yield self._amqp.wait_messages('vumi', 'test.inbound', 2)
+        [reg, msg] = self.get_messages('test.inbound')
+        self.assertEqual(msg['content'], u"öæł")
         self.assertEqual(msg['session_event'],
                          TransportUserMessage.SESSION_RESUME)
 

@@ -63,6 +63,7 @@ class TestVodaMessHttpRpcTransport(TestCase):
             'transport_type': 'ussd',
             'ussd_string_prefix': '*120*666',
             'web_path': "foo",
+            'web_host': "localhost",
             'web_port': 0,
             'url': self.mock_vodacom_messaging.url,
             'username': 'testuser',
@@ -90,7 +91,7 @@ class TestVodaMessHttpRpcTransport(TestCase):
         self.assertEqual(result, "pReq:0")
 
     @inlineCallbacks
-    def test_inbound_new(self):
+    def test_inbound_new_continue(self):
         args = "/?ussdSessionId=123&msisdn=555&provider=web&request=*120*666"
         d = http_request(self.worker_url + "foo" + args, '', method='GET')
         msg, = yield self.broker.wait_messages("vumi",
@@ -110,10 +111,14 @@ class TestVodaMessHttpRpcTransport(TestCase):
         self.broker.publish_message("vumi", "test_vodacom_messaging.outbound",
                 rep)
         response = yield d
-        self.assertEqual(response, 'OK')
+        correct_response = '<request>\n\t<headertext>OK</headertext>\n\t' \
+                '<options>\n\t\t<option command="1" order="1" ' \
+                'callback="http://localhost/foo" display="False" >' \
+                '</option>\n\t</options>\n</request>'
+        self.assertEqual(response, correct_response)
 
     @inlineCallbacks
-    def test_inbound_resume(self):
+    def test_inbound_resume_continue(self):
         args = "/?ussdSessionId=123&msisdn=555&provider=web&request=1"
         d = http_request(self.worker_url + "foo" + args, '', method='GET')
         msg, = yield self.broker.wait_messages("vumi",
@@ -133,7 +138,35 @@ class TestVodaMessHttpRpcTransport(TestCase):
         self.broker.publish_message("vumi", "test_vodacom_messaging.outbound",
                 rep)
         response = yield d
-        self.assertEqual(response, 'OK')
+        correct_response = '<request>\n\t<headertext>OK</headertext>\n\t' \
+                '<options>\n\t\t<option command="1" order="1" ' \
+                'callback="http://localhost/foo" display="False" >' \
+                '</option>\n\t</options>\n</request>'
+        self.assertEqual(response, correct_response)
+
+    @inlineCallbacks
+    def test_inbound_resume_close(self):
+        args = "/?ussdSessionId=123&msisdn=555&provider=web&request=1"
+        d = http_request(self.worker_url + "foo" + args, '', method='GET')
+        msg, = yield self.broker.wait_messages("vumi",
+            "test_vodacom_messaging.inbound", 1)
+        payload = msg.payload
+        self.assertEqual(payload['transport_name'], "test_vodacom_messaging")
+        self.assertEqual(payload['transport_type'], "ussd")
+        self.assertEqual(payload['transport_metadata'],
+                         {"session_id": "123"})
+        self.assertEqual(payload['session_event'],
+                         TransportUserMessage.SESSION_RESUME)
+        self.assertEqual(payload['from_addr'], '555')
+        self.assertEqual(payload['to_addr'], '')
+        self.assertEqual(payload['content'], '1')
+        tum = TransportUserMessage(**payload)
+        rep = tum.reply("OK", False)
+        self.broker.publish_message("vumi", "test_vodacom_messaging.outbound",
+                rep)
+        response = yield d
+        correct_response = '<request>\n\t<headertext>OK</headertext>\n</request>'
+        self.assertEqual(response, correct_response)
 
 
 class VodacomMessagingResponseTest(TestCase):
@@ -142,9 +175,8 @@ class VodacomMessagingResponseTest(TestCase):
     '''
 
     def setUp(self):
-        self.config = {
-                'web_host': 'vumi.p.org',
-                'web_path': '/api/v1/ussd/vmes/'}
+        self.web_host = 'vumi.p.org'
+        self.web_path = 'api/v1/ussd/vmes/'
 
     def tearDown(self):
         pass
@@ -154,7 +186,7 @@ class VodacomMessagingResponseTest(TestCase):
         return re.sub(r'\n\s*', '', string)
 
     def testMakeEndMessage(self):
-        vmr = VodacomMessagingResponse(self.config)
+        vmr = VodacomMessagingResponse(self.web_host, self.web_path)
         vmr.set_headertext("Goodbye")
         ref = '''
             <request>
@@ -164,7 +196,7 @@ class VodacomMessagingResponseTest(TestCase):
         self.assertEquals(self.stdXML(vmr), self.stdXML(ref))
 
     def testMakeFreetextMessage(self):
-        vmr = VodacomMessagingResponse(self.config)
+        vmr = VodacomMessagingResponse(self.web_host, self.web_path)
         vmr.set_headertext("Please enter your name")
         vmr.accept_freetext()
         ref = '''
@@ -172,7 +204,7 @@ class VodacomMessagingResponseTest(TestCase):
                 <headertext>Please enter your name</headertext>
                 <options>
                     <option
-                        callback="http://vumi.p.org/api/v1/ussd/vmes/?context="
+                        callback="http://vumi.p.org/api/v1/ussd/vmes/"
                         command="1"
                         display="False"
                         order="1" />
@@ -180,23 +212,22 @@ class VodacomMessagingResponseTest(TestCase):
             </request>
             '''
         self.assertEquals(self.stdXML(vmr), self.stdXML(ref))
-        vmr.set_context('username')
         ref = '''
-            <request>
-                <headertext>Please enter your name</headertext>
-                <options>
-                    <option
-                        callback="http://vumi.p.org/api/v1/ussd/vmes/?context=username"
-                        command="1"
-                        display="False"
-                        order="1" />
-                </options>
-            </request>
-            '''
+        <request>
+            <headertext>Please enter your name</headertext>
+            <options>
+            <option
+                callback="http://vumi.p.org/api/v1/ussd/vmes/"
+                command="1"
+                display="False"
+                order="1" />
+            </options>
+        </request>
+        '''
         self.assertEquals(self.stdXML(vmr), self.stdXML(ref))
 
     def testMakeOptionMessage(self):
-        vmr = VodacomMessagingResponse(self.config)
+        vmr = VodacomMessagingResponse(self.web_host, self.web_path)
         vmr.set_headertext("Pick a card")
         vmr.accept_freetext()
         vmr.add_option("Ace of diamonds")
@@ -209,19 +240,19 @@ class VodacomMessagingResponseTest(TestCase):
                     <option
                         command="1"
                         order="1"
-                        callback="http://vumi.p.org/api/v1/ussd/vmes/?context="
+                        callback="http://vumi.p.org/api/v1/ussd/vmes/"
                         display="True"
                         >Ace of diamonds</option>
                     <option
                         command="2"
                         order="2"
-                        callback="http://vumi.p.org/api/v1/ussd/vmes/?context="
+                        callback="http://vumi.p.org/api/v1/ussd/vmes/"
                         display="True"
                         >2 of clubs</option>
                     <option
                         command="3"
                         order="3"
-                        callback="http://vumi.p.org/api/v1/ussd/vmes/?context="
+                        callback="http://vumi.p.org/api/v1/ussd/vmes/"
                         display="True"
                         >3 of hearts</option>
                 </options>
@@ -235,7 +266,7 @@ class VodacomMessagingResponseTest(TestCase):
                 <headertext>Pick a card</headertext>
                 <options>
                     <option
-                        callback="http://vumi.p.org/api/v1/ussd/vmes/?context="
+                        callback="http://vumi.p.org/api/v1/ussd/vmes/"
                         command="1"
                         display="False"
                         order="1" />
@@ -252,19 +283,19 @@ class VodacomMessagingResponseTest(TestCase):
                 <headertext>Pick a card</headertext>
                 <options>
                     <option
-                        callback="http://vumi.p.org/api/v1/ussd/vmes/?context="
+                        callback="http://vumi.p.org/api/v1/ussd/vmes/"
                         command="1"
                         display="True"
                         order="1"
                         >King of spades</option>
                     <option
-                        callback="http://vumi.p.org/api/v1/ussd/vmes/?context="
+                        callback="http://vumi.p.org/api/v1/ussd/vmes/"
                         command="2"
                         display="True"
                         order="2"
                         >Queen of diamonds</option>
                     <option
-                        callback="http://vumi.p.org/api/v1/ussd/vmes/?context="
+                        callback="http://vumi.p.org/api/v1/ussd/vmes/"
                         command="3"
                         display="True"
                         order="3"
@@ -274,36 +305,35 @@ class VodacomMessagingResponseTest(TestCase):
             '''
         self.assertEquals(self.stdXML(vmr), self.stdXML(ref))
 
-        vmr.set_context('pickcard')
         ref = '''
-            <request>
-                <headertext>Pick a card</headertext>
-                <options>
-                    <option
-                        callback="http://vumi.p.org/api/v1/ussd/vmes/?context=pickcard"
-                        command="1"
-                        display="True"
-                        order="1"
-                        >King of spades</option>
-                    <option
-                        callback="http://vumi.p.org/api/v1/ussd/vmes/?context=pickcard"
-                        command="2"
-                        display="True"
-                        order="2"
-                        >Queen of diamonds</option>
-                    <option
-                        callback="http://vumi.p.org/api/v1/ussd/vmes/?context=pickcard"
-                        command="3"
-                        display="True"
-                        order="3"
-                        >Joker</option>
-                </options>
-            </request>
-            '''
+        <request>
+            <headertext>Pick a card</headertext>
+            <options>
+            <option
+                callback="http://vumi.p.org/api/v1/ussd/vmes/"
+                command="1"
+                display="True"
+                order="1"
+                >King of spades</option>
+            <option
+                callback="http://vumi.p.org/api/v1/ussd/vmes/"
+                command="2"
+                display="True"
+                order="2"
+                >Queen of diamonds</option>
+            <option
+                callback="http://vumi.p.org/api/v1/ussd/vmes/"
+                command="3"
+                display="True"
+                order="3"
+                >Joker</option>
+            </options>
+        </request>
+        '''
         self.assertEquals(self.stdXML(vmr), self.stdXML(ref))
 
     def testMakeOrderedOptionMessage(self):
-        vmr = VodacomMessagingResponse(self.config)
+        vmr = VodacomMessagingResponse(self.web_host, self.web_path)
         vmr.set_headertext("Pick a card")
         vmr.accept_freetext()
         vmr.add_option("3 of hearts", 3)
@@ -316,19 +346,19 @@ class VodacomMessagingResponseTest(TestCase):
                     <option
                         command="3"
                         order="3"
-                        callback="http://vumi.p.org/api/v1/ussd/vmes/?context="
+                        callback="http://vumi.p.org/api/v1/ussd/vmes/"
                         display="True"
                         >3 of hearts</option>
                     <option
                         command="2"
                         order="2"
-                        callback="http://vumi.p.org/api/v1/ussd/vmes/?context="
+                        callback="http://vumi.p.org/api/v1/ussd/vmes/"
                         display="True"
                         >2 of clubs</option>
                     <option
                         command="1"
                         order="1"
-                        callback="http://vumi.p.org/api/v1/ussd/vmes/?context="
+                        callback="http://vumi.p.org/api/v1/ussd/vmes/"
                         display="True"
                         >Ace of diamonds</option>
                 </options>
