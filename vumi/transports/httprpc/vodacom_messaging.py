@@ -56,14 +56,14 @@ class VodacomMessagingResponse(object):
         self.template_freetext_option_string = ('<option'
                 ' command="1"'
                 ' order="1"'
-                ' callback="http://%(web_host)s/%(web_path)s"'
+                ' callback="http://%(web_host)s%(web_path)s"'
                 ' display="False"'
                 ' ></option>')
         self.option_list = []
         self.template_numbered_option_string = ('<option'
                 ' command="%(order)s"'
                 ' order="%(order)s"'
-                ' callback="http://%(web_host)s/%(web_path)s"'
+                ' callback="http://%(web_host)s%(web_path)s"'
                 ' display="True"'
                 ' >%(text)s</option>')
 
