@@ -849,9 +849,9 @@ class IkhweziQuiz():
         if self.data['sessions'] > 4 or question_name == None:
             # terminate interaction
             question = self.quiz.get('completed')
-            vmr = VodacomMessagingResponse(self.config)
-            vmr.set_headertext(self._(question['headertext']))
-            return vmr
+            headertext = self._(question['headertext'])
+            return {"content": headertext,
+                    "continue_session": False}
 
         reply = None
         if question_name != 'continue':
@@ -864,33 +864,32 @@ class IkhweziQuiz():
         if exit:
             # don't continue, show exit
             question = self.quiz.get('exit')
-            vmr = VodacomMessagingResponse(self.config)
             headertext = self._(question['headertext'])
             if self.data['sessions'] < 4:
                 rem = 4 - self.data['sessions']
                 question = self.quiz.get('variable_exit')
                 headertext = self._(question['headertext']) % rem
-            vmr.set_headertext(headertext)
-            return vmr
+            return {"content": headertext,
+                    "continue_session": False}
 
         elif reply:
             # correct answer and offer to continue
             question = self.quiz.get('continue')
-            vmr = VodacomMessagingResponse(self.config)
-            vmr.set_headertext(self._(reply))
+            headertext = self._(reply)
             for key, val in question['options'].items():
-                vmr.add_option(self._(val['text']), key)
-            return vmr
+                headertext += "\n%s. %s" % (key, self._(val['text']))
+            return {"content": headertext,
+                    "continue_session": True}
 
         else:
             # ask another question
             question_name = self.remaining_list()[0]
             question = self.quiz.get(question_name)
-            vmr = VodacomMessagingResponse(self.config)
-            vmr.set_headertext(self._(question['headertext']))
+            headertext = self._(question['headertext'])
             for key, val in question['options'].items():
-                vmr.add_option(self._(val['text']), key)
-            return vmr
+                headertext += "\n%s. %s" % (key, self._(val['text']))
+            return {"content": headertext,
+                    "continue_session": True}
 
 
 class IkhweziQuizWorker(Worker):
@@ -937,7 +936,7 @@ class IkhweziQuizWorker(Worker):
         session_event = user_m.payload.get('session_event')
         provider = user_m.payload.get('provider')
         def response_callback(resp):
-            reply = user_m.reply(str(resp))
+            reply = user_m.reply(resp['content'], resp['continue_session'])
             self.publisher.publish_message(reply)
         ik = IkhweziQuiz(
                 self.config,
