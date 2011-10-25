@@ -16,7 +16,7 @@ from txamqp.protocol import AMQClient
 from vumi.errors import VumiError
 from vumi.message import Message
 from vumi.webapp.api import utils
-from vumi.utils import load_class_by_string, make_vumi_path_abs
+from vumi.utils import load_class_by_string, vumi_resource_path
 
 
 SPECS = {}
@@ -63,7 +63,7 @@ class AmqpFactory(protocol.ReconnectingClientFactory):
     def __init__(self, worker_class, options, config):
         self.options = options
         self.config = config
-        self.spec = get_spec(make_vumi_path_abs(options['specfile']))
+        self.spec = get_spec(vumi_resource_path(options['specfile']))
         self.delegate = TwistedDelegate()
         self.worker = None
         self.worker_class = worker_class

@@ -93,7 +93,7 @@ class StringProducer(object):
         pass
 
 
-def make_vumi_path_abs(path):
+def vumi_resource_path(path):
     """
     Return an absolute path to a Vumi package resource.
 
