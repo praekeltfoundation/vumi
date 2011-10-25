@@ -73,14 +73,15 @@ class HttpRpcTransport(Transport):
         if message.payload.get('in_reply_to') and 'content' in message.payload:
             self.finishRequest(
                     message.payload['in_reply_to'],
-                    message.payload['content'])
+                    message.payload['content'],
+                    message.payload['session_event'])
 
     def handle_raw_inbound_message(self, msgid, request):
         raise NotImplementedError("Sub-classes should implement"
                                   " handle_raw_inbound_message.")
 
-    def finishRequest(self, uuid, message=''):
-        data = str(message)
+    def finishRequest(self, uuid, content, session_event):
+        data = str(content)
         log.msg("HttpRpcTransport.finishRequest with data:", repr(data))
         log.msg(repr(self.requests))
         request = self.requests.get(uuid)
