@@ -301,72 +301,72 @@ class IkhweziQuizTest(IkhweziBaseTest):
             yield self.quiz_respond(i, completed_callback)
 
 
-    #@inlineCallbacks
-    #def test_answer_out_of_range_1(self):
-        #"""
-        #The 66 is impossible
-        #"""
-        #inputs = ['*120*112233#', 1, 66, 1, 1, 1, 1, 1]
+    @inlineCallbacks
+    def test_answer_out_of_range_1(self):
+        """
+        The 66 is impossible
+        """
+        inputs = ['*120*112233#', 1, 66, 1, 1, 1, 1, 1]
 
-        #def response_callback(resp):
-            #pass
-        #def finish_callback(resp):
-            #self.assertTrue(resp.headertext.endswith(self.exit_text))
-        #for i in inputs:
-            #yield self.quiz_respond(i, response_callback)
-        #yield self.quiz_respond(1, finish_callback)
+        def response_callback(resp):
+            pass
+        def finish_callback(resp):
+            self.assertEqual(resp['content'], self.variable_exit_text % 3)
+        for i in inputs:
+            yield self.quiz_respond(i, response_callback)
+        yield self.quiz_respond(1, finish_callback)
 
-    #@inlineCallbacks
-    #def test_answer_out_of_range_2(self):
-        #"""
-        #The 22 is impossible
-        #"""
-        #inputs = ['*120*112233#', 22, 1, 1, 1, 1, 1, 1]
+    @inlineCallbacks
+    def test_answer_out_of_range_2(self):
+        """
+        The 22 is impossible
+        """
+        inputs = ['*120*112233#', 22, 1, 1, 1, 1, 1, 1]
 
-        #def response_callback(resp):
-            #pass
-        #def finish_callback(resp):
-            #self.assertTrue(resp.headertext.endswith(self.exit_text))
-        #for i in inputs:
-            #yield self.quiz_respond(i, response_callback)
-        #yield self.quiz_respond(2, finish_callback)
+        def response_callback(resp):
+            pass
+        def finish_callback(resp):
+            self.assertEqual(resp['content'], self.variable_exit_text % 3)
+        for i in inputs:
+            yield self.quiz_respond(i, response_callback)
+        yield self.quiz_respond(2, finish_callback)
 
-    #@inlineCallbacks
-    #def test_answer_wrong_type_1(self):
-        #inputs = ['*120*112233#', 1, "is there a 3rd option?", 1, 1, 1]
+    @inlineCallbacks
+    def test_answer_wrong_type_1(self):
+        inputs = ['*120*112233#', 1, "is there a 3rd option?", 1, 1, 1]
 
-        #def response_callback(resp):
-            #pass
-        #def finish_callback(resp):
-            #self.assertTrue(resp.headertext.endswith(self.exit_text))
-        #for i in inputs:
-            #yield self.quiz_respond(i, response_callback)
-        #yield self.quiz_respond(2, finish_callback)
+        def response_callback(resp):
+            pass
+        def finish_callback(resp):
+            self.assertEqual(resp['content'], self.variable_exit_text % 3)
+        for i in inputs:
+            yield self.quiz_respond(i, response_callback)
+        yield self.quiz_respond(2, finish_callback)
 
 
-    #@inlineCallbacks
-    #def test_answer_wrong_type_2(self):
-        #inputs = ['*120*11223344#', 1, '*120*11223344#', 1, 1, 1, 2]
+    @inlineCallbacks
+    def test_answer_wrong_type_2(self):
+        inputs = ['*120*11223344#', 1, '*120*11223344#', 1, 1, 1, 2]
 
-        #def response_callback(resp):
-            #pass
-        #def finish_callback(resp):
-            #self.assertTrue(resp.headertext.endswith(self.exit_text))
-        #for i in inputs:
-            #yield self.quiz_respond(i, response_callback)
-        #yield self.quiz_respond(2, finish_callback)
+        def response_callback(resp):
+            pass
+        def finish_callback(resp):
+            self.assertEqual(resp['content'], self.variable_exit_text % 2)
+        for i in inputs:
+            yield self.quiz_respond(i, response_callback)
+        yield self.quiz_respond(2, finish_callback)
 
-    #@inlineCallbacks
-    #def test_answer_wrong_type_3(self):
-        #"""
-        #Mismatches on Continue question auto continue
-        #"""
-        #inputs = ['*120*11223344#', 1, 1, "ok", "huh", 1, 'exit', 'stop', 1]
+    @inlineCallbacks
+    def test_answer_wrong_type_3(self):
+        """
+        Mismatches on Continue question auto continue
+        """
+        inputs = ['*120*11223344#', 1, 1, "ok", "huh", 1, 'exit', 'stop', 1]
 
-        #def response_callback(resp):
-            #pass
-        #def finish_callback(resp):
-            #self.assertTrue(resp.headertext.endswith(self.exit_text))
-        #for i in inputs:
-            #yield self.quiz_respond(i, response_callback)
-        #yield self.quiz_respond(2, finish_callback)
+        def response_callback(resp):
+            pass
+        def finish_callback(resp):
+            self.assertEqual(resp['content'], self.variable_exit_text % 3)
+        for i in inputs:
+            yield self.quiz_respond(i, response_callback)
+        yield self.quiz_respond(2, finish_callback)
