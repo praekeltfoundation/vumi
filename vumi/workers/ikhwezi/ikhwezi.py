@@ -319,6 +319,9 @@ continue:
 exit:
     headertext: "Thnx for taking the quiz.  We'll let U know if U R a lucky winner within 48 hours."
 
+variable_exit:
+    headertext: "Thnx for taking the quiz.  You can still take the quiz %s more times.  We'll let U know if U R a lucky winner within 48 hours."
+
 completed:
     headertext: "Thank you, you've completed the HIV quiz and will be notified via SMS if you've won airtime prize."
 
@@ -862,7 +865,12 @@ class IkhweziQuiz():
             # don't continue, show exit
             question = self.quiz.get('exit')
             vmr = VodacomMessagingResponse(self.config)
-            vmr.set_headertext(self._(question['headertext']))
+            headertext = self._(question['headertext'])
+            if self.data['sessions'] < 4:
+                rem = 4 - self.data['sessions']
+                question = self.quiz.get('variable_exit')
+                headertext = self._(question['headertext']) % rem
+            vmr.set_headertext(headertext)
             return vmr
 
         elif reply:

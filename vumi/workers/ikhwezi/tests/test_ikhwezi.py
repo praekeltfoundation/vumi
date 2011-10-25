@@ -176,6 +176,7 @@ class IkhweziQuizTest(IkhweziBaseTest):
             self.translations['Afrikaans'][t['English']] = t['Afrikaans']
         self.language = 'English'
         self.exit_text = self.quiz['exit']['headertext']
+        self.variable_exit_text = self.quiz['variable_exit']['headertext']
         self.completed_text = self.quiz['completed']['headertext']
         self.config = {
                 'web_host': 'vumi.p.org',
