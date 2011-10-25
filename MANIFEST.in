@@ -4,7 +4,6 @@ include environments/template.py
 include logs/README
 include fab/README
 include tmp/pids/README
-include config/amqp-spec-0-8.xml
 include config/deploying.pip
 include config/smpp.yaml
 include config/smpp_sim.yaml
