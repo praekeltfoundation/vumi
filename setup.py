@@ -20,6 +20,7 @@ setup(
     author='Praekelt Foundation',
     author_email='dev@praekeltfoundation.org',
     packages=find_packages(),
+    include_package_data=True,
     install_requires=['setuptools'] +
                      remove_externals(listify('config/requirements.pip')),
     classifiers=[
