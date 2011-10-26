@@ -5,7 +5,7 @@ from twisted.internet.defer import inlineCallbacks
 from vumi.service import Worker
 
 
-class MessageHandler(Object):
+class MessageHandler(object):
     def __init__(self, worker, queue_name, publisher, publish_keys=[]):
         self.worker = worker
         self.queue_name = queue_name
