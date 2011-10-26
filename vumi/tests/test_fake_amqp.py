@@ -2,7 +2,7 @@ from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks, Deferred
 
 from vumi.service import get_spec, Worker
-from vumi.utils import make_vumi_path_abs
+from vumi.utils import vumi_resource_path
 from vumi.tests import fake_amqp
 
 
@@ -167,7 +167,7 @@ class FakeAMQPTestCase(TestCase):
 
     @inlineCallbacks
     def test_fake_amqclient(self):
-        spec = get_spec(make_vumi_path_abs("config/amqp-spec-0-8.xml"))
+        spec = get_spec(vumi_resource_path("amqp-spec-0-8.xml"))
         amq_client = fake_amqp.FakeAMQClient(spec, {}, self.broker)
         d = Deferred()
 
@@ -207,7 +207,7 @@ class FakeAMQPTestCase(TestCase):
     #         "username": "vumi",
     #         "password": "vumi",
     #         "vhost": "/develop",
-    #         "specfile": "config/amqp-spec-0-8.xml",
+    #         "specfile": "amqp-spec-0-8.xml",
     #         }
     #     wc = WorkerCreator(options)
     #     d = Deferred()

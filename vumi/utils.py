@@ -4,6 +4,7 @@ import os.path
 import re
 
 import importlib
+import pkg_resources
 from zope.interface import implements
 from twisted.internet import defer
 from twisted.internet import reactor, protocol
@@ -92,18 +93,16 @@ class StringProducer(object):
         pass
 
 
-def make_vumi_path_abs(path):
+def vumi_resource_path(path):
     """
-    Return an absolute path by prepending the vumi "root" directory.
+    Return an absolute path to a Vumi package resource.
 
-    The "root" directory is the one containing the "vumi" package. If
-    the path is already absolute, it is returned as-is.
+    Vumi package resources are found in the vumi.resources package.
+    If the path is already absolute, it is returned unmodified.
     """
     if os.path.isabs(path):
         return path
-    # We know where this file is relative to the vumi "root"
-    this_path = os.path.dirname(os.path.dirname(__file__))
-    return os.path.join(this_path, path)
+    return pkg_resources.resource_filename("vumi.resources", path)
 
 
 def load_class(module_name, class_name):

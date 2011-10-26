@@ -9,7 +9,7 @@ from twisted.web.resource import Resource
 from twisted.web import http
 
 
-from vumi.utils import (normalize_msisdn, make_vumi_path_abs, cleanup_msisdn,
+from vumi.utils import (normalize_msisdn, vumi_resource_path, cleanup_msisdn,
                         get_operator_name, http_request, http_request_full)
 
 
@@ -36,9 +36,9 @@ class UtilsTestCase(TestCase):
     def test_make_campaign_path_abs(self):
         vumi_tests_path = os.path.dirname(__file__)
         vumi_path = os.path.dirname(os.path.dirname(vumi_tests_path))
-        self.assertEqual('/foo/bar', make_vumi_path_abs('/foo/bar'))
-        self.assertEqual(os.path.join(vumi_path, 'foo/bar'),
-                         make_vumi_path_abs('foo/bar'))
+        self.assertEqual('/foo/bar', vumi_resource_path('/foo/bar'))
+        self.assertEqual(os.path.join(vumi_path, 'vumi/resources/foo/bar'),
+                         vumi_resource_path('foo/bar'))
 
     def test_cleanup_msisdn(self):
         self.assertEqual('27761234567', cleanup_msisdn('27761234567', '27'))

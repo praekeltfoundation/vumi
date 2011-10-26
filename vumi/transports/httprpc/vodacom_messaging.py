@@ -1,3 +1,5 @@
+from twisted.python import log
+
 from vumi.message import TransportUserMessage
 from vumi.transports.httprpc.transport import HttpRpcTransport
 
@@ -28,43 +30,45 @@ class VodaMessHttpRpcTransport(HttpRpcTransport):
                 transport_metadata=transport_metadata,
                 )
 
+    def finishRequest(self, uuid, content, session_event):
+        vmr = VodacomMessagingResponse(
+                self.config['web_host'],
+                self.config['web_path'])
+        vmr.set_headertext(str(content))
+        if session_event is None:
+            vmr.accept_freetext()
+        data = str(vmr)
+
+        log.msg("VodaMessHttpRpcTransport.finishRequest with data:", repr(data))
+        log.msg(repr(self.requests))
+        request = self.requests.get(uuid)
+        if request:
+            request.write(data)
+            request.finish()
+            del self.requests[uuid]
+
 
 class VodacomMessagingResponse(object):
-    def __init__(self, config):
-        self.config = config
-        self.context = ''
+    def __init__(self, web_host, web_path):
+        self.web_host = web_host
+        self.web_path = web_path
         self.freetext_option = None
         self.template_freetext_option_string = ('<option'
                 ' command="1"'
                 ' order="1"'
-                ' callback="http://%(web_host)s%(web_path)s?'
-                           'context=%(context)s"'
+                ' callback="http://%(web_host)s%(web_path)s"'
                 ' display="False"'
                 ' ></option>')
         self.option_list = []
         self.template_numbered_option_string = ('<option'
                 ' command="%(order)s"'
                 ' order="%(order)s"'
-                ' callback="http://%(web_host)s%(web_path)s?'
-                           'context=%(context)s"'
+                ' callback="http://%(web_host)s%(web_path)s"'
                 ' display="True"'
                 ' >%(text)s</option>')
 
     def set_headertext(self, headertext):
         self.headertext = headertext
-
-    def set_context(self, context):
-        """
-        context is a unique identifier for the state that generated
-        the message the user is responding to
-        """
-        self.context = context
-        if self.freetext_option:
-            self.accept_freetext()
-        count = 0
-        while count < len(self.option_list):
-            self.option_list[count].update({'context': self.context})
-            count += 1
 
     def add_option(self, text, order=None):
         self.freetext_option = None
@@ -74,17 +78,15 @@ class VodacomMessagingResponse(object):
         else:
             dict['order'] = len(self.option_list) + 1
         dict.update({
-            'web_path': self.config['web_path'],
-            'web_host': self.config['web_host'],
-            'context': self.context})
+            'web_path': self.web_path,
+            'web_host': self.web_host})
         self.option_list.append(dict)
 
     def accept_freetext(self):
         self.option_list = []
         self.freetext_option = self.template_freetext_option_string % {
-            'web_path': self.config['web_path'],
-            'web_host': self.config['web_host'],
-            'context': self.context}
+            'web_path': self.web_path,
+            'web_host': self.web_host}
 
     def __str__(self):
         headertext = '\t<headertext>%s</headertext>\n' % self.headertext
