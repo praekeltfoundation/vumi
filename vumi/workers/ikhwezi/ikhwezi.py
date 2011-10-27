@@ -40,7 +40,7 @@ TRANSLATIONS = '''
     Afrikaans: "Dankie dat jy aan die vasvra deelgeneem het. Ons sal jou binne 48 uur laat weet indien jy 'n wenner is."
     Sotho: "Rea o leboha ka quiz. Re tla o tsebisa haeba o le mohlodi dihoreng tse 48"
 -
-    English: "Thank you, you've completed the HIV quiz and will be notified via SMS if you've won airtime prize."
+    English: "Thanks, you have now completed all the HIV/AIDS quiz questions. We'll let U know if U R a lucky winner within 48 hours."
     Zulu:
     Afrikaans:
     Sotho:
@@ -316,14 +316,14 @@ continue:
         2:
             text: "Exit the quiz"
 
+early_exit:
+    headertext: "Thanks, you have completed this section of the quiz. Dial *120*112233# again, to try more questions and stand another chance to win"
+
 exit:
     headertext: "Thnx for taking the quiz.  We'll let U know if U R a lucky winner within 48 hours."
 
-variable_exit:
-    headertext: "Thnx for taking the quiz.  You can still take the quiz %s more times.  We'll let U know if U R a lucky winner within 48 hours."
-
 completed:
-    headertext: "Thank you, you've completed the HIV quiz and will be notified via SMS if you've won airtime prize."
+    headertext: "Thanks, you have now completed all the HIV/AIDS quiz questions. We'll let U know if U R a lucky winner within 48 hours."
 
 demographic1:
     headertext: "Thnx 4 taking the Quiz! Answer easy questions and be 1 of 5000 lucky winners.  Pick your language:"
@@ -866,9 +866,8 @@ class IkhweziQuiz():
             question = self.quiz.get('exit')
             headertext = self._(question['headertext'])
             if self.data['sessions'] < 4:
-                rem = 4 - self.data['sessions']
-                question = self.quiz.get('variable_exit')
-                headertext = self._(question['headertext']) % rem
+                question = self.quiz.get('early_exit')
+                headertext = self._(question['headertext'])
             return {"content": headertext,
                     "continue_session": False}
 

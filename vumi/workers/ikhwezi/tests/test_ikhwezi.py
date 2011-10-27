@@ -176,7 +176,7 @@ class IkhweziQuizTest(IkhweziBaseTest):
             self.translations['Afrikaans'][t['English']] = t['Afrikaans']
         self.language = 'English'
         self.exit_text = self.quiz['exit']['headertext']
-        self.variable_exit_text = self.quiz['variable_exit']['headertext']
+        self.early_exit_text = self.quiz['early_exit']['headertext']
         self.completed_text = self.quiz['completed']['headertext']
         self.config = {
                 'web_host': 'vumi.p.org',
@@ -216,7 +216,7 @@ class IkhweziQuizTest(IkhweziBaseTest):
         def response_callback(resp):
             pass
         def finish_callback(resp):
-            self.assertEqual(resp['content'], self.variable_exit_text % 3)
+            self.assertEqual(resp['content'], self.early_exit_text)
         for i in inputs:
             yield self.quiz_respond(i, response_callback)
         yield self.quiz_respond(1, finish_callback)
@@ -225,7 +225,7 @@ class IkhweziQuizTest(IkhweziBaseTest):
         def response_callback(resp):
             pass
         def finish_callback(resp):
-            self.assertEqual(resp['content'], self.variable_exit_text % 2)
+            self.assertEqual(resp['content'], self.early_exit_text)
         for i in inputs:
             yield self.quiz_respond(i, response_callback)
         yield self.quiz_respond(1, finish_callback)
@@ -234,7 +234,7 @@ class IkhweziQuizTest(IkhweziBaseTest):
         def response_callback(resp):
             pass
         def finish_callback(resp):
-            self.assertEqual(resp['content'], self.variable_exit_text % 1)
+            self.assertEqual(resp['content'], self.early_exit_text)
         for i in inputs:
             yield self.quiz_respond(i, response_callback)
         yield self.quiz_respond(1, finish_callback)
@@ -255,7 +255,7 @@ class IkhweziQuizTest(IkhweziBaseTest):
         def response_callback(resp):
             pass
         def finish_callback(resp):
-            self.assertEqual(resp['content'], self.variable_exit_text % 3)
+            self.assertEqual(resp['content'], self.early_exit_text)
         for i in inputs:
             yield self.quiz_respond(i, response_callback)
         yield self.quiz_respond(2, finish_callback)
@@ -264,7 +264,7 @@ class IkhweziQuizTest(IkhweziBaseTest):
         def response_callback(resp):
             pass
         def finish_callback(resp):
-            self.assertEqual(resp['content'], self.variable_exit_text % 2)
+            self.assertEqual(resp['content'], self.early_exit_text)
         for i in inputs:
             yield self.quiz_respond(i, response_callback)
         yield self.quiz_respond(2, finish_callback)
@@ -273,7 +273,7 @@ class IkhweziQuizTest(IkhweziBaseTest):
         def response_callback(resp):
             pass
         def finish_callback(resp):
-            self.assertEqual(resp['content'], self.variable_exit_text % 1)
+            self.assertEqual(resp['content'], self.early_exit_text)
         for i in inputs:
             yield self.quiz_respond(i, response_callback)
         yield self.quiz_respond(2, finish_callback)
@@ -311,7 +311,7 @@ class IkhweziQuizTest(IkhweziBaseTest):
         def response_callback(resp):
             pass
         def finish_callback(resp):
-            self.assertEqual(resp['content'], self.variable_exit_text % 3)
+            self.assertEqual(resp['content'], self.early_exit_text)
         for i in inputs:
             yield self.quiz_respond(i, response_callback)
         yield self.quiz_respond(1, finish_callback)
@@ -326,7 +326,7 @@ class IkhweziQuizTest(IkhweziBaseTest):
         def response_callback(resp):
             pass
         def finish_callback(resp):
-            self.assertEqual(resp['content'], self.variable_exit_text % 3)
+            self.assertEqual(resp['content'], self.early_exit_text)
         for i in inputs:
             yield self.quiz_respond(i, response_callback)
         yield self.quiz_respond(2, finish_callback)
@@ -338,7 +338,7 @@ class IkhweziQuizTest(IkhweziBaseTest):
         def response_callback(resp):
             pass
         def finish_callback(resp):
-            self.assertEqual(resp['content'], self.variable_exit_text % 3)
+            self.assertEqual(resp['content'], self.early_exit_text)
         for i in inputs:
             yield self.quiz_respond(i, response_callback)
         yield self.quiz_respond(2, finish_callback)
@@ -351,7 +351,7 @@ class IkhweziQuizTest(IkhweziBaseTest):
         def response_callback(resp):
             pass
         def finish_callback(resp):
-            self.assertEqual(resp['content'], self.variable_exit_text % 2)
+            self.assertEqual(resp['content'], self.early_exit_text)
         for i in inputs:
             yield self.quiz_respond(i, response_callback)
         yield self.quiz_respond(2, finish_callback)
@@ -366,7 +366,7 @@ class IkhweziQuizTest(IkhweziBaseTest):
         def response_callback(resp):
             pass
         def finish_callback(resp):
-            self.assertEqual(resp['content'], self.variable_exit_text % 3)
+            self.assertEqual(resp['content'], self.early_exit_text)
         for i in inputs:
             yield self.quiz_respond(i, response_callback)
         yield self.quiz_respond(2, finish_callback)
