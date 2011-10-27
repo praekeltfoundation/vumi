@@ -140,43 +140,35 @@ class IkhweziQuizCharacterTest(IkhweziBaseTest):
             key = k
             q = ''
             if v.get('headertext'):
-                #print k
                 q += self._(v['headertext'], language)
                 for k, v in v.get('options', {}).items():
                     q += "\n%s. %s" % (k, self._(v['text'], language))
-                #print q
-                #print len(q)
                 if key.startswith('demographic'):
-                    if len(q) > 140:
-                        print '\n', language, key, ":"
-                        print q
-                        print "*"*42, len(q), 'IS OVER LIMIT OF 140', "*"*42
-                    #self.assertTrue(len(q) <= 140)
+                    #if len(q) > 140:
+                        #print '\n', language, key, ":"
+                        #print q
+                        #print "*"*42, len(q), 'IS OVER LIMIT OF 140', "*"*42
+                    self.assertTrue(len(q) <= 140)
                 else:
-                    if len(q) > 160:
-                        print '\n', language, key, ":"
-                        print q
-                        print "*"*42, len(q), 'IS OVER LIMIT OF 160', "*"*42
-                    #self.assertTrue(len(q) <= 160)
-                #print ''
+                    #if len(q) > 160:
+                        #print '\n', language, key, ":"
+                        #print q
+                        #print "*"*42, len(q), 'IS OVER LIMIT OF 160', "*"*42
+                    self.assertTrue(len(q) <= 160)
 
         for k, v in self.quiz.items():
             if k.startswith('question'):
                 key = k
                 for k, v in v.get('options', {}).items():
                     q = ''
-                    #print key, k
                     q += self._(v['reply'], language)
                     for k, v in self.quiz['continue']['options'].items():
                         q += "\n%s. %s" % (k, self._(v['text'], language))
-                    #print q
-                    #print len(q)
-                    if len(q) > 160:
-                        print '\n', language, key, ":"
-                        print q
-                        print "*"*42, len(q), 'IS OVER LIMIT OF 160', "*"*42
-                    #self.assertTrue(len(q) <= 160)
-                    #print ''
+                    #if len(q) > 160:
+                        #print '\n', language, key, ":"
+                        #print q
+                        #print "*"*42, len(q), 'IS OVER LIMIT OF 160', "*"*42
+                    self.assertTrue(len(q) <= 160)
 
     def test_english_counts(self):
         self._character_counts()
