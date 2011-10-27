@@ -46,9 +46,29 @@ TRANSLATIONS = '''
     Sotho:
 -
     English: "Thnx 4 taking the Quiz! Answer easy questions and be 1 of 5000 lucky winners.  Pick your language:"
-    Zulu:
-    Afrikaans:
-    Sotho:
+    Zulu: "Thnx 4 taking the Quiz! Answer easy questions and be 1 of 5000 lucky winners.  Pick your language:"
+    Afrikaans: "Thnx 4 taking the Quiz! Answer easy questions and be 1 of 5000 lucky winners.  Pick your language:"
+    Sotho: "Thnx 4 taking the Quiz! Answer easy questions and be 1 of 5000 lucky winners.  Pick your language:"
+-
+    English: "English"
+    Zulu: "English"
+    Afrikaans: "English"
+    Sotho: "English"
+-
+    English: "Zulu"
+    Zulu: "Zulu"
+    Afrikaans: "Zulu"
+    Sotho: "Zulu"
+-
+    English: "Afrikaans"
+    Zulu: "Afrikaans"
+    Afrikaans: "Afrikaans"
+    Sotho: "Afrikaans"
+-
+    English: "Sotho"
+    Zulu: "Sotho"
+    Afrikaans: "Sotho"
+    Sotho: "Sotho"
 -
     English: "Please pick your gender"
     Zulu: "Sicela ukhethe ubulili bakho"

@@ -123,25 +123,41 @@ class IkhweziQuizCharacterTest(IkhweziBaseTest):
     def tearDown(self):
         return self.shutdown_db()
 
-    def test_english_counts(self):
+    def _(self, string, language):
+        trans = self.translations.get(language)
+        if trans == None:
+            return string
+        else:
+            newstring = trans.get(string)
+            if newstring == None:
+                #return string
+                return "TRANSLATION MISSING FOR: " + string + " "*160
+            else:
+                return newstring
+
+    def _character_counts(self, language="English"):
         for k, v in self.quiz.items():
             key = k
             q = ''
             if v.get('headertext'):
                 #print k
-                q += v['headertext']
+                q += self._(v['headertext'], language)
                 for k, v in v.get('options', {}).items():
-                    q += "\n%s. %s" % (k, v['text'])
+                    q += "\n%s. %s" % (k, self._(v['text'], language))
                 #print q
                 #print len(q)
                 if key.startswith('demographic'):
-                    #if len(q) > 140:
-                        #print "*"*42, 'LIMIT 140', "*"*42
-                    self.assertTrue(len(q) <= 140)
+                    if len(q) > 140:
+                        print '\n', language, key, ":"
+                        print q
+                        print "*"*42, len(q), 'IS OVER LIMIT OF 140', "*"*42
+                    #self.assertTrue(len(q) <= 140)
                 else:
-                    #if len(q) > 160:
-                        #print "*"*42, 'LIMIT 160', "*"*42
-                    self.assertTrue(len(q) <= 160)
+                    if len(q) > 160:
+                        print '\n', language, key, ":"
+                        print q
+                        print "*"*42, len(q), 'IS OVER LIMIT OF 160', "*"*42
+                    #self.assertTrue(len(q) <= 160)
                 #print ''
 
         for k, v in self.quiz.items():
@@ -150,15 +166,29 @@ class IkhweziQuizCharacterTest(IkhweziBaseTest):
                 for k, v in v.get('options', {}).items():
                     q = ''
                     #print key, k
-                    q += v['reply']
+                    q += self._(v['reply'], language)
                     for k, v in self.quiz['continue']['options'].items():
-                        q += "\n%s. %s" % (k, v['text'])
+                        q += "\n%s. %s" % (k, self._(v['text'], language))
                     #print q
                     #print len(q)
-                    #if len(q) > 160:
-                        #print "*"*42, 'LIMIT 160', "*"*42
-                    self.assertTrue(len(q) <= 160)
+                    if len(q) > 160:
+                        print '\n', language, key, ":"
+                        print q
+                        print "*"*42, len(q), 'IS OVER LIMIT OF 160', "*"*42
+                    #self.assertTrue(len(q) <= 160)
                     #print ''
+
+    def test_english_counts(self):
+        self._character_counts()
+
+    def test_afrikaans_counts(self):
+        self._character_counts("Afrikaans")
+
+    def test_zulu_counts(self):
+        self._character_counts("Zulu")
+
+    def test_sotho_counts(self):
+        self._character_counts("Sotho")
 
 class IkhweziQuizTest(IkhweziBaseTest):
 
