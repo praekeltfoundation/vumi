@@ -217,7 +217,7 @@ TRANSLATIONS = '''
 -
     English: "Is it possible for a person newly infected with HIV, to test HIV negative?"
     Zulu: "Ingaba kuyenzeka ukuthi imiphumela ye HIV/AIDS yomuntu oqeda kuthola igciwane ithi akanalo?"
-    Afrikaans: "s dit moontlik vir 'n persoon, wat nuut-geinfekteer is met MIV, om MIV negatief te toets?"
+    Afrikaans: "Is dit moontlik vir 'n persoon, wat nuut-geinfekteer is met MIV, om MIV negatief te toets?"
     Sotho: "Ekaba ho a etsahala hore motho ya qetang hokenwa ke HIV/AIDS, diteko tsa hae dire ha ana yona?"
 -
     English: "Correct, a newly-infected HIV positive person can test HIV-negative, if they are tested for HIV in the 'window period'"
