@@ -734,6 +734,7 @@ class IkhweziQuiz():
         return d
 
     def random_remaining_questions(self):
+        random.seed()
         rq = []
         rq.append(['demographic1'])
         demo = [
