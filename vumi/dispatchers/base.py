@@ -10,11 +10,6 @@ from vumi.message import TransportUserMessage, TransportEvent
 from vumi.utils import load_class_by_string
 
 
-class BaseDispatchRouter(object):
-    def __init__(self, dispatcher, config):
-        pass
-
-
 class BaseDispatchWorker(Worker):
     """Base class for a dispatch worker.
 
@@ -49,12 +44,12 @@ class BaseDispatchWorker(Worker):
         for transport_name in self._transport_names:
             self.transport_consumer[transport_name] = yield self.consume(
                 '%s.inbound' % (transport_name,),
-                self.dispatch_user_message,
+                self.dispatch_inbound_message,
                 message_class=TransportUserMessage)
         for transport_name in self._transport_names:
             self.transport_event_consumer[transport_name] = yield self.consume(
                 '%s.event' % (transport_name,),
-                self.dispatch_event,
+                self.dispatch_inbound_event,
                 message_class=TransportEvent)
 
     @inlineCallbacks
@@ -76,3 +71,49 @@ class BaseDispatchWorker(Worker):
                 '%s.outbound' % (exposed_name,),
                 self.dispatch_outbound_message,
                 message_class=TransportUserMessage)
+
+    def dispatch_inbound_message(self, msg):
+        return self._router.dispatch_inbound_message(msg)
+
+    def dispatch_inbound_event(self, msg):
+        return self._router.dispatch_inbound_event(msg)
+
+    def dispatch_outbound_message(self, msg):
+        return self._router.dispatch_outbound_message(msg)
+
+
+class BaseDispatchRouter(object):
+    """Base class for dispatch routing logic.
+    """
+
+    def __init__(self, dispatcher, config):
+        self.dispatcher = dispatcher
+        self.config = config
+
+    def dispatch_inbound_message(self, msg):
+        raise NotImplementedError()
+
+    def dispatch_inbound_event(self, msg):
+        raise NotImplementedError()
+
+    def dispatch_outbound_message(self, msg):
+        raise NotImplementedError()
+
+
+class SimpleDispatchRouter(BaseDispatchRouter):
+    """Simple dispatch router that maps transports to apps.
+    """
+
+    def dispatch_inbound_message(self, msg):
+        names = self.config['route_mappings'][msg['transport_name']]
+        for name in names:
+            self.dispatcher.exposed_publisher[name].publish_message(msg)
+
+    def dispatch_inbound_event(self, msg):
+        names = self.config['route_mappings'][msg['transport_name']]
+        for name in names:
+            self.dispatcher.exposed_event_publisher[name].publish_message(msg)
+
+    def dispatch_outbound_message(self, msg):
+        name = msg['transport_name']
+        self.dispatcher.transport_publisher[name].publish_message(msg)
