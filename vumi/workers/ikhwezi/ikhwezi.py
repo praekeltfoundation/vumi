@@ -756,7 +756,7 @@ class IkhweziQuiz():
                 'question8',
                 'question9',
                 'question10']
-        random.shuffle(demo)
+        random.shuffle(ques)
         while len(ques):
             for i in range(4):
                 try:
