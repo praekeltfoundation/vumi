@@ -215,7 +215,7 @@ class Worker(object):
             'exchange_type': exchange_type,
             'durable': durable,
         }
-        log.msg('Staring %s with %s' % (class_name, kwargs))
+        log.msg('Starting %s with %s' % (class_name, kwargs))
         klass = type(class_name, (DynamicConsumer,), kwargs)
         if message_class is not None:
             klass.message_class = message_class
