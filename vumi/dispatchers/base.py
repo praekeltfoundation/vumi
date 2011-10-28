@@ -20,15 +20,20 @@ class BaseDispatchWorker(Worker):
         log.msg('Starting a %s dispatcher with config: %s'
                 % (self.__class__.__name__,  self.config))
 
-        self._transport_names = self.config.get('transport_names', [])
-        self._exposed_names = self.config.get('exposed_names', [])
-        router_cls = load_class_by_string(self.config['router_class'])
-        self._router = router_cls(self, self.config)
-
+        yield self.setup_endpoints()
+        yield self.setup_router()
         yield self.setup_transport_publishers()
         yield self.setup_exposed_publishers()
         yield self.setup_transport_consumers()
         yield self.setup_exposed_consumers()
+
+    def setup_endpoints(self):
+        self._transport_names = self.config.get('transport_names', [])
+        self._exposed_names = self.config.get('exposed_names', [])
+
+    def setup_router(self):
+        router_cls = load_class_by_string(self.config['router_class'])
+        self._router = router_cls(self, self.config)
 
     @inlineCallbacks
     def setup_transport_publishers(self):
