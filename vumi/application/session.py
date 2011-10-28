@@ -31,7 +31,7 @@ class SessionManager(object):
                  gc_period=1.0):
         self.max_session_length = max_session_length
         redis_config = redis_config if redis_config is not None else {}
-        self.r_server = redis.Redis(db, **redis_config)
+        self.r_server = redis.Redis(db=db, **redis_config)
         self.r_prefix = prefix
 
         self.gc = task.LoopingCall(lambda: self.active_sessions())
