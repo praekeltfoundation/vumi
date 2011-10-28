@@ -8,7 +8,7 @@ import pkg_resources
 from zope.interface import implements
 from twisted.internet import defer
 from twisted.internet import reactor, protocol
-from twisted.internet.defer import succeed, fail
+from twisted.internet.defer import succeed
 from twisted.web.client import Agent, ResponseDone
 from twisted.web.http_headers import Headers
 from twisted.web.iweb import IBodyProducer
@@ -120,7 +120,7 @@ def load_class(module_name, class_name):
 
 def load_class_by_string(class_path):
     """
-    Load a class when given it's full name, including modules in python
+    Load a class when given its full name, including modules in python
     dot notation
 
     >>> cls = 'vumi.workers.example.ExampleWorker'
