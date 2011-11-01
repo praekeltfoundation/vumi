@@ -3,11 +3,50 @@ from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.message import TransportUserMessage, TransportEvent
-from vumi.dispatchers.base import BaseDispatchWorker
+from vumi.dispatchers.base import BaseDispatchWorker, ToAddrRouter
 from vumi.tests.utils import get_stubbed_worker
 
 
-class TestTransport(TestCase):
+class MessageMakerMixIn(object):
+    """TestCase mixin for creating transport messages."""
+
+    def mkmsg_ack(self, transport_name, **kw):
+        event_kw = dict(
+            event_type='ack',
+            user_message_id='1',
+            sent_message_id='abc',
+            transport_name=transport_name,
+            transport_metadata={},
+            )
+        event_kw.update(kw)
+        return TransportEvent(**event_kw)
+
+    def mkmsg_in(self, transport_name, content='foo', **kw):
+        msg_kw = dict(
+            from_addr='+41791234567',
+            to_addr='9292',
+            transport_name=transport_name,
+            transport_type='sms',
+            transport_metadata={},
+            content=content,
+            )
+        msg_kw.update(kw)
+        return TransportUserMessage(**msg_kw)
+
+    def mkmsg_out(self, transport_name, content='hello world', **kw):
+        msg_kw = dict(
+            to_addr='+41791234567',
+            from_addr='9292',
+            transport_name=transport_name,
+            transport_type='sms',
+            transport_metadata={},
+            content=content,
+            )
+        msg_kw.update(kw)
+        return TransportUserMessage(**msg_kw)
+
+
+class TestBaseDispatchWorker(TestCase, MessageMakerMixIn):
 
     @inlineCallbacks
     def setUp(self):
@@ -42,35 +81,6 @@ class TestTransport(TestCase):
             rkey = self.rkey('outbound')
         self._amqp.publish_message(exchange, rkey, message)
         return self._amqp.kick_delivery()
-
-    def mkmsg_ack(self, transport_name):
-        return TransportEvent(
-            event_type='ack',
-            user_message_id='1',
-            sent_message_id='abc',
-            transport_name=transport_name,
-            transport_metadata={},
-            )
-
-    def mkmsg_in(self, transport_name, content='foo'):
-        return TransportUserMessage(
-            from_addr='+41791234567',
-            to_addr='9292',
-            transport_name=transport_name,
-            transport_type='sms',
-            transport_metadata={},
-            content=content,
-            )
-
-    def mkmsg_out(self, transport_name, content='hello world'):
-        return TransportUserMessage(
-            to_addr='+41791234567',
-            from_addr='9292',
-            transport_name=transport_name,
-            transport_type='sms',
-            transport_metadata={},
-            content=content,
-            )
 
     def assert_messages(self, rkey, msgs):
         self.assertEqual(msgs, self._amqp.get_messages('vumi', rkey))
@@ -152,3 +162,48 @@ class TestTransport(TestCase):
         yield self.dispatch(msgs[2], 'app3.outbound')
         self.assert_messages('transport3.outbound', msgs)
         self.assert_no_messages('transport1.outbound', 'transport2.outbound')
+
+
+class DummyDispatcher(object):
+
+    class DummyPublisher(object):
+        def __init__(self):
+            self.msgs = []
+
+        def publish_message(self, msg):
+            self.msgs.append(msg)
+
+    def __init__(self, config):
+        self.transport_publisher = {}
+        for transport in config['transport_names']:
+            self.transport_publisher[transport] = self.DummyPublisher()
+        self.exposed_publisher = {}
+        for exposed in config['exposed_names']:
+            self.exposed_publisher[exposed] = self.DummyPublisher()
+
+
+class TestToAddrRouter(TestCase, MessageMakerMixIn):
+    def setUp(self):
+        self.config = {
+            'transport_names': ['transport1'],
+            'exposed_names': ['app1', 'app2'],
+            'toaddr_mappings': {
+                'app1': 'to:.*:1',
+                'app2': 'to:app2',
+                },
+            }
+        self.dispatcher = DummyDispatcher(self.config)
+        self.router = ToAddrRouter(self.dispatcher, self.config)
+
+    def test_dispatch_inbound_message(self):
+        msg = self.mkmsg_in(to_addr='to:foo:1', transport_name='transport1')
+        self.router.dispatch_inbound_message(msg)
+        publishers = self.dispatcher.exposed_publisher
+        self.assertEqual(publishers['app1'].msgs, [msg])
+        self.assertEqual(publishers['app2'].msgs, [])
+
+    def test_dispatch_outbound_message(self):
+        msg = self.mkmsg_out(transport_name='transport1')
+        self.router.dispatch_outbound_message(msg)
+        publishers = self.dispatcher.transport_publisher
+        self.assertEqual(publishers['transport1'].msgs, [msg])

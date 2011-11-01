@@ -2,6 +2,8 @@
 
 """Basic tools for building dispatchers."""
 
+import re
+
 from twisted.internet.defer import inlineCallbacks
 from twisted.python import log
 
@@ -94,6 +96,11 @@ class BaseDispatchRouter(object):
     def __init__(self, dispatcher, config):
         self.dispatcher = dispatcher
         self.config = config
+        self.setup_routing()
+
+    def setup_routing(self):
+        """Setup any things needed for routing."""
+        pass
 
     def dispatch_inbound_message(self, msg):
         raise NotImplementedError()
@@ -118,6 +125,42 @@ class SimpleDispatchRouter(BaseDispatchRouter):
         names = self.config['route_mappings'][msg['transport_name']]
         for name in names:
             self.dispatcher.exposed_event_publisher[name].publish_message(msg)
+
+    def dispatch_outbound_message(self, msg):
+        name = msg['transport_name']
+        self.dispatcher.transport_publisher[name].publish_message(msg)
+
+
+class ToAddrRouter(BaseDispatchRouter):
+    """Router that dispatches based on msg to_addr.
+
+    :type toaddr_mappings: dict
+    :param toaddr_mappings:
+        Mapping from application transport names to regular
+        expressions. If a message's to_addr matches the given
+        regular expression the message is sent to the applications
+        listening on the given transport name.
+    """
+
+    def setup_routing(self):
+        self.mappings = []
+        for name, toaddr_pattern in self.config['toaddr_mappings'].items():
+            self.mappings.append((name, re.compile(toaddr_pattern)))
+            # TODO: assert that name is in list of publishers.
+
+    def dispatch_inbound_message(self, msg):
+        toaddr = msg['to_addr']
+        for name, regex in self.mappings:
+            if regex.match(toaddr):
+                self.dispatcher.exposed_publisher[name].publish_message(msg)
+
+    def dispatch_inbound_event(self, msg):
+        pass
+        # TODO:
+        #   Use msg['user_message_id'] to look up where original message
+        #   was dispatched to and dispatch this message there
+        #   Perhaps there should be a message on the base class to support
+        #   this.
 
     def dispatch_outbound_message(self, msg):
         name = msg['transport_name']
