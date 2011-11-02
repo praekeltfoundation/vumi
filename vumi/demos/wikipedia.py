@@ -118,7 +118,7 @@ class WikipediaWorker(ApplicationWorker):
             True)
 
     def resume_wikipedia_session(self, msg, session):
-        response = msg['content'].strip()
+        response = msg['content'].strip() if msg['content'] is not None else ''
         if response.isdigit():
             self.handle_selection(msg, session, int(response))
         else:
