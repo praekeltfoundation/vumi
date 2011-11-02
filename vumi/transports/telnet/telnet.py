@@ -33,6 +33,17 @@ class TelnetTransportProtocol(TelnetProtocol):
 
 
 class TelnetServerTransport(Transport):
+    """Telnet based transport.
+
+    This transport listens on a specified port for telnet
+    clients and routes lines to and from connected clients.
+
+    Telnet transport options:
+
+    :type telnet_port: int
+    :param telnet_port:
+        Port for the telnet server to listen on.
+    """
 
     def validate_config(self):
         self.telnet_port = int(self.config['telnet_port'])
