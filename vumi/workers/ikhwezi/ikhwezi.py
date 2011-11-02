@@ -26,9 +26,9 @@ TRANSLATIONS = '''
     Sotho: "Rea o leboha ka ho nka karolo ho HIV Quiz. HA O mohlodi, re tshepa hore o ithutile! Lesedi le leng ka HIV/AIDS, letsetsa Aids Helpline 0800012322"
 -
     English: "Continue to win!"
-    Zulu: "Qhubeka ukuze uwine!"
+    Zulu: "Qhubeka uwine!"
     Afrikaans: "Gaan voort om te wen!"
-    Sotho: "E ya potsong e latelang"
+    Sotho: "Tswela pele ho hapa moputso"
 -
     English: "Exit the quiz"
     Zulu: "Phuma kwi-quiz"
@@ -96,7 +96,7 @@ TRANSLATIONS = '''
     Sotho: "Gauteng"
 -
     English: "Kwazulu Natal"
-    Zulu: "Kwazulu Natal"
+    Zulu: "KZN"
     Afrikaans: "Kwazulu Natal"
     Sotho: "Kwazulu Natal"
 -
@@ -108,7 +108,7 @@ TRANSLATIONS = '''
     English: "E Cape"
     Zulu: "Mpumakoloni"
     Afrikaans: "Oos-Kaap"
-    Sotho: "Eastern Cape"
+    Sotho: "E Cape"
 -
     English: "Mpumalanga"
     Zulu: "Mpumalanga"
@@ -117,13 +117,13 @@ TRANSLATIONS = '''
 -
     English: "N Cape"
     Zulu: "Nyakatho Kapa"
-    Afrikaans: "Noord-Kaap"
-    Sotho: "Northern Cape"
+    Afrikaans: "N-Kaap"
+    Sotho: "N Cape"
 -
     English: "W Cape"
     Zulu: "Ntshonakoloni"
     Afrikaans: "Wes-Kaap"
-    Sotho: "Western Cape"
+    Sotho: "W Cape"
 -
     English: "Free State"
     Zulu: "Free State"
@@ -131,7 +131,7 @@ TRANSLATIONS = '''
     Sotho: "Free State"
 -
     English: "North West"
-    Zulu: "North West"
+    Zulu: "N West"
     Afrikaans: "Noord-Wes"
     Sotho: "North West"
 -
