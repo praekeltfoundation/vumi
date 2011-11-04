@@ -1,5 +1,7 @@
 """Test for vumi.transport.infobip.infobip_ussd."""
 
+import json
+
 from twisted.trial.unittest import TestCase
 from twisted.web.resource import Resource
 from twisted.internet.defer import inlineCallbacks, DeferredQueue
@@ -86,3 +88,17 @@ class TestInfobipUssdTransport(TestCase):
         result = yield http_request(self.worker_url + "health", "",
                                     method='GET')
         self.assertEqual(result, "pReq:0")
+
+    @inlineCallbacks
+    def test_start(self):
+        json_content = json.dumps({
+                'msisdn': '55567890',
+                'text':"hello there",
+                'shortCode': "*120*666#"
+                })
+        d = http_request(self.worker_url + "session/1/start",
+                json_content, method='POST')
+        msg, = yield self.broker.wait_messages("vumi",
+            "test_infobip.inbound", 1)
+        payload = msg.payload
+        print "########", payload

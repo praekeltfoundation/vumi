@@ -21,13 +21,14 @@ class InfobipUssdTransport(HttpRpcTransport):
         parts = request.path.split('/')
         ussd_session_id = parts[-2]
         session_method = parts[-1]
+        #import pdb; pdb.set_trace()
         session_event = self.METHOD_TO_EVENT.get(session_method,
                                              TransportUserMessage.SESSION_NONE)
-        req_data = json.loads(request.content)
+        req_data = json.load(request.content)
         msisdn = req_data["msisdn"]
         content = req_data["text"]
         to_addr = req_data["shortCode"]
-        provider = req_data["unknown"]  # TODO: fill-in field
+        provider = req_data.get("unknown", "")  # TODO: fill-in field
 
         transport_metadata = {'session_id': ussd_session_id}
         self.publish_message(
