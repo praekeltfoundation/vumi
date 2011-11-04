@@ -11,6 +11,7 @@ from twisted.internet.base import DelayedCall
 
 from vumi.utils import http_request
 from vumi.transports.infobip.infobip_ussd import InfobipUssdTransport
+from vumi.message import TransportUserMessage
 from vumi.tests.utils import get_stubbed_worker
 
 
@@ -101,4 +102,17 @@ class TestInfobipUssdTransport(TestCase):
         msg, = yield self.broker.wait_messages("vumi",
             "test_infobip.inbound", 1)
         payload = msg.payload
-        print "########", payload
+        self.assertEqual(payload['content'], 'hello there')
+        tum = TransportUserMessage(**payload)
+        rep = tum.reply("hello yourself")
+        self.broker.publish_message("vumi", "test_infobip.outbound",
+                rep)
+        response = yield d
+        correct_response = {
+                "shouldClose": False,
+                "responseExitCode": 200,
+                "ussdMenu": "hello yourself",
+                "responseMessage": "",
+                }
+        self.assertEqual(json.loads(response), correct_response)
+

@@ -21,7 +21,6 @@ class InfobipUssdTransport(HttpRpcTransport):
         parts = request.path.split('/')
         ussd_session_id = parts[-2]
         session_method = parts[-1]
-        #import pdb; pdb.set_trace()
         session_event = self.METHOD_TO_EVENT.get(session_method,
                                              TransportUserMessage.SESSION_NONE)
         req_data = json.load(request.content)
@@ -46,7 +45,7 @@ class InfobipUssdTransport(HttpRpcTransport):
     def handle_outbound_message(self, message):
         if message.payload.get('in_reply_to') and 'content' in message.payload:
             should_close = (message['session_event']
-                            is not TransportUserMessage.SESSION_CLOSE)
+                            == TransportUserMessage.SESSION_CLOSE)
             response_data = {
                 "shouldClose": should_close,
                 "ussdMenu": message['content'],
