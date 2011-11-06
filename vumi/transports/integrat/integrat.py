@@ -66,7 +66,7 @@ class IntegratHttpResource(Resource):
             session_event=session_event,
             content=text,
             transport_name=self.transport_name,
-            transport_type="ussd",
+            transport_type=self.config.get('transport_type', 'ussd'),
             transport_metadata=transport_metadata,
             )
         return ''
