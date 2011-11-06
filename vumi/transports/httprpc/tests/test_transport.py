@@ -1,4 +1,5 @@
 import re
+import json
 from  xml.etree import ElementTree
 
 from twisted.trial.unittest import TestCase
@@ -102,7 +103,9 @@ class TestTransport(TestCase):
     def test_health(self):
         result = yield http_request(self.worker_url + "health", "",
                                     method='GET')
-        self.assertEqual(result, "pReq:0")
+        self.assertEqual(json.loads(result), {
+            'pending_requests': 0
+        })
 
     @inlineCallbacks
     def test_inbound(self):

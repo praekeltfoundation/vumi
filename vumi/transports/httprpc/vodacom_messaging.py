@@ -1,3 +1,5 @@
+# -*- test-case-name: vumi.transports.httprpc.tests.test_vodacommessaging -*-
+
 from twisted.python import log
 
 from vumi.message import TransportUserMessage
