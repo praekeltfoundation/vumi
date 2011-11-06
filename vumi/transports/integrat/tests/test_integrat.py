@@ -47,7 +47,8 @@ class TestIntegratHttpResource(TestCase):
     @inlineCallbacks
     def setUp(self):
         self.msgs = []
-        site_factory = Site(IntegratHttpResource("testgrat", self._publish))
+        site_factory = Site(IntegratHttpResource("testgrat", "ussd",
+            self._publish))
         self.server = yield reactor.listenTCP(0, site_factory)
         addr = self.server.getHost()
         self._server_url = "http://%s:%s/" % (addr.host, addr.port)

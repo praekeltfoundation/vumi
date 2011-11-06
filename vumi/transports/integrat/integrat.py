@@ -27,8 +27,9 @@ class IntegratHttpResource(Resource):
     # complete and reliable of the two in Integrat's case).
     EVENTS_TO_SKIP = set(['new'])
 
-    def __init__(self, transport_name, publish_message):
+    def __init__(self, transport_name, transport_type, publish_message):
         self.transport_name = transport_name
+        self.transport_type = transport_type
         self.publish_message = publish_message
 
     def render(self, request):
@@ -66,7 +67,7 @@ class IntegratHttpResource(Resource):
             session_event=session_event,
             content=text,
             transport_name=self.transport_name,
-            transport_type=self.config.get('transport_type', 'ussd'),
+            transport_type=self.transport_type,
             transport_metadata=transport_metadata,
             )
         return ''
@@ -91,6 +92,7 @@ class IntegratTransport(Transport):
         self.integrat_url = self.config['url']
         self.integrat_username = self.config['username']
         self.integrat_password = self.config['password']
+        self.transport_type = self.config.get('transport_type', 'ussd')
 
     @inlineCallbacks
     def setup_transport(self):
@@ -100,7 +102,7 @@ class IntegratTransport(Transport):
         self.web_resource = yield self.start_web_resources(
             [
                 (IntegratHttpResource(self.transport_name,
-                                      self.publish_message), self.web_path),
+                    self.transport_type, self.publish_message), self.web_path),
                 (HealthResource(), 'health'),
             ],
             self.web_port,

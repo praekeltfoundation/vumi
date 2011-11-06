@@ -1,12 +1,12 @@
-# -*- test-case-name: vumi.transports.httprpc.tests.test_vodacommessaging -*-
+# -*- test-case-name: vumi.transports.vodacom_messaging.tests.test_vodacom_messaging -*-
 
 from twisted.python import log
 
 from vumi.message import TransportUserMessage
-from vumi.transports.httprpc.transport import HttpRpcTransport
+from vumi.transports.httprpc import HttpRpcTransport
 
 
-class VodaMessHttpRpcTransport(HttpRpcTransport):
+class VodacomMessagingTransport(HttpRpcTransport):
 
     def handle_raw_inbound_message(self, msgid, request):
         content = str(request.args.get('request', [None])[0])
@@ -41,7 +41,7 @@ class VodaMessHttpRpcTransport(HttpRpcTransport):
             vmr.accept_freetext()
         data = str(vmr)
 
-        log.msg("VodaMessHttpRpcTransport.finishRequest with data:", repr(data))
+        log.msg("VodacomMessagingTransport.finishRequest with data:", repr(data))
         log.msg(repr(self.requests))
         request = self.requests.get(uuid)
         if request:

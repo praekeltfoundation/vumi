@@ -1,4 +1,4 @@
-# -*- test-case-name: vumi.transports.httprpc.tests.test_transport -*-
+# -*- test-case-name: vumi.transports.httprpc.tests.test_httprpc -*-
 
 import uuid
 import json
