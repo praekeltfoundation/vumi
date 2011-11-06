@@ -35,7 +35,7 @@ class HttpRpcResource(Resource):
     def render_(self, request, http_action=None):
         log.msg("HttpRpcResource HTTP Action: %s" % (request,))
         request.setHeader("content-type", "text/plain")
-        uu = str(uuid.uuid4().get_hex())
+        uu = uuid.uuid4().get_hex()
         self.transport.requests[uu] = request
         self.transport.handle_raw_inbound_message(uu, request)
         return NOT_DONE_YET
