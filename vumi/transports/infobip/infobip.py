@@ -1,3 +1,4 @@
+# -*- test-case-name: vumi.transports.infobip.tests.test_infobip -*-
 """Infobip USSD transport."""
 
 import json
@@ -6,7 +7,7 @@ from vumi.message import TransportUserMessage
 from vumi.transports.httprpc.transport import HttpRpcTransport
 
 
-class InfobipUssdTransport(HttpRpcTransport):
+class InfobipTransport(HttpRpcTransport):
     """Infobip USSD transport."""
 
     METHOD_TO_EVENT = {
