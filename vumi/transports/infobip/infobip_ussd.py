@@ -2,7 +2,6 @@
 
 import json
 
-from twisted.internet.defer import inlineCallbacks
 from vumi.message import TransportUserMessage
 from vumi.transports.httprpc.transport import HttpRpcTransport
 
