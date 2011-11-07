@@ -1,6 +1,6 @@
 # -*- test-case-name: vumi.transports.cellulant.tests.test_cellulant -*-
+from twisted.python import log
 from vumi.transports.httprpc import HttpRpcTransport
-
 from vumi.message import TransportUserMessage
 
 def pack_ussd_message(message):
@@ -35,8 +35,8 @@ class CellulantTransport(HttpRpcTransport):
         self.transport_type = self.config.get('transport_type', 'ussd')
 
     def handle_raw_inbound_message(self, message_id, request):
-        op_code = request.get('opCode')
-        if (request.get('ABORT') not in ('0', 'null')) or (op_code == 'ABO'):
+        op_code = request.args.get('opCode')[0]
+        if (request.args.get('ABORT')[0] not in ('0', 'null')) or (op_code == 'ABO'):
             # respond to phones aborting a session
             self.finishRequest(message_id, '')
             event = TransportUserMessage.SESSION_CLOSE
@@ -45,20 +45,20 @@ class CellulantTransport(HttpRpcTransport):
                 TransportUserMessage.SESSION_RESUME)
 
         transport_metadata = {
-            'session_id': request.get('sessionID'),
+            'session_id': request.args.get('sessionID')[0],
         }
         self.publish_message(
             message_id=message_id,
-            content=request.get('INPUT'),
+            content=request.args.get('INPUT')[0],
             to_addr=self.to_addr,
-            from_addr=request.get('MSISDN'),
+            from_addr=request.args.get('MSISDN')[0],
             session_event=event,
             transport_name=self.transport_name,
             transport_type=self.transport_type,
             transport_metadata=transport_metadata,
         )
 
-    def handle_raw_outbound_message(self, message):
+    def handle_outbound_message(self, message):
         if message.payload.get('in_reply_to') and 'content' in message.payload:
             self.finishRequest(message['in_reply_to'],
                                 pack_ussd_message(message))
