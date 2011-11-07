@@ -43,8 +43,7 @@ class TestCellulantTransportTestCase(TransportTestCase):
     def test_inbound_begin(self):
         deferred = self.mk_request()
 
-        [msg] = yield self._amqp.wait_messages("vumi",
-                    "%s.inbound" % self.transport_name, 1)
+        [msg] = yield self.wait_for_dispatched_messages(1)
         self.assertEqual(msg['content'], '')
         self.assertEqual(msg['to_addr'], '*120*1#')
         self.assertEqual(msg['from_addr'], '27761234567'),
@@ -54,8 +53,7 @@ class TestCellulantTransportTestCase(TransportTestCase):
         })
 
         reply = TransportUserMessage(**msg.payload).reply("ussd message")
-        self._amqp.publish_message("vumi", "%s.outbound" % self.transport_name,
-                reply)
+        self.dispatch(reply)
         response = yield deferred
         self.assertEqual(response, '1|ussd message|null|null|null|null')
 
@@ -63,8 +61,7 @@ class TestCellulantTransportTestCase(TransportTestCase):
     def test_inbound_resume_and_reply_with_end(self):
         deferred = self.mk_request(INPUT='hi', opCode='')
 
-        [msg] = yield self._amqp.wait_messages("vumi",
-            "%s.inbound" % self.transport_name, 1)
+        [msg] = yield self.wait_for_dispatched_messages(1)
         self.assertEqual(msg['content'], 'hi')
         self.assertEqual(msg['to_addr'], '*120*1#')
         self.assertEqual(msg['from_addr'], '27761234567')
@@ -75,8 +72,7 @@ class TestCellulantTransportTestCase(TransportTestCase):
 
         reply = TransportUserMessage(**msg.payload).reply("hello world",
             continue_session=False)
-        self._amqp.publish_message("vumi", "%s.outbound" % self.transport_name,
-            reply)
+        self.dispatch(reply)
         response = yield deferred
         self.assertEqual(response, '1|hello world|null|null|end|null')
 
@@ -87,8 +83,7 @@ class TestCellulantTransportTestCase(TransportTestCase):
         resp = yield self.mk_request(opCode='ABO')
         self.assertEqual(resp, '')
 
-        [msg] = yield self._amqp.wait_messages("vumi",
-            "%s.inbound" % self.transport_name, 1)
+        [msg] = yield self.get_dispatched_messages()
         self.assertEqual(msg['session_event'], TransportUserMessage.SESSION_CLOSE)
 
     @inlineCallbacks
@@ -96,6 +91,5 @@ class TestCellulantTransportTestCase(TransportTestCase):
         # should also return immediately
         resp = yield self.mk_request(ABORT=1)
         self.assertEqual(resp, '')
-        [msg] = yield self._amqp.wait_messages("vumi",
-            "%s.inbound" % self.transport_name, 1)
+        [msg] = yield self.get_dispatched_messages()
         self.assertEqual(msg['session_event'], TransportUserMessage.SESSION_CLOSE)
