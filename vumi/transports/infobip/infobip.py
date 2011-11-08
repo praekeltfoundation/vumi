@@ -8,7 +8,10 @@ from vumi.transports.httprpc.transport import HttpRpcTransport
 
 
 class InfobipTransport(HttpRpcTransport):
-    """Infobip USSD transport."""
+    """Infobip transport.
+
+    Currently only supports the Infobip USSD interface.
+    """
 
     METHOD_TO_EVENT = {
         "status": TransportUserMessage.SESSION_NONE,
@@ -39,6 +42,13 @@ class InfobipTransport(HttpRpcTransport):
                 transport_type=self.config.get('transport_type'),
                 transport_metadata=transport_metadata,
                 )
+
+        if session_event == TransportUserMessage.SESSION_CLOSE:
+            response_data = {
+                "responseExitCode": 200,
+                "responseMessage": "",
+                }
+            self.finishRequest(msgid, json.dumps(response_data), session_event)
 
     def handle_outbound_message(self, message):
         if message.payload.get('in_reply_to') and 'content' in message.payload:

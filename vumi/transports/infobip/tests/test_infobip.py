@@ -3,7 +3,7 @@
 import json
 
 from twisted.trial.unittest import TestCase
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.utils import http_request
 from vumi.transports.infobip.infobip import InfobipTransport
@@ -18,7 +18,6 @@ class TestInfobipUssdTransport(TestCase):
         config = {
             'transport_name': 'test_infobip',
             'transport_type': 'ussd',
-            'ussd_string_prefix': '*120*666',
             'web_path': "/session/",
             'web_port': 0,
             }
@@ -33,27 +32,61 @@ class TestInfobipUssdTransport(TestCase):
         yield self.worker.stopWorker()
 
     @inlineCallbacks
+    def make_request(self, url_suffix, json_dict, reply=None):
+        deferred_req = http_request(self.worker_url + url_suffix,
+                                    json.dumps(json_dict), method='POST')
+        [msg] = yield self.broker.wait_messages("vumi",
+                                                "test_infobip.inbound", 1)
+        msg = TransportUserMessage(**msg.payload)
+
+        if reply is not None:
+            self.broker.publish_message("vumi", "test_infobip.outbound",
+                                        msg.reply(reply))
+
+        response = yield deferred_req
+        returnValue((msg, response))
+
+    @inlineCallbacks
     def test_start(self):
-        json_content = json.dumps({
+        msg, response = yield self.make_request(
+            "session/1/start",
+            {
                 'msisdn': '55567890',
                 'text': "hello there",
-                'shortCode': "*120*666#"
-                })
-        d = http_request(self.worker_url + "session/1/start",
-                json_content, method='POST')
-        msg, = yield self.broker.wait_messages("vumi",
-            "test_infobip.inbound", 1)
-        payload = msg.payload
-        self.assertEqual(payload['content'], 'hello there')
-        tum = TransportUserMessage(**payload)
-        rep = tum.reply("hello yourself")
-        self.broker.publish_message("vumi", "test_infobip.outbound",
-                rep)
-        response = yield d
+                'shortCode': "*120*666#",
+            },
+            "hello yourself",
+            )
+
+        self.assertEqual(msg['content'], 'hello there')
+        self.assertEqual(msg['session_event'],
+                         TransportUserMessage.SESSION_NEW)
+
         correct_response = {
-                "shouldClose": False,
-                "responseExitCode": 200,
-                "ussdMenu": "hello yourself",
-                "responseMessage": "",
-                }
+            "shouldClose": False,
+            "responseExitCode": 200,
+            "ussdMenu": "hello yourself",
+            "responseMessage": "",
+            }
+        self.assertEqual(json.loads(response), correct_response)
+
+    @inlineCallbacks
+    def test_end(self):
+        msg, response = yield self.make_request(
+            "session/1/end",
+            {
+                'msisdn': '55567890',
+                'text': 'Bye!',
+                'shortCode': '*120*666#',
+            },
+            )
+
+        self.assertEqual(msg['content'], 'Bye!')
+        self.assertEqual(msg['session_event'],
+                         TransportUserMessage.SESSION_CLOSE)
+
+        correct_response = {
+            "responseExitCode": 200,
+            "responseMessage": "",
+            }
         self.assertEqual(json.loads(response), correct_response)
