@@ -107,7 +107,7 @@ class WikipediaWorker(ApplicationWorker):
     def consume_user_message(self, msg):
         user_id = msg.user()
         session = self.session_manager.load_session(user_id)
-        if session:
+        if session and msg['content'] is not None:
             self.resume_wikipedia_session(msg, session)
         else:
             session = self.session_manager.create_session(user_id)
@@ -118,7 +118,7 @@ class WikipediaWorker(ApplicationWorker):
             True)
 
     def resume_wikipedia_session(self, msg, session):
-        response = msg['content'].strip() if msg['content'] is not None else ''
+        response = msg['content'].strip()
         if response.isdigit():
             self.handle_selection(msg, session, int(response))
         else:
