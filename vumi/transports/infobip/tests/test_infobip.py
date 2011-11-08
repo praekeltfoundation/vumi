@@ -16,7 +16,6 @@ class TestInfobipUssdTransport(TestCase):
 
     @inlineCallbacks
     def setUp(self):
-        DelayedCall.debug = True
         config = {
             'transport_name': 'test_infobip',
             'transport_type': 'ussd',
