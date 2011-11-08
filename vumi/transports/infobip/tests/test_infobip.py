@@ -32,7 +32,8 @@ class TestInfobipUssdTransport(TestCase):
         yield self.worker.stopWorker()
 
     @inlineCallbacks
-    def make_request(self, url_suffix, json_dict, reply=None):
+    def make_request(self, url_suffix, json_dict, reply=None,
+                     continue_session=True):
         deferred_req = http_request(self.worker_url + url_suffix,
                                     json.dumps(json_dict), method='POST')
         [msg] = yield self.broker.wait_messages("vumi",
@@ -40,8 +41,9 @@ class TestInfobipUssdTransport(TestCase):
         msg = TransportUserMessage(**msg.payload)
 
         if reply is not None:
+            reply_msg = msg.reply(reply, continue_session=continue_session)
             self.broker.publish_message("vumi", "test_infobip.outbound",
-                                        msg.reply(reply))
+                                        reply_msg)
 
         response = yield deferred_req
         returnValue((msg, response))
@@ -66,6 +68,31 @@ class TestInfobipUssdTransport(TestCase):
             "shouldClose": False,
             "responseExitCode": 200,
             "ussdMenu": "hello yourself",
+            "responseMessage": "",
+            }
+        self.assertEqual(json.loads(response), correct_response)
+
+    @inlineCallbacks
+    def test_response_with_close(self):
+        msg, response = yield self.make_request(
+            "session/1/response",
+            {
+                'msisdn': '55567890',
+                'text': "More?",
+                'shortCode': "*120*666#",
+            },
+            "No thanks.",
+            continue_session=False,
+            )
+
+        self.assertEqual(msg['content'], 'More?')
+        self.assertEqual(msg['session_event'],
+                         TransportUserMessage.SESSION_RESUME)
+
+        correct_response = {
+            "shouldClose": True,
+            "responseExitCode": 200,
+            "ussdMenu": "No thanks.",
             "responseMessage": "",
             }
         self.assertEqual(json.loads(response), correct_response)
