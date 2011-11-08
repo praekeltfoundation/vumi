@@ -4,7 +4,6 @@ import json
 
 from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
-from twisted.internet.base import DelayedCall
 
 from vumi.utils import http_request
 from vumi.transports.infobip.infobip import InfobipTransport
