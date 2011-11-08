@@ -30,12 +30,13 @@ class VodaMessHttpRpcTransport(HttpRpcTransport):
                 transport_metadata=transport_metadata,
                 )
 
-    def finishRequest(self, uuid, content, session_event):
+    def finishRequest(self, uuid, content, end_session):
+        log.msg('finishRequest', uuid, content)
         vmr = VodacomMessagingResponse(
                 self.config['web_host'],
                 self.config['web_path'])
         vmr.set_headertext(str(content))
-        if session_event is None:
+        if not end_session:
             vmr.accept_freetext()
         data = str(vmr)
 

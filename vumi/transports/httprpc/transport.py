@@ -6,6 +6,7 @@ from twisted.web import http
 from twisted.web.resource import Resource
 from twisted.web.server import NOT_DONE_YET
 from vumi.transports.base import Transport
+from vumi.message import TransportUserMessage
 
 
 class HttpRpcHealthResource(Resource):
