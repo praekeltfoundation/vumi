@@ -40,10 +40,15 @@ TRANSLATIONS = '''
     Afrikaans: "Dankie dat jy aan die vasvra deelgeneem het. Ons sal jou binne 48 uur laat weet indien jy 'n wenner is."
     Sotho: "Rea o leboha ka quiz. Re tla o tsebisa haeba o le mohlodi dihoreng tse 48"
 -
+    English: "Thanks, you have completed this section of the quiz. Dial *120*112233# again, to try more questions and stand another chance to win"
+    Zulu:
+    Afrikaans:
+    Sotho: "Rea Leboha, O se o feditse kgehlo lena la quiz, tobetsa *120*112233# hape ho leka dipotso tse dingwe."
+-
     English: "Thanks, you have now completed all the HIV/AIDS quiz questions. We'll let U know if U R a lucky winner within 48 hours."
     Zulu:
     Afrikaans:
-    Sotho:
+    Sotho: "Rea Leboha, o feditse dipotso tsohle tsa quiz ya HIV/AIDS. Retla ho tsibisa moraho ha di hura tse 48 ha eba o hlotse."
 -
     English: "Thnx 4 taking the Quiz! Answer easy questions and be 1 of 5000 lucky winners.  Pick your language:"
     Zulu: "Thnx 4 taking the Quiz! Answer easy questions and be 1 of 5000 lucky winners.  Pick your language:"
@@ -313,12 +318,12 @@ TRANSLATIONS = '''
     English: "Please note, once testing positive for HIV, you first have to get your CD4 test done, to determine if you qualify for ARVs."
     Zulu: "Qaphela, uma usuhloliwe wathola ukuthi une-HIV, kufanele uqale uhlolwe i-CD4-count, ukuze kutholakale ukuthi uyafaneleka yini ukuthola ama-ARV."
     Afrikaans: "Onthou, nadat 'n mens positief toets, moet 'n CD4-telling eers geneem word om te bepaal of mens vir Anti-retroviale middels gekwalifiseer"
-    Sotho: "Lemoha, ha diteko di re o na le HIV, etsa pele diteko tsa hao tsa CD4, ho fumana hore na o loketse ho fumana diARV."
+    Sotho: "Lemoha, ha diteko di re o na le HIV, etsa diteko tsa CD4 pele, ho fumana hore na o loketse ho fumana diARV."
 -
     English: "Correct, once testing positive for HIV, you first have to get your CD4 test done, to determine if you qualify for ARVs."
     Zulu: "Uqinisile, uma usuhloliwe wathola ukuthi une-HIV, kufanele uqale uhlolwe i-CD4-count, ukuze kutholakale ukuthi uyafaneleka yini ukuthola ama-ARV."
     Afrikaans: "Korrek, nadat 'n mens positief toets, moet 'n CD4-telling eers geneem word om te bepaal of mens vir Anti-retroviale middels"
-    Sotho: "O nepile, ha diteko di re o na le HIV, etsa pele diteko tsa hao tsa CD4, ho fumana hore na o loketse ho fumana diARV."
+    Sotho: "O nepile, ha diteko di re o na le HIV, etsa diteko tsa CD4 pele, ho fumana hore na o loketse ho fumana diARV."
 
 '''
 

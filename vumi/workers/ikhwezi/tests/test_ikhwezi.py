@@ -175,19 +175,23 @@ class IkhweziQuizCharacterTest(IkhweziBaseTest):
                     in_reply = 'response to an answer of %s' % k
                     q = ''
                     _q = ''
+                    q2 = ''
+                    _q2 = ''
                     q += self._(v['reply'], "English")
                     _q += self._(v['reply'], language)
                     for k, v in self.quiz['continue']['options'].items():
-                        q += "\n%s. %s" % (k, self._(v['text'], "English"))
-                        _q += "\n%s. %s" % (k, self._(v['text'], language))
-                    if len(_q) > 160:
+                        q2 += "\n%s. %s" % (k, self._(v['text'], "English"))
+                        _q2 += "\n%s. %s" % (k, self._(v['text'], language))
+                    if len(_q + _q2) > 160:
+                        len2 = len(_q2)
+                        len1 = 160 - len2
                         print '\n', language, key, in_reply, ":"
                         print '*'*22, 'Original English', '*'*22
                         print q
                         print '*'*22, language, 'translation', '*'*22
                         print _q
-                        print '>>>>', language, 'character count =', len(_q), ' needs to be shortened to 160'
-                    #self.assertTrue(len(_q) <= 160)
+                        print '>>>>', language, 'character count =', len(_q), ' needs to be shortened to', len1
+                    #self.assertTrue(len(_q + _q2) <= 160)
 
     def test_english_counts(self):
         self._character_counts()
