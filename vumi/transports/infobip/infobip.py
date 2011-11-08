@@ -27,7 +27,6 @@ class InfobipTransport(HttpRpcTransport):
         msisdn = req_data["msisdn"]
         content = req_data["text"]
         to_addr = req_data["shortCode"]
-        provider = req_data.get("unknown", "")  # TODO: fill-in field
 
         transport_metadata = {'session_id': ussd_session_id}
         self.publish_message(
@@ -35,7 +34,6 @@ class InfobipTransport(HttpRpcTransport):
                 content=content,
                 to_addr=to_addr,
                 from_addr=msisdn,
-                provider=provider,
                 session_event=session_event,
                 transport_name=self.transport_name,
                 transport_type=self.config.get('transport_type'),
