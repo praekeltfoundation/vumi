@@ -43,8 +43,8 @@ class TestInfobipUssdTransport(TransportTestCase):
     def test_start(self):
         json_content = json.dumps({
             'msisdn': '55567890',
-            'text':"hello there",
-            'shortCode': "*120*666#"
+            'text': "hello there",
+            'shortCode': "*120*666#",
         })
 
         d = http_request(self.transport_url + "session/1/start",
