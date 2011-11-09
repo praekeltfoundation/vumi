@@ -83,12 +83,20 @@ class TestVodacomMessagingTransport(TransportTestCase):
 
     @inlineCallbacks
     def test_inbound_resume_continue(self):
-        args = "/?ussdSessionId=123&msisdn=555&provider=web&request=1"
-        d = http_request(self.transport_url + "foo" + args, '', method='GET')
-        msg, = yield self.broker.wait_messages("vumi",
-            "test_vodacom_messaging.inbound", 1)
+        url = "%s%s?%s" % (
+            self.transport_url,
+            self.config['web_path'],
+            urlencode({
+                'ussdSessionId': 123,
+                'msisdn': 555,
+                'provider': 'web',
+                'request': 1,
+            })
+        )
+        d = http_request(url, '', method='GET')
+        msg, = yield self.wait_for_dispatched_messages(1)
         payload = msg.payload
-        self.assertEqual(payload['transport_name'], "test_vodacom_messaging")
+        self.assertEqual(payload['transport_name'], self.transport_name)
         self.assertEqual(payload['transport_type'], "ussd")
         self.assertEqual(payload['transport_metadata'],
                          {"session_id": "123"})
@@ -99,8 +107,7 @@ class TestVodacomMessagingTransport(TransportTestCase):
         self.assertEqual(payload['content'], '1')
         tum = TransportUserMessage(**payload)
         rep = tum.reply("OK")
-        self.broker.publish_message("vumi", "test_vodacom_messaging.outbound",
-                rep)
+        self.dispatch(rep)
         response = yield d
         correct_response = '<request>\n\t<headertext>OK</headertext>\n\t' \
                 '<options>\n\t\t<option command="1" order="1" ' \
@@ -111,11 +118,20 @@ class TestVodacomMessagingTransport(TransportTestCase):
     @inlineCallbacks
     def test_inbound_resume_close(self):
         args = "/?ussdSessionId=123&msisdn=555&provider=web&request=1"
-        d = http_request(self.transport_url + "foo" + args, '', method='GET')
-        msg, = yield self.broker.wait_messages("vumi",
-            "test_vodacom_messaging.inbound", 1)
+        url = "%s%s?%s" % (
+            self.transport_url,
+            self.config['web_path'],
+            urlencode({
+                'ussdSessionId': 123,
+                'msisdn': 555,
+                'provider': 'web',
+                'request': 1,
+            })
+        )
+        d = http_request(url, '', method='GET')
+        msg, = yield self.wait_for_dispatched_messages(1)
         payload = msg.payload
-        self.assertEqual(payload['transport_name'], "test_vodacom_messaging")
+        self.assertEqual(payload['transport_name'], self.transport_name)
         self.assertEqual(payload['transport_type'], "ussd")
         self.assertEqual(payload['transport_metadata'],
                          {"session_id": "123"})
@@ -126,8 +142,7 @@ class TestVodacomMessagingTransport(TransportTestCase):
         self.assertEqual(payload['content'], '1')
         tum = TransportUserMessage(**payload)
         rep = tum.reply("OK", False)
-        self.broker.publish_message("vumi", "test_vodacom_messaging.outbound",
-                rep)
+        self.dispatch(rep)
         response = yield d
         correct_response = '<request>\n\t<headertext>OK</headertext>\n</request>'
         self.assertEqual(response, correct_response)
