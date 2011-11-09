@@ -117,3 +117,18 @@ class TestInfobipUssdTransport(TestCase):
             "responseMessage": "",
             }
         self.assertEqual(json.loads(response), correct_response)
+
+    @inlineCallbacks
+    def test_bad_request(self):
+        num_tests = 2  # repeat twice to ensure transport is still functional
+        json_dict = {
+            'text': 'Oops. No msisdn.',
+            }
+        for _test in range(num_tests):
+            response = yield http_request(self.worker_url + "session/1/start",
+                                          json.dumps(json_dict), method='POST')
+            self.assertTrue('exceptions.KeyError' in response)
+
+        errors = self.flushLoggedErrors(KeyError)
+        self.assertEqual([str(e.value) for e in errors],
+                         ["'msisdn'"] * num_tests)
