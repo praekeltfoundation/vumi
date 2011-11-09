@@ -1,4 +1,7 @@
+# -*- test-case-name: vumi.transports.httprpc.tests.test_httprpc -*-
+
 import uuid
+import json
 
 from twisted.internet.defer import inlineCallbacks
 from twisted.python import log
@@ -17,7 +20,9 @@ class HttpRpcHealthResource(Resource):
 
     def render_GET(self, request):
         request.setResponseCode(http.OK)
-        return "pReq:%s" % len(self.transport.requests)
+        return json.dumps({
+            'pending_requests': len(self.transport.requests)
+        })
 
 
 class HttpRpcResource(Resource):
@@ -30,7 +35,7 @@ class HttpRpcResource(Resource):
     def render_(self, request, http_action=None):
         log.msg("HttpRpcResource HTTP Action: %s" % (request,))
         request.setHeader("content-type", "text/plain")
-        uu = str(uuid.uuid4().get_hex())
+        uu = uuid.uuid4().get_hex()
         self.transport.requests[uu] = request
         self.transport.handle_raw_inbound_message(uu, request)
         return NOT_DONE_YET

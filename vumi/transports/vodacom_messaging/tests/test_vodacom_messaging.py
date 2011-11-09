@@ -1,4 +1,5 @@
 import re
+import json
 from  xml.etree import ElementTree
 
 from twisted.trial.unittest import TestCase
@@ -9,8 +10,8 @@ from twisted.internet import reactor
 from twisted.internet.base import DelayedCall
 
 from vumi.utils import http_request
-from vumi.transports.httprpc.vodacom_messaging import VodacomMessagingResponse
-from vumi.transports.httprpc.vodacom_messaging import VodaMessHttpRpcTransport
+from vumi.transports.vodacom_messaging import (VodacomMessagingResponse,
+    VodacomMessagingTransport)
 from vumi.message import TransportUserMessage
 from vumi.tests.utils import get_stubbed_worker
 
@@ -50,7 +51,7 @@ class MockHttpServer(object):
         yield self._webserver.loseConnection()
 
 
-class TestVodaMessHttpRpcTransport(TestCase):
+class TestVodacomMessagingTransport(TestCase):
 
     @inlineCallbacks
     def setUp(self):
@@ -69,7 +70,7 @@ class TestVodaMessHttpRpcTransport(TestCase):
             'username': 'testuser',
             'password': 'testpass',
             }
-        self.worker = get_stubbed_worker(VodaMessHttpRpcTransport, config)
+        self.worker = get_stubbed_worker(VodacomMessagingTransport, config)
         self.broker = self.worker._amqp_client.broker
         yield self.worker.startWorker()
         addr = self.worker.web_resource.getHost()
@@ -88,7 +89,9 @@ class TestVodaMessHttpRpcTransport(TestCase):
     def test_health(self):
         result = yield http_request(self.worker_url + "health", "",
                                     method='GET')
-        self.assertEqual(result, "pReq:0")
+        self.assertEqual(json.loads(result), {
+            'pending_requests': 0
+        })
 
     @inlineCallbacks
     def test_inbound_new_continue(self):

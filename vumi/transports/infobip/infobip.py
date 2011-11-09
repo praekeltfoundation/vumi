@@ -39,7 +39,7 @@ class InfobipTransport(HttpRpcTransport):
                 from_addr=msisdn,
                 session_event=session_event,
                 transport_name=self.transport_name,
-                transport_type=self.config.get('transport_type'),
+                transport_type=self.config.get('transport_type', 'ussd'),
                 transport_metadata=transport_metadata,
                 )
 
