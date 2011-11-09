@@ -11,6 +11,7 @@ from twisted.internet.base import DelayedCall
 
 from vumi.utils import http_request
 from vumi.transports.httprpc import HttpRpcTransport
+from vumi.transports.tests.test_base import TransportTestCase
 from vumi.message import TransportUserMessage
 from vumi.tests.utils import get_stubbed_worker
 
@@ -31,77 +32,30 @@ class OkTransport(HttpRpcTransport):
                 )
 
 
-class MockResource(Resource):
-    isLeaf = True
+class TestHttpRPCTransport(TransportTestCase):
 
-    def __init__(self, handler):
-        Resource.__init__(self)
-        self.handler = handler
-
-    def render_GET(self, request):
-        return self.handler(request)
-
-    def render_POST(self, request):
-        return self.handler(request)
-
-
-class MockHttpServer(object):
-
-    def __init__(self, handler):
-        self._handler = handler
-        self._webserver = None
-        self.addr = None
-        self.url = None
-
-    @inlineCallbacks
-    def start(self):
-        root = MockResource(self._handler)
-        site_factory = Site(root)
-        self._webserver = yield reactor.listenTCP(0, site_factory)
-        self.addr = self._webserver.getHost()
-        self.url = "http://%s:%s/" % (self.addr.host, self.addr.port)
-
-    @inlineCallbacks
-    def stop(self):
-        yield self._webserver.loseConnection()
-
-
-class TestTransport(TestCase):
+    transport_name = 'test_ok_transport'
+    transport_class = OkTransport
 
     @inlineCallbacks
     def setUp(self):
-        DelayedCall.debug = True
-        self.ok_transport_calls = DeferredQueue()
-        self.mock_service = MockHttpServer(self.handle_request)
-        yield self.mock_service.start()
+        yield super(TestHttpRPCTransport, self).setUp()
         config = {
-            'transport_name': 'test_ok_transport',
+            'transport_name': self.transport_name,
             'transport_type': 'ok',
             'ussd_string_prefix': '',
             'web_path': "foo",
             'web_port': 0,
-            'url': self.mock_service.url,
             'username': 'testuser',
             'password': 'testpass',
             }
-        self.worker = get_stubbed_worker(OkTransport, config)
-        self.broker = self.worker._amqp_client.broker
-        yield self.worker.startWorker()
-        addr = self.worker.web_resource.getHost()
-        self.worker_url = "http://%s:%s/" % (addr.host, addr.port)
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield self.worker.stopWorker()
-        yield self.mock_service.stop()
-
-    def handle_request(self, request):
-        self.ok_transport_calls.put(request)
-        return ''
+        self.transport = yield self.get_transport(config)
+        addr = self.transport.web_resource.getHost()
+        self.transport_url = "http://%s:%s/" % (addr.host, addr.port)
 
     @inlineCallbacks
     def test_health(self):
-        result = yield http_request(self.worker_url + "health", "",
+        result = yield http_request(self.transport_url + "health", "",
                                     method='GET')
         self.assertEqual(json.loads(result), {
             'pending_requests': 0
@@ -109,13 +63,11 @@ class TestTransport(TestCase):
 
     @inlineCallbacks
     def test_inbound(self):
-        d = http_request(self.worker_url + "foo", '', method='GET')
-        msg, = yield self.broker.wait_messages("vumi",
-            "test_ok_transport.inbound", 1)
+        d = http_request(self.transport_url + "foo", '', method='GET')
+        [msg] = yield self.wait_for_dispatched_messages(1)
         payload = msg.payload
         tum = TransportUserMessage(**payload)
         rep = tum.reply("OK")
-        self.broker.publish_message("vumi", "test_ok_transport.outbound",
-                rep)
+        self.dispatch(rep)
         response = yield d
         self.assertEqual(response, 'OK')

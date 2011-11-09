@@ -3,7 +3,6 @@ from twisted.trial.unittest import SkipTest
 from twisted.python import log
 from vumi.transports.tests.test_base import TransportTestCase
 from vumi.transports.cellulant import CellulantTransport
-from vumi.transports.httprpc.tests.utils import MockHttpServer
 from vumi.message import TransportUserMessage
 from vumi.utils import http_request
 from urllib import urlencode
@@ -42,7 +41,6 @@ class TestCellulantTransportTestCase(TransportTestCase):
     @inlineCallbacks
     def test_inbound_begin(self):
         deferred = self.mk_request()
-
         [msg] = yield self.wait_for_dispatched_messages(1)
         self.assertEqual(msg['content'], '')
         self.assertEqual(msg['to_addr'], '*120*1#')
