@@ -86,11 +86,10 @@ class HttpRpcTransport(Transport):
                                   " handle_raw_inbound_message.")
 
     def finishRequest(self, uuid, content):
-        data = str(content)
-        log.msg("HttpRpcTransport.finishRequest with data:", repr(data))
+        log.msg("HttpRpcTransport.finishRequest with content:", repr(content))
         log.msg(repr(self.requests))
         request = self.requests.get(uuid)
         if request:
-            request.write(data)
+            request.write(content)
             request.finish()
             del self.requests[uuid]
