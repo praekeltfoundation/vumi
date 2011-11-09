@@ -40,12 +40,6 @@ class TestVodacomMessagingTransport(TransportTestCase):
         self.transport_url = "http://%s:%s" % (addr.host, addr.port)
 
     @inlineCallbacks
-    def test_health(self):
-        result = yield http_request(self.transport_url + "/health", "",
-                                    method='GET')
-        self.assertEqual(result, "pReq:0")
-
-    @inlineCallbacks
     def test_inbound_new_continue(self):
         url = "%s%s?%s" % (
             self.transport_url,

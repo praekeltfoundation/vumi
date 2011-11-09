@@ -40,12 +40,6 @@ class TestInfobipUssdTransport(TransportTestCase):
         self.transport_url = "http://%s:%s/" % (addr.host, addr.port)
 
     @inlineCallbacks
-    def test_health(self):
-        result = yield http_request(self.transport_url + "health", "",
-                                    method='GET')
-        self.assertEqual(result, "pReq:0")
-
-    @inlineCallbacks
     def test_start(self):
         json_content = json.dumps({
             'msisdn': '55567890',
