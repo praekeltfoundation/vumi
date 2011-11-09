@@ -27,14 +27,12 @@ class TestVodacomMessagingTransport(TransportTestCase):
     @inlineCallbacks
     def setUp(self):
         yield super(TestVodacomMessagingTransport, self).setUp()
-        DelayedCall.debug = True
         self.config = {
             'transport_type': 'ussd',
             'ussd_string_prefix': '*120*666#',
             'web_path': "/foo",
             'web_host': "localhost",
             'web_port': 0,
-            # 'url': self.mock_vodacom_messaging.url,
             'username': 'testuser',
             'password': 'testpass',
         }
@@ -62,9 +60,7 @@ class TestVodacomMessagingTransport(TransportTestCase):
                 'request': '*120*666#',
             }))
         d = http_request(url, '', method='GET')
-        log.msg('dispatched', self.get_dispatched_messages())
-        log.msg('waiting for messages')
-        [msg] = yield self.wait_for_dispatched_messages(1)
+        msg, = yield self.wait_for_dispatched_messages(1)
         self.assertEqual(msg['transport_name'], self.transport_name)
         self.assertEqual(msg['transport_type'], "ussd")
         self.assertEqual(msg['transport_metadata'], {
@@ -88,7 +84,7 @@ class TestVodacomMessagingTransport(TransportTestCase):
     @inlineCallbacks
     def test_inbound_resume_continue(self):
         args = "/?ussdSessionId=123&msisdn=555&provider=web&request=1"
-        d = http_request(self.worker_url + "foo" + args, '', method='GET')
+        d = http_request(self.transport_url + "foo" + args, '', method='GET')
         msg, = yield self.broker.wait_messages("vumi",
             "test_vodacom_messaging.inbound", 1)
         payload = msg.payload
@@ -115,7 +111,7 @@ class TestVodacomMessagingTransport(TransportTestCase):
     @inlineCallbacks
     def test_inbound_resume_close(self):
         args = "/?ussdSessionId=123&msisdn=555&provider=web&request=1"
-        d = http_request(self.worker_url + "foo" + args, '', method='GET')
+        d = http_request(self.transport_url + "foo" + args, '', method='GET')
         msg, = yield self.broker.wait_messages("vumi",
             "test_vodacom_messaging.inbound", 1)
         payload = msg.payload
