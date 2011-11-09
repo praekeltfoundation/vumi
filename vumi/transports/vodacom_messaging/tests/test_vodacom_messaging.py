@@ -135,7 +135,8 @@ class TestVodacomMessagingTransport(TransportTestCase):
         rep = tum.reply("OK", False)
         self.dispatch(rep)
         response = yield d
-        correct_response = '<request>\n\t<headertext>OK</headertext>\n</request>'
+        correct_response = '<request>\n\t<headertext>OK' + \
+                            '</headertext>\n</request>'
         self.assertEqual(response, correct_response)
 
 
