@@ -1,15 +1,17 @@
-# -*- test-case-name: vumi.transports.infobip.tests.test_infobip_ussd -*-
+# -*- test-case-name: vumi.transports.infobip.tests.test_infobip -*-
 """Infobip USSD transport."""
 
 import json
 
-from twisted.internet.defer import inlineCallbacks
 from vumi.message import TransportUserMessage
 from vumi.transports.httprpc.transport import HttpRpcTransport
 
 
-class InfobipUssdTransport(HttpRpcTransport):
-    """Infobip USSD transport."""
+class InfobipTransport(HttpRpcTransport):
+    """Infobip transport.
+
+    Currently only supports the Infobip USSD interface.
+    """
 
     METHOD_TO_EVENT = {
         "status": TransportUserMessage.SESSION_NONE,
@@ -40,6 +42,13 @@ class InfobipUssdTransport(HttpRpcTransport):
                 transport_type=self.config.get('transport_type', 'ussd'),
                 transport_metadata=transport_metadata,
                 )
+
+        if session_event == TransportUserMessage.SESSION_CLOSE:
+            response_data = {
+                "responseExitCode": 200,
+                "responseMessage": "",
+                }
+            self.finishRequest(msgid, json.dumps(response_data), session_event)
 
     def handle_outbound_message(self, message):
         if message.payload.get('in_reply_to') and 'content' in message.payload:
