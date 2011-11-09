@@ -43,9 +43,7 @@ class TestInfobipUssdTransport(TransportTestCase):
     def test_health(self):
         result = yield http_request(self.transport_url + "health", "",
                                     method='GET')
-        self.assertEqual(json.loads(result), {
-            'pending_requests': 0
-        })
+        self.assertEqual(result, "pReq:0")
 
     @inlineCallbacks
     def test_start(self):

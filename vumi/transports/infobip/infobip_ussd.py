@@ -1,4 +1,3 @@
-# -*- test-case-name: vumi.transports.infobip.tests.test_infobip_ussd -*-
 """Infobip USSD transport."""
 
 import json
