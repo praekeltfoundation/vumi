@@ -77,7 +77,7 @@ class HttpRpcTransport(Transport):
     def handle_outbound_message(self, message):
         log.msg("HttpRpcTransport consuming %s" % (message))
         if message.payload.get('in_reply_to') and 'content' in message.payload:
-            self.finishRequest(
+            self.finish_request(
                     message.payload['in_reply_to'],
                     message.payload['content'].encode('utf-8'))
 
@@ -85,8 +85,8 @@ class HttpRpcTransport(Transport):
         raise NotImplementedError("Sub-classes should implement"
                                   " handle_raw_inbound_message.")
 
-    def finishRequest(self, uuid, data):
-        log.msg("HttpRpcTransport.finishRequest with data:", repr(data))
+    def finish_request(self, uuid, data):
+        log.msg("HttpRpcTransport.finish_request with data:", repr(data))
         log.msg(repr(self.requests))
         request = self.requests.get(uuid)
         if request:

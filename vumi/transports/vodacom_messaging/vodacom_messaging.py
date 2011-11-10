@@ -41,7 +41,7 @@ class VodacomMessagingTransport(HttpRpcTransport):
             vmr.set_headertext(message['content'])
             if not should_close:
                 vmr.accept_freetext()
-            self.finishRequest(message['in_reply_to'], unicode(vmr).encode('utf-8'))
+            self.finish_request(message['in_reply_to'], unicode(vmr).encode('utf-8'))
 
 
 class VodacomMessagingResponse(object):

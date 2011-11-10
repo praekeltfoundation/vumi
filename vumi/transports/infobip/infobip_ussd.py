@@ -52,6 +52,6 @@ class InfobipUssdTransport(HttpRpcTransport):
                 "responseExitCode": 200,
                 "responseMessage": "",
                 }
-            self.finishRequest(
+            self.finish_request(
                     message['in_reply_to'],
                     json.dumps(response_data))

@@ -38,7 +38,7 @@ class CellulantTransport(HttpRpcTransport):
         op_code = request.args.get('opCode')[0]
         if (request.args.get('ABORT')[0] not in ('0', 'null')) or (op_code == 'ABO'):
             # respond to phones aborting a session
-            self.finishRequest(message_id, '')
+            self.finish_request(message_id, '')
             event = TransportUserMessage.SESSION_CLOSE
         else:
             event = self.EVENT_MAP.get(op_code,
@@ -60,5 +60,5 @@ class CellulantTransport(HttpRpcTransport):
 
     def handle_outbound_message(self, message):
         if message.payload.get('in_reply_to') and 'content' in message.payload:
-            self.finishRequest(message['in_reply_to'],
+            self.finish_request(message['in_reply_to'],
                                 pack_ussd_message(message).encode('utf-8'))
