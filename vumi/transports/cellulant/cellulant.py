@@ -61,4 +61,4 @@ class CellulantTransport(HttpRpcTransport):
     def handle_outbound_message(self, message):
         if message.payload.get('in_reply_to') and 'content' in message.payload:
             self.finishRequest(message['in_reply_to'],
-                                pack_ussd_message(message))
+                                pack_ussd_message(message).encode('utf-8'))
