@@ -57,7 +57,7 @@ class HttpTransport(Transport):
                 (HttpResource(self), self.config['web_path']),
                 (HttpHealthResource(), 'health'),
             ],
-            self.config['web_port'])
+            int(self.config['web_port']))
 
     @inlineCallbacks
     def teardown_transport(self):
