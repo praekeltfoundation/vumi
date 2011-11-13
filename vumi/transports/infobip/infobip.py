@@ -1,10 +1,11 @@
 # -*- test-case-name: vumi.transports.infobip.tests.test_infobip -*-
+
 """Infobip USSD transport."""
 
 import json
 
 from vumi.message import TransportUserMessage
-from vumi.transports.httprpc.transport import HttpRpcTransport
+from vumi.transports.httprpc import HttpRpcTransport
 
 
 class InfobipTransport(HttpRpcTransport):
@@ -30,6 +31,7 @@ class InfobipTransport(HttpRpcTransport):
         msisdn = req_data["msisdn"]
         content = req_data["text"]
         to_addr = req_data["shortCode"]
+        provider = req_data.get("unknown", "")  # TODO: fill-in field
 
         transport_metadata = {'session_id': ussd_session_id}
         self.publish_message(
@@ -37,9 +39,10 @@ class InfobipTransport(HttpRpcTransport):
                 content=content,
                 to_addr=to_addr,
                 from_addr=msisdn,
+                provider=provider,
                 session_event=session_event,
                 transport_name=self.transport_name,
-                transport_type=self.config.get('transport_type', 'ussd'),
+                transport_type=self.config.get('transport_type'),
                 transport_metadata=transport_metadata,
                 )
 
@@ -48,7 +51,7 @@ class InfobipTransport(HttpRpcTransport):
                 "responseExitCode": 200,
                 "responseMessage": "",
                 }
-            self.finishRequest(msgid, json.dumps(response_data), session_event)
+            self.finish_request(msgid, json.dumps(response_data))
 
     def handle_outbound_message(self, message):
         if message.payload.get('in_reply_to') and 'content' in message.payload:
@@ -60,7 +63,6 @@ class InfobipTransport(HttpRpcTransport):
                 "responseExitCode": 200,
                 "responseMessage": "",
                 }
-            self.finishRequest(
+            self.finish_request(
                     message['in_reply_to'],
-                    json.dumps(response_data),
-                    message['session_event'])
+                    json.dumps(response_data))

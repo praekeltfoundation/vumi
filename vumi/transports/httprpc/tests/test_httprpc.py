@@ -1,6 +1,6 @@
 import re
 import json
-from  xml.etree import ElementTree
+from xml.etree import ElementTree
 
 from twisted.trial.unittest import TestCase
 from twisted.web.resource import Resource

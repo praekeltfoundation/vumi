@@ -1,4 +1,6 @@
+# -*- test-case-name: vumi.transports.api.tests.test_api -*-
 import uuid
+import json
 
 from twisted.internet.defer import inlineCallbacks
 from twisted.python import log
@@ -15,7 +17,7 @@ class HttpHealthResource(Resource):
 
     def render_GET(self, request):
         request.setResponseCode(http.OK)
-        return "OK"
+        return json.dumps({})
 
 
 class HttpResource(Resource):
@@ -30,10 +32,12 @@ class HttpResource(Resource):
         request.setHeader("content-type", "text/plain")
         uu = uuid.uuid4().get_hex()
         self.transport.handle_raw_inbound_message(uu, request)
-        return '{"message_id": "%s"}' % (uu)
+        return json.dumps({
+            'message_id': uu,
+        })
 
 
-class HttpTransport(Transport):
+class HttpApiTransport(Transport):
     """
     Strictly for internal testing only
     this has NO SECURITY!
@@ -57,7 +61,7 @@ class HttpTransport(Transport):
                 (HttpResource(self), self.config['web_path']),
                 (HttpHealthResource(), 'health'),
             ],
-            self.config['web_port'])
+            int(self.config['web_port']))
 
     @inlineCallbacks
     def teardown_transport(self):
@@ -73,10 +77,10 @@ class HttpTransport(Transport):
         log.msg("HttpApiTransport sending from %s to %s message \"%s\"" % (
             from_addr, to_addr, content))
         self.publish_message(
-                message_id=message_id,
-                content=content,
-                to_addr=to_addr,
-                from_addr=from_addr,
-                provider='vumi',
-                transport_type='http_api',
-                )
+            message_id=message_id,
+            content=content,
+            to_addr=to_addr,
+            from_addr=from_addr,
+            provider='vumi',
+            transport_type='http_api',
+        )
