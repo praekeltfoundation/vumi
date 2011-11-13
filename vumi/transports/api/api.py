@@ -1,4 +1,4 @@
-# -*- test-case-name: vumi.transports.api.tests.test_http -*-
+# -*- test-case-name: vumi.transports.api.tests.test_api -*-
 import uuid
 import json
 
@@ -37,7 +37,7 @@ class HttpResource(Resource):
         })
 
 
-class HttpTransport(Transport):
+class HttpApiTransport(Transport):
     """
     Strictly for internal testing only
     this has NO SECURITY!

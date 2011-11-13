@@ -6,7 +6,7 @@ from twisted.web.server import Site
 from twisted.internet import reactor
 
 from vumi.utils import http_request
-from vumi.transports.api.http import HttpTransport
+from vumi.transports.api import HttpApiTransport
 from vumi.message import TransportUserMessage
 from vumi.tests.utils import get_stubbed_worker
 
@@ -21,7 +21,7 @@ class TestTransport(TestCase):
             'web_path': "foo",
             'web_port': 0,
             }
-        self.worker = get_stubbed_worker(HttpTransport, config)
+        self.worker = get_stubbed_worker(HttpApiTransport, config)
         self.broker = self.worker._amqp_client.broker
         yield self.worker.startWorker()
         addr = self.worker.web_resource.getHost()
