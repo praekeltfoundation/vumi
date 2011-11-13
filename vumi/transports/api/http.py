@@ -1,4 +1,6 @@
+# -*- test-case-name: vumi.transports.api.tests.test_http -*-
 import uuid
+import json
 
 from twisted.internet.defer import inlineCallbacks
 from twisted.python import log
@@ -15,7 +17,7 @@ class HttpHealthResource(Resource):
 
     def render_GET(self, request):
         request.setResponseCode(http.OK)
-        return "OK"
+        return json.dumps({})
 
 
 class HttpResource(Resource):
@@ -30,7 +32,9 @@ class HttpResource(Resource):
         request.setHeader("content-type", "text/plain")
         uu = uuid.uuid4().get_hex()
         self.transport.handle_raw_inbound_message(uu, request)
-        return '{"message_id": "%s"}' % (uu)
+        return json.dumps({
+            'message_id': uu,
+        })
 
 
 class HttpTransport(Transport):

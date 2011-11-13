@@ -1,4 +1,4 @@
-
+import json
 from twisted.trial.unittest import TestCase
 from twisted.web.resource import Resource
 from twisted.internet.defer import inlineCallbacks, DeferredQueue
@@ -39,7 +39,7 @@ class TestTransport(TestCase):
     def test_health(self):
         result = yield http_request(self.worker_url + "health", "",
                                     method='GET')
-        self.assertEqual(result, "OK")
+        self.assertEqual(json.loads(result), {})
 
     @inlineCallbacks
     def test_inbound(self):
