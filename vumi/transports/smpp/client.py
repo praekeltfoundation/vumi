@@ -4,6 +4,7 @@ import uuid
 import redis
 
 from twisted.python import log
+from twisted.internet import reactor
 from twisted.internet.protocol import Protocol, ReconnectingClientFactory
 from twisted.internet.task import LoopingCall
 
@@ -93,6 +94,7 @@ class EsmeTransceiver(Protocol):
         self.config = config
         self.vumi_options = vumi_options
         self.inc = int(self.config['smpp_increment'])
+        self.smpp_bind_timeout = int(self.config.get('smpp_bind_timeout', 30))
         self.incSeq()
         self.datastream = ''
         self.__connect_callback = None
@@ -345,6 +347,13 @@ class EsmeTransceiver(Protocol):
         log.msg(pdu.get_obj())
         self.incSeq()
         self.sendPDU(pdu)
+        reactor.callLater(self.smpp_bind_timeout,
+                self.lose_unbound_connection, 'BOUND_TRX')
+
+    def lose_unbound_connection(self, required_state):
+        if self.state != required_state:
+            log.msg('Breaking connection due to binding delay\n')
+            self.transport.loseConnection()
 
     def connectionLost(self, *args, **kwargs):
         self.state = 'CLOSED'
