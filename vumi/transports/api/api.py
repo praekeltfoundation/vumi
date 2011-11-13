@@ -77,10 +77,10 @@ class HttpApiTransport(Transport):
         log.msg("HttpApiTransport sending from %s to %s message \"%s\"" % (
             from_addr, to_addr, content))
         self.publish_message(
-                message_id=message_id,
-                content=content,
-                to_addr=to_addr,
-                from_addr=from_addr,
-                provider='vumi',
-                transport_type='http_api',
-                )
+            message_id=message_id,
+            content=content,
+            to_addr=to_addr,
+            from_addr=from_addr,
+            provider='vumi',
+            transport_type='http_api',
+        )
