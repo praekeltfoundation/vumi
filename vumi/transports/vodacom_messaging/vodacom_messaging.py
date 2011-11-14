@@ -1,10 +1,12 @@
+# -*- test-case-name: vumi.transports.vodacom_messaging.tests.test_vodacom_messaging -*-
+
 from twisted.python import log
 
 from vumi.message import TransportUserMessage
-from vumi.transports.httprpc.transport import HttpRpcTransport
+from vumi.transports.httprpc import HttpRpcTransport
 
 
-class VodaMessHttpRpcTransport(HttpRpcTransport):
+class VodacomMessagingTransport(HttpRpcTransport):
 
     def handle_raw_inbound_message(self, msgid, request):
         content = str(request.args.get('request', [None])[0])
@@ -30,22 +32,16 @@ class VodaMessHttpRpcTransport(HttpRpcTransport):
                 transport_metadata=transport_metadata,
                 )
 
-    def finishRequest(self, uuid, content, session_event):
-        vmr = VodacomMessagingResponse(
-                self.config['web_host'],
-                self.config['web_path'])
-        vmr.set_headertext(str(content))
-        if session_event is None:
-            vmr.accept_freetext()
-        data = str(vmr)
-
-        log.msg("VodaMessHttpRpcTransport.finishRequest with data:", repr(data))
-        log.msg(repr(self.requests))
-        request = self.requests.get(uuid)
-        if request:
-            request.write(data)
-            request.finish()
-            del self.requests[uuid]
+    def handle_outbound_message(self, message):
+        if message.payload.get('in_reply_to') and 'content' in message.payload:
+            should_close = (message['session_event']
+                            == TransportUserMessage.SESSION_CLOSE)
+            vmr = VodacomMessagingResponse(self.config['web_host'],
+                                            self.config['web_path'])
+            vmr.set_headertext(message['content'])
+            if not should_close:
+                vmr.accept_freetext()
+            self.finish_request(message['in_reply_to'], unicode(vmr).encode('utf-8'))
 
 
 class VodacomMessagingResponse(object):
@@ -72,15 +68,15 @@ class VodacomMessagingResponse(object):
 
     def add_option(self, text, order=None):
         self.freetext_option = None
-        dict = {'text': str(text)}
+        dictionary = {'text': text}
         if order:
-            dict['order'] = int(order)
+            dictionary['order'] = int(order)
         else:
-            dict['order'] = len(self.option_list) + 1
-        dict.update({
+            dictionary['order'] = len(self.option_list) + 1
+        dictionary.update({
             'web_path': self.web_path,
             'web_host': self.web_host})
-        self.option_list.append(dict)
+        self.option_list.append(dictionary)
 
     def accept_freetext(self):
         self.option_list = []

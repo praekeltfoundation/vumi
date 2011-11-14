@@ -1,4 +1,7 @@
+# -*- test-case-name: vumi.transports.httprpc.tests.test_httprpc -*-
+
 import uuid
+import json
 
 from twisted.internet.defer import inlineCallbacks
 from twisted.python import log
@@ -6,6 +9,7 @@ from twisted.web import http
 from twisted.web.resource import Resource
 from twisted.web.server import NOT_DONE_YET
 from vumi.transports.base import Transport
+from vumi.message import TransportUserMessage
 
 
 class HttpRpcHealthResource(Resource):
@@ -17,7 +21,9 @@ class HttpRpcHealthResource(Resource):
 
     def render_GET(self, request):
         request.setResponseCode(http.OK)
-        return "pReq:%s" % len(self.transport.requests)
+        return json.dumps({
+            'pending_requests': len(self.transport.requests)
+        })
 
 
 class HttpRpcResource(Resource):
@@ -30,7 +36,7 @@ class HttpRpcResource(Resource):
     def render_(self, request, http_action=None):
         log.msg("HttpRpcResource HTTP Action: %s" % (request,))
         request.setHeader("content-type", "text/plain")
-        uu = str(uuid.uuid4().get_hex())
+        uu = uuid.uuid4().get_hex()
         self.transport.requests[uu] = request
         self.transport.handle_raw_inbound_message(uu, request)
         return NOT_DONE_YET
@@ -71,18 +77,16 @@ class HttpRpcTransport(Transport):
     def handle_outbound_message(self, message):
         log.msg("HttpRpcTransport consuming %s" % (message))
         if message.payload.get('in_reply_to') and 'content' in message.payload:
-            self.finishRequest(
+            self.finish_request(
                     message.payload['in_reply_to'],
-                    message.payload['content'],
-                    message.payload['session_event'])
+                    message.payload['content'].encode('utf-8'))
 
     def handle_raw_inbound_message(self, msgid, request):
         raise NotImplementedError("Sub-classes should implement"
                                   " handle_raw_inbound_message.")
 
-    def finishRequest(self, uuid, content, session_event):
-        data = str(content)
-        log.msg("HttpRpcTransport.finishRequest with data:", repr(data))
+    def finish_request(self, uuid, data):
+        log.msg("HttpRpcTransport.finish_request with data:", repr(data))
         log.msg(repr(self.requests))
         request = self.requests.get(uuid)
         if request:
