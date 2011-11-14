@@ -41,12 +41,12 @@ TRANSLATIONS = '''
     Sotho: "Rea o leboha ka quiz. Re tla o tsebisa haeba o le mohlodi dihoreng tse 48"
 -
     English: "Thanks, you have completed this section of the quiz. Dial *120*112233# again, to try more questions and stand another chance to win"
-    Zulu:
+    Zulu: "Siyabonga, Uqcedile kule-section ye quiz. Cofa U-*120*112233# ukuze uphendule imibuzo eminge."
     Afrikaans: "Dankie, jy het nou hierdie afdeling van die MIV/VIGS vrae beantwoord. Bel weer *120*112233# om nog vrae te antwoord en nog 'n kans te staan om te wen."
     Sotho: "Rea Leboha, O se o feditse kgehlo lena la quiz, tobetsa *120*112233# hape ho leka dipotso tse dingwe."
 -
     English: "Thanks, you have now completed all the HIV/AIDS quiz questions. We'll let U know if U R a lucky winner within 48 hours."
-    Zulu:
+    Zulu: "Siyabonga, Uqcede imibuzo yonke ye HIV/AIDS quiz. Sizo kuyazisa umuva kwama-hora angu-48 uma uWinile."
     Afrikaans: "Dankie, jy het nou al die MIV/VIGS vrae beantwoord en die vasvra voltooi. Ons sal jou binne 48 uur laat weet of jy 'n wenner is."
     Sotho: "Rea Leboha, o feditse dipotso tsohle tsa quiz ya HIV/AIDS. Retla ho tsibisa moraho ha di hura tse 48 ha eba o hlotse."
 -
@@ -226,14 +226,14 @@ TRANSLATIONS = '''
     Sotho: "Ekaba ho a etsahala hore motho ya qetang hokenwa ke HIV/AIDS, diteko tsa hae dire ha ana yona?"
 -
     English: "Correct, a newly-infected HIV positive person can test HIV-negative, if they are tested for HIV in the 'window period'"
-    Zulu: "Uqinisile, umuntu osanda kuthola i-HIV angase ahlolwe bese imiphumela ithi akanayo i-HIV. Lokhu kubangelwa ukuthi usuke eseku-'window period'"
+    Zulu: "Uqinisile, Kuyi 'Window Period', umuntu osanda kuthola i-HIV anga hlowa kwatholwa ukuthi akanayo i-HIV noma ikhona kuye."
     Afrikaans: "Korrek, 'n nuut-geinfekteerde persoon kan MIV negatief toets, omdat die toets in die 'venster periode' gedoen is"
-    Sotho: "O nepile, motho wa tshwaetso ya HIV la pele a ka hloka HIV morao. Hona ke hobane a bile le diteko 'nakong ya kemelo'"
+    Sotho: "O nepile, motho wa tshwaetso ya HIV la pele a ka hloka HIV morao. Hobane a yentse diteko 'nakong ya kemelo'"
 -
     English: "Please Note: a newly-infected HIV positive person can test HIV-negative, if they are tested for HIV in the 'window period'"
-    Zulu: "Qaphela: umuntu osanda kuthola i-HIV angase ahlolwe bese imiphumela ithi akanayo i-HIV. Lokhu kubangelwa ukuthi usuke eseku-'window period'"
+    Zulu: "Qaphela: Kuyi 'Window Period', umuntu osanda kuthola i-HIV anga hlowa kwatholwa ukuthi akanayo i-HIV noma ikhona kuye."
     Afrikaans: "Onthou, 'n nuut-geinfekteerde persoon kan MIV negatief toets, omdat die toets in die 'venster periode' gedoen is"
-    Sotho: "Lemoha: motho wa tshwaetso ya HIV la pele a ka hloka HIV morao. Hona ke hobane a bile le diteko 'nakong ya kemelo'"
+    Sotho: "Lemoha: Motho wa tshwaetso ya HIV la pele a ka hloka HIV morao. Hobane a bile le diteko 'nakong ya kemelo'"
 -
     English: "Can HIV be transmitted by sweat?"
     Zulu: "I-HIV ingathelelwana yini ngomjuluko?"
@@ -303,12 +303,12 @@ TRANSLATIONS = '''
     English: "Correct, with treatment and planning, it is possible for an HIV positive mother to deliver an HIV-negative baby."
     Zulu: "Uqinisile, ngokwelashwa nangokuhlela, kungenzeka ukuba umama one-HIV athole umntwana ongenayo i-HIV."
     Afrikaans: "Korrek, met die nodige medikasie en beplanning kan MIV-positiewe ma's geboorte skenk aan MIV-negatiewe babas."
-    Sotho: "O nepile, ka kalafo le tlhophiso mme ya nang le tshwaetso ya HIV a kgona ho pepa lesea le senang tshwaetso ya HIV."
+    Sotho: "O nepile, ka kalafo le tlhophiso mme ya nang le tshwaetso ya HIV a ka ba le lesea le senang tshwaetso ya HIV."
 -
     English: "Please note, with treatment and planning, it is possible for an HIV positive mother to deliver an HIV-negative baby."
     Zulu: "Qaphela, ngokwelashwa nangokuhlela, kungenzeka ukuba umama one-HIV athole umntwana ongenayo i-HIV."
     Afrikaans: "Onthou, met die nodige medikasie en beplanning kan MIV-positiewe ma's geboorte skenk aan MIV-negatiewe babas."
-    Sotho: "Lemoha, ka kalafo le tlhophiso mme ya nang le tshwaetso ya HIV a kgona ho pepa lesea le senang tshwaetso ya HIV."
+    Sotho: "Lemoha: ka kalafo le tlhophiso mme ya nang le tshwaetso ya HIV o kgona ho pepa lesea le senang HIV."
 -
     English: "Do you immediately have to start ARVs when you test HIV positive?"
     Zulu: "Ingabe kudingeka uqale ama-ARV ngokushesha lapho uhlolwa uthola ukuthi une-HIV?"
@@ -316,12 +316,12 @@ TRANSLATIONS = '''
     Sotho: "Na o tlameha ho qala hanghang ka diARV ha diteko di re o na le HIV?"
 -
     English: "Please note, once testing positive for HIV, you first have to get your CD4 test done, to determine if you qualify for ARVs."
-    Zulu: "Qaphela, uma usuhloliwe wathola ukuthi une-HIV, kufanele uqale uhlolwe i-CD4-count, ukuze kutholakale ukuthi uyafaneleka yini ukuthola ama-ARV."
+    Zulu: "Qaphela: Qala uhlolwe i-HIV, bese u hlolwa i-CD4-count yakho ukuze kutholakale ukuthi uyafaneleka yini ama-ARV."
     Afrikaans: "Onthou, na 'n positiewe toets moet 'n CD4-telling geneem word om te sien of mens vir 'ARV' behandeling kwalifiseer"
     Sotho: "Lemoha, ha diteko di re o na le HIV, etsa diteko tsa CD4 pele, ho fumana hore na o loketse ho fumana diARV."
 -
     English: "Correct, once testing positive for HIV, you first have to get your CD4 test done, to determine if you qualify for ARVs."
-    Zulu: "Uqinisile, uma usuhloliwe wathola ukuthi une-HIV, kufanele uqale uhlolwe i-CD4-count, ukuze kutholakale ukuthi uyafaneleka yini ukuthola ama-ARV."
+    Zulu: "Uqinisile: kumele uhlolwe i-CD4-count yakho kuqala ukuze wazi kahle ukuthi kumele uthole ama-ARV yini."
     Afrikaans: "Korrek, na 'n positiewe toets moet 'n CD4-telling geneem word om te sien of mens vir 'ARV' behandeling kwalifiseer"
     Sotho: "O nepile, ha diteko di re o na le HIV, etsa diteko tsa CD4 pele, ho fumana hore na o loketse ho fumana diARV."
 
