@@ -57,7 +57,7 @@ class LogParser(object):
             self.readline(line)
 
     def emit(self, obj):
-        sys.stdout.write('%s\n' % obj)
+        sys.stdout.write('%s\n' % (obj,))
 
     def readline(self, line):
         match = LOG_PATTERN.match(line)

@@ -34,7 +34,7 @@ class MessageInjector(Worker):
 
     def emit(self, obj):
         if self.config['verbose']:
-            sys.stdout.write('%s\n' % obj)
+            sys.stdout.write('%s\n' % (obj,))
 
     def readline(self):
         line = sys.stdin.readline()
