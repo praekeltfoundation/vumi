@@ -2,7 +2,7 @@
 import sys
 import json
 from twisted.python import usage
-from twisted.internet import reactor
+from twisted.internet import reactor, task
 from twisted.internet.defer import maybeDeferred, Deferred, inlineCallbacks
 from vumi.message import TransportUserMessage
 from vumi.service import Options, Worker, WorkerCreator
@@ -12,6 +12,7 @@ class InjectorOptions(Options):
     optParameters = Options.optParameters + [
         ["transport-name", None, None,
             "Name of the transport to inject messages from"],
+        ["verbose", "v", False, "Output the JSON being injected"],
     ]
 
     def postOptions(self):
@@ -27,11 +28,20 @@ class MessageInjector(Worker):
         self.transport_name = self.config['transport-name']
         self.publisher = yield self.publish_to('%s.inbound' %
                                                 self.transport_name)
+        self.publisher.require_bind = False
+        self.reader = task.LoopingCall(self.readline)
+        self.reader.start(0)
+
+    def emit(self, obj):
+        if self.config['verbose']:
+            sys.stdout.write('%s\n' % obj)
 
     def readline(self):
         line = sys.stdin.readline()
         if line:
-            self.process_line(line.strip())
+            line = line.strip()
+            self.emit(line)
+            self.process_line(line)
         else:
             self.reader.stop()
             reactor.stop()
