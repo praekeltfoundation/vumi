@@ -1,26 +1,33 @@
 # -*- test-case-name: vumi.scripts.tests.test_parse_smpp_log_messages -*-
 import sys
 import re
+import json
 from twisted.python import usage
 from twisted.internet import reactor
 from twisted.internet.defer import maybeDeferred
 from datetime import datetime
 
+
 class Options(usage.Options):
     optParameters = [
-        ["from", "f", None, "Parse log lines starting from timestamp [YYYY-MM-DD HH:MM:SS]"],
-        ["until", "u", None, "Parse log lines starting from timestamp [YYYY-MM-DD HH:MM:SS]"],
+        ["from", "f", None,
+            "Parse log lines starting from timestamp [YYYY-MM-DD HH:MM:SS]"],
+        ["until", "u", None,
+            "Parse log lines starting from timestamp [YYYY-MM-DD HH:MM:SS]"],
     ]
 
 DATE_PATTERN = re.compile(r'(?P<year>\d{4})-(?P<month>\d{2})-(?P<day>\d{2}) ' +
-                            r'(?P<hour>\d{2}):(?P<minute>\d{2}):(?P<second>\d{2})')
-LOG_PATTERN = re.compile(r'(?P<date>[\d\-\:\s]+)\+0000 .* PUBLISHING INBOUND: (?P<message>.*)')
+                        r'(?P<hour>\d{2}):(?P<minute>\d{2}):(?P<second>\d{2})')
+LOG_PATTERN = re.compile(r'(?P<date>[\d\-\:\s]+)\+0000 .* ' +
+                            'PUBLISHING INBOUND: (?P<message>.*)')
+
 
 def parse_date(string):
     match = DATE_PATTERN.match(string)
     if match:
-        return dict((k,int(v)) for k,v in match.groupdict().items())
+        return dict((k, int(v)) for k, v in match.groupdict().items())
     return {}
+
 
 class LogParser(object):
     """
@@ -50,7 +57,7 @@ class LogParser(object):
             self.readline(line)
 
     def emit(self, obj):
-        sys.stdout.write('%s\n' % obj)
+        sys.stdout.write('%s\n' % json.dumps(eval(obj)))
 
     def readline(self, line):
         match = LOG_PATTERN.match(line)
