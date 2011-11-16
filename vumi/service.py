@@ -457,7 +457,6 @@ class WorkerCreator(object):
 
         Return value is the AmqpFactory instance containing the worker.
         """
-        print 'called with', worker_class, config
         return self.create_worker_by_class(
             load_class_by_string(worker_class), config, timeout=timeout,
             bindAddress=bindAddress)
@@ -469,6 +468,5 @@ class WorkerCreator(object):
         return factory
 
     def _connect(self, factory, timeout, bindAddress):
-        print 'connectTCP called', self.options
         reactor.connectTCP(self.options['hostname'], self.options['port'],
                            factory, timeout, bindAddress)

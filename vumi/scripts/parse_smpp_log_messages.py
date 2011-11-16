@@ -57,7 +57,7 @@ class LogParser(object):
             self.readline(line)
 
     def emit(self, obj):
-        sys.stdout.write('%s\n' % json.dumps(eval(obj)))
+        sys.stdout.write('%s\n' % obj)
 
     def readline(self, line):
         match = LOG_PATTERN.match(line)
@@ -68,7 +68,7 @@ class LogParser(object):
                 return
             if self.stop and date > self.stop:
                 return
-            self.emit(data['message'])
+            self.emit(json.dumps(eval(data['message'])))
 
 
 if __name__ == '__main__':
