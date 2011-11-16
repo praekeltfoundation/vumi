@@ -80,6 +80,7 @@ class AmqpFactory(protocol.ReconnectingClientFactory):
         return amqp_client
 
     def clientConnectionFailed(self, connector, reason):
+        log.err("Connection failed.", reason)
         if self.worker is not None:
             self.worker.stopWorker()
         protocol.ReconnectingClientFactory.clientConnectionFailed(self,
