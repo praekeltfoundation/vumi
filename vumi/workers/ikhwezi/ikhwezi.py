@@ -41,12 +41,12 @@ TRANSLATIONS = '''
     Sotho: "Rea o leboha ka quiz. Re tla o tsebisa haeba o le mohlodi dihoreng tse 48"
 -
     English: "Thanks, you have completed this section of the quiz. Dial *120*112233# again, to try more questions and stand another chance to win"
-    Zulu: "Siyabonga, Uqcedile kule-section ye quiz. Cofa U-*120*112233# ukuze uphendule imibuzo eminge."
+    Zulu: "Siyabonga, uqedile kule-section ye quiz. Cofa u-*120*112233# ukuze uphendule imibuzo eminye."
     Afrikaans: "Dankie, jy het nou hierdie afdeling van die MIV/VIGS vrae beantwoord. Bel weer *120*112233# om nog vrae te antwoord en nog 'n kans te staan om te wen."
     Sotho: "Rea Leboha, O se o feditse kgehlo lena la quiz, tobetsa *120*112233# hape ho leka dipotso tse dingwe."
 -
     English: "Thanks, you have now completed all the HIV/AIDS quiz questions. We'll let U know if U R a lucky winner within 48 hours."
-    Zulu: "Siyabonga, Uqcede imibuzo yonke ye HIV/AIDS quiz. Sizo kuyazisa umuva kwama-hora angu-48 uma uWinile."
+    Zulu: "Siyabonga, uyiqede yonke imibuzo yeHIV/AIDS quiz. Uma uwinile sizokwazisa emuva kwama-hora angu-48."
     Afrikaans: "Dankie, jy het nou al die MIV/VIGS vrae beantwoord en die vasvra voltooi. Ons sal jou binne 48 uur laat weet of jy 'n wenner is."
     Sotho: "Rea Leboha, o feditse dipotso tsohle tsa quiz ya HIV/AIDS. Retla ho tsibisa moraho ha di hura tse 48 ha eba o hlotse."
 -
@@ -206,7 +206,7 @@ TRANSLATIONS = '''
     Sotho: "E, Moriana wa setso ha se pheko ya HIV/AIDS. Ha ho na pheko ya HIV/AIDS."
 -
     English: "Is an HIV test at any government clinic free of charge?"
-    Zulu: "Kumahhala yini ukuhlolelwa iHIV emtholampilo kahulumeni?"
+    Zulu: "Kumahala yini ukuhlolelwa iHIV emtholampilo kahulumeni?"
     Afrikaans: "Is 'n MIV-toets by enige regeringskliniek gratis?"
     Sotho: "Na teko ya HIV tliniking ke mahala?"
 -
@@ -226,12 +226,12 @@ TRANSLATIONS = '''
     Sotho: "Ekaba ho a etsahala hore motho ya qetang hokenwa ke HIV/AIDS, diteko tsa hae dire ha ana yona?"
 -
     English: "Correct, a newly-infected HIV positive person can test HIV-negative, if they are tested for HIV in the 'window period'"
-    Zulu: "Uqinisile, Kuyi 'Window Period', umuntu osanda kuthola i-HIV anga hlowa kwatholwa ukuthi akanayo i-HIV noma ikhona kuye."
+    Zulu: "Uqinisile, ku 'Window Period', umuntu osanda kuthola i-HIV angahlowa atholwe ukuthi akanayo i-HIV noma ikhona kuye."
     Afrikaans: "Korrek, 'n nuut-geinfekteerde persoon kan MIV negatief toets, omdat die toets in die 'venster periode' gedoen is"
     Sotho: "O nepile, motho wa tshwaetso ya HIV la pele a ka hloka HIV morao. Hobane a yentse diteko 'nakong ya kemelo'"
 -
     English: "Please Note: a newly-infected HIV positive person can test HIV-negative, if they are tested for HIV in the 'window period'"
-    Zulu: "Qaphela: Kuyi 'Window Period', umuntu osanda kuthola i-HIV anga hlowa kwatholwa ukuthi akanayo i-HIV noma ikhona kuye."
+    Zulu: "Qaphela: ku 'Window Period', umuntu osanda kuthola i-HIV angahlowa atholwe ukuthi akanayo i-HIV noma ikhona kuye."
     Afrikaans: "Onthou, 'n nuut-geinfekteerde persoon kan MIV negatief toets, omdat die toets in die 'venster periode' gedoen is"
     Sotho: "Lemoha: Motho wa tshwaetso ya HIV la pele a ka hloka HIV morao. Hobane a bile le diteko 'nakong ya kemelo'"
 -
