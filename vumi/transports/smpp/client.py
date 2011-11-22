@@ -352,7 +352,8 @@ class EsmeTransceiver(Protocol):
 
     def lose_unbound_connection(self, required_state):
         if self.state != required_state:
-            log.msg('Breaking connection due to binding delay\n')
+            log.msg('Breaking connection due to binding delay, %s != %s\n' % (
+                self.state, required_state))
             self.transport.loseConnection()
 
     def connectionLost(self, *args, **kwargs):
