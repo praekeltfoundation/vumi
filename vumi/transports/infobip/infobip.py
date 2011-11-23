@@ -4,6 +4,8 @@
 
 import json
 
+from twisted.python import log
+
 from vumi.message import TransportUserMessage
 from vumi.transports.httprpc import HttpRpcTransport
 
@@ -28,10 +30,15 @@ class InfobipTransport(HttpRpcTransport):
         session_event = self.METHOD_TO_EVENT.get(session_method,
                                              TransportUserMessage.SESSION_NONE)
         req_data = json.load(request.content)
+        log.msg(repr(req_data))
         msisdn = req_data["msisdn"]
         content = req_data["text"]
-        to_addr = req_data["shortCode"]
-        provider = req_data.get("unknown", "")  # TODO: fill-in field
+        # TODO: shortCode may be none so we should add a configuration variable
+        # perhaps?
+        to_addr = req_data["shortCode"] or ""
+        # TODO: looks like this is as close as we'll get to a provider
+        #       Example value: live2
+        provider = req_data.get("ussdGwId", "")
 
         transport_metadata = {'session_id': ussd_session_id}
         self.publish_message(
