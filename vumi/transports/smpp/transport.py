@@ -221,7 +221,10 @@ class SmppTransport(Transport):
                 transport_type='sms',
                 content=kwargs.get('short_message'))
         log.msg("PUBLISHING INBOUND: %s" % (message,))
-        return self.publish_message(**message)
+        try:
+            return self.publish_message(**message)
+        except Exception, e:
+            log.err(e)
 
     def send_smpp(self, message):
         log.msg("Sending SMPP message: %s" % (message))
