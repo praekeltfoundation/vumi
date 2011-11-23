@@ -1,0 +1,4 @@
+2011-11-15 00:23:52+0000 [EsmeTransceiver,client] PUBLISHING INBOUND: {'content': u'CODE1', 'transport_type': 'sms', 'to_addr': '1458', 'message_id': '8b400347-408a-47b5-9663-ff719881d73d', 'from_addr': '23xxxxxxxx'}
+2011-11-15 00:23:59+0000 [EsmeTransceiver,client] PUBLISHING INBOUND: {'content': u'CODE2', 'transport_type': 'sms', 'to_addr': '1458', 'message_id': 'c7590d37-6156-4e1e-8ad8-f11f97cc1a5b', 'from_addr': '24xxxxxxxx'}
+2011-11-15 00:24:26+0000 [EsmeTransceiver,client] PUBLISHING INBOUND: {'content': u'CODE3', 'transport_type': 'sms', 'to_addr': '1458', 'message_id': 'b70b6698-ee6c-463e-be24-a86246e88a7a', 'from_addr': '25xxxxxxxx'}
+2011-11-15 00:25:26+0000 [EsmeTransceiver,client] PUBLISHING INBOUND: {'content': u'CODE4', 'transport_type': 'sms', 'to_addr': '1458', 'message_id': 'f499a00d-83c2-4baf-8af3-cab27fb04394', 'from_addr': '26xxxxxxxx'}
