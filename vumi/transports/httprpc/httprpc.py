@@ -41,6 +41,9 @@ class HttpRpcResource(Resource):
         self.transport.handle_raw_inbound_message(uu, request)
         return NOT_DONE_YET
 
+    def render_PUT(self, request):
+        return self.render_(request, "render_PUT")
+
     def render_GET(self, request):
         return self.render_(request, "render_GET")
 
