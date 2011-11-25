@@ -220,12 +220,12 @@ class InfobipTransport(HttpRpcTransport):
             self.publish_message(**message_dict)
 
     def handle_outbound_message(self, message):
-        if message.payload.get('in_reply_to') and 'content' in message.payload:
+        if message.payload.get('in_reply_to'):
             should_close = (message['session_event']
                             == TransportUserMessage.SESSION_CLOSE)
             response_data = {
                 "shouldClose": should_close,
-                "ussdMenu": message['content'],
+                "ussdMenu": message.get('content'),
                 "responseExitCode": 200,
                 "responseMessage": "",
                 }
