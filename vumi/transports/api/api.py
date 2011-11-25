@@ -97,8 +97,8 @@ class OldHttpResource(Resource):
         Resource.__init__(self)
 
     def render(self, request, http_action=None):
-        print "user", request.getUser()
-        print "password", request.getPassword()
+        #print "user", request.getUser()
+        #print "password", request.getPassword()
         log.msg("HttpResource HTTP Action: %s" % (request,))
         request.setHeader("content-type", "text/plain")
         return json.dumps(self.transport.handle_raw_inbound_messages(request))
