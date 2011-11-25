@@ -4,6 +4,7 @@ from twisted.python import log
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.application import ApplicationWorker
+from vumi import Message
 
 class TtcGenericWorker(ApplicationWorker):
     
