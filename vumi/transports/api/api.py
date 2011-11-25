@@ -165,7 +165,7 @@ class OldSimpleHttpTransport(Transport):
                 "message": message,
                 "to_msisdn": to_msisdn,
                 "from_msisdn": from_msisdn,
-                "message_id": message_id,
+                "id": message_id,
                 })
         return return_list
 
@@ -214,6 +214,6 @@ class OldTemplateHttpTransport(OldSimpleHttpTransport):
                 "message": message,
                 "to_msisdn": to_msisdn,
                 "from_msisdn": from_msisdn,
-                "message_id": message_id,
+                "id": message_id,
                 })
         return return_list
