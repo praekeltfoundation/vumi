@@ -102,7 +102,7 @@ class TestInfobipUssdTransport(TestCase):
     def test_start_twice(self):
         msg, response = yield self.make_request("start", 1, text="hello there",
                                                 reply="hello yourself")
-        msg, response = yield self.make_request("start", 1, test="hello again",
+        msg, response = yield self.make_request("start", 1, text="hello again",
                                                 expect_msg=False)
 
         correct_response = {
@@ -204,19 +204,42 @@ class TestInfobipUssdTransport(TestCase):
         self.assertEqual(json.loads(response), correct_response)
 
     @inlineCallbacks
-    def test_start_without_text_does_stop_transport(self):
-        num_tests = 2  # repeat twice to ensure transport is still functional
+    def test_start_without_text(self):
+        msg, response = yield self.make_request("start", 1,
+                                                expect_msg=False)
+        correct_response = {
+            'responseExitCode': 400,
+            'responseMessage': "Missing required JSON field:"
+                               " KeyError('text',)",
+            }
+        self.assertEqual(json.loads(response), correct_response)
+
+    @inlineCallbacks
+    def test_response_without_text(self):
+        msg, response = yield self.make_request("start", 1, text="Hi!",
+                                                reply="Moo")
+        msg, response = yield self.make_request("response", 1,
+                                                expect_msg=False)
+        correct_response = {
+            'responseExitCode': 400,
+            'responseMessage': "Missing required JSON field:"
+                               " KeyError('text',)",
+            }
+        self.assertEqual(json.loads(response), correct_response)
+
+    @inlineCallbacks
+    def test_start_without_msisdn(self):
         json_dict = {
             'text': 'Oops. No msisdn.',
             }
-        for _test in range(num_tests):
-            response = yield http_request(self.worker_url + "session/1/start",
-                                          json.dumps(json_dict), method='POST')
-            self.assertTrue('exceptions.KeyError' in response)
-
-        errors = self.flushLoggedErrors(KeyError)
-        self.assertEqual([str(e.value) for e in errors],
-                         ["'msisdn'"] * num_tests)
+        response = yield http_request(self.worker_url + "session/1/start",
+                                      json.dumps(json_dict), method='POST')
+        correct_response = {
+            'responseExitCode': 400,
+            'responseMessage': "Missing required JSON field:"
+                               " KeyError('msisdn',)",
+            }
+        self.assertEqual(json.loads(response), correct_response)
 
     @inlineCallbacks
     def test_outbound_non_reply_logs_error(self):

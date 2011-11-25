@@ -148,9 +148,15 @@ class InfobipTransport(HttpRpcTransport):
             self.send_error(msgid,
                             "USSD session %r already started" % (session_id,))
             return None
+        try:
+            from_addr = req_data["msisdn"]
+            content = req_data["text"]
+        except KeyError, e:
+            self.send_error(msgid, "Missing required JSON field: %r" % (e,))
+            return None
 
         message_dict = {
-            "from_addr": req_data["msisdn"],
+            "from_addr": from_addr,
             # unfortunately shortCode is not as mandatory as the
             # Infobip documentation claims
             "to_addr": req_data.get("shortCode") or "",
@@ -159,7 +165,7 @@ class InfobipTransport(HttpRpcTransport):
             "provider": req_data.get("ussdGwId", ""),
             }
         self.save_ussd_params(session_id, message_dict)
-        message_dict["content"] = req_data["text"]
+        message_dict["content"] = content
         return message_dict
 
     def handle_infobip_response(self, msgid, session_id, req_data):
@@ -167,7 +173,12 @@ class InfobipTransport(HttpRpcTransport):
         if not message_dict:
             self.send_error(msgid, "Invalid USSD session %r" % (session_id,))
             return None
-        message_dict["content"] = req_data["text"]
+        try:
+            content = req_data["text"]
+        except KeyError, e:
+            self.send_error(msgid, "Missing required JSON field: %r" % (e,))
+            return None
+        message_dict["content"] = content
         return message_dict
 
     def handle_infobip_end(self, msgid, session_id, req_data):
