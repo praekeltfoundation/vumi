@@ -92,25 +92,36 @@ class TestOldSimpleHttpTransport(TransportTestCase):
         url = '%s%s?%s' % (
             self.transport_url,
             self.config['web_path'],
-            urlencode({
-                'to_msisdn': 555,
-                'from_msisdn': 123,
-                'message': 'hello',
-            })
+            urlencode([
+                ('to_msisdn', 555),
+                ('to_msisdn', 556),
+                ('from_msisdn', 123),
+                ('message', 'hello'),
+            ])
         )
         response = yield http_request(url, '', method='GET')
-        [msg] = self.get_dispatched_messages()
-        payload = msg.payload
-        self.assertEqual(payload['transport_name'], self.transport_name)
-        self.assertEqual(payload['to_addr'], "555")
-        self.assertEqual(payload['from_addr'], "123")
-        self.assertEqual(payload['content'], "hello")
-        self.assertEqual(json.loads(response), [{
-            'id': payload['message_id'],
-            'message': payload['content'],
-            'from_msisdn': payload['from_addr'],
-            'to_msisdn': payload['to_addr'],
-        }])
+        [msg1, msg2] = self.get_dispatched_messages()
+        payload1 = msg1.payload
+        payload2 = msg2.payload
+        self.assertEqual(payload1['transport_name'], self.transport_name)
+        self.assertEqual(payload1['to_addr'], "555")
+        self.assertEqual(payload2['to_addr'], "556")
+        self.assertEqual(payload1['from_addr'], "123")
+        self.assertEqual(payload1['content'], "hello")
+        self.assertEqual(json.loads(response), [
+            {
+                'id': payload1['message_id'],
+                'message': payload1['content'],
+                'from_msisdn': payload1['from_addr'],
+                'to_msisdn': payload1['to_addr'],
+            },
+            {
+                'id': payload2['message_id'],
+                'message': payload2['content'],
+                'from_msisdn': payload2['from_addr'],
+                'to_msisdn': payload2['to_addr'],
+            },
+            ])
 
 
 class TestOldTemplateHttpTransport(TestOldSimpleHttpTransport):
@@ -136,25 +147,38 @@ class TestOldTemplateHttpTransport(TestOldSimpleHttpTransport):
         url = '%s%s?%s' % (
             self.transport_url,
             self.config['web_path'],
-            urlencode({
-                'to_msisdn': 555,
-                'template_name': "Joe",
-                'template_surname': "Smith",
-                'to_msisdn': 555,
-                'from_msisdn': 123,
-                'template': 'hello {{ name }} {{surname}}',
-            })
+            urlencode([
+                ('to_msisdn', 555),
+                ('to_msisdn', 556),
+                ('template_name', "Joe"),
+                ('template_name', "Foo"),
+                ('template_surname', "Smith"),
+                ('template_surname', "Bar"),
+                ('from_msisdn', 123),
+                ('template', 'hello {{ name }} {{surname}}'),
+            ])
         )
+
         response = yield http_request(url, '', method='GET')
-        [msg] = self.get_dispatched_messages()
-        payload = msg.payload
-        self.assertEqual(payload['transport_name'], self.transport_name)
-        self.assertEqual(payload['to_addr'], "555")
-        self.assertEqual(payload['from_addr'], "123")
-        self.assertEqual(payload['content'], "hello Joe Smith")
-        self.assertEqual(json.loads(response), [{
-            'id': payload['message_id'],
-            'message': payload['content'],
-            'from_msisdn': payload['from_addr'],
-            'to_msisdn': payload['to_addr'],
-        }])
+        [msg1, msg2] = self.get_dispatched_messages()
+        payload1 = msg1.payload
+        payload2 = msg2.payload
+        self.assertEqual(payload1['transport_name'], self.transport_name)
+        self.assertEqual(payload1['to_addr'], "555")
+        self.assertEqual(payload1['from_addr'], "123")
+        self.assertEqual(payload1['content'], "hello Joe Smith")
+        self.assertEqual(payload2['content'], "hello Foo Bar")
+        self.assertEqual(json.loads(response), [
+            {
+            'id': payload1['message_id'],
+            'message': payload1['content'],
+            'from_msisdn': payload1['from_addr'],
+            'to_msisdn': payload1['to_addr'],
+            },
+            {
+            'id': payload2['message_id'],
+            'message': payload2['content'],
+            'from_msisdn': payload2['from_addr'],
+            'to_msisdn': payload2['to_addr'],
+            },
+            ])
