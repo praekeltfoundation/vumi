@@ -133,7 +133,6 @@ class TestInfobipUssdTransport(TestCase):
     @inlineCallbacks
     def test_response_for_invalid_session(self):
         msg, response = yield self.make_request("response", 1,
-                                                test="hello again",
                                                 expect_msg=False)
 
         correct_response = {
