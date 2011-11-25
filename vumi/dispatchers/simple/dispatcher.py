@@ -6,11 +6,11 @@ from vumi.service import Worker
 
 
 class MessageHandler(object):
-    def __init__(self, worker, queue_name, publisher, publish_keys=[]):
+    def __init__(self, worker, queue_name, publisher, publish_keys):
         self.worker = worker
         self.queue_name = queue_name
         self.publisher = publisher
-        self.publish_keys = publish_keys
+        self.publish_keys = publish_keys or []  # if None assume empty set
         log.msg("SimpleDispatcher forwarding from %s to %s" % (
             self.queue_name, self.publish_keys))
 

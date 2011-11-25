@@ -221,7 +221,15 @@ class SmppTransport(Transport):
                 transport_type='sms',
                 content=kwargs.get('short_message'))
         log.msg("PUBLISHING INBOUND: %s" % (message,))
-        return self.publish_message(**message)
+        # TODO: This logs messages that fail to serialize to JSON
+        #       Usually this happens when an SMPP message has content
+        #       we can't decode (e.g. data_coding == 4). We should
+        #       remove the try-except once we handle such messages
+        #       better.
+        try:
+            return self.publish_message(**message)
+        except Exception, e:
+            log.err(e)
 
     def send_smpp(self, message):
         log.msg("Sending SMPP message: %s" % (message))
