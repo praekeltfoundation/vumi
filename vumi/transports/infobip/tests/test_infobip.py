@@ -193,6 +193,16 @@ class TestInfobipUssdTransport(TestCase):
         self.assertEqual(json.loads(response), correct_response)
 
     @inlineCallbacks
+    def test_non_json_content(self):
+        response = yield http_request(self.worker_url + "session/1/start",
+                                      "not json at all", method="POST")
+        correct_response = {
+            'responseExitCode': 400,
+            'responseMessage': 'Invalid JSON',
+            }
+        self.assertEqual(json.loads(response), correct_response)
+
+    @inlineCallbacks
     def test_bad_request(self):
         num_tests = 2  # repeat twice to ensure transport is still functional
         json_dict = {
