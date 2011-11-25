@@ -203,7 +203,7 @@ class TestInfobipUssdTransport(TestCase):
         self.assertEqual(json.loads(response), correct_response)
 
     @inlineCallbacks
-    def test_bad_request(self):
+    def test_start_without_text_does_stop_transport(self):
         num_tests = 2  # repeat twice to ensure transport is still functional
         json_dict = {
             'text': 'Oops. No msisdn.',
