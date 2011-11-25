@@ -98,6 +98,19 @@ class TestInfobipUssdTransport(TestCase):
         self.assertEqual(json.loads(response), correct_response)
 
     @inlineCallbacks
+    def test_start_twice(self):
+        msg, response = yield self.make_request("start", 1, text="hello there",
+                                                reply="hello yourself")
+        msg, response = yield self.make_request("start", 1, test="hello again",
+                                                expect_msg=False)
+
+        correct_response = {
+            'responseExitCode': 400,
+            'responseMessage': "USSD session '1' already started",
+            }
+        self.assertEqual(json.loads(response), correct_response)
+
+    @inlineCallbacks
     def test_response_with_close(self):
         msg, response = yield self.make_request("start", 1, text="Hi",
                                                 reply="Hi!")
