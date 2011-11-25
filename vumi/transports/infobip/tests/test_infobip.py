@@ -3,6 +3,7 @@
 import json
 
 from twisted.trial.unittest import TestCase
+from twisted.python import log
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.utils import http_request
@@ -216,3 +217,29 @@ class TestInfobipUssdTransport(TestCase):
         errors = self.flushLoggedErrors(KeyError)
         self.assertEqual([str(e.value) for e in errors],
                          ["'msisdn'"] * num_tests)
+
+    @inlineCallbacks
+    def test_outbound_non_reply_logs_error(self):
+        errlogs = []
+
+        def gather_errors(event_dict):
+            if event_dict["isError"]:
+                errlogs.append(event_dict)
+
+        msg = TransportUserMessage(to_addr="1234", from_addr="5678",
+                                   transport_name="test_infobip",
+                                   transport_type="ussd",
+                                   transport_metadata={})
+
+        log.theLogPublisher.addObserver(gather_errors)
+        try:
+            self.broker.publish_message("vumi", "test_infobip.outbound", msg)
+            yield self.broker.kick_delivery()
+        finally:
+            log.theLogPublisher.removeObserver(gather_errors)
+
+        [error] = errlogs
+        [errmsg] = error['message']
+        self.assertTrue(errmsg.startswith("'Infobip transport cannot process"
+                                          " outbound message that is not a"
+                                          " reply:"))

@@ -232,3 +232,6 @@ class InfobipTransport(HttpRpcTransport):
             self.finish_request(
                     message['in_reply_to'],
                     json.dumps(response_data))
+        else:
+            log.err("Infobip transport cannot process outbound message that"
+                    " is not a reply: %r" % message)
