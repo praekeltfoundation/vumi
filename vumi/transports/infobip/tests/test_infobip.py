@@ -8,10 +8,13 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from vumi.utils import http_request
 from vumi.transports.infobip.infobip import InfobipTransport
 from vumi.message import TransportUserMessage
-from vumi.tests.utils import get_stubbed_worker
+from vumi.tests.utils import get_stubbed_worker, FakeRedis
 
 
 class TestInfobipUssdTransport(TestCase):
+
+    # set trial test timeout
+    timeout = 5
 
     @inlineCallbacks
     def setUp(self):
@@ -26,40 +29,57 @@ class TestInfobipUssdTransport(TestCase):
         yield self.worker.startWorker()
         addr = self.worker.web_resource.getHost()
         self.worker_url = "http://%s:%s/" % (addr.host, addr.port)
+        self.worker.r_server = FakeRedis()
 
     @inlineCallbacks
     def tearDown(self):
+        self.worker.r_server.teardown()
         yield self.worker.stopWorker()
 
-    @inlineCallbacks
-    def make_request(self, url_suffix, json_dict, reply=None,
-                     continue_session=True):
-        deferred_req = http_request(self.worker_url + url_suffix,
-                                    json.dumps(json_dict), method='POST')
-        [msg] = yield self.broker.wait_messages("vumi",
-                                                "test_infobip.inbound", 1)
-        msg = TransportUserMessage(**msg.payload)
+    DEFAULT_START_DATA = {
+        "msisdn": "385955363443",
+        "imsi": "429011234567890",
+        "shortCode": "*123#1#",
+        "optional": "o=1",
+        "ussdGwId": "11",
+        "language": None,
+        }
 
-        if reply is not None:
-            reply_msg = msg.reply(reply, continue_session=continue_session)
-            self.broker.publish_message("vumi", "test_infobip.outbound",
-                                        reply_msg)
+    DEFAULT_SESSION_DATA = {
+        "start": DEFAULT_START_DATA,
+        "response": DEFAULT_START_DATA,
+        "end": {"reason": "ok", "exitCode": 0},
+        "status": None,
+        }
+
+    @inlineCallbacks
+    def make_request(self, session_type, session_id, reply=None,
+                     continue_session=True, expect_msg=True, **kw):
+        url_suffix = "session/%s/%s" % (session_id, session_type)
+        request_data = self.DEFAULT_SESSION_DATA[session_type].copy()
+        request_data.update(kw)
+        deferred_req = http_request(self.worker_url + url_suffix,
+                                    json.dumps(request_data), method='POST')
+        if not expect_msg:
+            msg = None
+        else:
+            [msg] = yield self.broker.wait_messages("vumi",
+                                                    "test_infobip.inbound",
+                                                    1)
+            self.broker.clear_messages("vumi", "test_infobip.inbound")
+            msg = TransportUserMessage(**msg.payload)
+            if reply is not None:
+                reply_msg = msg.reply(reply, continue_session=continue_session)
+                self.broker.publish_message("vumi", "test_infobip.outbound",
+                                         reply_msg)
 
         response = yield deferred_req
         returnValue((msg, response))
 
     @inlineCallbacks
     def test_start(self):
-        msg, response = yield self.make_request(
-            "session/1/start",
-            {
-                'msisdn': '55567890',
-                'text': "hello there",
-                'shortCode': "*120*666#",
-            },
-            "hello yourself",
-            )
-
+        msg, response = yield self.make_request("start", 1, text="hello there",
+                                                reply="hello yourself")
         self.assertEqual(msg['content'], 'hello there')
         self.assertEqual(msg['session_event'],
                          TransportUserMessage.SESSION_NEW)
@@ -74,16 +94,11 @@ class TestInfobipUssdTransport(TestCase):
 
     @inlineCallbacks
     def test_response_with_close(self):
-        msg, response = yield self.make_request(
-            "session/1/response",
-            {
-                'msisdn': '55567890',
-                'text': "More?",
-                'shortCode': "*120*666#",
-            },
-            "No thanks.",
-            continue_session=False,
-            )
+        msg, response = yield self.make_request("start", 1, text="Hi",
+                                                reply="Hi!")
+        msg, response = yield self.make_request("response", 1, text="More?",
+                                                reply="No thanks.",
+                                                continue_session=False)
 
         self.assertEqual(msg['content'], 'More?')
         self.assertEqual(msg['session_event'],
@@ -99,16 +114,11 @@ class TestInfobipUssdTransport(TestCase):
 
     @inlineCallbacks
     def test_end(self):
-        msg, response = yield self.make_request(
-            "session/1/end",
-            {
-                'msisdn': '55567890',
-                'text': 'Bye!',
-                'shortCode': '*120*666#',
-            },
-            )
+        msg, response = yield self.make_request("start", 1, text='Bye!',
+                                                reply="Barp")
+        msg, response = yield self.make_request("end", 1)
 
-        self.assertEqual(msg['content'], 'Bye!')
+        self.assertEqual(msg['content'], None)
         self.assertEqual(msg['session_event'],
                          TransportUserMessage.SESSION_CLOSE)
 
@@ -125,8 +135,9 @@ class TestInfobipUssdTransport(TestCase):
             'text': 'Oops. No msisdn.',
             }
         for _test in range(num_tests):
-            response = yield http_request(self.worker_url + "session/1/start",
-                                          json.dumps(json_dict), method='POST')
+            deferred_req = http_request(self.worker_url + "session/1/start",
+                                        json.dumps(json_dict), method='POST')
+            response = yield deferred_req
             self.assertTrue('exceptions.KeyError' in response)
 
         errors = self.flushLoggedErrors(KeyError)
