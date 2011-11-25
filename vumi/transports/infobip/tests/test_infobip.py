@@ -52,14 +52,19 @@ class TestInfobipUssdTransport(TestCase):
         "status": None,
         }
 
+    SESSION_HTTP_METHOD = {
+        "end": "PUT",
+        }
+
     @inlineCallbacks
     def make_request(self, session_type, session_id, reply=None,
                      continue_session=True, expect_msg=True, **kw):
         url_suffix = "session/%s/%s" % (session_id, session_type)
+        method = self.SESSION_HTTP_METHOD.get(session_type, "POST")
         request_data = self.DEFAULT_SESSION_DATA[session_type].copy()
         request_data.update(kw)
         deferred_req = http_request(self.worker_url + url_suffix,
-                                    json.dumps(request_data), method='POST')
+                                    json.dumps(request_data), method=method)
         if not expect_msg:
             msg = None
         else:
@@ -129,15 +134,38 @@ class TestInfobipUssdTransport(TestCase):
         self.assertEqual(json.loads(response), correct_response)
 
     @inlineCallbacks
+    def test_status_for_active_session(self):
+        msg, response = yield self.make_request("start", 1, text="Hi",
+                                                reply="Boop")
+        response = yield http_request(self.worker_url + "session/1/status", "",
+                                      method="GET")
+        correct_response = {
+            'responseExitCode': 200,
+            'responseMessage': '',
+            'sessionActive': True,
+            }
+        self.assertEqual(json.loads(response), correct_response)
+
+    @inlineCallbacks
+    def test_status_for_inactive_session(self):
+        response = yield http_request(self.worker_url + "session/1/status", "",
+                                      method="GET")
+        correct_response = {
+            'responseExitCode': 200,
+            'responseMessage': '',
+            'sessionActive': False,
+            }
+        self.assertEqual(json.loads(response), correct_response)
+
+    @inlineCallbacks
     def test_bad_request(self):
         num_tests = 2  # repeat twice to ensure transport is still functional
         json_dict = {
             'text': 'Oops. No msisdn.',
             }
         for _test in range(num_tests):
-            deferred_req = http_request(self.worker_url + "session/1/start",
-                                        json.dumps(json_dict), method='POST')
-            response = yield deferred_req
+            response = yield http_request(self.worker_url + "session/1/start",
+                                          json.dumps(json_dict), method='POST')
             self.assertTrue('exceptions.KeyError' in response)
 
         errors = self.flushLoggedErrors(KeyError)
