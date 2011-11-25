@@ -159,6 +159,17 @@ class TestInfobipUssdTransport(TestCase):
         self.assertEqual(json.loads(response), correct_response)
 
     @inlineCallbacks
+    def test_end_for_invalid_session(self):
+        msg, response = yield self.make_request("end", 1,
+                                                expect_msg=False)
+
+        correct_response = {
+            'responseExitCode': 400,
+            'responseMessage': "Invalid USSD session '1'",
+            }
+        self.assertEqual(json.loads(response), correct_response)
+
+    @inlineCallbacks
     def test_status_for_active_session(self):
         msg, response = yield self.make_request("start", 1, text="Hi",
                                                 reply="Boop")
