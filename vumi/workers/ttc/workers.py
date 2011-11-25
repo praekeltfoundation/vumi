@@ -4,13 +4,13 @@ from twisted.python import log
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.application import ApplicationWorker
-from vumi import Message
+from vumi.message import Message
 
 class TtcGenericWorker(ApplicationWorker):
     
     @inlineCallbacks
-    def start_worker(self):
-        super(TtcGenericWorker, self).start_worker();
+    def startWorker(self):
+        super(TtcGenericWorker, self).startWorker()
         self.control_consumer = yield self.consume(
             '%(transport_name)s.control' % self.config,
             self.control,
