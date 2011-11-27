@@ -275,3 +275,17 @@ class TestInfobipUssdTransport(TestCase):
         self.assertTrue(last_line.endswith("Infobip transport cannot process"
                                            " outbound message that is not a"
                                            " reply."))
+
+    @inlineCallbacks
+    def test_ack(self):
+        msg, response = yield self.make_request("start", 1, text="Hi!",
+                                                reply="Moo")
+        [event] = yield self.broker.wait_messages("vumi",
+                                                  "test_infobip.event",
+                                                  1)
+        [reply] = yield self.broker.wait_messages("vumi",
+                                                  "test_infobip.outbound",
+                                                  1)
+
+        self.assertEqual(event["event_type"], "ack")
+        self.assertEqual(event["user_message_id"], reply["message_id"])

@@ -2,6 +2,7 @@
 
 import uuid
 import json
+import time
 
 from twisted.internet.defer import inlineCallbacks
 from twisted.python import log
@@ -96,3 +97,7 @@ class HttpRpcTransport(Transport):
             request.write(data)
             request.finish()
             del self.requests[uuid]
+            response_id = "%s:%s:%d" % (request.client.host,
+                                        request.client.port,
+                                        time.time() * 1000)
+            return response_id

@@ -241,11 +241,15 @@ class InfobipTransport(HttpRpcTransport):
                 "responseExitCode": 200,
                 "responseMessage": "",
                 }
-            # TODO: send ack if finish succeeds
-            # TODO: send failure if finish fails
-            self.finish_request(
-                    message['in_reply_to'],
-                    json.dumps(response_data))
+            response_id = self.finish_request(message['in_reply_to'],
+                                              json.dumps(response_data))
+            if response_id is None:
+                raise PermanentFailure("Infobip transport could not find"
+                                       " original request when attempting"
+                                       " to reply.")
+            else:
+                self.publish_ack(message['message_id'],
+                                 sent_message_id=response_id)
         else:
             log.err("Infobip transport cannot process outbound message that"
                     " is not a reply: %r" % message)
