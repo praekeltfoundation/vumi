@@ -59,7 +59,8 @@ class TestInfobipUssdTransport(TestCase):
 
     @inlineCallbacks
     def make_request(self, session_type, session_id, reply=None,
-                     continue_session=True, expect_msg=True, **kw):
+                     continue_session=True, expect_msg=True,
+                     defer_response=False, **kw):
         url_suffix = "session/%s/%s" % (session_id, session_type)
         method = self.SESSION_HTTP_METHOD.get(session_type, "POST")
         request_data = self.DEFAULT_SESSION_DATA[session_type].copy()
@@ -79,7 +80,10 @@ class TestInfobipUssdTransport(TestCase):
                 self.broker.publish_message("vumi", "test_infobip.outbound",
                                          reply_msg)
 
-        response = yield deferred_req
+        if defer_response:
+            response = deferred_req
+        else:
+            response = yield deferred_req
         returnValue((msg, response))
 
     @inlineCallbacks
@@ -289,3 +293,21 @@ class TestInfobipUssdTransport(TestCase):
 
         self.assertEqual(event["event_type"], "ack")
         self.assertEqual(event["user_message_id"], reply["message_id"])
+
+    @inlineCallbacks
+    def test_reply_failure(self):
+        msg, deferred_req = yield self.make_request("start", 1, text="Hi!",
+                                                    defer_response=True)
+        # finish message so reply will fail
+        self.worker.finish_request(msg['message_id'], "Done")
+        reply = msg.reply("Ping")
+        self.broker.publish_message("vumi", "test_infobip.outbound", reply)
+
+        [msg] = yield self.broker.wait_messages("vumi",
+                                                "test_infobip.failures",
+                                                1)
+        self.assertEqual(msg['failure_code'], "permanent")
+        last_line = msg['reason'].splitlines()[-1].strip()
+        self.assertTrue(last_line.endswith("Infobip transport could not find"
+                                           " original request when attempting"
+                                           " to reply."))
