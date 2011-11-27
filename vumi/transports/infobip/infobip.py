@@ -240,9 +240,12 @@ class InfobipTransport(HttpRpcTransport):
                 "responseExitCode": 200,
                 "responseMessage": "",
                 }
+            # TODO: send ack if finish succeeds
+            # TODO: send failure if finish fails
             self.finish_request(
                     message['in_reply_to'],
                     json.dumps(response_data))
         else:
             log.err("Infobip transport cannot process outbound message that"
                     " is not a reply: %r" % message)
+            # TODO: send failure message
