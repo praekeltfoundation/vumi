@@ -266,3 +266,12 @@ class TestInfobipUssdTransport(TestCase):
         self.assertTrue(errmsg.startswith("'Infobip transport cannot process"
                                           " outbound message that is not a"
                                           " reply:"))
+
+        [msg] = yield self.broker.wait_messages("vumi",
+                                                "test_infobip.failures",
+                                                1)
+        self.assertEqual(msg['failure_code'], "permanent")
+        last_line = msg['reason'].splitlines()[-1].strip()
+        self.assertTrue(last_line.endswith("Infobip transport cannot process"
+                                           " outbound message that is not a"
+                                           " reply."))

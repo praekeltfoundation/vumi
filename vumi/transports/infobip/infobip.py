@@ -11,6 +11,7 @@ from twisted.internet.defer import inlineCallbacks
 
 from vumi.message import TransportUserMessage
 from vumi.transports.httprpc import HttpRpcTransport
+from vumi.transports.failures import PermanentFailure
 from vumi.utils import get_deploy_int
 
 
@@ -248,4 +249,5 @@ class InfobipTransport(HttpRpcTransport):
         else:
             log.err("Infobip transport cannot process outbound message that"
                     " is not a reply: %r" % message)
-            # TODO: send failure message
+            raise PermanentFailure("Infobip transport cannot process outbound"
+                                   " message that is not a reply.""")
