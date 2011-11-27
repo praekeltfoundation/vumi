@@ -36,7 +36,7 @@ class VumiService(Service):
             worker_class = self.options.pop('worker_class')
 
         if not worker_class:
-            raise VumiError("please specify --worker_class")
+            raise VumiError("please specify --worker-class")
 
         config = {}
         # load the config file if specified
@@ -59,7 +59,7 @@ class VumiService(Service):
 class BasicSet(Options):
     optFlags = [
         ["worker-help", None, "Print out a usage message for the worker_class"
-                              " and exit"]
+                              " and exit"],
         ]
     optParameters = Options.optParameters + [
         ["worker-class", None, None, "Class of a worker to start"],
