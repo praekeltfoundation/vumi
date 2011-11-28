@@ -2,7 +2,6 @@
 
 import uuid
 import json
-import time
 
 from twisted.internet.defer import inlineCallbacks
 from twisted.python import log
@@ -89,15 +88,15 @@ class HttpRpcTransport(Transport):
         raise NotImplementedError("Sub-classes should implement"
                                   " handle_raw_inbound_message.")
 
-    def finish_request(self, uuid, data):
+    def finish_request(self, msgid, data):
         log.msg("HttpRpcTransport.finish_request with data:", repr(data))
         log.msg(repr(self.requests))
-        request = self.requests.get(uuid)
+        request = self.requests.get(msgid)
         if request:
             request.write(data)
             request.finish()
-            del self.requests[uuid]
-            response_id = "%s:%s:%d" % (request.client.host,
+            del self.requests[msgid]
+            response_id = "%s:%s:%s" % (request.client.host,
                                         request.client.port,
-                                        time.time() * 1000)
+                                        uuid.uuid4().get_hex())
             return response_id
