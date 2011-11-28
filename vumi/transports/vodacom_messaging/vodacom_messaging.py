@@ -1,7 +1,5 @@
 # -*- test-case-name: vumi.transports.vodacom_messaging.tests.test_vodacom_messaging -*-
 
-from twisted.python import log
-
 from vumi.message import TransportUserMessage
 from vumi.transports.httprpc import HttpRpcTransport
 
@@ -41,7 +39,8 @@ class VodacomMessagingTransport(HttpRpcTransport):
             vmr.set_headertext(message['content'])
             if not should_close:
                 vmr.accept_freetext()
-            self.finish_request(message['in_reply_to'], unicode(vmr).encode('utf-8'))
+            self.finish_request(message['in_reply_to'],
+                                unicode(vmr).encode('utf-8'))
 
 
 class VodacomMessagingResponse(object):

@@ -93,7 +93,7 @@ class TestBaseDispatchWorker(TestCase, MessageMakerMixIn):
         self._amqp.dispatched = {}
 
     @inlineCallbacks
-    def test_inboud_message_routing(self):
+    def test_inbound_message_routing(self):
         msg = self.mkmsg_in('transport1')
         yield self.dispatch(msg, 'transport1.inbound')
         self.assert_messages('app1.inbound', [msg])
@@ -116,7 +116,7 @@ class TestBaseDispatchWorker(TestCase, MessageMakerMixIn):
                                 'app3.event')
 
     @inlineCallbacks
-    def test_inboud_event_routing(self):
+    def test_inbound_event_routing(self):
         msg = self.mkmsg_ack('transport1')
         yield self.dispatch(msg, 'transport1.event')
         self.assert_messages('app1.event', [msg])
