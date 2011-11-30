@@ -36,7 +36,7 @@ def rowset(conn, sql="SELECT 0", presql=[], commit=False):
 def conn():
     return psycopg2.connect(
             host="localhost",
-            port=5555,
+            #port=5555,
             user="vumi",
             password="vumi",
             database="ikhwezi")
@@ -58,6 +58,9 @@ provider_prizes = {
         "Telkom_8ta": {
             "total_winners": 250
             },
+        "Virgin": {
+            "total_winners": 0
+            },
         }
 
 # Get the current unique msisdns and total sessions used
@@ -78,8 +81,22 @@ print "Current Total Sessions: %s" % (current_sessions)
 print "Fraction of campaign complete: %s" % (fraction_complete)
 
 
+# Vodacom Messaging determines provider from their network bind
+# so we need to re-label CellC msisdns starting with 27741 as Virgin
+def update_virgin_users_provider():
+    rowset(the_conn,
+            presql=["""
+                UPDATE ikhwezi_quiz
+                SET Provider = 'Virgin'
+                WHERE provider = 'CellC'
+                AND msisdn LIKE '27741%'
+                """],
+            commit=True)
+
+update_virgin_users_provider()
+
 # Find the count of current winners on a per provider basis
-# Find the count of current losers (decided non-winners) there are
+# Find the count of current losers (decided non-winners)
 # Find the count of candidates (people to pick winners from)
 # Find the count of others (people who are still busy playing)
 def winners_by_providor():
@@ -158,6 +175,9 @@ def new_winner_counts_by_provider():
         print "\tAllocated: %s" % (allocated)
         print "\tRemaining: %s" % (remaining_wins)
         target = fraction_complete*total
+        # Cap target to dispense at total - in case of too many sessions
+        if target > total:
+            target = total
         print "\tTarget to allocate: %s" % (target)
         dispense = int(target - allocated)
         print "\tNew vouchers to dispense: %s" % (dispense)
@@ -200,14 +220,23 @@ def candidate_lists_by_provider():
 
 candidate_lists = candidate_lists_by_provider()
 
-print "Candidate lists: %s" % (candidate_lists)
+#print "Candidate lists: %s" % (candidate_lists)
+
+for k, v in candidate_lists.items():
+    print k, len(v)
+    #if k == "CellC" or k == "Virgin":
+        #for i, x in enumerate(v):
+            #if x['msisdn'].startswith("27741"):
+                #print k, i, x
+            #else:
+                #print k, i, "."
 
 # Shuffle the candidate lists
 random.seed()
 for k in candidate_lists.keys():
     random.shuffle(candidate_lists[k])
 
-print "Shuffled Candidate lists: %s" % (candidate_lists)
+#print "Shuffled Candidate lists: %s" % (candidate_lists)
 
 new_winners = {}
 for k in provider_prizes.keys():
@@ -222,13 +251,13 @@ for k in provider_prizes.keys():
         except:
             pass
 
-print "Loser lists: %s" % (candidate_lists)
-print "New winners: %s" % (new_winners)
+#print "Loser lists: %s" % (candidate_lists)
+#print "New winners: %s" % (new_winners)
 
 winner_messages = {
-        "English": "Thnx 4 taking the Quiz. U have won R12 airtime! We will send U your airtime voucher. For more info about HIV/AIDS pls phone Aids Helpline 0800012322",
+        "English": "Thnx 4 taking the Quiz. U have won R10 airtime! We will send U your airtime voucher. For more info about HIV/AIDS pls phone Aids Helpline 0800012322",
         "Zulu": "Siyabonga ngokuphendula ngeHIV. Uwinile! Uzothola i-SMS ne-airtime voucher. Ukuthola okwengeziwe ngeHIV/AIDS shayela i-Aids Helpline 0800012322",
-        "Afrikaans": "Dankie vir jou deelname aan die vasvra! Jy het R12 lugtyd gewen! Jou lugtyd koepon is oppad! Vir meer inligting oor MIV/Vigs, bel die Vigs-hulplyn 0800012322",
+        "Afrikaans": "Dankie vir jou deelname aan die vasvra! Jy het R10 lugtyd gewen! Jou lugtyd koepon is oppad! Vir meer inligting oor MIV/Vigs, bel die Vigs-hulplyn 0800012322",
         "Sotho": "Rea o leboha ka ho nka karolo ho HIV Quiz. O mohlodi! SMS e tla romelwa le voutjhara ya moya. Lesedi le leng ka HIV/AIDS, letsetsa Aids Helpline 0800012322"
         }
 
@@ -239,7 +268,7 @@ def add_messages_to_winners():
 
 add_messages_to_winners()
 
-print "Winners with messages: %s" % (new_winners)
+#print "Winners with messages: %s" % (new_winners)
 
 # Update the db setting the new winners and losers
 def set_winners_and_losers():
@@ -275,7 +304,7 @@ def set_winners_and_losers():
             presql=presql,
             commit=True)
 
-set_winners_and_losers()
+#set_winners_and_losers()
 winners_file = "ikhwezi_winners_%s.json" % (str(datetime.utcnow().date()))
 f = open(winners_file, 'w')
 print "Writing new winner info to: %s" % (winners_file)
