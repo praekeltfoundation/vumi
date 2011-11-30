@@ -54,12 +54,14 @@ class TwitterTransport(Transport):
     def check_for_replies(self):
         yield self.twitter.replies(self.handle_replies)
 
+    @inlineCallbacks
     def handle_outbound_message(self, message):
         """
         TODO:   Add in_reply_to_status_id parameter if present,
                 need access to the Twitter docs to do so at the
                 moment.
         """
+        log.msg("Twitter transport sending %r" % (message,))
         post_id = yield self.twitter.update(message['content'])
         self.publish_ack(user_message_id=message['message_id'],
                             sent_message_id=post_id)
