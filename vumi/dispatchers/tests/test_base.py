@@ -207,3 +207,50 @@ class TestToAddrRouter(TestCase, MessageMakerMixIn):
         self.router.dispatch_outbound_message(msg)
         publishers = self.dispatcher.transport_publisher
         self.assertEqual(publishers['transport1'].msgs, [msg])
+
+
+class TestTransportToTransportRouter(TestCase, MessageMakerMixIn):
+
+    @inlineCallbacks
+    def setUp(self):
+        config = {
+            "transport_names": [
+                "transport1",
+                "transport2",
+                ],
+            "exposed_names": [],
+            "router_class": "vumi.dispatchers.base.TransportToTransportRouter",
+            "route_mappings": {
+                "transport1": ["transport2"],
+                },
+            }
+        self.worker = get_stubbed_worker(BaseDispatchWorker, config)
+        self._amqp = self.worker._amqp_client.broker
+        yield self.worker.startWorker()
+
+    @inlineCallbacks
+    def tearDown(self):
+        yield self.worker.stopWorker()
+
+    def dispatch(self, message, rkey=None, exchange='vumi'):
+        if rkey is None:
+            rkey = self.rkey('outbound')
+        self._amqp.publish_message(exchange, rkey, message)
+        return self._amqp.kick_delivery()
+
+    def assert_messages(self, rkey, msgs):
+        self.assertEqual(msgs, self._amqp.get_messages('vumi', rkey))
+
+    def assert_no_messages(self, *rkeys):
+        for rkey in rkeys:
+            self.assertEqual([], self._amqp.get_messages('vumi', rkey))
+
+    def clear_dispatched(self):
+        self._amqp.dispatched = {}
+
+    @inlineCallbacks
+    def test_inbound_message_routing(self):
+        msg = self.mkmsg_in('transport1')
+        yield self.dispatch(msg, 'transport1.inbound')
+        self.assert_messages('transport2.outbound', [msg])
+        self.assert_no_messages('transport2.inbound', 'transport1.outbound')
