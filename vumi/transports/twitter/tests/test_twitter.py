@@ -46,8 +46,11 @@ class TwitterTransportTestCase(TransportTestCase):
     def setUp(self):
         yield super(TwitterTransportTestCase, self).setUp()
         self.config = {
-            'username': 'tweeter',
-            'password': 'secret',
+            'app_name': 'testapp',
+            'consumer_key': 'consumer1',
+            'consumer_secret': 'consumersecret1',
+            'access_token': 'token1',
+            'access_token_secret': 'tokensecret1',
             'terms': ['some', 'trending', 'topic'],
         }
         self.transport = yield self.get_transport(self.config, start=False)

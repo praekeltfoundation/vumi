@@ -4,6 +4,7 @@ from twisted.python import log
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet import task
 from twittytwister import twitter
+from oauth import oauth
 from vumi.transports.base import Transport
 from vumi.message import TransportUserMessage
 from vumi.utils import get_deploy_int
@@ -14,10 +15,12 @@ class TwitterTransport(Transport):
     transport_type = 'twitter'
 
     def validate_config(self):
-        self.username = self.config.get('username')
-        self.password = self.config.get('password')
+        self.consumer_key = self.config['consumer_key']
+        self.consumer_secret = self.config['consumer_secret']
+        self.access_token = self.config['access_token']
+        self.access_token_secret = self.config['access_token_secret']
         self.r_config = self.config.get('redis', {})
-        self.r_prefix = "%(transport_name)s@%(username)s:replies" % self.config
+        self.r_prefix = "%(transport_name)s@%(app_name)s:replies" % self.config
         self.terms = set(self.config.get('terms'))
         self.check_replies_interval = int(self.config.get(
                             'check_replies_interval', 60))
@@ -27,7 +30,9 @@ class TwitterTransport(Transport):
         # TODO: get_deploy_int must die
         dbindex = get_deploy_int(self._amqp_client.vhost)
         self.r_server = yield redis.Redis(db=dbindex, **self.r_config)
-        self.twitter = twitter.TwitterFeed(self.username, self.password)
+        consumer = oauth.OAuthConsumer(self.consumer_key, self.consumer_secret)
+        token = oauth.OAuthToken(self.access_token, self.access_token_secret)
+        self.twitter = twitter.TwitterFeed(consumer=consumer, token=token)
         yield self.start_tracking_terms()
         self.start_checking_for_replies()
 
