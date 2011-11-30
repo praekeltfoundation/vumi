@@ -38,7 +38,9 @@ class TwitterTransport(Transport):
 
     @inlineCallbacks
     def start_tracking_terms(self):
-        self.stream = yield self.twitter.track(self.handle_track, self.terms)
+        if self.terms:
+            self.stream = yield self.twitter.track(self.handle_track,
+                                                   self.terms)
 
     def start_checking_for_replies(self):
         self.check_replies = task.LoopingCall(self.check_for_replies)
