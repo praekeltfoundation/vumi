@@ -1,5 +1,4 @@
-from twisted.internet.defer import inlineCallbacks, succeed
-from twisted.internet import task
+from twisted.internet.defer import inlineCallbacks
 from vumi.tests.utils import FakeRedis
 from vumi.transports.twitter import TwitterTransport
 from vumi.transports.tests.test_base import TransportTestCase
@@ -13,6 +12,7 @@ class Thing(object):
 
     def __getattr__(self, attr):
         return self.kwargs[attr]
+
 
 class FakeTwitter(object):
     def __init__(self, *args, **kwargs):
@@ -48,7 +48,7 @@ class TwitterTransportTestCase(TransportTestCase):
         self.config = {
             'username': 'tweeter',
             'password': 'secret',
-            'terms': ['some','trending','topic'],
+            'terms': ['some', 'trending', 'topic'],
         }
         self.transport = yield self.get_transport(self.config, start=False)
         self.transport.validate_config()
@@ -81,10 +81,11 @@ class TwitterTransportTestCase(TransportTestCase):
         self.assertEqual(msg['from_addr'], 'replier')
         self.assertEqual(msg['to_addr'], 'tweeter')
         self.assertEqual(msg['content'], '@tweeter hi there')
-        self.assertEqual(msg['session_event'], TransportUserMessage.SESSION_RESUME)
+        self.assertEqual(msg['session_event'],
+                         TransportUserMessage.SESSION_RESUME)
         self.assertEqual(msg['message_id'], 1)
-        last_reply_timestamp = self.transport.r_server.get('%s:last_reply_timestamp' %
-            self.transport.r_prefix)
+        last_reply_timestamp = self.transport.r_server.get(
+            '%s:last_reply_timestamp' % self.transport.r_prefix)
         self.assertEqual(last_reply_timestamp, '1')
 
     def test_handle_track(self):
@@ -104,4 +105,5 @@ class TwitterTransportTestCase(TransportTestCase):
         self.assertEqual(msg['to_addr'], '@reply_to')
         self.assertEqual(msg['content'], 'text')
         self.assertEqual(msg['message_id'], 1)
-        self.assertEqual(msg['session_event'], TransportUserMessage.SESSION_NONE)
+        self.assertEqual(msg['session_event'],
+                         TransportUserMessage.SESSION_NONE)

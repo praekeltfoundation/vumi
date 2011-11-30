@@ -6,6 +6,7 @@ from twisted.internet import task
 from twittytwister import twitter
 from vumi.transports.base import Transport
 from vumi.message import TransportUserMessage
+from vumi.utils import get_deploy_int
 
 
 class TwitterTransport(Transport):
