@@ -3,7 +3,8 @@ import sys
 import json
 from twisted.python import usage
 from twisted.internet import reactor, threads
-from twisted.internet.defer import maybeDeferred, inlineCallbacks
+from twisted.internet.defer import (maybeDeferred, DeferredQueue,
+                                    inlineCallbacks)
 from vumi.message import TransportUserMessage
 from vumi.service import Options, Worker, WorkerCreator
 
@@ -23,12 +24,15 @@ class InjectorOptions(Options):
 
 class MessageInjector(Worker):
 
+    WORKER_QUEUE = DeferredQueue()
+
     @inlineCallbacks
     def startWorker(self):
         self.transport_name = self.config['transport-name']
         self.publisher = yield self.publish_to('%s.inbound' %
                                                 self.transport_name)
         self.publisher.require_bind = False
+        self.WORKER_QUEUE.put(self)
 
     def process_file(self, in_file, out_file=None):
         return threads.deferToThread(self._process_file_in_thread,
@@ -54,19 +58,23 @@ class MessageInjector(Worker):
             TransportUserMessage(**data))
 
 
+@inlineCallbacks
 def main(options):
     vumi_options = {}
+    verbose = options['verbose']
     for opt in [i[0] for i in Options.optParameters]:
         vumi_options[opt] = options.pop(opt)
 
     worker_creator = WorkerCreator(vumi_options)
-    worker = worker_creator.create_worker(
-        'vumi.scripts.inject_messages.MessageInjector', options)
+    worker_creator.create_worker_by_class(
+        MessageInjector, options)
 
     in_file = sys.stdin
-    out_file = sys.stdout if vumi_options['verbose'] else None
+    out_file = sys.stdout if verbose else None
 
-    return worker.process_file(in_file, out_file)
+    worker = yield MessageInjector.WORKER_QUEUE.get()
+    yield worker.process_file(in_file, out_file)
+    reactor.stop()
 
 
 if __name__ == '__main__':
