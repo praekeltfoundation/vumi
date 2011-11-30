@@ -1,7 +1,8 @@
 # -*- test-case-name: vumi.transports.cellulant.tests.test_cellulant -*-
-from twisted.python import log
+
 from vumi.transports.httprpc import HttpRpcTransport
 from vumi.message import TransportUserMessage
+
 
 def pack_ussd_message(message):
     next_level = 1  # Ignoring the menu levels
@@ -22,6 +23,7 @@ def pack_ussd_message(message):
                 status,
                 extra)
 
+
 class CellulantTransport(HttpRpcTransport):
 
     EVENT_MAP = {
@@ -36,7 +38,8 @@ class CellulantTransport(HttpRpcTransport):
 
     def handle_raw_inbound_message(self, message_id, request):
         op_code = request.args.get('opCode')[0]
-        if (request.args.get('ABORT')[0] not in ('0', 'null')) or (op_code == 'ABO'):
+        if ((request.args.get('ABORT')[0] not in ('0', 'null'))
+            or (op_code == 'ABO')):
             # respond to phones aborting a session
             self.finish_request(message_id, '')
             event = TransportUserMessage.SESSION_CLOSE

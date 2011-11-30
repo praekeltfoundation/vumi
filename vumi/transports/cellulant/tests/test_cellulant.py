@@ -1,9 +1,6 @@
-from twisted.internet.defer import inlineCallbacks, returnValue
-from twisted.trial.unittest import SkipTest
-from twisted.python import log
+from twisted.internet.defer import inlineCallbacks
 from vumi.transports.tests.test_base import TransportTestCase
 from vumi.transports.cellulant import CellulantTransport
-from vumi.transports.httprpc.tests.utils import MockHttpServer
 from vumi.message import TransportUserMessage
 from vumi.utils import http_request
 from urllib import urlencode
@@ -47,7 +44,8 @@ class TestCellulantTransportTestCase(TransportTestCase):
         self.assertEqual(msg['content'], '')
         self.assertEqual(msg['to_addr'], '*120*1#')
         self.assertEqual(msg['from_addr'], '27761234567'),
-        self.assertEqual(msg['session_event'], TransportUserMessage.SESSION_NEW)
+        self.assertEqual(msg['session_event'],
+                         TransportUserMessage.SESSION_NEW)
         self.assertEqual(msg['transport_metadata'], {
             'session_id': '1',
         })
@@ -65,7 +63,8 @@ class TestCellulantTransportTestCase(TransportTestCase):
         self.assertEqual(msg['content'], 'hi')
         self.assertEqual(msg['to_addr'], '*120*1#')
         self.assertEqual(msg['from_addr'], '27761234567')
-        self.assertEqual(msg['session_event'], TransportUserMessage.SESSION_RESUME)
+        self.assertEqual(msg['session_event'],
+                         TransportUserMessage.SESSION_RESUME)
         self.assertEqual(msg['transport_metadata'], {
             'session_id': '1',
         })
@@ -84,7 +83,8 @@ class TestCellulantTransportTestCase(TransportTestCase):
         self.assertEqual(resp, '')
 
         [msg] = yield self.get_dispatched_messages()
-        self.assertEqual(msg['session_event'], TransportUserMessage.SESSION_CLOSE)
+        self.assertEqual(msg['session_event'],
+                         TransportUserMessage.SESSION_CLOSE)
 
     @inlineCallbacks
     def test_inbound_abort_field(self):
@@ -92,4 +92,5 @@ class TestCellulantTransportTestCase(TransportTestCase):
         resp = yield self.mk_request(ABORT=1)
         self.assertEqual(resp, '')
         [msg] = yield self.get_dispatched_messages()
-        self.assertEqual(msg['session_event'], TransportUserMessage.SESSION_CLOSE)
+        self.assertEqual(msg['session_event'],
+                         TransportUserMessage.SESSION_CLOSE)

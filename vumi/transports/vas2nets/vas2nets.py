@@ -252,8 +252,9 @@ class Vas2NetsTransport(Transport):
             'provider': message['transport_metadata']['network_id'],
             'tariff': message['transport_metadata'].get('tariff', 0),
             'text': validate_characters(message['content']),
-            'subservice': message['transport_metadata'].get(
-                'keyword', self.config['subservice']),
+            'subservice': self.config.get('subservice',
+                                          message['transport_metadata'].get(
+                                              'keyword', '')),
         }
 
         params.update(message_params)

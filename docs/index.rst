@@ -14,6 +14,7 @@ Contents:
    overview.rst
    roadmap.rst
    installation.rst
+   getting-started.rst
    api.rst
    client.rst
    deploying.rst

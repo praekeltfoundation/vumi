@@ -1,4 +1,4 @@
-# -*- test-case-name: vumi.transports.telnet.tests.test_transport -*-
+# -*- test-case-name: vumi.transports.telnet.tests.test_telnet -*-
 
 """Transport that sends and receives to telnet clients."""
 

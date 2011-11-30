@@ -56,8 +56,15 @@ class UglyModelTestCase(TestCase):
 
     def shutdown_db(self):
         d = succeed(None)
+
+        def add_callback(func, *args, **kw):
+            # This function exists to create a closure around a
+            # variable in the correct scope. If we just add the
+            # callback directly in the loops below, we only get the
+            # final value of "table", not each intermediate value.
+            d.addCallback(lambda _: func(self.db, *args, **kw))
         for tbl in reversed(self._test_tables):
-            d.addCallback(lambda _: tbl.drop_table(self.db))
+            add_callback(tbl.drop_table)
 
         def _cb(_):
             close_db(self._dbname)
