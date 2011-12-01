@@ -3,6 +3,12 @@ import random
 import json
 from datetime import datetime
 
+
+NOW = datetime.utcnow()
+TOTAL_SESSIONS = 200000.0
+SESSIONS_TO_WIN = 4  # THE LAST TIME THIS SCRIPT IS RUN (i.e. USSD sessions all used up), SET THIS TO 0
+
+
 # This script inspects the database,
 # Selects winners for the various providers
 # Updates the database to reflect who has won / not won
@@ -36,7 +42,7 @@ def rowset(conn, sql="SELECT 0", presql=[], commit=False):
 def conn():
     return psycopg2.connect(
             host="localhost",
-            #port=5555,
+            #port=5555,  # UNCOMMENT THIS FOR REMOTE DB
             user="vumi",
             password="vumi",
             database="ikhwezi")
@@ -47,21 +53,23 @@ the_conn = conn()
 # The number of available prize vouchers per provider
 provider_prizes = {
         "Vodacom": {
-            "total_winners": 2250
+            "total_winners": 2700  # was 2250
             },
         "MTN": {
-            "total_winners": 1500
+            "total_winners": 1800  # was 1500
             },
         "CellC": {
-            "total_winners": 1000
+            "total_winners": 900  # was 1000
             },
         "Telkom_8ta": {
-            "total_winners": 250
+            "total_winners": 300  # was 250
             },
         "Virgin": {
-            "total_winners": 0
+            "total_winners": 300  # was 0
             },
         }
+
+
 
 # Get the current unique msisdns and total sessions used
 def uniques_and_sessions():
@@ -74,11 +82,14 @@ def uniques_and_sessions():
     return rs[0]['uniques'], rs[0]['sessions']
 
 current_uniques, current_sessions = uniques_and_sessions()
-fraction_complete = current_sessions/200000.0
+fraction_complete = current_sessions/TOTAL_SESSIONS
 
+print "\n"
 print "Current Unique MSISDNs: %s" % (current_uniques)
 print "Current Total Sessions: %s" % (current_sessions)
+print "Expected Total Sessions: %s" % (TOTAL_SESSIONS)
 print "Fraction of campaign complete: %s" % (fraction_complete)
+print "Sessions requied to win: %s" % (SESSIONS_TO_WIN)
 
 
 # Vodacom Messaging determines provider from their network bind
@@ -122,18 +133,18 @@ def winners_by_providor():
                 count(*) as msisdns
             FROM ikhwezi_quiz
             WHERE winner IS NULL
-            AND sessions >= 4
+            AND sessions >= %s
             GROUP BY provider
-            """)
+            """ % (SESSIONS_TO_WIN))
     others = rowset(the_conn, """
             SELECT
                 provider,
                 count(*) as msisdns
             FROM ikhwezi_quiz
             WHERE winner IS NULL
-            AND sessions < 4
+            AND sessions < %s
             GROUP BY provider
-            """)
+            """ % (SESSIONS_TO_WIN))
     dct = {}
     for i in provider_prizes.keys():
         dct[i] = {
@@ -166,6 +177,7 @@ winners_dict = winners_by_providor()
 # = (provider_vouchers * sessions/max_sessions) - already allocated
 def new_winner_counts_by_provider():
     dct = {}
+    print "\n"
     for k,v in provider_prizes.items():
         print "Provider: %s" % (k)
         total = v['total_winners']
@@ -180,13 +192,19 @@ def new_winner_counts_by_provider():
             target = total
         print "\tTarget to allocate: %s" % (target)
         dispense = int(target - allocated)
+        # We can't dispense negative vouchers
+        if dispense < 0:
+            dispense = 0
         print "\tNew vouchers to dispense: %s" % (dispense)
         dct[k] = dispense
+    print "\n"
     return dct
 
 new_winner_counts = new_winner_counts_by_provider()
 
-print new_winner_counts
+print "Required new winners by proivider:"
+for k, v in new_winner_counts.items():
+    print "\t%s: %s" % (k, v)
 
 language_map = {
          "1": "English",
@@ -197,6 +215,7 @@ language_map = {
 
 def get_language(num):
     return language_map.get(num, "English")
+
 
 # Get the lists of candidates to win, on a per provider basis
 def candidate_lists_by_provider():
@@ -210,33 +229,26 @@ def candidate_lists_by_provider():
                     demographic1,
                     provider
                 FROM ikhwezi_quiz
-                WHERE sessions >= 4
+                WHERE sessions >= %s
                 AND winner IS NULL
                 AND provider = '%s'
-                """ % (k))
+                """ % (SESSIONS_TO_WIN, k))
         for i in candidates:
             dct[k].append({"msisdn": i['msisdn'], "language": get_language(i['demographic1'])})
     return dct
 
 candidate_lists = candidate_lists_by_provider()
 
-#print "Candidate lists: %s" % (candidate_lists)
 
+print "New candidates by provider:"
 for k, v in candidate_lists.items():
-    print k, len(v)
-    #if k == "CellC" or k == "Virgin":
-        #for i, x in enumerate(v):
-            #if x['msisdn'].startswith("27741"):
-                #print k, i, x
-            #else:
-                #print k, i, "."
+    print "\t%s: %s" % (k, len(v))
+
 
 # Shuffle the candidate lists
 random.seed()
 for k in candidate_lists.keys():
     random.shuffle(candidate_lists[k])
-
-#print "Shuffled Candidate lists: %s" % (candidate_lists)
 
 new_winners = {}
 for k in provider_prizes.keys():
@@ -251,8 +263,9 @@ for k in provider_prizes.keys():
         except:
             pass
 
-#print "Loser lists: %s" % (candidate_lists)
-#print "New winners: %s" % (new_winners)
+print "New winners by provider:"
+for k, v in new_winners.items():
+    print "\t%s: %s" % (k, len(v))
 
 winner_messages = {
         "English": "Thnx 4 taking the Quiz. U have won R10 airtime! We will send U your airtime voucher. For more info about HIV/AIDS pls phone Aids Helpline 0800012322",
@@ -268,9 +281,8 @@ def add_messages_to_winners():
 
 add_messages_to_winners()
 
-#print "Winners with messages: %s" % (new_winners)
 
-# Update the db setting the new winners and losers
+# Update ikhwezi_quiz setting the new winners and losers
 def set_winners_and_losers():
     presql = []
 
@@ -304,11 +316,37 @@ def set_winners_and_losers():
             presql=presql,
             commit=True)
 
-#set_winners_and_losers()
-winners_file = "ikhwezi_winners_%s.json" % (str(datetime.utcnow().date()))
-f = open(winners_file, 'w')
-print "Writing new winner info to: %s" % (winners_file)
-f.write(json.dumps(new_winners))
-f.close()
+set_winners_and_losers()
+
+
+# Update ikhwezi_winner setting the new winners and their messages
+def update_voucher_allocation():
+    presql = []
+    for k, v in new_winners.items():
+        i = 0
+        old_winner_count = winners_dict[k]['winners']
+        for this_winner in v:
+            i += 1
+            sql = """
+            UPDATE ikhwezi_winner
+            SET msisdn = '%s',
+                message = '%s',
+                allocated_at = '%s'
+            WHERE provider = '%s'
+            AND provider_voucher_number = %s
+            AND msisdn IS NULL
+            """ % (
+                    this_winner['msisdn'],
+                    this_winner['message'],
+                    str(NOW),
+                    k,
+                    i + old_winner_count
+                    )
+            presql.append(sql)
+    rowset(the_conn,
+            presql=presql,
+            commit=True)
+
+update_voucher_allocation()
 
 
