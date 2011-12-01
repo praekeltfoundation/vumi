@@ -82,13 +82,14 @@ CREATE INDEX idx_ikhwezi_quiz_winner ON ikhwezi_quiz (winner);
 */
 
 
-/*DROP TABLE IF EXISTS ikhwezi_winner;*/
+DROP TABLE IF EXISTS ikhwezi_winner;
 
-/*
+
 CREATE TABLE ikhwezi_winner (
     provider_voucher_number integer,
     provider varchar,
     voucher varchar,
+    voucher_send_id varchar,
     msisdn varchar,
     language varchar,
     allocated_at timestamp,
@@ -97,7 +98,8 @@ CREATE TABLE ikhwezi_winner (
 CREATE INDEX idx_ikhwezi_winner_provider_voucher_number ON ikhwezi_winner (provider_voucher_number);
 CREATE INDEX idx_ikhwezi_winner_provider ON ikhwezi_winner (provider);
 CREATE INDEX idx_ikhwezi_winner_voucher ON ikhwezi_winner (voucher);
+CREATE INDEX idx_ikhwezi_winner_voucher_send_id ON ikhwezi_winner (voucher_send_id);
 CREATE INDEX idx_ikhwezi_winner_msisdn ON ikhwezi_winner (msisdn);
 CREATE INDEX idx_ikhwezi_winner_language ON ikhwezi_winner (language);
 CREATE INDEX idx_ikhwezi_winner_allocated_at ON ikhwezi_winner (allocated_at);
-*/
+
