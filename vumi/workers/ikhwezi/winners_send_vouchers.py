@@ -1,13 +1,11 @@
 import psycopg2
-from datetime import datetime
+import json
 
 from vumi.webapp.api import utils
 
 
-NOW = datetime.utcnow()
-
-# This script sends actual vouchers for those winners allocated today
-# The actuall send is commented out 
+# This script sends actual vouchers
+# The actual send is commented out
 
 
 def rowset(conn, sql="SELECT 0", presql=[], commit=False):
@@ -66,12 +64,21 @@ rs = rowset(the_conn, """
             voucher,
             provider
         FROM ikhwezi_winner
-        WHERE allocated_at > '%s'
-        """ % (NOW.date()))
+        WHERE voucher IS NOT NULL
+        AND msisdn IS NOT NULL
+        AND voucher_send_id IS NULL
+        """)
 for r in rs:
     params.append(("to_msisdn", r['msisdn']))
     params.append(("message",
         "U Won R10 airtime on the HIV/AIDS Quiz. Dial %s%s# to recharge" % (recharge_prefix[r['provider']], r['voucher'])))
+
+
+params = [
+    ("from_msisdn", "27000000000"),
+    ("to_msisdn", "27763805186"),
+    ("message", "ikhwezi test 222"),
+]
 
 for i in params:
     print i
@@ -81,4 +88,5 @@ print "Winners to send vouchers: %s" % (len(rs))
 
 #print url
 #print repr(resp)
+#print json.loads(resp)
 
