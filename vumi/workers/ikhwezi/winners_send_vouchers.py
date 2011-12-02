@@ -1,11 +1,15 @@
 import psycopg2
 import json
+import sys
 
 from vumi.webapp.api import utils
 
 
 # This script sends actual vouchers
 # The actual send is commented out
+
+password = sys.argv[1]
+print "password = %s" % password
 
 
 def rowset(conn, sql="SELECT 0", presql=[], commit=False):
@@ -42,7 +46,7 @@ def conn():
 
 the_conn = conn()
 
-url = "http://ikhwezi:ikkystuff@vumi.praekeltfoundation.org/api/v1/sms/send.json"
+url = "http://ikhwezi:%s@vumi.praekeltfoundation.org/api/v1/sms/send.json" % password
 
 params = [
     ("from_msisdn", "27000000000"),
@@ -77,7 +81,7 @@ for r in rs:
 params = [
     ("from_msisdn", "27000000000"),
     ("to_msisdn", "27763805186"),
-    ("message", "ikhwezi test 222"),
+    ("message", "ikhwezi test ppp"),
 ]
 
 for i in params:

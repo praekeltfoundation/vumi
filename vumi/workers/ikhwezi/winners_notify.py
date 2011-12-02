@@ -1,13 +1,17 @@
 import psycopg2
+import sys
 from datetime import datetime
 
 from vumi.webapp.api import utils
 
 
-NOW = datetime.utcnow()
-
 # This script sends winner notifications for those winners allocated today
 # The actuall send is commented out 
+
+password = sys.argv[1]
+print "password = %s" % password
+
+NOW = datetime.utcnow()
 
 
 def rowset(conn, sql="SELECT 0", presql=[], commit=False):
@@ -44,7 +48,7 @@ def conn():
 
 the_conn = conn()
 
-url = "http://ikhwezi:ikkystuff@vumi.praekeltfoundation.org/api/v1/sms/send.json"
+url = "http://ikhwezi:%s@vumi.praekeltfoundation.org/api/v1/sms/send.json" % password
 
 params = [
     ("from_msisdn", "27000000000"),
