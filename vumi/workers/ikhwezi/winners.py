@@ -12,7 +12,7 @@ SESSIONS_TO_WIN = 4  # THE LAST TIME THIS SCRIPT IS RUN (i.e. USSD sessions all 
 # This script inspects the database,
 # Selects winners for the various providers
 # Updates the database to reflect who has won / not won
-# Writes the winner details (msisdn, language, winning_message) to a file
+# Writes the winner details (msisdn, language, winning_message) to ikhwezi_winner
 
 def rowset(conn, sql="SELECT 0", presql=[], commit=False):
     cursor = conn.cursor()
