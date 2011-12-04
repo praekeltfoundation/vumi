@@ -5,8 +5,10 @@ import sys
 from vumi.webapp.api import utils
 
 
-# This script sends actual vouchers
-# The actual send is commented out
+# This script sends actual vouchers and sets the send id
+# This will send vouchers where the MSISDN is set,
+# the voucher is loaded, and a SMS id from VUMI is not yet set
+# USSD prefixes for recharge are determined based on provider
 
 password = sys.argv[1]
 print "password = %s" % password
@@ -48,10 +50,6 @@ the_conn = conn()
 
 url = "http://ikhwezi:%s@vumi.praekeltfoundation.org/api/v1/sms/send.json" % password
 
-params = [
-    ("from_msisdn", "27000000000"),
-]
-
 recharge_prefix = {
         "Vodacom": "*100*01*",
         "MTN": "*141*",
@@ -72,25 +70,34 @@ rs = rowset(the_conn, """
         AND msisdn IS NOT NULL
         AND voucher_send_id IS NULL
         """)
+
 for r in rs:
+    params = [
+        ("from_msisdn", "27000000000"),
+    ]
+
     params.append(("to_msisdn", r['msisdn']))
     params.append(("message",
         "U Won R10 airtime on the HIV/AIDS Quiz. Dial %s%s# to recharge" % (recharge_prefix[r['provider']], r['voucher'])))
 
+    for i in params:
+        print i
 
-params = [
-    ("from_msisdn", "27000000000"),
-    ("to_msisdn", "27763805186"),
-    ("message", "ikhwezi test ppp"),
-]
+    url, resp = utils.callback(url, params)
+    send_json = json.loads(resp)
+    voucher_send_id = send_json[0]['id']
+    print "Voucher sent with id: %s" % (voucher_send_id)
+    rs2 = rowset(the_conn, presql=[
+            """
+            UPDATE ikhwezi_winner
+            SET voucher_send_id = '%s'
+            WHERE msisdn = '%s'
+            """ % (voucher_send_id, r['msisdn'])],
+            commit = True
+            )
 
-for i in params:
-    print i
+    #print url
+    #print repr(resp)
+    #print json.loads(resp)
 print "Winners to send vouchers: %s" % (len(rs))
-
-#url, resp = utils.callback(url, params)
-
-#print url
-#print repr(resp)
-#print json.loads(resp)
 
