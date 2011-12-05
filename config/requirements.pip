@@ -1,7 +1,7 @@
 zope.interface
 carrot==0.10.4
 celery==1.0.6
-twisted==10.0.0
+twisted==10.1
 txamqp==0.5
 Django==1.3
 importlib==1.0.2
@@ -26,7 +26,6 @@ redis
 -e git+git://github.com/dmaclay/python-smpp.git@develop#egg=python-smpp
 -e git+git://github.com/dustin/twitty-twister#egg=twitty-twister
 -e git+git://github.com/smn/pygsm.git#egg=smn-pygsm
--e git+git://github.com/smn/trialcoverage.git#egg=trial-coverage
 pyserial
 pytz
 gunicorn

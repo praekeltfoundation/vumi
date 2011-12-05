@@ -45,5 +45,7 @@ class ParseSMPPLogMessagesTestCase(TestCase):
             parser.readline(line)
 
         self.assertEqual(len(parser.emit_log), 2)
-        self.assertEqual(json.loads(parser.emit_log[0].strip())['content'], "CODE2")
-        self.assertEqual(json.loads(parser.emit_log[1].strip())['content'], "CODE3")
+        self.assertEqual(json.loads(parser.emit_log[0].strip())['content'],
+                         "CODE2")
+        self.assertEqual(json.loads(parser.emit_log[1].strip())['content'],
+                         "CODE3")
