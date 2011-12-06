@@ -3,8 +3,6 @@ import uuid
 import json
 import re
 
-from zope.interface import implements
-
 from twisted.internet.defer import inlineCallbacks
 from twisted.python import log
 from twisted.web import http
@@ -151,8 +149,9 @@ class OldSimpleHttpTransport(Transport):
             content = message
             to_addr = to_msisdn
             from_addr = from_msisdn
-            log.msg("OldSimpleHttpTransport sending from %s to %s message \"%s\"" % (
-                from_addr, to_addr, content))
+            log.msg(
+                'OldSimpleHttpTransport sending from %s to %s message "%s"' % (
+                    from_addr, to_addr, content))
             self.publish_message(
                 message_id=message_id,
                 content=content,
@@ -193,15 +192,16 @@ class OldTemplateHttpTransport(OldSimpleHttpTransport):
         template = closer.sub(')s', template)
         to_msisdns = request.args.get('to_msisdn', [None])
         from_msisdn = request.args.get('from_msisdn', [None])[0]
-        template_args = self.extract_template_args(request.args, len(to_msisdns))
+        template_args = self.extract_template_args(request.args,
+                                                   len(to_msisdns))
         return_list = []
         for i, to_msisdn in enumerate(to_msisdns):
             message_id = uuid.uuid4().get_hex()
             message = content = template % template_args[i]
             to_addr = to_msisdn
             from_addr = from_msisdn
-            log.msg("OldTemplateHttpTransport sending from %s to %s message \"%s\"" % (
-                from_addr, to_addr, content))
+            log.msg(('OldTemplateHttpTransport sending from %s to %s '
+                     'message "%s"') % (from_addr, to_addr, content))
             self.publish_message(
                 message_id=message_id,
                 content=content,

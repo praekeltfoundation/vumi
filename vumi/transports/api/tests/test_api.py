@@ -1,18 +1,12 @@
 import json
 from urllib import urlencode
-from twisted.trial.unittest import TestCase
-from twisted.web.resource import Resource
-from twisted.internet.defer import inlineCallbacks, DeferredQueue
-from twisted.web.server import Site
-from twisted.internet import reactor
+from twisted.internet.defer import inlineCallbacks
 
 from vumi.utils import http_request
 from vumi.transports.tests.test_base import TransportTestCase
 from vumi.transports.api import (HttpApiTransport,
                                 OldSimpleHttpTransport,
                                 OldTemplateHttpTransport)
-from vumi.message import TransportUserMessage
-from vumi.tests.utils import get_stubbed_worker
 
 
 class TestHttpApiTransport(TransportTestCase):
@@ -60,7 +54,6 @@ class TestHttpApiTransport(TransportTestCase):
         self.assertEqual(json.loads(response), {
             'message_id': payload['message_id'],
         })
-
 
 
 class TestOldSimpleHttpTransport(TransportTestCase):
