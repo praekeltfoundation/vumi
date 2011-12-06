@@ -41,6 +41,9 @@ class HttpRpcResource(Resource):
         self.transport.handle_raw_inbound_message(uu, request)
         return NOT_DONE_YET
 
+    def render_PUT(self, request):
+        return self.render_(request, "render_PUT")
+
     def render_GET(self, request):
         return self.render_(request, "render_GET")
 
@@ -85,11 +88,15 @@ class HttpRpcTransport(Transport):
         raise NotImplementedError("Sub-classes should implement"
                                   " handle_raw_inbound_message.")
 
-    def finish_request(self, uuid, data):
+    def finish_request(self, msgid, data):
         log.msg("HttpRpcTransport.finish_request with data:", repr(data))
         log.msg(repr(self.requests))
-        request = self.requests.get(uuid)
+        request = self.requests.get(msgid)
         if request:
             request.write(data)
             request.finish()
-            del self.requests[uuid]
+            del self.requests[msgid]
+            response_id = "%s:%s:%s" % (request.client.host,
+                                        request.client.port,
+                                        uuid.uuid4().get_hex())
+            return response_id

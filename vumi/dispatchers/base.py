@@ -131,6 +131,31 @@ class SimpleDispatchRouter(BaseDispatchRouter):
         self.dispatcher.transport_publisher[name].publish_message(msg)
 
 
+class TransportToTransportRouter(BaseDispatchRouter):
+    """Simple dispatch router that maps transports to apps.
+    """
+
+    def dispatch_inbound_message(self, msg):
+        names = self.config['route_mappings'][msg['transport_name']]
+        for name in names:
+            rkey = '%s.outbound' % (name,)
+            self.dispatcher.transport_publisher[name].publish_message(
+                msg, routing_key=rkey)
+
+    def dispatch_inbound_event(self, msg):
+        """
+        Explicitly throw away events, because transports can't receive them.
+        """
+        pass
+
+    def dispatch_outbound_message(self, msg):
+        """
+        If we're only hooking transports up to each other, there are no
+        outbound messages.
+        """
+        pass
+
+
 class ToAddrRouter(BaseDispatchRouter):
     """Router that dispatches based on msg to_addr.
 

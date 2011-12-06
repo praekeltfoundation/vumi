@@ -3,6 +3,7 @@ from twisted.web.server import Site
 from twisted.internet import reactor
 from twisted.internet.defer import DeferredQueue, inlineCallbacks
 
+
 class MockResource(Resource):
     isLeaf = True
 
@@ -19,7 +20,7 @@ class MockResource(Resource):
 
 class MockHttpServer(object):
 
-    def __init__(self, handler = None):
+    def __init__(self, handler=None):
         self.queue = DeferredQueue()
         self._handler = handler or self.handle_request
         self._webserver = None
