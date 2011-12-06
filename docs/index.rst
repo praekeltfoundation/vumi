@@ -12,7 +12,6 @@ Contents:
    :maxdepth: 1
 
    overview.rst
-   roadmap.rst
    installation.rst
    getting-started.rst
    api.rst
@@ -21,6 +20,8 @@ Contents:
    keywords.rst
    transports.rst
    metrics.rst
+   roadmap.rst
+   release-notes.rst
 
 For developers:
 
