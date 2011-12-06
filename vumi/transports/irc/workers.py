@@ -1,4 +1,4 @@
-# -*- test-case-name: vumi.workers.irc.tests.test_workers -*-
+# -*- test-case-name: vumi.transports.irc.tests.test_workers -*-
 
 import re
 import json
