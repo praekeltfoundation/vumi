@@ -1,3 +1,5 @@
+"""IRC transport."""
+
 from datetime import datetime
 import time
 
@@ -6,7 +8,7 @@ from twisted.internet.defer import inlineCallbacks
 from twisted.internet import protocol, reactor
 from twisted.python import log
 
-from vumi.service import Worker
+from vumi.transport import Transport
 from vumi.message import Message
 
 
@@ -118,46 +120,55 @@ class VumiBotFactory(protocol.ReconnectingClientFactory):
     # the class of the protocol to build when new connection is made
     protocol = VumiBot
 
-    def __init__(self, network, nickname, channels, publisher, consumer):
+    def __init__(self, network, nickname, channels):
         self.network = network
         self.nickname = nickname
         self.channels = channels
-        self.publisher = publisher
-        self.consumer = consumer
 
     def buildProtocol(self, addr):
         self.resetDelay()
-        p = self.protocol()
-        p.factory = self
-        return p
+        return self.protocol()
 
 
-class IrcTransport(Worker):
+class IrcTransport(Transport):
+    """IRC based transport.
 
-    @inlineCallbacks
-    def startWorker(self):
-        network = self.config.get('network', 'irc.freenode.net')
-        channels = self.config.get('channels', [])
-        nickname = self.config.get('nickname', 'vumibot')
-        inbound = self.config.get('inbound', 'irc.inbound')
-        outbound = self.config.get('outbound', 'irc.outbound')
-        self.publisher = yield self.publish_to(inbound)
-        self.name = nickname
-        self.consumer = yield self.consume(outbound, self.consume_message,
-                                           '%s.%s' % (outbound, self.name))
-        port = self.config.get('port', 6667)
+    IRC transport options:
 
-        # create factory protocol and application
-        f = VumiBotFactory(network, nickname, channels, self.publisher,
-                           self.consumer)
+    :type network: str
+    :param network:
+        Host name of the IRC server to connect to.
+    :type port: int
+    :param port:
+        Port of the IRC server to connect to. Default: 6667.
+    :type channels: list
+    :param channels:
+        List of channels to join. Defaults: [].
+    :type nickname: str
+    :param nickname:
+        IRC nickname for the transport IRC client to use. Default:
+        vumibot.
+    """
 
-        # connect factory to this host and port
-        reactor.connectTCP(network, port, f)
+    def validate_config(self):
+        self.network = self.config['network']
+        self.port = int(self.config.get('port', 6667))
+        self.channels = self.config.get('channels', [])
+        self.nickname = self.config.get('nickname', 'vumibot')
+        self.client = None
 
-    def consume_message(self, message):
-        log.msg('Consumed Message with %s, but have nowhere to send it. :-(' %
-                (message.payload),)
+    def setup_transport(self):
+        factory = VumiBotFactory(self.network, self.nickname, self.channels,
+                                 self.publisher, self.consumer)
+        self.client = reactor.connectTCP(self.network, self.port, factory)
 
-    @inlineCallbacks
-    def stopWorker(self):
-        yield None
+    def teardown_transport(self):
+        if self.client is not None:
+            self.client.disconnect()
+
+    def handle_raw_inbound_message(self):
+        # TODO: implement
+        pass
+
+    def handle_outbound_message(self, msg):
+        pass
