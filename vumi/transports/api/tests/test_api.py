@@ -40,9 +40,9 @@ class TestHttpApiTransport(TransportTestCase):
 
     @inlineCallbacks
     def test_health(self):
-        result = yield http_request(self.transport_url + "health", "",
-                                    method='GET')
-        self.assertEqual(json.loads(result), {})
+        result = yield http_request(
+            self.transport_url + "health", "", method='GET')
+        self.assertEqual(json.loads(result), {'pending_requests': 0})
 
     @inlineCallbacks
     def test_inbound(self):

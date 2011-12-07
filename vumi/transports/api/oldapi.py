@@ -7,26 +7,10 @@ from twisted.internet.defer import inlineCallbacks
 from twisted.python import log
 from twisted.web.resource import Resource
 
-from vumi.transports.base import Transport
-from vumi.transports.api.api import HttpHealthResource
+from vumi.transports.httprpc import HttpRpcTransport
 
 
-class OldHttpResource(Resource):
-    isLeaf = True
-
-    def __init__(self, transport):
-        self.transport = transport
-        Resource.__init__(self)
-
-    def render(self, request, http_action=None):
-        #print "user", request.getUser()
-        #print "password", request.getPassword()
-        log.msg("HttpResource HTTP Action: %s" % (request,))
-        request.setHeader("content-type", "text/plain")
-        return json.dumps(self.transport.handle_raw_inbound_messages(request))
-
-
-class OldSimpleHttpTransport(Transport):
+class OldSimpleHttpTransport(HttpRpcTransport):
     """
     Maintains the API used by the old Django based
     method of loading SMS's into VUMI over HTTP
@@ -45,25 +29,13 @@ class OldSimpleHttpTransport(Transport):
         default_transport : str
     """
 
-    @inlineCallbacks
-    def setup_transport(self):
-
-        # start receipt web resource
-        self.web_resource = yield self.start_web_resources(
-            [
-                (OldHttpResource(self), self.config['web_path']),
-                (HttpHealthResource(), 'health'),
-            ],
-            int(self.config['web_port']))
-
-    @inlineCallbacks
-    def teardown_transport(self):
-        yield self.web_resource.loseConnection()
+    def get_health_response(self):
+        return json.dumps({})
 
     def handle_outbound_message(self, message):
         log.msg("OldSimpleHttpTransport consuming %s" % (message))
 
-    def handle_raw_inbound_messages(self, request):
+    def handle_raw_inbound_message(self, request_id, request):
         message = request.args.get('message', [None])[0]
         to_msisdns = request.args.get('to_msisdn', [None])
         from_msisdn = request.args.get('from_msisdn', [None])[0]
@@ -90,7 +62,7 @@ class OldSimpleHttpTransport(Transport):
                 "from_msisdn": from_msisdn,
                 "id": message_id,
                 })
-        return return_list
+        return self.finish_request(request_id, json.dumps(return_list))
 
 
 class OldTemplateHttpTransport(OldSimpleHttpTransport):
@@ -108,7 +80,7 @@ class OldTemplateHttpTransport(OldSimpleHttpTransport):
                     template_args[i][k] = x
         return template_args
 
-    def handle_raw_inbound_messages(self, request):
+    def handle_raw_inbound_message(self, request_id, request):
         opener = re.compile('{{ *')
         closer = re.compile(' *}}')
         template = request.args.get('template', [None])[0]
@@ -140,4 +112,4 @@ class OldTemplateHttpTransport(OldSimpleHttpTransport):
                 "from_msisdn": from_msisdn,
                 "id": message_id,
                 })
-        return return_list
+        return self.finish_request(request_id, json.dumps(return_list))

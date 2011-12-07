@@ -1,46 +1,17 @@
 # -*- test-case-name: vumi.transports.api.tests.test_api -*-
-import uuid
 import json
 
-from twisted.internet.defer import inlineCallbacks
 from twisted.python import log
-from twisted.web import http
-from twisted.web.resource import Resource
-from vumi.transports.base import Transport
+from twisted.internet.defer import inlineCallbacks
+
+from vumi.transports.httprpc import HttpRpcTransport
 
 
-class HttpHealthResource(Resource):
-    isLeaf = True
-
-    def __init__(self):
-        Resource.__init__(self)
-
-    def render_GET(self, request):
-        request.setResponseCode(http.OK)
-        return json.dumps({})
-
-
-class HttpResource(Resource):
-    isLeaf = True
-
-    def __init__(self, transport):
-        self.transport = transport
-        Resource.__init__(self)
-
-    def render(self, request, http_action=None):
-        log.msg("HttpResource HTTP Action: %s" % (request,))
-        request.setHeader("content-type", "text/plain")
-        uu = uuid.uuid4().get_hex()
-        self.transport.handle_raw_inbound_message(uu, request)
-        return json.dumps({
-            'message_id': uu,
-        })
-
-
-class HttpApiTransport(Transport):
+class HttpApiTransport(HttpRpcTransport):
     """
-    Strictly for internal testing only
-    this has NO SECURITY!
+    Native HTTP API for getting messages into vumi.
+
+    NOTE: This has no security. Put it behind a firewall or something.
 
     Configuration Values
     --------------------
@@ -49,38 +20,42 @@ class HttpApiTransport(Transport):
     web_port : int
         The port this listens on
     transport_name : str
-        The name this transport instance will use to create it's queues
+        The name this transport instance will use to create its queues
+    reply_expected : boolean (default False)
+        True if a reply message is expected.
+
+    If reply_expected is True, the transport will wait for a reply message
+    and will return the reply's content as the HTTP response body. If False,
+    the message_id of the dispatched incoming message will be returned.
     """
 
-    @inlineCallbacks
+    transport_type = 'http_api'
+
     def setup_transport(self):
-
-        # start receipt web resource
-        self.web_resource = yield self.start_web_resources(
-            [
-                (HttpResource(self), self.config['web_path']),
-                (HttpHealthResource(), 'health'),
-            ],
-            int(self.config['web_port']))
-
-    @inlineCallbacks
-    def teardown_transport(self):
-        yield self.web_resource.loseConnection()
+        self.reply_expected = self.config.get('reply_expected', False)
+        return super(HttpApiTransport, self).setup_transport()
 
     def handle_outbound_message(self, message):
-        log.msg("HttpApiTransport consuming %s" % (message))
+        if self.reply_expected:
+            return super(HttpApiTransport, self).handle_outbound_message(
+                message)
+        log.msg("HttpApiTransport dropping outbound message: %s" % (message))
 
+    @inlineCallbacks
     def handle_raw_inbound_message(self, message_id, request):
         content = str(request.args.get('content', [None])[0])
         to_addr = str(request.args.get('to_addr', [None])[0])
         from_addr = str(request.args.get('from_addr', [None])[0])
-        log.msg("HttpApiTransport sending from %s to %s message \"%s\"" % (
-            from_addr, to_addr, content))
-        self.publish_message(
+        log.msg('HttpApiTransport sending from %s to %s message "%s"' % (
+                    from_addr, to_addr, content))
+        yield self.publish_message(
             message_id=message_id,
             content=content,
             to_addr=to_addr,
             from_addr=from_addr,
             provider='vumi',
-            transport_type='http_api',
+            transport_type=self.transport_type,
         )
+        if not self.reply_expected:
+            yield self.finish_request(message_id,
+                                      json.dumps({'message_id': message_id}))
