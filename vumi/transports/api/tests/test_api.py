@@ -1,3 +1,5 @@
+# -*- encoding: utf-8 -*-
+
 import json
 from urllib import urlencode
 from twisted.internet.defer import inlineCallbacks
@@ -25,6 +27,17 @@ class TestHttpApiTransport(TransportTestCase):
         addr = self.transport.web_resource.getHost()
         self.transport_url = "http://%s:%s/" % (addr.host, addr.port)
 
+    def mkurl(self, content, from_addr=123, to_addr=555):
+        return '%s%s?%s' % (
+            self.transport_url,
+            self.config['web_path'],
+            urlencode({
+                'to_addr': to_addr,
+                'from_addr': from_addr,
+                'content': content,
+            })
+        )
+
     @inlineCallbacks
     def test_health(self):
         result = yield http_request(self.transport_url + "health", "",
@@ -33,22 +46,24 @@ class TestHttpApiTransport(TransportTestCase):
 
     @inlineCallbacks
     def test_inbound(self):
-        url = '%s%s?%s' % (
-            self.transport_url,
-            self.config['web_path'],
-            urlencode({
-                'to_addr': 555,
-                'from_addr': 123,
-                'content': 'hello',
-            })
-        )
+        url = self.mkurl('hello')
         response = yield http_request(url, '', method='GET')
         [msg] = self.get_dispatched_messages()
-        payload = msg.payload
-        self.assertEqual(payload['transport_name'], self.transport_name)
-        self.assertEqual(payload['to_addr'], "555")
-        self.assertEqual(payload['from_addr'], "123")
-        self.assertEqual(payload['content'], "hello")
-        self.assertEqual(json.loads(response), {
-            'message_id': payload['message_id'],
-        })
+        self.assertEqual(msg['transport_name'], self.transport_name)
+        self.assertEqual(msg['to_addr'], "555")
+        self.assertEqual(msg['from_addr'], "123")
+        self.assertEqual(msg['content'], "hello")
+        self.assertEqual(json.loads(response),
+                         {'message_id': msg['message_id']})
+
+    @inlineCallbacks
+    def test_handle_non_ascii_input(self):
+        url = self.mkurl(u"öæł".encode("utf-8"))
+        response = yield http_request(url, '', method='GET')
+        [msg] = self.get_dispatched_messages()
+        self.assertEqual(msg['transport_name'], self.transport_name)
+        self.assertEqual(msg['to_addr'], "555")
+        self.assertEqual(msg['from_addr'], "123")
+        self.assertEqual(msg['content'], u"öæł")
+        self.assertEqual(json.loads(response),
+                         {'message_id': msg['message_id']})
