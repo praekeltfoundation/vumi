@@ -81,7 +81,7 @@ class TestTtcGenericWorker(TestCase):
             #('config', Message.from_json('{"program":{"name":"M4H","dialogues":{"name":"main"}}}'))
             #('config', Message.from_json('{"program":{"name":"M4H","dialogues":[{"name":"main","type":"sequential","interactions":[{"type":"announcement","content":"Hello","date":"today","time":"now"}]}]}}'))
             ('config', Message.from_json('{"program":{"name":"M4H","dialogues":[{"name":"main","type":"sequential","interactions":[{"type":"announcement","content":"Hello","schedule_type":"immediately"},{"type":"announcement","content":"How are you","schedule_type":"wait(00:10)"}]}]}}'))
-            ]
+        ]
         for name, event in events:
             yield self.send(event,'control')
         self.assertEqual(self.worker.record, events)

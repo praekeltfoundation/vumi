@@ -37,7 +37,12 @@ from vumi.application import SessionManager
         #txn.execute("SELECT lastval()")
         #return txn.fetchone()[0]
 
+#Models#
+#CREATE TABLE dialogues (id SERIAL PRIMARY KEY, name VARCHAR(50),type VARCHAR(20)) 
+#CREATE TABLE interactions (id SERIAL PRIMARY KEY, content VARCHAR(50), id_schedule INT, dialogue_id INT)
+#CREATE TABLE schedules (id SERIAL PRIMARY KEY, type VARCHAR(30), interaction_id INT)
 
+#Model Relations#
 class Dialogue(DBObject):
     HASMANY=['interactions']
     
