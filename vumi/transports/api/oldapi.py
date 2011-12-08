@@ -3,9 +3,7 @@ import uuid
 import json
 import re
 
-from twisted.internet.defer import inlineCallbacks
 from twisted.python import log
-from twisted.web.resource import Resource
 
 from vumi.transports.httprpc import HttpRpcTransport
 
