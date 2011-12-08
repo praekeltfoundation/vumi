@@ -39,7 +39,7 @@ from vumi.application import SessionManager
 
 #Models#
 #CREATE TABLE dialogues (id SERIAL PRIMARY KEY, name VARCHAR(50),type VARCHAR(20)) 
-#CREATE TABLE interactions (id SERIAL PRIMARY KEY, content VARCHAR(50), id_schedule INT, dialogue_id INT)
+#CREATE TABLE interactions (id SERIAL PRIMARY KEY, name VARCHAR, content VARCHAR(50), schedule_type VARCHAR(30), dialogue_id INT)
 #CREATE TABLE schedules (id SERIAL PRIMARY KEY, type VARCHAR(30), interaction_id INT)
 
 #Model Relations#
@@ -48,12 +48,11 @@ class Dialogue(DBObject):
     
 class Interaction(DBObject):
     BELONGSTO=['dialogue']
-    HASONE=['schedule']
 
-class Schedule(DBObject):
-    BELONGSTO=['interaction']
+#class Schedule(DBObject):
+    #BELONGSTO=['interaction']
 
-Registry.register(Dialogue, Interaction,Schedule)
+Registry.register(Dialogue, Interaction)
 
 class TtcGenericWorker(ApplicationWorker):
     
@@ -92,55 +91,61 @@ class TtcGenericWorker(ApplicationWorker):
     def consume_control(self, message):
         log.msg("Control message!")
         #data = message.payload['data']
-        program = message.get('program', {})
-        log.msg("Start the program %s" % program.get('name'))
-        self.record.append(('config',message))
-        
-        #Redis#
-        #self.redis.create_session("program")
-        #self.redis.save_session("program", program)
-        #session = self.redis.load_session("program")
-        #log.msg("Message stored and retrieved %s" % session.get('name'))
-        
-        #UglyModel#
-        #self.db.runInteraction(ParticipantModel.create_item,68473)        
-        #name = program.get('name')
-        #group = program.get('group',{})
-        #number = group.get('number')
-        #log.msg("Control message %s to be add %s" % (number,name))
-  
-        #Twistar#
-        
-        def onInteractionSave(interaction,dialogue):
-            print "linking dialogue to interaction"
-            dialogue.interactions.set([interaction])
-        
-        @inlineCallbacks
-        def onDialogueSave(dialogue, interactions):
-            print "element saved %s, now saving interactions %s" %(dialogue,interactions)
-            for interaction in interactions:
-                if interaction.get('type')== "announcement":
-                    yield Interaction(content=interaction.get('content'),
-                                 date=interaction.get('date'), 
-                                 time=interaction.get('time')).save().addCallback(onInteractionSave,dialogue).addErrback(failure)
-                    
+        if (message.get('program')):
+            log.msg("received a program")
+            program = message.get('program')
+            log.msg("Start the program %s" % program.get('name'))
+            self.record.append(('config',message))
             
+            #Redis#
+            #self.redis.create_session("program")
+            #self.redis.save_session("program", program)
+            #session = self.redis.load_session("program")
+            #log.msg("Message stored and retrieved %s" % session.get('name'))
             
-        def failure(error):
-            print "failure while saving %s" %error
+            #UglyModel#
+            #self.db.runInteraction(ParticipantModel.create_item,68473)        
+            #name = program.get('name')
+            #group = program.get('group',{})
+            #number = group.get('number')
+            #log.msg("Control message %s to be add %s" % (number,name))
+      
+            #Twistar#                
+            def failure(error):
+                log.msg("failure while saving %s" %error)
+                
+            dialogues = program.get('dialogues')
+            if (dialogues):
+                for dialogue in dialogues:
+                    #oDialogue = yield Dialogue(name=dialogue.get('name'),type=dialogue.get('type')).save().addCallback(onDialogueSave,dialogue.get('interactions')).addErrback(failure)
+                    oDialogue = yield Dialogue.find(where=['name = ?',dialogue.get('name')], limit=1)
+                    if (oDialogue==None):
+                        oDialogue = yield Dialogue(name=dialogue.get('name'),type=dialogue.get('type')).save().addErrback(failure)
+                    else:
+                        oDialogue.name = dialogue.get('name')
+                        oDialogue.save()
+                    for interaction in dialogue.get('interactions'):
+                        if interaction.get('type')== "announcement":
+                            oInteraction = yield Interaction.find(where=['name = ?',interaction.get('name')], limit=1)
+                            if (oInteraction==None):
+                                oInteraction = yield Interaction(content=interaction.get('content'),
+                                                                 name=interaction.get('name'),
+                                                                 schedule_type=interaction.get('schedule_type'), 
+                                                                 dialogue_id=oDialogue.id).save().addErrback(failure)
+                            else:
+                                oInteraction.content = interaction.get('content')
+                                oInteraction.name = interaction.get('name')
+                                oInteraction.schedule_type=interaction.get('schedule_type')
+                                oInteraction.save()
+                            #yield Schedule(type=interaction.get("schedule_type"),
+                                           #interaction_id=oInteraction.id).save()
+        
+        elif (message.get('phones')):
+            log.msg("received a list of phone")
+            phones = message.get("phone")
+            self.record.append(('config',message))
             
-        dialogues = program.get('dialogues')
-        if (dialogues):
-            for dialogue in dialogues:
-                #oDialogue = yield Dialogue(name=dialogue.get('name'),type=dialogue.get('type')).save().addCallback(onDialogueSave,dialogue.get('interactions')).addErrback(failure)
-                oDialogue = yield Dialogue(name=dialogue.get('name'),type=dialogue.get('type')).save().addErrback(failure)
-                for interaction in dialogue.get('interactions'):
-                    if interaction.get('type')== "announcement":
-                        oInteraction = yield Interaction(content=interaction.get('content'),
-                                 schedule_type=interaction.get('schedule_type'), 
-                                 dialogue_id=oDialogue.id).save().addErrback(failure)
-                        yield Schedule(type=interaction.get("schedule_type"),
-                                       interaction_id=oInteraction.id).save()
+
 
         #for dialogue in dialogues:
             #yield Message(name=dialogue.get('name')).save()

@@ -75,15 +75,31 @@ class TestTtcGenericWorker(TestCase):
             #yield self.send(message,"outbound")
     
     @inlineCallbacks
-    def test_consume_control_config_file(self):
+    def test_consume_control_program_file(self):
         events = [
             #('config', Message.from_json('{"program":{"name":"M4H"}}'))
             #('config', Message.from_json('{"program":{"name":"M4H","dialogues":{"name":"main"}}}'))
             #('config', Message.from_json('{"program":{"name":"M4H","dialogues":[{"name":"main","type":"sequential","interactions":[{"type":"announcement","content":"Hello","date":"today","time":"now"}]}]}}'))
-            ('config', Message.from_json('{"program":{"name":"M4H","dialogues":[{"name":"main","type":"sequential","interactions":[{"type":"announcement","content":"Hello","schedule_type":"immediately"},{"type":"announcement","content":"How are you","schedule_type":"wait(00:10)"}]}]}}'))
+            ('config', Message.from_json("""{"program":{"name":"M4H","dialogues":
+            [{"name":"main","type":"sequential","interactions":[
+            {"type":"announcement","name":"1","content":"Hello","schedule_type":"immediately"},
+            {"type":"announcement","name":"2","content":"How are you","schedule_type":"wait(00:20)"}
+            ]}
+            ]}}"""))
         ]
         for name, event in events:
             yield self.send(event,'control')
         self.assertEqual(self.worker.record, events)
         
- 
+    @inlineCallbacks
+    def test_consume_control_phones(self):
+        events = [
+            ('config', Message.from_json("""{"phones":[
+            {"phone":"788601462"},
+            {"phone":"788601462"}
+            ]}"""))
+            ]
+        for name, event in events:
+            yield self.send(event,'control')
+        self.assertEqual(self.worker.record, events)
+    
