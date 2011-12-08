@@ -1,10 +1,18 @@
 from twisted.trial.unittest import TestCase
 
 from vumi.tests.utils import RegexMatcher, UTCNearNow
-from vumi.message import TransportMessage, TransportEvent, TransportUserMessage
+from vumi.message import (Message, TransportMessage, TransportEvent,
+                          TransportUserMessage)
 
 
 class MessageTest(TestCase):
+
+    def test_message_equality(self):
+        self.assertEqual(Message(a=5), Message(a=5))
+        self.assertNotEqual(Message(a=5), Message(b=5))
+        self.assertNotEqual(Message(a=5), Message(a=6))
+        self.assertNotEqual(Message(a=5), {'a': 5})
+
     def test_transport_message(self):
         msg = TransportMessage(
             message_type='foo',
