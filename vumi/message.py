@@ -85,8 +85,8 @@ class Message(object):
 
     def __eq__(self, other):
         if isinstance(other, Message):
-            other = other.payload
-        return self.payload == other
+            return self.payload == other.payload
+        return False
 
     def __getitem__(self, key):
         return self.payload[key]
