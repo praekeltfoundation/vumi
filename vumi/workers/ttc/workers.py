@@ -39,10 +39,16 @@ from vumi.application import SessionManager
 
 
 class Dialogue(DBObject):
-    HASMANY=['annoucements']
+    HASMANY=['interactions']
     
-class Annoucement(DBObject):
-    pass
+class Interaction(DBObject):
+    BELONGSTO=['dialogue']
+    HASONE=['schedule']
+
+class Schedule(DBObject):
+    BELONGSTO=['interaction']
+
+Registry.register(Dialogue, Interaction,Schedule)
 
 class TtcGenericWorker(ApplicationWorker):
     
@@ -69,11 +75,15 @@ class TtcGenericWorker(ApplicationWorker):
         #self.redis = SessionManager(db=0, prefix="test")
         
         # Try to Access database with twistar
-        #Registry.DBPOOL = adbapi.ConnectionPool('psycopg2', "dbname=test host=localhost user=vumi password=vumi")
+        def done(result):
+            print "Got connection to database %s" %result
+        Registry.DBPOOL = adbapi.ConnectionPool('psycopg2', "dbname=test host=localhost user=vumi password=vumi")
+        yield Registry.DBPOOL.runQuery("SELECT 1").addCallback(done)
     
     def consume_user_message(self, message):
         log.msg("User message: %s" % message['content'])
     
+    @inlineCallbacks
     def consume_control(self, message):
         log.msg("Control message!")
         #data = message.payload['data']
@@ -95,8 +105,38 @@ class TtcGenericWorker(ApplicationWorker):
         #log.msg("Control message %s to be add %s" % (number,name))
   
         #Twistar#
-        #dialogues = program.get('dialogues')
-        #oDialogue = yield Dialogue(name=dialogues.get('name')).save()
+        
+        def onInteractionSave(interaction,dialogue):
+            print "linking dialogue to interaction"
+            dialogue.interactions.set([interaction])
+        
+        @inlineCallbacks
+        def onDialogueSave(dialogue, interactions):
+            print "element saved %s, now saving interactions %s" %(dialogue,interactions)
+            for interaction in interactions:
+                if interaction.get('type')== "announcement":
+                    yield Interaction(content=interaction.get('content'),
+                                 date=interaction.get('date'), 
+                                 time=interaction.get('time')).save().addCallback(onInteractionSave,dialogue).addErrback(failure)
+                    
+            
+            
+        def failure(error):
+            print "failure while saving %s" %error
+            
+        dialogues = program.get('dialogues')
+        if (dialogues):
+            for dialogue in dialogues:
+                #oDialogue = yield Dialogue(name=dialogue.get('name'),type=dialogue.get('type')).save().addCallback(onDialogueSave,dialogue.get('interactions')).addErrback(failure)
+                oDialogue = yield Dialogue(name=dialogue.get('name'),type=dialogue.get('type')).save().addErrback(failure)
+                for interaction in dialogue.get('interactions'):
+                    if interaction.get('type')== "announcement":
+                        oInteraction = yield Interaction(content=interaction.get('content'),
+                                 schedule_type=interaction.get('schedule_type'), 
+                                 dialogue_id=oDialogue.id).save().addErrback(failure)
+                        yield Schedule(type=interaction.get("schedule_type"),
+                                       interaction_id=oInteraction.id).save()
+
         #for dialogue in dialogues:
             #yield Message(name=dialogue.get('name')).save()
     
