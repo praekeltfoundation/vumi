@@ -1,85 +1,98 @@
 """IRC transport."""
 
-from datetime import datetime
-import time
-
 from twisted.words.protocols import irc
-from twisted.internet.defer import inlineCallbacks
 from twisted.internet import protocol, reactor
 from twisted.python import log
 
-from vumi.transport import Transport
-from vumi.message import Message
+from vumi.transports import Transport
 
 
-class VumiBot(irc.IRCClient):
-    """A logging IRC bot."""
-    nickname = 'twistedbot'
+class IrcMessage(object):
+    """Container for details of a message to or from an IRC user.
 
-    def _publish_message(self, **kwargs):
-        timestamp = datetime.utcnow()
+    :type sender: str
+    :param sender:
+        Who send the message (usually user!ident@hostmask).
+    :type recipient: str
+    :param recipient:
+        User or channel recieving the message.
+    :type content: str
+    :param content:
+        Contents of message.
+    :type action: bool
+    :param action:
+        Whether the message is an action.
+    """
 
-        payload = {
-            "nickname": kwargs.get('nickname', 'system'),
-            "server": self.server,
-            "channel": kwargs.get('channel', 'unknown'),
-            "message_type": kwargs.get('message_type', 'message'),
-            "message_content": kwargs.get('msg', ''),
-            "timestamp": timestamp.isoformat()
-        }
-        if "addressed" in kwargs:
-            payload["addressed"] = kwargs["addressed"]
+    def __init__(self, sender, recipient, content, action=False):
+        self.sender = sender
+        self.recipient = recipient
+        self.content = content
+        self.action = action
 
-        self.publisher.publish_message(Message(**payload))
+    def channel(self):
+        """Return the channel if the recipient is a channel.
+
+        Otherwise return None.
+        """
+        if self.recipient[:1] in ('#', '&', '$'):
+            return self.recipient
+        return None
+
+    def addressed_to(self, nickname):
+        if not self.channel():
+            return self.recipient.partition('!')[0] == nickname
+        parts = self.content.split(None, 1)
+        maybe_nickname = parts[0].rstrip(':,') if parts else ''
+        return maybe_nickname.lower() == nickname.lower()
+
+
+class VumiBotClient(irc.IRCClient):
+    """An IRC bot that bridges IRC to Vumi."""
+
+    def __init__(self, nickname, channels, transport):
+        self.nickname = nickname
+        self.channels = channels
+        self.transport = transport
+
+    def publish_message(self, irc_msg):
+        self.transport.handle_inbound_irc_message(irc_msg)
+
+    def consume_message(self, irc_msg):
+        self.msg(irc_msg.recipient.encode('utf8'),
+                 irc_msg.content.encode('utf8'))
+
+    # connecting and disconnecting from server
 
     def connectionMade(self):
-        self.nickname = self.factory.nickname
-        self.server = self.factory.network
-        self.publisher = self.factory.publisher
-        self.consumer = self.factory.consumer
-        self.consumer.callback = self.consume_message
         irc.IRCClient.connectionMade(self)
-        self._publish_message(message_type='system',
-                              msg="[%s connected at %s]" % (
-                self.nickname, time.asctime(datetime.utcnow().timetuple())))
+        log.msg("Connected (nickname is: %s)" % (self.nickname,))
 
     def connectionLost(self, reason):
         irc.IRCClient.connectionLost(self, reason)
-        self._publish_message(message_type='system',
-                              msg="[%s disconnected at %s]" % (
-                self.nickname, time.asctime(datetime.utcnow().timetuple())))
+        log.msg("Disconnected (nickname was: %s)." % (self.nickname,))
 
     # callbacks for events
 
     def signedOn(self):
         """Called when bot has succesfully signed on to server."""
-        log.msg("Channels: %r" % (self.factory.channels,))
-        for channel in self.factory.channels:
+        log.msg("Attempting to join channels: %r" % (self.channels,))
+        for channel in self.channels:
             self.join(channel)
 
     def joined(self, channel):
         """This will get called when the bot joins the channel."""
-        self._publish_message(message_type='system',
-                              msg="[%s has joined %s]" % (
-                self.nickname, channel))
+        log.msg("Joined %r" % (channel,))
 
-    def privmsg(self, user, channel, msg):
+    def privmsg(self, sender, recipient, message):
         """This will get called when the bot receives a message."""
-        user = user.split('!', 1)[0]
-        addressed = False
-        if not any(channel.startswith(p) for p in ('#', '&', '$')):
-            addressed = True
-        elif (msg.split(None, 1)[0].rstrip(':,').lower() ==
-              self.nickname.lower()):
-            addressed = True
-        self._publish_message(nickname=user, channel=channel, msg=msg,
-                              addressed=addressed)
+        irc_msg = IrcMessage(sender, recipient, message)
+        self.publish_message(irc_msg)
 
-    def action(self, user, channel, msg):
+    def action(self, sender, recipient, message):
         """This will get called when the bot sees someone do an action."""
-        user = user.split('!', 1)[0]
-        self._publish_message(message_type='action', nickname=user,
-                              channel=channel, msg=msg)
+        irc_msg = IrcMessage(sender, recipient, message, action=True)
+        self.publish_message(irc_msg)
 
     # irc callbacks
 
@@ -87,8 +100,7 @@ class VumiBot(irc.IRCClient):
         """Called when an IRC user changes their nickname."""
         old_nick = prefix.split('!')[0]
         new_nick = params[0]
-        self._publish_message(message_type='nick_change', nickname=old_nick,
-                              msg=new_nick)
+        log.msg("Nick changed from %r to %r" % (old_nick, new_nick))
 
     # For fun, override the method that determines how a nickname is changed on
     # collisions. The default method appends an underscore.
@@ -99,35 +111,26 @@ class VumiBot(irc.IRCClient):
         """
         return nickname + '^'
 
-    def consume_message(self, message):
-        log.msg('Consumed Message with %s' % (message.payload,))
-        try:
-            payload = message.payload
-            msg_type = payload['message_type']
-            if msg_type == 'message':
-                self.msg(payload['channel'].encode('utf8'),
-                         payload['message_content'].encode('utf8'))
-        except Exception, e:
-            log.msg("Oops: %r" % (e,))
-
 
 class VumiBotFactory(protocol.ReconnectingClientFactory):
-    """A factory for VumiBots.
+    """A factory for :class:`VumiBotClient`s.
 
-    A new protocol instance will be created each time we connect to the server.
+    A new protocol instance will be created each time we connect to
+    the server.
     """
 
     # the class of the protocol to build when new connection is made
-    protocol = VumiBot
+    protocol = VumiBotClient
 
-    def __init__(self, network, nickname, channels):
-        self.network = network
+    def __init__(self, nickname, channels, transport):
         self.nickname = nickname
         self.channels = channels
+        self.transport = transport
 
     def buildProtocol(self, addr):
         self.resetDelay()
-        return self.protocol()
+        return self.protocol(self.nickname, self.channels,
+                             self.transport)
 
 
 class IrcTransport(Transport):
@@ -158,17 +161,31 @@ class IrcTransport(Transport):
         self.client = None
 
     def setup_transport(self):
-        factory = VumiBotFactory(self.network, self.nickname, self.channels,
-                                 self.publisher, self.consumer)
+        # TODO: clean-up factory constructor (arguments are a bit duplicated)
+        factory = VumiBotFactory(self.nickname, self.channels,
+                                 self)
         self.client = reactor.connectTCP(self.network, self.port, factory)
 
     def teardown_transport(self):
         if self.client is not None:
             self.client.disconnect()
+            self.client.factory.stopTrying()
 
-    def handle_raw_inbound_message(self):
-        # TODO: implement
-        pass
+    def handle_inbound_irc_message(self, irc_msg):
+        message_dict = {
+            'to_addr': irc_msg.recipient,
+            'from_addr': irc_msg.sender,
+            'content': irc_msg.content,
+            'transport_name': self.transport_name,
+            'transport_type': self.config.get('transport_type', 'irc'),
+            'transport_metadata': {
+                'transport_nickname': self.client.something.nickname,
+                'irc_server': "%s:%s" % (self.network, self.port),
+                'irc_channel': irc_msg.channel(),
+                },
+            }
+        self.publish_message(**message_dict)
 
     def handle_outbound_message(self, msg):
-        pass
+        irc_msg = IrcMessage(msg['to_addr'], msg['content'])
+        self.client.something.consume_message(irc_msg)
