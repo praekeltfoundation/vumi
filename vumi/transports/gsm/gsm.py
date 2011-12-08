@@ -95,7 +95,7 @@ class GSMTransport(Transport):
         handler = dispatch_map.get(message['Type'], self.noop)
         handler(message)
 
-    def receive_message(self, message)
+    def receive_message(self, message):
         self.publish_message(
             to_addr=normalize_msisdn(message['Number'],
                         country_code=self.country_code),
