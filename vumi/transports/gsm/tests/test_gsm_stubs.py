@@ -41,6 +41,10 @@ class FakeGammuPhone(object):
         log.msg('Sending SMS %s' % (message,))
         self.outbox.append(message)
 
+class FailingFakeGammuPhone(FakeGammuPhone):
+    def SendSMS(self, message):
+        raise gammu.GSMError, 'Fail!'
+
 class FakeGSMTransport(GSMTransport):
 
     def start_polling(self):

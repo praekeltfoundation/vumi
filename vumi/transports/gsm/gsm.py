@@ -178,8 +178,23 @@ class GSMTransport(Transport):
     @inlineCallbacks
     def receive_delivery_report(self, delivery_report):
         log.err('Receiving delivery report %s' % (delivery_report,))
-        # if self.publish_delivery_report(user_message_id, delivery_status, **kw):
-            # yield self.delete_message(self.phone, delivery_report   )
+
+        status_map = {
+            'D': 'delivered',
+            'd': 'delivered',
+            'R': 'delivered',
+            'Q': 'pending',
+            'P': 'pending',
+            'B': 'pending',
+            'a': 'pending',
+            'u': 'pending'
+        }
+
+        phone_status = delivery_report['DeliveryStatus']
+        vumi_status = status_map.get(phone_status, 'failed')
+        self.publish_delivery_report(delivery_report['MessageReference'],
+            vumi_status)
+        yield self.delete_message(self.phone, delivery_report)
 
     @inlineCallbacks
     def delete_message(self, phone, message):
