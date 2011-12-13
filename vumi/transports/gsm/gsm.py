@@ -226,6 +226,7 @@ class GSMTransport(Transport):
         while self.r_server.llen(self.redis_outbound_queue):
             json_data = self.r_server.lpop(self.redis_outbound_queue)
             message = TransportUserMessage.from_json(json_data)
+            log.msg('Sending SMS to %s' % (message['to_addr'],))
 
             def _send_failure(f):
                 self.send_failure(message, f.value, f.getTraceback())
@@ -268,24 +269,7 @@ class GSMTransport(Transport):
 
     @inlineCallbacks
     def receive_delivery_report(self, delivery_report):
-        log.err('Receiving delivery report %s' % (delivery_report,))
-
-        status_map = {
-            'D': 'delivered',
-            'd': 'delivered',
-            'R': 'delivered',
-            'Q': 'pending',
-            'P': 'pending',
-            'B': 'pending',
-            'a': 'pending',
-            'u': 'pending'
-        }
-
-        phone_status = delivery_report['DeliveryStatus']
-        vumi_status = status_map.get(phone_status, 'failed')
-        self.publish_delivery_report(delivery_report['MessageReference'],
-            vumi_status)
-        yield self.delete_message(self.phone, delivery_report)
+        raise NotImplemented, 'delivery reports are broken in Gammu'
 
     @inlineCallbacks
     def delete_message(self, phone, message):
