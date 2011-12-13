@@ -38,7 +38,7 @@ class FakeGammuPhone(object):
         for index, message in enumerate(self.messages):
             if message['Location'] == location:
                 return self.messages.pop(index)
-        raise gammu.GSMError, 'message not found'
+        raise gammu.GSMError('message not found')
 
     def SendSMS(self, message):
         log.msg('Sending SMS %s' % (message,))
@@ -48,7 +48,7 @@ class FakeGammuPhone(object):
 class FailingFakeGammuPhone(FakeGammuPhone):
 
     def SendSMS(self, message):
-        raise gammu.GSMError, 'Fail!'
+        raise gammu.GSMError('Fail!')
 
 
 class FakeGSMTransport(GSMTransport):
