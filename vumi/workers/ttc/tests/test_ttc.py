@@ -168,3 +168,8 @@ class TestTtcGenericWorker(TestCase):
         dNow = datetime.now()
         dPast = datetime.now() - timedelta(minutes = 30)
         dFuture = datetime.now() + timedelta(minutes = 30)
+        self.worker.db.schedules.save({"datetime":dNow.isoformat(),
+                                       "dialogue_name": "main",
+                                       "interaction_name": "int1",
+                                       "participant_phone": "09"});
+        yield self.worker.send_scheduled()
