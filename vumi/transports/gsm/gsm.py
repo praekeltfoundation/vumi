@@ -175,12 +175,7 @@ class GSMTransport(Transport):
     @inlineCallbacks
     def get_next_sms(self, phone, start, location=0):
         # We use the flattened pseudo folder which means that all contents
-        # of all folders are flattened into one 'fake' folder. That also
-        # means that the messages we encounter aren't necessarily messages
-        # we want to work with. Messages we do not know what to do
-        # with we want to keep in the folder untouched. To do so we need to
-        # increment the index we're reading from so as to work with the next
-        # message in line.
+        # of all folders are flattened into one 'fake' folder.
 
         def handle_empty(failure):
             failure.trap(gammu.ERR_EMPTY)
