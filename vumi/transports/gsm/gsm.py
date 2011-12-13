@@ -50,7 +50,7 @@ class GSMTransport(Transport):
     redis_inbound_multipart_queue = 'multipart_queue'
 
     # valid characters for the GSM 03.38 charset
-    gsm_03_38_charset = frozenset([
+    gsm_03_38_singlebyte_charset = frozenset([
         '0', '@', 'Δ', 'SP', '0', '¡', 'P', '', 'p',
         '1', '£', '_', '!', '1', 'A', 'Q', 'a', 'q',
         '2', '$', 'Φ', '"', '2', 'B', 'R', 'b', 'r',
@@ -75,6 +75,9 @@ class GSMTransport(Transport):
     gsm_03_38_doublebyte_charset = frozenset([
         '€', '[', '\\', ']', '^', '{', '|', '}', '~',
     ])
+
+    gsm_03_38_charset = gsm_03_38_singlebyte_charset.union(
+                            gsm_03_38_doublebyte_charset)
 
     def is_gsm_charset(self, content):
         return set(content) <= self.gsm_03_38_charset
