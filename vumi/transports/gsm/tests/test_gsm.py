@@ -161,7 +161,7 @@ class GSMTransportTestCase(TransportTestCase):
         self.assertEqual([], self.get_dispatched_messages())
         self.assertEqual([], self.get_dispatched_events())
         [failure] = self.get_dispatched_failures()
-        self.assertEqual(failure['message'], msg)
+        self.assertEqual(failure['message'], msg.payload)
         self.assertEqual(failure['message_type'],
                             FailureMessage.MESSAGE_TYPE)
         self.assertEqual(failure['failure_code'],
