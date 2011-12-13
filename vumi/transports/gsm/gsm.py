@@ -336,13 +336,10 @@ class GSMTransport(Transport):
             poller.stop()
 
         if phone:
-            def cb_modem_not_connected(failure):
-                failure.trap(gammu.ERR_NOTCONNECTED)
+            try:
+                yield self.disconnect_phone(phone)
+            except gammu.ERR_NOTCONNECTED:
                 log.err()
-
-            deferred = self.disconnect_phone(phone)
-            deferred.addErrback(cb_modem_not_connected)
-            yield deferred
 
     def handle_outbound_message(self, message):
         """
