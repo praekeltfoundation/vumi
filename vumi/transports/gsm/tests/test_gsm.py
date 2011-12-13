@@ -119,6 +119,7 @@ class GSMTransportTestCase(TransportTestCase):
         yield self.dispatch(msg, rkey='%s.outbound' % self.transport_name)
         messages = yield self.transport.receive_and_send_messages(phone)
         self.assertEqual([], self.get_dispatched_messages())
+        self.assertEqual([], self.get_dispatched_events())
         [failure] = self.get_dispatched_failures()
         self.assertEqual(failure['message'], msg)
         self.assertEqual(failure['message_type'], FailureMessage.MESSAGE_TYPE)

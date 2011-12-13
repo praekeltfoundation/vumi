@@ -258,7 +258,11 @@ class GSMTransport(Transport):
                 gammu_message.update(defaults)
                 deferreds.append(deferToThread(phone.SendSMS, gammu_message))
 
-            deferred_list = DeferredList(deferreds)
+            def cb(*args, **kwargs):
+                print 'cb', args, kwargs
+
+            deferred_list = DeferredList(deferreds, consumeErrors=True,
+                fireOnOneErrback=True)
             deferred_list.addErrback(_send_failure)
             yield deferred_list
 
