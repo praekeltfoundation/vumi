@@ -1,5 +1,6 @@
 import gammu
 from vumi.transports.gsm import GSMTransport
+from vumi.tests.utils import FakeRedis
 from twisted.internet.task import LoopingCall
 from twisted.python import log
 
@@ -47,6 +48,7 @@ class FailingFakeGammuPhone(FakeGammuPhone):
 
 class FakeGSMTransport(GSMTransport):
 
-    def start_polling(self):
-        """skipping polling for mocked modem"""
-        pass
+    def setup_transport(self):
+        log.msg('Setting up the fake transport with FakeRedis')
+        self.r_server = FakeRedis()
+        self.r_prefix = "%(transport_name)s" % self.config

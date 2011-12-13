@@ -326,6 +326,18 @@ class FakeRedis(object):
             stop = None
         return [val[1] for val in zval[start:stop]]
 
+    # List operations
+    def llen(self, key):
+        return len(self._data.setdefault(key, []))
+
+    def lpop(self, key):
+        if self.llen(key):
+            return self._data[key].pop(0)
+
+    def rpush(self, key, obj):
+        self._data.setdefault(key, []).append(obj)
+        return self.llen(key) - 1
+
     # Expiry operations
 
     def expire(self, key, seconds):

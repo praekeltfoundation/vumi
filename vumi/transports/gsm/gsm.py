@@ -104,6 +104,7 @@ class GSMTransport(Transport):
 
     @inlineCallbacks
     def read_until_empty(self, phone, history=[]):
+        # print 'read_until_empty', phone, history
         if history:
             last_message = history[-1]
             list_with_message = yield self.get_next_sms(phone, False,

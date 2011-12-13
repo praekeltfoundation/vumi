@@ -2,7 +2,6 @@
 from twisted.internet import defer
 from twisted.internet.defer import inlineCallbacks
 from vumi.message import TransportUserMessage
-from vumi.tests.utils import FakeRedis
 from vumi.transports.gsm.tests.test_gsm_stubs import (
     FakeGSMTransport, FakeGammuPhone, FailingFakeGammuPhone)
 from vumi.transports.tests.test_base import TransportTestCase
