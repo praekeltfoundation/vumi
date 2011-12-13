@@ -176,21 +176,17 @@ class GSMTransport(Transport):
     def get_next_sms(self, phone, start, location=0):
         # We use the flattened pseudo folder which means that all contents
         # of all folders are flattened into one 'fake' folder.
-
-        def handle_empty(failure):
-            failure.trap(gammu.ERR_EMPTY)
+        try:
+            message = yield deferToThread(phone.GetNextSMS, 0, start, location)
+            # GetNextSMS has quirky behaviour where it only returns a single
+            # SMS but returns it in a list, unpack here.
+            if message:
+                [sms] = message
+                returnValue(sms)
+            else:
+                returnValue(None)
+        except gammu.ERR_EMPTY:
             log.err('No remaining SMS messages')
-
-        deferred = deferToThread(phone.GetNextSMS, 0, start, location)
-        deferred.addErrback(handle_empty)
-        message = yield deferred
-        # GetNextSMS has quirky behaviour where it only returns a single
-        # SMS but returns it in a list, unpack here.
-        if message:
-            [sms] = message
-            returnValue(sms)
-        else:
-            returnValue(None)
 
     @inlineCallbacks
     def receive_message(self, message):
