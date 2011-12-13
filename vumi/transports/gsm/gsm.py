@@ -173,7 +173,7 @@ class GSMTransport(Transport):
         returnValue(history)
 
     @inlineCallbacks
-    def get_next_sms(self, phone, *args):
+    def get_next_sms(self, phone, start, location=0):
         # We use the flattened pseudo folder which means that all contents
         # of all folders are flattened into one 'fake' folder. That also
         # means that the messages we encounter aren't necessarily messages
@@ -184,9 +184,9 @@ class GSMTransport(Transport):
 
         def handle_empty(failure):
             failure.trap(gammu.ERR_EMPTY)
-            log.err('No SMS for get_next_sms%s' % repr(args))
+            log.err('No remaining SMS messages')
 
-        deferred = deferToThread(phone.GetNextSMS, 0, *args)
+        deferred = deferToThread(phone.GetNextSMS, 0, start, location)
         deferred.addErrback(handle_empty)
         message = yield deferred
         # GetNextSMS has quirky behaviour where it only returns a single
@@ -255,6 +255,7 @@ class GSMTransport(Transport):
                 'Text': text,
                 'Length': len(text),
             })
+            self.r_server.delete(key)
             return message
 
     def construct_gammu_messages(self, message):
