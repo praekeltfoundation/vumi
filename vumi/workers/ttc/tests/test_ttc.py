@@ -2,6 +2,9 @@
 from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
 
+import pymongo
+from datetime import datetime, time, date, timedelta
+
 #from vumi.database.tests.test_base import UglyModelTestCase
 #from vumi.workers.ttc.workers import ParticipantModel
 from vumi.tests.utils import get_stubbed_worker
@@ -49,12 +52,25 @@ class TestTtcGenericWorker(TestCase):
         self.config = {'transport_name': self.transport_name,
                        'dbname': 'dbtest'}
         self.worker = get_stubbed_worker(TtcGenericWorker,
-                                         config=self.config)
+                                         config=self.config)        
         self.broker = self.worker._amqp_client.broker
+        
+        self.broker.exchange_declare('vumi','direct')
+        self.broker.queue_declare("%s.outbound" % self.transport_name)
+        self.broker.queue_bind("%s.outbound" % self.transport_name, "vumi","%s.outbound" % self.transport_name)
+        
+        #Database#
+        connection = pymongo.Connection("localhost",27017)
+        self.db = connection.test
+        self.programs = self.db.programs
+        
+        #Let's rock"
         yield self.worker.startWorker()
     
     @inlineCallbacks
     def tearDown(self):
+        self.db.programs.drop()
+        self.db.schedules.drop()
         yield self.worker.stopWorker()
     
     @inlineCallbacks
@@ -75,12 +91,12 @@ class TestTtcGenericWorker(TestCase):
             #yield self.send(message,"outbound")
     
     @inlineCallbacks
-    def test_consume_control_program_file(self):
+    def test_consume_control_program(self):
         events = [
             #('config', Message.from_json('{"program":{"name":"M4H"}}'))
             #('config', Message.from_json('{"program":{"name":"M4H","dialogues":{"name":"main"}}}'))
             #('config', Message.from_json('{"program":{"name":"M4H","dialogues":[{"name":"main","type":"sequential","interactions":[{"type":"announcement","content":"Hello","date":"today","time":"now"}]}]}}'))
-            ('config', Message.from_json("""{"program":{"name":"M4H","dialogues":
+            ('config', Message.from_json("""{"program":{"name":"M5H","dialogues":
             [{"name":"main","type":"sequential","interactions":[
             {"type":"announcement","name":"1","content":"Hello","schedule_type":"immediately"},
             {"type":"announcement","name":"2","content":"How are you","schedule_type":"wait(00:20)"}
@@ -89,17 +105,66 @@ class TestTtcGenericWorker(TestCase):
         ]
         for name, event in events:
             yield self.send(event,'control')
-        self.assertEqual(self.worker.record, events)
+        self.assertEqual(self.programs.count(), 1)
         
     @inlineCallbacks
-    def test_consume_control_phones(self):
+    def test_consume_control_participant(self):
         events = [
-            ('config', Message.from_json("""{"phones":[
+            ('1', Message.from_json("""{"program":{"name":"M4H","dialogues":
+            [{"name":"main","type":"sequential","interactions":[
+            {"type":"announcement","name":"1","content":"Hello","schedule_type":"immediately"},
+            {"type":"announcement","name":"2","content":"How are you","schedule_type":"wait(00:20)"}
+            ]}
+            ]}}""")),
+            ('2', Message.from_json("""{"participants":[
             {"phone":"788601462"},
-            {"phone":"788601462"}
+            {"phone":"788601463"}
             ]}"""))
             ]
+        events.sort()
         for name, event in events:
             yield self.send(event,'control')
-        self.assertEqual(self.worker.record, events)
+        program = self.programs.find_one({"name":"M4H"})
+        participants = program.get("participants")
+        self.assertEqual(participants, events[1][1].get('participants'))
     
+    
+    def test_schedule_participant_dialogue(self):
+        dialogue = {"name":"main","type":"sequential","interactions":[
+            {"type":"announcement","name":"i1","content":"Hello","schedule_type":"immediately"},
+            {"type":"announcement","name":"i2","content":"How are you","schedule_type":"wait"}
+            ]}
+        participant = {"phone":"09984", "name":"olivier"}
+        
+        schedules = self.worker.schedule_participant_dialogue(participant, dialogue)
+        #assert time calculation
+        self.assertEqual(len(schedules), 2)
+        self.assertTrue(datetime.strptime(schedules[0].get("datetime"),"%Y-%m-%dT%H:%M:%S.%f") - datetime.now() < timedelta(seconds=1))
+        self.assertTrue(datetime.strptime(schedules[1].get("datetime"),"%Y-%m-%dT%H:%M:%S.%f") - datetime.now() < timedelta(minutes=10))
+        self.assertTrue(datetime.strptime(schedules[1].get("datetime"),"%Y-%m-%dT%H:%M:%S.%f") - datetime.now() > timedelta(minutes=9))
+        
+        #assert schedule links
+        self.assertEqual(schedules[0].get("participant_phone"),"09984")
+        self.assertEqual(schedules[0].get("dialogue_name"),"main")
+        self.assertEqual(schedules[0].get("interaction_name"),"i1")
+        self.assertEqual(schedules[1].get("interaction_name"),"i2")
+    
+    @inlineCallbacks
+    def test_send_scheduled_oneMessage(self):
+        dNow = datetime.now()
+        self.worker.db.schedules.save({"datetime":dNow.isoformat(),
+                                       "dialogue_name": "main",
+                                       "interaction_name": "int1",
+                                       "participant_phone": "09"});
+        yield self.worker.send_scheduled()
+        message = self.broker.basic_get('%s.outbound' % self.transport_name)[1].get('content')
+        message = TransportUserMessage.from_json( message)
+        self.assertEqual(message.payload['to_addr'], "09")
+        #self.assertEqual(message.payload['from_addr'], "8282")
+        #self.assertEqual(message.payload['content'],"Hello Olivier")
+        self.assertEqual(self.worker.db.schedules.count(), 0)
+    
+    def test_send_scheduled_chooseMessage(self):
+        dNow = datetime.now()
+        dPast = datetime.now() - timedelta(minutes = 30)
+        dFuture = datetime.now() + timedelta(minutes = 30)
