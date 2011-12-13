@@ -79,7 +79,8 @@ class GSMTransportTestCase(TransportTestCase):
         # the transport should store them in redis until the next
         # send & receive loop is triggered
         queue_name = self.transport.redis_outbound_queue
-        self.assertEqual(self.transport.r_server.llen(queue_name), 1)
+        key = self.transport.r_key(queue_name)
+        self.assertEqual(self.transport.r_server.llen(key), 1)
         # trigger manually
         messages = yield self.transport.receive_and_send_messages(phone)
         # all should be happy
@@ -95,7 +96,7 @@ class GSMTransportTestCase(TransportTestCase):
             'Number': msg['to_addr'],
         }])
         # the redis list should be empty
-        self.assertEqual(self.transport.r_server.llen(queue_name), 0)
+        self.assertEqual(self.transport.r_server.llen(key), 0)
 
     @inlineCallbacks
     def test_sending_multipart_sms(self):
@@ -111,6 +112,47 @@ class GSMTransportTestCase(TransportTestCase):
         self.assertEqual(phone.outbox[1]['Text'], 'a' * 47)
         self.assertEqual(phone.outbox[1]['UDH']['PartNumber'], 2)
         self.assertEqual(phone.outbox[1]['UDH']['AllParts'], 2)
+
+    @inlineCallbacks
+    def test_receiving_multipart_sms(self):
+        phone = FakeGammuPhone([{
+            'MessageReference': u'9c103356fbf243b3805db555e4f9c2d3',
+            'Number': u'27761234567',
+            'DateTime': datetime.now(),
+            'SMSCDateTime': datetime.now(),
+            'Text': u'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' +
+                    u'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' +
+                    u'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' +
+                    u'aaaaaaaaaa',
+            'Type': 'Deliver',
+            'Location': 0,
+            'UDH': {
+                'AllParts': 2,
+                'PartNumber': 1,
+                'Text': '\x05\x00\x03\x19\x02\x01',
+                'Type': 'ConcatenatedMessages'
+            }
+        }, {
+            'MessageReference': u'9c103356fbf243b3805db555e4f9c2d3',
+            'Number': u'27761234567',
+            'DateTime': datetime.now(),
+            'SMSCDateTime': datetime.now(),
+            'Text': u'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+            'Type': 'Deliver',
+            'Location': 1,
+            'UDH': {
+                'AllParts': 2,
+                'PartNumber': 2,
+                'Text': '\x05\x00\x03\x19\x02\x02',
+                'Type': 'ConcatenatedMessages'
+            }
+        }])
+        yield self.transport.receive_and_send_messages(phone)
+        self.assertEqual([], self.get_dispatched_failures())
+        self.assertEqual([], self.get_dispatched_events())
+        [message] = self.get_dispatched_messages()
+        self.assertEqual(message['content'], 'a' * 200)
+        self.assertEqual(message['from_addr'], '+27761234567')
 
     @inlineCallbacks
     def test_sending_sms_failure(self):

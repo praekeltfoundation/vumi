@@ -41,7 +41,16 @@ class GSMTransport(Transport):
 
     """
 
+    # the name of the list we're using in Redis to store
+    # the outbound messages. We do this to ensure we don't
+    # lose messages during reboots
     redis_outbound_queue = 'outbound_queue'
+
+    # the name of the list we're using in Redis to keep
+    # parts of multipart messages are they are arriving
+    redis_inbound_multipart_queue = 'multipart_queue'
+
+    # valid characters for the GSM 03.38 charset
     gsm_03_38_charset = frozenset([
         '0', '@', 'Δ', 'SP', '0', '¡', 'P', '', 'p',
         '1', '£', '_', '!', '1', 'A', 'Q', 'a', 'q',
@@ -62,6 +71,8 @@ class GSMTransport(Transport):
         ' ', # space
     ])
 
+    # GSM 03.38 characters that are prefixed with an
+    # <ESC> character and are therefor double byte
     gsm_03_38_doublebyte_charset = frozenset([
         '€', '[', '\\', ']', '^', '{', '|', '}', '~',
     ])
@@ -103,6 +114,9 @@ class GSMTransport(Transport):
         self.r_server = yield redis.Redis(db=dbindex, **redis_config)
         self.r_prefix = "%(transport_name)s" % self.config
         self.start_polling()
+
+    def r_key(self, *key):
+        return ':'.join([self.r_prefix] + map(str, key))
 
     def start_polling(self):
         phone = gammu.StateMachine()
@@ -182,6 +196,18 @@ class GSMTransport(Transport):
 
     @inlineCallbacks
     def receive_message(self, message):
+        if self.is_part_of_multipart(message):
+            self.store_multipart_part(message)
+            reassembled_message = self.reassemble_multipart(message)
+            if reassembled_message:
+                self.publish_inbound_message(reassembled_message)
+        else:
+            self.publish_inbound_message(message)
+
+        yield self.delete_message(self.phone, message)
+
+
+    def publish_inbound_message(self, message):
         self.publish_message(
             to_addr=normalize_msisdn(self.phone_number,
                         country_code=self.country_code),
@@ -196,7 +222,38 @@ class GSMTransport(Transport):
                 # when it was retrieved from the modem
                 'read_at': message['SMSCDateTime'],
             })
-        yield self.delete_message(self.phone, message)
+
+    def is_part_of_multipart(self, message):
+        if 'UDH' not in message:
+            return False
+        if 'Type' not in message['UDH']:
+            return False
+        return message['UDH']['Type'] == 'ConcatenatedMessages'
+
+    def store_multipart_part(self, message):
+        key = self.r_key(self.redis_inbound_multipart_queue,
+                            message['MessageReference'])
+        part_number = message['UDH']['PartNumber']
+        text = message['Text']
+        self.r_server.hset(key, part_number, text)
+
+    def is_multipart_complete(self, message):
+        key = self.r_key(self.redis_inbound_multipart_queue,
+                            message['MessageReference'])
+        total_parts = message['UDH']['AllParts']
+        return self.r_server.hlen(key) == total_parts
+
+    def reassemble_multipart(self, message):
+        key = self.r_key(self.redis_inbound_multipart_queue,
+                            message['MessageReference'])
+        if self.is_multipart_complete(message):
+            parts = self.r_server.hgetall(key)
+            text = ''.join([part for idx, part in sorted(parts.items())])
+            message.update({
+                'Text': text,
+                'Length': len(text),
+            })
+            return message
 
     def construct_gammu_messages(self, message):
         if (self.is_gsm_charset(message['content']) and
@@ -223,8 +280,9 @@ class GSMTransport(Transport):
 
     @inlineCallbacks
     def send_outbound(self, phone):
-        while self.r_server.llen(self.redis_outbound_queue):
-            json_data = self.r_server.lpop(self.redis_outbound_queue)
+        key = self.r_key(self.redis_outbound_queue)
+        while self.r_server.llen(key):
+            json_data = self.r_server.lpop(key)
             message = TransportUserMessage.from_json(json_data)
             log.msg('Sending SMS to %s' % (message['to_addr'],))
 
@@ -259,11 +317,8 @@ class GSMTransport(Transport):
                 gammu_message.update(defaults)
                 deferreds.append(deferToThread(phone.SendSMS, gammu_message))
 
-            def cb(*args, **kwargs):
-                print 'cb', args, kwargs
-
             deferred_list = DeferredList(deferreds, consumeErrors=True,
-                fireOnOneErrback=True)
+                                                    fireOnOneErrback=True)
             deferred_list.addErrback(_send_failure)
             yield deferred_list
 
@@ -308,4 +363,5 @@ class GSMTransport(Transport):
         As a result we stash them in redis and whenever we have a connection
         to the phone we pull them out again and send them off.
         """
-        self.r_server.rpush(self.redis_outbound_queue, message.to_json())
+        key = self.r_key(self.redis_outbound_queue)
+        self.r_server.rpush(key, message.to_json())

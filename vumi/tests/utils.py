@@ -283,6 +283,9 @@ class FakeRedis(object):
     def hgetall(self, key):
         return self._data.get(key, {})
 
+    def hlen(self, key):
+        return len(self._data.get(key, {}))
+
     # Set operations
 
     def sadd(self, key, value):
