@@ -308,8 +308,8 @@ class GSMTransport(Transport):
                     # for delivery report
                     'Type': 'Status_Report',
                 }
-                gammu_message.update(defaults)
-                deferreds.append(deferToThread(phone.SendSMS, gammu_message))
+                defaults.update(gammu_message)
+                deferreds.append(deferToThread(phone.SendSMS, defaults))
 
             deferred_list = DeferredList(deferreds, consumeErrors=True,
                                                     fireOnOneErrback=True)
