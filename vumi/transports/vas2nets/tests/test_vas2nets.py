@@ -12,7 +12,7 @@ from twisted.internet.defer import inlineCallbacks
 from vumi.utils import http_request_full
 from vumi.transports.tests.test_base import TransportTestCase
 from vumi.tests.utils import get_stubbed_worker, TestResourceWorker
-from vumi.message import from_json
+from vumi.message import Message
 from vumi.transports.base import FailureMessage
 from vumi.transports.vas2nets.vas2nets import (
     Vas2NetsTransport, validate_characters, Vas2NetsEncodingError,
@@ -162,7 +162,7 @@ class Vas2NetsTransportTestCase(TransportTestCase):
         msg = self.mkmsg_in()
 
         [smsg] = self.get_dispatched('vas2nets.inbound')
-        self.assertEqual(msg.payload, from_json(smsg.body))
+        self.assertEqual(msg, Message.from_json(smsg.body))
 
     @inlineCallbacks
     def test_delivery_receipt_pending(self):
@@ -180,7 +180,7 @@ class Vas2NetsTransportTestCase(TransportTestCase):
         msg = self.mkmsg_delivery(
             'pending', '1', 'Message submitted to Provider for delivery.')
         [smsg] = self.get_dispatched('vas2nets.event')
-        self.assertEqual(msg, from_json(smsg.body))
+        self.assertEqual(msg, Message.from_json(smsg.body))
 
     @inlineCallbacks
     def test_delivery_receipt_failed(self):
@@ -198,7 +198,7 @@ class Vas2NetsTransportTestCase(TransportTestCase):
         msg = self.mkmsg_delivery(
             'failed', '-9', 'Message could not be delivered.')
         [smsg] = self.get_dispatched('vas2nets.event')
-        self.assertEqual(from_json(smsg.body), msg)
+        self.assertEqual(msg, Message.from_json(smsg.body))
 
     @inlineCallbacks
     def test_delivery_receipt_delivered(self):
@@ -216,7 +216,7 @@ class Vas2NetsTransportTestCase(TransportTestCase):
         msg = self.mkmsg_delivery(
             'delivered', '2', 'Message delivered to MSISDN.')
         [smsg] = self.get_dispatched('vas2nets.event')
-        self.assertEqual(from_json(smsg.body), msg)
+        self.assertEqual(msg, Message.from_json(smsg.body))
 
     def test_validate_characters(self):
         self.assertRaises(Vas2NetsEncodingError, validate_characters,
@@ -243,7 +243,7 @@ class Vas2NetsTransportTestCase(TransportTestCase):
 
         [smsg] = self.get_dispatched('vas2nets.event')
         self.assertEqual(self.mkmsg_ack(sent_message_id=mocked_message_id),
-                         from_json(smsg.body))
+                         Message.from_json(smsg.body))
 
     @inlineCallbacks
     def test_send_sms_reply_success(self):
@@ -260,7 +260,7 @@ class Vas2NetsTransportTestCase(TransportTestCase):
 
         [smsg] = self.get_dispatched('vas2nets.event')
         self.assertEqual(self.mkmsg_ack(sent_message_id=mocked_message_id),
-                         from_json(smsg.body))
+                         Message.from_json(smsg.body))
 
     @inlineCallbacks
     def test_send_sms_fail(self):
@@ -273,7 +273,7 @@ class Vas2NetsTransportTestCase(TransportTestCase):
         d = self.dispatch(msg)
         yield d
         [fmsg] = self.get_dispatched('vas2nets.failures')
-        fmsg = from_json(fmsg.body)
+        fmsg = Message.from_json(fmsg.body)
         self.assertEqual(msg.payload, fmsg['message'])
         self.assertTrue(
             "Vas2NetsTransportError: No SmsId Header" in fmsg['reason'])
@@ -284,8 +284,8 @@ class Vas2NetsTransportTestCase(TransportTestCase):
         d = self.dispatch(msg)
         yield d
         [fmsg] = self.get_dispatched('vas2nets.failures')
-        fmsg = from_json(fmsg.body)
-        self.assertEqual(msg, fmsg['message'])
+        fmsg = Message.from_json(fmsg.body)
+        self.assertEqual(msg.payload, fmsg['message'])
         self.assertEqual(fmsg['failure_code'],
                          FailureMessage.FC_TEMPORARY)
         self.assertTrue(fmsg['reason'].strip().endswith("connection refused"))
@@ -299,8 +299,8 @@ class Vas2NetsTransportTestCase(TransportTestCase):
         deferred = self.dispatch(msg)
         yield deferred
         [fmsg] = self.get_dispatched('vas2nets.failures')
-        fmsg = from_json(fmsg.body)
-        self.assertEqual(msg, fmsg['message'])
+        fmsg = Message.from_json(fmsg.body)
+        self.assertEqual(msg.payload, fmsg['message'])
         self.assertEqual(fmsg['failure_code'],
                          FailureMessage.FC_PERMANENT)
         self.assertTrue(fmsg['reason'].strip()
