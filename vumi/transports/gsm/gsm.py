@@ -168,7 +168,7 @@ class GSMTransport(Transport):
                 break
 
             handler = self.dispatch_map.get(sms['Type'], self.noop)
-            handler(sms)
+            yield handler(sms)
             history.append(sms)
         returnValue(history)
 
