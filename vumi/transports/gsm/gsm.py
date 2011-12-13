@@ -5,6 +5,7 @@ from twisted.internet.defer import (inlineCallbacks, returnValue,
 from twisted.internet.threads import deferToThread
 from twisted.internet.task import LoopingCall
 from twisted.python import log
+from twisted.python.failure import Failure
 from vumi.transports.base import Transport
 from vumi.utils import get_deploy_int, normalize_msisdn
 from vumi.message import TransportUserMessage
@@ -280,41 +281,28 @@ class GSMTransport(Transport):
             message = TransportUserMessage.from_json(json_data)
             log.msg('Sending SMS to %s' % (message['to_addr'],))
 
-            def _send_failure(f):
-                self.send_failure(message, f.value, f.getTraceback())
-                if self.SUPPRESS_FAILURE_EXCEPTIONS:
-                    return None
-                return f
-
-            # if we are sending multipart messages then we'll
-            # have multiple deferreds for a single SendSMS call.
-            # We're keeping those in a deferred list so as to only
-            # register on failed messages for `n` multipart deferreds
-            deferreds = []
-
-            # if it's a single SMS we get a list with 1 message
             # if it's multipart we'll get a number of messages
             # encoded appropriately
             gammu_messages = self.construct_gammu_messages(message)
-            for gammu_message in gammu_messages:
-                defaults = {
-                    'MessageReference': message['message_id'],
-                    'Number': message['to_addr'],
-                    # Send using the Phone's known SMSC
-                    'SMSC': {
-                        'Location': 1
-                    },
-                    # this will create submit message with request
-                    # for delivery report
-                    'Type': 'Status_Report',
-                }
-                defaults.update(gammu_message)
-                deferreds.append(deferToThread(phone.SendSMS, defaults))
-
-            deferred_list = DeferredList(deferreds, consumeErrors=True,
-                                                    fireOnOneErrback=True)
-            deferred_list.addErrback(_send_failure)
-            yield deferred_list
+            try:
+                for gammu_message in gammu_messages:
+                    overrides = {
+                        'MessageReference': message['message_id'],
+                        'Number': message['to_addr'],
+                        # Send using the Phone's known SMSC
+                        'SMSC': {
+                            'Location': 1
+                        },
+                        # this will create submit message with request
+                        # for delivery report
+                        'Type': 'Status_Report',
+                    }
+                    gammu_message.update(overrides)
+                    yield deferToThread(phone.SendSMS, gammu_message)
+            except gammu.GSMError, e:
+                failure = Failure(e)
+                self.send_failure(message, failure.value,
+                    failure.getTraceback())
 
     @inlineCallbacks
     def receive_delivery_report(self, delivery_report):
