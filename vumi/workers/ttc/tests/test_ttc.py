@@ -50,7 +50,7 @@ class TestTtcGenericWorker(TestCase):
     def setUp(self):
         self.transport_name = 'test'
         self.config = {'transport_name': self.transport_name,
-                       'dbname': 'dbtest'}
+                       'database': 'test'}
         self.worker = get_stubbed_worker(TtcGenericWorker,
                                          config=self.config)        
         self.broker = self.worker._amqp_client.broker
@@ -61,7 +61,7 @@ class TestTtcGenericWorker(TestCase):
         
         #Database#
         connection = pymongo.Connection("localhost",27017)
-        self.db = connection.test
+        self.db = connection[self.config['database']]
         self.programs = self.db.programs
         
         #Let's rock"
@@ -71,6 +71,8 @@ class TestTtcGenericWorker(TestCase):
     def tearDown(self):
         self.db.programs.drop()
         self.db.schedules.drop()
+        if (self.worker.sender != None):
+            yield self.worker.sender.stop()
         yield self.worker.stopWorker()
     
     @inlineCallbacks
@@ -96,7 +98,8 @@ class TestTtcGenericWorker(TestCase):
             #('config', Message.from_json('{"program":{"name":"M4H"}}'))
             #('config', Message.from_json('{"program":{"name":"M4H","dialogues":{"name":"main"}}}'))
             #('config', Message.from_json('{"program":{"name":"M4H","dialogues":[{"name":"main","type":"sequential","interactions":[{"type":"announcement","content":"Hello","date":"today","time":"now"}]}]}}'))
-            ('config', Message.from_json("""{"program":{"name":"M5H","dialogues":
+            ('config', Message.from_json("""{"program":{"name":"M5H","participants":[{"phone":"06"}],
+            "dialogues":
             [{"name":"main","type":"sequential","interactions":[
             {"type":"announcement","name":"1","content":"Hello","schedule_type":"immediately"},
             {"type":"announcement","name":"2","content":"How are you","schedule_type":"wait(00:20)"}
@@ -106,6 +109,7 @@ class TestTtcGenericWorker(TestCase):
         for name, event in events:
             yield self.send(event,'control')
         self.assertEqual(self.programs.count(), 1)
+        self.assertEqual(self.worker.db.schedules.count(),2)
         
     @inlineCallbacks
     def test_consume_control_participant(self):
@@ -152,24 +156,60 @@ class TestTtcGenericWorker(TestCase):
     @inlineCallbacks
     def test_send_scheduled_oneMessage(self):
         dNow = datetime.now()
+        self.worker.program_name = "M5H"
+        self.worker.db.programs.save({"name":"M5H","dialogues":
+            [{"name":"main","type":"sequential","interactions":[
+            {"type":"announcement","name":"1","content":"Hello","schedule_type":"immediately"},
+            {"type":"announcement","name":"2","content":"How are you","schedule_type":"wait(00:20)"}
+            ]}
+            ]})
         self.worker.db.schedules.save({"datetime":dNow.isoformat(),
                                        "dialogue_name": "main",
-                                       "interaction_name": "int1",
+                                       "interaction_name": "1",
                                        "participant_phone": "09"});
         yield self.worker.send_scheduled()
         message = self.broker.basic_get('%s.outbound' % self.transport_name)[1].get('content')
         message = TransportUserMessage.from_json( message)
         self.assertEqual(message.payload['to_addr'], "09")
         #self.assertEqual(message.payload['from_addr'], "8282")
-        #self.assertEqual(message.payload['content'],"Hello Olivier")
+        self.assertEqual(message.payload['content'],"Hello")
         self.assertEqual(self.worker.db.schedules.count(), 0)
     
+    @inlineCallbacks
     def test_send_scheduled_chooseMessage(self):
         dNow = datetime.now()
         dPast = datetime.now() - timedelta(minutes = 30)
         dFuture = datetime.now() + timedelta(minutes = 30)
+        self.worker.program_name = "M5H"
+        self.worker.db.programs.save({"name":"M5H","dialogues":
+            [{"name":"main","type":"sequential","interactions":[
+            {"type":"announcement","name":"1","content":"Hello","schedule_type":"immediately"},
+            {"type":"announcement","name":"2","content":"Today will be sunny","schedule_type":"wait-20"},
+            {"type":"announcement","name":"3","content":"Today is the special day","schedule_type":"wait-20"}           
+            ]}
+            ]})
+        self.worker.db.schedules.save({"datetime":dPast.isoformat(),
+                                       "dialogue_name": "main",
+                                       "interaction_name": "1",
+                                       "participant_phone": "09"});
         self.worker.db.schedules.save({"datetime":dNow.isoformat(),
                                        "dialogue_name": "main",
-                                       "interaction_name": "int1",
+                                       "interaction_name": "2",
+                                       "participant_phone": "09"});
+        self.worker.db.schedules.save({"datetime":dFuture.isoformat(),
+                                       "dialogue_name": "main",
+                                       "interaction_name": "3",
                                        "participant_phone": "09"});
         yield self.worker.send_scheduled()
+        #first message is the oldest
+        message1 = TransportUserMessage.from_json( self.broker.basic_get('%s.outbound' % self.transport_name)[1].get('content'))
+        self.assertEqual(message1.payload['content'],"Hello")    
+        #second message
+        message2 = TransportUserMessage.from_json( self.broker.basic_get('%s.outbound' % self.transport_name)[1].get('content'))
+        self.assertEqual(message2.payload['content'],"Today will be sunny")   
+        #third message is not send, so still in the schedules table
+        self.assertEquals(self.worker.db.schedules.count(),1)
+        self.assertTrue(self.broker.basic_get('%s.outbound' % self.transport_name))    
+        #only two message should be send
+        self.assertTrue((None,None) == self.broker.basic_get('%s.outbound' % self.transport_name))     
+        

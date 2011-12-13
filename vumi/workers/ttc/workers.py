@@ -77,6 +77,7 @@ class TtcGenericWorker(ApplicationWorker):
     
     @inlineCallbacks
     def startWorker(self):
+	log.msg("One Generic Worker is starting")
         super(TtcGenericWorker, self).startWorker()
         self.control_consumer = yield self.consume(
             '%(transport_name)s.control' % self.config,
@@ -84,11 +85,11 @@ class TtcGenericWorker(ApplicationWorker):
             message_class=Message)
     
         #config
-        self.transport_name = self.config.get('transport_name')
+        self.transport_name = self.config['transport_name']
         self.transport_type = 'sms'
 
         #some basic local recording
-        self.record = []
+	self.record = []
 
         # Try to access database with Ugly model
         #self.setup_db = setup_db(ParticipantModel)
@@ -101,16 +102,16 @@ class TtcGenericWorker(ApplicationWorker):
         # Try to Access Redis
         #self.redis = SessionManager(db=0, prefix="test")
         
-        #self.sender = task.LoopingCall(lambda: self.send_scheduled())
-        #self.sender.start(10.0)
-        
         # Try to Access relational database with twistar
         #Registry.DBPOOL = adbapi.ConnectionPool('psycopg2', "dbname=test host=localhost user=vumi password=vumi")
         #yield Registry.DBPOOL.runQuery("SELECT 1").addCallback(self.databaseAccessSuccess)
     
         # Try to Access Document database with pymongo
         connection = pymongo.Connection("localhost",27017)
-        self.db = connection.test
+        self.db = connection[self.config['database']]
+	log.msg("Connected to dababase %s" % self.config['database'])
+	
+	self.sender = None
     
     def consume_user_message(self, message):
         log.msg("User message: %s" % message['content'])
@@ -121,14 +122,19 @@ class TtcGenericWorker(ApplicationWorker):
         #data = message.payload['data']
         self.record.append(('config',message))
         if (message.get('program')):
-            log.msg("received a program")
-            program = message.get('program')
-            log.msg("Start the program %s" % program.get('name'))
-
+            program = message['program']
+	    program_name = program['name']
+            log.msg("Receive a program with name: %s" % program_name)
             #MongoDB#
-            programs = self.db.programs
-            programs.insert(program)
-            
+	    if (self.db.programs.find_one({"name":program_name})):
+		log.msg("Program already exist in database... updating")
+	    else:
+		self.db.programs.save(program)
+		self.program_name = program_name
+	    
+	    if 'participants' in program:
+		self.schedule_participants_dialogue(program['participants'], self.get_dialogue(program,"main"))
+		
             #Redis#
             #self.redis.create_session("program")
             #self.redis.save_session("program", program)
@@ -152,12 +158,20 @@ class TtcGenericWorker(ApplicationWorker):
                 #yield self.saveParticipantsDB(program.get('participants'))
         
         elif (message.get('participants')):
-            program = self.db.programs.find_one()
-            program['participants'] = message.get('participants')
+            program = self.db.programs.find_one({"name":self.program_name})
+	    if 'participants' in program: 
+		program['participants'] = program['participants'] + message.get('participants')
+	    else:
+		program['participants'] = message.get('participants')
             self.db.programs.save(program)
             #self.record.append(('config',message))
             #yield self.saveParticipantsDB(message.get("participants"))
 
+	#start looping process of the scheduler
+	if (self.sender == None):
+	    self.sender = task.LoopingCall(self.send_scheduled)
+	    self.sender.start(30.0)
+	
     
     def dispatch_event(self, message):
         log.msg("Event message!")
@@ -167,17 +181,43 @@ class TtcGenericWorker(ApplicationWorker):
     @inlineCallbacks
     def send_scheduled(self):
         log.msg('Sending Scheduled message start')
+	if (self.program_name == None):
+	    log.msg("Error scheduling starting but worker is not yet initialized")
+	    return
         toSends = self.db.schedules.find(spec={"datetime":{"$lt":datetime.now().isoformat()}},sort=[("datetime",1)])
         for toSend in toSends:
             self.db.schedules.remove({"_id":toSend.get('_id')})
+            program = self.db.programs.find_one({"name":self.program_name})
+	    interaction = self.get_interaction(program, toSend['dialogue_name'], toSend['interaction_name'])
             yield self.transport_publisher.publish_message(
                 TransportUserMessage(**{'from_addr':'',
                                       'to_addr':toSend.get('participant_phone'),
                                       'transport_name':self.transport_name,
                                       'transport_type':self.transport_type,
-                                      'transport_metadata':''
+                                      'transport_metadata':'',
+	                              'content':interaction['content']
                                     }));
-                        
+    
+    #MongoDB do not support fetching a subpart of an array
+    #may not be necessary in the near future
+    #https://jira.mongodb.org/browse/SERVER-828
+    #https://jira.mongodb.org/browse/SERVER-3089
+    def get_interaction(self, program, dialogue_name, interaction_name):
+        for dialogue in program['dialogues']:
+	    if dialogue["name"]== dialogue_name:
+		for interaction in dialogue["interactions"]:
+		    if interaction["name"]==interaction_name:
+			return interaction
+		    
+    def get_dialogue(self, program, dialogue_name):
+	for dialogue in program['dialogues']:
+	    if dialogue["name"]== dialogue_name:
+		return dialogue
+
+    def schedule_participants_dialogue(self, participants, dialogue):
+	for participant in participants:
+	    self.schedule_participant_dialogue(participant, dialogue)
+		    
     #TODO: manage multiple timezone
     #TODO: manage other schedule type
     #TODO: decide which id should be in an schedule object
@@ -198,6 +238,7 @@ class TtcGenericWorker(ApplicationWorker):
                 schedule["datetime"] = currentDateTime.isoformat()
             schedules.append(schedule)
             previdousDateTime = currentDateTime
+	    self.db.schedules.save(schedule)
         return schedules
             #schedules.save(schedule)
     
