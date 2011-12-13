@@ -103,25 +103,25 @@ class GSMTransport(Transport):
         self.phone = None
 
     @inlineCallbacks
-    def read_until_empty(self, phone, history=[]):
-        # print 'read_until_empty', phone, history
-        if history:
-            last_message = history[-1]
-            list_with_message = yield self.get_next_sms(phone, False,
-                                        last_message['Location'])
-        else:
-            list_with_message = yield self.get_next_sms(phone, True)
+    def read_until_empty(self, phone):
+        history = []
+        while True:
+            if history:
+                last_sms = history[-1]
+                sms = yield self.get_next_sms(phone, False, last_sms['Location'])
+            else:
+                sms = yield self.get_next_sms(phone, True)
 
-        if list_with_message:
-            message = list_with_message[0]
-            handler = self.dispatch_map.get(message['Type'], self.noop)
-            yield handler(message)
-            history.append(message)
-            yield self.read_until_empty(phone, history)
+            if not sms:
+                break
+
+            handler = self.dispatch_map.get(sms['Type'], self.noop)
+            handler(sms)
+            history.append(sms)
         returnValue(history)
 
     @inlineCallbacks
-    def get_next_sms(self, phone, start, location=None):
+    def get_next_sms(self, phone, *args):
         # We use the flattened pseudo folder which means that all contents
         # of all folders are flattened into one 'fake' folder. That also
         # means that the messages we encounter aren't necessarily messages
@@ -129,15 +129,28 @@ class GSMTransport(Transport):
         # with we want to keep in the folder untouched. To do so we need to
         # increment the index we're reading from so as to work with the next
         # message in line.
-        message = yield deferToThread(phone.GetNextSMS, 0, start, location)
-        returnValue(message)
+
+        def handle_empty(failure):
+            failure.trap(gammu.ERR_EMPTY)
+            log.err('No SMS for get_next_sms%s' % repr(args))
+
+        deferred = deferToThread(phone.GetNextSMS, 0, *args)
+        deferred.addErrback(handle_empty)
+        message = yield deferred
+        # GetNextSMS has quirky behaviour where it only returns a single
+        # SMS but returns it in a list, unpack here.
+        if message:
+            [sms] = message
+            returnValue(sms)
+        else:
+            returnValue(None)
 
     @inlineCallbacks
     def receive_message(self, message):
         self.publish_message(
-            to_addr=normalize_msisdn(str(message['Number']),
+            to_addr=normalize_msisdn(self.phone_number,
                         country_code=self.country_code),
-            from_addr=normalize_msisdn(self.phone_number,
+            from_addr=normalize_msisdn(str(message['Number']),
                         country_code=self.country_code),
             content=message['Text'],
             transport_type='sms',

@@ -23,7 +23,10 @@ class FakeGammuPhone(object):
         log.msg('Terminate called')
 
     def GetNextSMS(self, folder, start, location=None):
-        log.msg('GetNextSMS called with %s, %s, %s' % (folder, start, location))
+        if not self.messages:
+            log.msg('Messages buffer is empty, returning empty list')
+            return []
+
         if start:
             return [self.messages[0]]
         else:
