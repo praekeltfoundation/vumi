@@ -217,11 +217,11 @@ class GSMTransport(Transport):
             })
 
     def is_part_of_multipart(self, message):
-        if 'UDH' not in message:
-            return False
-        if 'Type' not in message['UDH']:
-            return False
-        return message['UDH']['Type'] == 'ConcatenatedMessages'
+        udh = message.get('UDH')
+        if udh:
+            message_type = udh.get('Type')
+            if message_type:
+                return message['UDH']['Type'] == 'ConcatenatedMessages'
 
     def store_multipart_part(self, message):
         key = self.r_key(self.redis_inbound_multipart_queue,
