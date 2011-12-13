@@ -7,7 +7,7 @@ from twisted.python import log
 
 class FakeGammuPhone(object):
 
-    def __init__(self, messages):
+    def __init__(self, messages=[]):
         self.messages = messages
         self.outbox = []
 

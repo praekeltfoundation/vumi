@@ -1,5 +1,7 @@
 # -*- test-case-name: vumi.transports.gsm.tests.test_gsm -*-
-from twisted.internet.defer import inlineCallbacks, returnValue
+# -*- coding: utf-8 -*-
+from twisted.internet.defer import (inlineCallbacks, returnValue,
+    DeferredList)
 from twisted.internet.threads import deferToThread
 from twisted.internet.task import LoopingCall
 from twisted.internet import reactor
@@ -40,6 +42,39 @@ class GSMTransport(Transport):
     """
 
     redis_outbound_queue = 'outbound_queue'
+    gsm_03_38_charset = frozenset([
+        '0', '@', 'Δ', 'SP', '0', '¡', 'P', '', 'p',
+        '1', '£', '_', '!', '1', 'A', 'Q', 'a', 'q',
+        '2', '$', 'Φ', '"', '2', 'B', 'R', 'b', 'r',
+        '3', '¥', 'Γ', '#', '3', 'C', 'S', 'c', 's',
+        '4', 'è', 'Λ', '¤', '4', 'D', 'T', 'd', 't',
+        '5', 'é', 'Ω', '%', '5', 'E', 'U', 'e', 'u',
+        '6', 'ù', 'Π', '&', '6', 'F', 'V', 'f', 'v',
+        '7', 'ì', 'Ψ', '\'', '7', 'G', 'W', 'g', 'w',
+        '8', 'ò', 'Σ', '(', '8', 'H', 'X', 'h', 'x',
+        '9', 'Ç', 'Θ', ')', '9', 'I', 'Y', 'i', 'y',
+        'A', 'LF', 'Ξ', '*', ':', 'J', 'Z', 'j', 'z',
+        'B', 'Ø', '<ESC>', '+', ';', 'K', 'Ä', 'k', 'ä',
+        'C', 'ø', 'Æ', ',', '<', 'L', 'Ö', 'l', 'ö',
+        'D', 'CR', 'æ', '-', '=', 'M', 'Ñ', 'm', 'ñ',
+        'E', 'Å', '', '.', '>', 'N', 'Ü', 'n', 'ü',
+        'F', 'å', 'É', '/', '?', 'O', '§', 'o', 'à',
+        ' ', # space
+    ])
+
+    gsm_03_38_doublebyte_charset = frozenset([
+        '€', '[', '\\', ']', '^', '{', '|', '}', '~',
+    ])
+
+    def is_gsm_charset(self, content):
+        return set(content) <= self.gsm_03_38_charset
+
+    def count_chars_needed(self, content):
+        single_bytes = len([c for c in content
+                                if c in self.gsm_03_38_charset])
+        double_bytes = len([c for c in content
+                                if c in self.gsm_03_38_doublebyte_charset])
+        return single_bytes + (2 * double_bytes)
 
     def validate_config(self):
         """
@@ -163,6 +198,29 @@ class GSMTransport(Transport):
             })
         yield self.delete_message(self.phone, message)
 
+    def construct_gammu_messages(self, message):
+        if (self.is_gsm_charset(message['content']) and
+            self.count_chars_needed(message['content']) <= 160):
+            return [self.construct_gammu_sms_message(message)]
+        else:
+            return self.construct_gammu_multipart_messages(message)
+
+    def construct_gammu_multipart_messages(self, message):
+        smsinfo = {
+            'Class': 1,
+            'Unicode': not self.is_gsm_charset(message['content']),
+            'Entries': [{
+                'ID': 'ConcatenatedTextLong',
+                'Buffer': message['content'],
+            }]
+        }
+        return gammu.EncodeSMS(smsinfo)
+
+    def construct_gammu_sms_message(self, message):
+        return {
+            'Text': message['content'],
+        }
+
     @inlineCallbacks
     def send_outbound(self, phone):
         while self.r_server.llen(self.redis_outbound_queue):
@@ -175,19 +233,34 @@ class GSMTransport(Transport):
                     return None
                 return f
 
-            deferred = deferToThread(phone.SendSMS, {
-                'Number': message['to_addr'],
-                'Text': message['content'],
-                'MessageReference': message['message_id'],
-                # Send using the Phone's known SMSC
-                'SMSC': {
-                    'Location': 1
-                },
-                # this will create submit message with request for delivery report
-                'Type': 'Status_Report',
-            })
-            deferred.addErrback(_send_failure)
-            yield deferred
+            # if we are sending multipart messages then we'll
+            # have multiple deferreds for a single SendSMS call.
+            # We're keeping those in a deferred list so as to only
+            # register on failed messages for `n` multipart deferreds
+            deferreds = []
+
+            # if it's a single SMS we get a list with 1 message
+            # if it's multipart we'll get a number of messages
+            # encoded appropriately
+            gammu_messages = self.construct_gammu_messages(message)
+            for gammu_message in gammu_messages:
+                defaults = {
+                    'MessageReference': message['message_id'],
+                    'Number': message['to_addr'],
+                    # Send using the Phone's known SMSC
+                    'SMSC': {
+                        'Location': 1
+                    },
+                    # this will create submit message with request
+                    # for delivery report
+                    'Type': 'Status_Report',
+                }
+                gammu_message.update(defaults)
+                deferreds.append(deferToThread(phone.SendSMS, gammu_message))
+
+            deferred_list = DeferredList(deferreds)
+            deferred_list.addErrback(_send_failure)
+            yield deferred_list
 
     @inlineCallbacks
     def receive_delivery_report(self, delivery_report):
