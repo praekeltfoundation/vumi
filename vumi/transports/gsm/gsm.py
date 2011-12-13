@@ -71,7 +71,7 @@ class GSMTransport(Transport):
     ])
 
     # GSM 03.38 characters that are prefixed with an
-    # <ESC> character and are therefor double byte
+    # <ESC> character and are therefore double byte
     gsm_03_38_doublebyte_charset = frozenset([
         '€', '[', '\\', ']', '^', '{', '|', '}', '~',
     ])
