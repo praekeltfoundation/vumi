@@ -1,9 +1,6 @@
 import gammu
 from vumi.transports.gsm import GSMTransport
 from vumi.tests.utils import FakeRedis
-from twisted.internet.task import LoopingCall
-from twisted.internet.defer import inlineCallbacks, Deferred
-from twisted.internet import reactor
 from twisted.python import log
 
 
@@ -47,10 +44,12 @@ class FakeGammuPhone(object):
         log.msg('Sending SMS %s' % (message,))
         self.outbox.append(message)
 
+
 class FailingFakeGammuPhone(FakeGammuPhone):
 
     def SendSMS(self, message):
         raise gammu.GSMError, 'Fail!'
+
 
 class FakeGSMTransport(GSMTransport):
 

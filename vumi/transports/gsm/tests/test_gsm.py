@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 from twisted.trial.unittest import SkipTest
-from twisted.internet import defer
 from twisted.internet.defer import inlineCallbacks
 from vumi.message import TransportUserMessage
 from vumi.transports.gsm.tests.test_gsm_stubs import (
@@ -8,7 +7,6 @@ from vumi.transports.gsm.tests.test_gsm_stubs import (
 from vumi.transports.tests.test_base import TransportTestCase
 from vumi.transports.failures import FailureMessage
 from datetime import datetime
-from pprint import pprint
 
 
 class GSMTransportTestCase(TransportTestCase):
@@ -61,7 +59,7 @@ class GSMTransportTestCase(TransportTestCase):
             'SMSCDateTime': datetime.now(),
         }])
 
-        messages = yield self.transport.receive_and_send_messages(phone)
+        yield self.transport.receive_and_send_messages(phone)
         self.assertEqual([], self.get_dispatched_failures())
         self.assertEqual([], self.get_dispatched_events())
         [msg] = self.get_dispatched_messages()
@@ -82,7 +80,7 @@ class GSMTransportTestCase(TransportTestCase):
         key = self.transport.r_key(queue_name)
         self.assertEqual(self.transport.r_server.llen(key), 1)
         # trigger manually
-        messages = yield self.transport.receive_and_send_messages(phone)
+        yield self.transport.receive_and_send_messages(phone)
         # all should be happy
         self.assertEqual(self.get_dispatched_failures(), [])
         # the phone's outbox should have the messages
@@ -102,7 +100,7 @@ class GSMTransportTestCase(TransportTestCase):
     def test_sending_multipart_sms(self):
         phone = FakeGammuPhone()
         msg = self.mk_msg()
-        msg['content'] = 'a' * 200 # doesn't fit in a single SMS
+        msg['content'] = 'a' * 200  # doesn't fit in a single SMS
         yield self.dispatch(msg, rkey='%s.outbound' % self.transport_name)
         yield self.transport.receive_and_send_messages(phone)
         self.assertEqual(len(phone.outbox), 2)
@@ -159,13 +157,15 @@ class GSMTransportTestCase(TransportTestCase):
         phone = FailingFakeGammuPhone()
         msg = self.mk_msg()
         yield self.dispatch(msg, rkey='%s.outbound' % self.transport_name)
-        messages = yield self.transport.receive_and_send_messages(phone)
+        yield self.transport.receive_and_send_messages(phone)
         self.assertEqual([], self.get_dispatched_messages())
         self.assertEqual([], self.get_dispatched_events())
         [failure] = self.get_dispatched_failures()
         self.assertEqual(failure['message'], msg)
-        self.assertEqual(failure['message_type'], FailureMessage.MESSAGE_TYPE)
-        self.assertEqual(failure['failure_code'], FailureMessage.FC_UNSPECIFIED)
+        self.assertEqual(failure['message_type'],
+                            FailureMessage.MESSAGE_TYPE)
+        self.assertEqual(failure['failure_code'],
+                            FailureMessage.FC_UNSPECIFIED)
 
     def test_delivery_reports(self):
-        raise SkipTest, 'Delivery reports broken python-gammu 1.30.93'
+        raise SkipTest('Delivery reports broken python-gammu 1.30.93')

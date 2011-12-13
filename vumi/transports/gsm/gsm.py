@@ -4,7 +4,6 @@ from twisted.internet.defer import (inlineCallbacks, returnValue,
     DeferredList)
 from twisted.internet.threads import deferToThread
 from twisted.internet.task import LoopingCall
-from twisted.internet import reactor
 from twisted.python import log
 from vumi.transports.base import Transport
 from vumi.utils import get_deploy_int, normalize_msisdn
@@ -68,7 +67,7 @@ class GSMTransport(Transport):
         'D', 'CR', 'æ', '-', '=', 'M', 'Ñ', 'm', 'ñ',
         'E', 'Å', '', '.', '>', 'N', 'Ü', 'n', 'ü',
         'F', 'å', 'É', '/', '?', 'O', '§', 'o', 'à',
-        ' ', # space
+        ' ',  # space
     ])
 
     # GSM 03.38 characters that are prefixed with an
@@ -157,7 +156,8 @@ class GSMTransport(Transport):
         while True:
             if history:
                 last_sms = history[-1]
-                sms = yield self.get_next_sms(phone, False, last_sms['Location'])
+                sms = yield self.get_next_sms(phone, False,
+                                                last_sms['Location'])
             else:
                 sms = yield self.get_next_sms(phone, True)
 
@@ -205,7 +205,6 @@ class GSMTransport(Transport):
             self.publish_inbound_message(message)
 
         yield self.delete_message(self.phone, message)
-
 
     def publish_inbound_message(self, message):
         self.publish_message(
@@ -324,7 +323,7 @@ class GSMTransport(Transport):
 
     @inlineCallbacks
     def receive_delivery_report(self, delivery_report):
-        raise NotImplemented, 'delivery reports are broken in Gammu'
+        raise NotImplemented('delivery reports are broken in Gammu')
 
     @inlineCallbacks
     def delete_message(self, phone, message):
