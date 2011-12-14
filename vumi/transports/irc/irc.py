@@ -203,3 +203,6 @@ class IrcTransport(Transport):
     def handle_outbound_message(self, msg):
         irc_msg = IrcMessage(msg['to_addr'], msg['content'])
         self.client.factory.something.consume_message(irc_msg)
+
+    # TODO: produce acks
+    # TODO: handle failures
