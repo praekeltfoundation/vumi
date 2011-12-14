@@ -334,7 +334,7 @@ class FakeRedis(object):
 
     # List operations
     def llen(self, key):
-        return len(self._data.setdefault(key, []))
+        return len(self._data.get(key, []))
 
     def lpop(self, key):
         if self.llen(key):
