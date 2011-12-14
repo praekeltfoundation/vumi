@@ -59,6 +59,7 @@ class GSMTransport(Transport):
     # back to them for internal processing?
     delivery_report_expiry = 7 * 24 * 60 * 60 # 7 days
 
+    # NOTE: not sure what to do about the <ESC> character yet.
     # valid characters for the GSM 03.38 charset
     gsm_03_38_singlebyte_charset = frozenset([
         '0', '@', 'Δ', 'SP', '0', '¡', 'P', '', 'p',
@@ -94,7 +95,7 @@ class GSMTransport(Transport):
 
     def count_chars_needed(self, content):
         single_bytes = len([c for c in content
-                                if c in self.gsm_03_38_charset])
+                                if c in self.gsm_03_38_singlebyte_charset])
         double_bytes = len([c for c in content
                                 if c in self.gsm_03_38_doublebyte_charset])
         return single_bytes + (2 * double_bytes)
@@ -169,10 +170,11 @@ class GSMTransport(Transport):
             sent = yield self.send_outbound(self.phone)
             self.store_message_references(sent)
             yield self.disconnect_phone(self.phone)
+            returnValue((received, sent))
         except gammu.ERR_TIMEOUT, e:
             log.err()
-        self.phone = None
-        returnValue((received, sent))
+        finally:
+            self.phone = None
 
     @inlineCallbacks
     def read_until_empty(self, phone):
@@ -240,9 +242,9 @@ class GSMTransport(Transport):
     def is_part_of_multipart(self, message):
         udh = message.get('UDH')
         if udh:
-            message_type = udh.get('Type')
-            if message_type:
-                return message['UDH']['Type'] == 'ConcatenatedMessages'
+            all_parts = udh.get('AllParts')
+            if all_parts:
+                return all_parts > 1
 
     def store_multipart_part(self, message):
         key = self.r_key(self.redis_inbound_multipart_queue,
@@ -269,22 +271,6 @@ class GSMTransport(Transport):
             })
             self.r_server.delete(key)
             return message
-
-    def store_message_references(self, sent_messages):
-        # FIXME: there's got to be a better way to do this, probably some
-        #        Redis pattern I'm not aware of.
-        for vumi_message, gammu_message_dict in sent_messages:
-            for message_reference, gammu_message in gammu_message_dict.items():
-                # used for looking up the message id for a message reference nr
-                ref2id_key = self.dr_rkey('ref2id', message_reference)
-                self.r_server.set(ref2id_key, vumi_message['message_id'])
-                # used for storing the reference numbers & status for a given id
-                id2refs_key = self.dr_rkey('id2refs', vumi_message['message_id'])
-                self.r_server.hset(id2refs_key, message_reference, 'pending')
-
-                # set to auto expire
-                self.r_server.expire(ref2id_key, self.delivery_report_expiry)
-                self.r_server.expire(id2refs_key, self.delivery_report_expiry)
 
     def construct_gammu_messages(self, message):
         if (self.is_gsm_charset(message['content']) and
@@ -348,27 +334,60 @@ class GSMTransport(Transport):
 
         returnValue(sent_messages)
 
-    # @inlineCallbacks
+    def store_message_references(self, sent_messages):
+        # FIXME: there's got to be a better way to do this, probably some
+        #        Redis pattern I'm not aware of.
+        for vumi_message, gammu_message_dict in sent_messages:
+            for message_reference, gammu_message in gammu_message_dict.items():
+                # used for looking up the message id for a message reference nr
+                ref2id_key = self.dr_rkey('ref2id', message_reference)
+                self.r_server.set(ref2id_key, vumi_message['message_id'])
+                # used for storing the reference numbers & status for a given id
+                id2refs_key = self.dr_rkey('id2refs', vumi_message['message_id'])
+                self.r_server.hset(id2refs_key, message_reference, 'pending')
+                # set to auto expire
+                self.r_server.expire(ref2id_key, self.delivery_report_expiry)
+                self.r_server.expire(id2refs_key, self.delivery_report_expiry)
+
     def receive_delivery_report(self, phone, delivery_report):
         log.msg('Received delivery report: %s' % (repr(delivery_report),))
         # what we get from the phone
         message_reference = delivery_report['MessageReference']
+
+        # NOTE:
+        # the GSM spec is either undocumented or vastly well hidden on
+        # the internet. I'm unable to find any other status's for
+        # delivery reports. Making DR report handling very difficult.
+        # Either that or I'm googling for the wrong stuff.
+        status = {
+            'Delivered': 'delivered',
+        }.get(delivery_report['Text'], 'failed')
+
         # what vumi message this is linked to
         message_id_key = self.dr_rkey('ref2id', message_reference)
         message_id = self.r_server.get(message_id_key)
         # update this part we've just received
         parts_key = self.dr_rkey('id2refs', message_id)
-        self.r_server.hset(parts_key, message_reference, delivery_report['Text'].lower())
+        self.r_server.hset(parts_key, message_reference, status)
         # what the total parts for this outbound message are
         parts = self.r_server.hvals(parts_key)
         # if they're all delivered then issue a delivery report
         if set(parts) == set(['delivered']):
             self.publish_delivery_report(message_id, 'delivered')
-            self.delete_message(phone, delivery_report)
-        else:
-            # TODO: what to do if 1 of 3 multipart messages fail?
-            log.msg('Not all ok: %s' % (repr(self.r_server.hgetall(parts_key)),))
+        # pending is someting we set, if there are no entries
+        # with pending we're assuming it's a failure since it
+        # isn't delivered. If it's a temporary update then
+        # at a later point in time we'll get all the 'delivered's
+        # and then issue a correct delivery report.
+        elif 'pending' not in parts:
+            self.publish_delivery_report(message_id, status)
+        self.delete_message(phone, delivery_report)
 
+    def mark_message_for_delivery_report_gc(self, message):
+        message_id = message['message_id']
+        parts_key = self.dr_rkey('id2refs', message_id)
+        parts = self.r_server.hvals(parts_key)
+        bucket = datetime.now()
 
     @inlineCallbacks
     def delete_message(self, phone, message):

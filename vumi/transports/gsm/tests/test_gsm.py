@@ -38,6 +38,7 @@ class GSMTransportTestCase(TransportTestCase):
 
     def tearDown(self):
         self.transport.r_server.teardown()
+        super(GSMTransportTestCase, self).tearDown()
 
     def mk_msg(self, **kwargs):
         defaults = {
