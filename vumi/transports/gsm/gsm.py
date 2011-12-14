@@ -50,6 +50,15 @@ class GSMTransport(Transport):
     # parts of multipart messages are they are arriving
     redis_inbound_multipart_queue = 'multipart_queue'
 
+    # the key we're using to link MessageReferences
+    # to Vumi message_id's for delivery reports
+    redis_delivery_report_map = 'delivery_reports'
+
+    # how long do we want to keep track of delivery
+    # report message ids so we can accurately link
+    # back to them for internal processing?
+    delivery_report_expiry = 7 * 24 * 60 * 60 # 7 days
+
     # valid characters for the GSM 03.38 charset
     gsm_03_38_singlebyte_charset = frozenset([
         '0', '@', 'Δ', 'SP', '0', '¡', 'P', '', 'p',
@@ -121,6 +130,12 @@ class GSMTransport(Transport):
     def r_key(self, *key):
         return ':'.join([self.r_prefix] + map(str, key))
 
+    def dr_rkey(self, *args):
+        """
+        Redis key for delivery reports
+        """
+        return self.r_key(self.redis_delivery_report_map, *map(str, args))
+
     def start_polling(self):
         phone = gammu.StateMachine()
         self.poller = LoopingCall(self.receive_and_send_messages, phone)
@@ -148,11 +163,16 @@ class GSMTransport(Transport):
     @inlineCallbacks
     def receive_and_send_messages(self, phone):
         log.msg('Receiving and sending messages')
-        self.phone = yield self.connect_phone(phone)
-        yield self.read_until_empty(self.phone)
-        yield self.send_outbound(self.phone)
-        yield self.disconnect_phone(self.phone)
+        try:
+            self.phone = yield self.connect_phone(phone)
+            received = yield self.read_until_empty(self.phone)
+            sent = yield self.send_outbound(self.phone)
+            self.store_message_references(sent)
+            yield self.disconnect_phone(self.phone)
+        except gammu.ERR_TIMEOUT, e:
+            log.err()
         self.phone = None
+        returnValue((received, sent))
 
     @inlineCallbacks
     def read_until_empty(self, phone):
@@ -169,7 +189,7 @@ class GSMTransport(Transport):
                 break
 
             handler = self.dispatch_map.get(sms['Type'], self.noop)
-            yield handler(sms)
+            yield handler(phone, sms)
             history.append(sms)
         returnValue(history)
 
@@ -190,7 +210,7 @@ class GSMTransport(Transport):
             log.err('No remaining SMS messages')
 
     @inlineCallbacks
-    def receive_message(self, message):
+    def receive_message(self, phone, message):
         if self.is_part_of_multipart(message):
             self.store_multipart_part(message)
             reassembled_message = self.reassemble_multipart(message)
@@ -199,7 +219,7 @@ class GSMTransport(Transport):
         else:
             self.publish_inbound_message(message)
 
-        yield self.delete_message(self.phone, message)
+        yield self.delete_message(phone, message)
 
     def publish_inbound_message(self, message):
         self.publish_message(
@@ -250,6 +270,22 @@ class GSMTransport(Transport):
             self.r_server.delete(key)
             return message
 
+    def store_message_references(self, sent_messages):
+        # FIXME: there's got to be a better way to do this, probably some
+        #        Redis pattern I'm not aware of.
+        for vumi_message, gammu_message_dict in sent_messages:
+            for message_reference, gammu_message in gammu_message_dict.items():
+                # used for looking up the message id for a message reference nr
+                ref2id_key = self.dr_rkey('ref2id', message_reference)
+                self.r_server.set(ref2id_key, vumi_message['message_id'])
+                # used for storing the reference numbers & status for a given id
+                id2refs_key = self.dr_rkey('id2refs', vumi_message['message_id'])
+                self.r_server.hset(id2refs_key, message_reference, 'pending')
+
+                # set to auto expire
+                self.r_server.expire(ref2id_key, self.delivery_report_expiry)
+                self.r_server.expire(id2refs_key, self.delivery_report_expiry)
+
     def construct_gammu_messages(self, message):
         if (self.is_gsm_charset(message['content']) and
             self.count_chars_needed(message['content']) <= 160):
@@ -275,19 +311,19 @@ class GSMTransport(Transport):
 
     @inlineCallbacks
     def send_outbound(self, phone):
-        key = self.r_key(self.redis_outbound_queue)
-        while self.r_server.llen(key):
-            json_data = self.r_server.lpop(key)
+        queue_key = self.r_key(self.redis_outbound_queue)
+        sent_messages = []
+        while self.r_server.llen(queue_key):
+            json_data = self.r_server.lpop(queue_key)
             message = TransportUserMessage.from_json(json_data)
             log.msg('Sending SMS to %s' % (message['to_addr'],))
 
-            # if it's multipart we'll get a number of messages
-            # encoded appropriately
-            gammu_messages = self.construct_gammu_messages(message)
+            # keep track of which Gammu messages were sent out for
+            # what Vumi message
+            gammu_messages = {}
             try:
-                for gammu_message in gammu_messages:
+                for gammu_message in self.construct_gammu_messages(message):
                     overrides = {
-                        'MessageReference': message['message_id'],
                         'Number': message['to_addr'],
                         # Send using the Phone's known SMSC
                         'SMSC': {
@@ -298,15 +334,41 @@ class GSMTransport(Transport):
                         'Type': 'Status_Report',
                     }
                     gammu_message.update(overrides)
-                    yield deferToThread(phone.SendSMS, gammu_message)
+
+                    # keep the message reference for delivery reports
+                    send_sms_response = yield deferToThread(phone.SendSMS, gammu_message)
+                    gammu_messages[send_sms_response] = gammu_message
+
+                # collect for audit trail
+                sent_messages.append((message, gammu_messages))
             except gammu.GSMError, e:
                 failure = Failure(e)
                 self.send_failure(message, failure.value,
                     failure.getTraceback())
 
-    @inlineCallbacks
-    def receive_delivery_report(self, delivery_report):
-        raise NotImplemented('delivery reports are broken in Gammu')
+        returnValue(sent_messages)
+
+    # @inlineCallbacks
+    def receive_delivery_report(self, phone, delivery_report):
+        log.msg('Received delivery report: %s' % (repr(delivery_report),))
+        # what we get from the phone
+        message_reference = delivery_report['MessageReference']
+        # what vumi message this is linked to
+        message_id_key = self.dr_rkey('ref2id', message_reference)
+        message_id = self.r_server.get(message_id_key)
+        # update this part we've just received
+        parts_key = self.dr_rkey('id2refs', message_id)
+        self.r_server.hset(parts_key, message_reference, delivery_report['Text'].lower())
+        # what the total parts for this outbound message are
+        parts = self.r_server.hvals(parts_key)
+        # if they're all delivered then issue a delivery report
+        if set(parts) == set(['delivered']):
+            self.publish_delivery_report(message_id, 'delivered')
+            self.delete_message(phone, delivery_report)
+        else:
+            # TODO: what to do if 1 of 3 multipart messages fail?
+            log.msg('Not all ok: %s' % (repr(self.r_server.hgetall(parts_key)),))
+
 
     @inlineCallbacks
     def delete_message(self, phone, message):

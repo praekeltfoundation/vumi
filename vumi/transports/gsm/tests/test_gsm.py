@@ -36,6 +36,9 @@ class GSMTransportTestCase(TransportTestCase):
             }
         })
 
+    def tearDown(self):
+        self.transport.r_server.teardown()
+
     def mk_msg(self, **kwargs):
         defaults = {
             'to_addr': '27761234567',
@@ -86,7 +89,6 @@ class GSMTransportTestCase(TransportTestCase):
         # the phone's outbox should have the messages
         self.assertEqual(phone.outbox, [{
             'Type': 'Status_Report',
-            'MessageReference': msg['message_id'],
             'SMSC': {
                 'Location': 1,
             },
@@ -167,5 +169,42 @@ class GSMTransportTestCase(TransportTestCase):
         self.assertEqual(failure['failure_code'],
                             FailureMessage.FC_UNSPECIFIED)
 
+    @inlineCallbacks
     def test_delivery_reports(self):
-        raise SkipTest('Delivery reports broken python-gammu 1.30.93')
+        # fake an outbound delivery first
+        phone = FakeGammuPhone()
+        msg = self.mk_msg()
+        yield self.dispatch(msg, rkey='%s.outbound' % self.transport_name)
+        # have the phone handle it
+        received, sent = yield self.transport.receive_and_send_messages(phone)
+        # test correct behaviour
+        self.assertEqual([], received)
+        # expand the sent messages, should be a vumi message and a dict of
+        # MessageReference -> GammuMessage mappings
+        [(vumi_msg, gammu_messages)] = sent
+        self.assertEqual(vumi_msg, msg)
+        self.assertEqual(gammu_messages.keys(), [1]) # reference number given by modem
+        self.assertEqual(gammu_messages[1]['Text'], msg['content'])
+
+        # Now fake the delivery report for the given reference number
+        phone = FakeGammuPhone([{
+            'SMSCDateTime': datetime.now(),
+            'Class': 0,
+            'Text': u'Delivered',
+            'Number': u'+27764493806',
+            'DateTime': datetime.now(),
+            'MessageReference': 1,
+            'Length': 9,
+            'Location': 0,
+            'Type': 'Status_Report',
+        }])
+
+        # received & sent
+        [delivery_report], [] = yield self.transport.receive_and_send_messages(phone)
+        self.assertEqual(delivery_report['Text'], 'Delivered')
+        self.assertEqual(delivery_report['MessageReference'], 1)
+
+        [delivery_report] = self.get_dispatched_events()
+        self.assertEqual(delivery_report['delivery_status'], 'delivered')
+        self.assertEqual(delivery_report['user_message_id'], msg['message_id'])
+

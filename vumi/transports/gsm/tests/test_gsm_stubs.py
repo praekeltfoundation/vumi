@@ -43,6 +43,7 @@ class FakeGammuPhone(object):
     def SendSMS(self, message):
         log.msg('Sending SMS %s' % (message,))
         self.outbox.append(message)
+        return len(self.outbox)
 
 
 class FailingFakeGammuPhone(FakeGammuPhone):

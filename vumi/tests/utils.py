@@ -286,6 +286,9 @@ class FakeRedis(object):
     def hlen(self, key):
         return len(self._data.get(key, {}))
 
+    def hvals(self, key):
+        return self._data.get(key, {}).values()
+
     # Set operations
 
     def sadd(self, key, value):
