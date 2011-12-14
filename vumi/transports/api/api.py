@@ -25,6 +25,7 @@ class HttpApiTransport(HttpRpcTransport):
         True if a reply message is expected
     allowed_fields : list (default DEFAULT_ALLOWED_FIELDS class attribute)
         The list of fields a request is allowed to contain
+        DEFAULT_ALLOWED_FIELDS = [content, to_addr, from_addr]
     field_defaults : dict (default {})
         Default values for fields not sent by the client
 
