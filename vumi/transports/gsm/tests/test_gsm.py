@@ -184,7 +184,8 @@ class GSMTransportTestCase(TransportTestCase):
         # MessageReference -> GammuMessage mappings
         [(vumi_msg, gammu_messages)] = sent
         self.assertEqual(vumi_msg, msg)
-        self.assertEqual(gammu_messages.keys(), [1]) # reference number given by modem
+        # reference number given by modem
+        self.assertEqual(gammu_messages.keys(), [1])
         self.assertEqual(gammu_messages[1]['Text'], msg['content'])
 
         # Now fake the delivery report for the given reference number
@@ -201,7 +202,8 @@ class GSMTransportTestCase(TransportTestCase):
         }])
 
         # received & sent
-        [delivery_report], [] = yield self.transport.receive_and_send_messages(phone)
+        results = yield self.transport.receive_and_send_messages(phone)
+        [delivery_report], [] = results
         self.assertEqual(delivery_report['Text'], 'Delivered')
         self.assertEqual(delivery_report['MessageReference'], 1)
 
@@ -211,7 +213,8 @@ class GSMTransportTestCase(TransportTestCase):
 
     # @inlineCallbacks
     def test_delivery_reports_fail(self):
-        raise SkipTest('Not implemented yet as I don\'t know what Gammu failed messages are returned as')
+        raise SkipTest('Not implemented yet as I don\'t know what Gammu '
+                            'failed messages are returned as')
 
     @inlineCallbacks
     def test_multipart_delivery_reports_success(self):
@@ -230,7 +233,7 @@ class GSMTransportTestCase(TransportTestCase):
         self.assertEqual(vumi_msg, msg)
         # reference numbers given by modem, 200 chars should be split over
         # two SMSs
-        self.assertEqual(gammu_messages.keys(), [1,2])
+        self.assertEqual(gammu_messages.keys(), [1, 2])
 
         # Now fake the delivery report for the given reference numbers
         phone = FakeGammuPhone([{
@@ -254,7 +257,8 @@ class GSMTransportTestCase(TransportTestCase):
             'Location': 1,
             'Type': 'Status_Report',
         }])
-        gammu_reports, _ = yield self.transport.receive_and_send_messages(phone)
+        results = yield self.transport.receive_and_send_messages(phone)
+        gammu_reports, _ = results
         [gd_report1, gd_report2] = gammu_reports
         [delivery_report] = self.get_dispatched_events()
         self.assertEqual(delivery_report['delivery_status'], 'delivered')
@@ -262,4 +266,5 @@ class GSMTransportTestCase(TransportTestCase):
 
     # @inlineCallbacks
     def test_multipart_delivery_reports_fail(self):
-        raise SkipTest('Not implemented yet as I don\'t know what Gammu failed messages are returned as')
+        raise SkipTest('Not implemented yet as I don\'t know what '
+                        'Gammu failed messages are returned as')

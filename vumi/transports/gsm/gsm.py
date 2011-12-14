@@ -1,7 +1,6 @@
 # -*- test-case-name: vumi.transports.gsm.tests.test_gsm -*-
 # -*- coding: utf-8 -*-
-from twisted.internet.defer import (inlineCallbacks, returnValue,
-    DeferredList)
+from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet.threads import deferToThread
 from twisted.internet.task import LoopingCall
 from twisted.python import log
@@ -57,7 +56,7 @@ class GSMTransport(Transport):
     # how long do we want to keep track of delivery
     # report message ids so we can accurately link
     # back to them for internal processing?
-    delivery_report_expiry = 7 * 24 * 60 * 60 # 7 days
+    delivery_report_expiry = 7 * 24 * 60 * 60  # 7 days
 
     # NOTE: not sure what to do about the <ESC> character yet.
     # valid characters for the GSM 03.38 charset
@@ -171,7 +170,7 @@ class GSMTransport(Transport):
             self.store_message_references(sent)
             yield self.disconnect_phone(self.phone)
             returnValue((received, sent))
-        except gammu.ERR_TIMEOUT, e:
+        except gammu.ERR_TIMEOUT:
             log.err()
         finally:
             self.phone = None
@@ -322,7 +321,8 @@ class GSMTransport(Transport):
                     gammu_message.update(overrides)
 
                     # keep the message reference for delivery reports
-                    send_sms_response = yield deferToThread(phone.SendSMS, gammu_message)
+                    send_sms_response = yield deferToThread(phone.SendSMS,
+                                                            gammu_message)
                     gammu_messages[send_sms_response] = gammu_message
 
                 # collect for audit trail
@@ -342,8 +342,9 @@ class GSMTransport(Transport):
                 # used for looking up the message id for a message reference nr
                 ref2id_key = self.dr_rkey('ref2id', message_reference)
                 self.r_server.set(ref2id_key, vumi_message['message_id'])
-                # used for storing the reference numbers & status for a given id
-                id2refs_key = self.dr_rkey('id2refs', vumi_message['message_id'])
+                # used for storing the reference numbers & status for an id
+                id2refs_key = self.dr_rkey('id2refs',
+                                            vumi_message['message_id'])
                 self.r_server.hset(id2refs_key, message_reference, 'pending')
                 # set to auto expire
                 self.r_server.expire(ref2id_key, self.delivery_report_expiry)
@@ -382,12 +383,6 @@ class GSMTransport(Transport):
         elif 'pending' not in parts:
             self.publish_delivery_report(message_id, status)
         self.delete_message(phone, delivery_report)
-
-    def mark_message_for_delivery_report_gc(self, message):
-        message_id = message['message_id']
-        parts_key = self.dr_rkey('id2refs', message_id)
-        parts = self.r_server.hvals(parts_key)
-        bucket = datetime.now()
 
     @inlineCallbacks
     def delete_message(self, phone, message):
