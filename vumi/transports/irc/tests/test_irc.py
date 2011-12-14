@@ -153,6 +153,8 @@ class TestIrcTransport(TransportTestCase):
             'irc_channel': '#zoo',
             })
 
+    @inlineCallbacks
     def test_handle_outbound_message(self):
-        # TODO: write test
-        pass
+        msg = self.mkmsg_out()
+        yield self.dispatch(msg)
+        # TODO: test message went somewhere
