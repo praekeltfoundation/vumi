@@ -1,5 +1,5 @@
 # -*- test-case-name: vumi.transports.api.tests.test_oldapi -*-
-import uuid
+
 import json
 import re
 
@@ -39,7 +39,7 @@ class OldSimpleHttpTransport(HttpRpcTransport):
         from_msisdn = request.args.get('from_msisdn', [None])[0]
         return_list = []
         for to_msisdn in to_msisdns:
-            message_id = uuid.uuid4().get_hex()
+            message_id = self.generate_message_id()
             content = message
             to_addr = to_msisdn
             from_addr = from_msisdn
@@ -90,7 +90,7 @@ class OldTemplateHttpTransport(OldSimpleHttpTransport):
                                                    len(to_msisdns))
         return_list = []
         for i, to_msisdn in enumerate(to_msisdns):
-            message_id = uuid.uuid4().get_hex()
+            message_id = self.generate_message_id()
             message = content = template % template_args[i]
             to_addr = to_msisdn
             from_addr = from_msisdn

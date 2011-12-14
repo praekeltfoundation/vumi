@@ -1,6 +1,5 @@
 # -*- test-case-name: vumi.transports.httprpc.tests.test_httprpc -*-
 
-import uuid
 import json
 
 from twisted.internet.defer import inlineCallbacks
@@ -8,6 +7,7 @@ from twisted.python import log
 from twisted.web import http
 from twisted.web.resource import Resource
 from twisted.web.server import NOT_DONE_YET
+
 from vumi.transports.base import Transport
 
 
@@ -33,9 +33,9 @@ class HttpRpcResource(Resource):
     def render_(self, request, http_action=None):
         log.msg("HttpRpcResource HTTP Action: %s" % (request,))
         request.setHeader("content-type", "text/plain")
-        uu = uuid.uuid4().get_hex()
-        self.transport.requests[uu] = request
-        self.transport.handle_raw_inbound_message(uu, request)
+        msgid = Transport.generate_message_id()
+        self.transport.requests[msgid] = request
+        self.transport.handle_raw_inbound_message(msgid, request)
         return NOT_DONE_YET
 
     def render_PUT(self, request):
@@ -112,5 +112,5 @@ class HttpRpcTransport(Transport):
             del self.requests[msgid]
             response_id = "%s:%s:%s" % (request.client.host,
                                         request.client.port,
-                                        uuid.uuid4().get_hex())
+                                        Transport.generate_message_id())
             return response_id
