@@ -47,16 +47,16 @@ class IrcMessage(object):
         return maybe_nickname.lower() == nickname.lower()
 
 
-class VumiBotClient(irc.IRCClient):
+class VumiBotProtocol(irc.IRCClient):
     """An IRC bot that bridges IRC to Vumi."""
 
-    def __init__(self, nickname, channels, transport):
+    def __init__(self, nickname, channels, irc_transport):
         self.nickname = nickname
         self.channels = channels
-        self.transport = transport
+        self.irc_transport = irc_transport
 
     def publish_message(self, irc_msg):
-        self.transport.handle_inbound_irc_message(irc_msg)
+        self.irc_transport.handle_inbound_irc_message(irc_msg)
 
     def consume_message(self, irc_msg):
         self.msg(irc_msg.recipient.encode('utf8'),
@@ -120,7 +120,7 @@ class VumiBotFactory(protocol.ReconnectingClientFactory):
     """
 
     # the class of the protocol to build when new connection is made
-    protocol = VumiBotClient
+    protocol = VumiBotProtocol
 
     def __init__(self, nickname, channels, transport):
         self.nickname = nickname
