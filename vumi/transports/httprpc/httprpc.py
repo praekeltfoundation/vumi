@@ -58,6 +58,17 @@ class HttpRpcTransport(Transport):
     of this transport of a given name.
     """
 
+    def get_transport_url(self, suffix=''):
+        """
+        Get the URL for the HTTP resource. Requires the worker to be started.
+
+        This is mostly useful in tests, and probably shouldn't be used
+        in non-test code, because the API might live behind a load
+        balancer or proxy.
+        """
+        addr = self.web_resource.getHost()
+        return "http://%s:%s/%s" % (addr.host, addr.port, suffix.lstrip('/'))
+
     @inlineCallbacks
     def setup_transport(self):
         self.requests = {}

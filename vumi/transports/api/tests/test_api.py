@@ -37,8 +37,7 @@ class TestHttpApiTransport(TransportTestCase):
         self.config.update(config_override)
 
         self.transport = yield self.get_transport(self.config)
-        addr = self.transport.web_resource.getHost()
-        self.transport_url = "http://%s:%s/" % (addr.host, addr.port)
+        self.transport_url = self.transport.get_transport_url()
 
     def mkurl(self, content, from_addr=123, to_addr=555, **kw):
         params = {

@@ -28,8 +28,7 @@ class TestInfobipUssdTransport(TestCase):
         self.worker = get_stubbed_worker(InfobipTransport, config)
         self.broker = self.worker._amqp_client.broker
         yield self.worker.startWorker()
-        addr = self.worker.web_resource.getHost()
-        self.worker_url = "http://%s:%s/" % (addr.host, addr.port)
+        self.worker_url = self.worker.get_transport_url()
         self.worker.r_server = FakeRedis()
 
     @inlineCallbacks
