@@ -19,15 +19,21 @@ class IrcMessage(object):
     :type content: str
     :param content:
         Contents of message.
+    :type nickname: str
+    :param nickname:
+        Nickname used by the client that received the message.
+        Optional.
     :type action: bool
     :param action:
         Whether the message is an action.
     """
 
-    def __init__(self, sender, recipient, content, action=False):
+    def __init__(self, sender, recipient, content, nickname=None,
+                 action=False):
         self.sender = sender
         self.recipient = recipient
         self.content = content
+        self.nickname = nickname
         self.action = action
 
     def __eq__(self, other):
@@ -93,12 +99,13 @@ class VumiBotProtocol(irc.IRCClient):
 
     def privmsg(self, sender, recipient, message):
         """This will get called when the bot receives a message."""
-        irc_msg = IrcMessage(sender, recipient, message)
+        irc_msg = IrcMessage(sender, recipient, message, self.nickname)
         self.publish_message(irc_msg)
 
     def action(self, sender, recipient, message):
         """This will get called when the bot sees someone do an action."""
-        irc_msg = IrcMessage(sender, recipient, message, action=True)
+        irc_msg = IrcMessage(sender, recipient, message, self.nickname,
+                             action=True)
         self.publish_message(irc_msg)
 
     # irc callbacks
@@ -129,15 +136,15 @@ class VumiBotFactory(protocol.ReconnectingClientFactory):
     # the class of the protocol to build when new connection is made
     protocol = VumiBotProtocol
 
-    def __init__(self, nickname, channels, transport):
+    def __init__(self, nickname, channels, irc_transport):
         self.nickname = nickname
         self.channels = channels
-        self.transport = transport
+        self.irc_transport = irc_transport
 
     def buildProtocol(self, addr):
         self.resetDelay()
         return self.protocol(self.nickname, self.channels,
-                             self.transport)
+                             self.irc_transport)
 
 
 class IrcTransport(Transport):
@@ -186,7 +193,7 @@ class IrcTransport(Transport):
             'transport_name': self.transport_name,
             'transport_type': self.config.get('transport_type', 'irc'),
             'transport_metadata': {
-                'transport_nickname': self.client.something.nickname,
+                'transport_nickname': irc_msg.nickname,
                 'irc_server': "%s:%s" % (self.network, self.port),
                 'irc_channel': irc_msg.channel(),
                 },
@@ -195,4 +202,4 @@ class IrcTransport(Transport):
 
     def handle_outbound_message(self, msg):
         irc_msg = IrcMessage(msg['to_addr'], msg['content'])
-        self.client.something.consume_message(irc_msg)
+        self.client.factory.something.consume_message(irc_msg)

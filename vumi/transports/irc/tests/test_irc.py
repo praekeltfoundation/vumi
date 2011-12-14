@@ -9,6 +9,7 @@ from twisted.internet.protocol import FileWrapper
 from vumi.tests.utils import get_stubbed_worker, LogCatcher
 from vumi.transports.irc.irc import IrcMessage, VumiBotProtocol
 from vumi.transports.irc import IrcTransport
+from vumi.transports.tests.test_base import TransportTestCase
 
 
 class TestIrcMessage(unittest.TestCase):
@@ -117,23 +118,41 @@ class TestVumiBotProtocol(unittest.TestCase):
         self.assertEqual(new_nick, collided_nick + '^')
 
 
-class TestIrcTransport(unittest.TestCase):
+class TestIrcTransport(TransportTestCase):
+
+    timeout = 5
+
+    transport_name = 'test_irc_transport'
+    transport_class = IrcTransport
+    nick = 'vumibottest'
 
     @inlineCallbacks
     def setUp(self):
-        config = {
-            'transport_name': 'test_irc',
+        super(TestIrcTransport, self).setUp()
+        self.config = {
+            'transport_name': self.transport_name,
             'network': '127.0.0.1',
+            'port': 0,
             'channels': [],
-            'nickname': 'vumibottext',
+            'nickname': self.nick,
             }
-        self.worker = get_stubbed_worker(IrcTransport, config)
-        self.broker = self.worker._amqp_client.broker
-        yield self.worker.startWorker()
+        self.transport = yield self.get_transport(self.config, start=True)
 
-    @inlineCallbacks
-    def tearDown(self):
-        yield self.worker.stopWorker()
+    def test_handle_inbound_irc_message(self):
+        sender, recipient, text = "user!host", "#zoo", "Hello gooites"
+        irc_msg = IrcMessage(sender, recipient, text, self.nick)
+        self.transport.handle_inbound_irc_message(irc_msg)
+        [msg] = self.get_dispatched_messages()
+        self.assertEqual(msg['transport_name'], self.transport_name)
+        self.assertEqual(msg['to_addr'], recipient)
+        self.assertEqual(msg['from_addr'], sender)
+        self.assertEqual(msg['content'], text)
+        self.assertEqual(msg['transport_metadata'], {
+            'transport_nickname': self.nick,
+            'irc_server': '127.0.0.1:0',
+            'irc_channel': '#zoo',
+            })
 
-    def test_stub(self):
+    def test_handle_outbound_message(self):
+        # TODO: write test
         pass
