@@ -208,3 +208,49 @@ class GSMTransportTestCase(TransportTestCase):
         self.assertEqual(delivery_report['delivery_status'], 'delivered')
         self.assertEqual(delivery_report['user_message_id'], msg['message_id'])
 
+    @inlineCallbacks
+    def test_multipart_delivery_reports(self):
+        # fake an outbound multipart delivery first
+        phone = FakeGammuPhone()
+        msg = self.mk_msg()
+        msg['content'] = 'a' * 200
+        yield self.dispatch(msg, rkey='%s.outbound' % self.transport_name)
+        # have the phone handle it
+        received, sent = yield self.transport.receive_and_send_messages(phone)
+        # test correct behaviour
+        self.assertEqual([], received)
+        # expand the sent messages, should be a vumi message and a dict of
+        # MessageReference -> GammuMessage mappings
+        [(vumi_msg, gammu_messages)] = sent
+        self.assertEqual(vumi_msg, msg)
+        # reference numbers given by modem, 200 chars should be split over
+        # two SMSs
+        self.assertEqual(gammu_messages.keys(), [1,2])
+
+        # Now fake the delivery report for the given reference number
+        phone = FakeGammuPhone([{
+            'SMSCDateTime': datetime.now(),
+            'Class': 0,
+            'Text': u'Delivered',
+            'Number': u'+27764493806',
+            'DateTime': datetime.now(),
+            'MessageReference': 1,
+            'Length': 9,
+            'Location': 0,
+            'Type': 'Status_Report',
+        }, {
+            'SMSCDateTime': datetime.now(),
+            'Class': 0,
+            'Text': u'Delivered',
+            'Number': u'+27764493806',
+            'DateTime': datetime.now(),
+            'MessageReference': 2,
+            'Length': 9,
+            'Location': 1,
+            'Type': 'Status_Report',
+        }])
+        gammu_reports, _ = yield self.transport.receive_and_send_messages(phone)
+        [gd_report1, gd_report2] = gammu_reports
+        [delivery_report] = self.get_dispatched_events()
+        self.assertEqual(delivery_report['delivery_status'], 'delivered')
+        self.assertEqual(delivery_report['user_message_id'], msg['message_id'])
