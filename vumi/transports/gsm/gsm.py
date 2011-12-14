@@ -172,6 +172,8 @@ class GSMTransport(Transport):
             returnValue((received, sent))
         except gammu.ERR_TIMEOUT:
             log.err()
+        except gammu.ERR_DEVICEOPENERROR:
+            log.err()
         finally:
             self.phone = None
 
