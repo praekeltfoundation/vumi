@@ -49,8 +49,10 @@ class TestTtcGenericWorker(TestCase):
     @inlineCallbacks
     def setUp(self):
         self.transport_name = 'test'
+        self.control_name = 'mycontrol'
         self.config = {'transport_name': self.transport_name,
-                       'database': 'test'}
+                       'database': 'test',
+                       'control_name':'mycontrol'}
         self.worker = get_stubbed_worker(TtcGenericWorker,
                                          config=self.config)        
         self.broker = self.worker._amqp_client.broker
@@ -70,14 +72,19 @@ class TestTtcGenericWorker(TestCase):
     @inlineCallbacks
     def tearDown(self):
         self.db.programs.drop()
-        self.db.schedules.drop()
+        if (self.worker.program_name):
+            self.worker.collection_schedules.drop()
+            self.worker.collection_logs.drop()
         if (self.worker.sender != None):
             yield self.worker.sender.stop()
         yield self.worker.stopWorker()
     
     @inlineCallbacks
     def send(self, msg, routing_suffix ='control'):
-        routing_key = "%s.%s" % (self.transport_name, routing_suffix)
+        if (routing_suffix=='control'):
+            routing_key = "%s.%s" % (self.control_name, routing_suffix)
+        else:
+            routing_key = "%s.%s" % (self.transport_name, routing_suffix)
         self.broker.publish_message('vumi', routing_key, msg)
         yield self.broker.kick_delivery()
  
@@ -98,7 +105,7 @@ class TestTtcGenericWorker(TestCase):
             #('config', Message.from_json('{"program":{"name":"M4H"}}'))
             #('config', Message.from_json('{"program":{"name":"M4H","dialogues":{"name":"main"}}}'))
             #('config', Message.from_json('{"program":{"name":"M4H","dialogues":[{"name":"main","type":"sequential","interactions":[{"type":"announcement","content":"Hello","date":"today","time":"now"}]}]}}'))
-            ('config', Message.from_json("""{"program":{"name":"M5H","participants":[{"phone":"06"}],
+            ('config', Message.from_json("""{"program":{"name":"M5H", "shortcode":"8282","participants":[{"phone":"06"}],
             "dialogues":
             [{"name":"main","type":"sequential","interactions":[
             {"type":"announcement","name":"1","content":"Hello","schedule_type":"immediately"},
@@ -109,12 +116,12 @@ class TestTtcGenericWorker(TestCase):
         for name, event in events:
             yield self.send(event,'control')
         self.assertEqual(self.programs.count(), 1)
-        self.assertEqual(self.worker.db.schedules.count(),2)
+        self.assertEqual(self.worker.collection_logs.count(),2)
         
     @inlineCallbacks
     def test_consume_control_participant(self):
         events = [
-            ('1', Message.from_json("""{"program":{"name":"M4H","dialogues":
+            ('1', Message.from_json("""{"program":{"name":"M4H","shortcode":"8282","dialogues":
             [{"name":"main","type":"sequential","interactions":[
             {"type":"announcement","name":"1","content":"Hello","schedule_type":"immediately"},
             {"type":"announcement","name":"2","content":"How are you","schedule_type":"wait(00:20)"}
@@ -134,18 +141,19 @@ class TestTtcGenericWorker(TestCase):
     
     
     def test_schedule_participant_dialogue(self):
-        dialogue = {"name":"main","type":"sequential","interactions":[
+        program = {"name":"M5H", "participants":[{"phone":"09984", "name":"olivier"}],"dialogues" : [{"name":"main","type":"sequential","interactions":[
             {"type":"announcement","name":"i1","content":"Hello","schedule_type":"immediately"},
             {"type":"announcement","name":"i2","content":"How are you","schedule_type":"wait"}
-            ]}
-        participant = {"phone":"09984", "name":"olivier"}
+            ]}]}
+
+        self.worker.init_program(program)
         
-        schedules = self.worker.schedule_participant_dialogue(participant, dialogue)
+        schedules = self.worker.schedule_participant_dialogue(program['participants'][0], program['dialogues'][0])
         #assert time calculation
         self.assertEqual(len(schedules), 2)
         self.assertTrue(datetime.strptime(schedules[0].get("datetime"),"%Y-%m-%dT%H:%M:%S.%f") - datetime.now() < timedelta(seconds=1))
-        self.assertTrue(datetime.strptime(schedules[1].get("datetime"),"%Y-%m-%dT%H:%M:%S.%f") - datetime.now() < timedelta(minutes=10))
-        self.assertTrue(datetime.strptime(schedules[1].get("datetime"),"%Y-%m-%dT%H:%M:%S.%f") - datetime.now() > timedelta(minutes=9))
+        self.assertTrue(datetime.strptime(schedules[1].get("datetime"),"%Y-%m-%dT%H:%M:%S.%f") - datetime.now() < timedelta(minutes=2))
+        self.assertTrue(datetime.strptime(schedules[1].get("datetime"),"%Y-%m-%dT%H:%M:%S.%f") - datetime.now() > timedelta(minutes=1))
         
         #assert schedule links
         self.assertEqual(schedules[0].get("participant_phone"),"09984")
@@ -156,14 +164,14 @@ class TestTtcGenericWorker(TestCase):
     @inlineCallbacks
     def test_send_scheduled_oneMessage(self):
         dNow = datetime.now()
-        self.worker.program_name = "M5H"
-        self.worker.db.programs.save({"name":"M5H","dialogues":
+        program = {"name":"M5H","shortcode":"8282","dialogues":
             [{"name":"main","type":"sequential","interactions":[
             {"type":"announcement","name":"1","content":"Hello","schedule_type":"immediately"},
             {"type":"announcement","name":"2","content":"How are you","schedule_type":"wait(00:20)"}
             ]}
-            ]})
-        self.worker.db.schedules.save({"datetime":dNow.isoformat(),
+            ]}
+        self.worker.init_program(program)
+        self.worker.collection_schedules.save({"datetime":dNow.isoformat(),
                                        "dialogue_name": "main",
                                        "interaction_name": "1",
                                        "participant_phone": "09"});
@@ -173,43 +181,43 @@ class TestTtcGenericWorker(TestCase):
         self.assertEqual(message.payload['to_addr'], "09")
         #self.assertEqual(message.payload['from_addr'], "8282")
         self.assertEqual(message.payload['content'],"Hello")
-        self.assertEqual(self.worker.db.schedules.count(), 0)
+        self.assertEqual(self.worker.collection_schedules.count(), 0)
     
     @inlineCallbacks
-    def test_send_scheduled_chooseMessage(self):
+    def test_send_scheduled_only_in_past(self):
         dNow = datetime.now()
         dPast = datetime.now() - timedelta(minutes = 30)
         dFuture = datetime.now() + timedelta(minutes = 30)
-        self.worker.program_name = "M5H"
-        self.worker.db.programs.save({"name":"M5H","dialogues":
+        program = ({"name":"M5H","shortcode":"8282","dialogues":
             [{"name":"main","type":"sequential","interactions":[
             {"type":"announcement","name":"1","content":"Hello","schedule_type":"immediately"},
             {"type":"announcement","name":"2","content":"Today will be sunny","schedule_type":"wait-20"},
             {"type":"announcement","name":"3","content":"Today is the special day","schedule_type":"wait-20"}           
             ]}
             ]})
-        self.worker.db.schedules.save({"datetime":dPast.isoformat(),
+        self.worker.init_program(program)
+        self.worker.collection_schedules.save({"datetime":dPast.isoformat(),
                                        "dialogue_name": "main",
                                        "interaction_name": "1",
                                        "participant_phone": "09"});
-        self.worker.db.schedules.save({"datetime":dNow.isoformat(),
+        self.worker.collection_schedules.save({"datetime":dNow.isoformat(),
                                        "dialogue_name": "main",
                                        "interaction_name": "2",
                                        "participant_phone": "09"});
-        self.worker.db.schedules.save({"datetime":dFuture.isoformat(),
+        self.worker.collection_schedules.save({"datetime":dFuture.isoformat(),
                                        "dialogue_name": "main",
                                        "interaction_name": "3",
                                        "participant_phone": "09"});
         yield self.worker.send_scheduled()
         #first message is the oldest
         message1 = TransportUserMessage.from_json( self.broker.basic_get('%s.outbound' % self.transport_name)[1].get('content'))
-        self.assertEqual(message1.payload['content'],"Hello")    
+        self.assertEqual(message1.payload['content'],"Hello")
         #second message
         message2 = TransportUserMessage.from_json( self.broker.basic_get('%s.outbound' % self.transport_name)[1].get('content'))
         self.assertEqual(message2.payload['content'],"Today will be sunny")   
-        #third message is not send, so still in the schedules table
-        self.assertEquals(self.worker.db.schedules.count(),1)
+        #third message is not send, so still in the schedules collection and two messages in the logs collection
+        self.assertEquals(self.worker.collection_schedules.count(),1)
+        self.assertEquals(self.worker.collection_logs.count(),2)
         self.assertTrue(self.broker.basic_get('%s.outbound' % self.transport_name))    
         #only two message should be send
-        self.assertTrue((None,None) == self.broker.basic_get('%s.outbound' % self.transport_name))     
-        
+        self.assertTrue((None,None) == self.broker.basic_get('%s.outbound' % self.transport_name))

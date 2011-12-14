@@ -1,12 +1,14 @@
 # -*- test-case-name: vumi.workers.ttc.tests.test_ttc -*-
 
+import sys
+
 from twisted.python import log
 from twisted.internet.defer import inlineCallbacks
 from twisted.enterprise import adbapi
 from twisted.internet import task
 
-from twistar.dbobject import DBObject
-from twistar.registry import Registry
+#from twistar.dbobject import DBObject
+#from twistar.registry import Registry
 
 import pymongo
 
@@ -80,12 +82,13 @@ class TtcGenericWorker(ApplicationWorker):
 	log.msg("One Generic Worker is starting")
         super(TtcGenericWorker, self).startWorker()
         self.control_consumer = yield self.consume(
-            '%(transport_name)s.control' % self.config,
+            '%(control_name)s.control' % self.config,
             self.consume_control,
             message_class=Message)
     
         #config
         self.transport_name = self.config['transport_name']
+	self.control_name = self.config['control_name']
         self.transport_type = 'sms'
 
         #some basic local recording
@@ -109,13 +112,38 @@ class TtcGenericWorker(ApplicationWorker):
         # Try to Access Document database with pymongo
         connection = pymongo.Connection("localhost",27017)
         self.db = connection[self.config['database']]
+	
 	log.msg("Connected to dababase %s" % self.config['database'])
 	
 	self.sender = None
+	self.program_name = None
     
     def consume_user_message(self, message):
         log.msg("User message: %s" % message['content'])
     
+    def init_program(self, program):
+	log.msg("Initialization of the program")
+	self.program_name = program["name"]
+	log.msg("Program name:%s"% self.program_name)
+	#register program in programs collection
+	if (self.db.programs.find_one({"name":self.program_name})):
+	    log.msg("Program already exist in database... updating")
+	else:
+	    self.db.programs.save(program)
+	#Declare necessary collection
+	collection_schedules_name = ("%s_schedules" % self.program_name)
+	if ( collection_schedules_name in self.db.collection_names()):
+	    self.collection_schedules = self.db[collection_schedules_name]
+	else:
+	    self.collection_schedules = self.db.create_collection(collection_schedules_name)
+	
+	
+	collection_logs_name = ("%s_logs" % self.program_name)
+	if ( collection_logs_name in self.db.collection_names()):
+	    self.collection_logs = self.db[collection_logs_name]
+	else:
+	    self.collection_logs = self.db.create_collection(collection_logs_name)
+	    
     #@inlineCallbacks
     def consume_control(self, message):
         log.msg("Control message!")
@@ -123,15 +151,10 @@ class TtcGenericWorker(ApplicationWorker):
         self.record.append(('config',message))
         if (message.get('program')):
             program = message['program']
-	    program_name = program['name']
-            log.msg("Receive a program with name: %s" % program_name)
+	    #program_name = program['name']
+            #log.msg("Receive a program with name: %s" % program_name)
             #MongoDB#
-	    if (self.db.programs.find_one({"name":program_name})):
-		log.msg("Program already exist in database... updating")
-	    else:
-		self.db.programs.save(program)
-		self.program_name = program_name
-	    
+	    self.init_program(program)
 	    if 'participants' in program:
 		self.schedule_participants_dialogue(program['participants'], self.get_dialogue(program,"main"))
 		
@@ -172,6 +195,7 @@ class TtcGenericWorker(ApplicationWorker):
 	    self.sender = task.LoopingCall(self.send_scheduled)
 	    self.sender.start(30.0)
 	
+	    
     
     def dispatch_event(self, message):
         log.msg("Event message!")
@@ -184,20 +208,25 @@ class TtcGenericWorker(ApplicationWorker):
 	if (self.program_name == None):
 	    log.msg("Error scheduling starting but worker is not yet initialized")
 	    return
-        toSends = self.db.schedules.find(spec={"datetime":{"$lt":datetime.now().isoformat()}},sort=[("datetime",1)])
+        toSends = self.collection_schedules.find(spec={"datetime":{"$lt":datetime.now().isoformat()}},sort=[("datetime",1)])
         for toSend in toSends:
-            self.db.schedules.remove({"_id":toSend.get('_id')})
+            self.collection_schedules.remove({"_id":toSend.get('_id')})
             program = self.db.programs.find_one({"name":self.program_name})
-	    interaction = self.get_interaction(program, toSend['dialogue_name'], toSend['interaction_name'])
-            yield self.transport_publisher.publish_message(
-                TransportUserMessage(**{'from_addr':'',
-                                      'to_addr':toSend.get('participant_phone'),
-                                      'transport_name':self.transport_name,
-                                      'transport_type':self.transport_type,
-                                      'transport_metadata':'',
-	                              'content':interaction['content']
-                                    }));
-    
+	    try:
+		interaction = self.get_interaction(program, toSend['dialogue_name'], toSend['interaction_name'])
+		log.msg("Send scheduled message %s to %s" % (interaction['content'], toSend['participant_phone'])) 
+		message = TransportUserMessage(**{'from_addr':program['shortcode'],
+		                            'to_addr':toSend.get('participant_phone'),
+		                            'transport_name':self.transport_name,
+		                            'transport_type':self.transport_type,
+		                            'transport_metadata':'',
+		                            'content':interaction['content']
+		                            })
+		yield self.transport_publisher.publish_message(message);
+		self.collection_logs.save({"datetime":datetime.now().isoformat(),"message":message.payload})
+	    except:
+		log.msg("Error while getting schedule reference, scheduled message dumpted: %s - %s" % (toSend['dialogue_name'],toSend['interaction_name']))
+		log.msg("Exception is %s" % sys.exc_info()[0])
     #MongoDB do not support fetching a subpart of an array
     #may not be necessary in the near future
     #https://jira.mongodb.org/browse/SERVER-828
@@ -222,7 +251,7 @@ class TtcGenericWorker(ApplicationWorker):
     #TODO: manage other schedule type
     #TODO: decide which id should be in an schedule object
     def schedule_participant_dialogue(self, participant, dialogue):
-        #schedules = self.db.schedules
+        #schedules = self.collection_schedules
         previousDateTime = None
         schedules = []
         for interaction in dialogue.get('interactions'):
@@ -234,11 +263,11 @@ class TtcGenericWorker(ApplicationWorker):
                 if (interaction.get('schedule_type')=="immediately"):
                     currentDateTime = datetime.now()
                 if (interaction.get('schedule_type')=="wait"):
-                    currentDateTime = previdousDateTime + timedelta(minutes=10)
+                    currentDateTime = previdousDateTime + timedelta(minutes=2)
                 schedule["datetime"] = currentDateTime.isoformat()
             schedules.append(schedule)
             previdousDateTime = currentDateTime
-	    self.db.schedules.save(schedule)
+	    self.collection_schedules.save(schedule)
         return schedules
             #schedules.save(schedule)
     
