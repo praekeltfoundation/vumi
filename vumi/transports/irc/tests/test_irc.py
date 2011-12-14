@@ -36,11 +36,12 @@ class TestIrcMessage(unittest.TestCase):
 class TestVumiBotProtocol(unittest.TestCase):
 
     nick = "testnick"
+    channel = "#test1"
 
     def setUp(self):
         self.f = StringIO()
         self.t = FileWrapper(self.f)
-        self.vb = VumiBotProtocol(self.nick, ['#test1'], self)
+        self.vb = VumiBotProtocol(self.nick, [self.channel], self)
         self.vb.makeConnection(self.t)
         self.recvd_messages = []
 
@@ -78,6 +79,42 @@ class TestVumiBotProtocol(unittest.TestCase):
             self.assertEqual(log['message'][0],
                              'Disconnected (nickname was: %s).' % self.nick)
             self.assertEqual(logger.errors, [])
+
+    def test_signed_on(self):
+        self.vb.signedOn()
+        self.check(['JOIN %s' % self.channel])
+
+    def test_joined(self):
+        with LogCatcher() as logger:
+            self.vb.joined(self.channel)
+            [log] = logger.logs
+            self.assertEqual(log['message'][0], 'Joined %r' % self.channel)
+
+    def test_privmsg(self):
+        sender, recipient, text = (self.nick, "#zoo", "Hello zooites")
+        self.vb.privmsg(sender, recipient, text)
+        [recvd_msg] = self.recvd_messages
+        self.assertEqual(recvd_msg, IrcMessage(sender, recipient,
+                                               text, action=False))
+
+    def test_action(self):
+        sender, recipient, text = (self.nick, "#zoo", "waves at zooites")
+        self.vb.action(sender, recipient, text)
+        [recvd_msg] = self.recvd_messages
+        self.assertEqual(recvd_msg, IrcMessage(sender, recipient,
+                                               text, action=True))
+
+    def test_irc_nick(self):
+        with LogCatcher() as logger:
+            self.vb.irc_NICK("oldnick!host", ["newnick"])
+            [log] = logger.logs
+            self.assertEqual(log['message'][0],
+                             "Nick changed from 'oldnick' to 'newnick'")
+
+    def test_alter_collided_nick(self):
+        collided_nick = "commonnick"
+        new_nick = self.vb.alterCollidedNick(collided_nick)
+        self.assertEqual(new_nick, collided_nick + '^')
 
 
 class TestIrcTransport(unittest.TestCase):

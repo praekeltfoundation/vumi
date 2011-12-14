@@ -30,6 +30,13 @@ class IrcMessage(object):
         self.content = content
         self.action = action
 
+    def __eq__(self, other):
+        if isinstance(other, IrcMessage):
+            return all(getattr(self, name) == getattr(other, name)
+                       for name in ("sender", "recipient", "content",
+                                    "action"))
+        return False
+
     def channel(self):
         """Return the channel if the recipient is a channel.
 
@@ -98,7 +105,7 @@ class VumiBotProtocol(irc.IRCClient):
 
     def irc_NICK(self, prefix, params):
         """Called when an IRC user changes their nickname."""
-        old_nick = prefix.split('!')[0]
+        old_nick = prefix.partition('!')[0]
         new_nick = params[0]
         log.msg("Nick changed from %r to %r" % (old_nick, new_nick))
 
