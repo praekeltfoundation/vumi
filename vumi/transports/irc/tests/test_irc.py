@@ -6,7 +6,7 @@ from twisted.trial import unittest
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet.protocol import FileWrapper
 
-from vumi.tests.utils import get_stubbed_worker
+from vumi.tests.utils import get_stubbed_worker, LogCatcher
 from vumi.transports.irc.irc import IrcMessage, VumiBotProtocol
 from vumi.transports.irc import IrcTransport
 
@@ -72,8 +72,12 @@ class TestVumiBotProtocol(unittest.TestCase):
         self.check([])
 
     def test_connection_lost(self):
-        self.vb.connectionLost("test loss of connection")
-        # TODO: check reason was logged.
+        with LogCatcher() as logger:
+            self.vb.connectionLost("test loss of connection")
+            [log] = logger.logs
+            self.assertEqual(log['message'][0],
+                             'Disconnected (nickname was: %s).' % self.nick)
+            self.assertEqual(logger.errors, [])
 
 
 class TestIrcTransport(unittest.TestCase):
