@@ -325,6 +325,10 @@ class GSMTransport(Transport):
                                                             gammu_message)
                     gammu_messages[send_sms_response] = gammu_message
 
+                    # multiparts result in multiple acks
+                    yield self.publish_ack(user_message_id=message['message_id'],
+                                            sent_message_id=send_sms_response)
+
                 # collect for audit trail
                 sent_messages.append((message, gammu_messages))
             except gammu.GSMError, e:

@@ -207,7 +207,7 @@ class GSMTransportTestCase(TransportTestCase):
         self.assertEqual(delivery_report['Text'], 'Delivered')
         self.assertEqual(delivery_report['MessageReference'], 1)
 
-        [delivery_report] = self.get_dispatched_events()
+        [ack, delivery_report] = self.get_dispatched_events()
         self.assertEqual(delivery_report['delivery_status'], 'delivered')
         self.assertEqual(delivery_report['user_message_id'], msg['message_id'])
 
@@ -242,7 +242,7 @@ class GSMTransportTestCase(TransportTestCase):
         # received & sent
         yield self.transport.receive_and_send_messages(phone)
 
-        [delivery_report] = self.get_dispatched_events()
+        [ack, delivery_report] = self.get_dispatched_events()
         self.assertEqual(delivery_report['delivery_status'], 'failed')
         self.assertEqual(delivery_report['user_message_id'], msg['message_id'])
 
@@ -291,9 +291,14 @@ class GSMTransportTestCase(TransportTestCase):
         results = yield self.transport.receive_and_send_messages(phone)
         gammu_reports, _ = results
         [gd_report1, gd_report2] = gammu_reports
-        [delivery_report] = self.get_dispatched_events()
+        [ack_part1, ack_part2, delivery_report] = self.get_dispatched_events()
         self.assertEqual(delivery_report['delivery_status'], 'delivered')
         self.assertEqual(delivery_report['user_message_id'], msg['message_id'])
+        self.assertEqual(ack_part1['sent_message_id'], 1)
+        self.assertEqual(ack_part1['user_message_id'], msg['message_id'])
+        self.assertEqual(ack_part2['sent_message_id'], 2)
+        self.assertEqual(ack_part2['user_message_id'], msg['message_id'])
+
 
     @inlineCallbacks
     def test_multipart_delivery_reports_fail(self):
@@ -337,6 +342,10 @@ class GSMTransportTestCase(TransportTestCase):
         # received & sent
         yield self.transport.receive_and_send_messages(phone)
 
-        [delivery_report] = self.get_dispatched_events()
+        [ack_part1, ack_part2, delivery_report] = self.get_dispatched_events()
         self.assertEqual(delivery_report['delivery_status'], 'failed')
         self.assertEqual(delivery_report['user_message_id'], msg['message_id'])
+        self.assertEqual(ack_part1['sent_message_id'], 1)
+        self.assertEqual(ack_part1['user_message_id'], msg['message_id'])
+        self.assertEqual(ack_part2['sent_message_id'], 2)
+        self.assertEqual(ack_part2['user_message_id'], msg['message_id'])
