@@ -192,3 +192,11 @@ class Transport(Worker):
         thing with them.
         """
         raise NotImplementedError()
+
+    @staticmethod
+    def generate_message_id():
+        """
+        Generate a message id.
+        """
+
+        return TransportUserMessage.generate_id()
