@@ -170,9 +170,8 @@ class GSMTransport(Transport):
             self.store_message_references(sent)
             yield self.disconnect_phone(self.phone)
             returnValue((received, sent))
-        except gammu.ERR_TIMEOUT:
-            log.err()
-        except gammu.ERR_DEVICEOPENERROR:
+        except (gammu.ERR_TIMEOUT, gammu.ERR_DEVICEOPENERROR,
+                gammu.ERR_DEVICEWRITEERROR):
             log.err()
         finally:
             self.phone = None
