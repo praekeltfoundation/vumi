@@ -211,10 +211,41 @@ class GSMTransportTestCase(TransportTestCase):
         self.assertEqual(delivery_report['delivery_status'], 'delivered')
         self.assertEqual(delivery_report['user_message_id'], msg['message_id'])
 
-    # @inlineCallbacks
+    @inlineCallbacks
     def test_delivery_reports_fail(self):
-        raise SkipTest('Not implemented yet as I don\'t know what Gammu '
-                            'failed messages are returned as')
+        """
+        This code is highly likely to not work properly. It's built on
+        assumptions on how gammu reports delivery report failures that
+        isn't documented anywhere. Gammu just hasn't documented it and
+        so it's largely guess-work.
+        """
+        # fake an outbound delivery first
+        phone = FakeGammuPhone()
+        msg = self.mk_msg()
+        yield self.dispatch(msg, rkey='%s.outbound' % self.transport_name)
+        # have the phone handle it
+        yield self.transport.receive_and_send_messages(phone)
+
+        # Now fake the delivery report for the given reference number
+        phone = FakeGammuPhone([{
+            'SMSCDateTime': datetime.now(),
+            'Class': 0,
+            'Text': u'Failed',  # Not sure if this is even returned.
+            'Number': u'+27764493806',
+            'DateTime': datetime.now(),
+            'MessageReference': 1,
+            'Length': 9,
+            'Location': 0,
+            'Type': 'Status_Report',
+        }])
+
+        # received & sent
+        yield self.transport.receive_and_send_messages(phone)
+
+        [delivery_report] = self.get_dispatched_events()
+        self.assertEqual(delivery_report['delivery_status'], 'failed')
+        self.assertEqual(delivery_report['user_message_id'], msg['message_id'])
+
 
     @inlineCallbacks
     def test_multipart_delivery_reports_success(self):
@@ -264,7 +295,48 @@ class GSMTransportTestCase(TransportTestCase):
         self.assertEqual(delivery_report['delivery_status'], 'delivered')
         self.assertEqual(delivery_report['user_message_id'], msg['message_id'])
 
-    # @inlineCallbacks
+    @inlineCallbacks
     def test_multipart_delivery_reports_fail(self):
-        raise SkipTest('Not implemented yet as I don\'t know what '
-                        'Gammu failed messages are returned as')
+        """
+        This code is highly likely to not work properly. It's built on
+        assumptions on how gammu reports delivery report failures that
+        isn't documented anywhere. Gammu just hasn't documented it and
+        so it's largely guess-work.
+        """
+        # fake an outbound delivery first
+        phone = FakeGammuPhone()
+        msg = self.mk_msg()
+        msg['content'] = 'a' * 200
+        yield self.dispatch(msg, rkey='%s.outbound' % self.transport_name)
+        # have the phone handle it
+        yield self.transport.receive_and_send_messages(phone)
+
+        # Now fake the delivery report for the given reference number
+        phone = FakeGammuPhone([{
+            'SMSCDateTime': datetime.now(),
+            'Class': 0,
+            'Text': u'Delivered',  # First part is delivered
+            'Number': u'+27764493806',
+            'DateTime': datetime.now(),
+            'MessageReference': 1,
+            'Length': 9,
+            'Location': 1,
+            'Type': 'Status_Report',
+        }, {
+            'SMSCDateTime': datetime.now(),
+            'Class': 0,
+            'Text': u'Failed',  # Second is never delivered
+            'Number': u'+27764493806',
+            'DateTime': datetime.now(),
+            'MessageReference': 2,
+            'Length': 9,
+            'Location': 2,
+            'Type': 'Status_Report',
+        }])
+
+        # received & sent
+        yield self.transport.receive_and_send_messages(phone)
+
+        [delivery_report] = self.get_dispatched_events()
+        self.assertEqual(delivery_report['delivery_status'], 'failed')
+        self.assertEqual(delivery_report['user_message_id'], msg['message_id'])
