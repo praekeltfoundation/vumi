@@ -35,7 +35,7 @@ class OldSimpleHttpTransport(HttpRpcTransport):
 
     def handle_raw_inbound_message(self, request_id, request):
         message = request.args.get('message', [None])[0]
-        to_msisdns = request.args.get('to_msisdn', [None])
+        to_msisdns = request.args.get('to_msisdn', [])
         from_msisdn = request.args.get('from_msisdn', [None])[0]
         return_list = []
         for to_msisdn in to_msisdns:
@@ -84,7 +84,7 @@ class OldTemplateHttpTransport(OldSimpleHttpTransport):
         template = request.args.get('template', [None])[0]
         template = opener.sub('%(template_', template)
         template = closer.sub(')s', template)
-        to_msisdns = request.args.get('to_msisdn', [None])
+        to_msisdns = request.args.get('to_msisdn', [])
         from_msisdn = request.args.get('from_msisdn', [None])[0]
         template_args = self.extract_template_args(request.args,
                                                    len(to_msisdns))
