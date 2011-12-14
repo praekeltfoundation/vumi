@@ -10,6 +10,7 @@ from contextlib import contextmanager
 
 import pytz
 from twisted.internet import defer, reactor
+from twisted.python import log
 
 from vumi.utils import vumi_resource_path
 from vumi.service import get_spec, Worker
@@ -337,3 +338,24 @@ class FakeRedis(object):
         delayed = self._expiries.get(key)
         if delayed is not None and not delayed.cancelled:
             delayed.cancel()
+
+
+class LogCatcher(object):
+    """Gather logs."""
+
+    def __init__(self):
+        self.logs = []
+
+    @property
+    def errors(self):
+        return [ev for ev in self.logs if ev["isError"]]
+
+    def _gather_logs(self, event_dict):
+        self.logs.append(event_dict)
+
+    def __enter__(self):
+        log.theLogPublisher.addObserver(self._gather_logs)
+        return self
+
+    def __exit__(self, *exc_info):
+        log.theLogPublisher.removeObserver(self._gather_logs)

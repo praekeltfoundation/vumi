@@ -3,13 +3,12 @@
 import json
 
 from twisted.trial.unittest import TestCase
-from twisted.python import log
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.utils import http_request
 from vumi.transports.infobip.infobip import InfobipTransport
 from vumi.message import TransportUserMessage
-from vumi.tests.utils import get_stubbed_worker, FakeRedis
+from vumi.tests.utils import get_stubbed_worker, FakeRedis, LogCatcher
 
 
 class TestInfobipUssdTransport(TestCase):
@@ -247,25 +246,16 @@ class TestInfobipUssdTransport(TestCase):
 
     @inlineCallbacks
     def test_outbound_non_reply_logs_error(self):
-        errlogs = []
-
-        def gather_errors(event_dict):
-            if event_dict["isError"]:
-                errlogs.append(event_dict)
-
         msg = TransportUserMessage(to_addr="1234", from_addr="5678",
                                    transport_name="test_infobip",
                                    transport_type="ussd",
                                    transport_metadata={})
 
-        log.theLogPublisher.addObserver(gather_errors)
-        try:
+        with LogCatcher() as logger:
             self.broker.publish_message("vumi", "test_infobip.outbound", msg)
             yield self.broker.kick_delivery()
-        finally:
-            log.theLogPublisher.removeObserver(gather_errors)
+            [error] = logger.errors
 
-        [error] = errlogs
         [errmsg] = error['message']
         self.assertTrue(errmsg.startswith("'Infobip transport cannot process"
                                           " outbound message that is not a"
