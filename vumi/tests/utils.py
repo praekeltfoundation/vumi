@@ -283,6 +283,12 @@ class FakeRedis(object):
     def hgetall(self, key):
         return self._data.get(key, {})
 
+    def hlen(self, key):
+        return len(self._data.get(key, {}))
+
+    def hvals(self, key):
+        return self._data.get(key, {}).values()
+
     # Set operations
 
     def sadd(self, key, value):
@@ -325,6 +331,18 @@ class FakeRedis(object):
         if stop == 0:
             stop = None
         return [val[1] for val in zval[start:stop]]
+
+    # List operations
+    def llen(self, key):
+        return len(self._data.get(key, []))
+
+    def lpop(self, key):
+        if self.llen(key):
+            return self._data[key].pop(0)
+
+    def rpush(self, key, obj):
+        self._data.setdefault(key, []).append(obj)
+        return self.llen(key) - 1
 
     # Expiry operations
 
