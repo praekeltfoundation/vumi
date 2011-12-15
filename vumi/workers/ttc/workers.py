@@ -156,7 +156,7 @@ class TtcGenericWorker(ApplicationWorker):
             #MongoDB#
 	    self.init_program(program)
 	    if 'participants' in program:
-		self.schedule_participants_dialogue(program['participants'], self.get_dialogue(program,"main"))
+		self.schedule_participants_dialogue(program['participants'], self.get_dialogue(program,"0"))
 		
             #Redis#
             #self.redis.create_session("program")
@@ -213,7 +213,7 @@ class TtcGenericWorker(ApplicationWorker):
             self.collection_schedules.remove({"_id":toSend.get('_id')})
             program = self.db.programs.find_one({"name":self.program_name})
 	    try:
-		interaction = self.get_interaction(program, toSend['dialogue_name'], toSend['interaction_name'])
+		interaction = self.get_interaction(program, toSend['dialogue_id'], toSend['interaction_id'])
 		log.msg("Send scheduled message %s to %s" % (interaction['content'], toSend['participant_phone'])) 
 		message = TransportUserMessage(**{'from_addr':program['shortcode'],
 		                            'to_addr':toSend.get('participant_phone'),
@@ -225,22 +225,22 @@ class TtcGenericWorker(ApplicationWorker):
 		yield self.transport_publisher.publish_message(message);
 		self.collection_logs.save({"datetime":datetime.now().isoformat(),"message":message.payload})
 	    except:
-		log.msg("Error while getting schedule reference, scheduled message dumpted: %s - %s" % (toSend['dialogue_name'],toSend['interaction_name']))
+		log.msg("Error while getting schedule reference, scheduled message dumpted: %s - %s" % (toSend['dialogue_id'],toSend['interaction_id']))
 		log.msg("Exception is %s" % sys.exc_info()[0])
     #MongoDB do not support fetching a subpart of an array
     #may not be necessary in the near future
     #https://jira.mongodb.org/browse/SERVER-828
     #https://jira.mongodb.org/browse/SERVER-3089
-    def get_interaction(self, program, dialogue_name, interaction_name):
+    def get_interaction(self, program, dialogue_id, interaction_id):
         for dialogue in program['dialogues']:
-	    if dialogue["name"]== dialogue_name:
+	    if dialogue["dialogue_id"]== dialogue_id:
 		for interaction in dialogue["interactions"]:
-		    if interaction["name"]==interaction_name:
+		    if interaction["interaction_id"]==interaction_id:
 			return interaction
 		    
-    def get_dialogue(self, program, dialogue_name):
+    def get_dialogue(self, program, dialogue_id):
 	for dialogue in program['dialogues']:
-	    if dialogue["name"]== dialogue_name:
+	    if dialogue["dialogue_id"]== dialogue_id:
 		return dialogue
 
     def schedule_participants_dialogue(self, participants, dialogue):
@@ -257,8 +257,8 @@ class TtcGenericWorker(ApplicationWorker):
         for interaction in dialogue.get('interactions'):
             schedule = {"datetime":None, 
                         "participant_phone": participant.get('phone'), 
-                        "dialogue_name":dialogue.get("name"), 
-                        "interaction_name":interaction.get("name")}
+                        "dialogue_id":dialogue.get('dialogue_id'), 
+                        "interaction_id":interaction.get("interaction_id")}
             if (dialogue.get('type')=="sequential"):
                 if (interaction.get('schedule_type')=="immediately"):
                     currentDateTime = datetime.now()

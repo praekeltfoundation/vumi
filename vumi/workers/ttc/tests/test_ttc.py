@@ -107,9 +107,9 @@ class TestTtcGenericWorker(TestCase):
             #('config', Message.from_json('{"program":{"name":"M4H","dialogues":[{"name":"main","type":"sequential","interactions":[{"type":"announcement","content":"Hello","date":"today","time":"now"}]}]}}'))
             ('config', Message.from_json("""{"program":{"name":"M5H", "shortcode":"8282","participants":[{"phone":"06"}],
             "dialogues":
-            [{"name":"main","type":"sequential","interactions":[
-            {"type":"announcement","name":"1","content":"Hello","schedule_type":"immediately"},
-            {"type":"announcement","name":"2","content":"How are you","schedule_type":"wait(00:20)"}
+            [{"dialogue_id":"0","type":"sequential","interactions":[
+            {"type":"announcement","interaction_id":"1","content":"Hello","schedule_type":"immediately"},
+            {"type":"announcement","interaction_id":"2","content":"How are you","schedule_type":"wait(00:20)"}
             ]}
             ]}}"""))
         ]
@@ -122,9 +122,9 @@ class TestTtcGenericWorker(TestCase):
     def test_consume_control_participant(self):
         events = [
             ('1', Message.from_json("""{"program":{"name":"M4H","shortcode":"8282","dialogues":
-            [{"name":"main","type":"sequential","interactions":[
-            {"type":"announcement","name":"1","content":"Hello","schedule_type":"immediately"},
-            {"type":"announcement","name":"2","content":"How are you","schedule_type":"wait(00:20)"}
+            [{"dialogue_id":"0","type":"sequential","interactions":[
+            {"type":"announcement","interaction_id":"1","content":"Hello","schedule_type":"immediately"},
+            {"type":"announcement","interaction_id":"2","content":"How are you","schedule_type":"wait(00:20)"}
             ]}
             ]}}""")),
             ('2', Message.from_json("""{"participants":[
@@ -141,10 +141,11 @@ class TestTtcGenericWorker(TestCase):
     
     
     def test_schedule_participant_dialogue(self):
-        program = {"name":"M5H", "participants":[{"phone":"09984", "name":"olivier"}],"dialogues" : [{"name":"main","type":"sequential","interactions":[
-            {"type":"announcement","name":"i1","content":"Hello","schedule_type":"immediately"},
-            {"type":"announcement","name":"i2","content":"How are you","schedule_type":"wait"}
-            ]}]}
+        program = {"name":"M5H", "participants":[{"phone":"09984", "name":"olivier"}],"dialogues" : 
+                   [{"dialogue_id":"0","type":"sequential","interactions":[
+                       {"type":"announcement","interaction_id":"1","content":"Hello","schedule_type":"immediately"},
+                       {"type":"announcement","interaction_id":"2","content":"How are you","schedule_type":"wait"}
+                   ]}]}
 
         self.worker.init_program(program)
         
@@ -157,23 +158,23 @@ class TestTtcGenericWorker(TestCase):
         
         #assert schedule links
         self.assertEqual(schedules[0].get("participant_phone"),"09984")
-        self.assertEqual(schedules[0].get("dialogue_name"),"main")
-        self.assertEqual(schedules[0].get("interaction_name"),"i1")
-        self.assertEqual(schedules[1].get("interaction_name"),"i2")
+        self.assertEqual(schedules[0].get("dialogue_id"),"0")
+        self.assertEqual(schedules[0].get("interaction_id"),"1")
+        self.assertEqual(schedules[1].get("interaction_id"),"2")
     
     @inlineCallbacks
     def test_send_scheduled_oneMessage(self):
         dNow = datetime.now()
         program = {"name":"M5H","shortcode":"8282","dialogues":
-            [{"name":"main","type":"sequential","interactions":[
-            {"type":"announcement","name":"1","content":"Hello","schedule_type":"immediately"},
-            {"type":"announcement","name":"2","content":"How are you","schedule_type":"wait(00:20)"}
+            [{"dialogue_id":"0","type":"sequential","interactions":[
+            {"type":"announcement","interaction_id":"1","content":"Hello","schedule_type":"immediately"},
+            {"type":"announcement","interaction_id":"2","content":"How are you","schedule_type":"wait(00:20)"}
             ]}
             ]}
         self.worker.init_program(program)
         self.worker.collection_schedules.save({"datetime":dNow.isoformat(),
-                                       "dialogue_name": "main",
-                                       "interaction_name": "1",
+                                       "dialogue_id": "0",
+                                       "interaction_id": "1",
                                        "participant_phone": "09"});
         yield self.worker.send_scheduled()
         message = self.broker.basic_get('%s.outbound' % self.transport_name)[1].get('content')
@@ -189,24 +190,24 @@ class TestTtcGenericWorker(TestCase):
         dPast = datetime.now() - timedelta(minutes = 30)
         dFuture = datetime.now() + timedelta(minutes = 30)
         program = ({"name":"M5H","shortcode":"8282","dialogues":
-            [{"name":"main","type":"sequential","interactions":[
-            {"type":"announcement","name":"1","content":"Hello","schedule_type":"immediately"},
-            {"type":"announcement","name":"2","content":"Today will be sunny","schedule_type":"wait-20"},
-            {"type":"announcement","name":"3","content":"Today is the special day","schedule_type":"wait-20"}           
+            [{"dialogue_id":"0","type":"sequential","interactions":[
+            {"type":"announcement","interaction_id":"1","content":"Hello","schedule_type":"immediately"},
+            {"type":"announcement","interaction_id":"2","content":"Today will be sunny","schedule_type":"wait-20"},
+            {"type":"announcement","interaction_id":"3","content":"Today is the special day","schedule_type":"wait-20"}           
             ]}
             ]})
         self.worker.init_program(program)
         self.worker.collection_schedules.save({"datetime":dPast.isoformat(),
-                                       "dialogue_name": "main",
-                                       "interaction_name": "1",
+                                       "dialogue_id": "0",
+                                       "interaction_id": "1",
                                        "participant_phone": "09"});
         self.worker.collection_schedules.save({"datetime":dNow.isoformat(),
-                                       "dialogue_name": "main",
-                                       "interaction_name": "2",
+                                       "dialogue_id": "0",
+                                       "interaction_id": "2",
                                        "participant_phone": "09"});
         self.worker.collection_schedules.save({"datetime":dFuture.isoformat(),
-                                       "dialogue_name": "main",
-                                       "interaction_name": "3",
+                                       "dialogue_id": "0",
+                                       "interaction_id": "3",
                                        "participant_phone": "09"});
         yield self.worker.send_scheduled()
         #first message is the oldest
