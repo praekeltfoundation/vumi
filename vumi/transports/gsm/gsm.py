@@ -1,8 +1,9 @@
 # -*- test-case-name: vumi.transports.gsm.tests.test_gsm -*-
 # -*- coding: utf-8 -*-
-from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
 from twisted.internet.threads import deferToThread
 from twisted.internet.task import LoopingCall
+from twisted.internet import reactor
 from twisted.python import log
 from twisted.python.failure import Failure
 from vumi.transports.base import Transport
@@ -22,9 +23,14 @@ class GSMTransport(Transport):
     Sample config file::
 
         transport_name: gsm_transport
-        poll_interval: 120 # seconds, defaults to 60
-        country_code: 27 # the international phone number country prefix
-        phone_number: 27761234567 # the phone number of the SIM
+        # seconds, connect retry interval if modem not found
+        connect_retry_interval: 15
+        # seconds, defaults to 60
+        poll_interval: 120
+        # the international phone number country prefix
+        country_code: 27
+        # the phone number of the SIM
+        phone_number: 27761234567
         gammu:
             UseGlobalDebugFile: 0
             DebugFile: ''
@@ -113,6 +119,8 @@ class GSMTransport(Transport):
 
         self.redis_config = self.config.get('redis', {})
         self.gammu_config = self.config.get('gammu')
+        self.connect_retry_interval = int(self.config.get(
+                                        'connect_retry_interval', 15))
         self.poll_interval = int(self.config.get('poll_interval', 60))
         self.country_code = str(self.config.get('country_code'))
         self.phone_number = str(self.config.get('phone_number'))
@@ -171,8 +179,16 @@ class GSMTransport(Transport):
             yield self.disconnect_phone(self.phone)
             returnValue((received, sent))
         except (gammu.ERR_TIMEOUT, gammu.ERR_DEVICEOPENERROR,
-                gammu.ERR_DEVICEWRITEERROR):
+                gammu.ERR_DEVICEWRITEERROR, gammu.ERR_DEVICENOTEXIST):
             log.err()
+            if self.phone:
+                yield self.disconnect_phone(self.phone)
+            deferred = Deferred()
+            reactor.callLater(self.connect_retry_interval,
+                                deferred.callback, 'retrying')
+            log.msg('Delaying retries for %s seconds' % (
+                                self.connect_retry_interval,))
+            yield deferred
         finally:
             self.phone = None
 
