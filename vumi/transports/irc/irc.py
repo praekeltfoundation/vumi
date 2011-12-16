@@ -2,9 +2,11 @@
 
 from twisted.words.protocols import irc
 from twisted.internet import protocol, reactor
+from twisted.internet.defer import inlineCallbacks
 from twisted.python import log
 
 from vumi.transports import Transport
+from vumi.transports.failures import TemporaryFailure
 
 
 class IrcMessage(object):
@@ -23,24 +25,23 @@ class IrcMessage(object):
     :param nickname:
         Nickname used by the client that received the message.
         Optional.
-    :type action: bool
-    :param action:
-        Whether the message is an action.
+    :type command: str
+    :param command:
+        IRC command that produced the message.
     """
 
-    def __init__(self, sender, recipient, content, nickname=None,
-                 action=False):
+    def __init__(self, sender, command, recipient, content, nickname=None):
         self.sender = sender
+        self.command = command
         self.recipient = recipient
         self.content = content
         self.nickname = nickname
-        self.action = action
 
     def __eq__(self, other):
         if isinstance(other, IrcMessage):
             return all(getattr(self, name) == getattr(other, name)
-                       for name in ("sender", "recipient", "content",
-                                    "action"))
+                       for name in ("sender", "command", "recipient",
+                                    "content", "nickname"))
         return False
 
     def channel(self):
@@ -72,8 +73,12 @@ class VumiBotProtocol(irc.IRCClient):
         self.irc_transport.handle_inbound_irc_message(irc_msg)
 
     def consume_message(self, irc_msg):
-        self.msg(irc_msg.recipient.encode('utf8'),
-                 irc_msg.content.encode('utf8'))
+        recipient = irc_msg.recipient.encode('utf8')
+        content = irc_msg.content.encode('utf8')
+        if irc_msg.command == 'ACTION':
+            self.describe(recipient, content)
+        else:
+            self.msg(recipient, content)
 
     # connecting and disconnecting from server
 
@@ -99,13 +104,14 @@ class VumiBotProtocol(irc.IRCClient):
 
     def privmsg(self, sender, recipient, message):
         """This will get called when the bot receives a message."""
-        irc_msg = IrcMessage(sender, recipient, message, self.nickname)
+        irc_msg = IrcMessage(sender, 'PRIVMSG', recipient, message,
+                             self.nickname)
         self.publish_message(irc_msg)
 
     def action(self, sender, recipient, message):
         """This will get called when the bot sees someone do an action."""
-        irc_msg = IrcMessage(sender, recipient, message, self.nickname,
-                             action=True)
+        irc_msg = IrcMessage(sender, 'ACTION', recipient, message,
+                             self.nickname)
         self.publish_message(irc_msg)
 
     # irc callbacks
@@ -136,15 +142,14 @@ class VumiBotFactory(protocol.ReconnectingClientFactory):
     # the class of the protocol to build when new connection is made
     protocol = VumiBotProtocol
 
-    def __init__(self, nickname, channels, irc_transport):
-        self.nickname = nickname
-        self.channels = channels
-        self.irc_transport = irc_transport
+    def __init__(self, vumibot_args):
+        self.vumibot_args = vumibot_args
+        self.vumibot = None
 
     def buildProtocol(self, addr):
         self.resetDelay()
-        return self.protocol(self.nickname, self.channels,
-                             self.irc_transport)
+        self.vumibot = self.protocol(*self.vumibot_args)
+        return self.vumibot
 
 
 class IrcTransport(Transport):
@@ -175,15 +180,14 @@ class IrcTransport(Transport):
         self.client = None
 
     def setup_transport(self):
-        # TODO: clean-up factory constructor (arguments are a bit duplicated)
-        factory = VumiBotFactory(self.nickname, self.channels,
-                                 self)
+        factory = VumiBotFactory((self.nickname, self.channels,
+                                 self))
         self.client = reactor.connectTCP(self.network, self.port, factory)
 
     def teardown_transport(self):
         if self.client is not None:
-            self.client.disconnect()
             self.client.factory.stopTrying()
+            self.client.disconnect()
 
     def handle_inbound_irc_message(self, irc_msg):
         message_dict = {
@@ -196,13 +200,22 @@ class IrcTransport(Transport):
                 'transport_nickname': irc_msg.nickname,
                 'irc_server': "%s:%s" % (self.network, self.port),
                 'irc_channel': irc_msg.channel(),
+                'irc_command': irc_msg.command,
                 },
             }
         self.publish_message(**message_dict)
 
+    @inlineCallbacks
     def handle_outbound_message(self, msg):
-        irc_msg = IrcMessage(msg['to_addr'], msg['content'])
-        self.client.factory.something.consume_message(irc_msg)
+        vumibot = self.client.factory.vumibot
+        if vumibot is None or self.client.state != 'connected':
+            raise TemporaryFailure("IrcTransport not connected (state: %r)."
+                                   % (self.client.state,))
+        irc_command = msg['transport_metadata'].get('irc_command', 'PRIVMSG')
+        irc_msg = IrcMessage(vumibot.nickname, irc_command, msg['to_addr'],
+                             msg['content'])
+        vumibot.consume_message(irc_msg)
+        yield self.publish_ack(user_message_id=msg['message_id'],
+                               sent_message_id='fakeid')
 
-    # TODO: produce acks
-    # TODO: handle failures
+    # TODO: replace fake id
