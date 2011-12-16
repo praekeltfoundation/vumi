@@ -253,5 +253,5 @@ class TestIrcTransport(TransportTestCase):
                                  ['#vumitest', 'hello world']))
 
         [smsg] = self.get_dispatched_events()
-        self.assertEqual(self.mkmsg_ack(sent_message_id="fakeid"),
+        self.assertEqual(self.mkmsg_ack(sent_message_id=msg['message_id']),
                          smsg)

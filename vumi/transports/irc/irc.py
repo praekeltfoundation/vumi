@@ -215,7 +215,7 @@ class IrcTransport(Transport):
         irc_msg = IrcMessage(vumibot.nickname, irc_command, msg['to_addr'],
                              msg['content'])
         vumibot.consume_message(irc_msg)
+        # intentionally duplicate message id in sent_message_id since
+        # IRC doesn't have its own message ids.
         yield self.publish_ack(user_message_id=msg['message_id'],
-                               sent_message_id='fakeid')
-
-    # TODO: replace fake id
+                               sent_message_id=msg['message_id'])
