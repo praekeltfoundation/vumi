@@ -246,7 +246,6 @@ class GSMTransportTestCase(TransportTestCase):
         self.assertEqual(delivery_report['delivery_status'], 'failed')
         self.assertEqual(delivery_report['user_message_id'], msg['message_id'])
 
-
     @inlineCallbacks
     def test_multipart_delivery_reports_success(self):
         # fake an outbound multipart delivery first
@@ -298,7 +297,6 @@ class GSMTransportTestCase(TransportTestCase):
         self.assertEqual(ack_part1['user_message_id'], msg['message_id'])
         self.assertEqual(ack_part2['sent_message_id'], 2)
         self.assertEqual(ack_part2['user_message_id'], msg['message_id'])
-
 
     @inlineCallbacks
     def test_multipart_delivery_reports_fail(self):
