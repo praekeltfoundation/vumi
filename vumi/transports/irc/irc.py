@@ -201,6 +201,8 @@ class IrcTransport(Transport):
                 'irc_server': "%s:%s" % (self.network, self.port),
                 'irc_channel': irc_msg.channel(),
                 'irc_command': irc_msg.command,
+                'irc_addressed_to_transport':
+                    irc_msg.addressed_to(irc_msg.nickname),
                 },
             }
         self.publish_message(**message_dict)

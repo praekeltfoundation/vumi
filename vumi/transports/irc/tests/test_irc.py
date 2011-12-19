@@ -216,7 +216,7 @@ class TestIrcTransport(TransportTestCase):
         super(TestIrcTransport, self).tearDown()
 
     @inlineCallbacks
-    def test_handle_inbound_privmsg(self):
+    def test_handle_inbound(self):
         sender, recipient, text = "user!ident@host", "#zoo", "Hello gooites"
         self.irc_server.client.privmsg(sender, recipient, text)
         [msg] = yield self.wait_for_dispatched_messages(1)
@@ -229,6 +229,7 @@ class TestIrcTransport(TransportTestCase):
             'irc_server': self.server_addr,
             'irc_channel': '#zoo',
             'irc_command': 'PRIVMSG',
+            'irc_addressed_to_transport': False,
             })
 
     @inlineCallbacks
