@@ -5,11 +5,12 @@
 import re
 
 from twisted.python import log
+from twisted.internet.defer import inlineCallbacks
 
 from vumi.application import ApplicationWorker
 
 
-class LoggerWorker(ApplicationWorker):
+class MemoWorker(ApplicationWorker):
     """Watches for memos to users and notifies users of memos when users
     appear.
 
@@ -23,41 +24,32 @@ class LoggerWorker(ApplicationWorker):
 
     # TODO: store memos in redis
 
+    @inlineCallbacks
     def startWorker(self):
+        yield super(MemoWorker, self).startWorker()
         self.memos = {}
 
     def consume_user_message(self, msg):
         """Log message from a user."""
-        log.msg("User message: %s" % msg['content'])
-        text = msg['content']
+        user = msg.user()
+        transport_metadata = msg['transport_metadata']
+        channel = transport_metadata.get('irc_channel', 'unknown')
+        addressed_to = transport_metadata.get('irc_addressed_to_transport',
+                                              True)
 
-        msg_type = payload['message_type']
-        msg = payload['message_content']
-        nickname = payload['nickname']
-        channel = payload.get('channel', 'unknown')
+        if addressed_to:
+            self.process_potential_memo(channel, user, msg)
 
-        log.msg("Got message:", payload)
-
-        if msg_type == 'message' and payload["addressed"]:
-            log.msg("Looks like something I should process.")
-            yield self.process_potential_memo(channel, nickname, msg, payload)
-
-        memos = self.memos.pop((channel, nickname), [])
+        memos = self.memos.pop((channel, user), [])
         if memos:
             log.msg("Time to deliver some memos:", memos)
-        for memo in memos:
-            msg = "%s: message from %s: %s" % (nickname, memo[0], memo[1])
-            yield self._publish_message(message_type='message',
-                                        channel=channel, msg=msg,
-                                        server=payload['server'])
+        for memo_sender, memo_text in memos:
+            self.reply_to(msg, "message from %s: %s" % (memo_sender,
+                                                        memo_text))
 
-    @inlineCallbacks
-    def process_potential_memo(self, channel, nickname, message, payload):
-        match = self.MEMO_RE.match(message)
+    def process_potential_memo(self, channel, nickname, msg):
+        match = self.MEMO_RE.match(msg['content'])
         if match:
             self.memos.setdefault((channel, match.group(1)), []).append(
                 (nickname, match.group(2)))
-            msg = "Sure thing, boss."
-            yield self._publish_message(message_type='message',
-                                        channel=channel, msg=msg,
-                                        server=payload['server'])
+            self.reply_to(msg, "Sure thing, boss.")
