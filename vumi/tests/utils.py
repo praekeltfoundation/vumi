@@ -304,6 +304,13 @@ class FakeRedis(object):
             return None
         return sval.pop()
 
+    def srem(self, key, value):
+        sval = self._data.get(key, set())
+        if value in sval:
+            sval.remove(value)
+            return 1
+        return 0
+
     def scard(self, key):
         return len(self._data.get(key, set()))
 
