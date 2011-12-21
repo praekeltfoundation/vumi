@@ -6,6 +6,7 @@ from vumi.application.base import ApplicationWorker, SESSION_NEW, SESSION_CLOSE
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.tests.fake_amqp import FakeAMQPBroker
 from vumi.tests.utils import get_stubbed_worker
+from datetime import datetime
 
 
 class DummyApplicationWorker(ApplicationWorker):
@@ -200,7 +201,7 @@ class ApplicationTestCase(TestCase):
             transport_type=transport_type,
             transport_metadata=transport_metadata,
             content=content,
-            timestamp=UTCNearNow(),
+            timestamp=datetime.now(),
             )
 
     def mkmsg_out(self, content='hello world', message_id='1',
@@ -222,7 +223,7 @@ class ApplicationTestCase(TestCase):
             in_reply_to=in_reply_to,
             )
         if stubs:
-            params['timestamp'] = UTCNearNow()
+            params['timestamp'] = datetime.now()
         return TransportUserMessage(**params)
 
     def get_dispatched_messages(self):
