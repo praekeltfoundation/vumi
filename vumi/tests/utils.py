@@ -347,9 +347,16 @@ class FakeRedis(object):
         if self.llen(key):
             return self._data[key].pop(0)
 
+    def lpush(self, key, obj):
+        self._data.setdefault(key, []).insert(0, obj)
+
     def rpush(self, key, obj):
         self._data.setdefault(key, []).append(obj)
         return self.llen(key) - 1
+
+    def lrange(self, key, start, end):
+        lval = self._data.get(key, [])
+        return lval[start:end]
 
     # Expiry operations
 
