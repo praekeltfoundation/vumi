@@ -304,6 +304,13 @@ class FakeRedis(object):
             return None
         return sval.pop()
 
+    def srem(self, key, value):
+        sval = self._data.get(key, set())
+        if value in sval:
+            sval.remove(value)
+            return 1
+        return 0
+
     def scard(self, key):
         return len(self._data.get(key, set()))
 
@@ -340,9 +347,16 @@ class FakeRedis(object):
         if self.llen(key):
             return self._data[key].pop(0)
 
+    def lpush(self, key, obj):
+        self._data.setdefault(key, []).insert(0, obj)
+
     def rpush(self, key, obj):
         self._data.setdefault(key, []).append(obj)
         return self.llen(key) - 1
+
+    def lrange(self, key, start, end):
+        lval = self._data.get(key, [])
+        return lval[start:end]
 
     # Expiry operations
 
