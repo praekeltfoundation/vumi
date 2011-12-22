@@ -156,6 +156,7 @@ class SmppTransport(Transport):
 
     def esme_disconnected(self):
         log.msg("ESME Disconnected")
+        return self._teardown_message_consumer()
 
     def r_get_id_for_sequence(self, sequence_number):
         return self.r_server.get("%s#%s" % (self.r_prefix, sequence_number))

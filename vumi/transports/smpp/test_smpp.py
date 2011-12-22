@@ -381,6 +381,7 @@ class FakeRedisRespTestCase(TransportTestCase):
             })
 
         yield self.transport.startWorker()
+        self.transport.esme_connected(self.esme)
 
     @defer.inlineCallbacks
     def test_match_resp(self):
@@ -538,3 +539,18 @@ class FakeRedisRespTestCase(TransportTestCase):
             # check the dispatcher returns the correct transport method
             self.assertEquals(method,
                     self.esme.command_status_dispatch(response.get_obj()))
+
+    @defer.inlineCallbacks
+    def test_reconnect(self):
+        connected_chan_count = len(self._amqp.channels)
+        disconnected_chan_count = connected_chan_count - 1
+
+        yield self.transport.esme_disconnected()
+        self.assertEqual(disconnected_chan_count, len(self._amqp.channels))
+        yield self.transport.esme_disconnected()
+        self.assertEqual(disconnected_chan_count, len(self._amqp.channels))
+
+        yield self.transport.esme_connected(self.esme)
+        self.assertEqual(connected_chan_count, len(self._amqp.channels))
+        yield self.transport.esme_connected(self.esme)
+        self.assertEqual(connected_chan_count, len(self._amqp.channels))
