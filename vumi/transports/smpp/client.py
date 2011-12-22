@@ -1,3 +1,5 @@
+# -*- test-case-name: vumi.transports.smpp.test.test_client -*-
+
 import re
 import json
 import uuid
@@ -82,6 +84,8 @@ ESME_command_status_map = {
 
 
 class EsmeTransceiver(Protocol):
+
+    callLater = reactor.callLater
 
     def __init__(self, seq, config, vumi_options):
         self.build_maps()
@@ -347,13 +351,14 @@ class EsmeTransceiver(Protocol):
         log.msg(pdu.get_obj())
         self.incSeq()
         self.sendPDU(pdu)
-        reactor.callLater(self.smpp_bind_timeout,
-                self.lose_unbound_connection, 'BOUND_TRX')
+        self._lose_conn = self.callLater(
+            self.smpp_bind_timeout, self.lose_unbound_connection, 'BOUND_TRX')
 
     def lose_unbound_connection(self, required_state):
         if self.state != required_state:
             log.msg('Breaking connection due to binding delay, %s != %s\n' % (
                 self.state, required_state))
+            self._lose_conn = None
             self.transport.loseConnection()
 
     def connectionLost(self, *args, **kwargs):
@@ -383,6 +388,9 @@ class EsmeTransceiver(Protocol):
             self.state = 'BOUND_TRX'
             self.lc_enquire = LoopingCall(self.enquire_link)
             self.lc_enquire.start(55.0)
+            if self._lose_conn is not None:
+                self._lose_conn.cancel()
+                self._lose_conn = None
             self.__connect_callback(self)
         log.msg('%s STATE: %s' % (self.name, self.state))
 
@@ -436,8 +444,14 @@ class EsmeTransceiver(Protocol):
         if codec is None or message is None:
             log.msg("WARNING: Not decoding message with data_coding=%s" % (
                     data_coding,))
-            return message
-        return message.decode(codec)
+        else:
+            try:
+                return message.decode(codec)
+            except Exception, e:
+                log.msg("Error decoding message with data_coding=%s" % (
+                        data_coding,))
+                log.err(e)
+        return message
 
     def handle_deliver_sm(self, pdu):
         if pdu['header']['command_status'] == 'ESME_ROK':

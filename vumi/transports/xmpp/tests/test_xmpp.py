@@ -44,6 +44,9 @@ class XMPPTransportTestCase(TransportTestCase):
         # start the publisher, we need that one eventhough we do not
         # connect to an XMPP server
         yield transport._setup_message_publisher()
+        # _setup_message_consumer() assumes we have a message_consumer
+        # attribute set to None
+        transport.message_consumer = None
         yield transport._setup_message_consumer()
         returnValue(transport)
 

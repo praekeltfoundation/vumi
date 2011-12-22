@@ -1,6 +1,5 @@
 # -*- test-case-name: vumi.transports.httprpc.tests.test_httprpc -*-
 
-import uuid
 import json
 
 from twisted.internet.defer import inlineCallbacks
@@ -8,8 +7,8 @@ from twisted.python import log
 from twisted.web import http
 from twisted.web.resource import Resource
 from twisted.web.server import NOT_DONE_YET
+
 from vumi.transports.base import Transport
-from vumi.message import TransportUserMessage
 
 
 class HttpRpcHealthResource(Resource):
@@ -21,9 +20,7 @@ class HttpRpcHealthResource(Resource):
 
     def render_GET(self, request):
         request.setResponseCode(http.OK)
-        return json.dumps({
-            'pending_requests': len(self.transport.requests)
-        })
+        return self.transport.get_health_response()
 
 
 class HttpRpcResource(Resource):
@@ -36,9 +33,9 @@ class HttpRpcResource(Resource):
     def render_(self, request, http_action=None):
         log.msg("HttpRpcResource HTTP Action: %s" % (request,))
         request.setHeader("content-type", "text/plain")
-        uu = uuid.uuid4().get_hex()
-        self.transport.requests[uu] = request
-        self.transport.handle_raw_inbound_message(uu, request)
+        msgid = Transport.generate_message_id()
+        self.transport.requests[msgid] = request
+        self.transport.handle_raw_inbound_message(msgid, request)
         return NOT_DONE_YET
 
     def render_PUT(self, request):
@@ -61,6 +58,17 @@ class HttpRpcTransport(Transport):
     of this transport of a given name.
     """
 
+    def get_transport_url(self, suffix=''):
+        """
+        Get the URL for the HTTP resource. Requires the worker to be started.
+
+        This is mostly useful in tests, and probably shouldn't be used
+        in non-test code, because the API might live behind a load
+        balancer or proxy.
+        """
+        addr = self.web_resource.getHost()
+        return "http://%s:%s/%s" % (addr.host, addr.port, suffix.lstrip('/'))
+
     @inlineCallbacks
     def setup_transport(self):
         self.requests = {}
@@ -77,6 +85,11 @@ class HttpRpcTransport(Transport):
     def teardown_transport(self):
         yield self.web_resource.loseConnection()
 
+    def get_health_response(self):
+        return json.dumps({
+            'pending_requests': len(self.requests)
+        })
+
     def handle_outbound_message(self, message):
         log.msg("HttpRpcTransport consuming %s" % (message))
         if message.payload.get('in_reply_to') and 'content' in message.payload:
@@ -88,15 +101,16 @@ class HttpRpcTransport(Transport):
         raise NotImplementedError("Sub-classes should implement"
                                   " handle_raw_inbound_message.")
 
-    def finish_request(self, msgid, data):
+    def finish_request(self, msgid, data, code=200):
         log.msg("HttpRpcTransport.finish_request with data:", repr(data))
         log.msg(repr(self.requests))
         request = self.requests.get(msgid)
         if request:
+            request.setResponseCode(code)
             request.write(data)
             request.finish()
             del self.requests[msgid]
             response_id = "%s:%s:%s" % (request.client.host,
                                         request.client.port,
-                                        uuid.uuid4().get_hex())
+                                        Transport.generate_message_id())
             return response_id

@@ -35,6 +35,7 @@ class TelnetServerTransportTestCase(TransportTestCase):
         super(TelnetServerTransportTestCase, self).setUp()
         self.worker = yield self.get_transport({'telnet_port': 0})
         self.client = yield self.make_client()
+        yield self.wait_for_client_start()
 
     def tearDown(self):
         super(TelnetServerTransportTestCase, self).tearDown()
@@ -46,6 +47,10 @@ class TelnetServerTransportTestCase(TransportTestCase):
         messages = [cls.from_json(content.body)
                     for content in contents]
         return messages
+
+    def wait_for_client_start(self):
+        """Wait for first message from client to be ready."""
+        return self._amqp.wait_messages('vumi', 'test.inbound', 1)
 
     @inlineCallbacks
     def make_client(self):

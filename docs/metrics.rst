@@ -6,7 +6,7 @@ Metrics
 Metrics are a means for workers to publish statistics about their
 operations for real-time plotting and later analysis. Vumi provides
 built-in support for publishing metric values to Carbon (the storage
-engine used by `Grahpite <http://http://graphite.wikidot.com/>`_).
+engine used by `Graphite <http://http://graphite.wikidot.com/>`_).
 
 
 Using metrics from a worker

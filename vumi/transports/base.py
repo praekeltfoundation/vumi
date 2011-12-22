@@ -55,6 +55,7 @@ class Transport(Worker):
 
         yield self.setup_transport()
 
+        self.message_consumer = None
         if self.start_message_consumer:
             yield self._setup_message_consumer()
 
@@ -103,6 +104,10 @@ class Transport(Worker):
 
     @inlineCallbacks
     def _setup_message_consumer(self):
+        if self.message_consumer is not None:
+            log.msg("Consumer already exists, not restarting.")
+            return
+
         self.message_consumer = yield self.consume(
             self.get_rkey('outbound'), self._process_message,
             message_class=TransportUserMessage)
@@ -111,6 +116,14 @@ class Transport(Worker):
         if self.concurrent_sends is not None:
             yield self.message_consumer.channel.basic_qos(
                 0, int(self.concurrent_sends), False)
+
+    def _teardown_message_consumer(self):
+        if self.message_consumer is None:
+            log.msg("Consumer does not exist, not stopping.")
+            return
+
+        consumer, self.message_consumer = self.message_consumer, None
+        return consumer.stop()
 
     @inlineCallbacks
     def _setup_event_publisher(self):
@@ -192,3 +205,11 @@ class Transport(Worker):
         thing with them.
         """
         raise NotImplementedError()
+
+    @staticmethod
+    def generate_message_id():
+        """
+        Generate a message id.
+        """
+
+        return TransportUserMessage.generate_id()

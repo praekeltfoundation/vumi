@@ -107,6 +107,10 @@ class FakeAMQPBroker(object):
         self.channels.append(channel)
         return Message(mkMethod("open-ok", 11))
 
+    def channel_close(self, channel):
+        self.channels.remove(channel)
+        return Message(mkMethod("close-ok", 41))
+
     def exchange_declare(self, exchange, exchange_type):
         exchange_class = None
         if exchange_type == 'direct':
@@ -261,6 +265,12 @@ class FakeAMQPChannel(object):
 
     def channel_open(self):
         return self.broker.channel_open(self)
+
+    def channel_close(self):
+        return self.broker.channel_close(self)
+
+    def close(self):
+        pass
 
     def basic_qos(self, _prefetch_size, prefetch_count, _global):
         self.qos_prefetch_count = prefetch_count

@@ -85,8 +85,8 @@ class Message(object):
 
     def __eq__(self, other):
         if isinstance(other, Message):
-            other = other.payload
-        return self.payload == other
+            return self.payload == other.payload
+        return False
 
     def __getitem__(self, key):
         return self.payload[key]
@@ -107,6 +107,17 @@ class TransportMessage(Message):
     # sub-classes should set the message type
     MESSAGE_TYPE = None
     MESSAGE_VERSION = '20110921'
+
+    @staticmethod
+    def generate_id():
+        """
+        Generate a unique message id.
+
+        There are places where we want a message id before we can
+        build a complete message. This lets us do that in a consistent
+        manner.
+        """
+        return uuid4().get_hex()
 
     def process_fields(self, fields):
         fields.setdefault('message_version', self.MESSAGE_VERSION)
@@ -154,7 +165,7 @@ class TransportUserMessage(TransportMessage):
 
     def process_fields(self, fields):
         fields = super(TransportUserMessage, self).process_fields(fields)
-        fields.setdefault('message_id', uuid4().get_hex())
+        fields.setdefault('message_id', self.generate_id())
         fields.setdefault('in_reply_to', None)
         fields.setdefault('session_event', None)
         fields.setdefault('content', None)
@@ -216,7 +227,7 @@ class TransportEvent(TransportMessage):
 
     def process_fields(self, fields):
         fields = super(TransportEvent, self).process_fields(fields)
-        fields.setdefault('event_id', uuid4().get_hex())
+        fields.setdefault('event_id', self.generate_id())
         return fields
 
     def validate_fields(self):
