@@ -140,6 +140,7 @@ class TestApplicationWorker(TestCase):
         worker.new_session(FakeUserMessage())
         worker.close_session(FakeUserMessage())
 
+
 class ApplicationTestCase(TestCase):
 
     """
@@ -188,14 +189,15 @@ class ApplicationTestCase(TestCase):
         returnValue(worker)
 
     def mkmsg_in(self, content='hello world', message_id='abc',
+                 to_addr='9292', from_addr='+41791234567',
                  transport_type=None, transport_metadata=None):
         if transport_type is None:
             transport_type = self.transport_type
         if transport_metadata is None:
             transport_metadata = {}
         return TransportUserMessage(
-            from_addr='+41791234567',
-            to_addr='9292',
+            from_addr=from_addr,
+            to_addr=to_addr,
             message_id=message_id,
             transport_name=self.transport_name,
             transport_type=transport_type,
