@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-from twisted.trial.unittest import SkipTest
 from twisted.internet.defer import inlineCallbacks
 from vumi.message import TransportUserMessage
 from vumi.transports.gsm.tests.test_gsm_stubs import (
