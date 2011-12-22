@@ -190,7 +190,8 @@ class ApplicationTestCase(TestCase):
 
     def mkmsg_in(self, content='hello world', message_id='abc',
                  to_addr='9292', from_addr='+41791234567',
-                 transport_type=None, transport_metadata=None):
+                 session_event=None, transport_type=None,
+                 transport_metadata=None):
         if transport_type is None:
             transport_type = self.transport_type
         if transport_metadata is None:
@@ -203,13 +204,15 @@ class ApplicationTestCase(TestCase):
             transport_type=transport_type,
             transport_metadata=transport_metadata,
             content=content,
+            session_event=session_event,
             timestamp=datetime.now(),
             )
 
     def mkmsg_out(self, content='hello world', message_id='1',
                   to_addr='+41791234567', from_addr='9292',
-                  in_reply_to=None, transport_type=None,
-                  transport_metadata=None, stubs=False):
+                  session_event=None, in_reply_to=None,
+                  transport_type=None, transport_metadata=None,
+                  stubs=False):
         if transport_type is None:
             transport_type = self.transport_type
         if transport_metadata is None:
@@ -222,6 +225,7 @@ class ApplicationTestCase(TestCase):
             transport_type=transport_type,
             transport_metadata=transport_metadata,
             content=content,
+            session_event=session_event,
             in_reply_to=in_reply_to,
             )
         if stubs:
