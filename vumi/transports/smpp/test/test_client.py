@@ -1,14 +1,29 @@
 from twisted.trial import unittest
-from smpp.pdu_builder import DeliverSM
+from twisted.internet.task import Clock
+from smpp.pdu_builder import DeliverSM, BindTransceiverResp
 from smpp.pdu import unpack_pdu
 
 from vumi.transports.smpp.client import EsmeTransceiver
 
 
+class FakeTransport(object):
+    def __init__(self):
+        self.connected = True
+
+    def loseConnection(self):
+        self.connected = False
+
+
 class FakeEsmeTransceiver(EsmeTransceiver):
     def __init__(self):
         self.defaults = {}
-        pass
+        self.name = 'test_esme'
+        self.inc = 1
+        self.seq = [0]
+        self.smpp_bind_timeout = 10
+        self.clock = Clock()
+        self.callLater = self.clock.callLater
+        self.transport = FakeTransport()
 
     def sendPDU(self, *args):
         pass
@@ -52,3 +67,30 @@ class EsmeTransceiverTestCase(unittest.TestCase):
             self.flushLoggedErrors()
         esme.setDeliverSMCallback(_cb)
         esme.handle_deliver_sm(self.get_sm(bad_msg, 8))
+
+    def test_bind_timeout(self):
+        esme = self.get_esme()
+        esme.connectionMade()
+
+        self.assertEqual(True, esme.transport.connected)
+        self.assertNotEqual(None, esme._lose_conn)
+
+        esme.clock.advance(esme.smpp_bind_timeout)
+
+        self.assertEqual(False, esme.transport.connected)
+        self.assertEqual(None, esme._lose_conn)
+
+    def test_bind_no_timeout(self):
+        esme = self.get_esme()
+        esme.setConnectCallback(lambda *a, **kw: None)
+        esme.connectionMade()
+
+        self.assertEqual(True, esme.transport.connected)
+        self.assertNotEqual(None, esme._lose_conn)
+
+        esme.handle_bind_transceiver_resp(unpack_pdu(
+            BindTransceiverResp(1).get_bin()))
+
+        self.assertEqual(True, esme.transport.connected)
+        self.assertEqual(None, esme._lose_conn)
+        esme.lc_enquire.stop()
