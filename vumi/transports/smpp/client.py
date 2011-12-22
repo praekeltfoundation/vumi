@@ -1,3 +1,5 @@
+# -*- test-case-name: vumi.transports.smpp.test.test_client -*-
+
 import re
 import json
 import uuid
@@ -436,8 +438,14 @@ class EsmeTransceiver(Protocol):
         if codec is None or message is None:
             log.msg("WARNING: Not decoding message with data_coding=%s" % (
                     data_coding,))
-            return message
-        return message.decode(codec)
+        else:
+            try:
+                return message.decode(codec)
+            except Exception, e:
+                log.msg("Error decoding message with data_coding=%s" % (
+                        data_coding,))
+                log.err(e)
+        return message
 
     def handle_deliver_sm(self, pdu):
         if pdu['header']['command_status'] == 'ESME_ROK':

@@ -25,7 +25,7 @@ class EsmeTransceiverTestCase(unittest.TestCase):
         return unpack_pdu(sm.get_bin())
 
     def test_deliver_sm_simple(self):
-        """A test that should always pass"""
+        """A simple message should be delivered."""
         esme = self.get_esme()
 
         def _cb(**kw):
@@ -34,10 +34,21 @@ class EsmeTransceiverTestCase(unittest.TestCase):
         esme.handle_deliver_sm(self.get_sm('hello'))
 
     def test_deliver_sm_ucs2(self):
-        """A test that should always pass"""
+        """A UCS-2 message should be delivered."""
         esme = self.get_esme()
 
         def _cb(**kw):
             self.assertEqual(u'hello', kw['short_message'])
         esme.setDeliverSMCallback(_cb)
         esme.handle_deliver_sm(self.get_sm('\x00h\x00e\x00l\x00l\x00o', 8))
+
+    def test_bad_sm_ucs2(self):
+        """An invalid UCS-2 message should be discarded."""
+        esme = self.get_esme()
+        bad_msg = '\n\x00h\x00e\x00l\x00l\x00o'
+
+        def _cb(**kw):
+            self.assertEqual(bad_msg, kw['short_message'])
+            self.flushLoggedErrors()
+        esme.setDeliverSMCallback(_cb)
+        esme.handle_deliver_sm(self.get_sm(bad_msg, 8))
