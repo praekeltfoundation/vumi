@@ -177,3 +177,10 @@ class BaseTransportTestCase(TransportTestCase):
         tr = yield self.get_transport({})
         self.assertEqual(self.transport_name, tr.transport_name)
         self.assert_basic_rkeys(tr)
+
+    @inlineCallbacks
+    def test_consumer_registry(self):
+        tr = yield self.get_transport({})
+        self.assertEqual(len(tr._consumers), 1)
+        yield tr.stopWorker()
+        self.assertEqual(len(tr._consumers), 0)

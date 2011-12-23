@@ -52,7 +52,8 @@ class ApplicationWorker(Worker):
 
     @inlineCallbacks
     def stopWorker(self):
-        for consumer in self._consumers:
+        while self._consumers:
+            consumer = self._consumers.pop()
             yield consumer.stop()
         yield self.teardown_application()
 
