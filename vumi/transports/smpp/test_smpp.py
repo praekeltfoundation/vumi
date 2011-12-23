@@ -5,8 +5,7 @@ from twisted.trial.unittest import TestCase
 from twisted.internet import defer
 from smpp.pdu_builder import SubmitSMResp, BindTransceiverResp
 
-from vumi.tests.utils import (
-    TestPublisher, mocking, FakeRedis)
+from vumi.tests.utils import TestPublisher, mocking, FakeRedis
 from vumi.message import TransportUserMessage, TransportEvent, Message
 from vumi.transports.smpp.client import EsmeTransceiver
 from vumi.transports.smpp.transport import SmppTransport
