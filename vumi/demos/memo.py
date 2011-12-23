@@ -26,8 +26,8 @@ class MemoWorker(ApplicationWorker):
 
     @inlineCallbacks
     def startWorker(self):
-        yield super(MemoWorker, self).startWorker()
         self.memos = {}
+        yield super(MemoWorker, self).startWorker()
 
     def consume_user_message(self, msg):
         """Log message from a user."""

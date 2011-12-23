@@ -1,48 +1,38 @@
 """Tests for vumi.demos.memo."""
 
-from twisted.trial import unittest
 from twisted.internet.defer import inlineCallbacks, returnValue
 
-from vumi.tests.utils import get_stubbed_worker
+from vumi.application.tests.test_base import ApplicationTestCase
+
 from vumi.demos.memo import MemoWorker
 from vumi.message import TransportUserMessage
 
 
-class TestMemoWorker(unittest.TestCase):
-    @inlineCallbacks
-    def setUp(self):
-        self.transport_name = 'test_transport'
-        self.worker = get_stubbed_worker(MemoWorker, {
-                'transport_name': self.transport_name})
-        self.broker = self.worker._amqp_client.broker
-        yield self.worker.startWorker()
+class TestMemoWorker(ApplicationTestCase):
+
+    application_class = MemoWorker
 
     @inlineCallbacks
-    def tearDown(self):
-        yield self.worker.stopWorker()
+    def setUp(self):
+        super(TestMemoWorker, self).setUp()
+        self.worker = yield self.get_application({})
 
     @inlineCallbacks
     def send(self, content, from_addr='testnick', channel=None):
         transport_metadata = {}
         if channel is not None:
             transport_metadata['irc_channel'] = channel
-        msg = TransportUserMessage(content=content,
-                                   from_addr=from_addr,
-                                   to_addr='some-addr',
-                                   transport_name='test',
-                                   transport_type='fake',
-                                   transport_metadata=transport_metadata)
-        self.broker.publish_message('vumi', '%s.inbound' % self.transport_name,
-                                    msg)
-        yield self.broker.kick_delivery()
+
+        msg = self.mkmsg_in(content=content, from_addr=from_addr,
+                            transport_metadata=transport_metadata)
+        yield self.dispatch(msg)
 
     def clear_messages(self):
-        self.broker.clear_messages('vumi', '%s.outbound' % self.transport_name)
+        self._amqp.clear_messages('vumi', '%s.outbound' % self.transport_name)
 
     @inlineCallbacks
     def recv(self, n=0):
-        msgs = yield self.broker.wait_messages('vumi', '%s.outbound'
-                                                % self.transport_name, n)
+        msgs = yield self.wait_for_dispatched_messages(n)
 
         def reply_code(msg):
             if msg['session_event'] == TransportUserMessage.SESSION_CLOSE:
