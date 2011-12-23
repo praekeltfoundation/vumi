@@ -64,7 +64,7 @@ class ApplicationWorker(Worker):
 
     def validate_config(self):
         """
-        Applicatiaon-specific config validation happens in here.
+        Application-specific config validation happens in here.
 
         Subclasses may override this method to perform extra config validation.
         """
