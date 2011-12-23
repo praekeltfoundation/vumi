@@ -61,7 +61,8 @@ class Transport(Worker):
 
     @inlineCallbacks
     def stopWorker(self):
-        for consumer in self._consumers:
+        while self._consumers:
+            consumer = self._consumers.pop()
             yield consumer.stop()
         yield self.teardown_transport()
 
@@ -111,6 +112,7 @@ class Transport(Worker):
         self.message_consumer = yield self.consume(
             self.get_rkey('outbound'), self._process_message,
             message_class=TransportUserMessage)
+        self._consumers.append(self.message_consumer)
 
         # Apply concurrency throttling if we need to.
         if self.concurrent_sends is not None:
@@ -121,7 +123,7 @@ class Transport(Worker):
         if self.message_consumer is None:
             log.msg("Consumer does not exist, not stopping.")
             return
-
+        self._consumers.remove(self.message_consumer)
         consumer, self.message_consumer = self.message_consumer, None
         return consumer.stop()
 
