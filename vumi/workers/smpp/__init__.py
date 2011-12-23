@@ -2,7 +2,7 @@
 Old DEPRECATED SMPP workers.
 """
 
-from vumi.transports.smpp.worker import (SMSAckWorker,
+from vumi.workers.smpp.worker import (SMSAckWorker,
                                          SMSBatchWorker,
                                          SMSReceiptWorker)
 
