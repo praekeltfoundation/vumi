@@ -12,6 +12,7 @@ class HTTPRelayError(VumiError): pass
 
 class HTTPRelay(ApplicationWorker):
 
+    reply_header = 'X-Vumi-HTTPRelay-Reply'
 
     def validate_config(self):
         self.supported_auth_methods = {
@@ -44,7 +45,8 @@ class HTTPRelay(ApplicationWorker):
 
         response = yield http_request_full(self.url.geturl(),
                             message.to_json(), headers, self.http_method)
-        if response.code = http.OK:
-            reply = response.delivered_body.strip():
-            if reply:
-                self.reply_to(message, reply)
+        if response.code == http.OK:
+            header = response.getHeader(self.reply_header) == 'true':
+            content = response.delivered_body.strip()
+            if header and content:
+                self.reply_to(message, content)
