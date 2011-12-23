@@ -279,5 +279,3 @@ class SMSKeywordTestCase(TestCase):
                           'sms.inbound.testing.27123456781')
         self.assertEquals(network2_consumer.routing_key,
                           'sms.inbound.testing.27123456781')
-
-
