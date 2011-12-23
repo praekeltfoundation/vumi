@@ -17,11 +17,6 @@ class HTTPRelayApplication(ApplicationWorker):
 
     reply_header = 'X-Vumi-HTTPRelay-Reply'
 
-    @inlineCallbacks
-    def startWorker(self, *args, **kwargs):
-        self.validate_config()
-        yield super(HTTPRelayApplication, self).startWorker(*args, **kwargs)
-
     def validate_config(self):
         self.supported_auth_methods = {
             'basic': self.generate_basic_auth_headers,
