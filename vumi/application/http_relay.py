@@ -1,4 +1,4 @@
-# -*- test-case-name: vumi.demos.tests.test_http_relay -*-
+# -*- test-case-name: vumi.application.tests.test_http_relay -*-
 from twisted.python import log
 from twisted.web import http
 from twisted.internet.defer import inlineCallbacks
