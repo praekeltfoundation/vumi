@@ -32,11 +32,12 @@ class LoggerWorker(ApplicationWorker):
     def log(self, **kwargs):
         """Write a message to web logging API."""
         log.msg("Logging payload: %r" % (kwargs,))
+        headers = {
+            'Content-Type': ['application/json'],
+            }
         response = yield http_request(self.log_server_url,
                                       json.dumps(kwargs),
-                                      headers={
-                                          'Content-Type': 'application/json'
-                                          })
+                                      headers=headers)
         log.msg("Response: %r" % (response,))
 
     @inlineCallbacks
@@ -44,20 +45,19 @@ class LoggerWorker(ApplicationWorker):
         """Log message from a user."""
         user = msg.user()
         transport_metadata = msg['transport_metadata']
-        channel = transport_metadata.get('irc_channel', 'unknown')
-
+        irc_channel = transport_metadata.get('irc_channel')
+        irc_command = transport_metadata.get('irc_command', 'PRIVMSG')
         text = msg['content']
 
-
-        # Check to see if they're sending me a private message
-        if not any(channel.startswith(p) for p in ('#', '&', '$')):
+        # only log messages send to a channel
+        if irc_channel is None:
             return
-        if msg_type in ('message', 'system'):
-            self.log(nickname=nickname, channel=channel, msg=msg)
-        elif msg_type == 'action':
-            self.log(message_type=msg_type, channel=channel,
-                     msg="* %s %s" % (nickname, msg))
-        elif msg_type == 'nick_change':
-            self.log(message_type='system',
-                     msg="%s is now known as %s" % (nickname, msg))
 
+        nickname = user.partition('!')[0]
+
+        if irc_command == 'PRIVMSG':
+            yield self.log(message_type='message', nickname=nickname,
+                           channel=irc_channel, msg=text)
+        elif irc_command == 'ACTION':
+            yield self.log(message_type='action', channel=irc_channel,
+                           msg="* %s %s" % (nickname, text))
