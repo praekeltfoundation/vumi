@@ -4,10 +4,9 @@ from twisted.trial.unittest import TestCase
 from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, DeferredQueue
 from twisted.web.server import Site
-from twisted.web.resource import Resource
 
 from vumi.utils import http_request
-from vumi.tests.utils import get_stubbed_worker
+from vumi.tests.utils import get_stubbed_worker, MockHttpServer
 from vumi.message import TransportUserMessage
 from vumi.transports.integrat.integrat import (IntegratHttpResource,
                                                IntegratTransport)
@@ -127,41 +126,6 @@ class TestIntegratHttpResource(TestCase):
         </Message>
         """
         yield self.check_response(xml, [])
-
-
-class MockResource(Resource):
-    isLeaf = True
-
-    def __init__(self, handler):
-        Resource.__init__(self)
-        self.handler = handler
-
-    def render_GET(self, request):
-        return self.handler(request)
-
-    def render_POST(self, request):
-        return self.handler(request)
-
-
-class MockHttpServer(object):
-
-    def __init__(self, handler):
-        self._handler = handler
-        self._webserver = None
-        self.addr = None
-        self.url = None
-
-    @inlineCallbacks
-    def start(self):
-        root = MockResource(self._handler)
-        site_factory = Site(root)
-        self._webserver = yield reactor.listenTCP(0, site_factory)
-        self.addr = self._webserver.getHost()
-        self.url = "http://%s:%s/" % (self.addr.host, self.addr.port)
-
-    @inlineCallbacks
-    def stop(self):
-        yield self._webserver.loseConnection()
 
 
 class TestIntegratTransport(TestCase):
