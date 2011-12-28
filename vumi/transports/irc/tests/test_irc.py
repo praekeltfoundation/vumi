@@ -41,12 +41,24 @@ class TestIrcMessage(unittest.TestCase):
                          'hello?', 'nicktest')
         self.assertEqual(msg.nickname, 'nicktest')
 
+    def test_addressed_to(self):
+        msg = IrcMessage('user!userfoo@example.com', 'PRIVMSG',
+                         'otheruser!userfoo@example.com',
+                         'hello?', 'nicktest')
+        self.assertFalse(msg.addressed_to('user'))
+        self.assertTrue(msg.addressed_to('otheruser'))
+
     def test_equality(self):
         msg1 = IrcMessage('user!userfoo@example.com', 'PRIVMSG', '#bar',
                          'hello?')
         msg2 = IrcMessage('user!userfoo@example.com', 'PRIVMSG', '#bar',
                          'hello?')
-        self.assertEqual(msg1, msg2)
+        self.assertTrue(msg1 == msg2)
+
+    def test_inequality(self):
+        msg1 = IrcMessage('user!userfoo@example.com', 'PRIVMSG', '#bar',
+                         'hello?')
+        self.assertFalse(msg1 == object())
 
 
 class TestVumiBotProtocol(unittest.TestCase):
