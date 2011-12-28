@@ -2,8 +2,8 @@
 
 import os.path
 import re
+import sys
 
-import importlib
 import pkg_resources
 from zope.interface import implements
 from twisted.internet import defer
@@ -12,6 +12,18 @@ from twisted.internet.defer import succeed
 from twisted.web.client import Agent, ResponseDone
 from twisted.web.http_headers import Headers
 from twisted.web.iweb import IBodyProducer
+
+
+def import_module(name):
+    """
+    This is a simpler version of `importlib.import_module` and does
+    not support relative imports.
+
+    It's here so that we can avoid using importlib and not have to
+    juggle different deps between Python versions.
+    """
+    __import__(name)
+    return sys.modules[name]
 
 
 class SimplishReceiver(protocol.Protocol):
@@ -114,7 +126,7 @@ def load_class(module_name, class_name):
     >>>
 
     """
-    mod = importlib.import_module(module_name)
+    mod = import_module(module_name)
     return getattr(mod, class_name)
 
 

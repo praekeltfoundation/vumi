@@ -3,6 +3,10 @@
 from  xml.etree import ElementTree
 
 
+def safetext(element):
+    return element.text or ''
+
+
 class HigateXMLParser():
 
     def parse(self, xmlstring):
@@ -34,8 +38,8 @@ class HigateXMLParser():
 
         if messagedict.get('Type') == "OnReceiveSMS":
             receivelist = element.find("Response").find("OnReceiveSMS").items()
-            hex = element.find("Response").find("OnReceiveSMS").find(
-                "Content").findtext("")
+            hex = safetext(element.find("Response").find("OnReceiveSMS").find(
+                "Content"))
             messagedict['hex'] = hex
             for i in receivelist:
                 messagedict[i[0]] = i[1]
@@ -51,8 +55,9 @@ class HigateXMLParser():
                 "USSContext").items()
             if element.find("Response").find("OnUSSEvent").find(
                 "USSText") != None:
-                USSText = element.find("Response").find("OnUSSEvent").find(
-                    "USSText").findtext("")
+                USSText = safetext(element.find("Response").find(
+                        "OnUSSEvent").find("USSText"))
+
                 messagedict['USSText'] = USSText
 
             messagedict['EventType'] = element.find("Response").find(
@@ -62,9 +67,9 @@ class HigateXMLParser():
                 messagedict[i[0]] = i[1]
 
         if messagedict.get('Type') == "USSReply":
-            UserID = element.find("Request").find("UserID").findtext('')
-            Password = element.find("Request").find("Password").findtext('')
-            USSText = element.find("Request").find("USSText").findtext('')
+            UserID = safetext(element.find("Request").find("UserID"))
+            Password = safetext(element.find("Request").find("Password"))
+            USSText = safetext(element.find("Request").find("USSText"))
             messagedict['UserID'] = UserID
             messagedict['Password'] = Password
             messagedict['USSText'] = USSText
