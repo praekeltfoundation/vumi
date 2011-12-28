@@ -1,6 +1,5 @@
 from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks, returnValue
-from vumi.tests.utils import get_stubbed_worker
 
 from vumi.application.base import ApplicationWorker, SESSION_NEW, SESSION_CLOSE
 from vumi.message import TransportUserMessage, TransportEvent
@@ -147,6 +146,9 @@ class ApplicationTestCase(TestCase):
     This is a base class for testing application workers.
 
     """
+
+    # base timeout of 5s for all application tests
+    timeout = 5
 
     transport_name = "sphex"
     transport_type = None
