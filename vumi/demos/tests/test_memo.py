@@ -51,7 +51,7 @@ class TestMemoWorker(ApplicationTestCase):
     def test_leave_memo(self):
         yield self.send('bot: tell memoed hey there', channel='#test')
         self.assertEquals(self.worker.memos, {
-            ('#test', 'memoed'): [('testnick', 'hey there')]
+            ('#test', 'memoed'): [('testnick', 'hey there')],
             })
         replies = yield self.recv()
         self.assertEqual(replies, [
