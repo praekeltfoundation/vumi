@@ -11,6 +11,8 @@ def mkmsg(body):
 
 
 class FakeAMQPTestCase(TestCase):
+    timeout = 5
+
     def setUp(self):
         self.broker = fake_amqp.FakeAMQPBroker()
 
@@ -182,7 +184,8 @@ class FakeAMQPTestCase(TestCase):
                 # NOTE: One-shot.
                 d.callback(msg)
 
-        worker = TestWorker(amq_client, {})
+        worker = TestWorker({}, {})
+        worker._amqp_client = amq_client
         yield worker.startWorker()
         yield worker.pub.publish_json({'message': 'foo'})
         yield worker.conpub.publish_json({'message': 'bar'})
@@ -196,7 +199,7 @@ class FakeAMQPTestCase(TestCase):
     # in the fake one. I've left it in here for now in case we need to
     # do further investigation later, but we *really* don't want to
     # run it as part of the test suite.
-    #
+
     # @inlineCallbacks
     # def test_zzz_real_amqclient(self):
     #     print ""
@@ -225,9 +228,9 @@ class FakeAMQPTestCase(TestCase):
     #             print "CONSUMED!", msg
     #             return True
 
-    #     factory = wc.create_worker_by_class(TestWorker, {})
+    #     worker = wc.create_worker_by_class(TestWorker, {})
+    #     worker.startService()
     #     yield d
-    #     worker = factory.worker
     #     yield worker.pub.publish_json({"foo": "bar"})
     #     yield worker.conpub.publish_json({"bar": "baz"})
     #     yield worker.pub.channel.queue_declare(queue='test.foo')
@@ -239,3 +242,4 @@ class FakeAMQPTestCase(TestCase):
     #     foo = yield worker.pub.channel.basic_get(queue='test.foo')
     #     print "got:", foo
     #     yield worker.stopWorker()
+    #     yield worker.stopService()
