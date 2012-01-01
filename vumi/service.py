@@ -347,7 +347,7 @@ class Consumer(object):
         #self.channel.close(None)
         # This actually closes the channel on the server
         yield self.channel.channel_close()
-        self.channel.close()
+        self.channel.close(None)
         returnValue(self.keep_consuming)
 
 

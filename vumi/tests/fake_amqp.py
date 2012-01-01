@@ -269,7 +269,7 @@ class FakeAMQPChannel(object):
     def channel_close(self):
         return self.broker.channel_close(self)
 
-    def close(self):
+    def close(self, _reason):
         pass
 
     def basic_qos(self, _prefetch_size, prefetch_count, _global):
