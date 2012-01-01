@@ -48,7 +48,8 @@ class VumiService(Service):
         # add options set with --set-option
         config.update(self.options.set_options)
 
-        worker_creator.create_worker(worker_class, config)
+        worker = worker_creator.create_worker(worker_class, config)
+        return worker.startService()
 
     # Twistd calls this method at shutdown
     def stopService(self):
