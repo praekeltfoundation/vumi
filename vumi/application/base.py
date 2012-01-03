@@ -6,6 +6,7 @@ from twisted.internet.defer import inlineCallbacks
 from twisted.python import log
 
 from vumi.service import Worker
+from vumi.errors import ConfigError
 from vumi.message import TransportUserMessage, TransportEvent
 
 
@@ -21,10 +22,17 @@ class ApplicationWorker(Worker):
     :class:`vumi.message.TransportEvent` messages.
     """
 
+    transport_name = None
+    start_message_consumer = True
+
     @inlineCallbacks
     def startWorker(self):
         log.msg('Starting a %s worker with config: %s'
                 % (self.__class__.__name__,  self.config))
+        self._consumers = []
+        self._validate_config()
+        self.transport_name = self.config['transport_name']
+
         self._event_handlers = {
             'ack': self.consume_ack,
             'delivery_report': self.consume_delivery_report,
@@ -33,16 +41,48 @@ class ApplicationWorker(Worker):
             SESSION_NEW: self.new_session,
             SESSION_CLOSE: self.close_session,
             }
-        self.transport_publisher = yield self.publish_to(
-            '%(transport_name)s.outbound' % self.config)
-        self.transport_consumer = yield self.consume(
-            '%(transport_name)s.inbound' % self.config,
-            self.dispatch_user_message,
-            message_class=TransportUserMessage)
-        self.transport_event_consumer = yield self.consume(
-            '%(transport_name)s.event' % self.config,
-            self.dispatch_event,
-            message_class=TransportEvent)
+
+        yield self._setup_transport_publisher()
+
+        yield self.setup_application()
+
+        if self.start_message_consumer:
+            yield self._setup_transport_consumer()
+            yield self._setup_event_consumer()
+
+    @inlineCallbacks
+    def stopWorker(self):
+        while self._consumers:
+            consumer = self._consumers.pop()
+            yield consumer.stop()
+        yield self.teardown_application()
+
+    def _validate_config(self):
+        if 'transport_name' not in self.config:
+            raise ConfigError("Missing 'transport_name' field in config.")
+        return self.validate_config()
+
+    def validate_config(self):
+        """
+        Application-specific config validation happens in here.
+
+        Subclasses may override this method to perform extra config validation.
+        """
+        pass
+
+    def setup_application(self):
+        """
+        All application specific setup should happen in here.
+
+        Subclasses should override this method to perform extra setup.
+        """
+        pass
+
+    def teardown_application(self):
+        """
+        Clean-up of setup done in setup_application should happen here.
+        """
+        pass
 
     def dispatch_event(self, event):
         """Dispatch to event_type specific handlers."""
@@ -91,3 +131,24 @@ class ApplicationWorker(Worker):
                  **kws):
         reply = original_message.reply(content, continue_session, **kws)
         self.transport_publisher.publish_message(reply)
+
+    @inlineCallbacks
+    def _setup_transport_publisher(self):
+        self.transport_publisher = yield self.publish_to(
+            '%(transport_name)s.outbound' % self.config)
+
+    @inlineCallbacks
+    def _setup_transport_consumer(self):
+        self.transport_consumer = yield self.consume(
+            '%(transport_name)s.inbound' % self.config,
+            self.dispatch_user_message,
+            message_class=TransportUserMessage)
+        self._consumers.append(self.transport_consumer)
+
+    @inlineCallbacks
+    def _setup_event_consumer(self):
+        self.transport_event_consumer = yield self.consume(
+            '%(transport_name)s.event' % self.config,
+            self.dispatch_event,
+            message_class=TransportEvent)
+        self._consumers.append(self.transport_event_consumer)

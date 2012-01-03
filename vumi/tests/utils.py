@@ -2,7 +2,6 @@
 
 import re
 import json
-import importlib
 import fnmatch
 from datetime import datetime, timedelta
 from collections import namedtuple
@@ -15,7 +14,7 @@ from twisted.web.server import Site
 from twisted.internet.defer import DeferredQueue, inlineCallbacks
 from twisted.python import log
 
-from vumi.utils import vumi_resource_path
+from vumi.utils import vumi_resource_path, import_module
 from vumi.service import get_spec, Worker
 from vumi.tests.fake_amqp import FakeAMQClient
 
@@ -73,7 +72,7 @@ class Mocking(object):
 
     def __enter__(self):
         """Overwrite whatever module the function is part of"""
-        self.mod = importlib.import_module(self.function.__module__)
+        self.mod = import_module(self.function.__module__)
         setattr(self.mod, self.function.__name__, self)
         return self
 
