@@ -1,59 +1,86 @@
+# -*- coding: utf-8 -*-
+# -*- test-case-name: vumi.transports.truteq.tests.test_truteq -*-
+
+"""TruTeq transport."""
+
 from twisted.python import log
-from twisted.internet.defer import inlineCallbacks
-from twisted.internet import reactor
+from twisted.internet.defer import inlineCallbacks, Deferred
 
-from vumi.message import Message
-from vumi.service import Worker, Consumer, Publisher
-from vumi.workers.truteq.util import (VumiSSMIFactory, SessionType,
-                                      ussd_code_to_routing_key)
+from ssmi import client
+
+from vumi.transports.base import Transport
+from vumi.transports.failures import PermanentFailure
 
 
-class TruTeqConsumer(Consumer):
+def ussd_code_to_routing_key(ussd_code):
+    # convert *120*663*79# to s120s663s79h since
+    # * and # are wildcards for AMQP based routing
+    ussd_code = ussd_code.replace("*", "s")
+    ussd_code = ussd_code.replace("#", "h")
+    return ussd_code
+
+
+class SessionType(object):
+    """ussd_type's from SSMI documentation"""
+    NEW = client.SSMI_USSD_TYPE_NEW
+    EXISTING = client.SSMI_USSD_TYPE_EXISTING
+    END = client.SSMI_USSD_TYPE_END
+    TIMEOUT = client.SSMI_USSD_TYPE_TIMEOUT
+
+
+class VumiSSMIProtocol(client.SSMIClient):
     """
-    This consumer creates the generic outbound USSD transport.
-    Anything published to the `vumi.ussd` exchange with
-    routing key ussd.truteq.* (* == single word match, # == zero or more words)
+    Subclassing the protocol to avoid me having to
+    work with callbacks to do authorization
     """
-    exchange_name = "vumi.ussd"
-    exchange_type = "topic"
-    durable = False
-    queue_name = "ussd.truteq"
-    routing_key = "ussd.truteq.*"
+    def __init__(self, username, password):
+        self._username = username  # these could probably be a
+        self._password = password  # callback instance var
 
-    def __init__(self, send_callback):
-        self.send = send_callback
+    def set_handler(self, handler):
+        # set the variables needed by SSMIClient so I don't have to
+        # specify callbacks manually for each function
+        self.handler = handler
+        self._ussd_callback = self.handler.ussd_callback
+        self._sms_callback = self.handler.sms_callback
+        self._errback = self.handler.errback
+        # ugh, can't do normal super() call because twisted's protocol.Factory
+        # is an old style class that doesn't subclass object.
+        client.SSMIClient.__init__(self)
 
-    def consume_message(self, message):
-        log.msg("Consumed Message %s" % message)
-        self.send(**message.payload)
-        return True
+    def connectionMade(self, *args, **kwargs):
+        client.SSMIClient.connectionMade(self, *args, **kwargs)
+        self.factory.onConnectionMade.callback(self)
+
+    def connectionLost(self, *args, **kwargs):
+        client.SSMIClient.connectionLost(self, *args, **kwargs)
+        self.factory.onConnectionLost.callback(self)
 
 
-class TruTeqPublisher(Publisher):
+class VumiSSMIFactory(client.SSMIFactory):
     """
-    This publisher publishes all incoming USSD messages to the
-    `vumi.ussd` exchange, its default routing key is `ussd.fallback`
-    but every new message that comes in has the USSD code as the first message.
-    The transport keeps this USSD code in an internal memory based dictionary
-    and uses it as the routing key for the message being published.
-
-    Successive messages coming from the client do not have the USSD code and
-    the dictionary is checked for what routing key should be used.
+    Subclassed the factory to allow me to work with my custom subclassed
+    protocol
     """
-    exchange_name = "vumi.ussd"
-    exchange_type = "topic"             # -> route based on pattern matching
-    routing_key = 'ussd.fallback'       # -> overriden in publish method
-    durable = False                     # -> not created at boot
-    auto_delete = False                 # -> auto delete if no consumers bound
-    delivery_mode = 2                   # -> do not save to disk
+    protocol = VumiSSMIProtocol
 
-    def publish_message(self, message, **kwargs):
-        log.msg("Publishing Message %s with extra args: %s" % (message,
-                                                               kwargs))
-        super(TruTeqPublisher, self).publish_message(message, **kwargs)
+    def __init__(self, *args, **kwargs):
+        self.args = args
+        self.kwargs = kwargs
+        self.onConnectionMade = Deferred()
+        self.onConnectionLost = Deferred()
+
+    def buildProtocol(self, addr):
+        prot = self.protocol(*self.args, **self.kwargs)
+        prot.factory = self
+        log.msg('SSMIFactory Connected.', logLevel=logging.DEBUG)
+        log.msg('SSMIFactory Resetting reconnection delay',
+                logLevel=logging.DEBUG)
+        self.resetDelay()
+        return prot
 
 
-class USSDTransport(Worker):
+class TruteqTransport(Transport):
     """
     The USSDTransport for TruTeq
     """
