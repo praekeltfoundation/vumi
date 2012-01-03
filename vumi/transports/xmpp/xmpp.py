@@ -107,8 +107,6 @@ class XMPPTransport(Transport):
         self.xmpp_protocol = XMPPTransportProtocol(jid, self.publish_message)
         self.xmpp_protocol.setHandlerParent(self.xmpp_client)
 
-        # self.xmpp_client.startService()
-
         log.msg("XMPPTransport %s started." % self.transport_name)
 
     def teardown_transport(self):
