@@ -1,11 +1,13 @@
 # -*- test-case-name: vumi.transports.api.tests.test_oldapi -*-
+import json
+import re
 from base64 import b64decode
+
 from zope.interface import implements
 from twisted.python import log
 from twisted.web import http
+
 from vumi.transports.httprpc import HttpRpcTransport
-import json
-import re
 
 
 class OldSimpleHttpTransport(HttpRpcTransport):
