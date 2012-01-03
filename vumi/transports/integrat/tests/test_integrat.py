@@ -166,6 +166,8 @@ class MockHttpServer(object):
 
 class TestIntegratTransport(TestCase):
 
+    timeout = 5
+
     @inlineCallbacks
     def setUp(self):
         self.integrat_calls = DeferredQueue()
@@ -213,7 +215,8 @@ class TestIntegratTransport(TestCase):
         req = yield self.integrat_calls.get()
         self.assertEqual(req.path, '/')
         self.assertEqual(req.method, 'POST')
-        self.assertEqual(req.headers['content-type'], 'text/html')
+        self.assertEqual(req.getHeader('content-type'),
+                         'text/xml; charset=utf-8')
         self.assertEqual(req.content.getvalue(),
                          '<Message><Version Version="1.0" />'
                          '<Request Flags="0" SessionID="sess123"'
