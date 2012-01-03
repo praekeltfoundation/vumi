@@ -296,6 +296,10 @@ class EsmeTransceiver(Protocol):
 
     def incSeq(self):
         self.seq[0] += self.inc
+        # SMPP supports a max sequence_number of: FFFFFFFF = 4,294,967,295
+        # so start recycling @ 4,000,000,000 just to keep the numbers round
+        if self.seq[0] > 4000000000:
+            self.seq[0] = self.seq[0] % self.inc + self.inc
 
     def popData(self):
         data = None
