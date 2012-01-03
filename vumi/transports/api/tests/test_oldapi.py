@@ -1,11 +1,13 @@
-import json
 from urllib import urlencode
 from twisted.internet.defer import inlineCallbacks
+from twisted.web import http
 
-from vumi.utils import http_request
+from vumi.utils import http_request, http_request_full
 from vumi.transports.tests.test_base import TransportTestCase
 from vumi.transports.api import (OldSimpleHttpTransport,
                                  OldTemplateHttpTransport)
+from base64 import b64encode
+import json
 
 
 class TestOldSimpleHttpTransport(TransportTestCase):
@@ -68,8 +70,40 @@ class TestOldSimpleHttpTransport(TransportTestCase):
             },
             ])
 
+    @inlineCallbacks
+    def test_http_basic_auth(self):
+        http_auth_config = self.config.copy()
+        http_auth_config.update({
+            'identities': {
+                'username': 'password',
+            }
+        })
+        transport = yield self.get_transport(http_auth_config)
+        url = '%s%s?%s' % (
+            transport.get_transport_url(),
+            self.config['web_path'],
+            urlencode({
+            'to_msisdn': '123',
+            'from_msisdn': '456',
+            'message': 'hello',
+        }))
 
-class TestOldTemplateHttpTransport(TestOldSimpleHttpTransport):
+        response = yield http_request_full(url, '', method='GET')
+        self.assertEqual(response.code, http.UNAUTHORIZED)
+        self.assertEqual([], self.get_dispatched_messages())
+
+        response = yield http_request_full(url, '', headers={
+            'Authorization': ['Basic %s' % b64encode('username:password')]
+        }, method='GET')
+        self.assertEqual(response.code, http.OK)
+        [msg] = self.get_dispatched_messages()
+        self.assertEqual(msg['content'], 'hello')
+        self.assertEqual(msg['transport_metadata'], {
+            'http_user': 'username',
+        })
+
+
+class TestOldTemplateHttpTransport(TransportTestCase):
 
     transport_name = 'test_old_template_http_transport'
     transport_class = OldTemplateHttpTransport
