@@ -140,6 +140,8 @@ class WorkerAMQClient(AMQClient):
     def start_consumer(self, consumer_class, *args, **kwargs):
         channel = yield self.get_channel()
         consumer = consumer_class(*args, **kwargs)
+        if consumer.start_paused:
+            channel.channel_flow(active=False)
         consumer.vumi_options = self.vumi_options
 
         # get the details for AMQP
@@ -223,7 +225,7 @@ class Worker(MultiService, object):
 
     def consume(self, routing_key, callback, queue_name=None,
                 exchange_name='vumi', exchange_type='direct', durable=True,
-                message_class=None):
+                message_class=None, paused=False):
 
         # use the routing key to generate the name for the class
         # amq.routing.key -> AmqRoutingKey
@@ -235,6 +237,7 @@ class Worker(MultiService, object):
             'exchange_name': exchange_name,
             'exchange_type': exchange_type,
             'durable': durable,
+            'start_paused': paused,
         }
         log.msg('Starting %s with %s' % (class_name, kwargs))
         klass = type(class_name, (DynamicConsumer,), kwargs)
@@ -299,6 +302,7 @@ class Consumer(object):
     routing_key = "routing_key"
 
     message_class = Message
+    start_paused = False
 
     @inlineCallbacks
     def start(self, channel, queue):
@@ -320,6 +324,12 @@ class Consumer(object):
         read_messages()
         yield None
         returnValue(self)
+
+    def pause(self):
+        return self.channel.channel_flow(active=False)
+
+    def unpause(self):
+        return self.channel.channel_flow(active=True)
 
     @inlineCallbacks
     def consume(self, message):

@@ -1,5 +1,5 @@
 from twisted.trial.unittest import TestCase
-from twisted.internet.defer import inlineCallbacks, Deferred
+from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.service import get_spec, Worker
 from vumi.utils import vumi_resource_path
@@ -8,6 +8,20 @@ from vumi.tests import fake_amqp
 
 def mkmsg(body):
     return fake_amqp.Thing("Message", body=body)
+
+
+class TestWorker(Worker):
+    @inlineCallbacks
+    def startWorker(self):
+        paused = self.config.get('paused', False)
+        self.msgs = []
+        self.pub = yield self.publish_to('test.pub')
+        self.conpub = yield self.publish_to('test.con')
+        self.con = yield self.consume(
+            'test.con', self.consume_msg, paused=paused)
+
+    def consume_msg(self, msg):
+        self.msgs.append(msg)
 
 
 class FakeAMQPTestCase(TestCase):
@@ -37,6 +51,16 @@ class FakeAMQPTestCase(TestCase):
         self.q1 = self.make_queue('q1')
         self.q2 = self.make_queue('q2')
         self.q3 = self.make_queue('q3')
+
+    @inlineCallbacks
+    def get_worker(self, **config):
+        spec = get_spec(vumi_resource_path("amqp-spec-0-8.xml"))
+        amq_client = fake_amqp.FakeAMQClient(spec, {}, self.broker)
+
+        worker = TestWorker({}, config)
+        worker._amqp_client = amq_client
+        yield worker.startWorker()
+        returnValue(worker)
 
     def test_misc(self):
         str(fake_amqp.Thing('kind', foo='bar'))
@@ -169,28 +193,55 @@ class FakeAMQPTestCase(TestCase):
 
     @inlineCallbacks
     def test_fake_amqclient(self):
-        spec = get_spec(vumi_resource_path("amqp-spec-0-8.xml"))
-        amq_client = fake_amqp.FakeAMQClient(spec, {}, self.broker)
-        d = Deferred()
-
-        class TestWorker(Worker):
-            @inlineCallbacks
-            def startWorker(self):
-                self.pub = yield self.publish_to('test.pub')
-                self.conpub = yield self.publish_to('test.con')
-                self.con = yield self.consume('test.con', self.consume_msg)
-
-            def consume_msg(self, msg):
-                # NOTE: One-shot.
-                d.callback(msg)
-
-        worker = TestWorker({}, {})
-        worker._amqp_client = amq_client
-        yield worker.startWorker()
+        worker = yield self.get_worker()
         yield worker.pub.publish_json({'message': 'foo'})
         yield worker.conpub.publish_json({'message': 'bar'})
-        msg = yield d
-        self.assertEqual({'message': 'bar'}, msg.payload)
+        yield self.broker.wait_delivery()
+        self.assertEqual({'message': 'bar'}, worker.msgs[0].payload)
+
+    @inlineCallbacks
+    def test_fake_amqclient_qos(self):
+        """
+        Even if we set QOS, all messages should get delivered.
+        """
+        worker = yield self.get_worker()
+
+        yield worker.con.channel.basic_qos(0, 1, False)
+        yield worker.conpub.publish_json({'message': 'foo'})
+        yield worker.conpub.publish_json({'message': 'bar'})
+        yield self.broker.wait_delivery()
+        self.assertEqual(2, len(worker.msgs))
+
+    @inlineCallbacks
+    def test_fake_amqclient_pause(self):
+        """
+        Pausing and unpausing channels should work as expected.
+        """
+        worker = yield self.get_worker(paused=True)
+
+        yield worker.conpub.publish_json({'message': 'foo'})
+        yield self.broker.wait_delivery()
+        self.assertEqual([], worker.msgs)
+
+        yield worker.con.unpause()
+        yield self.broker.wait_delivery()
+        self.assertEqual(1, len(worker.msgs))
+        self.assertEqual({'message': 'foo'}, worker.msgs[0].payload)
+        worker.msgs = []
+
+        yield self.broker.wait_delivery()
+        yield worker.con.pause()
+        yield worker.con.pause()
+        yield self.broker.wait_delivery()
+        yield worker.conpub.publish_json({'message': 'bar'})
+        yield self.broker.wait_delivery()
+        self.assertEqual([], worker.msgs)
+
+        yield worker.con.unpause()
+        yield worker.conpub.publish_json({'message': 'baz'})
+        yield self.broker.wait_delivery()
+        self.assertEqual(2, len(worker.msgs))
+        yield worker.con.unpause()
 
     # This is a test which actually connects to the AMQP broker.
     #
@@ -221,7 +272,8 @@ class FakeAMQPTestCase(TestCase):
     #             self.pub = yield self.publish_to('test.pub')
     #             self.pub.routing_key_is_bound = lambda _: True
     #             self.conpub = yield self.publish_to('test.con')
-    #             self.con = yield self.consume('test.con', self.consume_msg)
+    #             self.con = yield self.consume('test.con', self.consume_msg,
+    #                                           paused=True)
     #             d.callback(None)
 
     #         def consume_msg(self, msg):
@@ -231,8 +283,13 @@ class FakeAMQPTestCase(TestCase):
     #     worker = wc.create_worker_by_class(TestWorker, {})
     #     worker.startService()
     #     yield d
+    #     print "foo"
     #     yield worker.pub.publish_json({"foo": "bar"})
     #     yield worker.conpub.publish_json({"bar": "baz"})
+    #     yield worker.con.unpause()
+    #     yield worker.con.pause()
+    #     yield worker.con.pause()
+    #     print "bar"
     #     yield worker.pub.channel.queue_declare(queue='test.foo')
     #     yield worker.pub.channel.queue_bind(queue='test.foo',
     #                                         exchange='vumi',
