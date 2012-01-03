@@ -15,7 +15,7 @@ from vumi.message import TransportUserMessage, TransportEvent, Message
 from vumi.webapp.api.models import (SentSMSBatch, SentSMS, Keyword,
                                     ReceivedSMS, Transport)
 from vumi.webapp.api import utils
-from vumi.transports.smpp.worker import (
+from vumi.workers.smpp.worker import (
     SMSBatchConsumer, SMSReceiptConsumer, dynamically_create_keyword_consumer,
     SMSKeywordWorker, SMSReceiptWorker)
 

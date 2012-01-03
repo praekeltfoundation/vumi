@@ -603,8 +603,8 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
             raise Exception("increment may not be less than offset")
         if int(self.config['smpp_increment']) < 1:
             raise Exception("increment may not be less than 1")
-        if int(self.config['smpp_offset']) < 1:
-            raise Exception("offset may not be less than 1")
+        if int(self.config['smpp_offset']) < 0:
+            raise Exception("offset may not be less than 0")
         self.esme = None
         self.__connect_callback = None
         self.__disconnect_callback = None
