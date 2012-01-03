@@ -31,18 +31,26 @@ class IrcMessage(object):
     """
 
     def __init__(self, sender, command, recipient, content, nickname=None):
-        self.sender = sender
+        self.full_sender = sender
+        self.sender = self.canonicalize_recipient(sender)
         self.command = command
-        self.recipient = recipient
+        self.full_recipient = recipient
+        self.recipient = self.canonicalize_recipient(recipient)
         self.content = content
         self.nickname = nickname
 
     def __eq__(self, other):
         if isinstance(other, IrcMessage):
             return all(getattr(self, name) == getattr(other, name)
-                       for name in ("sender", "command", "recipient",
+                       for name in ("full_sender", "command", "full_recipient",
                                     "content", "nickname"))
         return False
+
+    @staticmethod
+    def canonicalize_recipient(recipient):
+        """Convert a generic IRC address (with possible server parts)
+        to a simple lowercase username or channel."""
+        return recipient.partition('!')[0].lower()
 
     def channel(self):
         """Return the channel if the recipient is a channel.
@@ -54,11 +62,13 @@ class IrcMessage(object):
         return None
 
     def addressed_to(self, nickname):
+        nickname = self.canonicalize_recipient(nickname)
         if not self.channel():
-            return self.recipient.partition('!')[0] == nickname
+            return self.recipient == nickname
         parts = self.content.split(None, 1)
         maybe_nickname = parts[0].rstrip(':,') if parts else ''
-        return maybe_nickname.lower() == nickname.lower()
+        maybe_nickname = self.canonicalize_recipient(maybe_nickname)
+        return maybe_nickname == nickname
 
 
 class VumiBotProtocol(irc.IRCClient):
@@ -198,6 +208,8 @@ class IrcTransport(Transport):
             'transport_type': self.config.get('transport_type', 'irc'),
             'transport_metadata': {
                 'transport_nickname': irc_msg.nickname,
+                'irc_full_sender': irc_msg.full_sender,
+                'irc_full_recipient': irc_msg.full_recipient,
                 'irc_server': "%s:%s" % (self.network, self.port),
                 'irc_channel': irc_msg.channel(),
                 'irc_command': irc_msg.command,
@@ -214,7 +226,9 @@ class IrcTransport(Transport):
             raise TemporaryFailure("IrcTransport not connected (state: %r)."
                                    % (self.client.state,))
         irc_command = msg['transport_metadata'].get('irc_command', 'PRIVMSG')
-        irc_msg = IrcMessage(vumibot.nickname, irc_command, msg['to_addr'],
+        irc_channel = msg['transport_metadata'].get('irc_channel')
+        recipient = irc_channel if irc_channel is not None else msg['to_addr']
+        irc_msg = IrcMessage(vumibot.nickname, irc_command, recipient,
                              msg['content'])
         vumibot.consume_message(irc_msg)
         # intentionally duplicate message id in sent_message_id since

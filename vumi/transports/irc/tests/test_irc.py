@@ -18,7 +18,7 @@ class TestIrcMessage(unittest.TestCase):
     def test_message(self):
         msg = IrcMessage('user!userfoo@example.com', 'PRIVMSG', '#bar',
                          'hello?')
-        self.assertEqual(msg.sender, 'user!userfoo@example.com')
+        self.assertEqual(msg.sender, 'user')
         self.assertEqual(msg.command, 'PRIVMSG')
         self.assertEqual(msg.recipient, '#bar')
         self.assertEqual(msg.content, 'hello?')
@@ -59,6 +59,12 @@ class TestIrcMessage(unittest.TestCase):
         msg1 = IrcMessage('user!userfoo@example.com', 'PRIVMSG', '#bar',
                          'hello?')
         self.assertFalse(msg1 == object())
+
+    def test_canonicalize_recipient(self):
+        canonical = IrcMessage.canonicalize_recipient
+        self.assertEqual(canonical("user!userfoo@example.com"), "user")
+        self.assertEqual(canonical("#channel"), "#channel")
+        self.assertEqual(canonical("userfoo"), "userfoo")
 
 
 class TestVumiBotProtocol(unittest.TestCase):
@@ -233,11 +239,13 @@ class TestIrcTransport(TransportTestCase):
         self.irc_server.client.privmsg(sender, recipient, text)
         [msg] = yield self.wait_for_dispatched_messages(1)
         self.assertEqual(msg['transport_name'], self.transport_name)
-        self.assertEqual(msg['to_addr'], recipient)
-        self.assertEqual(msg['from_addr'], sender)
+        self.assertEqual(msg['to_addr'], "#zoo")
+        self.assertEqual(msg['from_addr'], "user")
         self.assertEqual(msg['content'], text)
         self.assertEqual(msg['transport_metadata'], {
             'transport_nickname': self.nick,
+            'irc_full_recipient': recipient,
+            'irc_full_sender': sender,
             'irc_server': self.server_addr,
             'irc_channel': '#zoo',
             'irc_command': 'PRIVMSG',
