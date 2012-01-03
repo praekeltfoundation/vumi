@@ -44,7 +44,7 @@ class LoggerWorker(ApplicationWorker):
     @inlineCallbacks
     def consume_user_message(self, msg):
         """Log message from a user."""
-        user = msg.user()
+        nickname = msg.user()
         transport_metadata = msg['transport_metadata']
         irc_server = transport_metadata.get('irc_server')
         irc_channel = transport_metadata.get('irc_channel')
@@ -55,7 +55,6 @@ class LoggerWorker(ApplicationWorker):
         if irc_channel is None or irc_server is None:
             return
 
-        nickname = user.partition('!')[0]
         network = irc_server.partition(':')[0]
 
         if irc_command == 'PRIVMSG':
@@ -88,16 +87,16 @@ class MemoWorker(ApplicationWorker):
 
     def consume_user_message(self, msg):
         """Log message from a user."""
-        user = msg.user()
+        nickname = msg.user()
         transport_metadata = msg['transport_metadata']
         channel = transport_metadata.get('irc_channel', 'unknown')
         addressed_to = transport_metadata.get('irc_addressed_to_transport',
                                               True)
 
         if addressed_to:
-            self.process_potential_memo(channel, user, msg)
+            self.process_potential_memo(channel, nickname, msg)
 
-        memos = self.memos.pop((channel, user), [])
+        memos = self.memos.pop((channel, nickname), [])
         if memos:
             log.msg("Time to deliver some memos:", memos)
         for memo_sender, memo_text in memos:
@@ -107,6 +106,8 @@ class MemoWorker(ApplicationWorker):
     def process_potential_memo(self, channel, nickname, msg):
         match = self.MEMO_RE.match(msg['content'])
         if match:
-            self.memos.setdefault((channel, match.group(1)), []).append(
-                (nickname, match.group(2)))
+            recipient = match.group(1).lower()
+            memo_text = match.group(2)
+            self.memos.setdefault((channel, recipient),
+                                  []).append((nickname, memo_text))
             self.reply_to(msg, "Sure thing, boss.")

@@ -45,7 +45,7 @@ class TestLoggerWorker(ApplicationTestCase):
     @inlineCallbacks
     def test_inbound_channel_msg(self):
         msg = self.mkmsg_in(content="a message",
-                            from_addr="userfoo!user@example.com",
+                            from_addr="userfoo",
                             transport_metadata={
                                 'irc_server': "irc.example.com:6667",
                                 'irc_channel': "#bar",
@@ -65,7 +65,7 @@ class TestLoggerWorker(ApplicationTestCase):
     @inlineCallbacks
     def test_inbound_channel_action(self):
         msg = self.mkmsg_in(content="an action",
-                            from_addr="userfoo!user@example.com",
+                            from_addr="userfoo",
                             transport_metadata={
                                 'irc_server': "irc.example.com:6667",
                                 'irc_channel': "#bar",
@@ -131,6 +131,13 @@ class TestMemoWorker(ApplicationTestCase):
         self.assertEqual(replies, [
             ('reply', 'Sure thing, boss.'),
             ])
+
+    @inlineCallbacks
+    def test_leave_memo_nick_canonicalization(self):
+        yield self.send('bot: tell MeMoEd hey there', channel='#test')
+        self.assertEquals(self.worker.memos, {
+            ('#test', 'memoed'): [('testnick', 'hey there')],
+            })
 
     @inlineCallbacks
     def test_send_memos(self):
