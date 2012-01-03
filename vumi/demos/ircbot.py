@@ -1,7 +1,8 @@
-# -*- test-case-name: vumi.demos.tests.test_logger -*-
+# -*- test-case-name: vumi.demos.tests.test_ircbot -*-
 
-"""Demo ApplicationWorker that logs messages received."""
+"""Demo workers for constructing a simple IRC bot."""
 
+import re
 import json
 
 from twisted.python import log
@@ -12,7 +13,7 @@ from vumi.utils import http_request
 
 
 class LoggerWorker(ApplicationWorker):
-    """Logs text to a URL.
+    """Logs messages to a URL.
 
     Configuration
     -------------
@@ -61,3 +62,48 @@ class LoggerWorker(ApplicationWorker):
         elif irc_command == 'ACTION':
             yield self.log(message_type='action', channel=irc_channel,
                            msg="* %s %s" % (nickname, text))
+
+
+class MemoWorker(ApplicationWorker):
+    """Watches for memos to users and notifies users of memos when users
+    appear.
+
+    Configuration
+    -------------
+    transport_name : str
+        Name of the transport.
+    """
+
+    MEMO_RE = re.compile(r'^\S+ tell (\S+) (.*)$')
+
+    # TODO: store memos in redis
+
+    @inlineCallbacks
+    def startWorker(self):
+        self.memos = {}
+        yield super(MemoWorker, self).startWorker()
+
+    def consume_user_message(self, msg):
+        """Log message from a user."""
+        user = msg.user()
+        transport_metadata = msg['transport_metadata']
+        channel = transport_metadata.get('irc_channel', 'unknown')
+        addressed_to = transport_metadata.get('irc_addressed_to_transport',
+                                              True)
+
+        if addressed_to:
+            self.process_potential_memo(channel, user, msg)
+
+        memos = self.memos.pop((channel, user), [])
+        if memos:
+            log.msg("Time to deliver some memos:", memos)
+        for memo_sender, memo_text in memos:
+            self.reply_to(msg, "message from %s: %s" % (memo_sender,
+                                                        memo_text))
+
+    def process_potential_memo(self, channel, nickname, msg):
+        match = self.MEMO_RE.match(msg['content'])
+        if match:
+            self.memos.setdefault((channel, match.group(1)), []).append(
+                (nickname, match.group(2)))
+            self.reply_to(msg, "Sure thing, boss.")
