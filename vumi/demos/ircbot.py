@@ -46,21 +46,24 @@ class LoggerWorker(ApplicationWorker):
         """Log message from a user."""
         user = msg.user()
         transport_metadata = msg['transport_metadata']
+        irc_server = transport_metadata.get('irc_server')
         irc_channel = transport_metadata.get('irc_channel')
         irc_command = transport_metadata.get('irc_command', 'PRIVMSG')
         text = msg['content']
 
-        # only log messages send to a channel
-        if irc_channel is None:
+        # only log messages sent to an IRC channel and server
+        if irc_channel is None or irc_server is None:
             return
 
         nickname = user.partition('!')[0]
+        network = irc_server.partition(':')[0]
 
         if irc_command == 'PRIVMSG':
             yield self.log(message_type='message', nickname=nickname,
-                           channel=irc_channel, msg=text)
+                           server=network, channel=irc_channel, msg=text)
         elif irc_command == 'ACTION':
-            yield self.log(message_type='action', channel=irc_channel,
+            yield self.log(message_type='action', server=network,
+                           channel=irc_channel,
                            msg="* %s %s" % (nickname, text))
 
 

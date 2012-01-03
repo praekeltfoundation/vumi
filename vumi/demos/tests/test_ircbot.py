@@ -47,6 +47,7 @@ class TestLoggerWorker(ApplicationTestCase):
         msg = self.mkmsg_in(content="a message",
                             from_addr="userfoo!user@example.com",
                             transport_metadata={
+                                'irc_server': "irc.example.com:6667",
                                 'irc_channel': "#bar",
                                 'irc_command': 'PRIVMSG',
                                 },
@@ -57,6 +58,7 @@ class TestLoggerWorker(ApplicationTestCase):
             'message_type': 'message',
             'msg': "a message",
             'nickname': "userfoo",
+            'server': "irc.example.com",
             'channel': "#bar",
             })
 
@@ -65,6 +67,7 @@ class TestLoggerWorker(ApplicationTestCase):
         msg = self.mkmsg_in(content="an action",
                             from_addr="userfoo!user@example.com",
                             transport_metadata={
+                                'irc_server': "irc.example.com:6667",
                                 'irc_channel': "#bar",
                                 'irc_command': 'ACTION',
                                 },
@@ -74,6 +77,7 @@ class TestLoggerWorker(ApplicationTestCase):
         self.assertEqual(content, {
             'message_type': 'action',
             'msg': "* userfoo an action",
+            'server': "irc.example.com",
             'channel': "#bar",
             })
 
