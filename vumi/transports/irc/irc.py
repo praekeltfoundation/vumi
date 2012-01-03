@@ -170,23 +170,22 @@ class IrcTransport(Transport):
     :type network: str
     :param network:
         Host name of the IRC server to connect to.
+    :type nickname: str
+    :param nickname:
+        IRC nickname for the transport IRC client to use.
     :type port: int
     :param port:
         Port of the IRC server to connect to. Default: 6667.
     :type channels: list
     :param channels:
         List of channels to join. Defaults: [].
-    :type nickname: str
-    :param nickname:
-        IRC nickname for the transport IRC client to use. Default:
-        vumibot.
     """
 
     def validate_config(self):
         self.network = self.config['network']
+        self.nickname = self.config['nickname']
         self.port = int(self.config.get('port', 6667))
         self.channels = self.config.get('channels', [])
-        self.nickname = self.config.get('nickname', 'vumibot')
         self.client = None
 
     def setup_transport(self):
