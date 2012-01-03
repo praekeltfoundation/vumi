@@ -62,14 +62,14 @@ Vumi's SMPP Transport can be configured by a YAML file, `./config/example_smpp.y
 
 The SMPP Transport publishes inbound messages in Vumi's common message format and accepts the same format for outbound messages.
 
-Here is a sample message::
+Here is a sample message:
 
 .. literalinclude:: sample-message.json
 
 HTTP Relay Application
 ~~~~~~~~~~~~~~~~~~~~~~
 
-Vumi ships with a simple application which forwards all messages it receives as JSON to a given URL with the option of using HTTP Basic Authentication when doing so. This application is also configured using the YAML file::
+Vumi ships with a simple application which forwards all messages it receives as JSON to a given URL with the option of using HTTP Basic Authentication when doing so. This application is also configured using the YAML file:
 
 .. literalinclude:: ../../config/example_http_relay.yaml
 
