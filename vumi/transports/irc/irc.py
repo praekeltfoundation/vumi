@@ -14,7 +14,7 @@ class IrcMessage(object):
 
     :type sender: str
     :param sender:
-        Who send the message (usually user!ident@hostmask).
+        Who sent the message (usually user!ident@hostmask).
     :type recipient: str
     :param recipient:
         User or channel recieving the message.
