@@ -9,12 +9,10 @@ In this use case we are going to:
     2. Configure Vumi accept all incoming and outgoing messages on an SMPP bind.
     3. Setup a worker that forwards all incoming messages to a URL via HTTP POST.
     4. Setup Supervisord to manage all the different processes.
-    
+
 .. note::
-    If you're using vagrant to setup a virtual machine some of these steps will already have been done for you.
-    
-.. note::
-    Some basic understanding of AMQP is assumed.
+
+    Vumi relies for a large part on AMQP for its routing capabilities and some basic understanding is assumed. Have a look at http://blog.springsource.com/2010/06/14/understanding-amqp-the-protocol-used-by-rabbitmq/ for a more detailed explanation of AMQP.
 
 
 Installing the SMSC simulator
@@ -24,12 +22,12 @@ Go to the `./utils` directory in the Vumi repository and run the bash script cal
 
     $ cd ./utils
     $ ./install_smpp_simulator.sh
-    
-This will have installed the application in the `./utils/smppsim/SMPPSim` directory. 
+
+This will have installed the application in the `./utils/smppsim/SMPPSim` directory.
 
 By default the SMPP simulator tries to open port 88 for it's HTTP console, since you often need administrative rights to open ports lower than 1024 let's change that to 8080 instead.
 
-Line 60 of `./utils/smppsim/SMPP/conf/smppsim.props` says::
+Line 60 of `./utils/smppsim/SMPPSim/conf/smppsim.props` says::
 
     HTTP_PORT=88
 
@@ -40,7 +38,7 @@ Change this to::
 Another change we need to make is on line 83::
 
     ESME_TO_ESME=TRUE
-    
+
 Needs to be changed to, FALSE::
 
     ESME_TO_ESME=FALSE
@@ -53,32 +51,27 @@ Having this set to True sometimes causes the SMSC and Vumi to bounce messages ba
 Configuring Vumi
 ----------------
 
-Vumi relies for a large part on AMQP for its routing capabilities. The AMQP specification says that messages are sent to an exchange. Together with the exchange type, the message's routing key and the queue's binding key determine where and how a message is finally delivered. Have a look at http://blog.springsource.com/2010/06/14/understanding-amqp-the-protocol-used-by-rabbitmq/ for a more detailed explanation.
+Vumi applications are made up of at least two components, the **Transport** which deals with in & outbound messages and the **Application** which acts on the messages received and potentially generates replies.
 
-Vumi, by default, is configured to make use of `direct` exchanges, that means that a message's routing key must exactly match a queue's binding key for it to be delivered to that queue. By default that is fine but sometimes different behaviour is required. In this example we're going to deviate from that behaviour.
+SMPP Transport
+~~~~~~~~~~~~~~
 
-We're assuming that all messages being sent back to an SMSC can be delivered by the SMSC to the number specified. This means that we're going to use a `topic` exchange instead of a direct exchange. A `topic` exchange allows for wildcard matching of routing keys.
-
-Vumi's SMPP transport can be configured by a YAML file, `./config/example_smpp.yaml`. For this example, this is what our SMPP configuration looks like:
+Vumi's SMPP Transport can be configured by a YAML file, `./config/example_smpp.yaml`. For this example, this is what our SMPP configuration looks like:
 
 .. literalinclude:: ../../config/example_smpp.yaml
 
-We've configured the details of the SMPP server but also we've told Vumi to send and receive messages via `topic` exchange called `vumi.topic`.
+The SMPP Transport publishes inbound messages in Vumi's common message format and accepts the same format for outbound messages.
 
-Configure an SMPP Transport
----------------------------
+Here is a sample message::
 
-To get the desired behaviour we need to subclass the standard SMPP transport
-that Vumi ships with since we want to publish to a `topic` exchange.
+.. literalinclude:: sample-message.json
 
-.. literalinclude:: ../../vumi/workers/smpp/topic_transport.py
+HTTP Relay Application
+~~~~~~~~~~~~~~~~~~~~~~
 
-Configure a Worker
-------------------
+Vumi ships with a simple application which forwards all messages it receives as JSON to a given URL with the option of using HTTP Basic Authentication when doing so. This application is also configured using the YAML file::
 
-Now that we've got a Vumi transport setup that accepts incoming messages over an SMPP bind let's setup a worker to forward the messages to a URL via HTTP POST.
-
-.. literalinclude:: ../../vumi/workers/smpp/topic_worker.py
+.. literalinclude:: ../../config/example_http_relay.yaml
 
 Supervisord!
 ------------
@@ -100,4 +93,4 @@ Let's give it a try:
 --------------------
 
 1. Go to http://localhost:8080 and send an SMS to Vumi via "Inject an MO message".
-2. Type a message, it doesn't matter what `destination_addr` you chose, since it's a topical exchange Vumi will route all incoming message to the `TopicSmppWorker` which will HTTP POST to the URL provided.
+2. Type a message, it doesn't matter what `destination_addr` you chose, all incoming messages will be routed using the SMPP Transport's `transport_name` to the application subscribed to those messages. The HTTPRelayApplication will HTTP POST to the URL provided.
