@@ -20,7 +20,7 @@ class LoggerWorker(ApplicationWorker):
         Name of the transport.
     log_server : str
         URL to post log messages too.
-        E.g.
+        E.g. http://ircarchive.appspot.com/bot/
     """
 
     def startWorker(self):
