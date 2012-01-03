@@ -1,4 +1,4 @@
-# -*- test-case-name: vumi.transports.smpp.test_smpp -*-
+# -*- test-case-name: vumi.workers.smpp.tests.test_smpp -*-
 
 import json
 from datetime import datetime
@@ -8,8 +8,7 @@ from twisted.internet.defer import inlineCallbacks
 
 from vumi.service import Worker, Consumer, Publisher
 from vumi.webapp.api import utils
-from vumi.webapp.api.models import Keyword, SentSMS, Transport
-from vumi.webapp.api import models
+from vumi.webapp.api.models import Keyword, SentSMS, ReceivedSMS, Transport
 from vumi.message import TransportUserMessage, VUMI_DATE_FORMAT
 
 
@@ -26,7 +25,7 @@ class SMSKeywordConsumer(Consumer):
         try:
             keyword = Keyword.objects.get(keyword=head.lower())
             user = keyword.user
-            received_sms = models.ReceivedSMS()
+            received_sms = ReceivedSMS()
             received_sms.user = user
             received_sms.to_msisdn = message['to_addr']
             received_sms.from_msisdn = message['from_addr']
@@ -301,7 +300,7 @@ class SMSBatchConsumer(Consumer):
         kwargs = dictionary.get('kwargs')
         if kwargs:
             pk = kwargs.get('pk')
-            for o in models.SentSMS.objects.filter(batch=pk):
+            for o in SentSMS.objects.filter(batch=pk):
                 message = TransportUserMessage(
                     transport_type='sms',
                     transport_metadata={},

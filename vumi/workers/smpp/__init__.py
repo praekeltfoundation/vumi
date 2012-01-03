@@ -1,0 +1,3 @@
+"""
+Old DEPRECATED SMPP workers.
+"""
