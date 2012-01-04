@@ -9,6 +9,10 @@ from contextlib import contextmanager
 
 import pytz
 from twisted.internet import defer, reactor
+from twisted.web.resource import Resource
+from twisted.web.server import Site
+from twisted.internet.defer import DeferredQueue, inlineCallbacks
+from twisted.python import log
 
 from vumi.utils import vumi_resource_path, import_module
 from vumi.service import get_spec, Worker
@@ -368,3 +372,63 @@ class FakeRedis(object):
         delayed = self._expiries.get(key)
         if delayed is not None and not delayed.cancelled:
             delayed.cancel()
+
+
+class LogCatcher(object):
+    """Gather logs."""
+
+    def __init__(self):
+        self.logs = []
+
+    @property
+    def errors(self):
+        return [ev for ev in self.logs if ev["isError"]]
+
+    def _gather_logs(self, event_dict):
+        self.logs.append(event_dict)
+
+    def __enter__(self):
+        log.theLogPublisher.addObserver(self._gather_logs)
+        return self
+
+    def __exit__(self, *exc_info):
+        log.theLogPublisher.removeObserver(self._gather_logs)
+
+
+class MockResource(Resource):
+    isLeaf = True
+
+    def __init__(self, handler):
+        Resource.__init__(self)
+        self.handler = handler
+
+    def render_GET(self, request):
+        return self.handler(request)
+
+    def render_POST(self, request):
+        return self.handler(request)
+
+
+class MockHttpServer(object):
+
+    def __init__(self, handler=None):
+        self.queue = DeferredQueue()
+        self._handler = handler or self.handle_request
+        self._webserver = None
+        self.addr = None
+        self.url = None
+
+    def handle_request(self, request):
+        self.queue.put(request)
+
+    @inlineCallbacks
+    def start(self):
+        root = MockResource(self._handler)
+        site_factory = Site(root)
+        self._webserver = yield reactor.listenTCP(0, site_factory)
+        self.addr = self._webserver.getHost()
+        self.url = "http://%s:%s/" % (self.addr.host, self.addr.port)
+
+    @inlineCallbacks
+    def stop(self):
+        yield self._webserver.loseConnection()
