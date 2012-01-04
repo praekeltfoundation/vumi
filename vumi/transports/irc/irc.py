@@ -31,10 +31,8 @@ class IrcMessage(object):
     """
 
     def __init__(self, sender, command, recipient, content, nickname=None):
-        self.full_sender = sender
         self.sender = self.canonicalize_recipient(sender)
         self.command = command
-        self.full_recipient = recipient
         self.recipient = self.canonicalize_recipient(recipient)
         self.content = content
         self.nickname = nickname
@@ -42,7 +40,7 @@ class IrcMessage(object):
     def __eq__(self, other):
         if isinstance(other, IrcMessage):
             return all(getattr(self, name) == getattr(other, name)
-                       for name in ("full_sender", "command", "full_recipient",
+                       for name in ("sender", "command", "recipient",
                                     "content", "nickname"))
         return False
 
@@ -199,21 +197,26 @@ class IrcTransport(Transport):
             self.client.disconnect()
 
     def handle_inbound_irc_message(self, irc_msg):
+        irc_server = "%s:%s" % (self.network, self.port)
+        irc_channel = irc_msg.channel()
         message_dict = {
             'to_addr': irc_msg.recipient,
             'from_addr': irc_msg.sender,
             'content': irc_msg.content,
             'transport_name': self.transport_name,
             'transport_type': self.config.get('transport_type', 'irc'),
+            'helper_metadata': {
+                'irc': {
+                    'transport_nickname': irc_msg.nickname,
+                    'addressed_to_transport':
+                        irc_msg.addressed_to(irc_msg.nickname),
+                    'irc_server': irc_server,
+                    'irc_channel': irc_channel,
+                    'irc_command': irc_msg.command,
+                    },
+                },
             'transport_metadata': {
-                'transport_nickname': irc_msg.nickname,
-                'irc_full_sender': irc_msg.full_sender,
-                'irc_full_recipient': irc_msg.full_recipient,
-                'irc_server': "%s:%s" % (self.network, self.port),
-                'irc_channel': irc_msg.channel(),
-                'irc_command': irc_msg.command,
-                'irc_addressed_to_transport':
-                    irc_msg.addressed_to(irc_msg.nickname),
+                'irc_channel': irc_channel,
                 },
             }
         self.publish_message(**message_dict)
@@ -224,9 +227,12 @@ class IrcTransport(Transport):
         if vumibot is None or self.client.state != 'connected':
             raise TemporaryFailure("IrcTransport not connected (state: %r)."
                                    % (self.client.state,))
-        irc_command = msg['transport_metadata'].get('irc_command', 'PRIVMSG')
-        irc_channel = msg['transport_metadata'].get('irc_channel')
-        recipient = irc_channel if irc_channel is not None else msg['to_addr']
+        irc_metadata = msg['helper_metadata'].get('irc', {})
+        transport_metadata = msg['transport_metadata']
+        irc_command = irc_metadata.get('irc_command', 'PRIVMSG')
+        irc_channel = irc_metadata.get('irc_channel',
+                                       transport_metadata.get('irc_channel'))
+        recipient = msg['to_addr'] if irc_channel is None else irc_channel
         irc_msg = IrcMessage(vumibot.nickname, irc_command, recipient,
                              msg['content'])
         vumibot.consume_message(irc_msg)

@@ -242,14 +242,17 @@ class TestIrcTransport(TransportTestCase):
         self.assertEqual(msg['to_addr'], "#zoo")
         self.assertEqual(msg['from_addr'], "user")
         self.assertEqual(msg['content'], text)
+        self.assertEqual(msg['helper_metadata'], {
+            'irc': {
+                'transport_nickname': self.nick,
+                'addressed_to_transport': False,
+                'irc_server': self.server_addr,
+                'irc_channel': '#zoo',
+                'irc_command': 'PRIVMSG',
+                }
+            })
         self.assertEqual(msg['transport_metadata'], {
-            'transport_nickname': self.nick,
-            'irc_full_recipient': recipient,
-            'irc_full_sender': sender,
-            'irc_server': self.server_addr,
             'irc_channel': '#zoo',
-            'irc_command': 'PRIVMSG',
-            'irc_addressed_to_transport': False,
             })
 
     @inlineCallbacks
