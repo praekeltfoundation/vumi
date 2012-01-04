@@ -1,3 +1,5 @@
+.. _first-smpp-bind:
+
 Forwarding SMSs from an SMPP bind to a URL
 ==========================================
 

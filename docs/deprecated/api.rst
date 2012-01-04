@@ -1,3 +1,6 @@
+.. _deprecated-http-api:
+
+
 The HTTP API (deprecated)
 =========================
 

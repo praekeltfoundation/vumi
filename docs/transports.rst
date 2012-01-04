@@ -8,7 +8,7 @@ Contents
 
 .. toctree::
     :maxdepth: 1
-    
-    transports/setup-smpp.rst
+
+    transports/http-transport.rst
     transports/smpp-transports.rst
     transports/vas2net-transports.rst
