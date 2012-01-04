@@ -3,6 +3,12 @@
 How we do releases
 ==================
 
+Update the release notes and roadmap
+------------------------------------
+
+Update the :doc:`roadmap` and :doc:`release-notes` as necessary.
+
+
 Create a release branch
 -----------------------
 
