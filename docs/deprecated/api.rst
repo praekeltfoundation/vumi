@@ -1,13 +1,19 @@
-The HTTP API
-============
+.. _deprecated-http-api:
+
+
+The HTTP API (deprecated)
+=========================
 
 .. note::
-    This documentation is in need of a update. While the features are still
-    correct the underlying implementation of the transports has changed
-    significantly recently. Work is underway to get the docs and the actual
-    code in sync.
-    
-    Specifically all the SMPP and Supervisord stuff is missing from these docs.
+    This API is **deprecated**. It was based on Django and that dependency is being removed from Vumi.
+    There are `replacement APIs`_ that provide the same interface but instead are built on twisted.
+    Some features are missing in this replacement API, specifically:
+
+        * Actual storage of SMSs
+        * Querying of SMSs
+        * Specifying of HTTP callbacks
+        * URLs for Clickatell & Opera HTTP interfaces
+
 
 Running the Webapp / API
 ------------------------
@@ -306,3 +312,4 @@ Note the XML suffix on the URL. The resource returns XML whereas Clickatell retu
 .. _Techsys: http://www.techsys.co.za/
 .. _E-Scape: http://www.escapetech.net/
 
+.. _`replacement APIs`: https://github.com/praekelt/vumi/blob/develop/vumi/transports/api/oldapi.py
