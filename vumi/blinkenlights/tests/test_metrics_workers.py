@@ -2,7 +2,7 @@ from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks, Deferred
 from vumi.tests.utils import TestChannel, get_stubbed_worker
 from vumi.tests.fake_amqp import FakeAMQPBroker
-from vumi.workers.blinkenlights import metrics
+from vumi.blinkenlights import metrics_workers
 from vumi.blinkenlights.message20110818 import MetricMessage
 
 
@@ -31,7 +31,8 @@ class TestMetricTimeBucket(TestCase):
     @inlineCallbacks
     def test_bucketing(self):
         config = {'buckets': 4, 'bucket_size': 5}
-        worker = get_stubbed_worker(metrics.MetricTimeBucket, config=config)
+        worker = get_stubbed_worker(metrics_workers.MetricTimeBucket,
+                                    config=config)
         broker = BrokerWrapper(worker._amqp_client.broker)
         yield worker.startWorker()
 
@@ -82,7 +83,8 @@ class TestMetricAggregator(TestCase):
     @inlineCallbacks
     def test_aggregating(self):
         config = {'bucket': 3, 'bucket_size': 5}
-        worker = self.get_worker(metrics.MetricAggregator, config=config)
+        worker = self.get_worker(metrics_workers.MetricAggregator,
+                                 config=config)
         worker._time = self.fake_time
         broker = BrokerWrapper(worker._amqp_client.broker)
         yield worker.startWorker()
@@ -119,7 +121,8 @@ class TestMetricAggregator(TestCase):
     @inlineCallbacks
     def test_aggregating_lag(self):
         config = {'bucket': 3, 'bucket_size': 5, 'lag': 1}
-        worker = self.get_worker(metrics.MetricAggregator, config=config)
+        worker = self.get_worker(metrics_workers.MetricAggregator,
+                                 config=config)
         worker._time = self.fake_time
         broker = BrokerWrapper(worker._amqp_client.broker)
         yield worker.startWorker()
@@ -189,7 +192,7 @@ class TestAggregationSystem(TestCase):
             'bucket_size': bucket_size,
             }
         for _i in range(bucketters):
-            worker = get_stubbed_worker(metrics.MetricTimeBucket,
+            worker = get_stubbed_worker(metrics_workers.MetricTimeBucket,
                                         config=bucket_config,
                                         broker=broker)
             yield worker.startWorker()
@@ -201,7 +204,7 @@ class TestAggregationSystem(TestCase):
         for i in range(aggregators):
             config = aggregator_config.copy()
             config['bucket'] = i
-            worker = get_stubbed_worker(metrics.MetricAggregator,
+            worker = get_stubbed_worker(metrics_workers.MetricAggregator,
                                         config=config, broker=broker)
             worker._time = self.fake_time
             yield worker.startWorker()
@@ -241,7 +244,7 @@ class TestGraphitePublisher(TestCase):
     def test_publish_metric(self):
         datapoint = ("vumi.test.v1", 1.0, 1234)
         channel = TestChannel()
-        pub = metrics.GraphitePublisher()
+        pub = metrics_workers.GraphitePublisher()
         pub.start(channel)
         pub.publish_metric(*datapoint)
         self._check_msg(channel, *datapoint)
@@ -250,7 +253,7 @@ class TestGraphitePublisher(TestCase):
 class TestGraphiteMetricsCollector(TestCase):
     @inlineCallbacks
     def test_single_message(self):
-        worker = get_stubbed_worker(metrics.GraphiteMetricsCollector)
+        worker = get_stubbed_worker(metrics_workers.GraphiteMetricsCollector)
         broker = BrokerWrapper(worker._amqp_client.broker)
         yield worker.startWorker()
 
@@ -287,7 +290,7 @@ class TestRandomMetricsGenerator(TestCase):
 
     @inlineCallbacks
     def test_one_run(self):
-        worker = get_stubbed_worker(metrics.RandomMetricsGenerator,
+        worker = get_stubbed_worker(metrics_workers.RandomMetricsGenerator,
                                     config={
                                         "manager_period": "0.1",
                                         "generator_period": "0.1",
