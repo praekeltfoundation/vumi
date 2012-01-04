@@ -4,6 +4,8 @@ import json
 from copy import deepcopy
 
 from twisted.python import log, usage
+from twisted.application.service import MultiService
+from twisted.application.internet import TCPClient
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet import protocol, reactor
 from twisted.web.server import Site
@@ -60,38 +62,40 @@ class Options(usage.Options):
 
 class AmqpFactory(protocol.ReconnectingClientFactory):
 
-    def __init__(self, worker_class, options, config):
-        self.options = options
-        self.config = config
-        self.spec = get_spec(vumi_resource_path(options['specfile']))
+    def __init__(self, worker):
+        self.options = worker.options
+        self.config = worker.config
+        self.spec = get_spec(vumi_resource_path(worker.options['specfile']))
         self.delegate = TwistedDelegate()
-        self.worker = None
-        self.worker_class = worker_class
+        self.worker = worker
+        self.amqp_client = None
 
     def buildProtocol(self, addr):
-        amqp_client = WorkerAMQClient(
+        self.amqp_client = WorkerAMQClient(
             self.delegate, self.options['vhost'],
             self.spec, self.options.get('heartbeat', 0))
-        amqp_client.factory = self
-        amqp_client.vumi_options = self.options
-        self.worker = self.worker_class(amqp_client, self.config)
-        amqp_client.startWorker = self.worker.startWorker
+        self.amqp_client.factory = self
+        self.amqp_client.vumi_options = self.options
+        self.amqp_client.connected_callback = self.worker._amqp_connected
         self.resetDelay()
-        return amqp_client
+        return self.amqp_client
 
     def clientConnectionFailed(self, connector, reason):
-        log.err("Connection failed.", reason)
-        if self.worker is not None:
-            self.worker.stopWorker()
-        protocol.ReconnectingClientFactory.clientConnectionFailed(self,
-                connector, reason)
+        log.err("Connection failed: %r" % (reason,))
+        self.worker._amqp_connection_failed()
+        self.amqp_client = None
+        protocol.ReconnectingClientFactory.clientConnectionFailed(
+            self, connector, reason)
 
     def clientConnectionLost(self, connector, reason):
-        log.err("Client connection lost.", reason)
-        if self.worker is not None:
-            self.worker.stopWorker()
-        protocol.ReconnectingClientFactory.clientConnectionLost(self,
-                connector, reason)
+        if not self.worker.running:
+            # We've specifically asked for this disconnect.
+            return
+        log.err("Client connection lost: %r" % (reason,))
+        self.worker._amqp_connection_failed()
+        self.amqp_client = None
+        protocol.ReconnectingClientFactory.clientConnectionLost(
+            self, connector, reason)
 
 
 class WorkerAMQClient(AMQClient):
@@ -102,7 +106,7 @@ class WorkerAMQClient(AMQClient):
                                 self.vumi_options['password'])
         # authentication was successful
         log.msg("Got an authenticated connection")
-        yield self.startWorker()
+        yield self.connected_callback(self)
 
     @inlineCallbacks
     def get_channel(self, channel_id=None):
@@ -136,6 +140,8 @@ class WorkerAMQClient(AMQClient):
     def start_consumer(self, consumer_class, *args, **kwargs):
         channel = yield self.get_channel()
         consumer = consumer_class(*args, **kwargs)
+        if consumer.start_paused:
+            channel.channel_flow(active=False)
         consumer.vumi_options = self.vumi_options
 
         # get the details for AMQP
@@ -176,17 +182,29 @@ class WorkerAMQClient(AMQClient):
         returnValue(publisher)
 
 
-class Worker(object):
+class Worker(MultiService, object):
     """
     The Worker is responsible for starting consumers & publishers
     as needed.
     """
 
-    def __init__(self, amqp_client, config=None):
-        self._amqp_client = amqp_client
+    def __init__(self, options, config=None):
+        super(Worker, self).__init__()
+        self.options = options
         if config is None:
             config = {}
         self.config = config
+        self._amqp_client = None
+
+    def _amqp_connected(self, amqp_client):
+        self._amqp_client = amqp_client
+        return self.startWorker()
+
+    def _amqp_connection_failed(self):
+        pass
+
+    def _amqp_connection_lost(self):
+        self._amqp_client = None
 
     def startWorker(self):
         # I hate camelCasing method but since Twisted has it as a
@@ -197,12 +215,17 @@ class Worker(object):
     def stopWorker(self):
         pass
 
+    @inlineCallbacks
+    def stopService(self):
+        yield self.stopWorker()
+        super(Worker, self).stopService()
+
     def routing_key_to_class_name(self, routing_key):
         return ''.join(map(lambda s: s.capitalize(), routing_key.split('.')))
 
     def consume(self, routing_key, callback, queue_name=None,
                 exchange_name='vumi', exchange_type='direct', durable=True,
-                message_class=None):
+                message_class=None, paused=False):
 
         # use the routing key to generate the name for the class
         # amq.routing.key -> AmqRoutingKey
@@ -214,6 +237,7 @@ class Worker(object):
             'exchange_name': exchange_name,
             'exchange_type': exchange_type,
             'durable': durable,
+            'start_paused': paused,
         }
         log.msg('Starting %s with %s' % (class_name, kwargs))
         klass = type(class_name, (DynamicConsumer,), kwargs)
@@ -278,6 +302,7 @@ class Consumer(object):
     routing_key = "routing_key"
 
     message_class = Message
+    start_paused = False
 
     @inlineCallbacks
     def start(self, channel, queue):
@@ -299,6 +324,12 @@ class Consumer(object):
         read_messages()
         yield None
         returnValue(self)
+
+    def pause(self):
+        return self.channel.channel_flow(active=False)
+
+    def unpause(self):
+        return self.channel.channel_flow(active=True)
 
     @inlineCallbacks
     def consume(self, message):
@@ -326,7 +357,7 @@ class Consumer(object):
         #self.channel.close(None)
         # This actually closes the channel on the server
         yield self.channel.channel_close()
-        self.channel.close()
+        self.channel.close(None)
         returnValue(self.keep_consuming)
 
 
@@ -464,10 +495,11 @@ class WorkerCreator(object):
 
     def create_worker_by_class(self, worker_class, config, timeout=30,
                                bindAddress=None):
-        factory = AmqpFactory(worker_class, deepcopy(self.options), config)
-        self._connect(factory, timeout=timeout, bindAddress=bindAddress)
-        return factory
+        worker = worker_class(deepcopy(self.options), config)
+        self._connect(worker, timeout=timeout, bindAddress=bindAddress)
+        return worker
 
-    def _connect(self, factory, timeout, bindAddress):
-        reactor.connectTCP(self.options['hostname'], self.options['port'],
-                           factory, timeout, bindAddress)
+    def _connect(self, worker, timeout, bindAddress):
+        service = TCPClient(self.options['hostname'], self.options['port'],
+                            AmqpFactory(worker), timeout, bindAddress)
+        service.setServiceParent(worker)

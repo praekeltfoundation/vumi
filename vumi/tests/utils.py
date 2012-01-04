@@ -193,7 +193,8 @@ class TestChannel(object):
 def get_stubbed_worker(worker_class, config=None, broker=None):
     spec = get_spec(vumi_resource_path("amqp-spec-0-8.xml"))
     amq_client = FakeAMQClient(spec, {}, broker)
-    worker = worker_class(amq_client, config)
+    worker = worker_class({}, config)
+    worker._amqp_client = amq_client
     return worker
 
 

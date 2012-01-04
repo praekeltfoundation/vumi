@@ -23,9 +23,10 @@ class TransportTestCase(unittest.TestCase):
         self._workers = []
         self._amqp = FakeAMQPBroker()
 
+    @inlineCallbacks
     def tearDown(self):
         for worker in self._workers:
-            worker.stopWorker()
+            yield worker.stopWorker()
 
     def rkey(self, name):
         return "%s.%s" % (self.transport_name, name)
