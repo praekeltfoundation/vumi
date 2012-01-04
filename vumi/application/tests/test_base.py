@@ -147,6 +147,9 @@ class ApplicationTestCase(TestCase):
 
     """
 
+    # base timeout of 5s for all application tests
+    timeout = 5
+
     transport_name = "sphex"
     transport_type = None
     application_class = None
@@ -190,9 +193,11 @@ class ApplicationTestCase(TestCase):
     def mkmsg_in(self, content='hello world', message_id='abc',
                  to_addr='9292', from_addr='+41791234567',
                  session_event=None, transport_type=None,
-                 transport_metadata=None):
+                 helper_metadata=None, transport_metadata=None):
         if transport_type is None:
             transport_type = self.transport_type
+        if helper_metadata is None:
+            helper_metadata = {}
         if transport_metadata is None:
             transport_metadata = {}
         return TransportUserMessage(
@@ -202,6 +207,7 @@ class ApplicationTestCase(TestCase):
             transport_name=self.transport_name,
             transport_type=transport_type,
             transport_metadata=transport_metadata,
+            helper_metadata=helper_metadata,
             content=content,
             session_event=session_event,
             timestamp=datetime.now(),
