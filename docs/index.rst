@@ -16,7 +16,6 @@ Contents:
    getting-started.rst
    first-smpp-bind.rst
    client.rst
-   deploying.rst
    transports.rst
    metrics.rst
    roadmap.rst

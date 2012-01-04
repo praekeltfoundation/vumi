@@ -60,20 +60,20 @@ SMPP Transport
 
 Vumi's SMPP Transport can be configured by a YAML file, `./config/example_smpp.yaml`. For this example, this is what our SMPP configuration looks like:
 
-.. literalinclude:: ../../config/example_smpp.yaml
+.. literalinclude:: ../config/example_smpp.yaml
 
 The SMPP Transport publishes inbound messages in Vumi's common message format and accepts the same format for outbound messages.
 
 Here is a sample message:
 
-.. literalinclude:: sample-message.json
+.. literalinclude:: transports/sample-message.json
 
 HTTP Relay Application
 ~~~~~~~~~~~~~~~~~~~~~~
 
 Vumi ships with a simple application which forwards all messages it receives as JSON to a given URL with the option of using HTTP Basic Authentication when doing so. This application is also configured using the YAML file:
 
-.. literalinclude:: ../../config/example_http_relay.yaml
+.. literalinclude:: ../config/example_http_relay.yaml
 
 Setting up the webserver that responds to the HTTP request that the `HTTPRelayApplication` makes is left as an exercise for the reader. The `HTTPRelayApplication` has the ability to automatically respond to incoming messages based on the HTTP response received.
 
@@ -89,7 +89,7 @@ Supervisord!
 Let's use Supervisord to ensure all the different parts keep running.
 Here is the configuration file `supervisord.example.conf`:
 
-.. literalinclude:: ../../supervisord.example.conf
+.. literalinclude:: ../supervisord.example.conf
 
 Ensure you're in your python `virtualenv` and start it with the following command::
 
