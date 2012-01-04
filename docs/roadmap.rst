@@ -5,25 +5,6 @@ The roadmap outlines features intended for upcoming releases of
 Vumi. Information on older releases can be found in
 :doc:`release-notes`.
 
-Version 0.3
------------
-
-:Projected date: 9 Dec 2011
-
-* defined common message format. *(done)*
-* added user session management. *(done)*
-* added transport worker base class. *(done)*
-* added application worker base class. *(done)*
-* re-organized example application workers into a separate package and
-  updated all examples to use common message format *(done)*
-* deprecated Django-based vumi.webapp *(done)*
-* added and deprecated UglyModel *(done)*
-* re-organized  transports into  a  separate package  and updated  all
-  transports  to  use  common  message  format (TruTeq,  IRC  and  GSM
-  transports still pending)
-* add satisfactory HTTP API(s)
-* remove SMPP transport's dependency on Django
-
 
 Version 0.4
 -----------

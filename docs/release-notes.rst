@@ -1,6 +1,27 @@
 Release Notes
 =============
 
+Version 0.3
+-----------
+
+:Date released: 4 Jan 2012
+
+* defined common message format.
+* added user session management.
+* added transport worker base class.
+* added application worker base class.
+* made workers into Twisted services.
+* re-organized example application workers into a separate package and
+  updated all examples to use common message format
+* deprecated Django-based vumi.webapp
+* added and deprecated UglyModel
+* re-organized transports into a separate package and updated all
+  transports except TruTeq to use common message (TruTeq will be
+  migrated in 0.4 or a 0.3 point release).
+* added satisfactory HTTP API(s)
+* removed SMPP transport's dependency on Django
+
+
 Version 0.2
 -----------
 
