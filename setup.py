@@ -10,7 +10,7 @@ def remove_externals(requirements):
 
 setup(
     name="vumi",
-    version="0.3.0a",
+    version="0.3.0",
     url='http://github.com/praekelt/vumi',
     license='BSD',
     description="Super-scalable messaging engine for the delivery of SMS, "
