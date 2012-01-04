@@ -20,10 +20,13 @@ class TestMemoWorker(ApplicationTestCase):
     @inlineCallbacks
     def send(self, content, from_addr='testnick', channel=None):
         transport_metadata = {}
+        helper_metadata = {}
         if channel is not None:
             transport_metadata['irc_channel'] = channel
+            helper_metadata['irc'] = {'irc_channel': channel}
 
         msg = self.mkmsg_in(content=content, from_addr=from_addr,
+                            helper_metadata=helper_metadata,
                             transport_metadata=transport_metadata)
         yield self.dispatch(msg)
 

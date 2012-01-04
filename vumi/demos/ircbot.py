@@ -32,10 +32,9 @@ class MemoWorker(ApplicationWorker):
     def consume_user_message(self, msg):
         """Log message from a user."""
         nickname = msg.user()
-        transport_metadata = msg['transport_metadata']
-        channel = transport_metadata.get('irc_channel', 'unknown')
-        addressed_to = transport_metadata.get('irc_addressed_to_transport',
-                                              True)
+        irc_metadata = msg['helper_metadata'].get('irc', {})
+        channel = irc_metadata.get('irc_channel', 'unknown')
+        addressed_to = irc_metadata.get('addressed_to_transport', True)
 
         if addressed_to:
             self.process_potential_memo(channel, nickname, msg)
