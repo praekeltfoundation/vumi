@@ -258,6 +258,17 @@ class FakeRedis(object):
     def delete(self, key):
         self._data.pop(key, None)
 
+    # Integer operations
+
+    def incrby(self, key, increment):
+        old_value = self._data.get(key)
+        new_value = str(int(old_value) + increment)
+        self._data[key] = new_value
+        return new_value
+
+    def incr(self, key):
+        return self.incrby(key, 1)
+
     # Hash operations
 
     def hset(self, key, field, value):
