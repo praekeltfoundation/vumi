@@ -1,4 +1,4 @@
-# -*- test-case-name: vumi.workers.blinkenlights.tests.test_metrics -*-
+# -*- test-case-name: vumi.blinkenlights.tests.test_metrics_workers -*-
 
 import time
 import random
