@@ -73,6 +73,14 @@ Vumi ships with a simple application which forwards all messages it receives as 
 
 .. literalinclude:: ../../config/example_http_relay.yaml
 
+Setting up the webserver that responds to the HTTP request that the `HTTPRelayApplication` makes is left as an exercise for the reader. The `HTTPRelayApplication` has the ability to automatically respond to incoming messages based on the HTTP response received.
+
+To do this:
+
+    1. The resource must return with a status of 200
+    2. The resource must set an HTTP Header `X-Vumi-HTTPRelay-Reply` and it must be set to `true` (case insensitive)
+    3. Any content that is returned in the body of the response is sent back as a message. If you want to limit this to 140 characters for use with SMS then that is the HTTP resource's responsibility.
+
 Supervisord!
 ------------
 
