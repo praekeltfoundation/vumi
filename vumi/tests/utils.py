@@ -261,7 +261,7 @@ class FakeRedis(object):
 
     def incrby(self, key, increment):
         old_value = self._data.get(key)
-        new_value = str(int(old_value) + 1)
+        new_value = str(int(old_value) + increment)
         self._data[key] = new_value
         return new_value
 
