@@ -1,19 +1,10 @@
 zope.interface
-carrot==0.10.4
-celery==1.0.6
 twisted==10.1
 txamqp==0.5
-Django==1.3
-importlib==1.0.2
 PyYAML==3.09
-pycurl==7.18.1
-decorator
-pystache==0.3.1
-django-piston==0.2.2
 iso8601==0.1.4
 supervisor
 psycopg2==2.4.1
-South==0.7.3
 pyOpenSSL==0.11
 python-ssmi
 python-foneworx
@@ -23,7 +14,6 @@ redis
 -e git+git://github.com/dustin/twitty-twister#egg=twitty-twister
 pyserial
 pytz
-gunicorn
 python-fusiontables==0.1
 # oauth and simplejson are needed by twittytwister
 oauth

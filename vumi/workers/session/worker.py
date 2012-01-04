@@ -6,7 +6,6 @@ from twisted.internet.defer import inlineCallbacks
 
 from vumi.service import Worker, Consumer, Publisher
 from vumi.session import getVumiSession, delVumiSession, TraversedDecisionTree
-from vumi.webapp.api import utils
 from vumi.utils import get_deploy_int
 
 
@@ -43,40 +42,6 @@ class SessionConsumer(Consumer):
             json.dumps(dictionary), self.__class__.__name__))
         #dictionary = message.get('short_message')
 
-    def call_for_json(self, MSISDN):
-        if self.data_url['url']:
-            params = [(self.data_url['params'][0], str(MSISDN))]
-            url = self.data_url['url']
-            auth_string = ''
-            if self.data_url['username']:
-                auth_string += self.data_url['username']
-                if self.data_url['password']:
-                    auth_string += ":" + self.data_url['password']
-                auth_string += "@"
-            resp_url, resp = utils.callback("http://" + auth_string + url,
-                                            params)
-            return resp
-        return None
-
-    def post_back_json(self, MSISDN):
-        session = getVumiSession(self.r_server,
-                                 self.routing_key + '.' + MSISDN)
-        if session and session.get_decision_tree():
-            json_string = json.dumps(session.get_decision_tree().get_data())
-            if self.post_url['url']:
-                params = [(self.post_url['params'][0], json_string)]
-                url = self.post_url['url']
-                auth_string = ''
-                if self.post_url['username']:
-                    auth_string += self.post_url['username']
-                    if self.post_url['password']:
-                        auth_string += ":" + self.post_url['password']
-                    auth_string += "@"
-                resp_url, resp = utils.callback("http://" + auth_string + url,
-                                                params)
-                return resp
-        return None
-
     def get_session(self, MSISDN):
         sess = getVumiSession(self.r_server,
                               self.routing_key + '.' + MSISDN)
@@ -94,12 +59,7 @@ class SessionConsumer(Consumer):
         self.set_data_url(decision_tree.get_data_source())
         self.set_post_url(decision_tree.get_post_source())
         if self.data_url.get('url'):
-            json_data = self.call_for_json(MSISDN)
-            try:
-                decision_tree.load_json_data(json_data)
-            except Exception, e:
-                log.msg(e)
-                log.err(e)
+            raise ValueError("This is broken. Sorry. :-(")
         else:
             decision_tree.load_dummy_data()
         return decision_tree

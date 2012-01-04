@@ -1,6 +1,4 @@
 Sphinx==1.0.7
-nose==0.11.3
-django-nose
 coverage
 python-subunit
 junitxml
