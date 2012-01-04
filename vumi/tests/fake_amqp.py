@@ -9,6 +9,7 @@ from txamqp.client import TwistedDelegate
 from txamqp.content import Content
 
 from vumi.service import WorkerAMQClient
+from vumi.message import Message as VumiMessage
 
 
 def gen_id(prefix=''):
@@ -91,6 +92,7 @@ class FakeAMQPBroker(object):
         self.exchanges = {}
         self.channels = []
         self.dispatched = {}
+        self._delivering = None
 
     def _get_queue(self, queue):
         assert queue in self.queues
@@ -104,6 +106,10 @@ class FakeAMQPBroker(object):
         assert channel not in self.channels
         self.channels.append(channel)
         return Message(mkMethod("open-ok", 11))
+
+    def channel_close(self, channel):
+        self.channels.remove(channel)
+        return Message(mkMethod("close-ok", 41))
 
     def exchange_declare(self, exchange, exchange_type):
         exchange_class = None
@@ -157,52 +163,112 @@ class FakeAMQPBroker(object):
 
     def basic_ack(self, queue, delivery_tag):
         self._get_queue(queue).ack(delivery_tag)
-        self.kick_delivery()
         return None
 
-    def deliver_to_channels(self, d):
-        if any([self.try_deliver_to_channel(channel)
-                for channel in self.channels]):
-            self._kick_delivery(d)
-        else:
-            d.callback(None)
+    def deliver_to_channels(self):
+        # Since all delivery goes through kick_delivery(), this can
+        # only happen if message_processed() is called too many times.
+        assert self._delivering is not None
+
+        for channel in self.channels:
+            self.try_deliver_to_channel(channel)
+
+        # Process the sentinel "message" we added in kick_delivery().
+        self.message_processed()
 
     def try_deliver_to_channel(self, channel):
         if not channel.deliverable():
             return False
+        delivered = False
         for ctag, queue in channel.consumers.items():
             dtag, msg = self._get_queue(queue).get_message()
-            if dtag is not None:
+            while dtag is not None:
                 dmsg = mk_deliver(msg['content'], msg['exchange'],
                                   msg['routing_key'], ctag, dtag)
+                self._delivering['count'] += 1
                 channel.deliver_message(dmsg, queue)
-                return True
-            return False
+                delivered = True
+                dtag, msg = self._get_queue(queue).get_message()
+        return delivered
 
     def kick_delivery(self):
         """
         Schedule a message delivery run.
 
-        Returns a deferred that will fire when there are no more
-        deliverable messages. This is useful for manually triggering a
-        delivery run from inside a test.
+        Returns a deferred that will fire when all deliverable
+        messages have been delivered and processed by their consumers.
+        This is useful for manually triggering a delivery run from
+        inside a test.
         """
+        if self._delivering is None:
+            self._delivering = {
+                'deferred': Deferred(),
+                'count': 0,
+                }
+        # Add a sentinel "message" that gets processed after this
+        # delivery run, making the delivery process re-entrant. This
+        # is important, because delivered messages can trigger more
+        # messages to be published, which kicks delivery again.
+        self._delivering['count'] += 1
+        # Schedule this for later, so that we don't block whatever it
+        # is we're currently doing.
+        reactor.callLater(0, self.deliver_to_channels)
+        return self.wait_delivery()
+
+    def wait_delivery(self):
+        """
+        Wait for the current message delivery run (if any) to finish.
+
+        Returns a deferred that will fire when the broker is finished
+        delivering any messages from the current run. This should not
+        leave any messages undelivered, because basic_publish() kicks
+        off a delivery run.
+        """
+        if self._delivering is not None:
+            return self._delivering['deferred']
         d = Deferred()
-        self._kick_delivery(d)
+        d.callback(None)
         return d
 
-    def _kick_delivery(self, d):
-        reactor.callLater(0, self.deliver_to_channels, d)
+    def wait_messages(self, exchange, rkey, n):
+        def check(d):
+            msgs = self.get_messages(exchange, rkey)
+            if len(msgs) >= n:
+                d.callback(msgs)
+            else:
+                reactor.callLater(0, check, d)
+
+        done = Deferred()
+        reactor.callLater(0, check, done)
+        return done
+
+    def clear_messages(self, exchange, rkey):
+        del self.dispatched[exchange][rkey][:]
 
     def get_dispatched(self, exchange, rkey):
         return self.dispatched.get(exchange, {}).get(rkey, [])
+
+    def get_messages(self, exchange, rkey):
+        contents = self.get_dispatched(exchange, rkey)
+        messages = [VumiMessage.from_json(content.body)
+                    for content in contents]
+        return messages
 
     def publish_message(self, exchange, routing_key, message):
         return self.publish_raw(exchange, routing_key, message.to_json())
 
     def publish_raw(self, exchange, routing_key, data):
+        assert exchange in self.exchanges
         amq_message = Content(data)
         return self.basic_publish(exchange, routing_key, amq_message)
+
+    def message_processed(self):
+        assert self._delivering is not None
+        self._delivering['count'] -= 1
+        if self._delivering['count'] <= 0:
+            d = self._delivering['deferred']
+            self._delivering = None
+            d.callback(None)
 
 
 class FakeAMQPChannel(object):
@@ -213,9 +279,27 @@ class FakeAMQPChannel(object):
         self.consumers = {}
         self.delegate = delegate
         self.unacked = []
+        self.flow_active = True
+
+    def __repr__(self):
+        return '<FakeAMQPChannel: id=%s flow=%s>' % (
+            self.channel_id, self.flow_active)
 
     def channel_open(self):
         return self.broker.channel_open(self)
+
+    def channel_close(self):
+        return self.broker.channel_close(self)
+
+    def channel_flow(self, active):
+        self.flow_active = active
+        if active:
+            # We've re-enabled flow, so deliver queued messages.
+            self.broker.kick_delivery()
+        return Message(mkMethod("flow-ok", 21), [('active', active)])
+
+    def close(self, _reason):
+        pass
 
     def basic_qos(self, _prefetch_size, prefetch_count, _global):
         self.qos_prefetch_count = prefetch_count
@@ -255,6 +339,8 @@ class FakeAMQPChannel(object):
                     return resp
 
     def deliverable(self):
+        if not self.flow_active:
+            return False
         if self.qos_prefetch_count < 1:
             return True
         return len(self.unacked) < self.qos_prefetch_count
@@ -270,6 +356,13 @@ class FakeAMQPChannel(object):
             return mk_get_ok(msg['content'], msg['exchange'],
                              msg['routing_key'], dtag)
         return Message(mkMethod("get-empty", 72))
+
+    def message_processed(self):
+        """
+        Notify the broker that a message has been processed, in order
+        to make delivery sane.
+        """
+        self.broker.message_processed()
 
 
 class FakeAMQPExchange(object):

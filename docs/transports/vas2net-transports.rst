@@ -1,74 +1,7 @@
 Vas2Nets
 ========
 
-A WASP providing connectivity in Nigeria.
-
-
-Incoming SMSs
-*************
-
-:routing key: `sms.inbound.<transport-name>.<to_msisdn>`
-
-::
-
-    {
-        'transport_message_id': 'alpha numeric',
-        'transport_timestamp': 'iso 8601 format',
-        'transport_network_id': 'MNO unique id, used for number portability',
-        'transport_keyword': 'keyword if provided by vas2nets',
-        'to_msisdn': '+27761234567',
-        'from_msisdn': '+27761234567',
-        'message': 'message content'
-    }
-
-Delivery Reports
-****************
-
-:routing key: `sms.receipt.<transport-name>`
-
-::
-
-    {
-        'transport_message_id': 'alpha numeric',
-        'transport_status': 'numeric',
-        'transport_status_message': 'text status accompanying numeric status',
-        'transport_timestamp': 'iso 8601 format',
-        'transport_network_id': 'MNO unique id, used for number portability',
-        'to_msisdn': '+27761234567',
-        'id': 'transport message id if this was a reply, else internal id'
-    }
-
-Outbound SMSs
-*************
-
-:queue: `sms.outbound.<transport-name>`
-
-::
-    
-    {
-        'to_msisdn': '...',
-        'from_msisdn': '...',
-        'reply_to': 'reply to transport_message_id',
-        'id': 'internal message id',
-        'transport_network_id': 'MNO unique id, used for number portability',
-        'transport_keyword': 'MNO unique id, used for internal billing',
-        'message': 'the body of the sms text'
-    }
-
-On successfull delivery of an SMS, Vas2Nets gives us the `transport_message_id` 
-of the message that was delivered. We need to store this as its our only point
-of reference when the delivery receipt is returned, this is published on with
-the following info:
-
-:routing key: `sms.ack.<transport-name>`
-
-::
-
-    {
-        'id': 'internal message id',
-        'transport_message_id': 'transport message id, alpha numeric'
-    }
-
+A WASP providing connectivity in Nigeria via an HTTP API.
 
 Notes
 ~~~~~
@@ -82,8 +15,8 @@ Valid single byte characters::
     ' ',
     '/?!#%&()*+,-:;<=>.',
     '\n\r'
-    
-Valid double byte characters, will limit SMS to max length of 70 instead of 
+
+Valid double byte characters, will limit SMS to max length of 70 instead of
 160 if used::
 
     '|{}[]€\~^'
@@ -99,7 +32,7 @@ Configuration parameters
     web_receive_path: /api/v1/sms/vas2nets/receive/
     web_receipt_path: /api/v1/sms/vas2nets/receipt/
     web_port: 8123
-    
+
     url: <provided by vas2nets>
     username: <provided by vas2nets>
     password: <provided by vas2nets>

@@ -1,16 +1,20 @@
 # -*- test-case-name: vumi.tests.test_testutils -*-
 
+import re
 import json
-import importlib
 import fnmatch
 from datetime import datetime, timedelta
 from collections import namedtuple
 from contextlib import contextmanager
 
 import pytz
-from twisted.internet import defer
+from twisted.internet import defer, reactor
+from twisted.web.resource import Resource
+from twisted.web.server import Site
+from twisted.internet.defer import DeferredQueue, inlineCallbacks
+from twisted.python import log
 
-from vumi.utils import make_vumi_path_abs
+from vumi.utils import vumi_resource_path, import_module
 from vumi.service import get_spec, Worker
 from vumi.tests.fake_amqp import FakeAMQClient
 
@@ -44,6 +48,14 @@ class UTCNearNow(object):
         return (now - self.offset) < other < (now + self.offset)
 
 
+class RegexMatcher(object):
+    def __init__(self, regex):
+        self.regex = re.compile(regex)
+
+    def __eq__(self, other):
+        return self.regex.match(other)
+
+
 class Mocking(object):
 
     class HistoryItem(object):
@@ -60,13 +72,13 @@ class Mocking(object):
 
     def __enter__(self):
         """Overwrite whatever module the function is part of"""
-        self.mod = importlib.import_module(self.function.__module__)
-        setattr(self.mod, self.function.func_name, self)
+        self.mod = import_module(self.function.__module__)
+        setattr(self.mod, self.function.__name__, self)
         return self
 
     def __exit__(self, *exc_info):
         """Reset to whatever the function was originally when done"""
-        setattr(self.mod, self.function.func_name, self.function)
+        setattr(self.mod, self.function.__name__, self.function)
 
     def __call__(self, *args, **kwargs):
         """Return the return value when called, store the args & kwargs
@@ -179,14 +191,15 @@ class TestChannel(object):
 
 
 def get_stubbed_worker(worker_class, config=None, broker=None):
-    spec = get_spec(make_vumi_path_abs("config/amqp-spec-0-8.xml"))
+    spec = get_spec(vumi_resource_path("amqp-spec-0-8.xml"))
     amq_client = FakeAMQClient(spec, {}, broker)
-    worker = worker_class(amq_client, config)
+    worker = worker_class({}, config)
+    worker._amqp_client = amq_client
     return worker
 
 
 def get_stubbed_channel(broker=None, id=0):
-    spec = get_spec(make_vumi_path_abs("config/amqp-spec-0-8.xml"))
+    spec = get_spec(vumi_resource_path("amqp-spec-0-8.xml"))
     amq_client = FakeAMQClient(spec, {}, broker)
     return amq_client.channel(id)
 
@@ -211,6 +224,16 @@ class TestResourceWorker(Worker):
 class FakeRedis(object):
     def __init__(self):
         self._data = {}
+        self._expiries = {}
+
+    def teardown(self):
+        self._clean_up_expires()
+
+    def _clean_up_expires(self):
+        for key in self._expiries.keys():
+            delayed = self._expiries.pop(key)
+            if not delayed.cancelled:
+                delayed.cancel()
 
     # Global operations
 
@@ -233,9 +256,40 @@ class FakeRedis(object):
         self._data[key] = value
 
     def delete(self, key):
-        del self._data[key]
+        self._data.pop(key, None)
+
+    # Integer operations
+
+    def incrby(self, key, increment):
+        old_value = self._data.get(key)
+        new_value = str(int(old_value) + increment)
+        self._data[key] = new_value
+        return new_value
+
+    def incr(self, key):
+        return self.incrby(key, 1)
 
     # Hash operations
+
+    def hset(self, key, field, value):
+        mapping = self._data.setdefault(key, {})
+        new_field = field not in mapping
+        mapping[field] = value
+        return int(new_field)
+
+    def hget(self, key, field):
+        return self._data.get(key, {}).get(field)
+
+    def hdel(self, key, *fields):
+        mapping = self._data.get(key)
+        if mapping is None:
+            return 0
+        deleted = 0
+        for field in fields:
+            if field in mapping:
+                del mapping[field]
+                deleted += 1
+        return deleted
 
     def hmset(self, key, mapping):
         hval = self._data.setdefault(key, {})
@@ -243,6 +297,12 @@ class FakeRedis(object):
 
     def hgetall(self, key):
         return self._data.get(key, {})
+
+    def hlen(self, key):
+        return len(self._data.get(key, {}))
+
+    def hvals(self, key):
+        return self._data.get(key, {}).values()
 
     # Set operations
 
@@ -258,6 +318,13 @@ class FakeRedis(object):
         if not sval:
             return None
         return sval.pop()
+
+    def srem(self, key, value):
+        sval = self._data.get(key, set())
+        if value in sval:
+            sval.remove(value)
+            return 1
+        return 0
 
     def scard(self, key):
         return len(self._data.get(key, set()))
@@ -286,3 +353,94 @@ class FakeRedis(object):
         if stop == 0:
             stop = None
         return [val[1] for val in zval[start:stop]]
+
+    # List operations
+    def llen(self, key):
+        return len(self._data.get(key, []))
+
+    def lpop(self, key):
+        if self.llen(key):
+            return self._data[key].pop(0)
+
+    def lpush(self, key, obj):
+        self._data.setdefault(key, []).insert(0, obj)
+
+    def rpush(self, key, obj):
+        self._data.setdefault(key, []).append(obj)
+        return self.llen(key) - 1
+
+    def lrange(self, key, start, end):
+        lval = self._data.get(key, [])
+        return lval[start:end]
+
+    # Expiry operations
+
+    def expire(self, key, seconds):
+        self.persist(key)
+        delayed = reactor.callLater(seconds, self.delete, key)
+        self._expiries[key] = delayed
+
+    def persist(self, key):
+        delayed = self._expiries.get(key)
+        if delayed is not None and not delayed.cancelled:
+            delayed.cancel()
+
+
+class LogCatcher(object):
+    """Gather logs."""
+
+    def __init__(self):
+        self.logs = []
+
+    @property
+    def errors(self):
+        return [ev for ev in self.logs if ev["isError"]]
+
+    def _gather_logs(self, event_dict):
+        self.logs.append(event_dict)
+
+    def __enter__(self):
+        log.theLogPublisher.addObserver(self._gather_logs)
+        return self
+
+    def __exit__(self, *exc_info):
+        log.theLogPublisher.removeObserver(self._gather_logs)
+
+
+class MockResource(Resource):
+    isLeaf = True
+
+    def __init__(self, handler):
+        Resource.__init__(self)
+        self.handler = handler
+
+    def render_GET(self, request):
+        return self.handler(request)
+
+    def render_POST(self, request):
+        return self.handler(request)
+
+
+class MockHttpServer(object):
+
+    def __init__(self, handler=None):
+        self.queue = DeferredQueue()
+        self._handler = handler or self.handle_request
+        self._webserver = None
+        self.addr = None
+        self.url = None
+
+    def handle_request(self, request):
+        self.queue.put(request)
+
+    @inlineCallbacks
+    def start(self):
+        root = MockResource(self._handler)
+        site_factory = Site(root)
+        self._webserver = yield reactor.listenTCP(0, site_factory)
+        self.addr = self._webserver.getHost()
+        self.url = "http://%s:%s/" % (self.addr.host, self.addr.port)
+
+    @inlineCallbacks
+    def stop(self):
+        yield self._webserver.loseConnection()

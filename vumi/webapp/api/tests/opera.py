@@ -49,7 +49,8 @@ class OperaSMSHandlerTestCase(TestCase):
     def test_sms_receiving_with_text_plain_headers(self):
         """
         By eavesdropping we got the following log, this is what opera sends.
-        DTD is available at https://dragon.sa.operatelecom.com/MEnable/Client/Extra/bspostevent-1_0_0.dtd
+        DTD is available at https://dragon.sa.operatelecom.com/MEnable/Client/
+        Extra/bspostevent-1_0_0.dtd
 
         POST /api/v1/sms/opera/receive.xml HTTP/1.1
         Content-Length: 1798
@@ -66,7 +67,8 @@ class OperaSMSHandlerTestCase(TestCase):
           <field name="RemoteNetwork" type = "string">mtn-za</field>
           <field name="BSDate-tomorrow" type = "string">20100605</field>
           <field name="BSDate-today" type = "string">20100604</field>
-          <field name="ReceiveDate" type = "date">2010-06-04 15:51:25 +0000</field>
+          <field name="ReceiveDate"
+                 type = "date">2010-06-04 15:51:25 +0000</field>
           <field name="Local" type = "string">*32323</field>
           <field name="ClientID" type = "string">4</field>
           <field name="ChannelID" type = "string">111</field>
@@ -88,7 +90,8 @@ class OperaSMSHandlerTestCase(TestCase):
           <field name="Parsed" type = "string"></field>
           <field name="ServiceName" type = "string">Prktl Vumi</field>
           <field name="BSDate-thisweek" type = "string">20100531</field>
-          <field name="ServiceEndDate" type = "string">2010-06-30 07:47:00 +0200</field>
+          <field name="ServiceEndDate"
+                 type = "string">2010-06-30 07:47:00 +0200</field>
           <field name="Now" type = "date">2010-06-04 15:51:27 +0000</field>
         </bspostevent>
         """

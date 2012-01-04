@@ -7,11 +7,9 @@ find vumi/ -name '*.pyc' -delete
 echo "=== Erasing previous coverage data..."
 coverage erase
 echo "=== Running trial tests..."
-coverage run ./ve/bin/trial --reporter=subunit vumi | tee results.txt | subunit2junitxml > test_results.xml
+coverage run `which trial` --reporter=subunit vumi | tee results.txt | subunit2junitxml > test_results.xml
 subunit2pyunit < results.txt
 rm results.txt
-echo "=== Running django tests..."
-./manage.py test --with-xunit --xunit-file=django_test_results.xml --cover-package=vumi.webapp
 echo "=== Processing coverage data..."
 coverage xml
 echo "=== Checking for PEP-8 violations..."

@@ -212,7 +212,9 @@ class SessionTestCase(TestCase):
                                 {   "name": "ten"},
                                 {   "name": "eleven"},
                                 {   "name": "twelve"},
-                                {   "name": "something that uses up lots of characters"},
+                                {   "name":
+                                    "something that uses up lots of characters"
+                                    },
                                 {   "name": "and use up more characters"},
                                 {
                                     "name": "alpha",
@@ -346,7 +348,8 @@ class SessionTestCase(TestCase):
         dt4 = sess4.get_decision_tree()
         dt4.answer(1)
         self.assertEquals(dt4.question(),
-                "Which item?\n1. one\n2. two\n3. three\n4. four\n5. five\n6. six\n7. seven\n8. eight\n9. nine\n0. more items ...")
+                "Which item?\n1. one\n2. two\n3. three\n4. four\n5. five\n6."
+                " six\n7. seven\n8. eight\n9. nine\n0. more items ...")
         sess4.save()
         sess4 = None
         # after persisting to redis, retrieve afresh
@@ -354,7 +357,9 @@ class SessionTestCase(TestCase):
         dt4 = sess4.get_decision_tree()
         dt4.answer(0)
         self.assertEquals(dt4.question(),
-                "Which item?\n1. ten\n2. eleven\n3. twelve\n4. something that uses up lots of characters\n5. and use up more characters\n0. more items ...")
+                "Which item?\n1. ten\n2. eleven\n3. twelve\n4. something that"
+                " uses up lots of characters\n5. and use up more"
+                " characters\n0. more items ...")
         sess4.save()
         sess4 = None
         # after persisting to redis, retrieve afresh

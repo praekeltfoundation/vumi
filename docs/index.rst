@@ -11,14 +11,22 @@ Contents:
 .. toctree::
    :maxdepth: 1
 
-   roadmap.rst
+   overview.rst
    installation.rst
-   api.rst
+   getting-started.rst
+   first-smpp-bind.rst
    client.rst
-   deploying.rst
-   keywords.rst
    transports.rst
    metrics.rst
+   roadmap.rst
+   release-notes.rst
+
+For developers:
+
+.. toctree::
+   :maxdepth: 1
+
+   routing-naming-conventions.rst
    how-we-do-releases.rst
    coding-guidelines.rst
 
