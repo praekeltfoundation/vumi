@@ -29,6 +29,43 @@ class FakeEsmeTransceiver(EsmeTransceiver):
         pass
 
 
+class EsmeSequenceNumberTestCase(unittest.TestCase):
+
+    def test_sequence_rollover(self):
+        esme = FakeEsmeTransceiver()
+        self.assertEqual(0, esme.getSeq())
+        esme.incSeq()
+        self.assertEqual(1, esme.getSeq())
+        esme.seq = [4004004004]
+        self.assertEqual(4004004004, esme.getSeq())
+        esme.incSeq()
+        self.assertEqual(1, esme.getSeq())
+
+    def test_sequence_rollover_10_4(self):
+        esme = FakeEsmeTransceiver()
+        esme.inc = 10
+        esme.seq = [4]
+        self.assertEqual(4, esme.getSeq())
+        esme.incSeq()
+        self.assertEqual(14, esme.getSeq())
+        esme.seq = [4004004004]
+        self.assertEqual(4004004004, esme.getSeq())
+        esme.incSeq()
+        self.assertEqual(14, esme.getSeq())
+
+    def test_sequence_rollover_5_3(self):
+        esme = FakeEsmeTransceiver()
+        esme.inc = 5
+        esme.seq = [3]
+        self.assertEqual(3, esme.getSeq())
+        esme.incSeq()
+        self.assertEqual(8, esme.getSeq())
+        esme.seq = [4004004003]
+        self.assertEqual(4004004003, esme.getSeq())
+        esme.incSeq()
+        self.assertEqual(8, esme.getSeq())
+
+
 class EsmeTransceiverTestCase(unittest.TestCase):
     def get_esme(self):
         esme = FakeEsmeTransceiver()
