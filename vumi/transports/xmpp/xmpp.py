@@ -119,7 +119,6 @@ class XMPPTransport(Transport):
         log.msg("XMPPTransport %s started." % self.transport_name)
 
     def teardown_transport(self):
-        self.xmpp_client.stopService()
         log.msg("XMPPTransport %s stopped." % self.transport_name)
 
     def handle_outbound_message(self, message):
