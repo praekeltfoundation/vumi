@@ -89,15 +89,15 @@ Supervisord!
 Let's use Supervisord to ensure all the different parts keep running.
 Here is the configuration file `supervisord.example.conf`:
 
-.. literalinclude:: ../supervisord.example.conf
+.. literalinclude:: ../etc/supervisord.example.conf
 
 Ensure you're in your python `virtualenv` and start it with the following command::
 
-    $ supervisord -c supervisord.example.conf
+    $ supervisord -c etc/supervisord.example.conf
 
 You'll be able to see the HTTP management console at http://localhost:9010/ or at the command line with::
 
-    $ supervisorctl -c supervisord.example.conf
+    $ supervisorctl -c etc/supervisord.example.conf
 
 Let's give it a try:
 --------------------

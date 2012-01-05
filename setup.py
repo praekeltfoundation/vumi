@@ -22,7 +22,7 @@ setup(
     packages=find_packages(),
     include_package_data=True,
     install_requires=['setuptools'] +
-                     remove_externals(listify('config/requirements.pip')),
+                     remove_externals(listify('requirements.pip')),
     classifiers=[
         'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',
