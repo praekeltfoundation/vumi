@@ -58,7 +58,12 @@ class SchedulerTestCase(TestCase):
         msg = self.mkmsg_in()
         now = time.mktime(datetime(2012, 1, 1).timetuple())
         delta = 10  # seconds from now
-        self.scheduler.schedule_for_delivery(msg, delta, now)
+        key, bucket_key = self.scheduler.schedule_for_delivery(msg, delta, now)
+        self.assertEqual(bucket_key, '%s#%s.%s' % (
+            self.scheduler.r_prefix,
+            'scheduled_keys',
+            self.scheduler.get_next_write_timestamp(delta, now)
+        ))
         scheduled_key = self.scheduler.get_scheduled_key(now)
         self.assertEqual(scheduled_key, None)
         scheduled_time = now + delta + self.scheduler.GRANULARITY
