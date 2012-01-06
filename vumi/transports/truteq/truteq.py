@@ -72,9 +72,8 @@ class TruteqTransport(Transport):
         self.r_config = self.config.get('redis', {})
         self.r_prefix = "%(transport_name)s:ussd_codes" % self.config
 
-    @inlineCallbacks
     def setup_transport(self):
-        self.r_server = yield redis.Redis(**self.r_config)
+        self.r_server = redis.Redis(**self.r_config)
         self.ssmi_client = None
         # the strange wrapping of the funciton in a lambda is to get around
         # an odd type check in client.SSMIClient.__init__.
