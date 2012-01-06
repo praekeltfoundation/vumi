@@ -104,16 +104,23 @@ class TestTruteqTransport(TransportTestCase):
                         session_event=TransportUserMessage.SESSION_CLOSE)
 
     @inlineCallbacks
-    def _test_outbound_ussd(self, vumi_session_type, ssmi_session_type):
-        msg = self.mkmsg_out(content="Test", to_addr="+1234",
+    def _test_outbound_ussd(self, vumi_session_type, ssmi_session_type,
+                            content="Test"):
+        msg = self.mkmsg_out(content=content, to_addr="+1234",
                              session_event=vumi_session_type)
         yield self.dispatch(msg)
         ussd_call = yield self.dummy_connect.ussd_calls.get()
-        self.assertEqual(ussd_call, ("+1234", "Test", ssmi_session_type))
+        self.assertEqual(ussd_call, ("+1234", content or "",
+                                     ssmi_session_type))
 
     def test_handle_outbound_ussd_no_session(self):
         return self._test_outbound_ussd(TransportUserMessage.SESSION_NONE,
                                         client.SSMI_USSD_TYPE_EXISTING)
+
+    def test_handle_outbound_ussd_null_content(self):
+        return self._test_outbound_ussd(TransportUserMessage.SESSION_NONE,
+                                        client.SSMI_USSD_TYPE_EXISTING,
+                                        content=None)
 
     def test_handle_outbound_ussd_resume(self):
         return self._test_outbound_ussd(TransportUserMessage.SESSION_RESUME,
