@@ -1,12 +1,10 @@
 # -*- test-case-name: vumi.transports.tests.test_scheduler -*-
 import time
-import json
 from datetime import datetime
 from uuid import uuid4
 
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet.task import LoopingCall
-from twisted.python import log
 
 from vumi.message import TransportUserMessage
 

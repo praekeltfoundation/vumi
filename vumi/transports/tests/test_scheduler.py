@@ -1,9 +1,8 @@
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from twisted.internet.defer import inlineCallbacks
 from twisted.trial.unittest import TestCase
-from twisted.python import log
 
 from vumi.tests.utils import FakeRedis
 from vumi.transports.scheduler import Scheduler
