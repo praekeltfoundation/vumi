@@ -5,7 +5,6 @@
 
 from twisted.python import log
 from twisted.internet import reactor
-from twisted.internet.defer import inlineCallbacks
 
 from ssmi import client
 import redis
