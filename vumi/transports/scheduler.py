@@ -65,7 +65,8 @@ class Scheduler(object):
     def get_read_timestamp(self, now):
         now = int(now)
         timestamp = datetime.utcfromtimestamp(now).isoformat().split('.')[0]
-        next_timestamp = self.r_server.zrange(self._scheduled_timestamps_key, 0, 0)
+        next_timestamp = self.r_server.zrange(self._scheduled_timestamps_key,
+                                                0, 0)
         if next_timestamp and next_timestamp[0] <= timestamp:
             return next_timestamp[0]
         return None
@@ -96,7 +97,8 @@ class Scheduler(object):
 
         :param message: The message to be delivered.
         :param delta: How far in the future to send this, in seconds
-        :param now: Used to calculate the delta (timestamp in seconds since epoch)
+        :param now: Used to calculate the delta (timestamp in
+                    seconds since epoch)
 
         If ``now`` is ``None` then it will default to ``time.time()``
         """
@@ -125,7 +127,9 @@ class Scheduler(object):
 
     def store_read_timestamp(self, timestamp):
         score = time.mktime(time.strptime(timestamp, "%Y-%m-%dT%H:%M:%S"))
-        self.r_server.zadd(self._scheduled_timestamps_key, **{timestamp: score})
+        self.r_server.zadd(self._scheduled_timestamps_key, **{
+            timestamp: score
+        })
 
     @inlineCallbacks
     def deliver_scheduled(self, _time=None):

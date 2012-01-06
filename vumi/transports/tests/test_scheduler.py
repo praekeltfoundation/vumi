@@ -79,7 +79,7 @@ class SchedulerTestCase(TestCase):
     @inlineCallbacks
     def test_deliver_loop_future(self):
         now = time.mktime(datetime(2012, 1, 1).timetuple())
-        for i in range(0,3):
+        for i in range(0, 3):
             msg = self.mkmsg_in(message_id='message_%s' % (i,))
             delta = i * 10
             self.scheduler.schedule_for_delivery(msg, delta, now)
