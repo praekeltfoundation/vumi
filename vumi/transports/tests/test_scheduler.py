@@ -66,7 +66,7 @@ class SchedulerTestCase(TestCase):
         ))
         scheduled_key = self.scheduler.get_scheduled_key(now)
         self.assertEqual(scheduled_key, None)
-        scheduled_time = now + delta + self.scheduler.GRANULARITY
+        scheduled_time = now + delta + self.scheduler.granularity
         scheduled_key = self.scheduler.get_scheduled_key(scheduled_time)
         self.assertTrue(scheduled_key)
 
@@ -76,7 +76,7 @@ class SchedulerTestCase(TestCase):
         now = time.mktime(datetime(2012, 1, 1).timetuple())
         delta = 10  # seconds from now
         self.scheduler.schedule_for_delivery(msg, delta, now)
-        scheduled_time = now + delta + self.scheduler.GRANULARITY
+        scheduled_time = now + delta + self.scheduler.granularity
         yield self.scheduler.deliver_scheduled(scheduled_time)
         self.assertDelivered(msg)
 
@@ -87,7 +87,7 @@ class SchedulerTestCase(TestCase):
             msg = self.mkmsg_in(message_id='message_%s' % (i,))
             delta = i * 10
             self.scheduler.schedule_for_delivery(msg, delta, now)
-            scheduled_time = now + delta + self.scheduler.GRANULARITY
+            scheduled_time = now + delta + self.scheduler.granularity
             yield self.scheduler.deliver_scheduled(scheduled_time)
             self.assertNumDelivered(i + 1)
 
@@ -108,7 +108,7 @@ class SchedulerTestCase(TestCase):
     def test_clear_scheduled_messages(self):
         msg = self.mkmsg_in()
         now = time.mktime(datetime.now().timetuple())
-        scheduled_time = now + self.scheduler.GRANULARITY
+        scheduled_time = now + self.scheduler.granularity
         key, bucket = self.scheduler.schedule_for_delivery(msg, 0,
                                                     scheduled_time)
         self.assertEqual(len(self.get_pending_messages()), 1)

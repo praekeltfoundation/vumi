@@ -15,12 +15,12 @@ class Scheduler(object):
     at a given time.
     """
 
-    GRANULARITY = 5  # seconds
-    DELIVERY_PERIOD = 3
-
-    def __init__(self, redis, callback, prefix='scheduler'):
+    def __init__(self, redis, callback, prefix='scheduler',
+                    granularity=5, delivery_period=3):
         self.r_server = redis
         self.r_prefix = prefix
+        self.granularity = granularity
+        self.delivery_period = delivery_period
         self._scheduled_timestamps_key = self.r_key("scheduled_timestamps")
         self.callback = callback
         self.loop = LoopingCall(self.deliver_scheduled)
@@ -30,7 +30,7 @@ class Scheduler(object):
         return self.loop.running
 
     def start(self):
-        self.loop.start(self.DELIVERY_PERIOD, now=True)
+        self.loop.start(self.delivery_period, now=True)
 
     def stop(self):
         if self.loop.running:
@@ -57,7 +57,7 @@ class Scheduler(object):
     def get_next_write_timestamp(self, delta, now):
         now = int(now)
         timestamp = now + delta
-        timestamp += self.GRANULARITY - (timestamp % self.GRANULARITY)
+        timestamp += self.granularity - (timestamp % self.granularity)
         return datetime.utcfromtimestamp(timestamp).isoformat().split('.')[0]
 
     def get_read_timestamp(self, now):
