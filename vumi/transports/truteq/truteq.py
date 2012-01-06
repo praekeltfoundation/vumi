@@ -96,7 +96,8 @@ class TruteqTransport(Transport):
             from_addr=normalize_msisdn(msisdn),
             to_addr=normalize_msisdn(ussd_code),
             session_event=session_event,
-            # TODO: does content need to be decoded?
+            # XXX: text should be decoded before being published
+            #      but I don't know what encoding is used.
             content=text,
             transport_name=self.transport_name,
             transport_type=self.transport_type,
