@@ -32,7 +32,8 @@ class Scheduler(object):
         return self.loop.running
 
     def start(self):
-        self.loop.start(self.delivery_period, now=True)
+        if not self.loop.running:
+            self.loop.start(self.delivery_period, now=True)
 
     def stop(self):
         if self.loop.running:
