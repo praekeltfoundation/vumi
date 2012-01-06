@@ -56,15 +56,14 @@ class Scheduler(object):
     def get_scheduled(self, scheduled_key):
         return self.r_server.hgetall(scheduled_key)
 
-    def get_next_write_timestamp(self, delta, now=None):
-        if now is None:
-            now = int(time.time())
+    def get_next_write_timestamp(self, delta, now):
+        now = int(now)
         timestamp = now + delta
         timestamp += self.GRANULARITY - (timestamp % self.GRANULARITY)
         return datetime.utcfromtimestamp(timestamp).isoformat().split('.')[0]
 
-    def get_read_timestamp(self, time):
-        now = int(time)
+    def get_read_timestamp(self, now):
+        now = int(now)
         timestamp = datetime.utcfromtimestamp(now).isoformat().split('.')[0]
         next_timestamp = self.r_server.zrange(self._scheduled_timestamps_key, 0, 0)
         if next_timestamp and next_timestamp[0] <= timestamp:
@@ -101,23 +100,28 @@ class Scheduler(object):
 
         If ``now`` is ``None` then it will default to ``time.time()``
         """
+        if not now:
+            now = int(time.time())
+
         key = self.scheduled_key()
-        self.r_server.hmset(key, {
-                "message": message.to_json(),
-                "scheduled_at": datetime.utcnow().isoformat(),
-                })
         self.add_to_scheduled_set(key)
-        self.store_scheduled(key, delta, now)
-        return key
+        bucket_key = self.store_scheduled(key, delta, now)
+        self.r_server.hmset(key, {
+            "message": message.to_json(),
+            "scheduled_at": datetime.utcnow().isoformat(),
+            "bucket_key": bucket_key,
+        })
+        return key, bucket_key
 
     def add_to_scheduled_set(self, key):
         self.r_server.sadd(self.r_key("scheduled_keys"), key)
 
-    def store_scheduled(self, scheduled_key, delta, now=None):
-        timestamp = self.get_next_write_timestamp(delta, now=now)
+    def store_scheduled(self, scheduled_key, delta, now):
+        timestamp = self.get_next_write_timestamp(delta, now)
         bucket_key = self.r_key("scheduled_keys." + timestamp)
         self.r_server.sadd(bucket_key, scheduled_key)
         self.store_read_timestamp(timestamp)
+        return bucket_key
 
     def store_read_timestamp(self, timestamp):
         score = time.mktime(time.strptime(timestamp, "%Y-%m-%dT%H:%M:%S"))
@@ -134,3 +138,10 @@ class Scheduler(object):
             scheduled_at = scheduled_data['scheduled_at']
             message = TransportUserMessage.from_json(scheduled_data['message'])
             yield self.callback(scheduled_at, message)
+
+    def clear_scheduled(self, key):
+        self.r_server.srem(self.r_key("scheduled_keys"), key)
+        message_data = self.get_scheduled(key)
+        bucket_key = message_data['bucket_key']
+        self.r_server.srem(bucket_key, key)
+        self.r_server.delete(key)

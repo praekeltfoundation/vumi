@@ -1,5 +1,4 @@
 import time
-from pprint import pprint
 from datetime import datetime, timedelta
 
 from twisted.internet.defer import inlineCallbacks
@@ -33,6 +32,10 @@ class SchedulerTestCase(TestCase):
 
     def assertNumDelivered(self, number):
         self.assertEqual(number, len(self._delivery_history))
+
+    def get_pending_messages(self):
+        scheduled_timestamps = self.scheduler.r_key('scheduled_timestamps')
+        return self.r_server.zrange(scheduled_timestamps, 0, -1)
 
     def mkmsg_in(self, content='hello world', message_id='abc',
                  to_addr='9292', from_addr='+41791234567',
@@ -83,3 +86,30 @@ class SchedulerTestCase(TestCase):
             scheduled_time = now + delta + self.scheduler.GRANULARITY
             yield self.scheduler.deliver_scheduled(scheduled_time)
             self.assertNumDelivered(i + 1)
+
+    @inlineCallbacks
+    def test_deliver_ancient_messages(self):
+        # something stuck in the queue since 1912 or scheduler hasn't
+        # been running since 1912
+        msg = self.mkmsg_in()
+        way_back = time.mktime(datetime(1912, 1, 1).timetuple())
+        scheduled_key = self.scheduler.schedule_for_delivery(msg, 0, way_back)
+        self.assertTrue(scheduled_key)
+        now = time.mktime(datetime.now().timetuple())
+        yield self.scheduler.deliver_scheduled(now)
+        self.assertDelivered(msg)
+        self.assertEqual(self.get_pending_messages(), [])
+
+    @inlineCallbacks
+    def test_clear_scheduled_messages_for_msisdn(self):
+        msg = self.mkmsg_in()
+        now = time.mktime(datetime.now().timetuple())
+        scheduled_time = now + self.scheduler.GRANULARITY
+        key, bucket = self.scheduler.schedule_for_delivery(msg, 0,
+                                                    scheduled_time)
+        self.assertEqual(len(self.get_pending_messages()), 1)
+        self.scheduler.clear_scheduled(key)
+        yield self.scheduler.deliver_scheduled()
+        self.assertEqual(self.r_server.hgetall(key), {})
+        self.assertEqual(self.r_server.smembers(bucket), set())
+        self.assertNumDelivered(0)
