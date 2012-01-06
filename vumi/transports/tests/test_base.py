@@ -159,6 +159,9 @@ class TransportTestCase(unittest.TestCase):
     def wait_for_dispatched_messages(self, amount):
         return self._amqp.wait_messages('vumi', self.rkey('inbound'), amount)
 
+    def clear_dispatched_messages(self):
+        self._amqp.clear_messages('vumi', self.rkey('inbound'))
+
     def dispatch(self, message, rkey=None, exchange='vumi'):
         if rkey is None:
             rkey = self.rkey('outbound')
