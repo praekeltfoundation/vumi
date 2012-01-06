@@ -96,3 +96,9 @@ class TestTruteqTransport(TransportTestCase):
 
     def test_handle_outbout_message(self):
         self.fail("Unimplemented test.")
+
+    def test_handle_inbound_sms(self):
+        self.fail("Unimplemented test.")
+
+    def test_handle_ssmi_error(self):
+        self.fail("Unimplemented test.")
