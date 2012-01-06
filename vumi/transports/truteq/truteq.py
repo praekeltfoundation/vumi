@@ -4,7 +4,6 @@
 """TruTeq USSD transport."""
 
 from twisted.python import log
-from twisted.internet.defer import inlineCallbacks
 from twisted.internet import reactor
 
 from ssmi import client
@@ -19,15 +18,19 @@ class TruteqTransport(Transport):
     The USSDTransport for TruTeq
     """
 
+    SSMI_TO_VUMI_EVENT = {
+        client.SSMI_USSD_TYPE_NEW: TransportUserMessage.SESSION_NEW,
+        client.SSMI_USSD_TYPE_EXISTING: TransportUserMessage.SESSION_RESUME,
+        client.SSMI_USSD_TYPE_END: TransportUserMessage.SESSION_CLOSE,
+        client.SSMI_USSD_TYPE_TIMEOUT: TransportUserMessage.SESSION_CLOSE,
+    }
+
     VUMI_TO_SSMI_EVENT = {
+        TransportUserMessage.SESSION_NONE: client.SSMI_USSD_TYPE_EXISTING,
         TransportUserMessage.SESSION_NEW: client.SSMI_USSD_TYPE_NEW,
         TransportUserMessage.SESSION_RESUME: client.SSMI_USSD_TYPE_EXISTING,
         TransportUserMessage.SESSION_CLOSE: client.SSMI_USSD_TYPE_END,
-        }
-
-    SSMI_TO_VUMI_EVENT = dict((v, k) for k, v in VUMI_TO_SSMI_EVENT.items())
-    SSMI_TO_VUMI_EVENT[client.SSMI_USSD_TYPE_TIMEOUT] = \
-            TransportUserMessage.SESSION_CLOSE
+    }
 
     def validate_config(self):
         """
@@ -44,10 +47,12 @@ class TruteqTransport(Transport):
         #           MSISDN dialed into which ussd code, problem is that it is
         #           memory and will be lost during restarts.
         self.storage = {}
-
-        factory = client.SSMIFactory(self._setup_ssmi_client)
-        self.ssmi_connector = reactor.connectTCP(self.host, self.port, factory)
         self.ssmi_client = None
+        # the strange wrapping of the funciton in a lambda is to get around
+        # an odd type check in client.SSMIClient.__init__.
+        factory = client.SSMIFactory(
+            lambda ssmi_client: self._setup_ssmi_client(ssmi_client))
+        self.ssmi_connector = reactor.connectTCP(self.host, self.port, factory)
 
     def _setup_ssmi_client(self, ssmi_client):
         ssmi_client.app_setup(self.username, self.password,
@@ -105,7 +110,6 @@ class TruteqTransport(Transport):
     def ssmi_errback(self, *args, **kwargs):
         log.err("Got error from SSMI: %r, %r" % (args, kwargs))
 
-    @inlineCallbacks
     def handle_outbound_message(self, message):
         text = message['content']
         if text is None:

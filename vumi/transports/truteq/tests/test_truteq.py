@@ -1,6 +1,6 @@
 """Test for vumi.transport.truteq.truteq."""
 
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import inlineCallbacks, DeferredQueue
 from twisted.internet import reactor
 
 from ssmi import client
@@ -11,16 +11,23 @@ from vumi.transports.truteq.truteq import TruteqTransport
 from vumi.tests.utils import LogCatcher
 
 
-class MockConnectTCP(object):
+class MockConnectTCPForSSMI(object):
     def __init__(self):
+        self.ussd_calls = DeferredQueue()
         self.clear()
 
     def __call__(self, host, port, factory):
         self.host, self.port, self.factory = host, port, factory
+        ssmi_client = factory.buildProtocol("dummy_address")
+        ssmi_client.send_ussd = self.send_ussd
         return self
 
     def clear(self):
         self.host, self.port, self.factory = None, None, None
+
+    def send_ussd(self, msisdn, message,
+                  ussd_type=client.SSMI_USSD_TYPE_EXISTING):
+        self.ussd_calls.put((msisdn, message, ussd_type))
 
     def disconnect(self):
         self.clear()
@@ -34,7 +41,7 @@ class TestTruteqTransport(TransportTestCase):
     @inlineCallbacks
     def setUp(self):
         super(TestTruteqTransport, self).setUp()
-        self.dummy_connect = MockConnectTCP()
+        self.dummy_connect = MockConnectTCPForSSMI()
         self.patch(reactor, 'connectTCP', self.dummy_connect)
         self.config = {
             'username': 'vumitest',
@@ -47,14 +54,14 @@ class TestTruteqTransport(TransportTestCase):
     def tearDown(self):
         super(TestTruteqTransport, self).tearDown()
 
-    def _send_ussd(self, msisdn="+12345",
-                   ussd_type=client.SSMI_USSD_TYPE_EXISTING,
-                   phase="ignored", message="Hello"):
+    def _incoming_ussd(self, msisdn="+12345",
+                       ussd_type=client.SSMI_USSD_TYPE_EXISTING,
+                       phase="ignored", message="Hello"):
         self.transport.ussd_callback(msisdn, ussd_type, phase, message)
 
     def _start_ussd(self, to_addr="+678", **kw):
-        self._send_ussd(ussd_type=client.SSMI_USSD_TYPE_NEW, message=to_addr,
-                        **kw)
+        self._incoming_ussd(ussd_type=client.SSMI_USSD_TYPE_NEW,
+                            message=to_addr, **kw)
         self._check_msg(session_event=TransportUserMessage.SESSION_NEW)
 
     def _check_msg(self, from_addr="+12345", to_addr="+678", content=None,
@@ -70,32 +77,55 @@ class TestTruteqTransport(TransportTestCase):
         self.clear_dispatched_messages()
 
     def test_handle_inbound_ussd_new(self):
-        self._send_ussd(ussd_type=client.SSMI_USSD_TYPE_NEW, message="+678")
+        self._incoming_ussd(ussd_type=client.SSMI_USSD_TYPE_NEW,
+                            message="+678")
         self._check_msg(to_addr="+678",
                         session_event=TransportUserMessage.SESSION_NEW)
 
     def test_handle_inbound_ussd_resume(self):
         self._start_ussd()
-        self._send_ussd(ussd_type=client.SSMI_USSD_TYPE_EXISTING,
+        self._incoming_ussd(ussd_type=client.SSMI_USSD_TYPE_EXISTING,
                         message="Hello")
         self._check_msg(content="Hello",
                         session_event=TransportUserMessage.SESSION_RESUME)
 
     def test_handle_inbound_ussd_close(self):
         self._start_ussd()
-        self._send_ussd(ussd_type=client.SSMI_USSD_TYPE_END, message="Done")
+        self._incoming_ussd(ussd_type=client.SSMI_USSD_TYPE_END,
+                            message="Done")
         self._check_msg(content="Done",
                         session_event=TransportUserMessage.SESSION_CLOSE)
 
     def test_handle_inbound_ussd_timeout(self):
         self._start_ussd()
-        self._send_ussd(ussd_type=client.SSMI_USSD_TYPE_TIMEOUT,
+        self._incoming_ussd(ussd_type=client.SSMI_USSD_TYPE_TIMEOUT,
                         message="Timeout")
         self._check_msg(content="Timeout",
                         session_event=TransportUserMessage.SESSION_CLOSE)
 
-    def test_handle_outbout_message(self):
-        self.fail("Unimplemented test.")
+    @inlineCallbacks
+    def _test_outbound_ussd(self, vumi_session_type, ssmi_session_type):
+        msg = self.mkmsg_out(content="Test", to_addr="+1234",
+                             session_event=vumi_session_type)
+        yield self.dispatch(msg)
+        ussd_call = yield self.dummy_connect.ussd_calls.get()
+        self.assertEqual(ussd_call, ("+1234", "Test", ssmi_session_type))
+
+    def test_handle_outbound_ussd_no_session(self):
+        return self._test_outbound_ussd(TransportUserMessage.SESSION_NONE,
+                                        client.SSMI_USSD_TYPE_EXISTING)
+
+    def test_handle_outbound_ussd_resume(self):
+        return self._test_outbound_ussd(TransportUserMessage.SESSION_RESUME,
+                                        client.SSMI_USSD_TYPE_EXISTING)
+
+    def test_handle_outbound_ussd_new(self):
+        return self._test_outbound_ussd(TransportUserMessage.SESSION_NEW,
+                                        client.SSMI_USSD_TYPE_NEW)
+
+    def test_handle_outbound_ussd_close(self):
+        return self._test_outbound_ussd(TransportUserMessage.SESSION_CLOSE,
+                                        client.SSMI_USSD_TYPE_END)
 
     def test_handle_inbound_sms(self):
         with LogCatcher() as logger:
