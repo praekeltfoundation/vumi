@@ -19,7 +19,6 @@ class SchedulerTestCase(TestCase):
     def tearDown(self):
         if self.scheduler.is_running:
             self.scheduler.stop()
-        self._delivery_history = []
 
     def _scheduler_callback(self, scheduled_at, message):
         self._delivery_history.append((scheduled_at, message))
