@@ -1,10 +1,14 @@
 # -*- test-case-name: vumi.transports.tests.test_scheduler -*-
 import time
+import json
 from datetime import datetime
 from uuid import uuid4
 
+from twisted.internet.defer import inlineCallbacks
 from twisted.internet.task import LoopingCall
 from twisted.python import log
+
+from vumi.message import TransportUserMessage
 
 
 class Scheduler(object):
@@ -48,6 +52,9 @@ class Scheduler(object):
         failure_id = uuid4().get_hex()
         timestamp = timestamp.isoformat().split('.')[0]
         return self.r_key(".".join(("scheduled", timestamp, failure_id)))
+
+    def get_scheduled(self, scheduled_key):
+        return self.r_server.hgetall(scheduled_key)
 
     def get_next_write_timestamp(self, delta, now=None):
         if now is None:
@@ -116,6 +123,7 @@ class Scheduler(object):
         score = time.mktime(time.strptime(timestamp, "%Y-%m-%dT%H:%M:%S"))
         self.r_server.zadd(self._scheduled_timestamps_key, **{timestamp: score})
 
+    @inlineCallbacks
     def deliver_scheduled(self, time=None):
         if not time:
             time = int(time.time())
@@ -123,4 +131,7 @@ class Scheduler(object):
             scheduled_key = self.get_scheduled_key(time)
             if not scheduled_key:
                 return
-            yield self.callback(scheduled_key)
+            scheduled_data = self.get_scheduled(scheduled_key)
+            scheduled_at = scheduled_data['scheduled_at']
+            message = TransportUserMessage.from_json(scheduled_data['message'])
+            yield self.callback(scheduled_at, message)

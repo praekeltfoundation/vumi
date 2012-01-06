@@ -2,6 +2,7 @@ import time
 from pprint import pprint
 from datetime import datetime, timedelta
 
+from twisted.internet.defer import inlineCallbacks
 from twisted.trial.unittest import TestCase
 from twisted.python import log
 
@@ -14,11 +15,21 @@ class SchedulerTestCase(TestCase):
 
     def setUp(self):
         self.r_server = FakeRedis()
-        self.scheduler = Scheduler(self.r_server, log.msg)
+        self.scheduler = Scheduler(self.r_server, self._scheduler_callback)
+        self._delivery_history = []
 
     def tearDown(self):
         if self.scheduler.is_running:
             self.scheduler.stop()
+        self._delivery_history = []
+
+    def _scheduler_callback(self, scheduled_at, message):
+        self._delivery_history.append((scheduled_at, message))
+        return (scheduled_at, message)
+
+    def assertDelivered(self, message):
+        self.assertIn(message['message_id'],
+            [message['message_id'] for _, message in self._delivery_history])
 
     def mkmsg_in(self, content='hello world', message_id='abc',
                  to_addr='9292', from_addr='+41791234567',
@@ -45,5 +56,16 @@ class SchedulerTestCase(TestCase):
         self.scheduler.schedule_for_delivery(msg, delta, now)
         scheduled_key = self.scheduler.get_scheduled_key(now)
         self.assertEqual(scheduled_key, None)
-        scheduled_key = self.scheduler.get_scheduled_key(now + delta + self.scheduler.GRANULARITY)
+        scheduled_time = now + delta + self.scheduler.GRANULARITY
+        scheduled_key = self.scheduler.get_scheduled_key(scheduled_time)
         self.assertTrue(scheduled_key)
+
+    @inlineCallbacks
+    def test_delivery_loop(self):
+        msg = self.mkmsg_in()
+        now = time.mktime(datetime(2012,1,1).timetuple())
+        delta = 10  # seconds from now
+        self.scheduler.schedule_for_delivery(msg, delta, now)
+        scheduled_time = now + delta + self.scheduler.GRANULARITY
+        yield self.scheduler.deliver_scheduled(scheduled_time)
+        self.assertDelivered(msg)
