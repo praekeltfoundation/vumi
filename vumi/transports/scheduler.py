@@ -1,5 +1,7 @@
 # -*- test-case-name: vumi.transports.tests.test_scheduler -*-
 import time
+import iso8601
+import pytz
 from datetime import datetime
 from uuid import uuid4
 
@@ -62,11 +64,12 @@ class Scheduler(object):
 
     def get_read_timestamp(self, now):
         now = int(now)
-        timestamp = datetime.utcfromtimestamp(now).isoformat().split('.')[0]
+        timestamp = datetime.utcfromtimestamp(now).replace(tzinfo=pytz.UTC)
         next_timestamp = self.r_server.zrange(self._scheduled_timestamps_key,
                                                 0, 0)
-        if next_timestamp and next_timestamp[0] <= timestamp:
-            return next_timestamp[0]
+        if next_timestamp:
+            if iso8601.parse_date(next_timestamp[0]) <= timestamp:
+                return next_timestamp[0]
         return None
 
     def get_next_read_timestamp(self):
