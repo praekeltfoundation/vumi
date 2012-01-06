@@ -58,6 +58,10 @@ class TruteqTransport(Transport):
     # default maximum lifetime of USSD sessions (in seconds)
     DEFAULT_USSD_SESSION_LIFETIME = 5 * 60
 
+    # TODO: Check that UTF-8 is in fact what TruTeq use to encode their
+    #       messages
+    SSMI_ENCODING = "UTF-8"
+
     def validate_config(self):
         """
         Transport-specific config validation happens in here.
@@ -110,6 +114,7 @@ class TruteqTransport(Transport):
         log.msg("Received USSD, from: %s, message: %s" % (msisdn, message))
         session_event = self.SSMI_TO_VUMI_EVENT[ussd_type]
         msisdn = normalize_msisdn(msisdn)
+        message = message.decode(self.SSMI_ENCODING)
 
         if session_event == TransportUserMessage.SESSION_NEW:
             # If it's a new session then store the message as the USSD code
@@ -127,8 +132,6 @@ class TruteqTransport(Transport):
             from_addr=msisdn,
             to_addr=ussd_code,
             session_event=session_event,
-            # XXX: text should be decoded before being published
-            #      but I don't know what encoding is used.
             content=text,
             transport_name=self.transport_name,
             transport_type=self.transport_type,
@@ -147,6 +150,5 @@ class TruteqTransport(Transport):
         if text is None:
             text = ''
         ssmi_session_type = self.VUMI_TO_SSMI_EVENT[message['session_event']]
-        # XXX: text should be encoded before being sent out via SSMI
-        #      but I don't know what the encoding should be.
-        self.ssmi_client.send_ussd(message['to_addr'], text, ssmi_session_type)
+        data = text.encode(self.SSMI_ENCODING)
+        self.ssmi_client.send_ussd(message['to_addr'], data, ssmi_session_type)

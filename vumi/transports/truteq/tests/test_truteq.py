@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 """Test for vumi.transport.truteq.truteq."""
 
 from twisted.internet.defer import inlineCallbacks, DeferredQueue
@@ -105,15 +107,22 @@ class TestTruteqTransport(TransportTestCase):
         self._check_msg(content="Timeout",
                         session_event=TransportUserMessage.SESSION_CLOSE)
 
+    def test_handle_inbound_ussd_non_ascii(self):
+        self._start_ussd()
+        self._incoming_ussd(ussd_type=client.SSMI_USSD_TYPE_TIMEOUT,
+                        message=u"föóbær".encode("utf-8"))
+        self._check_msg(content=u"föóbær",
+                        session_event=TransportUserMessage.SESSION_CLOSE)
+
     @inlineCallbacks
     def _test_outbound_ussd(self, vumi_session_type, ssmi_session_type,
-                            content="Test"):
+                            content="Test", encoding="utf-8"):
         msg = self.mkmsg_out(content=content, to_addr="+1234",
                              session_event=vumi_session_type)
         yield self.dispatch(msg)
         ussd_call = yield self.dummy_connect.ussd_calls.get()
-        self.assertEqual(ussd_call, ("+1234", content or "",
-                                     ssmi_session_type))
+        data = content.encode(encoding) if content else ""
+        self.assertEqual(ussd_call, ("+1234", data, ssmi_session_type))
 
     def test_handle_outbound_ussd_no_session(self):
         return self._test_outbound_ussd(TransportUserMessage.SESSION_NONE,
@@ -135,6 +144,11 @@ class TestTruteqTransport(TransportTestCase):
     def test_handle_outbound_ussd_close(self):
         return self._test_outbound_ussd(TransportUserMessage.SESSION_CLOSE,
                                         client.SSMI_USSD_TYPE_END)
+
+    def test_handle_outbound_ussd_non_ascii(self):
+        return self._test_outbound_ussd(TransportUserMessage.SESSION_NONE,
+                                        client.SSMI_USSD_TYPE_EXISTING,
+                                        content=u"föóbær")
 
     def test_handle_inbound_sms(self):
         with LogCatcher() as logger:
