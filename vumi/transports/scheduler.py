@@ -124,11 +124,10 @@ class Scheduler(object):
         self.r_server.zadd(self._scheduled_timestamps_key, **{timestamp: score})
 
     @inlineCallbacks
-    def deliver_scheduled(self, time=None):
-        if not time:
-            time = int(time.time())
+    def deliver_scheduled(self, _time=None):
+        _time = _time or int(time.time())
         while True:
-            scheduled_key = self.get_scheduled_key(time)
+            scheduled_key = self.get_scheduled_key(_time)
             if not scheduled_key:
                 return
             scheduled_data = self.get_scheduled(scheduled_key)

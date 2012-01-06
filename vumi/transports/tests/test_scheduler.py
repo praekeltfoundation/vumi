@@ -31,6 +31,9 @@ class SchedulerTestCase(TestCase):
         self.assertIn(message['message_id'],
             [message['message_id'] for _, message in self._delivery_history])
 
+    def assertNumDelivered(self, number):
+        self.assertEqual(number, len(self._delivery_history))
+
     def mkmsg_in(self, content='hello world', message_id='abc',
                  to_addr='9292', from_addr='+41791234567',
                  session_event=None, transport_type='sms',
@@ -51,7 +54,7 @@ class SchedulerTestCase(TestCase):
 
     def test_scheduling(self):
         msg = self.mkmsg_in()
-        now = time.mktime(datetime(2012,1,1).timetuple())
+        now = time.mktime(datetime(2012, 1, 1).timetuple())
         delta = 10  # seconds from now
         self.scheduler.schedule_for_delivery(msg, delta, now)
         scheduled_key = self.scheduler.get_scheduled_key(now)
@@ -63,9 +66,20 @@ class SchedulerTestCase(TestCase):
     @inlineCallbacks
     def test_delivery_loop(self):
         msg = self.mkmsg_in()
-        now = time.mktime(datetime(2012,1,1).timetuple())
+        now = time.mktime(datetime(2012, 1, 1).timetuple())
         delta = 10  # seconds from now
         self.scheduler.schedule_for_delivery(msg, delta, now)
         scheduled_time = now + delta + self.scheduler.GRANULARITY
         yield self.scheduler.deliver_scheduled(scheduled_time)
         self.assertDelivered(msg)
+
+    @inlineCallbacks
+    def test_deliver_loop_future(self):
+        now = time.mktime(datetime(2012, 1, 1).timetuple())
+        for i in range(0,3):
+            msg = self.mkmsg_in(message_id='message_%s' % (i,))
+            delta = i * 10
+            self.scheduler.schedule_for_delivery(msg, delta, now)
+            scheduled_time = now + delta + self.scheduler.GRANULARITY
+            yield self.scheduler.deliver_scheduled(scheduled_time)
+            self.assertNumDelivered(i + 1)
