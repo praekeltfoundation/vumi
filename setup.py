@@ -10,7 +10,7 @@ def remove_externals(requirements):
 
 setup(
     name="vumi",
-    version="0.3.0a",
+    version="0.4.0a",
     url='http://github.com/praekelt/vumi',
     license='BSD',
     description="Super-scalable messaging engine for the delivery of SMS, "
@@ -22,7 +22,7 @@ setup(
     packages=find_packages(),
     include_package_data=True,
     install_requires=['setuptools'] +
-                     remove_externals(listify('config/requirements.pip')),
+                     remove_externals(listify('requirements.pip')),
     classifiers=[
         'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',

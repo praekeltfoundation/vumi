@@ -49,3 +49,8 @@ class SessionManagerTestCase(TestCase):
         session = self.sm.load_session("u1")
         self.assertTrue(session.pop('created_at') is not None)
         self.assertEqual(session, test_session)
+
+    def test_lazy_clearing(self):
+        self.sm.save_session('user_id', {})
+        self.assertEqual(list(self.sm.active_sessions()), [])
+

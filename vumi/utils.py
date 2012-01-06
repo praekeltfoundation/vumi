@@ -3,6 +3,7 @@
 import os.path
 import re
 import sys
+import base64
 
 import pkg_resources
 from zope.interface import implements
@@ -63,6 +64,15 @@ def http_request_full(url, data=None, headers={}, method='POST'):
 def http_request(url, data, headers={}, method='POST'):
     d = http_request_full(url, data, headers=headers, method=method)
     return d.addCallback(lambda r: r.delivered_body)
+
+
+def basic_auth_string(username, password):
+    """
+    Encode a username and password for use in an HTTP Basic Authentication
+    header
+    """
+    b64 = base64.encodestring('%s:%s' % (username, password)).strip()
+    return 'Basic %s' % b64
 
 
 def normalize_msisdn(raw, country_code=''):

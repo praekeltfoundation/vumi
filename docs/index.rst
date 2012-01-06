@@ -14,10 +14,8 @@ Contents:
    overview.rst
    installation.rst
    getting-started.rst
-   api.rst
+   first-smpp-bind.rst
    client.rst
-   deploying.rst
-   keywords.rst
    transports.rst
    metrics.rst
    roadmap.rst

@@ -294,8 +294,15 @@ class EsmeTransceiver(Protocol):
     def getSeq(self):
         return self.seq[0]
 
+    # TODO From VUMI 0.4 onwards incSeq and smpp_offset/smpp_increment
+    # will fall away and getSeq will run off the Redis incr function
+    # with one shared value per system_id@host:port account credential
     def incSeq(self):
         self.seq[0] += self.inc
+        # SMPP supports a max sequence_number of: FFFFFFFF = 4,294,967,295
+        # so start recycling @ 4,000,000,000 just to keep the numbers round
+        if self.seq[0] > 4000000000:
+            self.seq[0] = self.seq[0] % self.inc + self.inc
 
     def popData(self):
         data = None
@@ -603,8 +610,8 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
             raise Exception("increment may not be less than offset")
         if int(self.config['smpp_increment']) < 1:
             raise Exception("increment may not be less than 1")
-        if int(self.config['smpp_offset']) < 1:
-            raise Exception("offset may not be less than 1")
+        if int(self.config['smpp_offset']) < 0:
+            raise Exception("offset may not be less than 0")
         self.esme = None
         self.__connect_callback = None
         self.__disconnect_callback = None

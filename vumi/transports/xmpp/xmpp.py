@@ -5,9 +5,8 @@ from twisted.python import log
 from twisted.words.protocols.jabber.jid import JID
 from twisted.words.xish import domish
 from twisted.words.xish.domish import Element as DomishElement
-from twisted.application.service import MultiService
 
-from wokkel import client
+from wokkel.client import XMPPClient
 from wokkel.xmppim import (RosterClientProtocol, MessageProtocol,
                            PresenceClientProtocol)
 
@@ -40,11 +39,14 @@ class TransportPresenceClientProtocol(PresenceClientProtocol):
         self.unsubscribed(entity)
 
 
-class XMPPTransportProtocol(MessageProtocol):
-    def __init__(self, jid, callback):
+class XMPPTransportProtocol(MessageProtocol, object):
+    def __init__(self, jid, message_callback, connection_callback,
+                 connection_lost_callback=None,):
         super(MessageProtocol, self).__init__()
         self.jid = jid
-        self.callback = callback
+        self.message_callback = message_callback
+        self.connection_callback = connection_callback
+        self.connection_lost_callback = connection_lost_callback
 
     def reply(self, jid, content):
         message = domish.Element((None, "message"))
@@ -62,8 +64,22 @@ class XMPPTransportProtocol(MessageProtocol):
         if not isinstance(message.body, DomishElement):
             return None
         text = unicode(message.body).encode('utf-8').strip()
-        self.callback(to_addr=self.jid.userhost(), from_addr=message['from'],
-            content=text, transport_type='xmpp', message_id=message['id'])
+        self.message_callback(
+            to_addr=self.jid.userhost(),
+            from_addr=message['from'],
+            content=text,
+            transport_type='xmpp',
+            message_id=message['id'])
+
+    def connectionMade(self):
+        self.connection_callback()
+        return super(XMPPTransportProtocol, self).connectionMade()
+
+    def connectionLost(self, reason):
+        if self.connection_lost_callback is not None:
+            self.connection_lost_callback(reason)
+        log.msg("XMPP Connection lost.")
+        super(XMPPTransportProtocol, self).connectionLost(reason)
 
 
 class XMPPTransport(Transport):
@@ -71,39 +87,38 @@ class XMPPTransport(Transport):
     The XMPPTransport for Gtalk
     """
 
+    start_message_consumer = False
+    _xmpp_protocol = XMPPTransportProtocol
+    _xmpp_client = XMPPClient
+
     def setup_transport(self):
         log.msg("Starting XMPPTransport: %s" % self.transport_name)
+
         username = self.config.pop('username')
         password = self.config.pop('password')
-        status = {
-            None: self.config.pop('status', ''),
-        }
+        statuses = {None: self.config.pop('status', '')}
         host = self.config.pop('host')
         port = int(self.config.pop('port'))
 
-        self.xmpp_service = MultiService()
-
-        jid = JID(username)
-        xmpp_client = client.XMPPClient(jid, password, host, port)
-        xmpp_client.logTraffic = self.config.get('debug')
-        xmpp_client.setServiceParent(self.xmpp_service)
+        self.jid = JID(username)
+        self.xmpp_client = self._xmpp_client(self.jid, password, host, port)
+        self.xmpp_client.logTraffic = self.config.get('debug')
+        self.xmpp_client.setServiceParent(self)
 
         presence = TransportPresenceClientProtocol()
-        presence.setHandlerParent(xmpp_client)
-        presence.available(statuses=status)
+        presence.setHandlerParent(self.xmpp_client)
+        presence.available(statuses=statuses)
 
         roster = TransportRosterClientProtocol()
-        roster.setHandlerParent(xmpp_client)
+        roster.setHandlerParent(self.xmpp_client)
 
-        self.xmpp_protocol = XMPPTransportProtocol(jid, self.publish_message)
-        self.xmpp_protocol.setHandlerParent(xmpp_client)
-
-        self.xmpp_service.startService()
+        self.xmpp_protocol = self._xmpp_protocol(
+            self.jid, self.publish_message, self._setup_message_consumer)
+        self.xmpp_protocol.setHandlerParent(self.xmpp_client)
 
         log.msg("XMPPTransport %s started." % self.transport_name)
 
     def teardown_transport(self):
-        self.xmpp_service.stopService()
         log.msg("XMPPTransport %s stopped." % self.transport_name)
 
     def handle_outbound_message(self, message):

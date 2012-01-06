@@ -48,12 +48,17 @@ class SessionManager(object):
         the user's session still exists, if not it is removed from the set.
         """
         skey = self.r_key('active_sessions')
+        sessions_to_expire = []
         for user_id in self.r_server.smembers(skey):
             ukey = self.r_key('session', user_id)
             if self.r_server.exists(ukey):
                 yield user_id, self.load_session(user_id)
             else:
-                self.r_server.srem(skey, user_id)
+                sessions_to_expire.append(user_id)
+
+        # clear empty ones
+        for user_ids in sessions_to_expire:
+            self.r_server.srem(skey, user_id)
 
     def r_key(self, *args):
         """

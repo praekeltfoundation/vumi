@@ -163,18 +163,18 @@ class FakeAMQPBroker(object):
 
     def basic_ack(self, queue, delivery_tag):
         self._get_queue(queue).ack(delivery_tag)
-        self.kick_delivery()
         return None
 
-    def deliver_to_channels(self, d):
-        if self._delivering is None:
-            # The delivery run we were asked to start is already finished.
-            return
-        if any([self.try_deliver_to_channel(channel)
-                for channel in self.channels]):
-            self._kick_delivery(d)
-        else:
-            self.message_processed()
+    def deliver_to_channels(self):
+        # Since all delivery goes through kick_delivery(), this can
+        # only happen if message_processed() is called too many times.
+        assert self._delivering is not None
+
+        for channel in self.channels:
+            self.try_deliver_to_channel(channel)
+
+        # Process the sentinel "message" we added in kick_delivery().
+        self.message_processed()
 
     def try_deliver_to_channel(self, channel):
         if not channel.deliverable():
@@ -185,8 +185,8 @@ class FakeAMQPBroker(object):
             while dtag is not None:
                 dmsg = mk_deliver(msg['content'], msg['exchange'],
                                   msg['routing_key'], ctag, dtag)
-                channel.deliver_message(dmsg, queue)
                 self._delivering['count'] += 1
+                channel.deliver_message(dmsg, queue)
                 delivered = True
                 dtag, msg = self._get_queue(queue).get_message()
         return delivered
@@ -205,13 +205,30 @@ class FakeAMQPBroker(object):
                 'deferred': Deferred(),
                 'count': 0,
                 }
-        self._delivering['count'] += 1  # To handle the no-deliveries case.
-        d = self._delivering['deferred']
-        self._kick_delivery(d)
-        return d
+        # Add a sentinel "message" that gets processed after this
+        # delivery run, making the delivery process re-entrant. This
+        # is important, because delivered messages can trigger more
+        # messages to be published, which kicks delivery again.
+        self._delivering['count'] += 1
+        # Schedule this for later, so that we don't block whatever it
+        # is we're currently doing.
+        reactor.callLater(0, self.deliver_to_channels)
+        return self.wait_delivery()
 
-    def _kick_delivery(self, d):
-        reactor.callLater(0, self.deliver_to_channels, d)
+    def wait_delivery(self):
+        """
+        Wait for the current message delivery run (if any) to finish.
+
+        Returns a deferred that will fire when the broker is finished
+        delivering any messages from the current run. This should not
+        leave any messages undelivered, because basic_publish() kicks
+        off a delivery run.
+        """
+        if self._delivering is not None:
+            return self._delivering['deferred']
+        d = Deferred()
+        d.callback(None)
+        return d
 
     def wait_messages(self, exchange, rkey, n):
         def check(d):
@@ -262,6 +279,11 @@ class FakeAMQPChannel(object):
         self.consumers = {}
         self.delegate = delegate
         self.unacked = []
+        self.flow_active = True
+
+    def __repr__(self):
+        return '<FakeAMQPChannel: id=%s flow=%s>' % (
+            self.channel_id, self.flow_active)
 
     def channel_open(self):
         return self.broker.channel_open(self)
@@ -269,7 +291,14 @@ class FakeAMQPChannel(object):
     def channel_close(self):
         return self.broker.channel_close(self)
 
-    def close(self):
+    def channel_flow(self, active):
+        self.flow_active = active
+        if active:
+            # We've re-enabled flow, so deliver queued messages.
+            self.broker.kick_delivery()
+        return Message(mkMethod("flow-ok", 21), [('active', active)])
+
+    def close(self, _reason):
         pass
 
     def basic_qos(self, _prefetch_size, prefetch_count, _global):
@@ -310,6 +339,8 @@ class FakeAMQPChannel(object):
                     return resp
 
     def deliverable(self):
+        if not self.flow_active:
+            return False
         if self.qos_prefetch_count < 1:
             return True
         return len(self.unacked) < self.qos_prefetch_count

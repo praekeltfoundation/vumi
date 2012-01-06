@@ -1,0 +1,5 @@
+Sphinx==1.0.7
+coverage
+python-subunit
+junitxml
+pep8

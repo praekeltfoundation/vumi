@@ -1,0 +1,20 @@
+zope.interface
+twisted==10.1
+txamqp==0.5
+PyYAML==3.09
+iso8601==0.1.4
+supervisor
+psycopg2==2.4.1
+pyOpenSSL==0.11
+python-ssmi
+python-foneworx
+wokkel
+redis
+-e git+git://github.com/dmaclay/python-smpp.git@develop#egg=python-smpp
+-e git+git://github.com/dustin/twitty-twister#egg=twitty-twister
+pyserial
+pytz
+python-fusiontables==0.1
+# oauth and simplejson are needed by twittytwister
+oauth
+simplejson

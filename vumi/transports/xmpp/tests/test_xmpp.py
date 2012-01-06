@@ -1,7 +1,5 @@
 from twisted.internet.defer import inlineCallbacks, returnValue
-from twisted.words.protocols.jabber.jid import JID
 from twisted.words.xish import domish
-from twisted.application.service import MultiService
 
 from vumi.transports.tests.test_base import TransportTestCase
 from vumi.message import TransportUserMessage, from_json
@@ -24,30 +22,12 @@ class XMPPTransportTestCase(TransportTestCase):
             'transport_name': 'test_xmpp',
             'transport_type': 'xmpp',
         }, XMPPTransport, start=False)
-        transport.transport_name = 'test_xmpp'
-        transport.concurrent_sends = None
 
-        yield transport._setup_failure_publisher()
-        yield transport._setup_message_publisher()
-        yield transport._setup_event_publisher()
-
-        # stubbing so I can test without an actual XMPP server
-        self.jid = JID('user@xmpp.domain.com')
-
-        test_protocol = test_xmpp_stubs.TestXMPPTransportProtocol(self.jid,
-            transport.publish_message)
-        transport.xmpp_protocol = test_protocol
-        transport.xmpp_service = MultiService()
-        transport.transport_name = 'test_xmpp'
-        # set _consumers, `stopWorker()` expects it to be there.
-        transport._consumers = []
-        # start the publisher, we need that one eventhough we do not
-        # connect to an XMPP server
-        yield transport._setup_message_publisher()
-        # _setup_message_consumer() assumes we have a message_consumer
-        # attribute set to None
-        transport.message_consumer = None
-        yield transport._setup_message_consumer()
+        transport._xmpp_protocol = test_xmpp_stubs.TestXMPPTransportProtocol
+        transport._xmpp_client = test_xmpp_stubs.TestXMPPClient
+        yield transport.startWorker()
+        yield transport.xmpp_protocol.connectionMade()
+        self.jid = transport.jid
         returnValue(transport)
 
     @inlineCallbacks
