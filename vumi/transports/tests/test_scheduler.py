@@ -105,7 +105,7 @@ class SchedulerTestCase(TestCase):
         self.assertEqual(self.get_pending_messages(), [])
 
     @inlineCallbacks
-    def test_clear_scheduled_messages_for_msisdn(self):
+    def test_clear_scheduled_messages(self):
         msg = self.mkmsg_in()
         now = time.mktime(datetime.now().timetuple())
         scheduled_time = now + self.scheduler.GRANULARITY
