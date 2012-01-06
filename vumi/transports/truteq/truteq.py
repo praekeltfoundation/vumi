@@ -113,7 +113,7 @@ class TruteqTransport(Transport):
 
         if session_event == TransportUserMessage.SESSION_NEW:
             # If it's a new session then store the message as the USSD code
-            ussd_code = normalize_msisdn(message)
+            ussd_code = message
             self.set_ussd_code(msisdn, ussd_code)
             text = None
         elif session_event == TransportUserMessage.SESSION_CLOSE:

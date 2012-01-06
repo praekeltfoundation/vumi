@@ -151,3 +151,9 @@ class TestTruteqTransport(TransportTestCase):
             self.assertEqual(error["message"][0],
                              repr("Got error from SSMI:"
                                   " ('foo',), {'baz': 'bar'}"))
+
+    def test_ussd_addr_retains_asterisks_and_hashes(self):
+        self._incoming_ussd(ussd_type=client.SSMI_USSD_TYPE_NEW,
+                            message="+6*7*8#")
+        self._check_msg(to_addr="+6*7*8#",
+                        session_event=TransportUserMessage.SESSION_NEW)
