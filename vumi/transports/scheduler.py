@@ -44,12 +44,12 @@ class Scheduler(object):
 
     def scheduled_key(self):
         """
-        Construct a failure key.
+        Construct a unique scheduled key.
         """
         timestamp = datetime.utcnow()
-        failure_id = uuid4().get_hex()
+        unique_id = uuid4().get_hex()
         timestamp = timestamp.isoformat().split('.')[0]
-        return self.r_key(".".join(("scheduled", timestamp, failure_id)))
+        return self.r_key(".".join(("scheduled", timestamp, unique_id)))
 
     def get_scheduled(self, scheduled_key):
         return self.r_server.hgetall(scheduled_key)
