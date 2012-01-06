@@ -116,4 +116,6 @@ class TruteqTransport(Transport):
         if text is None:
             text = ''
         ssmi_session_type = self.VUMI_TO_SSMI_EVENT[message['session_event']]
+        # XXX: text should be encoded before being sent out via SSMI
+        #      but I don't know what the encoding should be.
         self.ssmi_client.send_ussd(message['to_addr'], text, ssmi_session_type)
