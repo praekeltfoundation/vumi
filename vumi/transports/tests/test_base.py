@@ -99,8 +99,10 @@ class TransportTestCase(unittest.TestCase):
             transport_metadata=transport_metadata,
             )
 
-    def mkmsg_in(self, content='hello world', message_id='abc',
-                 transport_type=None, transport_metadata=None):
+    def mkmsg_in(self, content='hello world',
+                 session_event=TransportUserMessage.SESSION_NONE,
+                 message_id='abc', transport_type=None,
+                 transport_metadata=None):
         if transport_type is None:
             transport_type = self.transport_type
         if transport_metadata is None:
@@ -113,11 +115,13 @@ class TransportTestCase(unittest.TestCase):
             transport_type=transport_type,
             transport_metadata=transport_metadata,
             content=content,
+            session_event=session_event,
             timestamp=UTCNearNow(),
             )
 
-    def mkmsg_out(self, content='hello world', message_id='1',
-                  to_addr='+41791234567', from_addr='9292',
+    def mkmsg_out(self, content='hello world',
+                  session_event=TransportUserMessage.SESSION_NONE,
+                  message_id='1', to_addr='+41791234567', from_addr='9292',
                   in_reply_to=None, transport_type=None,
                   transport_metadata=None, stubs=False):
         if transport_type is None:
@@ -132,6 +136,7 @@ class TransportTestCase(unittest.TestCase):
             transport_type=transport_type,
             transport_metadata=transport_metadata,
             content=content,
+            session_event=session_event,
             in_reply_to=in_reply_to,
             )
         if stubs:
