@@ -17,7 +17,28 @@ from vumi.transports.base import Transport
 
 class TruteqTransport(Transport):
     """
-    The USSDTransport for TruTeq
+    A transport for TruTeq.
+
+    Currently only USSD messages are supported.
+
+    TruTeq transport options:
+
+    :type username: str
+    :param username:
+        Username of the TruTeq account to connect to.
+    :type password: str
+    :param password:
+        Password for the TruTeq account.
+    :type host: str
+    :param host:
+        Hostname of the TruTeq SSMI server to connect to.
+    :type port: int
+    :param port:
+        Port of the TruTeq SSMI server.
+    :ussd_session_lifetime: int
+    :param ussd_session_lifetime:
+        Maximum number of seconds to retain USSD session information.
+        Default is 300.
     """
 
     SSMI_TO_VUMI_EVENT = {
