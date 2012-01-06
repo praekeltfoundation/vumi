@@ -98,7 +98,17 @@ class TestTruteqTransport(TransportTestCase):
         self.fail("Unimplemented test.")
 
     def test_handle_inbound_sms(self):
-        self.fail("Unimplemented test.")
+        with LogCatcher() as logger:
+            self.transport.sms_callback("foo", baz="bar")
+            [error] = logger.errors
+            self.assertEqual(error["message"][0],
+                             repr("Got SMS from SSMI but SMSes not supported:"
+                                  " ('foo',), {'baz': 'bar'}"))
 
     def test_handle_ssmi_error(self):
-        self.fail("Unimplemented test.")
+        with LogCatcher() as logger:
+            self.transport.ssmi_errback("foo", baz="bar")
+            [error] = logger.errors
+            self.assertEqual(error["message"][0],
+                             repr("Got error from SSMI:"
+                                  " ('foo',), {'baz': 'bar'}"))
