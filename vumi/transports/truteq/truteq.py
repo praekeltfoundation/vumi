@@ -111,26 +111,15 @@ class TruteqTransport(Transport):
         session_event = self.SSMI_TO_VUMI_EVENT[ussd_type]
         msisdn = normalize_msisdn(msisdn)
 
-        # FIXME: See the note about self.storage
-        # If it's a new session then store the message as the USSD code
-        # use that as the routing key for publishing.
         if session_event == TransportUserMessage.SESSION_NEW:
-            # cache
+            # If it's a new session then store the message as the USSD code
             ussd_code = normalize_msisdn(message)
             self.set_ussd_code(msisdn, ussd_code)
             text = None
-
-        # If its the end of a session or a session has timed-out then we
-        # should remove the USSD code from the storage
         elif session_event == TransportUserMessage.SESSION_CLOSE:
-            # clear cache
             ussd_code = self.get_ussd_code(msisdn, delete=True)
             text = message
-
-        # if it's an existing session then look up the USSD code from
-        # the storage and use that as the routing key
         elif session_event == TransportUserMessage.SESSION_RESUME:
-            # read cache
             ussd_code = self.get_ussd_code(msisdn)
             text = message
 
