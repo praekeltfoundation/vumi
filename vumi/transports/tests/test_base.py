@@ -15,6 +15,9 @@ class TransportTestCase(unittest.TestCase):
     Not to be confused with BaseTransportTestCase below.
     """
 
+    # have transport tests timeout after 5s by default
+    timeout = 5
+
     transport_name = "sphex"
     transport_type = None
     transport_class = None
