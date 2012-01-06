@@ -58,7 +58,9 @@ class Scheduler(object):
 
     def get_next_write_timestamp(self, delta, now):
         now = int(now)
-        timestamp = now + delta
+        return self.get_time_bucket(now + delta)
+
+    def get_time_bucket(self, timestamp):
         timestamp += self.granularity - (timestamp % self.granularity)
         return datetime.utcfromtimestamp(timestamp).isoformat().split('.')[0]
 
@@ -76,10 +78,7 @@ class Scheduler(object):
         return self.get_read_timestamp(time.time())
 
     def get_scheduled_key(self, time):
-        timestamp = self.get_read_timestamp(time)
-        if not timestamp:
-            return None
-        # key of set containing all scheduled message keys
+        timestamp = self.get_time_bucket(time)
         bucket_key = self.r_key("scheduled_keys." + timestamp)
         # key of message to be delivered
         scheduled_key = self.r_server.spop(bucket_key)
