@@ -10,7 +10,7 @@ from twisted.internet.defer import inlineCallbacks
 from ssmi import client
 import redis
 
-from vumi.utils import normalize_msisdn, get_deploy_int
+from vumi.utils import normalize_msisdn
 from vumi.message import TransportUserMessage
 from vumi.transports.base import Transport
 
@@ -74,9 +74,7 @@ class TruteqTransport(Transport):
 
     @inlineCallbacks
     def setup_transport(self):
-        # TODO: get_deploy_int must die
-        dbindex = get_deploy_int(self._amqp_client.vhost)
-        self.r_server = yield redis.Redis(db=dbindex, **self.r_config)
+        self.r_server = yield redis.Redis(**self.r_config)
         self.ssmi_client = None
         # the strange wrapping of the funciton in a lambda is to get around
         # an odd type check in client.SSMIClient.__init__.
