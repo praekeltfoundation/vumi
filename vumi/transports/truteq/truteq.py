@@ -5,10 +5,12 @@
 
 from twisted.python import log
 from twisted.internet import reactor
+from twisted.internet.defer import inlineCallbacks
 
 from ssmi import client
+import redis
 
-from vumi.utils import normalize_msisdn
+from vumi.utils import normalize_msisdn, get_deploy_int
 from vumi.message import TransportUserMessage
 from vumi.transports.base import Transport
 
@@ -32,6 +34,9 @@ class TruteqTransport(Transport):
         TransportUserMessage.SESSION_CLOSE: client.SSMI_USSD_TYPE_END,
     }
 
+    # default maximum lifetime of USSD sessions (in seconds)
+    DEFAULT_USSD_SESSION_LIFETIME = 5 * 60
+
     def validate_config(self):
         """
         Transport-specific config validation happens in here.
@@ -40,13 +45,17 @@ class TruteqTransport(Transport):
         self.password = self.config['password']
         self.host = self.config['host']
         self.port = int(self.config['port'])
+        self.ussd_session_lifetime = self.config.get(
+                'ussd_session_lifetime', self.DEFAULT_USSD_SESSION_LIFETIME)
         self.transport_type = self.config.get('transport_type', 'ussd')
+        self.r_config = self.config.get('redis', {})
+        self.r_prefix = "%(transport_name)s:ussd_codes" % self.config
 
+    @inlineCallbacks
     def setup_transport(self):
-        # FIXME:    this needs to be done more intelligently, it stores which
-        #           MSISDN dialed into which ussd code, problem is that it is
-        #           memory and will be lost during restarts.
-        self.storage = {}
+        # TODO: get_deploy_int must die
+        dbindex = get_deploy_int(self._amqp_client.vhost)
+        self.r_server = yield redis.Redis(db=dbindex, **self.r_config)
         self.ssmi_client = None
         # the strange wrapping of the funciton in a lambda is to get around
         # an odd type check in client.SSMIClient.__init__.
@@ -64,37 +73,52 @@ class TruteqTransport(Transport):
     def teardown_transport(self):
         self.ssmi_connector.disconnect()
 
+    def msisdn_key(self, msisdn):
+        return "%s:%s" % (self.r_prefix, msisdn)
+
+    def get_ussd_code(self, msisdn, delete=False):
+        rkey = self.msisdn_key(msisdn)
+        ussd_code = self.r_server.get(rkey)
+        if ussd_code is not None and delete:
+            self.r_server.delete(rkey)
+        return ussd_code
+
+    def set_ussd_code(self, msisdn, ussd_code):
+        rkey = self.msisdn_key(msisdn)
+        ussd_code = self.r_server.set(rkey, ussd_code)
+        self.r_server.expire(rkey, self.ussd_session_lifetime)
+
     def ussd_callback(self, msisdn, ussd_type, phase, message):
         log.msg("Received USSD, from: %s, message: %s" % (msisdn, message))
         session_event = self.SSMI_TO_VUMI_EVENT[ussd_type]
+        msisdn = normalize_msisdn(msisdn)
 
         # FIXME: See the note about self.storage
         # If it's a new session then store the message as the USSD code
         # use that as the routing key for publishing.
         if session_event == TransportUserMessage.SESSION_NEW:
             # cache
-            ussd_code = self.storage[msisdn] = message
+            ussd_code = normalize_msisdn(message)
+            self.set_ussd_code(msisdn, ussd_code)
             text = None
 
         # If its the end of a session or a session has timed-out then we
         # should remove the USSD code from the storage
         elif session_event == TransportUserMessage.SESSION_CLOSE:
             # clear cache
-            ussd_code = self.storage.get(msisdn)
-            if msisdn in self.storage:
-                del self.storage[msisdn]
+            ussd_code = self.get_ussd_code(msisdn, delete=True)
             text = message
 
         # if it's an existing session then look up the USSD code from
         # the storage and use that as the routing key
         elif session_event == TransportUserMessage.SESSION_RESUME:
             # read cache
-            ussd_code = self.storage.get(msisdn)
+            ussd_code = self.get_ussd_code(msisdn)
             text = message
 
         self.publish_message(
-            from_addr=normalize_msisdn(msisdn),
-            to_addr=normalize_msisdn(ussd_code),
+            from_addr=msisdn,
+            to_addr=ussd_code,
             session_event=session_event,
             # XXX: text should be decoded before being published
             #      but I don't know what encoding is used.

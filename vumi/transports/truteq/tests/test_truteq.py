@@ -8,7 +8,7 @@ from ssmi import client
 from vumi.message import TransportUserMessage
 from vumi.transports.tests.test_base import TransportTestCase
 from vumi.transports.truteq.truteq import TruteqTransport
-from vumi.tests.utils import LogCatcher
+from vumi.tests.utils import LogCatcher, FakeRedis
 
 
 class MockConnectTCPForSSMI(object):
@@ -50,9 +50,11 @@ class TestTruteqTransport(TransportTestCase):
             'port': 1234,
             }
         self.transport = yield self.get_transport(self.config, start=True)
+        self.transport.r_server = FakeRedis()
 
     def tearDown(self):
         super(TestTruteqTransport, self).tearDown()
+        self.transport.r_server.teardown()
 
     def _incoming_ussd(self, msisdn="+12345",
                        ussd_type=client.SSMI_USSD_TYPE_EXISTING,
