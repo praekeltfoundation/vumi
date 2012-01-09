@@ -53,4 +53,4 @@ class MemoWorker(ApplicationWorker):
             memo_text = match.group(2)
             self.memos.setdefault((channel, recipient),
                                   []).append((nickname, memo_text))
-            self.reply_to(msg, "Sure thing, boss.")
+            self.reply_to(msg, "%s: Sure thing, boss." % (nickname,))

@@ -58,7 +58,7 @@ class TestMemoWorker(ApplicationTestCase):
             })
         replies = yield self.recv()
         self.assertEqual(replies, [
-            ('reply', 'Sure thing, boss.'),
+            ('reply', 'testnick: Sure thing, boss.'),
             ])
 
     @inlineCallbacks
