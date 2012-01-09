@@ -9,7 +9,7 @@ from vumi.errors import VumiError
 def getVumiSession(r_server, key):
     sess = r_server.get(key)
     if sess:
-        session = yaml.load(sess)
+        session = yaml.safe_load(sess)
         session.set_r_server(r_server)
         return session
     else:
