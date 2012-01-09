@@ -371,6 +371,10 @@ class FakeRedis(object):
 
     def lrange(self, key, start, end):
         lval = self._data.get(key, [])
+        if end >= 0 or end < -1:
+            end += 1
+        else:
+            end = None
         return lval[start:end]
 
     # Expiry operations
