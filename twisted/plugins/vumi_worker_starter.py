@@ -43,7 +43,7 @@ class VumiService(Service):
         config_file = self.options.pop('config')
         if config_file:
             with file(config_file, 'r') as stream:
-                config.update(yaml.load(stream))
+                config.update(yaml.safe_load(stream))
 
         # add options set with --set-option
         config.update(self.options.set_options)
