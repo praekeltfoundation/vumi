@@ -1,3 +1,5 @@
+# -*- test-case-name: vumi.transports.smpp.clientserver.test.test_server -*-
+
 import uuid
 from datetime import datetime
 
