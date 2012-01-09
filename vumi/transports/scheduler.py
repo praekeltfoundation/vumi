@@ -101,7 +101,7 @@ class Scheduler(object):
         :param now: Used to calculate the delta (timestamp in
                     seconds since epoch)
 
-        If ``now`` is ``None` then it will default to ``time.time()``
+        If ``now`` is ``None`` then it will default to ``time.time()``
         """
         if not now:
             now = int(time.time())
