@@ -1,4 +1,4 @@
-# -*- test-case-name: vumi.transports.smpp.test.test_client -*-
+# -*- test-case-name: vumi.transports.smpp.clientserver.test.test_client -*-
 
 import re
 import json

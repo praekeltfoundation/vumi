@@ -3,7 +3,7 @@ from twisted.python import log
 from twisted.internet import reactor
 
 from vumi.service import Worker, Consumer, Publisher
-from vumi.transports.smpp.server import SmscServerFactory
+from vumi.transports.smpp.clientserver.server import SmscServerFactory
 
 
 class SmppServiceConsumer(Consumer):

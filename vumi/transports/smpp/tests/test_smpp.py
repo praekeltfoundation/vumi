@@ -4,7 +4,7 @@ from smpp.pdu_builder import SubmitSMResp, BindTransceiverResp
 
 from vumi.tests.utils import FakeRedis
 from vumi.message import Message
-from vumi.transports.smpp.client import EsmeTransceiver
+from vumi.transports.smpp.clientserver.client import EsmeTransceiver
 from vumi.transports.smpp.transport import SmppTransport
 from vumi.transports.tests.test_base import TransportTestCase
 

@@ -3,7 +3,7 @@ from twisted.internet.task import Clock
 from smpp.pdu_builder import DeliverSM, BindTransceiverResp
 from smpp.pdu import unpack_pdu
 
-from vumi.transports.smpp.client import EsmeTransceiver
+from vumi.transports.smpp.clientserver.client import EsmeTransceiver
 
 
 class FakeTransport(object):
