@@ -80,7 +80,7 @@ class TemplatedDecisionTree(DecisionTree):
         self.template_history = []
 
     def load_yaml_template(self, yaml_string):
-        self.template = yaml.load(yaml_string)
+        self.template = yaml.safe_load(yaml_string)
         self.template_current = self.template.get('__start__')
 
     def get_template(self):

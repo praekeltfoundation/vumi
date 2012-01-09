@@ -1,3 +1,4 @@
+import yaml
 from twisted.trial.unittest import TestCase
 
 from vumi.session import (VumiSession, TemplatedDecisionTree,
@@ -446,3 +447,20 @@ class SessionTestCase(TestCase):
 
         #print "\n\n"
         #time.sleep(2)
+
+
+class TemplatedDecisionTreeTestCase(TestCase):
+    """
+    Tests for `TemplatedDecisionTree`.
+    """
+
+    def test_load_yaml_template_unsafe(self):
+        """
+        `load_yaml_template()` should not allow unsafe YAML tag execution.
+        """
+        dt = TemplatedDecisionTree()
+        self.assertRaises(yaml.constructor.ConstructorError,
+            lambda: dt.load_yaml_template('!!python/object/apply:int []'))
+        # These attributes should not have been set.
+        self.assertIdentical(dt.template, None)
+        self.assertIdentical(dt.template_current, None)
