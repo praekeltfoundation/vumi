@@ -82,13 +82,16 @@ class TestMemoWorker(ApplicationTestCase):
         yield self.send('ping', channel='#test', from_addr='testmemo')
         replies = yield self.recv(2)
         self.assertEqual(replies, [
-            ('reply', 'message from testnick: this is memo 1'),
-            ('reply', 'message from testnick: this is memo 2'),
+            ('reply', 'testmemo, testnick asked me tell you:'
+             ' this is memo 1'),
+            ('reply', 'testmemo, testnick asked me tell you:'
+             ' this is memo 2'),
             ])
         self.clear_messages()
 
         yield self.send('ping', channel='#another', from_addr='testmemo')
         replies = yield self.recv(1)
         self.assertEqual(replies, [
-            ('reply', 'message from testnick: this is a different channel'),
+            ('reply', 'testmemo, testnick asked me tell you:'
+             ' this is a different channel'),
             ])

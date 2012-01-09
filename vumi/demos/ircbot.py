@@ -43,8 +43,8 @@ class MemoWorker(ApplicationWorker):
         if memos:
             log.msg("Time to deliver some memos:", memos)
         for memo_sender, memo_text in memos:
-            self.reply_to(msg, "message from %s: %s" % (memo_sender,
-                                                        memo_text))
+            self.reply_to(msg, "%s, %s asked me tell you: %s"
+                          % (nickname, memo_sender, memo_text))
 
     def process_potential_memo(self, channel, nickname, msg):
         match = self.MEMO_RE.match(msg['content'])
