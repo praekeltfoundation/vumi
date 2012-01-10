@@ -1,37 +1,54 @@
 import logging
 
 from twisted.trial.unittest import TestCase
-from vumi.log import _mk_logger
+from twisted.internet.defer import Deferred, inlineCallbacks
+from twisted.internet import reactor
 
+from vumi.tests.utils import LogCatcher
+from vumi import log
+
+
+class TestException(Exception): pass
 
 class VumiLogTestCase(TestCase):
 
     def setUp(self):
         self._log_history = []
 
-    def _log_callback(self, msg, **kwargs):
-        self._log_history.append((msg, kwargs))
-
-    def last_log_call(self):
-        return self._log_history[-1]
-
     def test_invalid_log_level(self):
-        self.assertRaises(RuntimeError, _mk_logger, 'NOT_A_LEVEL',
-                            self._log_callback)
+        self.assertRaises(RuntimeError, log._mk_logger, 'NOT_A_LEVEL',
+                            lambda *a, **kw: None)
 
-    def test_logging(self):
+    def test_normal_log_levels(self):
         levels = [
-            'DEBUG',
-            'INFO',
-            'WARNING',
-            'ERROR',
-            'CRITICAL'
+            ('DEBUG', log.debug),
+            ('INFO', log.info),
+            ('WARNING', log.warning),
         ]
-        for level in levels:
-            logger = _mk_logger(level, self._log_callback)
-            logger('foo %s' % (level,))
-            self.assertEqual(self.last_log_call(), (
-                '%s: foo %s' % (level, level), {
-                    'logLevel': getattr(logging, level)
-                }
-            ))
+        for label, logger in levels:
+            log_catcher = LogCatcher()
+            with log_catcher:
+                logger('foo %s' % (label,))
+            last_log = log_catcher.logs[0]
+            self.assertFalse(last_log['isError'])
+            self.assertEqual(last_log['logLevel'], getattr(logging, label))
+            self.assertEqual(last_log['message'],
+                                ('foo %s' % (label,),))
+
+    def test_error_log_levels(self):
+        levels = [
+            ('ERROR', log.error),
+            ('CRITICAL', log.critical),
+        ]
+        for label, logger in levels:
+            entry = 'foo %s' % (label,)
+            lc = LogCatcher()
+            with lc:
+                logger(TestException(entry))
+            entry = lc.logs[0]
+            self.assertTrue(entry['isError'])
+            self.assertEqual(entry['logLevel'], getattr(logging, label))
+            self.assertEqual(entry['message'], ())
+            failure = entry['failure']
+            exception = failure.trap(TestException)
+            self.assertEqual(exception, TestException)
