@@ -64,7 +64,7 @@ class KeyValueStore(KeyValueBase):
 
     def get(self, key):
         try:
-            return str(self._data.get[key])
+            return str(self._data[key])
         except:
             return None
 

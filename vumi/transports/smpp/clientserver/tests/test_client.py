@@ -21,6 +21,12 @@ class KeyValueStoreTestCase(unittest.TestCase):
         self.assertTrue(issubclass(KeyValueStore, KeyValueBase))
         self.assertTrue(isinstance(self.kvs, KeyValueBase))
 
+    def test_set_get_delete(self):
+        self.kvs.set("cookie", "monster")
+        self.assertEqual(self.kvs.get("cookie"), "monster")
+        self.assertEqual(self.kvs.get("kookie"), None)
+
+
 
 class FakeTransport(object):
     def __init__(self):
