@@ -12,8 +12,8 @@ class TestException(Exception): pass
 
 class VumiLogTestCase(TestCase):
 
-    def setUp(self):
-        self._log_history = []
+    def tearDown(self):
+        self.flushLoggedErrors(TestException)
 
     def test_invalid_log_level(self):
         self.assertRaises(RuntimeError, log._mk_logger, 'NOT_A_LEVEL',
