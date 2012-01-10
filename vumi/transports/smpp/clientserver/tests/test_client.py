@@ -3,7 +3,23 @@ from twisted.internet.task import Clock
 from smpp.pdu_builder import DeliverSM, BindTransceiverResp
 from smpp.pdu import unpack_pdu
 
-from vumi.transports.smpp.clientserver.client import EsmeTransceiver
+from vumi.transports.smpp.clientserver.client import (
+        EsmeTransceiver,
+        KeyValueBase,
+        KeyValueStore)
+
+
+class KeyValueStoreTestCase(unittest.TestCase):
+
+    def setUp(self):
+        self.kvs = KeyValueStore()
+
+    def tearDown(self):
+        pass
+
+    def test_implements_abstract(self):
+        self.assertTrue(issubclass(KeyValueStore, KeyValueBase))
+        self.assertTrue(isinstance(self.kvs, KeyValueBase))
 
 
 class FakeTransport(object):

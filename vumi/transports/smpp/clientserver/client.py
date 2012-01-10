@@ -31,6 +31,10 @@ from vumi.utils import get_deploy_int
 
 class KeyValueBase(object):
     __metaclass__ = abc.ABCMeta
+    """
+    Note: all keys and return values are strings,
+    even when incrementing stored integer values.
+    """
 
     @abc.abstractmethod
     def get(self, key):
@@ -49,8 +53,32 @@ class KeyValueBase(object):
 
     @abc.abstractmethod
     def incr(self, key):
-        """Increment value stored under key and return as integer."""
+        """Increment value stored under key and return as a string."""
         return
+
+
+class KeyValueStore(KeyValueBase):
+
+    def __init__(self):
+        self._data = {}
+
+    def get(self, key):
+        try:
+            return str(self._data.get[key])
+        except:
+            return None
+
+    def set(self, key, value):
+        self._data[key] = str(value)
+
+    def delete(self, key):
+        del self._data[key]
+
+    def incr(self, key):
+        old = self.get(key)
+        new = str(int(old) + 1)
+        self.set(key, new)
+        return new
 
 
 # TODO this will move to pdu_inspector in python-smpp
