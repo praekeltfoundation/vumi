@@ -8,7 +8,8 @@ from smpp.pdu import unpack_pdu
 from vumi.transports.smpp.clientserver.client import (
         EsmeTransceiver,
         KeyValueBase,
-        KeyValueStore)
+        KeyValueStore,
+        ESME)
 
 
 class KeyValueStoreTestCase(unittest.TestCase):
@@ -63,6 +64,18 @@ class KeyValueStoreTestCase(unittest.TestCase):
         self.kvs.set(self.prefix + "counter", "oops")
         self.assertEqual(self.kvs.incr(self.prefix + "counter"), None)
         self.assertEqual(self.kvs.delete(self.prefix + "counter"), "oops")
+
+
+class EsmeTestCase(unittest.TestCase):
+
+    def setUp(self):
+        self.esme = ESME(
+                None,
+                KeyValueStore(),
+                )
+
+    def test_esme_init_kvs_test(self):
+        pass
 
 
 class FakeTransport(object):
