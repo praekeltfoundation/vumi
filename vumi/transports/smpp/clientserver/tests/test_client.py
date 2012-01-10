@@ -1,3 +1,5 @@
+import uuid
+
 from twisted.trial import unittest
 from twisted.internet.task import Clock
 from smpp.pdu_builder import DeliverSM, BindTransceiverResp
@@ -13,12 +15,23 @@ class KeyValueStoreTestCase(unittest.TestCase):
 
     def setUp(self):
         self.kvs = KeyValueStore()
+        self.prefix = "smpp_test_%s" % uuid.uuid4()
 
     def tearDown(self):
         pass
 
+    def run_all_tests_on_instance(self, instance):
+        self.test_implements_abstract(instance)
+        self.test_set_get_delete(instance)
+        self.test_incr(instance)
+
+    def test_runtine_test(self):
+        newKeyValueStoreTestCase = KeyValueStoreTestCase()
+        newKeyValueStoreTestCase.prefix = "smpp_test_%s" % uuid.uuid4()
+        instance = KeyValueStore()
+        newKeyValueStoreTestCase.run_all_tests_on_instance(instance)
+
     def test_implements_abstract(self, third_party_impl=None):
-        third_party_impl = self.kvs
         if third_party_impl:
             self.assertTrue(issubclass(third_party_impl.__class__,
                 KeyValueBase))
@@ -30,25 +43,26 @@ class KeyValueStoreTestCase(unittest.TestCase):
     def test_set_get_delete(self, third_party_impl=None):
         if third_party_impl:
             self.kvs = third_party_impl
-        self.kvs.set("cookie", "monster")
-        self.assertEqual(self.kvs.get("cookie"), "monster")
-        self.assertEqual(self.kvs.get("kookie"), None)
-        self.kvs.set("cookie", "crumbles")
-        self.assertNotEqual(self.kvs.get("cookie"), "monster")
-        self.assertEqual(self.kvs.get("cookie"), "crumbles")
-        self.kvs.delete("cookie")
-        self.assertEqual(self.kvs.get("cookie"), None)
+        self.kvs.set(self.prefix + "cookie", "monster")
+        self.assertEqual(self.kvs.get(self.prefix + "cookie"), "monster")
+        self.assertEqual(self.kvs.get(self.prefix + "kookie"), None)
+        self.kvs.set(self.prefix + "cookie", "crumbles")
+        self.assertNotEqual(self.kvs.get(self.prefix + "cookie"), "monster")
+        self.assertEqual(self.kvs.get(self.prefix + "cookie"), "crumbles")
+        self.kvs.delete(self.prefix + "cookie")
+        self.assertEqual(self.kvs.get(self.prefix + "cookie"), None)
 
     def test_incr(self, third_party_impl=None):
         if third_party_impl:
             self.kvs = third_party_impl
-        self.assertEqual(self.kvs.incr("counter"), None)
-        self.kvs.set("counter", 1)
-        self.assertEqual(self.kvs.incr("counter"), "2")
-        self.kvs.set("counter", "1")
-        self.assertEqual(self.kvs.incr("counter"), "2")
-        self.kvs.set("counter", "oops")
-        self.assertEqual(self.kvs.incr("counter"), None)
+        self.assertEqual(self.kvs.incr(self.prefix + "counter"), None)
+        self.kvs.set(self.prefix + "counter", 1)
+        self.assertEqual(self.kvs.incr(self.prefix + "counter"), "2")
+        self.kvs.set(self.prefix + "counter", "1")
+        self.assertEqual(self.kvs.incr(self.prefix + "counter"), "2")
+        self.kvs.set(self.prefix + "counter", "oops")
+        self.assertEqual(self.kvs.incr(self.prefix + "counter"), None)
+        self.kvs.delete(self.prefix + "counter")
 
 
 class FakeTransport(object):
