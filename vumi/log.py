@@ -1,8 +1,8 @@
+# -*- test-case-name: vumi.tests.test_log -*-
 import logging
+
 from twisted.python import log
 
-observer = log.PythonLoggingObserver()
-observer.start()
 
 def _mk_logger(level, callback):
     level = level.upper()
@@ -14,7 +14,7 @@ def _mk_logger(level, callback):
             'logLevel': level_value
         }
         defaults.update(kwargs)
-        callback('%s: %s' % (level, msg), **kwargs)
+        callback('%s: %s' % (level, msg), **defaults)
     return logger
 
 debug = _mk_logger('DEBUG', log.msg)
