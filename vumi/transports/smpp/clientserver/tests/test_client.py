@@ -17,11 +17,19 @@ class KeyValueStoreTestCase(unittest.TestCase):
     def tearDown(self):
         pass
 
-    def test_implements_abstract(self):
-        self.assertTrue(issubclass(KeyValueStore, KeyValueBase))
+    def test_implements_abstract(self, third_party_impl=None):
+        third_party_impl = self.kvs
+        if third_party_impl:
+            self.assertTrue(issubclass(third_party_impl.__class__,
+                KeyValueBase))
+            self.kvs = third_party_impl
+        else:
+            self.assertTrue(issubclass(KeyValueStore, KeyValueBase))
         self.assertTrue(isinstance(self.kvs, KeyValueBase))
 
-    def test_set_get_delete(self):
+    def test_set_get_delete(self, third_party_impl=None):
+        if third_party_impl:
+            self.kvs = third_party_impl
         self.kvs.set("cookie", "monster")
         self.assertEqual(self.kvs.get("cookie"), "monster")
         self.assertEqual(self.kvs.get("kookie"), None)
@@ -31,7 +39,9 @@ class KeyValueStoreTestCase(unittest.TestCase):
         self.kvs.delete("cookie")
         self.assertEqual(self.kvs.get("cookie"), None)
 
-    def test_incr(self):
+    def test_incr(self, third_party_impl=None):
+        if third_party_impl:
+            self.kvs = third_party_impl
         self.assertEqual(self.kvs.incr("counter"), None)
         self.kvs.set("counter", 1)
         self.assertEqual(self.kvs.incr("counter"), "2")
