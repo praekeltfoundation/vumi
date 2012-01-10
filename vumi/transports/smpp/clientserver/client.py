@@ -58,6 +58,7 @@ class KeyValueBase(object):
 
 
 class KeyValueStore(KeyValueBase):
+    """A minimal implementation of KeyValueBase"""
 
     def __init__(self):
         self._data = {}
@@ -76,7 +77,15 @@ class KeyValueStore(KeyValueBase):
 
     def incr(self, key):
         old = self.get(key)
-        new = str(int(old) + 1)
+        if old is None:
+            return old
+        new = None
+        try:
+            new = str(int(old) + 1)
+        except:
+            pass
+        if old is None or new is None:
+            return None
         self.set(key, new)
         return new
 

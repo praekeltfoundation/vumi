@@ -25,7 +25,20 @@ class KeyValueStoreTestCase(unittest.TestCase):
         self.kvs.set("cookie", "monster")
         self.assertEqual(self.kvs.get("cookie"), "monster")
         self.assertEqual(self.kvs.get("kookie"), None)
+        self.kvs.set("cookie", "crumbles")
+        self.assertNotEqual(self.kvs.get("cookie"), "monster")
+        self.assertEqual(self.kvs.get("cookie"), "crumbles")
+        self.kvs.delete("cookie")
+        self.assertEqual(self.kvs.get("cookie"), None)
 
+    def test_incr(self):
+        self.assertEqual(self.kvs.incr("counter"), None)
+        self.kvs.set("counter", 1)
+        self.assertEqual(self.kvs.incr("counter"), "2")
+        self.kvs.set("counter", "1")
+        self.assertEqual(self.kvs.incr("counter"), "2")
+        self.kvs.set("counter", "oops")
+        self.assertEqual(self.kvs.incr("counter"), None)
 
 
 class FakeTransport(object):
