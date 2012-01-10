@@ -1,6 +1,7 @@
 # -*- test-case-name: vumi.transports.smpp.clientserver.test.test_client -*-
 
 import re
+import abc
 import json
 import uuid
 import redis
@@ -26,6 +27,30 @@ from smpp.pdu_inspector import (MultipartMessage,
                                 )
 
 from vumi.utils import get_deploy_int
+
+
+class KeyValueBase(object):
+    __metaclass__ = abc.ABCMeta
+
+    @abc.abstractmethod
+    def get(self, key):
+        """Retrieve data from the store by key and return an string."""
+        return
+
+    @abc.abstractmethod
+    def set(self, key, value):
+        """Save string value to datastore under key."""
+        return
+
+    @abc.abstractmethod
+    def delete(self, key):
+        """Delete record for data stored under key."""
+        return
+
+    @abc.abstractmethod
+    def incr(self, key):
+        """Increment value stored under key and return as integer."""
+        return
 
 
 # TODO this will move to pdu_inspector in python-smpp
