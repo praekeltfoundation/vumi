@@ -73,18 +73,20 @@ class KeyValueStore(KeyValueBase):
         self._data[key] = str(value)
 
     def delete(self, key):
+        value = self.get(key)
         del self._data[key]
+        return value
 
     def incr(self, key):
         old = self.get(key)
         if old is None:
-            return old
+            return None
         new = None
         try:
             new = str(int(old) + 1)
         except:
             pass
-        if old is None or new is None:
+        if new is None:
             return None
         self.set(key, new)
         return new
