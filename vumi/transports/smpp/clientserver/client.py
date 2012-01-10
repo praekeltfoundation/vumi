@@ -747,3 +747,26 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
         print 'Connection failed. Reason:', reason
         ReconnectingClientFactory.clientConnectionFailed(
                 self, connector, reason)
+
+
+class ESME(object):
+    """
+    The top 'Client' object
+    Potentially should be able to bind as:
+        * Transceiver
+        * Transmitter and/or Receiver
+    but currently only Transceiver is implemented
+    """
+    def __init__(self, clientConfig, keyValueStore):
+        self.config = clientConfig
+        self.kvs = keyValueStore
+        kvstc = KeyValueStoreTestCase()
+        kvstc.prefix = "woohoo"
+        kvstc.run_all_tests_on_instance(self.kvs)
+
+    def bindTransciever(self):
+        pass
+
+
+from vumi.transports.smpp.clientserver.tests.test_client \
+        import KeyValueStoreTestCase
