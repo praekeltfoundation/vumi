@@ -57,6 +57,12 @@ class TestMetricManager(TestCase):
         self.assertEqual(cnt.name, "vumi.test.my.count")
         self.assertEqual(mm._metrics, [cnt])
 
+    def test_double_register(self):
+        mm = metrics.MetricManager("vumi.test.")
+        mm.register(metrics.Count("my.count"))
+        self.assertRaises(metrics.MetricRegistrationError,
+                          mm.register, metrics.Count("my.count"))
+
     def test_lookup(self):
         mm = metrics.MetricManager("vumi.test.")
         cnt = mm.register(metrics.Count("my.count"))
