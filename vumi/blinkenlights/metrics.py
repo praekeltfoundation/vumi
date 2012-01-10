@@ -77,7 +77,7 @@ class MetricManager(Publisher):
         """
         metric.manage(self.prefix)
         self._metrics.append(metric)
-        if metric.name in self._metrics_lookup:
+        if metric.suffix in self._metrics_lookup:
             raise MetricRegistrationError("Duplicate metric name %s"
                                           % metric.name)
         self._metrics_lookup[metric.suffix] = metric
