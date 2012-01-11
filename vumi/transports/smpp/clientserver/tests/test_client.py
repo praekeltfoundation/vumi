@@ -26,7 +26,7 @@ class KeyValueStoreTestCase(unittest.TestCase):
         self.test_set_get_delete(instance)
         self.test_incr(instance)
 
-    def test_runtime_test(self):
+    def test_instance_test(self):
         newKeyValueStoreTestCase = KeyValueStoreTestCase()
         newKeyValueStoreTestCase.prefix = "smpp_test_%s" % uuid.uuid4()
         instance = KeyValueStore()
@@ -64,18 +64,6 @@ class KeyValueStoreTestCase(unittest.TestCase):
         self.kvs.set(self.prefix + "counter", "oops")
         self.assertEqual(self.kvs.incr(self.prefix + "counter"), None)
         self.assertEqual(self.kvs.delete(self.prefix + "counter"), "oops")
-
-
-class EsmeTestCase(unittest.TestCase):
-
-    def setUp(self):
-        self.esme = ESME(
-                None,
-                KeyValueStore(),
-                )
-
-    def test_esme_init_kvs_test(self):
-        pass
 
 
 class FakeTransport(object):

@@ -749,6 +749,10 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
                 self, connector, reason)
 
 
+class EsmeCallbacks(object):
+    pass
+
+
 class ESME(object):
     """
     The top 'Client' object
@@ -760,13 +764,6 @@ class ESME(object):
     def __init__(self, clientConfig, keyValueStore):
         self.config = clientConfig
         self.kvs = keyValueStore
-        kvstc = KeyValueStoreTestCase()
-        kvstc.prefix = "woohoo"
-        kvstc.run_all_tests_on_instance(self.kvs)
 
     def bindTransciever(self):
         pass
-
-
-from vumi.transports.smpp.clientserver.tests.test_client \
-        import KeyValueStoreTestCase

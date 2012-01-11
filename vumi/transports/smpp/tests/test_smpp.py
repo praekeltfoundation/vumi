@@ -1,12 +1,40 @@
 
 from twisted.internet import defer
+from twisted.trial.unittest import TestCase
 from smpp.pdu_builder import SubmitSMResp, BindTransceiverResp
 
 from vumi.tests.utils import FakeRedis
 from vumi.message import Message
-from vumi.transports.smpp.clientserver.client import EsmeTransceiver
+from vumi.transports.smpp.clientserver.client import (
+        EsmeTransceiver,
+        ESME,
+        KeyValueStore)
+from vumi.transports.smpp.clientserver.tests.test_client import (
+        KeyValueStoreTestCase)
 from vumi.transports.smpp.transport import SmppTransport
 from vumi.transports.tests.test_base import TransportTestCase
+
+
+class EsmeClientInitTestcase(TestCase):
+
+    def test_esme_init_with_fakeredis(self):
+        self.esme = ESME(
+                None,
+                FakeRedis(),
+                )
+        kvstc = KeyValueStoreTestCase()
+        kvstc.prefix = "woohoo"
+        kvstc.run_all_tests_on_instance(self.esme.kvs)
+
+
+    def test_esme_init_with_simple_keyvaluestore(self):
+        self.esme = ESME(
+                None,
+                KeyValueStore(),
+                )
+        kvstc = KeyValueStoreTestCase()
+        kvstc.prefix = "woohoo"
+        kvstc.run_all_tests_on_instance(self.esme.kvs)
 
 
 class RedisTestEsmeTransceiver(EsmeTransceiver):
