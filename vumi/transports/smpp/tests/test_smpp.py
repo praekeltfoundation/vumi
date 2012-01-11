@@ -19,7 +19,7 @@ from vumi.transports.tests.test_base import TransportTestCase
 class EsmeClientInitTestcase(TestCase):
 
     def test_esme_init_with_redis(self):
-        r_server = redis.Redis("localhost", db=9)
+        r_server = redis.Redis("localhost", db=13)
         #print dir(r_server)
         #print r_server.delete("vumi.transports.smpp.tests.test_smpp#counter")
         #print r_server.keys()
