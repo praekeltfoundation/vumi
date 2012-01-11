@@ -68,6 +68,7 @@ class KeyValueStoreTestCase(unittest.TestCase):
         try:
             if third_party_impl:
                 self.kvs = third_party_impl
+            self.assertEqual(self.kvs.get(key1), None)
             self.assertEqual(self.kvs.incr(key1), 1)
             self.kvs.set(key1, 1)
             self.assertEqual(self.kvs.incr(key1), 2)
