@@ -26,7 +26,7 @@ class KeyValueStoreTestCase(unittest.TestCase):
         self.test_set_get_delete(instance)
         self.test_incr(instance)
 
-    def test_runtine_test(self):
+    def test_runtime_test(self):
         newKeyValueStoreTestCase = KeyValueStoreTestCase()
         newKeyValueStoreTestCase.prefix = "smpp_test_%s" % uuid.uuid4()
         instance = KeyValueStore()
