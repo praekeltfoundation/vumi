@@ -32,7 +32,6 @@ class FakeRedisTestCase(TestCase):
         self.assertEqual(True, self.r_server.delete("delete_me"))
         self.assertEqual(False, self.r_server.delete("delete_me"))
 
-
     def test_incr(self):
         self.r_server = FakeRedis()
         self.r_server.set("inc", 1)
@@ -40,7 +39,6 @@ class FakeRedisTestCase(TestCase):
         self.assertEqual(2, self.r_server.incr("inc"))
         self.assertEqual(3, self.r_server.incr("inc"))
         self.assertEqual('3', self.r_server.get("inc"))
-
 
     def test_incr_with_by_param(self):
         self.r_server = FakeRedis()
