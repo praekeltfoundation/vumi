@@ -24,24 +24,31 @@ class UtilsTestCase(TestCase):
         self.assertEqual(options, worker.config)
 
 
-class FakeRedisIncrTestCase(TestCase):
+class FakeRedisTestCase(TestCase):
+
+    def test_delete(self):
+        self.r_server = FakeRedis()
+        self.r_server.set("delete_me", 1)
+        self.assertEqual(True, self.r_server.delete("delete_me"))
+        self.assertEqual(False, self.r_server.delete("delete_me"))
+
 
     def test_incr(self):
         self.r_server = FakeRedis()
         self.r_server.set("inc", 1)
         self.assertEqual('1', self.r_server.get("inc"))
-        self.assertEqual('2', self.r_server.incr("inc"))
-        self.assertEqual('3', self.r_server.incr("inc"))
+        self.assertEqual(2, self.r_server.incr("inc"))
+        self.assertEqual(3, self.r_server.incr("inc"))
+        self.assertEqual('3', self.r_server.get("inc"))
 
 
     def test_incrby(self):
         self.r_server = FakeRedis()
         self.r_server.set("inc", 1)
         self.assertEqual('1', self.r_server.get("inc"))
-        self.assertEqual('2', self.r_server.incrby("inc", 1))
-        self.assertEqual('4', self.r_server.incrby("inc", 2))
-        self.assertEqual('7', self.r_server.incrby("inc", 3))
-        self.assertEqual('11', self.r_server.incrby("inc", 4))
-        self.assertEqual('111', self.r_server.incrby("inc", 100))
-
-
+        self.assertEqual(2, self.r_server.incrby("inc", 1))
+        self.assertEqual(4, self.r_server.incrby("inc", 2))
+        self.assertEqual(7, self.r_server.incrby("inc", 3))
+        self.assertEqual(11, self.r_server.incrby("inc", 4))
+        self.assertEqual(111, self.r_server.incrby("inc", 100))
+        self.assertEqual('111', self.r_server.get("inc"))

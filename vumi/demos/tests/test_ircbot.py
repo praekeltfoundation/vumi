@@ -3,6 +3,7 @@
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.application.tests.test_base import ApplicationTestCase
+from vumi.tests.utils import FakeRedis
 
 from vumi.demos.ircbot import MemoWorker
 from vumi.message import TransportUserMessage
@@ -15,7 +16,13 @@ class TestMemoWorker(ApplicationTestCase):
     @inlineCallbacks
     def setUp(self):
         super(TestMemoWorker, self).setUp()
-        self.worker = yield self.get_application({})
+        self.worker = yield self.get_application({
+            'worker_name': 'testmemo',
+            })
+        self.worker.r_server = FakeRedis()
+
+    def tearDown(self):
+        self.worker.r_server.teardown()
 
     @inlineCallbacks
     def send(self, content, from_addr='testnick', channel=None):
@@ -53,20 +60,18 @@ class TestMemoWorker(ApplicationTestCase):
     @inlineCallbacks
     def test_leave_memo(self):
         yield self.send('bot: tell memoed hey there', channel='#test')
-        self.assertEquals(self.worker.memos, {
-            ('#test', 'memoed'): [('testnick', 'hey there')],
-            })
+        self.assertEquals(self.worker.retrieve_memos('#test', 'memoed'),
+                          [['testnick', 'hey there']])
         replies = yield self.recv()
         self.assertEqual(replies, [
-            ('reply', 'Sure thing, boss.'),
+            ('reply', 'testnick: Sure thing, boss.'),
             ])
 
     @inlineCallbacks
     def test_leave_memo_nick_canonicalization(self):
         yield self.send('bot: tell MeMoEd hey there', channel='#test')
-        self.assertEquals(self.worker.memos, {
-            ('#test', 'memoed'): [('testnick', 'hey there')],
-            })
+        self.assertEquals(self.worker.retrieve_memos('#test', 'memoed'),
+                          [['testnick', 'hey there']])
 
     @inlineCallbacks
     def test_send_memos(self):
@@ -82,13 +87,16 @@ class TestMemoWorker(ApplicationTestCase):
         yield self.send('ping', channel='#test', from_addr='testmemo')
         replies = yield self.recv(2)
         self.assertEqual(replies, [
-            ('reply', 'message from testnick: this is memo 1'),
-            ('reply', 'message from testnick: this is memo 2'),
+            ('reply', 'testmemo, testnick asked me tell you:'
+             ' this is memo 1'),
+            ('reply', 'testmemo, testnick asked me tell you:'
+             ' this is memo 2'),
             ])
         self.clear_messages()
 
         yield self.send('ping', channel='#another', from_addr='testmemo')
         replies = yield self.recv(1)
         self.assertEqual(replies, [
-            ('reply', 'message from testnick: this is a different channel'),
+            ('reply', 'testmemo, testnick asked me tell you:'
+             ' this is a different channel'),
             ])

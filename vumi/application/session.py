@@ -10,15 +10,12 @@ from twisted.internet import task
 class SessionManager(object):
     """A manager for sessions.
 
-    :type db: int
-    :param db:
-        Redis db number.
+    :type r_server: redis.Redis
+    :param r_server:
+        Redis db connection.
     :type prefix: str
     :param prefix:
         Prefix to use for Redis keys.
-    :type redis_config: dict
-    :param redis_config:
-        Configuration options for redis.Redis. Default is None (no options).
     :type max_session_length: float
     :param max_session_length:
         Time before a session expires. Default is None (never expire).
@@ -27,18 +24,18 @@ class SessionManager(object):
         Time in seconds between checking for session expiry.
     """
 
-    def __init__(self, db, prefix, redis_config=None, max_session_length=None,
+    def __init__(self, r_server, prefix, max_session_length=None,
                  gc_period=1.0):
         self.max_session_length = max_session_length
-        redis_config = redis_config if redis_config is not None else {}
-        self.r_server = redis.Redis(db=db, **redis_config)
+        self.r_server = r_server
         self.r_prefix = prefix
 
         self.gc = task.LoopingCall(lambda: self.active_sessions())
         self.gc.start(gc_period)
 
     def stop(self):
-        return self.gc.stop()
+        if self.gc.running:
+            return self.gc.stop()
 
     def active_sessions(self):
         """

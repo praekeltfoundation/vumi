@@ -256,14 +256,19 @@ class FakeRedis(object):
         self._data[key] = value
 
     def delete(self, key):
+        existed = self.exists(key)
         self._data.pop(key, None)
+        return existed
 
     # Integer operations
 
     def incrby(self, key, increment):
         old_value = self._data.get(key)
-        new_value = str(int(old_value) + increment)
-        self._data[key] = new_value
+        try:
+            new_value = int(old_value) + increment
+        except:
+            new_value = increment
+        self.set(key, new_value)
         return new_value
 
     def incr(self, key):
@@ -371,6 +376,10 @@ class FakeRedis(object):
 
     def lrange(self, key, start, end):
         lval = self._data.get(key, [])
+        if end >= 0 or end < -1:
+            end += 1
+        else:
+            end = None
         return lval[start:end]
 
     # Expiry operations

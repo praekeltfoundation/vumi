@@ -92,8 +92,9 @@ class WikipediaWorker(ApplicationWorker):
 
     @inlineCallbacks
     def startWorker(self):
-        self.session_manager = SessionManager(
-            get_deploy_int(self._amqp_client.vhost),
+        db = get_deploy_int(self._amqp_client.vhost)
+        self.r_server = redis.Redis(db)
+        self.session_manager = SessionManager(self.r_server,
             "%(worker_name)s:%(transport_name)s" % self.config,
             max_session_length=self.MAX_SESSION_LENGTH)
 
