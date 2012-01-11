@@ -1,3 +1,4 @@
+import redis
 
 from twisted.internet import defer
 from twisted.trial.unittest import TestCase
@@ -17,24 +18,39 @@ from vumi.transports.tests.test_base import TransportTestCase
 
 class EsmeClientInitTestcase(TestCase):
 
-    def test_esme_init_with_fakeredis(self):
+    def test_esme_init_with_redis(self):
+        r_server = redis.Redis("localhost", db=9)
+        #print dir(r_server)
+        #print r_server.delete("vumi.transports.smpp.tests.test_smpp#counter")
+        #print r_server.keys()
         self.esme = ESME(
                 None,
-                FakeRedis(),
+                r_server,
                 )
         kvstc = KeyValueStoreTestCase()
-        kvstc.prefix = "woohoo"
+        kvstc.prefix = __name__
         kvstc.run_all_tests_on_instance(self.esme.kvs)
 
+    def test_esme_init_with_fakeredis(self):
+        fake_redis = FakeRedis()
+        self.esme = ESME(
+                None,
+                fake_redis,
+                )
+        kvstc = KeyValueStoreTestCase()
+        kvstc.prefix = __name__
+        kvstc.run_all_tests_on_instance(self.esme.kvs)
 
     def test_esme_init_with_simple_keyvaluestore(self):
+        key_value_store = KeyValueStore()
         self.esme = ESME(
                 None,
-                KeyValueStore(),
+                key_value_store,
                 )
         kvstc = KeyValueStoreTestCase()
-        kvstc.prefix = "woohoo"
+        kvstc.prefix = __name__
         kvstc.run_all_tests_on_instance(self.esme.kvs)
+        self.assertTrue(key_value_store.is_empty())
 
 
 class RedisTestEsmeTransceiver(EsmeTransceiver):

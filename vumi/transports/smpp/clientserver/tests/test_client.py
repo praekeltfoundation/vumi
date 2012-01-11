@@ -16,12 +16,14 @@ class KeyValueStoreTestCase(unittest.TestCase):
 
     def setUp(self):
         self.kvs = KeyValueStore()
+        KeyValueBase.register(self.kvs.__class__)
         self.prefix = "smpp_test_%s" % uuid.uuid4()
 
     def tearDown(self):
         pass
 
     def run_all_tests_on_instance(self, instance):
+        KeyValueBase.register(instance.__class__)
         self.test_implements_abstract(instance)
         self.test_set_get_delete(instance)
         self.test_incr(instance)
@@ -42,28 +44,42 @@ class KeyValueStoreTestCase(unittest.TestCase):
         self.assertTrue(isinstance(self.kvs, KeyValueBase))
 
     def test_set_get_delete(self, third_party_impl=None):
-        if third_party_impl:
-            self.kvs = third_party_impl
-        self.kvs.set(self.prefix + "cookie", "monster")
-        self.assertEqual(self.kvs.get(self.prefix + "cookie"), "monster")
-        self.assertEqual(self.kvs.get(self.prefix + "kookie"), None)
-        self.kvs.set(self.prefix + "cookie", "crumbles")
-        self.assertNotEqual(self.kvs.get(self.prefix + "cookie"), "monster")
-        self.assertEqual(self.kvs.get(self.prefix + "cookie"), "crumbles")
-        self.assertEqual(self.kvs.delete(self.prefix + "cookie"), "crumbles")
-        self.assertEqual(self.kvs.get(self.prefix + "cookie"), None)
+        key1 = "%s#cookie" % self.prefix
+
+        try:
+            if third_party_impl:
+                self.kvs = third_party_impl
+            self.assertEqual(self.kvs.get(key1), None)
+            self.kvs.set(key1, "monster")
+            self.assertEqual(self.kvs.get(key1), "monster")
+            self.kvs.set(key1, "crumbles")
+            self.assertNotEqual(self.kvs.get(key1), "monster")
+            self.assertEqual(self.kvs.get(key1), "crumbles")
+            self.assertEqual(self.kvs.delete(key1), True)
+            self.assertEqual(self.kvs.get(key1), None)
+
+        except:
+            self.kvs.delete(key1)
+            raise
 
     def test_incr(self, third_party_impl=None):
-        if third_party_impl:
-            self.kvs = third_party_impl
-        self.assertEqual(self.kvs.incr(self.prefix + "counter"), None)
-        self.kvs.set(self.prefix + "counter", 1)
-        self.assertEqual(self.kvs.incr(self.prefix + "counter"), "2")
-        self.kvs.set(self.prefix + "counter", "1")
-        self.assertEqual(self.kvs.incr(self.prefix + "counter"), "2")
-        self.kvs.set(self.prefix + "counter", "oops")
-        self.assertEqual(self.kvs.incr(self.prefix + "counter"), None)
-        self.assertEqual(self.kvs.delete(self.prefix + "counter"), "oops")
+        key1 = "%s#counter" % self.prefix
+
+        try:
+            if third_party_impl:
+                self.kvs = third_party_impl
+            self.assertEqual(self.kvs.incr(key1), 1)
+            self.kvs.set(key1, 1)
+            self.assertEqual(self.kvs.incr(key1), 2)
+            self.kvs.set(key1, "1")
+            self.assertEqual(self.kvs.incr(key1), 2)
+            self.kvs.set(key1, "oops")
+            self.assertEqual(self.kvs.incr(key1), 1)
+            self.assertEqual(self.kvs.delete(key1), True)
+
+        except:
+            self.kvs.delete(key1)
+            raise
 
 
 class FakeTransport(object):

@@ -31,14 +31,10 @@ from vumi.utils import get_deploy_int
 
 class KeyValueBase(object):
     __metaclass__ = abc.ABCMeta
-    """
-    Note: all keys and return values are strings,
-    even when incrementing stored integer values.
-    """
 
     @abc.abstractmethod
     def get(self, key):
-        """Retrieve data from the store by key and return an string."""
+        """Retrieve data from the store by key and return a string."""
         return
 
     @abc.abstractmethod
@@ -53,12 +49,16 @@ class KeyValueBase(object):
 
     @abc.abstractmethod
     def incr(self, key):
-        """Increment value stored under key and return as a string."""
+        """Increment value stored under key and return an integer."""
         return
 
 
-class KeyValueStore(KeyValueBase):
-    """A minimal implementation of KeyValueBase"""
+class KeyValueStore(object):
+    """
+    A minimal implementation of KeyValueBase
+    It is specifically not a subclass of KeyValueBase
+    so that the ABC register() method can be used in testing
+    """
 
     def __init__(self):
         self._data = {}
@@ -74,25 +74,30 @@ class KeyValueStore(KeyValueBase):
 
     def delete(self, key):
         value = self.get(key)
-        del self._data[key]
-        return value
+        if value:
+            del self._data[key]
+            return True
+        else:
+            return False
 
     def incr(self, key):
         old = self.get(key)
-        if old is None:
-            return None
-        new = None
         try:
-            new = str(int(old) + 1)
+            new = int(old) + 1
         except:
-            pass
-        if new is None:
-            return None
+            new = 1
         self.set(key, new)
         return new
 
+    # This method is not required by the KeyValueBase ABC
+    def is_empty(self):
+        if len(self._data) == 0:
+            return True
+        else:
+            return False
 
-# TODO this will move to pdu_inspector in python-smpp
+
+# TODO this will move tog pdu_inspector in python-smpp
 ESME_command_status_map = {
     "ESME_ROK": "No Error",
     "ESME_RINVMSGLEN": "Message Length is invalid",
