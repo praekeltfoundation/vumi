@@ -42,13 +42,13 @@ class FakeRedisTestCase(TestCase):
         self.assertEqual('3', self.r_server.get("inc"))
 
 
-    def test_incrby(self):
+    def test_incr_with_by_param(self):
         self.r_server = FakeRedis()
         self.r_server.set("inc", 1)
         self.assertEqual('1', self.r_server.get("inc"))
-        self.assertEqual(2, self.r_server.incrby("inc", 1))
-        self.assertEqual(4, self.r_server.incrby("inc", 2))
-        self.assertEqual(7, self.r_server.incrby("inc", 3))
-        self.assertEqual(11, self.r_server.incrby("inc", 4))
-        self.assertEqual(111, self.r_server.incrby("inc", 100))
+        self.assertEqual(2, self.r_server.incr("inc", 1))
+        self.assertEqual(4, self.r_server.incr("inc", 2))
+        self.assertEqual(7, self.r_server.incr("inc", 3))
+        self.assertEqual(11, self.r_server.incr("inc", 4))
+        self.assertEqual(111, self.r_server.incr("inc", 100))
         self.assertEqual('111', self.r_server.get("inc"))

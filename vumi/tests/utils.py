@@ -262,7 +262,8 @@ class FakeRedis(object):
 
     # Integer operations
 
-    def incrby(self, key, increment):
+    # The python redis lib combines incr & incrby into incr(key, increment=1)
+    def incr(self, key, increment=1):
         old_value = self._data.get(key)
         try:
             new_value = int(old_value) + increment
@@ -271,8 +272,6 @@ class FakeRedis(object):
         self.set(key, new_value)
         return new_value
 
-    def incr(self, key):
-        return self.incrby(key, 1)
 
     # Hash operations
 
