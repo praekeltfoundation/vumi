@@ -24,7 +24,7 @@ class UtilsTestCase(TestCase):
         self.assertEqual(options, worker.config)
 
 
-class FakeRedisIncrTestCase(TestCase):
+class FakeRedisTestCase(TestCase):
 
     def test_delete(self):
         self.r_server = FakeRedis()
