@@ -8,12 +8,12 @@ from vumi.application import SessionManager
 
 class SessionManagerTestCase(TestCase):
     def setUp(self):
-        self.sm = SessionManager(db=0, prefix="test")
-        self.sm.r_server = FakeRedis()  # stub out redis
+        self.fake_redis = FakeRedis()
+        self.sm = SessionManager(self.fake_redis, prefix="test")
 
     def tearDown(self):
         self.sm.stop()
-        self.sm.r_server.teardown()  # teardown fake redis
+        self.fake_redis.teardown()
 
     def test_active_sessions(self):
         def get_sessions():
