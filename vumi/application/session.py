@@ -34,7 +34,8 @@ class SessionManager(object):
         self.gc.start(gc_period)
 
     def stop(self):
-        return self.gc.stop()
+        if self.gc.running:
+            return self.gc.stop()
 
     def active_sessions(self):
         """
