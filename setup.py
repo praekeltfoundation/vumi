@@ -23,6 +23,12 @@ setup(
     include_package_data=True,
     install_requires=['setuptools'] +
                      remove_externals(listify('requirements.pip')),
+
+    dependency_links=[
+        'https://github.com/dmaclay/python-smpp/zipball/develop#egg=python-smpp',
+        'https://github.com/dustin/twitty-twister/zipball/master#egg=twitty-twister',
+    ],
+
     classifiers=[
         'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',
