@@ -9,7 +9,7 @@ from vumi.errors import VumiError
 def getVumiSession(r_server, key):
     sess = r_server.get(key)
     if sess:
-        session = yaml.load(sess)
+        session = yaml.safe_load(sess)
         session.set_r_server(r_server)
         return session
     else:
@@ -24,7 +24,13 @@ def delVumiSession(r_server, key):
     return r_server.delete(key)
 
 
-class VumiSession(object):
+class VumiSession(yaml.YAMLObject):
+    # Allow use with safe_load() / safe_dump()
+    yaml_loader = yaml.SafeLoader
+    yaml_dumper = yaml.SafeDumper
+
+    yaml_tag = u'VumiSession'
+
     key = None
     decision_tree = None
     r_server = None
@@ -51,7 +57,7 @@ class VumiSession(object):
         if self.r_server:
             r_server = self.r_server
             self.r_server = None
-            r_server.set(self.get_key(), yaml.dump(self))
+            r_server.set(self.get_key(), yaml.safe_dump(self))
             self.r_server = r_server
 
     def delete(self):
@@ -59,7 +65,12 @@ class VumiSession(object):
         self.r_server = None
 
 
-class DecisionTree(object):
+class DecisionTree(yaml.YAMLObject):
+    # Allow use with safe_load() / safe_dump()
+    yaml_loader = yaml.SafeLoader
+    yaml_dumper = yaml.SafeDumper
+
+    yaml_tag = u'DecisionTree'
 
     def __init__(self):
         pass
@@ -73,6 +84,8 @@ class DecisionTree(object):
 
 class TemplatedDecisionTree(DecisionTree):
 
+    yaml_tag = u'TemplatedDecisionTree'
+
     def __init__(self):
         DecisionTree.__init__(self)
         self.template = None
@@ -80,7 +93,7 @@ class TemplatedDecisionTree(DecisionTree):
         self.template_history = []
 
     def load_yaml_template(self, yaml_string):
-        self.template = yaml.load(yaml_string)
+        self.template = yaml.safe_load(yaml_string)
         self.template_current = self.template.get('__start__')
 
     def get_template(self):
@@ -117,6 +130,8 @@ class TemplatedDecisionTree(DecisionTree):
 
 class PopulatedDecisionTree(TemplatedDecisionTree):
 
+    yaml_tag = u'PopulatedDecisionTree'
+
     def __init__(self):
         TemplatedDecisionTree.__init__(self)
         self.data = None
@@ -145,6 +160,8 @@ class PopulatedDecisionTree(TemplatedDecisionTree):
 
 
 class TraversedDecisionTree(PopulatedDecisionTree):
+
+    yaml_tag = u'TraversedDecisionTree'
 
     def __init__(self):
         PopulatedDecisionTree.__init__(self)
