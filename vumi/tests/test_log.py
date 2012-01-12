@@ -15,10 +15,6 @@ class VumiLogTestCase(TestCase):
     def tearDown(self):
         self.flushLoggedErrors(TestException)
 
-    def test_invalid_log_level(self):
-        self.assertRaises(RuntimeError, log._mk_logger, 'NOT_A_LEVEL',
-                            lambda *a, **kw: None)
-
     def test_normal_log_levels(self):
         levels = [
             ('DEBUG', log.debug),
