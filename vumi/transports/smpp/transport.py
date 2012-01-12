@@ -150,6 +150,7 @@ class SmppTransport(Transport):
         log.msg("Unacknowledged message count: %s" % (
             self.esme_client.get_unacked_count()))
         #self.conn_throttle(unacked=self.esme_client.get_unacked_count())
+        self.r_set_message_payload(message.payload)
         sequence_number = self.send_smpp(message)
         self.r_set_last_sequence(sequence_number)
         self.r_set_id_for_sequence(sequence_number,
@@ -187,9 +188,19 @@ class SmppTransport(Transport):
             self.r_prefix, self.smpp_offset),
                 sequence_number)
 
-    def submit_sm_resp(self, *args, **kwargs):
+    def submit_sm_resp(self, *args, **kwargs): #TODO the client does too much
         transport_msg_id = kwargs['message_id']
         sent_sms_id = self.r_get_id_for_sequence(kwargs['sequence_number'])
+
+        if kwargs['command_status'] == 'ESME_ROK':
+            #print repr(self.r_get_message_payload_for_id(sent_sms_id))
+            self.r_delete_payload_for_message_id(sent_sms_id)
+            #print repr(self.r_get_message_payload_for_id(sent_sms_id))
+        else:
+            # We have an error
+            error_payload = self.r_get_message_payload_for_id(sent_sms_id)
+            #print error_payload
+
         self.r_delete_for_sequence(kwargs['sequence_number'])
         log.msg("Mapping transport_msg_id=%s to sent_sms_id=%s" % (
             transport_msg_id, sent_sms_id))
