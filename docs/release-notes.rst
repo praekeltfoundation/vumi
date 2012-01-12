@@ -4,6 +4,17 @@ Release Notes
 Version 0.3
 -----------
 
+:Version: 0.3.1
+:Date released: 12 Jan 2012
+
+* Use yaml.safe_load everywhere YAML config files are loaded. This
+  fixes a potential security issue which allowed those with write
+  access to Vumi configuration files to run arbitrary Python code as
+  the user running Vumi.
+* Fix bug in metrics manager that unintentionally allowed two metrics
+  with the same name to be registered.
+
+:Version: 0.3.0
 :Date released: 4 Jan 2012
 
 * defined common message format.
@@ -25,6 +36,7 @@ Version 0.3
 Version 0.2
 -----------
 
+:Version: 0.2.0
 :Date released: 19 September 2011
 
 * System metrics as per :doc:`roadmap/blinkenlights`.
@@ -34,6 +46,7 @@ Version 0.2
 Version 0.1
 -----------
 
+:Version: 0.1.0
 :Date released: 4 August 2011
 
 * SMPP Transport (version 3.4 in transceiver mode)

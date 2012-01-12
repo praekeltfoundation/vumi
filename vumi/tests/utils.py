@@ -272,7 +272,6 @@ class FakeRedis(object):
         self.set(key, new_value)
         return new_value
 
-
     # Hash operations
 
     def hset(self, key, field, value):
