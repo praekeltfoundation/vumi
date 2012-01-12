@@ -1,14 +1,14 @@
 import logging
 
 from twisted.trial.unittest import TestCase
-from twisted.internet.defer import Deferred, inlineCallbacks
-from twisted.internet import reactor
 
 from vumi.tests.utils import LogCatcher
 from vumi import log
 
 
-class TestException(Exception): pass
+class TestException(Exception):
+    pass
+
 
 class VumiLogTestCase(TestCase):
 

@@ -53,4 +53,3 @@ class SessionManagerTestCase(TestCase):
     def test_lazy_clearing(self):
         self.sm.save_session('user_id', {})
         self.assertEqual(list(self.sm.active_sessions()), [])
-
