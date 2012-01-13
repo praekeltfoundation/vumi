@@ -13,5 +13,5 @@ rm results.txt
 echo "=== Processing coverage data..."
 coverage xml
 echo "=== Checking for PEP-8 violations..."
-pep8 --repeat --exclude '0*.py' vumi | tee pep8.txt
+pep8 --repeat --exclude='migrations' vumi | tee pep8.txt
 echo "=== Done."
