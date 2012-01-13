@@ -75,7 +75,7 @@ class SchedulerTestCase(TestCase):
         now = time.mktime(datetime(2012, 1, 1).timetuple())
         delta = 16  # seconds from now
         self.scheduler.schedule_for_delivery(msg, delta, now)
-        scheduled_time = now + delta
+        scheduled_time = now + delta + self.scheduler.granularity
         yield self.scheduler.deliver_scheduled(scheduled_time)
         self.assertDelivered(msg)
 
@@ -86,7 +86,7 @@ class SchedulerTestCase(TestCase):
             msg = self.mkmsg_in(message_id='message_%s' % (i,))
             delta = i * 10
             self.scheduler.schedule_for_delivery(msg, delta, now)
-            scheduled_time = now + delta
+            scheduled_time = now + delta + self.scheduler.granularity
             yield self.scheduler.deliver_scheduled(scheduled_time)
             self.assertNumDelivered(i + 1)
 
@@ -101,7 +101,8 @@ class SchedulerTestCase(TestCase):
         now = time.mktime(datetime.now().timetuple())
         yield self.scheduler.deliver_scheduled(now)
         self.assertEqual(len(self.get_pending_messages()), 1)
-        yield self.scheduler.deliver_scheduled(way_back)
+        yield self.scheduler.deliver_scheduled(
+            way_back + self.scheduler.granularity)
         self.assertDelivered(msg)
         self.assertEqual(self.get_pending_messages(), [])
 

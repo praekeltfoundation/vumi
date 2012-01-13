@@ -136,7 +136,7 @@ class Scheduler(object):
     def deliver_scheduled(self, _time=None):
         _time = _time or int(time.time())
         while True:
-            scheduled_key = self.get_scheduled_key(_time)
+            scheduled_key = self.get_scheduled_key(_time - self.granularity)
             if not scheduled_key:
                 return
             scheduled_data = self.get_scheduled(scheduled_key)
