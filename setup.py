@@ -16,9 +16,12 @@ setup(
     long_description=open('README.rst', 'r').read(),
     author='Praekelt Foundation',
     author_email='dev@praekeltfoundation.org',
-    packages=find_packages(exclude=['environments']),
+    packages=find_packages(exclude=['environments']) + ['twisted.plugins'],
+    package_data={'twisted.plugins': ['twisted/plugins/*.py']},
     include_package_data=True,
     install_requires=['setuptools'] + listify('requirements.pip'),
+    # NOTE: See https://github.com/pypa/pip/issues/355 regarding Twisted
+    # plugins and "pip uninstall"
 
     dependency_links=[
         'https://github.com/dmaclay/python-smpp/zipball/develop#egg=python-smpp',
