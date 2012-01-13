@@ -129,6 +129,9 @@ class Scheduler(object):
             timestamp: score
         })
 
+    def get_all_scheduled_keys(self):
+        return self.r_server.smembers(self.r_key("scheduled_keys"))
+
     @inlineCallbacks
     def deliver_scheduled(self, _time=None):
         _time = _time or int(time.time())
@@ -140,6 +143,7 @@ class Scheduler(object):
             scheduled_at = scheduled_data['scheduled_at']
             message = TransportUserMessage.from_json(scheduled_data['message'])
             yield self.callback(scheduled_at, message)
+            self.clear_scheduled(scheduled_key)
 
     def clear_scheduled(self, key):
         self.r_server.srem(self.r_key("scheduled_keys"), key)
