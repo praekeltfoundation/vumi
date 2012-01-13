@@ -28,7 +28,7 @@ class ApplicationWorker(Worker):
     @inlineCallbacks
     def startWorker(self):
         log.msg('Starting a %s worker with config: %s'
-                % (self.__class__.__name__,  self.config))
+                % (self.__class__.__name__, self.config))
         self._consumers = []
         self._validate_config()
         self.transport_name = self.config['transport_name']
