@@ -10,6 +10,8 @@ def parse_requirements(filename):
     dependency_links = []
     for requirement in listify(filename):
         if requirement.startswith("https:") or requirement.startswith("http:"):
+            (_, _, name) = requirement.partition('#egg=')
+            install_requires.append(name)
             dependency_links.append(requirement)
         else:
             install_requires.append(requirement)
