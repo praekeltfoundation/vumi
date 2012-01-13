@@ -3,7 +3,6 @@ import json
 import re
 from base64 import b64decode
 
-from zope.interface import implements
 from twisted.python import log
 from twisted.web import http
 
