@@ -7,14 +7,11 @@ supervisor
 psycopg2==2.4.1
 pyOpenSSL==0.11
 python-ssmi
-python-foneworx
 wokkel
 redis
 python-smpp
 twitty-twister
-pyserial
 pytz
-python-fusiontables==0.1
 # oauth and simplejson are needed by twittytwister
 oauth
 simplejson
