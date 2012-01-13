@@ -16,7 +16,7 @@ setup(
     long_description=open('README.rst', 'r').read(),
     author='Praekelt Foundation',
     author_email='dev@praekeltfoundation.org',
-    packages=find_packages(),
+    packages=find_packages(exclude=['environments']),
     include_package_data=True,
     install_requires=['setuptools'] + listify('requirements.pip'),
 
