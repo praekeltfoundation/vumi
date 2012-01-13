@@ -5,9 +5,6 @@ def listify(filename):
     return filter(None, open(filename, 'r').read().split('\n'))
 
 
-def remove_externals(requirements):
-    return filter(lambda e: not e.startswith('-e'), requirements)
-
 setup(
     name="vumi",
     version="0.4.0a",
@@ -21,8 +18,7 @@ setup(
     author_email='dev@praekeltfoundation.org',
     packages=find_packages(),
     include_package_data=True,
-    install_requires=['setuptools'] +
-                     remove_externals(listify('requirements.pip')),
+    install_requires=['setuptools'] + listify('requirements.pip'),
 
     dependency_links=[
         'https://github.com/dmaclay/python-smpp/zipball/develop#egg=python-smpp',
