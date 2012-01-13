@@ -9,8 +9,8 @@ pyOpenSSL==0.11
 python-ssmi
 wokkel
 redis
-python-smpp
-twitty-twister
+https://github.com/dmaclay/python-smpp/zipball/develop#egg=python-smpp
+https://github.com/dustin/twitty-twister/zipball/master#egg=twitty-twister
 pytz
 # oauth and simplejson are needed by twittytwister
 oauth

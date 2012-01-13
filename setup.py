@@ -5,6 +5,18 @@ def listify(filename):
     return filter(None, open(filename, 'r').read().split('\n'))
 
 
+def parse_requirements(filename):
+    install_requires = []
+    dependency_links = []
+    for requirement in listify(filename):
+        if requirement.startswith("https:") or requirement.startswith("http:"):
+            dependency_links.append(requirement)
+        else:
+            install_requires.append(requirement)
+    return install_requires, dependency_links
+
+install_requires, dependency_links = parse_requirements("requirements.pip")
+
 setup(
     name="vumi",
     version="0.4.0a",
@@ -16,18 +28,13 @@ setup(
     long_description=open('README.rst', 'r').read(),
     author='Praekelt Foundation',
     author_email='dev@praekeltfoundation.org',
+    # NOTE: See https://github.com/pypa/pip/issues/355 regarding Twisted
+    # plugins and "pip uninstall"
     packages=find_packages(exclude=['environments']) + ['twisted.plugins'],
     package_data={'twisted.plugins': ['twisted/plugins/*.py']},
     include_package_data=True,
-    install_requires=['setuptools'] + listify('requirements.pip'),
-    # NOTE: See https://github.com/pypa/pip/issues/355 regarding Twisted
-    # plugins and "pip uninstall"
-
-    dependency_links=[
-        'https://github.com/dmaclay/python-smpp/zipball/develop#egg=python-smpp',
-        'https://github.com/dustin/twitty-twister/zipball/master#egg=twitty-twister',
-    ],
-
+    install_requires=['setuptools'] + install_requires,
+    dependency_links=dependency_links,
     classifiers=[
         'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',
