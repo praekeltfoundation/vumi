@@ -17,10 +17,10 @@ class ExtendedTransportTestCase(TransportTestCase):
             self.assertEqual(message.payload[p], comparison.payload[p])
 
     def assertFailedMessageParams(self, message, comparison, params=[]):
-        failure = json.loads(message.payload['message'])
+        failure = message.payload['message']
         for p in params:
             self.assertEqual(failure[p], comparison.payload[p])
-        #pass
+        pass
 
 
 class RedisTestEsmeTransceiver(EsmeTransceiver):
@@ -210,10 +210,37 @@ class FakeRedisRespTestCase(ExtendedTransportTestCase):
             content="hello world",
             to_addr="1111111111")
 
-        #self.transport.send_failure(fail_msg, Exception("Foo"), "testing")
-
-        #self.assertEqual([self.mkmsg_fail(fail_msg.payload, "testing")],
-                         #self.get_dispatched_failures()[1:])
+        comparison = self.mkmsg_fail(message4.to_json(), 'ESME_RTHROTTLED')
+        actual = self.get_dispatched_failures()[1]
+        self.assertMessageParams(
+                actual,
+                comparison,
+                [
+                    #'timestamp',  # don't check for test
+                    'reason',
+                    'message_version',
+                    #'message',  # tested with assertFailedMessageParams()
+                    'message_type',
+                    'failure_code',
+                ])
+        self.assertFailedMessageParams(
+                actual,
+                message4,
+                [
+                    'transport_name',
+                    'in_reply_to',
+                    'from_addr',
+                    #'timestamp',  # don't check for test
+                    'to_addr',
+                    'content',
+                    'session_event',
+                    'message_version',
+                    'transport_type',
+                    'helper_metadata',
+                    'transport_metadata',
+                    'message_type',
+                    'message_id',
+                ])
 
         # Some error codes would occur on bind attempts
         bind_dispatch_methods = {

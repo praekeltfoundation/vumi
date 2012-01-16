@@ -1,5 +1,6 @@
 # -*- test-case-name: vumi.transports.smpp.test_smpp -*-
 
+import json
 from datetime import datetime
 
 import redis
@@ -162,11 +163,10 @@ class SmppTransport(Transport):
         return self._teardown_message_consumer()
 
     def r_set_message(self, message):
-        payload = message.payload
-        message_id = payload['message_id']
-        self.r_server.set("%s#%s" % (self.r_message_prefix, message_id), str(payload))
+        message_id = message.payload['message_id']
+        self.r_server.set("%s#%s" % (self.r_message_prefix, message_id), message.to_json())
 
-    def r_get_message_payload_for_id(self, message_id):
+    def r_get_message_json_for_id(self, message_id):
         return self.r_server.get("%s#%s" % (self.r_message_prefix, message_id))
 
     def r_delete_message(self, message_id):
@@ -195,12 +195,13 @@ class SmppTransport(Transport):
         sent_sms_id = self.r_get_id_for_sequence(kwargs['sequence_number'])
 
         if kwargs['command_status'] == 'ESME_ROK':
-            #print repr(self.r_get_message_payload_for_id(sent_sms_id))
+            #print repr(self.r_get_message_json_for_id(sent_sms_id))
             self.r_delete_message(sent_sms_id)
-            #print "OK", repr(self.r_get_message_payload_for_id(sent_sms_id))
+            #print "OK", repr(self.r_get_message_json_for_id(sent_sms_id))
         else:
             # We have an error
-            error_payload = self.r_get_message_payload_for_id(sent_sms_id)
+            error_payload = json.loads(
+                    self.r_get_message_json_for_id(sent_sms_id))
             self.r_delete_message(sent_sms_id)
             self.failure_publisher.publish_message(FailureMessage(
                     message=error_payload,
