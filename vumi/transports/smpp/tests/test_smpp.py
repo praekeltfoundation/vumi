@@ -47,12 +47,6 @@ class RedisTestSmppTransport(SmppTransport):
         pass
 
     def mess_tempfault(self, *args, **kwargs):
-        #pdu = kwargs.get('pdu')
-        #sequence_number = pdu['header']['sequence_number']
-        #id = self.r_get_id_for_sequence(sequence_number)
-        #reason = pdu['header']['command_status']
-        #self.send_failure(Message(id=id), RuntimeError("A random exception"),
-                          #reason)
         pass
 
     def conn_permfault(self, *args, **kwargs):
