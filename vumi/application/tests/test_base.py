@@ -217,7 +217,7 @@ class ApplicationTestCase(TestCase):
                   to_addr='+41791234567', from_addr='9292',
                   session_event=None, in_reply_to=None,
                   transport_type=None, transport_metadata=None,
-                  stubs=False):
+                  ):
         if transport_type is None:
             transport_type = self.transport_type
         if transport_metadata is None:
@@ -233,8 +233,6 @@ class ApplicationTestCase(TestCase):
             session_event=session_event,
             in_reply_to=in_reply_to,
             )
-        if stubs:
-            params['timestamp'] = datetime.now()
         return TransportUserMessage(**params)
 
     def get_dispatched_messages(self):
