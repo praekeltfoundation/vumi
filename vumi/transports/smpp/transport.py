@@ -164,13 +164,15 @@ class SmppTransport(Transport):
 
     def r_set_message(self, message):
         message_id = message.payload['message_id']
-        self.r_server.set("%s#%s" % (self.r_message_prefix, message_id), message.to_json())
+        self.r_server.set("%s#%s" % (
+            self.r_message_prefix, message_id), message.to_json())
 
     def r_get_message_json_for_id(self, message_id):
         return self.r_server.get("%s#%s" % (self.r_message_prefix, message_id))
 
     def r_delete_message(self, message_id):
-        return self.r_server.delete("%s#%s" % (self.r_message_prefix, message_id))
+        return self.r_server.delete(
+                "%s#%s" % (self.r_message_prefix, message_id))
 
     def r_get_id_for_sequence(self, sequence_number):
         return self.r_server.get("%s#%s" % (self.r_prefix, sequence_number))
@@ -190,7 +192,7 @@ class SmppTransport(Transport):
             self.r_prefix, self.smpp_offset),
                 sequence_number)
 
-    def submit_sm_resp(self, *args, **kwargs): #TODO the client does too much
+    def submit_sm_resp(self, *args, **kwargs):  # TODO the client does too much
         transport_msg_id = kwargs['message_id']
         sent_sms_id = self.r_get_id_for_sequence(kwargs['sequence_number'])
 

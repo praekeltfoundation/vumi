@@ -20,7 +20,6 @@ class ExtendedTransportTestCase(TransportTestCase):
         failure = message.payload['message']
         for p in params:
             self.assertEqual(failure[p], comparison.payload[p])
-        pass
 
 
 class RedisTestEsmeTransceiver(EsmeTransceiver):
