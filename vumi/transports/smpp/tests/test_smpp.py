@@ -1,10 +1,8 @@
-import json
 
 from twisted.internet import defer
 from smpp.pdu_builder import SubmitSMResp, BindTransceiverResp
 
 from vumi.tests.utils import FakeRedis
-from vumi.message import Message
 from vumi.transports.smpp.client import EsmeTransceiver
 from vumi.transports.smpp.transport import SmppTransport
 from vumi.transports.tests.test_base import TransportTestCase
