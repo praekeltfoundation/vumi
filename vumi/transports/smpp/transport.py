@@ -10,6 +10,7 @@ from twisted.internet import reactor
 from vumi.utils import get_operator_number, get_deploy_int
 from vumi.transports.base import Transport
 from vumi.transports.smpp.client import EsmeTransceiverFactory
+from vumi.transports.failures import FailureMessage
 from vumi.message import Message
 
 
@@ -150,7 +151,7 @@ class SmppTransport(Transport):
         log.msg("Unacknowledged message count: %s" % (
             self.esme_client.get_unacked_count()))
         #self.conn_throttle(unacked=self.esme_client.get_unacked_count())
-        self.r_set_message_payload(message.payload)
+        self.r_set_message(message)
         sequence_number = self.send_smpp(message)
         self.r_set_last_sequence(sequence_number)
         self.r_set_id_for_sequence(sequence_number,
@@ -160,14 +161,15 @@ class SmppTransport(Transport):
         log.msg("ESME Disconnected")
         return self._teardown_message_consumer()
 
-    def r_set_message_payload(self, payload):
+    def r_set_message(self, message):
+        payload = message.payload
         message_id = payload['message_id']
         self.r_server.set("%s#%s" % (self.r_message_prefix, message_id), str(payload))
 
     def r_get_message_payload_for_id(self, message_id):
         return self.r_server.get("%s#%s" % (self.r_message_prefix, message_id))
 
-    def r_delete_payload_for_message_id(self, message_id):
+    def r_delete_message(self, message_id):
         return self.r_server.delete("%s#%s" % (self.r_message_prefix, message_id))
 
     def r_get_id_for_sequence(self, sequence_number):
@@ -194,12 +196,16 @@ class SmppTransport(Transport):
 
         if kwargs['command_status'] == 'ESME_ROK':
             #print repr(self.r_get_message_payload_for_id(sent_sms_id))
-            self.r_delete_payload_for_message_id(sent_sms_id)
-            #print repr(self.r_get_message_payload_for_id(sent_sms_id))
+            self.r_delete_message(sent_sms_id)
+            #print "OK", repr(self.r_get_message_payload_for_id(sent_sms_id))
         else:
             # We have an error
             error_payload = self.r_get_message_payload_for_id(sent_sms_id)
-            #print error_payload
+            self.r_delete_message(sent_sms_id)
+            self.failure_publisher.publish_message(FailureMessage(
+                    message=error_payload,
+                    failure_code=None,
+                    reason=kwargs['command_status']))
 
         self.r_delete_for_sequence(kwargs['sequence_number'])
         log.msg("Mapping transport_msg_id=%s to sent_sms_id=%s" % (

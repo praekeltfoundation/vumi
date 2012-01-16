@@ -1,3 +1,4 @@
+import json
 
 from twisted.internet import defer
 from smpp.pdu_builder import SubmitSMResp, BindTransceiverResp
@@ -7,6 +8,19 @@ from vumi.message import Message
 from vumi.transports.smpp.client import EsmeTransceiver
 from vumi.transports.smpp.transport import SmppTransport
 from vumi.transports.tests.test_base import TransportTestCase
+
+
+class ExtendedTransportTestCase(TransportTestCase):
+
+    def assertMessageParams(self, message, comparison, params=[]):
+        for p in params:
+            self.assertEqual(message.payload[p], comparison.payload[p])
+
+    def assertFailedMessageParams(self, message, comparison, params=[]):
+        failure = json.loads(message.payload['message'])
+        for p in params:
+            self.assertEqual(failure[p], comparison.payload[p])
+        #pass
 
 
 class RedisTestEsmeTransceiver(EsmeTransceiver):
@@ -34,12 +48,12 @@ class RedisTestSmppTransport(SmppTransport):
         pass
 
     def mess_tempfault(self, *args, **kwargs):
-        pdu = kwargs.get('pdu')
-        sequence_number = pdu['header']['sequence_number']
-        id = self.r_get_id_for_sequence(sequence_number)
-        reason = pdu['header']['command_status']
-        self.send_failure(Message(id=id), RuntimeError("A random exception"),
-                          reason)
+        #pdu = kwargs.get('pdu')
+        #sequence_number = pdu['header']['sequence_number']
+        #id = self.r_get_id_for_sequence(sequence_number)
+        #reason = pdu['header']['command_status']
+        #self.send_failure(Message(id=id), RuntimeError("A random exception"),
+                          #reason)
         pass
 
     def conn_permfault(self, *args, **kwargs):
@@ -64,7 +78,7 @@ def payload_equal_except_timestamp(dict1, dict2):
     return return_value
 
 
-class FakeRedisRespTestCase(TransportTestCase):
+class FakeRedisRespTestCase(ExtendedTransportTestCase):
 
     transport_name = "redis_testing_transport"
     transport_class = RedisTestSmppTransport
@@ -146,8 +160,37 @@ class FakeRedisRespTestCase(TransportTestCase):
         self.assertEqual([self.mkmsg_ack('446', '3rd_party_id_3')],
                          self.get_dispatched_events()[2:])
 
-        self.assertEqual([self.mkmsg_fail({'id': '446'}, 'ESME_RSUBMITFAIL')],
-                         self.get_dispatched_failures())
+        comparison = self.mkmsg_fail(message3.to_json(), 'ESME_RSUBMITFAIL')
+        actual = self.get_dispatched_failures()[0]
+        self.assertMessageParams(
+                actual,
+                comparison,
+                [
+                    #'timestamp',  # don't check for test
+                    'reason',
+                    'message_version',
+                    #'message',  # tested with assertFailedMessageParams()
+                    'message_type',
+                    'failure_code',
+                ])
+        self.assertFailedMessageParams(
+                actual,
+                message3,
+                [
+                    'transport_name',
+                    'in_reply_to',
+                    'from_addr',
+                    #'timestamp',  # don't check for test
+                    'to_addr',
+                    'content',
+                    'session_event',
+                    'message_version',
+                    'transport_type',
+                    'helper_metadata',
+                    'transport_metadata',
+                    'message_type',
+                    'message_id',
+                ])
 
         message4 = self.mkmsg_out(
             message_id=447,
@@ -167,10 +210,10 @@ class FakeRedisRespTestCase(TransportTestCase):
             content="hello world",
             to_addr="1111111111")
 
-        self.transport.send_failure(fail_msg, Exception("Foo"), "testing")
+        #self.transport.send_failure(fail_msg, Exception("Foo"), "testing")
 
-        self.assertEqual([self.mkmsg_fail(fail_msg.payload, "testing")],
-                         self.get_dispatched_failures()[1:])
+        #self.assertEqual([self.mkmsg_fail(fail_msg.payload, "testing")],
+                         #self.get_dispatched_failures()[1:])
 
         # Some error codes would occur on bind attempts
         bind_dispatch_methods = {
