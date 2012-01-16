@@ -71,11 +71,10 @@ class TransportTestCase(unittest.TestCase):
         self.assert_rkey_attr('outbound', transport.message_consumer)
 
     def mkmsg_ack(self, user_message_id='1', sent_message_id='abc',
-                  transport_metadata=None,
-                  overload={}):
+                  transport_metadata=None):
         if transport_metadata is None:
             transport_metadata = {}
-        return_msg = TransportEvent(
+        return TransportEvent(
             event_id=RegexMatcher(r'^[0-9a-fA-F]{32}$'),
             event_type='ack',
             user_message_id=user_message_id,
@@ -84,15 +83,12 @@ class TransportTestCase(unittest.TestCase):
             transport_name=self.transport_name,
             transport_metadata=transport_metadata,
             )
-        return_msg.payload.update(overload)
-        return return_msg
 
     def mkmsg_delivery(self, status='delivered', user_message_id='abc',
-                       transport_metadata=None,
-                       overload={}):
+                       transport_metadata=None):
         if transport_metadata is None:
             transport_metadata = {}
-        return_msg = TransportEvent(
+        return TransportEvent(
             event_id=RegexMatcher(r'^[0-9a-fA-F]{32}$'),
             event_type='delivery_report',
             transport_name=self.transport_name,
@@ -102,19 +98,16 @@ class TransportTestCase(unittest.TestCase):
             timestamp=UTCNearNow(),
             transport_metadata=transport_metadata,
             )
-        return_msg.payload.update(overload)
-        return return_msg
 
     def mkmsg_in(self, content='hello world',
                  session_event=TransportUserMessage.SESSION_NONE,
                  message_id='abc', transport_type=None,
-                 transport_metadata=None,
-                 overload={}):
+                 transport_metadata=None):
         if transport_type is None:
             transport_type = self.transport_type
         if transport_metadata is None:
             transport_metadata = {}
-        return_msg = TransportUserMessage(
+        return TransportUserMessage(
             from_addr='+41791234567',
             to_addr='9292',
             message_id=message_id,
@@ -125,15 +118,12 @@ class TransportTestCase(unittest.TestCase):
             session_event=session_event,
             timestamp=UTCNearNow(),
             )
-        return_msg.payload.update(overload)
-        return return_msg
 
     def mkmsg_out(self, content='hello world',
                   session_event=TransportUserMessage.SESSION_NONE,
                   message_id='1', to_addr='+41791234567', from_addr='9292',
                   in_reply_to=None, transport_type=None,
-                  transport_metadata=None,
-                  overload={}):
+                  transport_metadata=None):
         if transport_type is None:
             transport_type = self.transport_type
         if transport_metadata is None:
@@ -149,21 +139,16 @@ class TransportTestCase(unittest.TestCase):
             session_event=session_event,
             in_reply_to=in_reply_to,
             )
-        return_msg = TransportUserMessage(**params)
-        return_msg.payload.update(overload)
-        return return_msg
+        return TransportUserMessage(**params)
 
     def mkmsg_fail(self, message, reason,
-                   failure_code=FailureMessage.FC_UNSPECIFIED,
-                   overload={}):
-        return_msg = FailureMessage(
+                   failure_code=FailureMessage.FC_UNSPECIFIED):
+        return FailureMessage(
             timestamp=UTCNearNow(),
             failure_code=failure_code,
             message=message,
             reason=reason,
             )
-        return_msg.payload.update(overload)
-        return return_msg
 
     def get_dispatched_events(self):
         return self._amqp.get_messages('vumi', self.rkey('event'))

@@ -193,15 +193,14 @@ class ApplicationTestCase(TestCase):
     def mkmsg_in(self, content='hello world', message_id='abc',
                  to_addr='9292', from_addr='+41791234567',
                  session_event=None, transport_type=None,
-                 helper_metadata=None, transport_metadata=None,
-                 overload={}):
+                 helper_metadata=None, transport_metadata=None):
         if transport_type is None:
             transport_type = self.transport_type
         if helper_metadata is None:
             helper_metadata = {}
         if transport_metadata is None:
             transport_metadata = {}
-        return_msg = TransportUserMessage(
+        return TransportUserMessage(
             from_addr=from_addr,
             to_addr=to_addr,
             message_id=message_id,
@@ -213,14 +212,12 @@ class ApplicationTestCase(TestCase):
             session_event=session_event,
             timestamp=datetime.now(),
             )
-        return_msg.payload.update(overload)
-        return return_msg
 
     def mkmsg_out(self, content='hello world', message_id='1',
                   to_addr='+41791234567', from_addr='9292',
                   session_event=None, in_reply_to=None,
                   transport_type=None, transport_metadata=None,
-                  overload={}):
+                  stubs=False):
         if transport_type is None:
             transport_type = self.transport_type
         if transport_metadata is None:
@@ -238,9 +235,7 @@ class ApplicationTestCase(TestCase):
             )
         if stubs:
             params['timestamp'] = datetime.now()
-        return_msg = TransportUserMessage(**params)
-        return_msg.payload.update(overload)
-        return return_msg
+        return TransportUserMessage(**params)
 
     def get_dispatched_messages(self):
         return self._amqp.get_messages('vumi', self.rkey('outbound'))
