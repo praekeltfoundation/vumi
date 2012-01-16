@@ -114,6 +114,22 @@ class FakeRedisRespTestCase(ExtendedTransportTestCase):
         yield self.transport.startWorker()
         self.transport.esme_connected(self.esme)
 
+    def test_redis_message_persistence(self):
+        # A simple test of set -> get -> delete for redis message persistence
+        message1 = self.mkmsg_out(
+            message_id='1234567890abcdefg',
+            content="hello world",
+            to_addr="far-far-away")
+        original_json = message1.to_json()
+        self.transport.r_set_message(message1)
+        retrieved_json = self.transport.r_get_message_json_for_id(
+                message1.payload['message_id'])
+        self.assertEqual(original_json, retrieved_json)
+        self.assertTrue(self.transport.r_delete_message(
+            message1.payload['message_id']))
+        self.assertEqual(self.transport.r_get_message_json_for_id(
+            message1.payload['message_id']), None)
+
     @defer.inlineCallbacks
     def test_match_resp(self):
         message1 = self.mkmsg_out(
