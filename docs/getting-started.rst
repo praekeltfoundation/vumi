@@ -3,7 +3,8 @@
 First steps with Vumi
 =====================
 
-The simplest Vumi system consists of a *transport worker* and an *application worker*.
+The simplest Vumi system consists of a *transport worker* and an
+*application worker*.
 
 A *transport worker* is responsible for sending messages to and
 receiving messages from users in the big wide world. For this example
@@ -26,7 +27,16 @@ Bigger systems will include multiple transport workers and application
 workers and also *failure workers* and *dispatchers* but we will
 ignore these for the moment.
 
-First open a terminal window and start the transport worker by running::
+Vumi workers communicate over *RabbitMQ* so first ensure that the
+RabbitMQ server is installed and running. Next setup RabbitMQ for
+Vumi using::
+
+  ./utils/rabbitmq.setup.sh
+
+from your clone of the Vumi repository. You should now be ready to
+start the Vumi workers.
+
+Open a terminal window and start the transport worker by running::
 
   twistd -n --pidfile=telnettransport.pid start_worker --worker-class vumi.transports.telnet.TelnetServerTransport --set-option=transport_name:telnet --set-option=telnet_port:9010
 
