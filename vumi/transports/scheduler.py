@@ -89,9 +89,6 @@ class Scheduler(object):
             self.r_server.zrem(self._scheduled_timestamps_key, timestamp)
         return scheduled_key
 
-    def get_next_scheduled_key(self):
-        return self.get_scheduled_key(time.time())
-
     def schedule_for_delivery(self, message, delta, now=None):
         """
         Store this message in redis for scheduled delivery
