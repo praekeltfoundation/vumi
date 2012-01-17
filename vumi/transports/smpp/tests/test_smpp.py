@@ -164,8 +164,8 @@ class FakeRedisRespTestCase(ExtendedTransportTestCase):
                 command_status="ESME_RSUBMITFAIL")
         self.transport._process_message(message3)
         self.esme.handleData(response3.get_bin())
-        self.assertEqual([self.mkmsg_ack('446', '3rd_party_id_3')],
-                         self.get_dispatched_events()[2:])
+        # There should be no ack
+        self.assertEqual([], self.get_dispatched_events()[2:])
 
         comparison = self.mkmsg_fail(message3.to_json(), 'ESME_RSUBMITFAIL')
         actual = self.get_dispatched_failures()[0]
@@ -208,8 +208,8 @@ class FakeRedisRespTestCase(ExtendedTransportTestCase):
                 command_status="ESME_RTHROTTLED")
         self.transport._process_message(message4)
         self.esme.handleData(response4.get_bin())
-        self.assertEqual([self.mkmsg_ack('447', '3rd_party_id_4')],
-                         self.get_dispatched_events()[3:])
+        # There should be no ack
+        self.assertEqual([], self.get_dispatched_events()[3:])
         self.assertTrue(self.transport.throttle_invoked_via_pdu)
 
         fail_msg = self.mkmsg_out(
