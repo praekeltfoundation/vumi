@@ -120,12 +120,34 @@ class FakeRedisRespTestCase(ExtendedTransportTestCase):
             to_addr="far-far-away")
         original_json = message1.to_json()
         self.transport.r_set_message(message1)
-        retrieved_json = self.transport.r_get_message_json_for_id(
+        retrieved_json = self.transport.r_get_message_json(
                 message1.payload['message_id'])
         self.assertEqual(original_json, retrieved_json)
+        retrieved_message = self.transport.r_get_message(
+                message1.payload['message_id'])
+        self.assertMessageParams(
+                retrieved_message,
+                message1,
+                [
+                    'transport_name',
+                    'transport_metadata',
+                    'from_addr',
+                    'message_type',
+                    'helper_metadata',
+                    'to_addr',
+                    'content',
+                    'message_version',
+                    'transport_type',
+                    #'timestamp',  # timestamp in message1 still an object
+                    'in_reply_to',
+                    'session_event',
+                    'message_id',
+                ])
         self.assertTrue(self.transport.r_delete_message(
             message1.payload['message_id']))
-        self.assertEqual(self.transport.r_get_message_json_for_id(
+        self.assertEqual(self.transport.r_get_message_json(
+            message1.payload['message_id']), None)
+        self.assertEqual(self.transport.r_get_message(
             message1.payload['message_id']), None)
 
     @defer.inlineCallbacks

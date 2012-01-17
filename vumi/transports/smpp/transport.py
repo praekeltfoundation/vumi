@@ -171,8 +171,16 @@ class SmppTransport(Transport):
         message_id = message.payload['message_id']
         self.r_server.set(self.r_message_key(message_id), message.to_json())
 
-    def r_get_message_json_for_id(self, message_id):
+    def r_get_message_json(self, message_id):
         return self.r_server.get(self.r_message_key(message_id))
+
+    def r_get_message(self, message_id):
+        json_string = self.r_get_message_json(message_id)
+        if json_string:
+            payload = json.loads(json_string)
+            return Message(**payload)
+        else:
+            return None
 
     def r_delete_message(self, message_id):
         return self.r_server.delete(self.r_message_key(message_id))
@@ -186,7 +194,8 @@ class SmppTransport(Transport):
         return self.r_server.get(self.r_sequence_number_key(sequence_number))
 
     def r_delete_for_sequence(self, sequence_number):
-        return self.r_server.delete(self.r_sequence_number_key(sequence_number))
+        return self.r_server.delete(
+                self.r_sequence_number_key(sequence_number))
 
     def r_set_id_for_sequence(self, sequence_number, id):
         self.r_server.set(self.r_sequence_number_key(sequence_number), id)
@@ -209,17 +218,17 @@ class SmppTransport(Transport):
             self.r_delete_message(sent_sms_id)
             log.msg("Mapping transport_msg_id=%s to sent_sms_id=%s" % (
                 transport_msg_id, sent_sms_id))
-            log.msg("PUBLISHING ACK: (%s -> %s)" % (sent_sms_id, transport_msg_id))
+            log.msg("PUBLISHING ACK: (%s -> %s)" % (
+                sent_sms_id, transport_msg_id))
             return self.publish_ack(
                 user_message_id=sent_sms_id,
                 sent_message_id=transport_msg_id)
         else:
             # We have an error
-            error_payload = json.loads(
-                    self.r_get_message_json_for_id(sent_sms_id))
+            error_message = self.r_get_message(sent_sms_id)
             self.r_delete_message(sent_sms_id)
             self.failure_publisher.publish_message(FailureMessage(
-                    message=error_payload,
+                    message=error_message.payload,
                     failure_code=None,
                     reason=kwargs['command_status']))
 
