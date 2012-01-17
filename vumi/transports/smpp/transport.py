@@ -112,7 +112,7 @@ class SmppTransport(Transport):
             # Only set up redis if we don't have a test stub already
             self.r_server = redis.Redis("localhost", db=dbindex)
         self.r_prefix = "%(system_id)s@%(host)s:%(port)s" % self.config
-        self.r_message_prefix = "vumi_global_message_json"
+        self.r_message_prefix = "%s#message_json" % self.r_prefix
         log.msg("Connected to Redis, prefix: %s" % self.r_prefix)
         last_sequence_number = int(self.r_get_last_sequence()
                                    or self.smpp_offset)
