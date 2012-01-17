@@ -31,7 +31,7 @@ Vumi workers communicate over *RabbitMQ* so first ensure that the
 RabbitMQ server is installed and running. Next setup RabbitMQ for
 Vumi using::
 
-  ./utils/rabbitmq.setup.sh
+  sudo ./utils/rabbitmq.setup.sh
 
 from your clone of the Vumi repository. You should now be ready to
 start the Vumi workers.
