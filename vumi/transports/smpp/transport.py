@@ -162,35 +162,43 @@ class SmppTransport(Transport):
         log.msg("ESME Disconnected")
         return self._teardown_message_consumer()
 
+    # Redis message storing methods
+
+    def r_message_key(self, message_id):
+        return "%s#%s" % (self.r_message_prefix, message_id)
+
     def r_set_message(self, message):
         message_id = message.payload['message_id']
-        self.r_server.set("%s#%s" % (
-            self.r_message_prefix, message_id), message.to_json())
+        self.r_server.set(self.r_message_key(message_id), message.to_json())
 
     def r_get_message_json_for_id(self, message_id):
-        return self.r_server.get("%s#%s" % (self.r_message_prefix, message_id))
+        return self.r_server.get(self.r_message_key(message_id))
 
     def r_delete_message(self, message_id):
-        return self.r_server.delete(
-                "%s#%s" % (self.r_message_prefix, message_id))
+        return self.r_server.delete(self.r_message_key(message_id))
+
+    # Redis sequence number storing methods
+
+    def r_sequence_number_key(self, sequence_number):
+        return "%s#%s" % (self.r_prefix, sequence_number)
 
     def r_get_id_for_sequence(self, sequence_number):
-        return self.r_server.get("%s#%s" % (self.r_prefix, sequence_number))
+        return self.r_server.get(self.r_sequence_number_key(sequence_number))
 
     def r_delete_for_sequence(self, sequence_number):
-        return self.r_server.delete("%s#%s" % (self.r_prefix, sequence_number))
+        return self.r_server.delete(self.r_sequence_number_key(sequence_number))
 
     def r_set_id_for_sequence(self, sequence_number, id):
-        self.r_server.set("%s#%s" % (self.r_prefix, sequence_number), id)
+        self.r_server.set(self.r_sequence_number_key(sequence_number), id)
+
+    def r_last_sequence_number_key(self):
+        return "%s_%s#last_sequence_number" % (self.r_prefix, self.smpp_offset)
 
     def r_get_last_sequence(self):
-        return self.r_server.get("%s_%s#last_sequence_number" % (
-            self.r_prefix, self.smpp_offset))
+        return self.r_server.get(self.r_last_sequence_number_key())
 
     def r_set_last_sequence(self, sequence_number):
-        self.r_server.set("%s_%s#last_sequence_number" % (
-            self.r_prefix, self.smpp_offset),
-                sequence_number)
+        self.r_server.set(self.r_last_sequence_number_key(), sequence_number)
 
     def submit_sm_resp(self, *args, **kwargs):  # TODO the client does too much
         transport_msg_id = kwargs['message_id']
