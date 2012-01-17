@@ -65,7 +65,7 @@ class SchedulerTestCase(TestCase):
         ))
         scheduled_key = self.scheduler.get_scheduled_key(now)
         self.assertEqual(scheduled_key, None)
-        scheduled_time = now + delta + self.scheduler.granularity
+        scheduled_time = now + delta
         scheduled_key = self.scheduler.get_scheduled_key(scheduled_time)
         self.assertTrue(scheduled_key)
         self.assertEqual(set([scheduled_key]),
@@ -88,7 +88,7 @@ class SchedulerTestCase(TestCase):
             msg = self.mkmsg_in(message_id='message_%s' % (i,))
             delta = i * 10
             key, _ = self.scheduler.schedule_for_delivery(msg, delta, now)
-            scheduled_time = now + delta
+            scheduled_time = now + delta + self.scheduler.granularity
             self.assertEqual(set([key]),
                 self.scheduler.get_all_scheduled_keys())
             yield self.scheduler.deliver_scheduled(scheduled_time)
