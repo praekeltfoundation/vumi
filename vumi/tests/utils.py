@@ -277,7 +277,7 @@ class FakeRedis(object):
     def hset(self, key, field, value):
         mapping = self._data.setdefault(key, {})
         new_field = field not in mapping
-        mapping[field] = value
+        mapping[field] = unicode(value)
         return int(new_field)
 
     def hget(self, key, field):
@@ -296,7 +296,8 @@ class FakeRedis(object):
 
     def hmset(self, key, mapping):
         hval = self._data.setdefault(key, {})
-        hval.update(mapping)
+        hval.update(dict([(key, unicode(value))
+            for key, value in mapping.items()]))
 
     def hgetall(self, key):
         return self._data.get(key, {})
