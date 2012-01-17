@@ -65,7 +65,7 @@ class SchedulerTestCase(TestCase):
         ))
         scheduled_key = self.scheduler.get_scheduled_key(now)
         self.assertEqual(scheduled_key, None)
-        scheduled_time = now + delta
+        scheduled_time = now + delta + self.scheduler.granularity
         scheduled_key = self.scheduler.get_scheduled_key(scheduled_time)
         self.assertTrue(scheduled_key)
         self.assertEqual(set([scheduled_key]),
