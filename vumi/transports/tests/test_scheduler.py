@@ -68,6 +68,8 @@ class SchedulerTestCase(TestCase):
         scheduled_time = now + delta
         scheduled_key = self.scheduler.get_scheduled_key(scheduled_time)
         self.assertTrue(scheduled_key)
+        self.assertEqual(set([scheduled_key]),
+                        self.scheduler.get_all_scheduled_keys())
 
     @inlineCallbacks
     def test_delivery_loop(self):
@@ -85,10 +87,13 @@ class SchedulerTestCase(TestCase):
         for i in range(0, 3):
             msg = self.mkmsg_in(message_id='message_%s' % (i,))
             delta = i * 10
-            self.scheduler.schedule_for_delivery(msg, delta, now)
+            key, _ = self.scheduler.schedule_for_delivery(msg, delta, now)
             scheduled_time = now + delta
+            self.assertEqual(set([key]),
+                self.scheduler.get_all_scheduled_keys())
             yield self.scheduler.deliver_scheduled(scheduled_time)
             self.assertNumDelivered(i + 1)
+            self.assertEqual(set(), self.scheduler.get_all_scheduled_keys())
 
     @inlineCallbacks
     def test_deliver_ancient_messages(self):
@@ -96,14 +101,18 @@ class SchedulerTestCase(TestCase):
         # been running since 1912
         msg = self.mkmsg_in()
         way_back = time.mktime(datetime(1912, 1, 1).timetuple())
-        scheduled_key = self.scheduler.schedule_for_delivery(msg, 0, way_back)
+        scheduled_key, _ = self.scheduler.schedule_for_delivery(
+                                                msg, 0, way_back)
         self.assertTrue(scheduled_key)
         now = time.mktime(datetime.now().timetuple())
         yield self.scheduler.deliver_scheduled(now)
+        self.assertEqual(set([scheduled_key]),
+            self.scheduler.get_all_scheduled_keys())
         self.assertEqual(len(self.get_pending_messages()), 1)
         yield self.scheduler.deliver_scheduled(way_back)
         self.assertDelivered(msg)
         self.assertEqual(self.get_pending_messages(), [])
+        self.assertEqual(set(), self.scheduler.get_all_scheduled_keys())
 
     @inlineCallbacks
     def test_clear_scheduled_messages(self):
@@ -113,6 +122,8 @@ class SchedulerTestCase(TestCase):
         key, bucket = self.scheduler.schedule_for_delivery(msg, 0,
                                                     scheduled_time)
         self.assertEqual(len(self.get_pending_messages()), 1)
+        self.assertEqual(set([key]),
+            self.scheduler.get_all_scheduled_keys())
         self.scheduler.clear_scheduled(key)
         yield self.scheduler.deliver_scheduled()
         self.assertEqual(self.r_server.hgetall(key), {})
