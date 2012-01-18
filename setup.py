@@ -35,7 +35,7 @@ setup(
     packages=find_packages(exclude=['environments']) + ['twisted.plugins'],
     package_data={'twisted.plugins': ['twisted/plugins/*.py']},
     include_package_data=True,
-    install_requires=['setuptools'] + install_requires,
+    install_requires=install_requires,
     dependency_links=dependency_links,
     classifiers=[
         'Development Status :: 4 - Beta',
