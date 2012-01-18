@@ -19,7 +19,7 @@ class ExtendedTransportTestCase(TransportTestCase):
         failure = message.payload['message']
         for p in comparison.payload.keys():
             if p not in ignore:
-                self.assertEqual(failure[p], comparison.payload[p])
+                self.assertEqual(failure.get(p), comparison.payload[p])
 
 
 class RedisTestEsmeTransceiver(EsmeTransceiver):
@@ -165,7 +165,7 @@ class FakeRedisRespTestCase(ExtendedTransportTestCase):
                 ], self.get_dispatched_events())
 
         message3 = self.mkmsg_out(
-            message_id=446,
+            message_id='446',
             content="hello world",
             to_addr="1111111111")
         sequence_num3 = self.esme.getSeq()

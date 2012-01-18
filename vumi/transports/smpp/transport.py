@@ -211,7 +211,7 @@ class SmppTransport(Transport):
         transport_msg_id = kwargs['message_id']
         sent_sms_id = self.r_get_id_for_sequence(kwargs['sequence_number'])
         if sent_sms_id is None:
-            log.msg("Sequence number lookup failed for:%s" % (
+            log.err("Sequence number lookup failed for:%s" % (
                 kwargs['sequence_number']))
         else:
             self.r_delete_for_sequence(kwargs['sequence_number'])
@@ -229,8 +229,14 @@ class SmppTransport(Transport):
                 # We have an error
                 error_message = self.r_get_message(sent_sms_id)
                 if error_message is None:
-                    log.msg("Could not retrieve failed message:%s" % (
+                    log.err("Could not retrieve failed message:%s" % (
                         sent_sms_id))
+                    # For now, publish a minimal message with just the id
+                    tmp_message = Message(message_id=sent_sms_id)
+                    self.failure_publisher.publish_message(FailureMessage(
+                            message=tmp_message.payload,
+                            failure_code=None,
+                            reason=kwargs['command_status']))
                 else:
                     self.r_delete_message(sent_sms_id)
                     self.failure_publisher.publish_message(FailureMessage(
