@@ -1,6 +1,5 @@
 # -*- test-case-name: vumi.transports.smpp.test_smpp -*-
 
-import json
 from datetime import datetime
 
 import redis
@@ -177,8 +176,7 @@ class SmppTransport(Transport):
     def r_get_message(self, message_id):
         json_string = self.r_get_message_json(message_id)
         if json_string:
-            payload = json.loads(json_string)
-            return Message(**payload)
+            return Message.from_json(json_string)
         else:
             return None
 
