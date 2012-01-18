@@ -210,25 +210,33 @@ class SmppTransport(Transport):
     def submit_sm_resp(self, *args, **kwargs):  # TODO the client does too much
         transport_msg_id = kwargs['message_id']
         sent_sms_id = self.r_get_id_for_sequence(kwargs['sequence_number'])
-        self.r_delete_for_sequence(kwargs['sequence_number'])
-
-        if kwargs['command_status'] == 'ESME_ROK':
-            self.r_delete_message(sent_sms_id)
-            log.msg("Mapping transport_msg_id=%s to sent_sms_id=%s" % (
-                transport_msg_id, sent_sms_id))
-            log.msg("PUBLISHING ACK: (%s -> %s)" % (
-                sent_sms_id, transport_msg_id))
-            return self.publish_ack(
-                user_message_id=sent_sms_id,
-                sent_message_id=transport_msg_id)
+        if sent_sms_id is None:
+            log.msg("Sequence number lookup failed for:%s" % (
+                kwargs['sequence_number']))
         else:
-            # We have an error
-            error_message = self.r_get_message(sent_sms_id)
-            self.r_delete_message(sent_sms_id)
-            self.failure_publisher.publish_message(FailureMessage(
-                    message=error_message.payload,
-                    failure_code=None,
-                    reason=kwargs['command_status']))
+            self.r_delete_for_sequence(kwargs['sequence_number'])
+
+            if kwargs['command_status'] == 'ESME_ROK':
+                self.r_delete_message(sent_sms_id)
+                log.msg("Mapping transport_msg_id=%s to sent_sms_id=%s" % (
+                    transport_msg_id, sent_sms_id))
+                log.msg("PUBLISHING ACK: (%s -> %s)" % (
+                    sent_sms_id, transport_msg_id))
+                self.publish_ack(
+                    user_message_id=sent_sms_id,
+                    sent_message_id=transport_msg_id)
+            else:
+                # We have an error
+                error_message = self.r_get_message(sent_sms_id)
+                if error_message is None:
+                    log.msg("Could not retrieve failed message:%s" % (
+                        sent_sms_id))
+                else:
+                    self.r_delete_message(sent_sms_id)
+                    self.failure_publisher.publish_message(FailureMessage(
+                            message=error_message.payload,
+                            failure_code=None,
+                            reason=kwargs['command_status']))
 
     def delivery_status(self, state):
         if state in [
