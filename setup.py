@@ -30,9 +30,11 @@ setup(
     long_description=open('README.rst', 'r').read(),
     author='Praekelt Foundation',
     author_email='dev@praekeltfoundation.org',
-    # NOTE: See https://github.com/pypa/pip/issues/355 regarding Twisted
-    # plugins and "pip uninstall"
-    packages=find_packages(exclude=['environments']) + ['twisted.plugins'],
+    packages=find_packages(exclude=['environments']) + [
+        # NOTE:2012-01-18: This is commented out for now, pending a fix for
+        # https://github.com/pypa/pip/issues/355
+        #'twisted.plugins',
+    ],
     package_data={'twisted.plugins': ['twisted/plugins/*.py']},
     include_package_data=True,
     install_requires=install_requires,
