@@ -231,12 +231,15 @@ class SmppTransport(Transport):
                 if error_message is None:
                     log.err("Could not retrieve failed message:%s" % (
                         sent_sms_id))
-                    # For now, publish a minimal message with just the id
-                    tmp_message = Message(message_id=sent_sms_id)
-                    self.failure_publisher.publish_message(FailureMessage(
-                            message=tmp_message.payload,
-                            failure_code=None,
-                            reason=kwargs['command_status']))
+                    # Uncomment below to enable the publishing of a
+                    # a minimal message with just the id
+                    # Currently it is best left commented as the
+                    # failure worker won't be able to use it
+                    #tmp_message = Message(message_id=sent_sms_id)
+                    #self.failure_publisher.publish_message(FailureMessage(
+                            #message=tmp_message.payload,
+                            #failure_code=None,
+                            #reason=kwargs['command_status']))
                 else:
                     self.r_delete_message(sent_sms_id)
                     self.failure_publisher.publish_message(FailureMessage(
