@@ -10,14 +10,16 @@ from vumi.transports.tests.test_base import TransportTestCase
 
 class ExtendedTransportTestCase(TransportTestCase):
 
-    def assertMessageParams(self, message, comparison, params=[]):
-        for p in params:
-            self.assertEqual(message.payload[p], comparison.payload[p])
+    def assertMessageParams(self, message, comparison, ignore=[]):
+        for p in comparison.payload.keys():
+            if p not in ignore:
+                self.assertEqual(message.payload[p], comparison.payload[p])
 
-    def assertFailedMessageParams(self, message, comparison, params=[]):
+    def assertFailedMessageParams(self, message, comparison, ignore=[]):
         failure = message.payload['message']
-        for p in params:
-            self.assertEqual(failure[p], comparison.payload[p])
+        for p in comparison.payload.keys():
+            if p not in ignore:
+                self.assertEqual(failure[p], comparison.payload[p])
 
 
 class RedisTestEsmeTransceiver(EsmeTransceiver):
@@ -180,30 +182,14 @@ class FakeRedisRespTestCase(ExtendedTransportTestCase):
                 actual,
                 comparison,
                 [
-                    #'timestamp',  # don't check for test
-                    'reason',
-                    'message_version',
-                    #'message',  # tested with assertFailedMessageParams()
-                    'message_type',
-                    'failure_code',
+                    'timestamp',  # don't check for test
+                    'message',  # tested with assertFailedMessageParams()
                 ])
         self.assertFailedMessageParams(
                 actual,
                 message3,
                 [
-                    'transport_name',
-                    'in_reply_to',
-                    'from_addr',
-                    #'timestamp',  # don't check for test
-                    'to_addr',
-                    'content',
-                    'session_event',
-                    'message_version',
-                    'transport_type',
-                    'helper_metadata',
-                    'transport_metadata',
-                    'message_type',
-                    'message_id',
+                    'timestamp',  # don't check for test
                 ])
 
         message4 = self.mkmsg_out(
@@ -230,30 +216,14 @@ class FakeRedisRespTestCase(ExtendedTransportTestCase):
                 actual,
                 comparison,
                 [
-                    #'timestamp',  # don't check for test
-                    'reason',
-                    'message_version',
-                    #'message',  # tested with assertFailedMessageParams()
-                    'message_type',
-                    'failure_code',
+                    'timestamp',  # don't check for test
+                    'message',  # tested with assertFailedMessageParams()
                 ])
         self.assertFailedMessageParams(
                 actual,
                 message4,
                 [
-                    'transport_name',
-                    'in_reply_to',
-                    'from_addr',
-                    #'timestamp',  # don't check for test
-                    'to_addr',
-                    'content',
-                    'session_event',
-                    'message_version',
-                    'transport_type',
-                    'helper_metadata',
-                    'transport_metadata',
-                    'message_type',
-                    'message_id',
+                    'timestamp',  # don't check for test
                 ])
 
         # Some error codes would occur on bind attempts
