@@ -215,37 +215,43 @@ class SmppTransport(Transport):
                 kwargs['sequence_number']))
         else:
             self.r_delete_for_sequence(kwargs['sequence_number'])
-
             if kwargs['command_status'] == 'ESME_ROK':
-                self.r_delete_message(sent_sms_id)
-                log.msg("Mapping transport_msg_id=%s to sent_sms_id=%s" % (
-                    transport_msg_id, sent_sms_id))
-                log.msg("PUBLISHING ACK: (%s -> %s)" % (
-                    sent_sms_id, transport_msg_id))
-                self.publish_ack(
-                    user_message_id=sent_sms_id,
-                    sent_message_id=transport_msg_id)
+                # The sms was submitted ok
+                self.submit_sm_success(sent_sms_id, transport_msg_id)
             else:
                 # We have an error
-                error_message = self.r_get_message(sent_sms_id)
-                if error_message is None:
-                    log.err("Could not retrieve failed message:%s" % (
-                        sent_sms_id))
-                    # Uncomment below to enable the publishing of a
-                    # a minimal message with just the id
-                    # Currently it is best left commented as the
-                    # failure worker won't be able to use it
-                    #tmp_message = Message(message_id=sent_sms_id)
-                    #self.failure_publisher.publish_message(FailureMessage(
-                            #message=tmp_message.payload,
-                            #failure_code=None,
-                            #reason=kwargs['command_status']))
-                else:
-                    self.r_delete_message(sent_sms_id)
-                    self.failure_publisher.publish_message(FailureMessage(
-                            message=error_message.payload,
-                            failure_code=None,
-                            reason=kwargs['command_status']))
+                self.submit_sm_failure(sent_sms_id, kwargs['command_status'])
+
+    def submit_sm_success(self, sent_sms_id, transport_msg_id):
+        self.r_delete_message(sent_sms_id)
+        log.msg("Mapping transport_msg_id=%s to sent_sms_id=%s" % (
+            transport_msg_id, sent_sms_id))
+        log.msg("PUBLISHING ACK: (%s -> %s)" % (
+            sent_sms_id, transport_msg_id))
+        self.publish_ack(
+            user_message_id=sent_sms_id,
+            sent_message_id=transport_msg_id)
+
+    def submit_sm_failure(self, sent_sms_id, reason, failure_code=None):
+        error_message = self.r_get_message(sent_sms_id)
+        if error_message is None:
+            log.err("Could not retrieve failed message:%s" % (
+                sent_sms_id))
+            # Uncomment below to enable the publishing of a
+            # a minimal message with just the id
+            # Currently it is best left commented as the
+            # failure worker won't be able to use it
+            #tmp_message = Message(message_id=sent_sms_id)
+            #self.failure_publisher.publish_message(FailureMessage(
+                    #message=tmp_message.payload,
+                    #failure_code=None,
+                    #reason=reason))
+        else:
+            self.r_delete_message(sent_sms_id)
+            self.failure_publisher.publish_message(FailureMessage(
+                    message=error_message.payload,
+                    failure_code=None,
+                    reason=reason))
 
     def delivery_status(self, state):
         if state in [
