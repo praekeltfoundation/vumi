@@ -62,17 +62,6 @@ class RedisTestSmppTransport(SmppTransport):
             self.throttle_invoked_via_pdu = True
 
 
-def payload_equal_except_timestamp(dict1, dict2):
-    return_value = True
-    for k in dict1.keys():
-        if return_value and k != "timestamp" and dict1.get(k):
-            return_value = return_value and dict1.get(k) == dict2.get(k)
-    for k in dict2.keys():
-        if return_value and k != "timestamp" and dict2.get(k):
-            return_value = return_value and dict1.get(k) == dict2.get(k)
-    return return_value
-
-
 class FakeRedisRespTestCase(ExtendedTransportTestCase):
 
     transport_name = "redis_testing_transport"
