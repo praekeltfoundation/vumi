@@ -92,6 +92,10 @@ class TestMetricManager(TestCase):
         finally:
             mm.stop()
 
+    def test_stop_unstarted(self):
+        mm = metrics.MetricManager("vumi.test.", 0.1, self.on_publish)
+        mm.stop()
+
     @inlineCallbacks
     def test_in_worker(self):
         worker = get_stubbed_worker(Worker)
