@@ -86,16 +86,18 @@ class SessionManager(object):
         ukey = self.r_key('session', user_id)
         self.r_server.expire(ukey, timeout)
 
-    def create_session(self, user_id):
+    def create_session(self, user_id, **kwargs):
         """
         Create a new session using the given user_id
         """
-        session = self.save_session(user_id, {
+        defaults = {
             'created_at': time.time()
-        })
+        }
+        defaults.update(kwargs)
+        session = self.save_session(user_id, defaults)
         if self.max_session_length:
             self.schedule_session_expiry(user_id, self.max_session_length)
-        return session
+        return self.load_session(user_id)
 
     def clear_session(self, user_id):
         ukey = self.r_key('session', user_id)

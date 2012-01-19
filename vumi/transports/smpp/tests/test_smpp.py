@@ -71,6 +71,8 @@ class RedisTestSmppTransport(SmppTransport):
                 )
         return sequence_number
 
+    # TODO remove these fault methods to bring
+    # failure handling more in line with other transports
     def ok(self, *args, **kwargs):
         pass
 
@@ -78,12 +80,6 @@ class RedisTestSmppTransport(SmppTransport):
         pass
 
     def mess_tempfault(self, *args, **kwargs):
-        pdu = kwargs.get('pdu')
-        sequence_number = pdu['header']['sequence_number']
-        id = self.r_get_id_for_sequence(sequence_number)
-        reason = pdu['header']['command_status']
-        self.send_failure(Message(id=id), RuntimeError("A random exception"),
-                          reason)
         pass
 
     def conn_permfault(self, *args, **kwargs):
@@ -95,17 +91,6 @@ class RedisTestSmppTransport(SmppTransport):
     def conn_throttle(self, *args, **kwargs):
         if kwargs.get('pdu'):
             self.throttle_invoked_via_pdu = True
-
-
-def payload_equal_except_timestamp(dict1, dict2):
-    return_value = True
-    for k in dict1.keys():
-        if return_value and k != "timestamp" and dict1.get(k):
-            return_value = return_value and dict1.get(k) == dict2.get(k)
-    for k in dict2.keys():
-        if return_value and k != "timestamp" and dict2.get(k):
-            return_value = return_value and dict1.get(k) == dict2.get(k)
-    return return_value
 
 
 class FakeRedisRespTestCase(TransportTestCase):
@@ -151,6 +136,27 @@ class FakeRedisRespTestCase(TransportTestCase):
         yield self.transport.startWorker()
         self.transport.esme_connected(self.esme)
 
+    def test_redis_message_persistence(self):
+        # A simple test of set -> get -> delete for redis message persistence
+        message1 = self.mkmsg_out(
+            message_id='1234567890abcdefg',
+            content="hello world",
+            to_addr="far-far-away")
+        original_json = message1.to_json()
+        self.transport.r_set_message(message1)
+        retrieved_json = self.transport.r_get_message_json(
+                message1.payload['message_id'])
+        self.assertEqual(original_json, retrieved_json)
+        retrieved_message = self.transport.r_get_message(
+                message1.payload['message_id'])
+        self.assertEqual(retrieved_message, message1)
+        self.assertTrue(self.transport.r_delete_message(
+            message1.payload['message_id']))
+        self.assertEqual(self.transport.r_get_message_json(
+            message1.payload['message_id']), None)
+        self.assertEqual(self.transport.r_get_message(
+            message1.payload['message_id']), None)
+
     @defer.inlineCallbacks
     def test_match_resp(self):
         message1 = self.mkmsg_out(
@@ -179,7 +185,7 @@ class FakeRedisRespTestCase(TransportTestCase):
                 ], self.get_dispatched_events())
 
         message3 = self.mkmsg_out(
-            message_id=446,
+            message_id='446',
             content="hello world",
             to_addr="1111111111")
         sequence_num3 = self.esme.getSeq()
@@ -187,11 +193,12 @@ class FakeRedisRespTestCase(TransportTestCase):
                 command_status="ESME_RSUBMITFAIL")
         self.transport._process_message(message3)
         self.esme.handleData(response3.get_bin())
-        self.assertEqual([self.mkmsg_ack('446', '3rd_party_id_3')],
-                         self.get_dispatched_events()[2:])
+        # There should be no ack
+        self.assertEqual([], self.get_dispatched_events()[2:])
 
-        self.assertEqual([self.mkmsg_fail({'id': '446'}, 'ESME_RSUBMITFAIL')],
-                         self.get_dispatched_failures())
+        comparison = self.mkmsg_fail(message3.payload, 'ESME_RSUBMITFAIL')
+        actual = self.get_dispatched_failures()[0]
+        self.assertEqual(actual, comparison)
 
         message4 = self.mkmsg_out(
             message_id=447,
@@ -202,19 +209,13 @@ class FakeRedisRespTestCase(TransportTestCase):
                 command_status="ESME_RTHROTTLED")
         self.transport._process_message(message4)
         self.esme.handleData(response4.get_bin())
-        self.assertEqual([self.mkmsg_ack('447', '3rd_party_id_4')],
-                         self.get_dispatched_events()[3:])
+        # There should be no ack
+        self.assertEqual([], self.get_dispatched_events()[3:])
         self.assertTrue(self.transport.throttle_invoked_via_pdu)
 
-        fail_msg = self.mkmsg_out(
-            message_id=555,
-            content="hello world",
-            to_addr="1111111111")
-
-        self.transport.send_failure(fail_msg, Exception("Foo"), "testing")
-
-        self.assertEqual([self.mkmsg_fail(fail_msg.payload, "testing")],
-                         self.get_dispatched_failures()[1:])
+        comparison = self.mkmsg_fail(message4.payload, 'ESME_RTHROTTLED')
+        actual = self.get_dispatched_failures()[1]
+        self.assertEqual(actual, comparison)
 
         # Some error codes would occur on bind attempts
         bind_dispatch_methods = {
