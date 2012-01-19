@@ -52,8 +52,9 @@ class MetricManager(Publisher):
 
     def stop(self):
         """Stop publishing metrics."""
-        self._task.stop()
-        self._task = None
+        if self._task:
+            self._task.stop()
+            self._task = None
 
     def _publish_metrics(self):
         msg = MetricMessage()
