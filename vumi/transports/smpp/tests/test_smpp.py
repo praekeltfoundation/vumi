@@ -8,20 +8,6 @@ from vumi.transports.smpp.transport import SmppTransport
 from vumi.transports.tests.test_base import TransportTestCase
 
 
-class ExtendedTransportTestCase(TransportTestCase):
-
-    def assertMessageParams(self, message, comparison, ignore=[]):
-        for p in comparison.payload.keys():
-            if p not in ignore:
-                self.assertEqual(message.payload[p], comparison.payload[p])
-
-    def assertFailedMessageParams(self, message, comparison, ignore=[]):
-        failure = message.payload['message']
-        for p in comparison.payload.keys():
-            if p not in ignore:
-                self.assertEqual(failure.get(p), comparison.payload[p])
-
-
 class RedisTestEsmeTransceiver(EsmeTransceiver):
 
     def sendPDU(self, pdu):
@@ -62,7 +48,7 @@ class RedisTestSmppTransport(SmppTransport):
             self.throttle_invoked_via_pdu = True
 
 
-class FakeRedisRespTestCase(ExtendedTransportTestCase):
+class FakeRedisRespTestCase(TransportTestCase):
 
     transport_name = "redis_testing_transport"
     transport_class = RedisTestSmppTransport
@@ -165,21 +151,9 @@ class FakeRedisRespTestCase(ExtendedTransportTestCase):
         # There should be no ack
         self.assertEqual([], self.get_dispatched_events()[2:])
 
-        comparison = self.mkmsg_fail(message3.to_json(), 'ESME_RSUBMITFAIL')
+        comparison = self.mkmsg_fail(message3.payload, 'ESME_RSUBMITFAIL')
         actual = self.get_dispatched_failures()[0]
-        self.assertMessageParams(
-                actual,
-                comparison,
-                [
-                    'timestamp',  # don't check for test
-                    'message',  # tested with assertFailedMessageParams()
-                ])
-        self.assertFailedMessageParams(
-                actual,
-                message3,
-                [
-                    'timestamp',  # don't check for test
-                ])
+        self.assertEqual(actual, comparison)
 
         message4 = self.mkmsg_out(
             message_id=447,
@@ -194,26 +168,9 @@ class FakeRedisRespTestCase(ExtendedTransportTestCase):
         self.assertEqual([], self.get_dispatched_events()[3:])
         self.assertTrue(self.transport.throttle_invoked_via_pdu)
 
-        fail_msg = self.mkmsg_out(
-            message_id=555,
-            content="hello world",
-            to_addr="1111111111")
-
-        comparison = self.mkmsg_fail(message4.to_json(), 'ESME_RTHROTTLED')
+        comparison = self.mkmsg_fail(message4.payload, 'ESME_RTHROTTLED')
         actual = self.get_dispatched_failures()[1]
-        self.assertMessageParams(
-                actual,
-                comparison,
-                [
-                    'timestamp',  # don't check for test
-                    'message',  # tested with assertFailedMessageParams()
-                ])
-        self.assertFailedMessageParams(
-                actual,
-                message4,
-                [
-                    'timestamp',  # don't check for test
-                ])
+        self.assertEqual(actual, comparison)
 
         # Some error codes would occur on bind attempts
         bind_dispatch_methods = {
