@@ -123,7 +123,7 @@ class TransportTestCase(unittest.TestCase):
                   session_event=TransportUserMessage.SESSION_NONE,
                   message_id='1', to_addr='+41791234567', from_addr='9292',
                   in_reply_to=None, transport_type=None,
-                  transport_metadata=None, stubs=False):
+                  transport_metadata=None):
         if transport_type is None:
             transport_type = self.transport_type
         if transport_metadata is None:
@@ -139,8 +139,6 @@ class TransportTestCase(unittest.TestCase):
             session_event=session_event,
             in_reply_to=in_reply_to,
             )
-        if stubs:
-            params['timestamp'] = UTCNearNow()
         return TransportUserMessage(**params)
 
     def mkmsg_fail(self, message, reason,
