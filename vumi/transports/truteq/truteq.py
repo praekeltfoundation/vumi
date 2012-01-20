@@ -1,5 +1,5 @@
-# -*- coding: utf-8 -*-
 # -*- test-case-name: vumi.transports.truteq.tests.test_truteq -*-
+# -*- coding: utf-8 -*-
 
 """TruTeq USSD transport."""
 
