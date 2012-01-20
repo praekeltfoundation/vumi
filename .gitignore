@@ -25,3 +25,4 @@ dropin.cache
 /test_results.xml
 /django_test_results.xml
 /pep8.txt
+/.tox
