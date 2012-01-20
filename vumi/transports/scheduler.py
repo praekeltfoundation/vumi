@@ -89,9 +89,6 @@ class Scheduler(object):
             self.r_server.zrem(self._scheduled_timestamps_key, timestamp)
         return scheduled_key
 
-    def get_next_scheduled_key(self):
-        return self.get_scheduled_key(time.time())
-
     def schedule_for_delivery(self, message, delta, now=None):
         """
         Store this message in redis for scheduled delivery
@@ -132,17 +129,21 @@ class Scheduler(object):
             timestamp: score
         })
 
+    def get_all_scheduled_keys(self):
+        return self.r_server.smembers(self.r_key("scheduled_keys"))
+
     @inlineCallbacks
     def deliver_scheduled(self, _time=None):
         _time = _time or int(time.time())
         while True:
-            scheduled_key = self.get_scheduled_key(_time)
+            scheduled_key = self.get_scheduled_key(_time - self.granularity)
             if not scheduled_key:
                 return
             scheduled_data = self.get_scheduled(scheduled_key)
             scheduled_at = scheduled_data['scheduled_at']
             message = TransportUserMessage.from_json(scheduled_data['message'])
             yield self.callback(scheduled_at, message)
+            self.clear_scheduled(scheduled_key)
 
     def clear_scheduled(self, key):
         self.r_server.srem(self.r_key("scheduled_keys"), key)
