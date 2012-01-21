@@ -20,7 +20,7 @@ class BaseDispatchWorker(Worker):
     @inlineCallbacks
     def startWorker(self):
         log.msg('Starting a %s dispatcher with config: %s'
-                % (self.__class__.__name__,  self.config))
+                % (self.__class__.__name__, self.config))
 
         yield self.setup_endpoints()
         yield self.setup_router()

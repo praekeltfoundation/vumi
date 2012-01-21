@@ -2,10 +2,6 @@
 
 from twisted.trial import unittest
 from twisted.internet.defer import inlineCallbacks, returnValue
-from twisted.internet import reactor
-from twisted.web.server import Site
-from twisted.web.resource import Resource
-from twisted.web.static import Data
 
 from vumi.tests.utils import get_stubbed_worker
 from vumi.demos.words import (SimpleAppWorker, EchoWorker, ReverseWorker,

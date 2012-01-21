@@ -136,7 +136,6 @@ class Vas2NetsTransportTestCase(TransportTestCase):
             }
         kw.setdefault('transport_metadata', transport_metadata)
         # kw.setdefault('message_id', 'vas2nets.abc')
-        kw.setdefault('stubs', False)
         return super(Vas2NetsTransportTestCase, self).mkmsg_out(**kw)
 
     @inlineCallbacks

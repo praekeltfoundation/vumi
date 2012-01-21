@@ -3,18 +3,12 @@ from  xml.etree import ElementTree
 from urllib import urlencode
 
 from twisted.trial.unittest import TestCase
-from twisted.web.resource import Resource
-from twisted.internet.defer import inlineCallbacks, DeferredQueue
-from twisted.web.server import Site
-from twisted.internet import reactor
-from twisted.internet.base import DelayedCall
-from twisted.python import log
+from twisted.internet.defer import inlineCallbacks
 from vumi.transports.tests.test_base import TransportTestCase
 from vumi.utils import http_request
 from vumi.transports.vodacom_messaging import (VodacomMessagingResponse,
     VodacomMessagingTransport)
 from vumi.message import TransportUserMessage
-from vumi.tests.utils import get_stubbed_worker
 
 
 class TestVodacomMessagingTransport(TransportTestCase):
