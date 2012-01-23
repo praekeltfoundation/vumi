@@ -64,5 +64,6 @@ class XMPPTransportTestCase(TransportTestCase):
         self.assertEqual(msg['to_addr'], self.jid.userhost())
         self.assertEqual(msg['from_addr'], 'test@case.com')
         self.assertEqual(msg['transport_name'], 'test_xmpp')
-        self.assertEqual(msg['message_id'], message['id'])
+        self.assertNotEqual(msg['message_id'], message['id'])
+        self.assertEqual(msg['transport_metadata']['xmpp_id'], message['id'])
         self.assertEqual(msg['content'], 'hello world')
