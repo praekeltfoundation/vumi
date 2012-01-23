@@ -1,8 +1,12 @@
+import json
+import pytz
+from datetime import datetime
+
 from twisted.trial.unittest import TestCase
 
 from vumi.tests.utils import RegexMatcher, UTCNearNow
 from vumi.message import (Message, TransportMessage, TransportEvent,
-                          TransportUserMessage)
+                          TransportUserMessage, VUMI_DATE_FORMAT)
 
 
 class MessageTest(TestCase):
@@ -94,3 +98,39 @@ class MessageTest(TestCase):
         self.assertEqual('20110921', msg['message_version'])
         # self.assertEqual('sphex', msg['transport_name'])
         self.assertEqual('delivered', msg['delivery_status'])
+
+    def test_date_decoding(self):
+        defaults = {
+            u'transport_name': u'sphex',
+            u'transport_metadata': {},
+            u'from_addr': u'12345',
+            u'to_addr': u'+27831234567',
+            u'message_id': u'c2fe343785b74b17a19d8f415c082c95',
+            u'content': None,
+            u'message_version': u'20110921',
+            u'transport_type': u'sms',
+            u'helper_metadata': {},
+            u'in_reply_to': None,
+            u'session_event': None,
+            u'message_type': u'user_message'
+        }
+
+        timestamp = datetime(2012,1,23,17,17,13, tzinfo=pytz.UTC)
+
+        old_format = defaults.copy()
+        old_format.update({
+            'timestamp': timestamp.strftime(VUMI_DATE_FORMAT)
+        })
+        old_format_json = json.dumps(old_format)
+
+        new_format = defaults.copy()
+        new_format.update({
+            'timestamp': timestamp.isoformat()
+        })
+        new_format_json = json.dumps(new_format)
+
+        msg = TransportUserMessage.from_json(old_format_json)
+        self.assertEqual(msg['timestamp'], timestamp)
+
+        msg = TransportUserMessage.from_json(new_format_json)
+        self.assertEqual(msg['timestamp'], timestamp)

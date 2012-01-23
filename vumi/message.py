@@ -1,20 +1,32 @@
 # -*- test-case-name: vumi.tests.test_message -*-
 
 import json
+import iso8601
+import pytz
 from uuid import uuid4
 from datetime import datetime
 
 from errors import MissingMessageField, InvalidMessageField
+from vumi import log
 
-# This is the date format we work with internally
+# This is the date format we once work with internally
+# Deprecated in 0.4, on it's way out in 0.5
 VUMI_DATE_FORMAT = "%Y-%m-%d %H:%M:%S.%f"
-
 
 def date_time_decoder(json_object):
     for key, value in json_object.items():
         try:
-            json_object[key] = datetime.strptime(value,
-                    VUMI_DATE_FORMAT)
+            json_object[key] = iso8601.parse_date(value)
+        except iso8601.ParseError:
+            try:
+                json_object[key] = datetime.strptime(value,
+                        VUMI_DATE_FORMAT).replace(tzinfo=pytz.UTC)
+                log.warning('%s date format is deprecated. '
+                            'Please use ISO 8601 going forward')
+            except ValueError:
+                continue
+            except TypeError:
+                continue
         except ValueError:
             continue
         except TypeError:
@@ -26,7 +38,7 @@ class JSONMessageEncoder(json.JSONEncoder):
     """A JSON encoder that is able to serialize datetime"""
     def default(self, obj):
         if isinstance(obj, datetime):
-            return obj.strftime(VUMI_DATE_FORMAT)
+            return obj.isoformat()
         return super(JSONMessageEncoder, self).default(obj)
 
 
@@ -122,7 +134,8 @@ class TransportMessage(Message):
     def process_fields(self, fields):
         fields.setdefault('message_version', self.MESSAGE_VERSION)
         fields.setdefault('message_type', self.MESSAGE_TYPE)
-        fields.setdefault('timestamp', datetime.utcnow())
+        fields.setdefault('timestamp', datetime.utcnow().replace(
+                            tzinfo=pytz.UTC))
         return fields
 
     def validate_fields(self):

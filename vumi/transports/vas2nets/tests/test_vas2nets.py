@@ -1,5 +1,6 @@
 # encoding: utf-8
 import string
+import pytz
 from datetime import datetime
 from urllib import urlencode
 
@@ -111,7 +112,8 @@ class Vas2NetsTransportTestCase(TransportTestCase):
             'delivery_message': tr_message,
             'delivery_status': tr_status,
             'network_id': 'provider',
-            'timestamp': self.today.strftime('%Y-%m-%dT%H:%M:%S'),
+            'timestamp': datetime(self.today.year, self.today.month,
+                            self.today.day, tzinfo=pytz.UTC)
             }
         return super(Vas2NetsTransportTestCase, self).mkmsg_delivery(
             status, user_message_id='vas2nets.abc',
@@ -122,7 +124,8 @@ class Vas2NetsTransportTestCase(TransportTestCase):
             'original_message_id': 'vas2nets.abc',
             'keyword': '',
             'network_id': 'provider',
-            'timestamp': self.today.strftime('%Y-%m-%dT%H:%M:%S'),
+            'timestamp': datetime(self.today.year, self.today.month,
+                            self.today.day, tzinfo=pytz.UTC)
             }
         return super(Vas2NetsTransportTestCase, self).mkmsg_in(
             message_id='vas2nets.abc', transport_metadata=transport_metadata)
@@ -132,7 +135,8 @@ class Vas2NetsTransportTestCase(TransportTestCase):
             'original_message_id': 'vas2nets.def',
             'keyword': '',
             'network_id': 'provider',
-            'timestamp': self.today.strftime('%Y-%m-%dT%H:%M:%S'),
+            'timestamp': datetime(self.today.year, self.today.month,
+                            self.today.day, tzinfo=pytz.UTC),
             }
         kw.setdefault('transport_metadata', transport_metadata)
         # kw.setdefault('message_id', 'vas2nets.abc')
