@@ -210,6 +210,7 @@ class EsmeTransceiverTestCase(unittest.TestCase):
         self.assertEqual(None, esme._lose_conn)
         esme.lc_enquire.stop()
 
+
 class ClientConfigTestCase(unittest.TestCase):
 
     def test_minimal_instantiation(self):
@@ -281,4 +282,3 @@ class ESMETestCase(unittest.TestCase):
 
     def test_bind_as_transceiver(self):
         self.esme.bindTransciever()
-
