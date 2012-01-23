@@ -10,6 +10,7 @@ from vumi.transports.smpp.clientserver.client import (
         KeyValueBase,
         KeyValueStore,
         ESME)
+from vumi.transports.smpp.clientserver.config import ClientConfig
 
 
 class KeyValueStoreTestCase(unittest.TestCase):
@@ -208,3 +209,76 @@ class EsmeTransceiverTestCase(unittest.TestCase):
         self.assertEqual(True, esme.transport.connected)
         self.assertEqual(None, esme._lose_conn)
         esme.lc_enquire.stop()
+
+class ClientConfigTestCase(unittest.TestCase):
+
+    def test_minimal_instantiation(self):
+        self.clientConfig = ClientConfig(
+                host='localhost',
+                port=2775,
+                system_id='test_system',
+                password='password',
+                )
+
+    def test_instantiation_defaults(self):
+        self.clientConfig1 = ClientConfig(
+                host='localhost',
+                port=2775,
+                system_id='test_system',
+                password='password',
+                )
+        self.clientConfig2 = ClientConfig(
+                host='localhost',
+                port=2775,
+                system_id='test_system',
+                password='password',
+                system_type="",
+                interface_version="34",
+                dest_addr_ton=0,
+                dest_addr_npi=0,
+                registered_delivery=0,
+                )
+        attr_to_check = [
+                'system_type',
+                'interface_version',
+                'dest_addr_ton',
+                'dest_addr_npi',
+                'registered_delivery',
+                ]
+        for a in attr_to_check:
+            self.assertEqual(getattr(self.clientConfig1, a),
+                    getattr(self.clientConfig2, a))
+
+    def test_instantiation_extended(self):
+        self.clientConfig = ClientConfig(
+                host='localhost',
+                port=2775,
+                system_id='test_system',
+                password='password',
+                system_type="some_type",
+                interface_version="34",
+                dest_addr_ton=1,
+                dest_addr_npi=1,
+                registered_delivery=1,
+                )
+        attr_to_check = {
+                'system_type': "some_type",
+                'interface_version': "34",
+                'dest_addr_ton': 1,
+                'dest_addr_npi': 1,
+                'registered_delivery': 1,
+                }
+        for k, v in attr_to_check.items():
+            self.assertEqual(getattr(self.clientConfig, k), v)
+
+
+class ESMETestCase(unittest.TestCase):
+
+    def setUp(self):
+        self.clientConfig = None
+        self.keyValueStore = None
+        self.esme = ESME(self.clientConfig, self.keyValueStore)
+
+    def test_bind_as_transceiver(self):
+        self.esme.bindTransciever()
+

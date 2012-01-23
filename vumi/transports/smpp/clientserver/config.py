@@ -1,7 +1,7 @@
 
 class ClientConfig(object):
 
-    __init__(self, **kwargs):
+    def __init__(self, **kwargs):
         self.host = kwargs['host']
         self.port = kwargs['port']
         self.system_id = kwargs['system_id']  # in SMPP system_id is the username
