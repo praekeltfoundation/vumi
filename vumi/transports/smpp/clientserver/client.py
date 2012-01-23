@@ -168,7 +168,6 @@ class EsmeTransceiver(Protocol):
         self.vumi_options = vumi_options
         self.inc = int(self.config['smpp_increment'])
         self.smpp_bind_timeout = int(self.config.get('smpp_bind_timeout', 30))
-        self.incSeq()
         self.datastream = ''
         self.__connect_callback = None
         self.__submit_sm_resp_callback = None
@@ -191,7 +190,10 @@ class EsmeTransceiver(Protocol):
                 self.config['system_id'],
                 self.config['host'],
                 self.config['port'])
+        self.sequence_number_prefix = "vumi_smpp_last_sequence_number#%s" % (
+                self.r_prefix)
         log.msg("r_prefix = %s" % self.r_prefix)
+        self.incSeq()
 
     # Dummy error handler functions, just log invocation
     def dummy_ok(self, *args, **kwargs):
@@ -360,18 +362,31 @@ class EsmeTransceiver(Protocol):
     def dispatch_unknown(self):
         return self.error_handlers.get("unknown")
 
+    def setSeq(self, seq):
+        self.r_server.set(self.sequence_number_prefix, int(seq))
+
     def getSeq(self):
-        return self.seq[0]
+        seq = self.r_server.get(self.sequence_number_prefix)
+        try:
+            return int(seq)
+        except:
+            return 0
+
+    def getNextSeq(self):
+        seq = self.r_server.incr(self.sequence_number_prefix)
+        # SMPP supports a max sequence_number of: FFFFFFFF = 4,294,967,295
+        # so start recycling @ 4,000,000,000 just to keep the numbers round
+        if seq > 4000000000:
+            self.r_server.delete(self.sequence_number_prefix)
+            return self.getNextSeq()
+        else:
+            return seq
 
     # TODO From VUMI 0.4 onwards incSeq and smpp_offset/smpp_increment
     # will fall away and getSeq will run off the Redis incr function
     # with one shared value per system_id@host:port account credential
     def incSeq(self):
-        self.seq[0] += self.inc
-        # SMPP supports a max sequence_number of: FFFFFFFF = 4,294,967,295
-        # so start recycling @ 4,000,000,000 just to keep the numbers round
-        if self.seq[0] > 4000000000:
-            self.seq[0] = self.seq[0] % self.inc + self.inc
+        self.getNextSeq()
 
     def popData(self):
         data = None
@@ -755,6 +770,8 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
 
 
 class EsmeCallbacks(object):
+
+    #self.connect
     pass
 
 
@@ -771,4 +788,4 @@ class ESME(object):
         self.kvs = keyValueStore
 
     def bindTransciever(self):
-        pass
+        self.factory = EsmeTransceiverFactory(None, None)
