@@ -217,7 +217,7 @@ class TransportUserMessage(TransportMessage):
             to_addr=to_addr,
             in_reply_to=None,
             content=content,
-            session_event=cls.SESSION_NEW,
+            session_event=cls.SESSION_NONE,
             **kw)
         return out_msg
 
