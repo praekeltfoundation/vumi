@@ -131,6 +131,7 @@ class ApplicationWorker(Worker):
                  **kws):
         reply = original_message.reply(content, continue_session, **kws)
         self.transport_publisher.publish_message(reply)
+        return reply
 
     @inlineCallbacks
     def _setup_transport_publisher(self):
