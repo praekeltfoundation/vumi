@@ -120,7 +120,7 @@ class SmppTransport(Transport):
         if not hasattr(self, 'esme_client'):
             # start the Smpp transport (if we don't have one)
             factory = EsmeTransceiverFactory(self.config,
-                                             self._amqp_client.vumi_options)
+                                             self.r_server)
             factory.loadDefaults(self.config)
             factory.setConnectCallback(self.esme_connected)
             factory.setDisconnectCallback(self.esme_disconnected)

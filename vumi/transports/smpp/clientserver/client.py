@@ -4,7 +4,6 @@ import re
 import abc
 import json
 import uuid
-import redis
 
 from twisted.python import log
 from twisted.internet import reactor
@@ -25,8 +24,6 @@ from smpp.pdu_inspector import (MultipartMessage,
                                 detect_multipart,
                                 multipart_key,
                                 )
-
-from vumi.utils import get_deploy_int
 
 
 class KeyValueBase(object):
@@ -156,13 +153,12 @@ class EsmeTransceiver(Protocol):
 
     callLater = reactor.callLater
 
-    def __init__(self, kv_store, config, vumi_options):
+    def __init__(self, config, kvs):
         self.build_maps()
         self.defaults = {}
         self.state = 'CLOSED'
         log.msg('STATE: %s' % (self.state))
         self.config = config
-        self.vumi_options = vumi_options
         self.inc = int(self.config['smpp_increment'])
         self.smpp_bind_timeout = int(self.config.get('smpp_bind_timeout', 30))
         self.datastream = ''
@@ -180,9 +176,7 @@ class EsmeTransceiver(Protocol):
                 "conn_throttle": self.dummy_conn_throttle,
                 "unknown": self.dummy_unknown,
                 }
-        self.r_server = redis.Redis("localhost",
-                db=get_deploy_int(self.vumi_options['vhost']))
-        log.msg("Connected to Redis")
+        self.r_server = kvs
         self.r_prefix = "%s@%s:%s" % (
                 self.config['system_id'],
                 self.config['host'],
@@ -683,9 +677,9 @@ class EsmeTransceiver(Protocol):
 
 class EsmeTransceiverFactory(ReconnectingClientFactory):
 
-    def __init__(self, config, vumi_options):
+    def __init__(self, config, kvs):
         self.config = config
-        self.vumi_options = vumi_options
+        self.kvs = kvs
         if int(self.config['smpp_increment']) \
                 < int(self.config['smpp_offset']):
             raise Exception("increment may not be less than offset")
@@ -735,7 +729,7 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
 
     def buildProtocol(self, addr):
         print 'Connected'
-        self.esme = EsmeTransceiver(None, self.config, self.vumi_options)
+        self.esme = EsmeTransceiver(self.config, self.kvs)
         self.esme.loadDefaults(self.defaults)
         self.esme.setConnectCallback(
                 connect_callback=self.__connect_callback)
