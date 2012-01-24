@@ -351,12 +351,20 @@ class FakeRedis(object):
     def zcard(self, key):
         return len(self._data.get(key, []))
 
-    def zrange(self, key, start, stop):
+    def zrange(self, key, start, stop, desc=False, withscores=False,
+                score_cast_func=float):
         zval = self._data.get(key, [])
         stop += 1  # redis start/stop are element indexes
         if stop == 0:
             stop = None
-        return [val[1] for val in zval[start:stop]]
+        results = sorted(zval[start:stop],
+                    key=lambda (score,_): score_cast_func(score))
+        if desc:
+            results.reverse()
+        if withscores:
+             return results
+        else:
+            return [v for k,v in results]
 
     # List operations
     def llen(self, key):
