@@ -122,7 +122,6 @@ class SmppTransport(Transport):
             factory = EsmeTransceiverFactory(self.config,
                                              self._amqp_client.vumi_options)
             factory.loadDefaults(self.config)
-            factory.setLastSequenceNumber(last_sequence_number)
             factory.setConnectCallback(self.esme_connected)
             factory.setDisconnectCallback(self.esme_disconnected)
             factory.setSubmitSMRespCallback(self.submit_sm_resp)

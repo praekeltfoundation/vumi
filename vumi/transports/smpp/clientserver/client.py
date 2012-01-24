@@ -156,14 +156,11 @@ class EsmeTransceiver(Protocol):
 
     callLater = reactor.callLater
 
-    def __init__(self, seq, config, vumi_options):
+    def __init__(self, kv_store, config, vumi_options):
         self.build_maps()
-        self.name = 'Proto' + str(seq)
-        log.msg('__init__ %s' % self.name)
         self.defaults = {}
         self.state = 'CLOSED'
-        log.msg('%s STATE: %s' % (self.name, self.state))
-        self.seq = seq
+        log.msg('STATE: %s' % (self.state))
         self.config = config
         self.vumi_options = vumi_options
         self.inc = int(self.config['smpp_increment'])
@@ -415,7 +412,7 @@ class EsmeTransceiver(Protocol):
             self.handle_enquire_link(pdu)
         if pdu['header']['command_id'] == 'enquire_link_resp':
             self.handle_enquire_link_resp(pdu)
-        log.msg('%s STATE: %s' % (self.name, self.state))
+        log.msg('STATE: %s' % (self.state))
 
     def loadDefaults(self, defaults):
         self.defaults = dict(self.defaults, **defaults)
@@ -437,7 +434,7 @@ class EsmeTransceiver(Protocol):
 
     def connectionMade(self):
         self.state = 'OPEN'
-        log.msg('%s STATE: %s' % (self.name, self.state))
+        log.msg('STATE: %s' % (self.state))
         pdu = BindTransceiver(self.getSeq(), **self.defaults)
         log.msg(pdu.get_obj())
         self.incSeq()
@@ -454,11 +451,11 @@ class EsmeTransceiver(Protocol):
 
     def connectionLost(self, *args, **kwargs):
         self.state = 'CLOSED'
-        log.msg('%s STATE: %s' % (self.name, self.state))
+        log.msg('STATE: %s' % (self.state))
         try:
             self.lc_enquire.stop()
             del self.lc_enquire
-            log.msg('%s stop & del enquire link looping call' % self.name)
+            log.msg('stop & del enquire link looping call')
         except:
             pass
 
@@ -483,7 +480,7 @@ class EsmeTransceiver(Protocol):
                 self._lose_conn.cancel()
                 self._lose_conn = None
             self.__connect_callback(self)
-        log.msg('%s STATE: %s' % (self.name, self.state))
+        log.msg('STATE: %s' % (self.state))
 
     def handle_submit_sm_resp(self, pdu):
         self.pop_unacked()
@@ -702,8 +699,6 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
         self.__submit_sm_resp_callback = None
         self.__delivery_report_callback = None
         self.__deliver_sm_callback = None
-        self.seq = [int(self.config['smpp_offset'])]
-        log.msg("Set sequence number: %s" % (self.seq))
         self.initialDelay = float(
             self.config.get('initial_reconnect_delay', 5))
         self.maxDelay = max(45, self.initialDelay)
@@ -716,10 +711,6 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
 
     def loadDefaults(self, defaults):
         self.defaults = dict(self.defaults, **defaults)
-
-    def setLastSequenceNumber(self, last):
-        self.seq = [last]
-        log.msg("Set sequence number: %s" % (self.seq))
 
     def setConnectCallback(self, connect_callback):
         self.__connect_callback = connect_callback
@@ -744,7 +735,7 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
 
     def buildProtocol(self, addr):
         print 'Connected'
-        self.esme = EsmeTransceiver(self.seq, self.config, self.vumi_options)
+        self.esme = EsmeTransceiver(None, self.config, self.vumi_options)
         self.esme.loadDefaults(self.defaults)
         self.esme.setConnectCallback(
                 connect_callback=self.__connect_callback)
