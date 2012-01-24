@@ -84,4 +84,3 @@ class XMPPTransportTestCase(TransportTestCase):
         [msg] = self.get_dispatched_messages()
         self.assertTrue(msg['message_id'])
         self.assertEqual(msg['transport_metadata']['xmpp_id'], None)
-
