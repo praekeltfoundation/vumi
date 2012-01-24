@@ -72,6 +72,16 @@ class TestApplicationWorker(TestCase):
         routing_key = "%s.%s" % (self.transport_name, routing_suffix)
         return self.broker.get_messages("vumi", routing_key)
 
+    def assert_msgs_match(self, msgs, expected_msgs):
+        for key in ['timestamp', 'message_id']:
+            for msg in msgs + expected_msgs:
+                del msg.payload[key]
+                msg.payload[key] = 'OVERRIDDEN_BY_TEST'
+
+        for msg, expected_msg in zip(msgs, expected_msgs):
+            self.assertEqual(msg, expected_msg)
+        self.assertEqual(len(msgs), len(expected_msgs))
+
     @inlineCallbacks
     def test_event_dispatch(self):
         events = [
@@ -115,13 +125,14 @@ class TestApplicationWorker(TestCase):
         self.worker.reply_to(msg, "End!", False)
         replies = self.recv()
         expecteds = [msg.reply("More!"), msg.reply("End!", False)]
-        for key in ['timestamp', 'message_id']:
-            for msg in expecteds + replies:
-                del msg.payload[key]
+        self.assert_msgs_match(replies, expecteds)
 
-        for reply, expected in zip(replies, expecteds):
-            self.assertEqual(reply, expected)
-        self.assertEqual(len(replies), len(expecteds))
+    def test_send_to(self):
+        sent_msg = self.worker.send_to('+12345', "Hi!")
+        sends = self.recv()
+        expecteds = [TransportUserMessage.send('+12345', "Hi!")]
+        self.assert_msgs_match(sends, expecteds)
+        self.assert_msgs_match(sends, [sent_msg])
 
     def test_subclassing_api(self):
         worker = get_stubbed_worker(ApplicationWorker,
