@@ -61,10 +61,10 @@ class FakeRedisTestCase(TestCase):
         self.assertEqual(self.r_server.zrange('set', 0, 3),
                                                 ['one', 'two', 'three'])
         self.assertEqual(self.r_server.zrange('set', 0, -1),
-                                                ['one', 'two','three'])
+                                                ['one', 'two', 'three'])
         self.assertEqual(self.r_server.zrange('set', 0, -1, withscores=True),
                         [(0.1, 'one'), (0.2, 'two'), (0.3, 'three')])
         self.assertEqual(self.r_server.zrange('set', 0, -1, desc=True),
-                        ['three', 'two','one'])
+                        ['three', 'two', 'one'])
         self.assertEqual(self.r_server.zrange('set', 0, -1, desc=True,
             withscores=True), [(0.3, 'three'), (0.2, 'two'), (0.1, 'one')])

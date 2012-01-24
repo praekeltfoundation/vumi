@@ -358,13 +358,13 @@ class FakeRedis(object):
         if stop == 0:
             stop = None
         results = sorted(zval[start:stop],
-                    key=lambda (score,_): score_cast_func(score))
+                    key=lambda (score, _): score_cast_func(score))
         if desc:
             results.reverse()
         if withscores:
-             return results
+            return results
         else:
-            return [v for k,v in results]
+            return [v for k, v in results]
 
     # List operations
     def llen(self, key):
