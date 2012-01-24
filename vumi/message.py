@@ -169,6 +169,7 @@ class TransportUserMessage(TransportMessage):
         fields.setdefault('in_reply_to', None)
         fields.setdefault('session_event', None)
         fields.setdefault('content', None)
+        fields.setdefault('transport_metadata', {})
         fields.setdefault('helper_metadata', {})
         return fields
 
@@ -205,6 +206,18 @@ class TransportUserMessage(TransportMessage):
             transport_type=self['transport_type'],
             transport_metadata=self['transport_metadata'],
             helper_metadata=self['helper_metadata'],
+            **kw)
+        return out_msg
+
+    @classmethod
+    def send(cls, to_addr, content, **kw):
+        kw.setdefault('from_addr', None)
+        kw.setdefault('transport_name', None)
+        out_msg = cls(
+            to_addr=to_addr,
+            in_reply_to=None,
+            content=content,
+            session_event=cls.SESSION_NEW,
             **kw)
         return out_msg
 
