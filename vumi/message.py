@@ -163,6 +163,16 @@ class TransportUserMessage(TransportMessage):
     SESSION_EVENTS = frozenset([SESSION_NONE, SESSION_NEW, SESSION_RESUME,
                                 SESSION_CLOSE])
 
+    # canonical transport types
+    TT_HTTP_API = 'http_api'
+    TT_IRC = 'irc'
+    TT_TELNET = 'telnet'
+    TT_TWITTER = 'twitter'
+    TT_SMS = 'sms'
+    TT_USSD = 'ussd'
+    TT_XMPP = 'xmpp'
+    TRANSPORT_TYPES = set([TT_SMS, TT_USSD])
+
     def process_fields(self, fields):
         fields = super(TransportUserMessage, self).process_fields(fields)
         fields.setdefault('message_id', self.generate_id())
