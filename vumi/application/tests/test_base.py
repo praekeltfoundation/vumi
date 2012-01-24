@@ -75,8 +75,8 @@ class TestApplicationWorker(TestCase):
     def assert_msgs_match(self, msgs, expected_msgs):
         for key in ['timestamp', 'message_id']:
             for msg in msgs + expected_msgs:
-                del msg.payload[key]
-                msg.payload[key] = 'OVERRIDDEN_BY_TEST'
+                self.assertTrue(key in msg.payload)
+                msg[key] = 'OVERRIDDEN_BY_TEST'
 
         for msg, expected_msg in zip(msgs, expected_msgs):
             self.assertEqual(msg, expected_msg)
