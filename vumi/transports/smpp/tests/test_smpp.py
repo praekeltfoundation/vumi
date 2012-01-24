@@ -115,12 +115,13 @@ class FakeRedisRespTestCase(TransportTestCase):
                 }
 
         # hack a lot of transport setup
-        self.esme = RedisTestEsmeTransceiver(
-                self.seq, self.config, self.vumi_options)
-        self.esme.state = 'BOUND_TRX'
         self.transport = yield self.get_transport(self.config, start=False)
-        self.transport.esme_client = self.esme
         self.transport.r_server = FakeRedis()
+        self.esme = RedisTestEsmeTransceiver(
+                self.config,
+                self.transport.r_server)
+        self.esme.state = 'BOUND_TRX'
+        self.transport.esme_client = self.esme
         self.esme.setSubmitSMRespCallback(self.transport.submit_sm_resp)
 
         # set error handlers
