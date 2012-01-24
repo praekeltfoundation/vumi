@@ -69,7 +69,9 @@ class XMPPTransportProtocol(MessageProtocol, object):
             from_addr=message['from'],
             content=text,
             transport_type='xmpp',
-            message_id=message['id'])
+            transport_metadata={
+                'xmpp_id': message.getAttribute('id'),
+            })
 
     def connectionMade(self):
         self.connection_callback()

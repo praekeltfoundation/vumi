@@ -64,5 +64,23 @@ class XMPPTransportTestCase(TransportTestCase):
         self.assertEqual(msg['to_addr'], self.jid.userhost())
         self.assertEqual(msg['from_addr'], 'test@case.com')
         self.assertEqual(msg['transport_name'], 'test_xmpp')
-        self.assertEqual(msg['message_id'], message['id'])
+        self.assertNotEqual(msg['message_id'], message['id'])
+        self.assertEqual(msg['transport_metadata']['xmpp_id'], message['id'])
         self.assertEqual(msg['content'], 'hello world')
+
+    @inlineCallbacks
+    def test_message_without_id(self):
+        transport = yield self.mk_transport()
+
+        message = domish.Element((None, "message"))
+        message['to'] = self.jid.userhost()
+        message['from'] = 'test@case.com'
+        message.addElement((None, 'body'), content='hello world')
+        self.assertFalse(message.hasAttribute('id'))
+
+        protocol = transport.xmpp_protocol
+        protocol.onMessage(message)
+
+        [msg] = self.get_dispatched_messages()
+        self.assertTrue(msg['message_id'])
+        self.assertEqual(msg['transport_metadata']['xmpp_id'], None)
