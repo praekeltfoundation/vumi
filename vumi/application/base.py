@@ -2,6 +2,8 @@
 
 """Basic tools for building a vumi ApplicationWorker."""
 
+import copy
+
 from twisted.internet.defer import inlineCallbacks
 from twisted.python import log
 
@@ -32,6 +34,7 @@ class ApplicationWorker(Worker):
         self._consumers = []
         self._validate_config()
         self.transport_name = self.config['transport_name']
+        self.send_to_defaults = self.config.get('send_to', {})
 
         self._event_handlers = {
             'ack': self.consume_ack,
@@ -131,6 +134,13 @@ class ApplicationWorker(Worker):
                  **kws):
         reply = original_message.reply(content, continue_session, **kws)
         self.transport_publisher.publish_message(reply)
+
+    def send_to(self, to_addr, content, **kw):
+        options = copy.deepcopy(self.send_to_defaults)
+        options.update(kw)
+        msg = TransportUserMessage.send(to_addr, content, **kw)
+        self.transport_publisher.publish_message(msg)
+        return msg
 
     @inlineCallbacks
     def _setup_transport_publisher(self):
