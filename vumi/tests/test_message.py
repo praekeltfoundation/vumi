@@ -81,6 +81,17 @@ class MessageTest(TestCase):
                          msg['transport_metadata'])
         self.assertEqual(reply['helper_metadata'], msg['helper_metadata'])
 
+    def test_transport_user_message_send(self):
+        msg = TransportUserMessage.send('123', 'Hi!')
+        self.assertEqual(msg['to_addr'], '123')
+        self.assertEqual(msg['from_addr'], None)
+        self.assertEqual(msg['session_event'], msg.SESSION_NONE)
+        self.assertEqual(msg['in_reply_to'], None)
+        self.assertEqual(msg['transport_name'], None)
+        self.assertEqual(msg['transport_type'], None)
+        self.assertEqual(msg['transport_metadata'], {})
+        self.assertEqual(msg['helper_metadata'], {})
+
     def test_transport_event_ack(self):
         msg = TransportEvent(
             event_id='def',

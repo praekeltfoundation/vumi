@@ -213,6 +213,7 @@ class TransportUserMessage(TransportMessage):
     def send(cls, to_addr, content, **kw):
         kw.setdefault('from_addr', None)
         kw.setdefault('transport_name', None)
+        kw.setdefault('transport_type', None)
         out_msg = cls(
             to_addr=to_addr,
             in_reply_to=None,
