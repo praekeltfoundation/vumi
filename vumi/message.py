@@ -171,7 +171,8 @@ class TransportUserMessage(TransportMessage):
     TT_SMS = 'sms'
     TT_USSD = 'ussd'
     TT_XMPP = 'xmpp'
-    TRANSPORT_TYPES = set([TT_SMS, TT_USSD])
+    TRANSPORT_TYPES = set([TT_HTTP_API, TT_IRC, TT_TELNET, TT_TWITTER, TT_SMS,
+                           TT_USSD, TT_XMPP])
 
     def process_fields(self, fields):
         fields = super(TransportUserMessage, self).process_fields(fields)
