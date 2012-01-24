@@ -138,7 +138,7 @@ class ApplicationWorker(Worker):
     def send_to(self, to_addr, content, **kw):
         options = copy.deepcopy(self.send_to_defaults)
         options.update(kw)
-        msg = TransportUserMessage.send(to_addr, content, **kw)
+        msg = TransportUserMessage.send(to_addr, content, **options)
         self.transport_publisher.publish_message(msg)
         return msg
 
