@@ -159,7 +159,6 @@ class EsmeTransceiver(Protocol):
         self.state = 'CLOSED'
         log.msg('STATE: %s' % (self.state))
         self.config = config
-        self.inc = int(self.config['smpp_increment'])
         self.smpp_bind_timeout = int(self.config.get('smpp_bind_timeout', 30))
         self.datastream = ''
         self.__connect_callback = None
@@ -373,9 +372,6 @@ class EsmeTransceiver(Protocol):
         else:
             return seq
 
-    # TODO From VUMI 0.4 onwards incSeq and smpp_offset/smpp_increment
-    # will fall away and getSeq will run off the Redis incr function
-    # with one shared value per system_id@host:port account credential
     def incSeq(self):
         self.getNextSeq()
 
@@ -680,13 +676,6 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
     def __init__(self, config, kvs):
         self.config = config
         self.kvs = kvs
-        if int(self.config['smpp_increment']) \
-                < int(self.config['smpp_offset']):
-            raise Exception("increment may not be less than offset")
-        if int(self.config['smpp_increment']) < 1:
-            raise Exception("increment may not be less than 1")
-        if int(self.config['smpp_offset']) < 0:
-            raise Exception("offset may not be less than 0")
         self.esme = None
         self.__connect_callback = None
         self.__disconnect_callback = None

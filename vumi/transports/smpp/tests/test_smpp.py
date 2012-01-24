@@ -106,8 +106,6 @@ class FakeRedisRespTestCase(TransportTestCase):
                 "system_id": "vumitest-vumitest-vumitest",
                 "host": "host",
                 "port": "port",
-                "smpp_increment": 10,
-                "smpp_offset": 6,
                 "TRANSPORT_NAME": "redis_testing_transport",
                 }
         self.vumi_options = {

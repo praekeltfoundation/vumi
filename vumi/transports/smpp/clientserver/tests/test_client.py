@@ -98,9 +98,6 @@ class FakeTransport(object):
 class FakeEsmeTransceiver(EsmeTransceiver):
     def __init__(self):
         self.defaults = {}
-        self.name = 'test_esme'
-        self.inc = 1
-        self.seq = [0]
         self.smpp_bind_timeout = 10
         self.clock = Clock()
         self.callLater = self.clock.callLater

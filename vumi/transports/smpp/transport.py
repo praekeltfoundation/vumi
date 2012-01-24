@@ -21,17 +21,6 @@ class SmppTransport(Transport):
     The SMPP transport has many configuration parameters. These are
     divided up into sections below.
 
-    SMPP sequence number configuration options:
-
-    :type smpp_increment: int
-    :param smpp_increment:
-        Increment for SMPP sequence number (must be >= number of
-        SMPP workers on a single SMPP account).
-    :type smpp_offset: int
-    :param smpp_offset:
-        Offset for this worker's SMPP sequence numbers (no duplicates
-        on a single SMPP account and must be <= increment)
-
     SMPP server account configuration options:
 
     :type system_id: str
@@ -104,7 +93,6 @@ class SmppTransport(Transport):
 
         # TODO: move this to a config file
         dbindex = get_deploy_int(self._amqp_client.vhost)
-        self.smpp_offset = int(self.config['smpp_offset'])
 
         # Connect to Redis
         if not hasattr(self, 'r_server'):
@@ -113,9 +101,6 @@ class SmppTransport(Transport):
         self.r_prefix = "%(system_id)s@%(host)s:%(port)s" % self.config
         self.r_message_prefix = "%s#message_json" % self.r_prefix
         log.msg("Connected to Redis, prefix: %s" % self.r_prefix)
-        last_sequence_number = int(self.r_get_last_sequence()
-                                   or self.smpp_offset)
-        log.msg("Last sequence_number: %s" % last_sequence_number)
 
         if not hasattr(self, 'esme_client'):
             # start the Smpp transport (if we don't have one)
@@ -152,7 +137,6 @@ class SmppTransport(Transport):
         #self.conn_throttle(unacked=self.esme_client.get_unacked_count())
         self.r_set_message(message)
         sequence_number = self.send_smpp(message)
-        self.r_set_last_sequence(sequence_number)
         self.r_set_id_for_sequence(sequence_number,
                                    message.payload.get("message_id"))
 
@@ -196,15 +180,6 @@ class SmppTransport(Transport):
 
     def r_set_id_for_sequence(self, sequence_number, id):
         self.r_server.set(self.r_sequence_number_key(sequence_number), id)
-
-    def r_last_sequence_number_key(self):
-        return "%s_%s#last_sequence_number" % (self.r_prefix, self.smpp_offset)
-
-    def r_get_last_sequence(self):
-        return self.r_server.get(self.r_last_sequence_number_key())
-
-    def r_set_last_sequence(self, sequence_number):
-        self.r_server.set(self.r_last_sequence_number_key(), sequence_number)
 
     def submit_sm_resp(self, *args, **kwargs):  # TODO the client does too much
         transport_msg_id = kwargs['message_id']
