@@ -88,9 +88,9 @@ class Vas2NetsFailureWorkerTestCase(unittest.TestCase):
     def mk_failure_worker(self, config, broker, redis):
         w = get_stubbed_worker(FailureWorker, config, broker)
         self.workers.append(w)
-        yield w.startWorker()
         w.retry_publisher = yield self.worker.publish_to("foo")
         w.r_server = redis
+        yield w.startWorker()
         returnValue(w)
 
     @inlineCallbacks
