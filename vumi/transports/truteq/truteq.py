@@ -15,6 +15,7 @@ from vumi.message import TransportUserMessage
 from vumi.transports.base import Transport
 
 
+# # Turn on debug logging in the SSMI library.
 # client.set_debug(True)
 
 
@@ -159,6 +160,7 @@ class TruteqTransport(Transport):
         if text is None:
             text = ''
         ssmi_session_type = self.VUMI_TO_SSMI_EVENT[message['session_event']]
+        # Everything we send to ssmi_client needs to be bytestrings.
         data = text.encode(self.SSMI_ENCODING)
         msisdn = message['to_addr'].strip('+').encode(self.SSMI_ENCODING)
         self.ssmi_client.send_ussd(msisdn, data, ssmi_session_type)
