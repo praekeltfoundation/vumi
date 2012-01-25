@@ -52,6 +52,22 @@ class EsmeClientInitTestcase(TestCase):
         kvstc.run_all_tests_on_instance(self.esme.kvs)
         self.assertTrue(key_value_store.is_empty())
 
+    def test_esme_init_with_bad_object(self):
+        key_value_store = self
+        self.esme = ESME(
+                None,
+                key_value_store,
+                )
+        kvstc = KeyValueStoreTestCase()
+        kvstc.prefix = __name__
+        exception_expected = None
+        try:
+            kvstc.run_all_tests_on_instance(self.esme.kvs)
+            self.assertTrue(key_value_store.is_empty())
+        except Exception, e:
+            exception_expected = e
+        self.assertTrue(exception_expected is not None)
+
 
 class RedisTestEsmeTransceiver(EsmeTransceiver):
 

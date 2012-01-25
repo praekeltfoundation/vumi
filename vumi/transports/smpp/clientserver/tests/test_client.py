@@ -25,10 +25,11 @@ class KeyValueStoreTestCase(unittest.TestCase):
         pass
 
     def run_all_tests_on_instance(self, instance):
+        self.kvs = instance
         KeyValueBase.register(instance.__class__)
-        self.test_implements_abstract(instance)
-        self.test_set_get_delete(instance)
-        self.test_incr(instance)
+        self.test_implements_abstract()
+        self.test_set_get_delete()
+        self.test_incr()
 
     def test_instance_test(self):
         newKeyValueStoreTestCase = KeyValueStoreTestCase()
@@ -36,21 +37,14 @@ class KeyValueStoreTestCase(unittest.TestCase):
         instance = KeyValueStore()
         newKeyValueStoreTestCase.run_all_tests_on_instance(instance)
 
-    def test_implements_abstract(self, third_party_impl=None):
-        if third_party_impl:
-            self.assertTrue(issubclass(third_party_impl.__class__,
-                KeyValueBase))
-            self.kvs = third_party_impl
-        else:
-            self.assertTrue(issubclass(KeyValueStore, KeyValueBase))
+    def test_implements_abstract(self):
+        self.assertTrue(issubclass(KeyValueStore, KeyValueBase))
         self.assertTrue(isinstance(self.kvs, KeyValueBase))
 
-    def test_set_get_delete(self, third_party_impl=None):
+    def test_set_get_delete(self):
         key1 = "%s#cookie" % self.prefix
 
         try:
-            if third_party_impl:
-                self.kvs = third_party_impl
             self.assertEqual(self.kvs.get(key1), None)
             self.kvs.set(key1, "monster")
             self.assertEqual(self.kvs.get(key1), "monster")
@@ -64,12 +58,10 @@ class KeyValueStoreTestCase(unittest.TestCase):
             self.kvs.delete(key1)
             raise
 
-    def test_incr(self, third_party_impl=None):
+    def test_incr(self):
         key1 = "%s#counter" % self.prefix
 
         try:
-            if third_party_impl:
-                self.kvs = third_party_impl
             self.assertEqual(self.kvs.get(key1), None)
             self.assertEqual(self.kvs.incr(key1), 1)
             self.kvs.set(key1, 1)
