@@ -3,6 +3,7 @@
 
 """TruTeq USSD transport."""
 
+from twisted.internet.defer import Deferred
 from twisted.python import log
 from twisted.internet import reactor
 
@@ -12,6 +13,9 @@ import redis
 from vumi.utils import normalize_msisdn
 from vumi.message import TransportUserMessage
 from vumi.transports.base import Transport
+
+
+# client.set_debug(True)
 
 
 class TruteqTransport(Transport):
@@ -39,6 +43,8 @@ class TruteqTransport(Transport):
         Maximum number of seconds to retain USSD session information.
         Default is 300.
     """
+
+    SUPPRESS_FAILURE_EXCEPTIONS = False
 
     SSMI_TO_VUMI_EVENT = {
         client.SSMI_USSD_TYPE_NEW: TransportUserMessage.SESSION_NEW,
@@ -78,11 +84,13 @@ class TruteqTransport(Transport):
     def setup_transport(self):
         self.r_server = redis.Redis(**self.r_config)
         self.ssmi_client = None
+        self._setup_d = Deferred()
         # the strange wrapping of the funciton in a lambda is to get around
         # an odd type check in client.SSMIClient.__init__.
         factory = client.SSMIFactory(
             lambda ssmi_client: self._setup_ssmi_client(ssmi_client))
         self.ssmi_connector = reactor.connectTCP(self.host, self.port, factory)
+        return self._setup_d
 
     def _setup_ssmi_client(self, ssmi_client):
         ssmi_client.app_setup(self.username, self.password,
@@ -90,6 +98,7 @@ class TruteqTransport(Transport):
                               sms_callback=self.sms_callback,
                               errback=self.ssmi_errback)
         self.ssmi_client = ssmi_client
+        self._setup_d.callback(None)
 
     def teardown_transport(self):
         self.ssmi_connector.disconnect()
@@ -145,9 +154,11 @@ class TruteqTransport(Transport):
         log.err("Got error from SSMI: %r, %r" % (args, kwargs))
 
     def handle_outbound_message(self, message):
+        log.msg("Outbound USSD message: %s" % (message,))
         text = message['content']
         if text is None:
             text = ''
         ssmi_session_type = self.VUMI_TO_SSMI_EVENT[message['session_event']]
         data = text.encode(self.SSMI_ENCODING)
-        self.ssmi_client.send_ussd(message['to_addr'], data, ssmi_session_type)
+        msisdn = message['to_addr'].strip('+').encode(self.SSMI_ENCODING)
+        self.ssmi_client.send_ussd(msisdn, data, ssmi_session_type)
