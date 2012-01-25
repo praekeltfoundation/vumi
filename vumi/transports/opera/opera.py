@@ -141,7 +141,8 @@ class OperaTransport(Transport):
 
         dbindex = get_deploy_int(self._amqp_client.vhost)
         redis_config = self.config.get('redis', {})
-        self.r_server = yield redis.Redis(db=dbindex, **redis_config)
+        if not hasattr(self, 'r_server'):
+            self.r_server = yield redis.Redis(db=dbindex, **redis_config)
         self.r_prefix = "%(transport_name)s@%(url)s" % self.config
 
         self.proxy = xmlrpc.Proxy(self.opera_url)

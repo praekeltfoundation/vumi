@@ -2,7 +2,7 @@
 from datetime import datetime, timedelta
 
 from twisted.internet import defer
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.web import xmlrpc
 
 from vumi.message import TransportUserMessage
@@ -23,6 +23,14 @@ class OperaTransportTestCase(TransportTestCase):
         self.url = 'http://%s:%s' % (self.host, self.port)
         self.transport = yield self.mk_transport()
 
+    @inlineCallbacks
+    def tearDown(self):
+        # teardown fake redis, prevents DelayedCall's from leaving the reactor
+        # in a dirty state.
+        yield self.r_server.teardown()
+        yield super(OperaTransportTestCase, self).tearDown()
+
+    @inlineCallbacks
     def mk_transport(self, cls=OperaTransport, **config):
         default_config = {
             'url': 'http://testing.domain',
@@ -34,7 +42,11 @@ class OperaTransportTestCase(TransportTestCase):
             'web_port': self.port
         }
         default_config.update(config)
-        return self.get_transport(default_config, cls)
+        self.r_server = FakeRedis()
+        worker = yield self.get_transport(default_config, cls, start=False)
+        worker.r_server = self.r_server
+        yield worker.startWorker()
+        returnValue(worker)
 
     def mk_msg(self, **kwargs):
         defaults = {
@@ -54,7 +66,6 @@ class OperaTransportTestCase(TransportTestCase):
 
         identifier = '001efc31'
         message_id = '123456'
-        self.transport.r_server = FakeRedis()
         # prime redis to match the incoming identifier to an
         # internal message id
         self.transport.set_message_id_for_identifier(identifier, message_id)
@@ -81,10 +92,6 @@ class OperaTransportTestCase(TransportTestCase):
         self.assertEqual(event['message_type'], 'event')
         self.assertEqual(event['event_type'], 'delivery_report')
         self.assertEqual(event['user_message_id'], message_id)
-
-        # teardown fake redis, prevents DelayedCall's from leaving the reactor
-        # in a dirty state.
-        self.transport.r_server.teardown()
 
     @inlineCallbacks
     def test_incoming_sms_processing(self):
