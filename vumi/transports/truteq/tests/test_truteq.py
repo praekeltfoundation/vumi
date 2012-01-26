@@ -117,12 +117,15 @@ class TestTruteqTransport(TransportTestCase):
     @inlineCallbacks
     def _test_outbound_ussd(self, vumi_session_type, ssmi_session_type,
                             content="Test", encoding="utf-8"):
-        msg = self.mkmsg_out(content=content, to_addr="+1234",
+        msg = self.mkmsg_out(content=content, to_addr=u"+1234",
                              session_event=vumi_session_type)
         yield self.dispatch(msg)
         ussd_call = yield self.dummy_connect.ussd_calls.get()
         data = content.encode(encoding) if content else ""
-        self.assertEqual(ussd_call, ("+1234", data, ssmi_session_type))
+        self.assertFalse(
+            # This stuff all needs to be bytestrings by here.
+            any(isinstance(field, unicode) for field in ussd_call))
+        self.assertEqual(ussd_call, ("1234", data, ssmi_session_type))
 
     def test_handle_outbound_ussd_no_session(self):
         return self._test_outbound_ussd(TransportUserMessage.SESSION_NONE,
