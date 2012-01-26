@@ -308,6 +308,12 @@ class FakeRedis(object):
     def hvals(self, key):
         return self._data.get(key, {}).values()
 
+    def hincrby(self, key, field, amount=1):
+        value = self._data.get(key, {}).get(field, "0")
+        value = int(value) + amount
+        self._data.setdefault(key, {})[field] = str(value)
+        return value
+
     # Set operations
 
     def sadd(self, key, value):

@@ -50,3 +50,12 @@ class FakeRedisTestCase(TestCase):
         self.assertEqual(11, self.r_server.incr("inc", 4))
         self.assertEqual(111, self.r_server.incr("inc", 100))
         self.assertEqual('111', self.r_server.get("inc"))
+
+    def test_hincrby(self):
+        self.r_server = FakeRedis()
+        hincrby = self.r_server.hincrby
+        self.assertEqual(hincrby("inc", "field1"), 1)
+        self.assertEqual(hincrby("inc", "field1"), 2)
+        self.assertEqual(hincrby("inc", "field1", 3), 5)
+        self.r_server.hset("inc", "field2", "a")
+        self.assertRaises(Exception, hincrby, "inc", "field2")
