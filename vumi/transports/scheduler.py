@@ -2,13 +2,14 @@
 import time
 import iso8601
 import pytz
+import json
 from datetime import datetime
 from uuid import uuid4
 
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet.task import LoopingCall
 
-from vumi.message import TransportUserMessage
+from vumi import message
 
 
 class Scheduler(object):
@@ -18,13 +19,16 @@ class Scheduler(object):
     """
 
     def __init__(self, redis, callback, prefix='scheduler',
-                    granularity=5, delivery_period=3):
+                    granularity=5, delivery_period=3, json_encoder=None,
+                    json_decoder=None):
         self.r_server = redis
         self.r_prefix = prefix
         self.granularity = granularity
         self.delivery_period = delivery_period
         self._scheduled_timestamps_key = self.r_key("scheduled_timestamps")
         self.callback = callback
+        self.json_encoder = json_encoder or message.JSONMessageEncoder
+        self.json_decoder = json_decoder or message.date_time_decoder
         self.loop = LoopingCall(self.deliver_scheduled)
 
     @property
@@ -89,17 +93,21 @@ class Scheduler(object):
             self.r_server.zrem(self._scheduled_timestamps_key, timestamp)
         return scheduled_key
 
-    def schedule_for_delivery(self, message, delta, now=None):
+    def schedule(self, delta, payload, now=None):
         """
-        Store this message in redis for scheduled delivery
+        Store the payload in Redis and call `self.callback` after
+        `delta` seconds as counted from `now` onwards.
 
-        :param message: The message to be delivered.
-        :param delta: How far in the future to send this, in seconds
+
+        :param delta: the amount of seconds
+        :param payload: the payload send to `self.callback`
         :param now: Used to calculate the delta (timestamp in
                     seconds since epoch)
 
         If ``now`` is ``None`` then it will default to ``time.time()``
         """
+        # do this first as we want it to blow up before any keys
+        # are set should the content not be JSON encodable
         if not now:
             now = int(time.time())
 
@@ -107,9 +115,9 @@ class Scheduler(object):
         self.add_to_scheduled_set(key)
         bucket_key = self.store_scheduled(key, delta, now)
         self.r_server.hmset(key, {
-            "message": message.to_json(),
-            "scheduled_at": datetime.utcnow().isoformat(),
-            "bucket_key": bucket_key,
+            'payload': json.dumps(payload, cls=self.json_encoder),
+            'scheduled_at': datetime.utcnow().isoformat(),
+            'bucket_key': bucket_key,
         })
         return key, bucket_key
 
@@ -141,8 +149,9 @@ class Scheduler(object):
                 return
             scheduled_data = self.get_scheduled(scheduled_key)
             scheduled_at = scheduled_data['scheduled_at']
-            message = TransportUserMessage.from_json(scheduled_data['message'])
-            yield self.callback(scheduled_at, message)
+            payload = json.loads(scheduled_data['payload'],
+                                    object_hook=self.json_decoder)
+            yield self.callback(scheduled_at, payload)
             self.clear_scheduled(scheduled_key)
 
     def clear_scheduled(self, key):

@@ -134,6 +134,7 @@ class ApplicationWorker(Worker):
                  **kws):
         reply = original_message.reply(content, continue_session, **kws)
         self.transport_publisher.publish_message(reply)
+        return reply
 
     def send_to(self, to_addr, content, **kw):
         options = copy.deepcopy(self.send_to_defaults)

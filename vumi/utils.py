@@ -13,6 +13,7 @@ from twisted.internet.defer import succeed
 from twisted.web.client import Agent, ResponseDone
 from twisted.web.http_headers import Headers
 from twisted.web.iweb import IBodyProducer
+from twisted.web.http import PotentialDataLoss
 
 
 def import_module(name):
@@ -42,6 +43,15 @@ class SimplishReceiver(protocol.Protocol):
 
     def connectionLost(self, reason):
         if reason.check(ResponseDone):
+            self.deferred.callback(self.response)
+        elif reason.check(PotentialDataLoss):
+            # This is only (and always!) raised if we have an HTTP 1.0 request
+            # with no Content-Length.
+            # See http://twistedmatrix.com/trac/ticket/4840 for sadness.
+            #
+            # We ignore this and treat the call as success. If we care about
+            # checking for potential data loss, we should do that in all cases
+            # rather than trying to figure out if we might need to.
             self.deferred.callback(self.response)
         else:
             self.deferred.errback(reason)

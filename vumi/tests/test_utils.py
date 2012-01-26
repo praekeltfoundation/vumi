@@ -6,6 +6,7 @@ from twisted.internet.defer import Deferred, inlineCallbacks
 from twisted.web.server import Site, NOT_DONE_YET
 from twisted.web.resource import Resource
 from twisted.web import http
+from twisted.internet.protocol import Protocol, Factory
 
 
 from vumi.utils import (normalize_msisdn, vumi_resource_path, cleanup_msisdn,
@@ -51,7 +52,15 @@ class UtilsTestCase(TestCase):
         self.assertEqual('UNKNOWN', get_operator_name('27801234567', mapping))
 
 
+class FakeHTTP10(Protocol):
+    def dataReceived(self, data):
+        self.transport.write(self.factory.response_body)
+        self.transport.loseConnection()
+
+
 class HttpUtilsTestCase(TestCase):
+
+    timeout = 3
 
     class InterruptHttp(Exception):
         """Indicates that test server should halt http reply"""
@@ -139,3 +148,22 @@ class HttpUtilsTestCase(TestCase):
         request = yield http_request_full(self.url, '')
         self.assertEqual(request.delivered_body, "Bad")
         self.assertEqual(request.code, http.INTERNAL_SERVER_ERROR)
+
+    @inlineCallbacks
+    def test_http_request_potential_data_loss(self):
+        self.webserver.loseConnection()
+        factory = Factory()
+        factory.protocol = FakeHTTP10
+        factory.response_body = (
+            "HTTP/1.0 201 CREATED\r\n"
+            "Date: Mon, 23 Jan 2012 15:08:47 GMT\r\n"
+            "Server: Fake HTTP 1.0\r\n"
+            "Content-Type: text/html; charset=utf-8\r\n"
+            "\r\n"
+            "Yay")
+        self.webserver = yield reactor.listenTCP(0, factory)
+        addr = self.webserver.getHost()
+        self.url = "http://%s:%s/" % (addr.host, addr.port)
+
+        data = yield http_request(self.url, '')
+        self.assertEqual(data, "Yay")
