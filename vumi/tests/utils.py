@@ -310,7 +310,8 @@ class FakeRedis(object):
 
     def hincrby(self, key, field, amount=1):
         value = self._data.get(key, {}).get(field, "0")
-        value = int(value) + amount
+        # the int(str(..)) coerces amount to an int but rejects floats
+        value = int(value) + int(str(amount))
         self._data.setdefault(key, {})[field] = str(value)
         return value
 
