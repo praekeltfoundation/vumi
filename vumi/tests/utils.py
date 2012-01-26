@@ -222,6 +222,17 @@ class TestResourceWorker(Worker):
 
 
 class FakeRedis(object):
+    """In process and memory implementation of redis-like data store.
+
+    It's intended to match the Python redis module API closely so that
+    it can be used in place of the redis module when testing.
+
+    Known limitations:
+
+    * Exceptions raised are not guaranteed to match the exception
+      types raised by the real Python redis module.
+    """
+
     def __init__(self):
         self._data = {}
         self._expiries = {}
