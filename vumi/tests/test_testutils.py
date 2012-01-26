@@ -51,6 +51,24 @@ class FakeRedisTestCase(TestCase):
         self.assertEqual(111, self.r_server.incr("inc", 100))
         self.assertEqual('111', self.r_server.get("inc"))
 
+    def test_zrange(self):
+        self.r_server = FakeRedis()
+        self.r_server.zadd('set', one=0.1, two=0.2, three=0.3)
+        self.assertEqual(self.r_server.zrange('set', 0, 0), ['one'])
+        self.assertEqual(self.r_server.zrange('set', 0, 1), ['one', 'two'])
+        self.assertEqual(self.r_server.zrange('set', 0, 2),
+                                                ['one', 'two', 'three'])
+        self.assertEqual(self.r_server.zrange('set', 0, 3),
+                                                ['one', 'two', 'three'])
+        self.assertEqual(self.r_server.zrange('set', 0, -1),
+                                                ['one', 'two', 'three'])
+        self.assertEqual(self.r_server.zrange('set', 0, -1, withscores=True),
+                        [(0.1, 'one'), (0.2, 'two'), (0.3, 'three')])
+        self.assertEqual(self.r_server.zrange('set', 0, -1, desc=True),
+                        ['three', 'two', 'one'])
+        self.assertEqual(self.r_server.zrange('set', 0, -1, desc=True,
+            withscores=True), [(0.3, 'three'), (0.2, 'two'), (0.1, 'one')])
+
     def test_hincrby(self):
         self.r_server = FakeRedis()
         hincrby = self.r_server.hincrby
