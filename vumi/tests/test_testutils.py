@@ -59,3 +59,5 @@ class FakeRedisTestCase(TestCase):
         self.assertEqual(hincrby("inc", "field1", 3), 5)
         self.r_server.hset("inc", "field2", "a")
         self.assertRaises(Exception, hincrby, "inc", "field2")
+        self.r_server.set("key", "string")
+        self.assertRaises(Exception, self.r_server.hincrby, "key", "field1")
