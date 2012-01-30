@@ -22,10 +22,31 @@ class ApplicationWorker(Worker):
 
     Handles :class:`vumi.message.TransportUserMessage` and
     :class:`vumi.message.TransportEvent` messages.
+
+    Application workers may send outgoing messages using
+    :meth:`reply_to` (for replies to incoming messages) or
+    :meth:`send_to` (for messages that are not replies).
+
+    Messages sent via :meth:`send_to` pass optional additional data
+    from configuration to the TransportUserMessage constructor, based
+    on the tag parameter passed to send_to. This usually contains
+    information useful for routing the message (e.g. `transport_name`).
+
+    An example :meth:`send_to` configuration might look like::
+
+      - send_to:
+        - default:
+          transport_name: sms_transport
+
+    The available tags are defined by the :attr:`SEND_TO_TAGS` class
+    attribute. Sub-classes must override this attribute if they wish
+    to use additional or other tags in their calls to :meth:`send_to`.
     """
 
     transport_name = None
     start_message_consumer = True
+
+    SEND_TO_TAGS = frozenset(['default'])
 
     @inlineCallbacks
     def startWorker(self):
@@ -34,7 +55,10 @@ class ApplicationWorker(Worker):
         self._consumers = []
         self._validate_config()
         self.transport_name = self.config['transport_name']
-        self.send_to_defaults = self.config.get('send_to', {})
+
+        self.send_to_options = self.config.get('send_to', {})
+        for tag in self.SEND_TO_TAGS:
+            self.send_to_options.setdefault(tag, {})
 
         self._event_handlers = {
             'ack': self.consume_ack,
@@ -136,8 +160,9 @@ class ApplicationWorker(Worker):
         self.transport_publisher.publish_message(reply)
         return reply
 
-    def send_to(self, to_addr, content, **kw):
-        options = copy.deepcopy(self.send_to_defaults)
+    def send_to(self, to_addr, content, tag='default', **kw):
+        assert tag in self.SEND_TO_TAGS
+        options = copy.deepcopy(self.send_to_options[tag])
         options.update(kw)
         msg = TransportUserMessage.send(to_addr, content, **options)
         self.transport_publisher.publish_message(msg)

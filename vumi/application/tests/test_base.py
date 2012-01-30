@@ -10,6 +10,8 @@ from datetime import datetime
 
 class DummyApplicationWorker(ApplicationWorker):
 
+    SEND_TO_TAGS = frozenset(['default', 'outbound1'])
+
     def __init__(self, *args, **kwargs):
         super(ApplicationWorker, self).__init__(*args, **kwargs)
         self.record = []
@@ -135,7 +137,8 @@ class TestApplicationWorker(TestCase):
         self.assert_msgs_match(sends, [sent_msg])
 
     def test_send_to_with_options(self):
-        self.worker.send_to_defaults['transport_name'] = 'foo_transport'
+        options = self.worker.send_to_options['default']
+        options['transport_name'] = 'foo_transport'
         sent_msg = self.worker.send_to('+12345', "Hi!",
                 transport_type=TransportUserMessage.TT_USSD)
         sends = self.recv()
@@ -144,6 +147,22 @@ class TestApplicationWorker(TestCase):
                 transport_name='foo_transport')]
         self.assert_msgs_match(sends, expecteds)
         self.assert_msgs_match(sends, [sent_msg])
+
+    def test_send_to_with_tag(self):
+        options = self.worker.send_to_options['outbound1']
+        options['transport_name'] = 'foo_transport2'
+        sent_msg = self.worker.send_to('+12345', "Hi!", "outbound1",
+                transport_type=TransportUserMessage.TT_USSD)
+        sends = self.recv()
+        expecteds = [TransportUserMessage.send('+12345', "Hi!",
+                transport_type=TransportUserMessage.TT_USSD,
+                transport_name='foo_transport2')]
+        self.assert_msgs_match(sends, expecteds)
+        self.assert_msgs_match(sends, [sent_msg])
+
+    def test_send_to_with_bad_tag(self):
+        self.assertRaises(AssertionError, self.worker.send_to,
+                          '+12345', "Hi!", "outbound_unknown")
 
     def test_subclassing_api(self):
         worker = get_stubbed_worker(ApplicationWorker,
