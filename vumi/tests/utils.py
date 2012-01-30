@@ -328,9 +328,10 @@ class FakeRedis(object):
 
     # Set operations
 
-    def sadd(self, key, value):
+    def sadd(self, key, *values):
         sval = self._data.setdefault(key, set())
-        sval.add(value)
+        for value in values:
+            sval.add(unicode(value))
 
     def smembers(self, key):
         return self._data.get(key, set())
