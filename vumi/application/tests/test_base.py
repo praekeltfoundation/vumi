@@ -10,8 +10,6 @@ from datetime import datetime
 
 class DummyApplicationWorker(ApplicationWorker):
 
-    ACCEPTED_ROUTING_TAGS = frozenset([None, "ping"])
-
     def __init__(self, *args, **kwargs):
         super(ApplicationWorker, self).__init__(*args, **kwargs)
         self.record = []
@@ -136,13 +134,14 @@ class TestApplicationWorker(TestCase):
         self.assert_msgs_match(sends, expecteds)
         self.assert_msgs_match(sends, [sent_msg])
 
-    def test_send_to_with_tag_and_kws(self):
-        sent_msg = self.worker.send_to('+12345', "Hi!", tag="ping",
+    def test_send_to_with_options(self):
+        self.worker.send_to_defaults['transport_name'] = 'foo_transport'
+        sent_msg = self.worker.send_to('+12345', "Hi!",
                 transport_type=TransportUserMessage.TT_USSD)
         sends = self.recv()
         expecteds = [TransportUserMessage.send('+12345', "Hi!",
                 transport_type=TransportUserMessage.TT_USSD,
-                routing_metadata={'tag': "ping"})]
+                transport_name='foo_transport')]
         self.assert_msgs_match(sends, expecteds)
         self.assert_msgs_match(sends, [sent_msg])
 
