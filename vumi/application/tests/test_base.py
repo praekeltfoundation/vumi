@@ -252,6 +252,9 @@ class ApplicationTestCase(TestCase):
         interests of reducing boilerplate:
 
         * ``transport_name`` defaults to :attr:`self.transport_name`
+        * ``send_to`` defaults to a dictionary with config for each tag
+          defined in worker's SEND_TO_TAGS attribute. Each tag's config
+          contains a transport_name set to ``<tag>_outbound``.
         """
 
         if cls is None:
