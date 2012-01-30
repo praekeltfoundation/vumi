@@ -257,6 +257,11 @@ class ApplicationTestCase(TestCase):
         if cls is None:
             cls = self.application_class
         config.setdefault('transport_name', self.transport_name)
+        if 'send_to' not in config and cls.SEND_TO_TAGS:
+            config['send_to'] = {}
+            for tag in cls.SEND_TO_TAGS:
+                config['send_to'][tag] = {
+                    'transport_name': '%s_outbound' % tag}
         worker = get_stubbed_worker(cls, config, self._amqp)
         self._workers.append(worker)
         if start:
