@@ -50,7 +50,17 @@ class TestApplicationWorker(TestCase):
     @inlineCallbacks
     def setUp(self):
         self.transport_name = 'test'
-        self.config = {'transport_name': self.transport_name}
+        self.config = {
+            'transport_name': self.transport_name,
+            'send_to': {
+                'default': {
+                    'transport_name': 'default_transport',
+                    },
+                'outbound1': {
+                    'transport_name': 'outbound1_transport',
+                    },
+                },
+            }
         self.worker = get_stubbed_worker(DummyApplicationWorker,
                                          config=self.config)
         self.broker = self.worker._amqp_client.broker
@@ -132,37 +142,59 @@ class TestApplicationWorker(TestCase):
     def test_send_to(self):
         sent_msg = self.worker.send_to('+12345', "Hi!")
         sends = self.recv()
-        expecteds = [TransportUserMessage.send('+12345', "Hi!")]
+        expecteds = [TransportUserMessage.send('+12345', "Hi!",
+                transport_name='default_transport')]
         self.assert_msgs_match(sends, expecteds)
         self.assert_msgs_match(sends, [sent_msg])
 
     def test_send_to_with_options(self):
-        options = self.worker.send_to_options['default']
-        options['transport_name'] = 'foo_transport'
         sent_msg = self.worker.send_to('+12345', "Hi!",
                 transport_type=TransportUserMessage.TT_USSD)
         sends = self.recv()
         expecteds = [TransportUserMessage.send('+12345', "Hi!",
                 transport_type=TransportUserMessage.TT_USSD,
-                transport_name='foo_transport')]
+                transport_name='default_transport')]
         self.assert_msgs_match(sends, expecteds)
         self.assert_msgs_match(sends, [sent_msg])
 
     def test_send_to_with_tag(self):
-        options = self.worker.send_to_options['outbound1']
-        options['transport_name'] = 'foo_transport2'
         sent_msg = self.worker.send_to('+12345', "Hi!", "outbound1",
                 transport_type=TransportUserMessage.TT_USSD)
         sends = self.recv()
         expecteds = [TransportUserMessage.send('+12345', "Hi!",
                 transport_type=TransportUserMessage.TT_USSD,
-                transport_name='foo_transport2')]
+                transport_name='outbound1_transport')]
         self.assert_msgs_match(sends, expecteds)
         self.assert_msgs_match(sends, [sent_msg])
 
     def test_send_to_with_bad_tag(self):
         self.assertRaises(AssertionError, self.worker.send_to,
                           '+12345', "Hi!", "outbound_unknown")
+
+    @inlineCallbacks
+    def test_send_to_with_no_send_to_tags(self):
+        config = {'transport_name': 'notags_app'}
+        notags_worker = get_stubbed_worker(ApplicationWorker,
+                                           config=config)
+        yield notags_worker.startWorker()
+        self.assertRaises(AssertionError, notags_worker.send_to,
+                          '+12345', "Hi!")
+
+    @inlineCallbacks
+    def test_send_to_with_bad_config(self):
+        config = {'transport_name': 'badconfig_app',
+                  'send_to': {
+                      'default': {},  # missing transport_name
+                      'outbound1': {},  # also missing transport_name
+                      },
+                  }
+        badcfg_worker = get_stubbed_worker(DummyApplicationWorker,
+                                           config=config)
+        errors = []
+        d = badcfg_worker.startWorker()
+        d.addErrback(lambda result: errors.append(result))
+        yield d
+        self.assertEqual(errors[0].type, AssertionError)
 
     def test_subclassing_api(self):
         worker = get_stubbed_worker(ApplicationWorker,

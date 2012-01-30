@@ -30,7 +30,7 @@ class ApplicationWorker(Worker):
     Messages sent via :meth:`send_to` pass optional additional data
     from configuration to the TransportUserMessage constructor, based
     on the tag parameter passed to send_to. This usually contains
-    information useful for routing the message (e.g. `transport_name`).
+    information useful for routing the message.
 
     An example :meth:`send_to` configuration might look like::
 
@@ -38,15 +38,26 @@ class ApplicationWorker(Worker):
         - default:
           transport_name: sms_transport
 
+    Currently 'transport_name' **must** be defined for each send_to
+    section since all existing dispatchers rely on this for routing
+    outbound messages.
+
     The available tags are defined by the :attr:`SEND_TO_TAGS` class
-    attribute. Sub-classes must override this attribute if they wish
-    to use additional or other tags in their calls to :meth:`send_to`.
+    attribute. Sub-classes must override this attribute with a set of
+    tag names if they wish to use :meth:`send_to`. If applications
+    have only a single tag, it is suggested to name that tag `default`
+    (this makes calling `send_to` easier since the value of the tag
+    parameter may be omitted).
+
+    By default :attr:`SEND_TO_TAGS` is empty and all calls to
+    :meth:`send_to` will fail (this is to make it easy to identify
+    which tags an application requires `send_to` configuration for).
     """
 
     transport_name = None
     start_message_consumer = True
 
-    SEND_TO_TAGS = frozenset(['default'])
+    SEND_TO_TAGS = frozenset([])
 
     @inlineCallbacks
     def startWorker(self):
@@ -58,7 +69,8 @@ class ApplicationWorker(Worker):
 
         self.send_to_options = self.config.get('send_to', {})
         for tag in self.SEND_TO_TAGS:
-            self.send_to_options.setdefault(tag, {})
+            assert tag in self.SEND_TO_TAGS
+            assert 'transport_name' in self.send_to_options[tag]
 
         self._event_handlers = {
             'ack': self.consume_ack,
