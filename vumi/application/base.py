@@ -2,8 +2,6 @@
 
 """Basic tools for building a vumi ApplicationWorker."""
 
-import copy
-
 from twisted.internet.defer import inlineCallbacks
 from twisted.python import log
 
@@ -22,10 +20,29 @@ class ApplicationWorker(Worker):
 
     Handles :class:`vumi.message.TransportUserMessage` and
     :class:`vumi.message.TransportEvent` messages.
+
+    Application workers may send outgoing messages using
+    :meth:`reply_to` (for replies to incoming messages) or
+    :meth:`send_to` (for messages that are not replies).
+
+    Messages sent via :meth:`send_to` may add a routing key to their
+    routing metadata to assist dispatchers in routing them to the
+    correct transport. The allowed list of routing key values for a
+    particular application is specified in its
+    :attr:`ACCEPTED_ROUTING_TAGS` attribute. By default, this list of
+    tags contains only the value `None` (i.e. only untagged messages
+    are accepted by :meth:`send_to`).
+
+    Routing tags should ideally describe classes of messages sent out
+    by the application (e.g. 'birthday_reminders') that need to be
+    routed in the same way rather than transport types (e.g. 'ussd' or
+    'sms').
     """
 
     transport_name = None
     start_message_consumer = True
+
+    ACCEPTED_ROUTING_TAGS = frozenset([None])
 
     @inlineCallbacks
     def startWorker(self):
@@ -34,7 +51,6 @@ class ApplicationWorker(Worker):
         self._consumers = []
         self._validate_config()
         self.transport_name = self.config['transport_name']
-        self.send_to_defaults = self.config.get('send_to', {})
 
         self._event_handlers = {
             'ack': self.consume_ack,
@@ -136,10 +152,23 @@ class ApplicationWorker(Worker):
         self.transport_publisher.publish_message(reply)
         return reply
 
-    def send_to(self, to_addr, content, **kw):
-        options = copy.deepcopy(self.send_to_defaults)
-        options.update(kw)
-        msg = TransportUserMessage.send(to_addr, content, **options)
+    def send_to(self, to_addr, content, tag=None, **kw):
+        """Send an outbound message that isn't a reply.
+
+        Replies should be sent via :meth:`reply_to`.
+
+        :type to_addr: unicode
+        :param to_addr: address to send the message to
+        :type content: unicode
+        :param content: message content
+        :type tag: unicode
+        :param tag: routing tag (see class documentation)
+        """
+        assert tag in self.ACCEPTED_ROUTING_TAGS
+        if tag is not None:
+            routing_metadata = kw.setdefault('routing_metadata', {})
+            routing_metadata['tag'] = tag
+        msg = TransportUserMessage.send(to_addr, content, **kw)
         self.transport_publisher.publish_message(msg)
         return msg
 
