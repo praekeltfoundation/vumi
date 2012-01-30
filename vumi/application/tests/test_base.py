@@ -1,6 +1,7 @@
 from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks, returnValue
 
+from vumi.errors import ConfigError
 from vumi.application.base import ApplicationWorker, SESSION_NEW, SESSION_CLOSE
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.tests.fake_amqp import FakeAMQPBroker
@@ -194,7 +195,7 @@ class TestApplicationWorker(TestCase):
         d = badcfg_worker.startWorker()
         d.addErrback(lambda result: errors.append(result))
         yield d
-        self.assertEqual(errors[0].type, AssertionError)
+        self.assertEqual(errors[0].type, ConfigError)
 
     def test_subclassing_api(self):
         worker = get_stubbed_worker(ApplicationWorker,

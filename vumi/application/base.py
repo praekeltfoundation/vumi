@@ -66,11 +66,7 @@ class ApplicationWorker(Worker):
         self._consumers = []
         self._validate_config()
         self.transport_name = self.config['transport_name']
-
         self.send_to_options = self.config.get('send_to', {})
-        for tag in self.SEND_TO_TAGS:
-            assert tag in self.SEND_TO_TAGS
-            assert 'transport_name' in self.send_to_options[tag]
 
         self._event_handlers = {
             'ack': self.consume_ack,
@@ -99,6 +95,16 @@ class ApplicationWorker(Worker):
     def _validate_config(self):
         if 'transport_name' not in self.config:
             raise ConfigError("Missing 'transport_name' field in config.")
+        send_to_options = self.config.get('send_to', {})
+        for tag in self.SEND_TO_TAGS:
+            if tag not in send_to_options:
+                raise ConfigError("No configuration for send_to tag %r but"
+                                  " at least a transport_name is required."
+                                  % (tag,))
+            if 'transport_name' not in send_to_options[tag]:
+                raise ConfigError("The configuration for send_to tag %r must"
+                                  " contain a transport_name." % (tag,))
+
         return self.validate_config()
 
     def validate_config(self):
