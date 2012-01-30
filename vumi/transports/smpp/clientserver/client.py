@@ -762,4 +762,4 @@ class ESME(object):
         self.kvs = keyValueStore
 
     def bindTransciever(self):
-        self.factory = EsmeTransceiverFactory(None, None)
+        self.factory = EsmeTransceiverFactory(self.config, self.kvs)

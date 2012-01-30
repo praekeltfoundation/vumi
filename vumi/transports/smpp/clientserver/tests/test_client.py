@@ -248,10 +248,16 @@ class ClientConfigTestCase(unittest.TestCase):
 class ESMETestCase(unittest.TestCase):
 
     def setUp(self):
-        self.clientConfig = None
+        self.clientConfig = ClientConfig(
+                host='localhost',
+                port=2775,
+                system_id='test_system',
+                password='password',
+                )
+
         self.keyValueStore = None
         self.esme = ESME(self.clientConfig, self.keyValueStore)
 
     def test_bind_as_transceiver(self):
-        #self.esme.bindTransciever()
+        self.esme.bindTransciever()
         pass
