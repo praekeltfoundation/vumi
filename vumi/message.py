@@ -163,12 +163,24 @@ class TransportUserMessage(TransportMessage):
     SESSION_EVENTS = frozenset([SESSION_NONE, SESSION_NEW, SESSION_RESUME,
                                 SESSION_CLOSE])
 
+    # canonical transport types
+    TT_HTTP_API = 'http_api'
+    TT_IRC = 'irc'
+    TT_TELNET = 'telnet'
+    TT_TWITTER = 'twitter'
+    TT_SMS = 'sms'
+    TT_USSD = 'ussd'
+    TT_XMPP = 'xmpp'
+    TRANSPORT_TYPES = set([TT_HTTP_API, TT_IRC, TT_TELNET, TT_TWITTER, TT_SMS,
+                           TT_USSD, TT_XMPP])
+
     def process_fields(self, fields):
         fields = super(TransportUserMessage, self).process_fields(fields)
         fields.setdefault('message_id', self.generate_id())
         fields.setdefault('in_reply_to', None)
         fields.setdefault('session_event', None)
         fields.setdefault('content', None)
+        fields.setdefault('transport_metadata', {})
         fields.setdefault('helper_metadata', {})
         return fields
 
@@ -205,6 +217,19 @@ class TransportUserMessage(TransportMessage):
             transport_type=self['transport_type'],
             transport_metadata=self['transport_metadata'],
             helper_metadata=self['helper_metadata'],
+            **kw)
+        return out_msg
+
+    @classmethod
+    def send(cls, to_addr, content, **kw):
+        kw.setdefault('from_addr', None)
+        kw.setdefault('transport_name', None)
+        kw.setdefault('transport_type', None)
+        out_msg = cls(
+            to_addr=to_addr,
+            in_reply_to=None,
+            content=content,
+            session_event=cls.SESSION_NONE,
             **kw)
         return out_msg
 

@@ -2,6 +2,8 @@
 
 """Basic tools for building a vumi ApplicationWorker."""
 
+import copy
+
 from twisted.internet.defer import inlineCallbacks
 from twisted.python import log
 
@@ -20,10 +22,42 @@ class ApplicationWorker(Worker):
 
     Handles :class:`vumi.message.TransportUserMessage` and
     :class:`vumi.message.TransportEvent` messages.
+
+    Application workers may send outgoing messages using
+    :meth:`reply_to` (for replies to incoming messages) or
+    :meth:`send_to` (for messages that are not replies).
+
+    Messages sent via :meth:`send_to` pass optional additional data
+    from configuration to the TransportUserMessage constructor, based
+    on the tag parameter passed to send_to. This usually contains
+    information useful for routing the message.
+
+    An example :meth:`send_to` configuration might look like::
+
+      - send_to:
+        - default:
+          transport_name: sms_transport
+
+    Currently 'transport_name' **must** be defined for each send_to
+    section since all existing dispatchers rely on this for routing
+    outbound messages.
+
+    The available tags are defined by the :attr:`SEND_TO_TAGS` class
+    attribute. Sub-classes must override this attribute with a set of
+    tag names if they wish to use :meth:`send_to`. If applications
+    have only a single tag, it is suggested to name that tag `default`
+    (this makes calling `send_to` easier since the value of the tag
+    parameter may be omitted).
+
+    By default :attr:`SEND_TO_TAGS` is empty and all calls to
+    :meth:`send_to` will fail (this is to make it easy to identify
+    which tags an application requires `send_to` configuration for).
     """
 
     transport_name = None
     start_message_consumer = True
+
+    SEND_TO_TAGS = frozenset([])
 
     @inlineCallbacks
     def startWorker(self):
@@ -32,6 +66,7 @@ class ApplicationWorker(Worker):
         self._consumers = []
         self._validate_config()
         self.transport_name = self.config['transport_name']
+        self.send_to_options = self.config.get('send_to', {})
 
         self._event_handlers = {
             'ack': self.consume_ack,
@@ -60,6 +95,16 @@ class ApplicationWorker(Worker):
     def _validate_config(self):
         if 'transport_name' not in self.config:
             raise ConfigError("Missing 'transport_name' field in config.")
+        send_to_options = self.config.get('send_to', {})
+        for tag in self.SEND_TO_TAGS:
+            if tag not in send_to_options:
+                raise ConfigError("No configuration for send_to tag %r but"
+                                  " at least a transport_name is required."
+                                  % (tag,))
+            if 'transport_name' not in send_to_options[tag]:
+                raise ConfigError("The configuration for send_to tag %r must"
+                                  " contain a transport_name." % (tag,))
+
         return self.validate_config()
 
     def validate_config(self):
@@ -132,6 +177,15 @@ class ApplicationWorker(Worker):
         reply = original_message.reply(content, continue_session, **kws)
         self.transport_publisher.publish_message(reply)
         return reply
+
+    def send_to(self, to_addr, content, tag='default', **kw):
+        if tag not in self.SEND_TO_TAGS:
+            raise ValueError("Tag %r not defined in SEND_TO_TAGS" % (tag,))
+        options = copy.deepcopy(self.send_to_options[tag])
+        options.update(kw)
+        msg = TransportUserMessage.send(to_addr, content, **options)
+        self.transport_publisher.publish_message(msg)
+        return msg
 
     @inlineCallbacks
     def _setup_transport_publisher(self):
