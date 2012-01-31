@@ -330,8 +330,7 @@ class FakeRedis(object):
 
     def sadd(self, key, *values):
         sval = self._data.setdefault(key, set())
-        for value in values:
-            sval.add(unicode(value))
+        sval.update(map(unicode, values))
 
     def smembers(self, key):
         return self._data.get(key, set())
