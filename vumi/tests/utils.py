@@ -222,6 +222,17 @@ class TestResourceWorker(Worker):
 
 
 class FakeRedis(object):
+    """In process and memory implementation of redis-like data store.
+
+    It's intended to match the Python redis module API closely so that
+    it can be used in place of the redis module when testing.
+
+    Known limitations:
+
+    * Exceptions raised are not guaranteed to match the exception
+      types raised by the real Python redis module.
+    """
+
     def __init__(self):
         self._data = {}
         self._expiries = {}
@@ -308,11 +319,18 @@ class FakeRedis(object):
     def hvals(self, key):
         return self._data.get(key, {}).values()
 
+    def hincrby(self, key, field, amount=1):
+        value = self._data.get(key, {}).get(field, "0")
+        # the int(str(..)) coerces amount to an int but rejects floats
+        value = int(value) + int(str(amount))
+        self._data.setdefault(key, {})[field] = str(value)
+        return value
+
     # Set operations
 
-    def sadd(self, key, value):
+    def sadd(self, key, *values):
         sval = self._data.setdefault(key, set())
-        sval.add(value)
+        sval.update(map(unicode, values))
 
     def smembers(self, key):
         return self._data.get(key, set())
