@@ -169,7 +169,7 @@ class TestApplicationWorker(TestCase):
         self.assert_msgs_match(sends, [sent_msg])
 
     def test_send_to_with_bad_tag(self):
-        self.assertRaises(AssertionError, self.worker.send_to,
+        self.assertRaises(ValueError, self.worker.send_to,
                           '+12345', "Hi!", "outbound_unknown")
 
     @inlineCallbacks
@@ -178,7 +178,7 @@ class TestApplicationWorker(TestCase):
         notags_worker = get_stubbed_worker(ApplicationWorker,
                                            config=config)
         yield notags_worker.startWorker()
-        self.assertRaises(AssertionError, notags_worker.send_to,
+        self.assertRaises(ValueError, notags_worker.send_to,
                           '+12345', "Hi!")
 
     @inlineCallbacks

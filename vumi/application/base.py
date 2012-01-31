@@ -179,7 +179,8 @@ class ApplicationWorker(Worker):
         return reply
 
     def send_to(self, to_addr, content, tag='default', **kw):
-        assert tag in self.SEND_TO_TAGS
+        if tag not in self.SEND_TO_TAGS:
+            raise ValueError("Tag %r not defined in SEND_TO_TAGS" % (tag,))
         options = copy.deepcopy(self.send_to_options[tag])
         options.update(kw)
         msg = TransportUserMessage.send(to_addr, content, **options)
