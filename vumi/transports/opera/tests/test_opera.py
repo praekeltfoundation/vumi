@@ -43,9 +43,8 @@ class OperaTransportTestCase(TransportTestCase):
         }
         default_config.update(config)
         self.r_server = FakeRedis()
-        worker = yield self.get_transport(default_config, cls, start=False)
+        worker = yield self.get_transport(default_config, cls)
         worker.r_server = self.r_server
-        yield worker.startWorker()
         returnValue(worker)
 
     def mk_msg(self, **kwargs):
