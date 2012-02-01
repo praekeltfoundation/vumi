@@ -6,7 +6,7 @@ from datetime import datetime
 
 NOW = datetime.utcnow()
 TOTAL_SESSIONS = 200000.0
-SESSIONS_TO_WIN = 4  # THE LAST TIME THIS SCRIPT IS RUN (i.e. USSD sessions all used up), SET THIS TO 0
+SESSIONS_TO_WIN = 0  # THE LAST TIME THIS SCRIPT IS RUN (i.e. USSD sessions all used up), SET THIS TO 0
 
 
 # This script inspects the database,
@@ -42,7 +42,7 @@ def rowset(conn, sql="SELECT 0", presql=[], commit=False):
 def conn():
     return psycopg2.connect(
             host="localhost",
-            #port=5555,  # UNCOMMENT THIS FOR REMOTE DB
+            port=5555,  # UNCOMMENT THIS FOR REMOTE DB
             user="vumi",
             password="vumi",
             database="ikhwezi")
@@ -214,7 +214,7 @@ language_map = {
         }
 
 def get_language(num):
-    return language_map.get(num, "English")
+    return language_map.get(str(num), "English")
 
 
 # Get the lists of candidates to win, on a per provider basis
@@ -235,6 +235,7 @@ def candidate_lists_by_provider():
                 """ % (SESSIONS_TO_WIN, k))
         for i in candidates:
             dct[k].append({"msisdn": i['msisdn'], "language": get_language(i['demographic1'])})
+            print get_language(i['demographic1'])
     return dct
 
 candidate_lists = candidate_lists_by_provider()
@@ -321,11 +322,11 @@ set_winners_and_losers()
 
 # Update ikhwezi_winner setting the new winners and their messages
 def update_voucher_allocation():
-    presql = []
     for k, v in new_winners.items():
         i = 0
         old_winner_count = winners_dict[k]['winners']
         for this_winner in v:
+            presql = []
             i += 1
             sql = """
             UPDATE ikhwezi_winner
@@ -342,10 +343,11 @@ def update_voucher_allocation():
                     k,
                     i + old_winner_count
                     )
+            print sql
             presql.append(sql)
-    rowset(the_conn,
-            presql=presql,
-            commit=True)
+            rowset(the_conn,
+                    presql=presql,
+                    commit=True)
 
 update_voucher_allocation()
 

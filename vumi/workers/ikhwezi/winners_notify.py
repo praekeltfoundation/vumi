@@ -41,7 +41,7 @@ def rowset(conn, sql="SELECT 0", presql=[], commit=False):
 def conn():
     return psycopg2.connect(
             host="localhost",
-            #port=5555,  # UNCOMMENT THIS FOR REMOTE DB
+            port=5555,  # UNCOMMENT THIS FOR REMOTE DB
             user="vumi",
             password="vumi",
             database="ikhwezi")
@@ -56,21 +56,41 @@ params = [
 
 rs = rowset(the_conn, """
         SELECT
+            provider,
+            provider_voucher_number,
             msisdn,
             message
         FROM ikhwezi_winner
-        WHERE allocated_at > '%s'
-        """ % (NOW.date()))
-for r in rs:
-    params.append(("to_msisdn", r['msisdn']))
-    params.append(("message", r['message']))
+        WHERE message IS NOT NULL
+        ORDER BY provider_voucher_number
+        """)
+#rs = [
+        #{
+            #"msisdn": "27763805186",
+            #"message": "hi dmaclay",
+            #},
+        #{
+            #"msisdn": "27735939536",
+            #"message": "hi hodgestar",
+            #}
+        #]
 
-for i in params:
-    print i
 print "Winners to notify: %s" % (len(rs))
 
-#url, resp = utils.callback(url, params)
+for r in rs:
+    params = [
+        ("from_msisdn", "27000000000"),
+        ("to_msisdn", r['msisdn']),
+        ("message", r['message']),
+    ]
 
-#print url
-#print repr(resp)
+    print r['provider'], r['provider_voucher_number'],
+    print params
+
+    url, resp = utils.callback(url, params)
+    print url
+    print repr(resp)
+    print ""
+
+print "Winners to notify: %s" % (len(rs))
 

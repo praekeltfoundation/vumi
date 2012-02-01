@@ -53,7 +53,7 @@ def rowset(conn, sql="SELECT 0", presql=[], commit=False):
 def conn():
     return psycopg2.connect(
             host="localhost",
-            #port=5555,  # UNCOMMENT THIS FOR REMOTE DB
+            port=5555,  # UNCOMMENT THIS FOR REMOTE DB
             user="vumi",
             password="vumi",
             database="ikhwezi")
