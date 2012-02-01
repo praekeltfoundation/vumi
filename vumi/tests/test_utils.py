@@ -146,6 +146,10 @@ class HttpUtilsTestCase(TestCase):
         request = yield http_request_full(self.url, '', {'User-Agent': 'blah'})
         self.assertEqual(request.delivered_body, "Yay")
         self.assertEqual(request.code, http.OK)
+        request = yield http_request_full(self.url, '',
+                                          {'User-Agent': ['blah']})
+        self.assertEqual(request.delivered_body, "Yay")
+        self.assertEqual(request.code, http.OK)
 
     @inlineCallbacks
     def test_http_request_full_err(self):

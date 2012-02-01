@@ -80,7 +80,7 @@ def mkheaders(headers):
     """
     raw_headers = {}
     for k, v in headers.iteritems():
-        if not isinstance(v, list):
+        if isinstance(v, basestring):
             v = [v]
         raw_headers[k] = v
     return Headers(raw_headers)
