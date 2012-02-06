@@ -41,7 +41,7 @@ def rowset(conn, sql="SELECT 0", presql=[], commit=False):
 def conn():
     return psycopg2.connect(
             host="localhost",
-            #port=5555,  # UNCOMMENT THIS FOR REMOTE DB
+            port=5555,  # UNCOMMENT THIS FOR REMOTE DB
             user="vumi",
             password="vumi",
             database="ikhwezi")
@@ -69,9 +69,11 @@ rs = rowset(the_conn, """
         WHERE voucher IS NOT NULL
         AND msisdn IS NOT NULL
         AND voucher_send_id IS NULL
+        AND provider = 'Vodacom'
         """)
 
 for r in rs:
+    #print r
     params = [
         ("from_msisdn", "27000000000"),
     ]
@@ -82,6 +84,7 @@ for r in rs:
 
     for i in params:
         print i
+    print ""
 
     url, resp = utils.callback(url, params)
     send_json = json.loads(resp)
