@@ -117,7 +117,6 @@ class FakeRedisRespTestCase(TransportTestCase):
     @defer.inlineCallbacks
     def setUp(self):
         super(FakeRedisRespTestCase, self).setUp()
-        self.seq = [123456]
         self.config = {
                 "system_id": "vumitest-vumitest-vumitest",
                 "host": "host",
