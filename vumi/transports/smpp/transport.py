@@ -9,6 +9,7 @@ from twisted.internet import reactor
 from vumi.utils import get_operator_number, get_deploy_int
 from vumi.transports.base import Transport
 from vumi.transports.smpp.clientserver.client import EsmeTransceiverFactory
+from vumi.transports.smpp.clientserver.config import ClientConfig
 from vumi.transports.failures import FailureMessage
 from vumi.message import Message
 
@@ -89,6 +90,17 @@ class SmppTransport(Transport):
 
     def setup_transport(self):
         log.msg("Starting the SmppTransport with %s" % self.config)
+        #self.clientConfig = ClientConfig(
+                #host=self.config['host'],
+                #port=self.config['port'],
+                #system_id=self.config['system_id'],
+                #password=self.config['password'],
+                #)
+        #for k in self.clientConfig.options.keys():
+            #if self.config.has_key(k):
+                #self.clientConfig.set(k, self.config[k])
+        self.clientConfig = ClientConfig(**self.config)
+
 
         # TODO: move this to a config file
         dbindex = get_deploy_int(self._amqp_client.vhost)

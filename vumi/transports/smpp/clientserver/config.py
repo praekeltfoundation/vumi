@@ -2,20 +2,37 @@
 
 class ClientConfig(object):
 
+    required = [
+            'host',
+            'port',
+            'system_id',  # in SMPP system_id is the username
+            'password',
+            ]
+
+    options = {
+            'system_type': "",
+            'interface_version': "34",
+            'dest_addr_ton': 0,
+            'dest_addr_npi': 0,
+            'registered_delivery': 0,
+            }
+
     def __init__(self, **kwargs):
-        self.host = kwargs['host']
-        self.port = kwargs['port']
-        self.system_id = kwargs['system_id']  # in SMPP system_id is the username
-        self.password = kwargs['password']
-        self.system_type = kwargs.get('system_type', '')
-        self.interface_version = kwargs.get('interface_version', "34")
-        self.dest_addr_ton = kwargs.get('dest_addr_ton', 0)
-        self.dest_addr_npi = kwargs.get('dest_addr_npi', 0)
-        self.registered_delivery = kwargs.get('registered_delivery', 0)
+        self.dictionary = {}
+        #print ""
+        for i in self.required:
+            self.dictionary[i] = kwargs[i]
+            #print "%s: %s" % (i, self.dictionary[i])
+        for k, v in self.options.items():
+            self.dictionary[k] = kwargs.get(k, self.options[k])
+            #print "%s: %s" % (k, self.dictionary[k])
 
     # a get method that performs like a dictionary's get method
-    def get(self, attr, default=None):
+    def get(self, key, default=None):
         try:
-            return getattr(self, attr)
+            return self.dictionary[key]
         except:
             return default
+
+    def set(self, key, value):
+        self.dictionary[key] = value

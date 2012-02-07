@@ -219,8 +219,9 @@ class ClientConfigTestCase(unittest.TestCase):
                 'registered_delivery',
                 ]
         for a in attr_to_check:
-            self.assertEqual(getattr(self.clientConfig1, a),
-                    getattr(self.clientConfig2, a))
+            self.assertEqual(
+                    self.clientConfig1.get(a),
+                    self.clientConfig2.get(a))
 
     def test_instantiation_extended(self):
         self.clientConfig = ClientConfig(
@@ -242,7 +243,7 @@ class ClientConfigTestCase(unittest.TestCase):
                 'registered_delivery': 1,
                 }
         for k, v in attr_to_check.items():
-            self.assertEqual(getattr(self.clientConfig, k), v)
+            self.assertEqual(self.clientConfig.get(k), v)
 
 
 class ESMETestCase(unittest.TestCase):

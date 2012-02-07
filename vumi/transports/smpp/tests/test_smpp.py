@@ -120,15 +120,19 @@ class FakeRedisRespTestCase(TransportTestCase):
         super(FakeRedisRespTestCase, self).setUp()
         self.config = {
                 "TRANSPORT_NAME": "redis_testing_transport",
+                "system_id": "vumitest-vumitest-vumitest",
+                "host": "host",
+                "port": "port",
+                "password": "password",
                 }
         self.vumi_options = {
                 "vhost": "develop",
                 }
-        self.smpp_config = ClientConfig(
-                system_id="vumitest-vumitest-vumitest",
-                host="host",
-                port="port",
-                password='password',
+        self.clientConfig = ClientConfig(
+                system_id=self.config['system_id'],
+                host=self.config['host'],
+                port=self.config['port'],
+                password=self.config['password'],
                 )
 
 
@@ -136,7 +140,7 @@ class FakeRedisRespTestCase(TransportTestCase):
         self.transport = yield self.get_transport(self.config, start=False)
         self.transport.r_server = FakeRedis()
         self.esme = RedisTestEsmeTransceiver(
-                self.smpp_config,
+                self.clientConfig,
                 self.transport.r_server)
         self.esme.state = 'BOUND_TRX'
         self.transport.esme_client = self.esme
