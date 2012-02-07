@@ -235,14 +235,18 @@ class ClientConfigTestCase(unittest.TestCase):
                 dest_addr_ton=1,
                 dest_addr_npi=1,
                 registered_delivery=1,
+                smpp_bind_timeout=33,
                 some_garbage_param_that_should_not_be_here="foo"
                 )
         params_to_check = {
+                # smpp
                 'system_type': "some_type",
                 'interface_version': "34",
                 'dest_addr_ton': 1,
                 'dest_addr_npi': 1,
                 'registered_delivery': 1,
+                # client
+                'smpp_bind_timeout': 33,
                 }
         for k, v in params_to_check.items():
             self.assertEqual(self.clientConfig.get(k), v)

@@ -9,12 +9,16 @@ class ClientConfig(object):
             'password',
             ]
 
-    options = {
+    smpp_options = {
             'system_type': "",
             'interface_version': "34",
             'dest_addr_ton': 0,
             'dest_addr_npi': 0,
             'registered_delivery': 0,
+            }
+
+    client_options = {
+            'smpp_bind_timeout': 30,
             }
 
     def __init__(self, **kwargs):
@@ -23,8 +27,11 @@ class ClientConfig(object):
         for i in self.required:
             self.dictionary[i] = kwargs[i]
             #print "%s: %s" % (i, self.dictionary[i])
-        for k, v in self.options.items():
-            self.dictionary[k] = kwargs.get(k, self.options[k])
+        for k, v in self.smpp_options.items():
+            self.dictionary[k] = kwargs.get(k, self.smpp_options[k])
+            #print "%s: %s" % (k, self.dictionary[k])
+        for k, v in self.client_options.items():
+            self.dictionary[k] = kwargs.get(k, self.client_options[k])
             #print "%s: %s" % (k, self.dictionary[k])
 
     # a get method that performs like a dictionary's get method
