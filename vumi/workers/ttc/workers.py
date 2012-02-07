@@ -110,10 +110,10 @@ class TtcGenericWorker(ApplicationWorker):
         #yield Registry.DBPOOL.runQuery("SELECT 1").addCallback(self.databaseAccessSuccess)
 
         # Try to Access Document database with pymongo
-        connection = pymongo.Connection("localhost",27017)
-        self.db = connection[self.config['database']]
+        #connection = pymongo.Connection("localhost",27017)
+        #self.db = connection[self.config['database']]
 
-        log.msg("Connected to dababase %s" % self.config['database'])
+        #log.msg("Connected to dababase %s" % self.config['database'])
 
         self.sender = None
         self.program_name = None
@@ -121,45 +121,63 @@ class TtcGenericWorker(ApplicationWorker):
     def consume_user_message(self, message):
         log.msg("User message: %s" % message['content'])
 
-    def init_program_db(self, program_name):
-        log.msg("Initialization of the program")
-        self.program_name = program_name
-        log.msg("Program name:%s"% self.program_name)
-        #Register program in programs collection
-        #if (self.db.programs.find_one({"name":self.program_name})):
-            #log.msg("Program already exist in database... updating")
-        #else:
-            #self.db.programs.save(program)
+    def get_current_script(self):
+        for script in self.collection_scripts.find({"activated":1}).sort("modified",pymongo.DESCENDING).limit(1):
+            return script
+        
 
+    def init_program_db(self, database_name):
+        log.msg("Initialization of the program")
+        self.database_name = database_name
+        log.msg("Connecting to database: %s"% self.database_name)
+        
+        #Initilization of the database
+        connection = pymongo.Connection("localhost",27017)
+        self.db = connection[self.database_name]
+        
+        #Declare collection for retriving script
+        collection_scripts_name = "scripts"
+        if not(collection_scripts_name in self.db.collection_names()):
+            log.msg("Error collection not initialized: %s"% collection_scripts_name)
+            raise Exception("Collection error", collection_scripts_name)
+        self.collection_scripts = self.db[collection_scripts_name]
+        
+        #Declare collection for retriving participants
+        collection_participants_name = "participants"
+        if not(collection_participants_name in self.db.collection_names()):
+            log.msg("Error collection not initialized: %s"% collection_participants_name)
+            raise Exception("Collection error", collection_participants_name)
+        self.collection_participants = self.db[collection_participants_name]
+        
         #Declare collection for scheduling messages
-        collection_schedules_name = ("%s_schedules" % self.program_name)
+        collection_schedules_name = "schedules"
         if ( collection_schedules_name in self.db.collection_names()):
             self.collection_schedules = self.db[collection_schedules_name]
         else:
             self.collection_schedules = self.db.create_collection(collection_schedules_name)
 
         #Declare collection for loging messages
-        collection_logs_name = ("%s_logs" % self.program_name)
-        if ( collection_logs_name in self.db.collection_names()):
-            self.collection_logs = self.db[collection_logs_name]
+        collection_status_name = "status"
+        if ( collection_status_name in self.db.collection_names()):
+            self.collection_status = self.db[collection_status_name]
         else:
-            self.collection_logs = self.db.create_collection(collection_logs_name)
+            self.collection_status = self.db.create_collection(collection_status_name)
 
     #@inlineCallbacks
     def consume_control(self, message):
         log.msg("Control message!")
         #data = message.payload['data']
-        self.record.append(('config',message))
+        #self.record.append(('config',message))
         if (message.get('program')):
             program = message['program']
             #program_name = program['name']
             #log.msg("Receive a program with name: %s" % program_name)
             #MongoDB#
-            self.init_program_db(program['name'])
-            self.db.programs.save(program)
-            if 'participants' in program:
-                self.schedule_participants_dialogue(program['participants'], 
-                                                    self.get_dialogue(program,"0"))
+            self.init_program_db(program['database-name'])
+            #self.db.programs.save(program)
+            #if 'participants' in program:
+                #self.schedule_participants_dialogue(program['participants'], 
+                                                    #self.get_dialogue(program,"0"))
 
             #Redis#
             #self.redis.create_session("program")
@@ -182,33 +200,32 @@ class TtcGenericWorker(ApplicationWorker):
                 #yield self.saveDialoguesDB(program.get('dialogues'))
             #if(program.get('participants')):
                 #yield self.saveParticipantsDB(program.get('participants'))
-
-        elif (message.get('participants')):
-            program = self.db.programs.find_one({"name":self.program_name})
-            if 'participants' in program: 
-                program['participants'] = program['participants'] + message.get('participants')
-            else:
-                program['participants'] = message.get('participants')
-            self.db.programs.save(program)
+        
+        #elif (message.get('participants')):
+            #program = self.db.programs.find_one({"name":self.program_name})
+            #if 'participants' in program: 
+                #program['participants'] = program['participants'] + message.get('participants')
+            #else:
+                #program['participants'] = message.get('participants')
+            #self.db.programs.save(program)
             #self.record.append(('config',message))
             #yield self.saveParticipantsDB(message.get("participants"))
 
         elif (message['action']=='resume' or message['action']=='start'):
             log.msg("Getting an action: "+message['action'])
-            self.init_program_db(message.get('content'))
+            #self.init_program_db(message.get('content'))
             #reconstruct the scheduling by replaying all the program for each participant
             self.collection_schedules.drop()
-            program = self.db.programs.find_one({"name":self.program_name})
+            script = self.get_current_script()
             self.schedule_participants_dialogue(
-                program['participants'],
-                program['dialogues'][0])
+                self.collection_participants.find(),
+                script['dialogues'][0])
             
 
         #start looping process of the scheduler
         if (self.sender == None):
             self.sender = task.LoopingCall(self.send_scheduled)
             self.sender.start(30.0)
-
 
 
     def dispatch_event(self, message):
@@ -219,13 +236,13 @@ class TtcGenericWorker(ApplicationWorker):
     @inlineCallbacks
     def send_scheduled(self):
         log.msg('Sending Scheduled message start')
-        if (self.program_name == None):
-            log.msg("Error scheduling starting but worker is not yet initialized")
-            return
+        #if (self.program_name == None):
+            #log.msg("Error scheduling starting but worker is not yet initialized")
+            #return
         toSends = self.collection_schedules.find(spec={"datetime":{"$lt":datetime.now().isoformat()}},sort=[("datetime",1)])
         for toSend in toSends:
             self.collection_schedules.remove({"_id":toSend.get('_id')})
-            program = self.db.programs.find_one({"name":self.program_name})
+            program = self.get_current_script()
             try:
                 interaction = self.get_interaction(program, toSend['dialogue-id'], toSend['interaction-id'])
                 log.msg("Send scheduled message %s to %s" % (interaction['content'], toSend['participant-phone'])) 
@@ -237,7 +254,7 @@ class TtcGenericWorker(ApplicationWorker):
                                                   'content':interaction['content']
                                                   })
                 yield self.transport_publisher.publish_message(message);
-                self.collection_logs.save({"datetime":datetime.now().isoformat(),
+                self.collection_status.save({"datetime":datetime.now().isoformat(),
                                            "message":message.payload,
                                            "participant-phone": toSend['participant-phone'],
                                            "dialogue-id": toSend['dialogue-id'],
@@ -289,7 +306,7 @@ class TtcGenericWorker(ApplicationWorker):
                                        "interaction-id":interaction["interaction-id"]})
             if (schedule is not None): #Is the interaction already schedule
                 continue
-            log = self.collection_logs.find_one({
+            log = self.collection_status.find_one({
                                        "participant-phone": participant['phone'],
                                        "dialogue-id":dialogue["dialogue-id"],
                                        "interaction-id":interaction["interaction-id"]},
@@ -313,7 +330,7 @@ class TtcGenericWorker(ApplicationWorker):
                #Scheduling a date already in the past is forbidden. 
                 if (sendingDateTime < datetime.now() and 
                     datetime.now() - sendingDateTime > timedelta(minutes=10)): 
-                    self.collection_logs.save({"datetime": datetime.now().isoformat(),
+                    self.collection_status.save({"datetime": datetime.now().isoformat(),
                                              "type": "schedule-fail",
                                              "participant-phone": participant['phone'], 
                                              "dialogue-id": dialogue['dialogue-id'], 

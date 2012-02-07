@@ -4,6 +4,7 @@ from twisted.internet.defer import inlineCallbacks
 
 import pymongo
 import json
+import ast
 from datetime import datetime, time, date, timedelta
 
 #from vumi.database.tests.test_base import UglyModelTestCase
@@ -47,16 +48,15 @@ class FakeUserMessage(TransportUserMessage):
 
 class TestTtcGenericWorker(TestCase):
     
-    emptyProgram = """
+    configControl = """
     {"program":{
-            "name":"M5H"}
+            "name":"M5H",
+            "database-name":"test"}
     }
     """
     
-    simpleProgram= """{"program":{
-            "name":"M5H", 
-            "shortcode":"8282",
-            "participants":[{"phone":"06"}],
+    simpleScript= """{"script":{
+            "shortcode": "8282",
             "dialogues":
             [{"dialogue-id":"0","interactions":[
                    {"type-interaction":"announcement",
@@ -70,7 +70,7 @@ class TestTtcGenericWorker(TestCase):
                    "minutes":"60"}]}
             ]}}"""
     
-    simpleParticipant = """{"participants":[
+    twoParticipants = """{"participants":[
             {"phone":"788601462"},
             {"phone":"788601463"}
             ]}"""
@@ -82,8 +82,8 @@ class TestTtcGenericWorker(TestCase):
     }"""
     
     simpleProgram_Question = """
-    {"program": {
-		"name": "QuestionDialogue",
+    {"script": {
+		"shortcode": "8282",
 		"dialogues": [
 			{
 				"interactions": [
@@ -107,12 +107,8 @@ class TestTtcGenericWorker(TestCase):
     }"""
     
     simpleProgram_announcement_fixedtime = """
-    {"program": {
-            "participants": [
-                    {
-                            "phone": "06"
-                    }
-            ],
+    {"script": {
+            "shortcode": "8282",
             "dialogues": [
                     {
                             "dialogue-id":"program.dialogues[0]",
@@ -158,8 +154,14 @@ class TestTtcGenericWorker(TestCase):
         #Database#
         connection = pymongo.Connection("localhost",27017)
         self.db = connection[self.config['database']]
-        self.programs = self.db.programs
-        
+        self.collection_scripts = self.db["scripts"]
+        self.collection_scripts.drop()
+        self.collection_participants = self.db["participants"]
+        self.collection_participants.drop()
+        self.collection_status = self.db["status"]
+        self.collection_status.drop()
+        self.collection_schedules = self.db["schedules"]
+        self.collection_schedules.drop()
         
         #Let's rock"
         yield self.worker.startWorker()
@@ -197,38 +199,55 @@ class TestTtcGenericWorker(TestCase):
     @inlineCallbacks
     def test01_consume_control_program(self):
         events = [
-            ('config', Message.from_json(self.emptyProgram))
+            ('config', Message.from_json(self.configControl))
         ]
-        self.programs.drop()
+        self.collection_scripts.save({"script": [
+            {"activated":True, "do something":"like that"}]})
+        self.collection_participants.save({"phone":"08"})
+        
         for name, event in events:
             yield self.send(event,'control')
-        self.assertEqual(self.programs.count(), 1)
-        #self.assertEqual(self.worker.collection_logs.count(),1)
-        #self.assertEqual(self.worker.collection_schedules.count(),1)
         
-    #@inlineCallbacks
-    #def test02_add_participant(self):
-        #events = [
-            #('1', Message.from_json(self.simpleProgram)),
-            #('2', Message.from_json(self.simpleParticipant))
-            #]
-        #events.sort()
-        #for name, event in events:
-            #yield self.send(event,'control')
-        #program = self.programs.find_one({"name":"M5H"})
-        #participants = program.get("participants")
-        #self.assertEqual(participants, 
-                         #events[0][1].get('program').get('participants') + 
-                         #events[1][1].get('participants'))
-    
+        self.assertTrue(self.collection_schedules)
+        self.assertTrue(self.collection_status)
+        
+    def test02_multiple_script_in_collection(self):
+        config = json.loads(self.configControl)
+        
+        activeScript = {"script":"do something",
+                  "activated":1,
+                  "modified":"45"}        
+        self.collection_scripts.save(activeScript)
+
+        oldActiveScript = {"script":"do something else",
+                  "activated":1,
+                  "modified":"23"}
+        self.collection_scripts.save(oldActiveScript)
+
+        draftScript = {"script":"do something else one more time",
+                  "activated":0,
+                  "modified":"50"}
+        self.collection_scripts.save(draftScript)
+        
+        self.collection_participants.save({"phone":"06"})
+        self.worker.init_program_db(config['program']['database-name'])
+         
+        script = self.worker.get_current_script()
+        self.assertEqual(script['script'], activeScript['script'])
+            
     
     def test03_schedule_participant_dialogue(self):
-        program = Message.from_json(self.simpleProgram)['program']
         
-        self.worker.init_program_db(program['name'])
-        self.worker.db.programs.save(program)
+        config = json.loads(self.configControl)
+        script = json.loads(self.simpleScript)
+        participant = {"phone":"06"}
         
-        schedules = self.worker.schedule_participant_dialogue(program['participants'][0], program['dialogues'][0])
+        #The collections have to be created before initializing worker's database
+        self.collection_scripts.save(script)
+        self.collection_participants.save(participant)
+        self.worker.init_program_db(config['program']['database-name'])
+        
+        schedules = self.worker.schedule_participant_dialogue(participant, script['script']['dialogues'][0])
         #assert time calculation
         self.assertEqual(len(schedules), 2)
         self.assertTrue(datetime.strptime(schedules[0].get("datetime"),"%Y-%m-%dT%H:%M:%S") - datetime.now() < timedelta(seconds=1))
@@ -243,55 +262,65 @@ class TestTtcGenericWorker(TestCase):
     
     @inlineCallbacks
     def test04_send_scheduled_oneMessage(self):
-        dNow = datetime.now()
-        program = Message.from_json(self.simpleProgram)['program']
-    
-        self.worker.init_program_db(program['name'])
-        self.worker.db.programs.save(program)
         
-        self.worker.collection_schedules.save({"datetime":dNow.isoformat(),
+        config = json.loads(self.configControl)
+        script = json.loads(self.simpleScript)
+        participant = {"phone":"08"}
+        dNow = datetime.now()
+        
+        self.collection_scripts.save(script['script'])
+        self.collection_participants.save(participant)
+        self.worker.init_program_db(config['program']['database-name'])
+        self.collection_schedules.save({"datetime":dNow.isoformat(),
                                        "dialogue-id": "0",
                                        "interaction-id": "0",
                                        "participant-phone": "09"});
+        
         yield self.worker.send_scheduled()
         message = self.broker.basic_get('%s.outbound' % self.transport_name)[1].get('content')
         message = TransportUserMessage.from_json( message)
+        
         self.assertEqual(message.payload['to_addr'], "09")
         self.assertEqual(message.payload['content'], "Hello")
-        self.assertEqual(self.worker.collection_schedules.count(), 0)
-        log = self.worker.collection_logs.find_one()
-        self.assertEquals(log['participant-phone'], "09")
-        self.assertEquals(log['dialogue-id'], "0")
-        self.assertEquals(log['interaction-id'], "0")
+        self.assertEqual(self.collection_schedules.count(), 0)
+        status = self.worker.collection_status.find_one()
+        self.assertEquals(status['participant-phone'], "09")
+        self.assertEquals(status['dialogue-id'], "0")
+        self.assertEquals(status['interaction-id'], "0")
     
     @inlineCallbacks
     def test05_send_scheduled_only_in_past(self):
-        dNow = datetime.now()
-        dPast = datetime.now() - timedelta(minutes = 30)
-        dFuture = datetime.now() + timedelta(minutes = 30)
-        program = ({"name":"M5H","shortcode":"8282","dialogues":
+        config = json.loads(self.configControl)
+        script = ({"shortcode":"8282","dialogues":
             [{"dialogue-id":"0","type":"sequential","interactions":[
             {"type":"announcement","interaction-id":"0","content":"Hello","schedule-type":"immediately"},
             {"type":"announcement","interaction-id":"1","content":"Today will be sunny","schedule-type":"wait-20"},
             {"type":"announcement","interaction-id":"2","content":"Today is the special day","schedule-type":"wait-20"}           
             ]}
             ]})
+        participant = {"phone":"06"}
         
-        self.worker.init_program_db(program['name'])
-        self.worker.db.programs.save(program)
+        dNow = datetime.now()
+        dPast = datetime.now() - timedelta(minutes = 30)
+        dFuture = datetime.now() + timedelta(minutes = 30)
         
-        self.worker.collection_schedules.save({"datetime":dPast.isoformat(),
+        self.collection_scripts.save(script)
+        self.collection_participants.save(participant)
+        self.worker.init_program_db(config['program']['database-name'])
+        
+        self.collection_schedules.save({"datetime":dPast.isoformat(),
                                        "dialogue-id": "0",
                                        "interaction-id": "0",
                                        "participant-phone": "09"});
-        self.worker.collection_schedules.save({"datetime":dNow.isoformat(),
+        self.collection_schedules.save({"datetime":dNow.isoformat(),
                                        "dialogue-id": "0",
                                        "interaction-id": "1",
                                        "participant-phone": "09"});
-        self.worker.collection_schedules.save({"datetime":dFuture.isoformat(),
+        self.collection_schedules.save({"datetime":dFuture.isoformat(),
                                        "dialogue-id": "0",
                                        "interaction-id": "2",
                                        "participant-phone": "09"});
+        
         yield self.worker.send_scheduled()
         #first message is the oldest
         message1 = TransportUserMessage.from_json( self.broker.basic_get('%s.outbound' % self.transport_name)[1].get('content'))
@@ -300,8 +329,8 @@ class TestTtcGenericWorker(TestCase):
         message2 = TransportUserMessage.from_json( self.broker.basic_get('%s.outbound' % self.transport_name)[1].get('content'))
         self.assertEqual(message2.payload['content'],"Today will be sunny")   
         #third message is not send, so still in the schedules collection and two messages in the logs collection
-        self.assertEquals(self.worker.collection_schedules.count(),1)
-        self.assertEquals(self.worker.collection_logs.count(),2)
+        self.assertEquals(self.collection_schedules.count(),1)
+        self.assertEquals(self.collection_status.count(),2)
         self.assertTrue(self.broker.basic_get('%s.outbound' % self.transport_name))    
         #only two message should be send
         self.assertTrue((None,None) == self.broker.basic_get('%s.outbound' % self.transport_name))
@@ -314,110 +343,91 @@ class TestTtcGenericWorker(TestCase):
             return db.create_collection(collection_name)
 
      
-    def test06_schedule_interaction_while_interaction_inlog(self):
+    def test06_schedule_interaction_while_interaction_instatus(self):
+        config = json.loads(self.configControl)
+        script = json.loads(self.simpleScript)
+        participant = {"phone":"06"}
+        
         dNow = datetime.now()
         dPast = datetime.now() - timedelta(minutes = 30)
         dFuture = datetime.now() + timedelta(minutes = 30)
         
-        program_name = "M5H"
-        
-        #set up of the data
-        connection = pymongo.Connection("localhost",27017)
-        self.db = connection['test']
-        
-        program = json.loads(self.simpleProgram)['program']
-        self.db.programs.save(program)
-        
-        #Declare collection for scheduling messages
-        self.collection_schedules = self.getCollection(self.db, ("%s_schedules" % program_name))
-        #self.collection_schedules.drop()
-        #self.collection_schedules.save({"datetime":dFuture.isoformat(),
-                                       #"participant-phone": "06",
-                                       #"interaction-id": "0",
-                                       #"dialogue-id": "0"});
-
-        #Declare collection for loging messages
-        self.collection_logs = self.getCollection (self.db, ("%s_logs" % program_name))
-        self.collection_logs.drop()
-        self.collection_logs.save({"datetime":dPast.isoformat(),
+        self.collection_scripts.save(script)
+        self.collection_participants.save(participant)
+        self.worker.init_program_db(config['program']['database-name'])
+        self.collection_status.save({"datetime":dPast.isoformat(),
                                    "participant-phone":"06",
                                    "interaction-id": "0",
                                    "dialogue-id": "0"});
                 
         #Starting the test
-        self.worker.init_program_db(program_name)   
-        schedules = self.worker.schedule_participant_dialogue(program['participants'][0], program['dialogues'][0])
+        schedules = self.worker.schedule_participant_dialogue(participant, script['script']['dialogues'][0])
         
-        self.assertEqual(self.collection_logs.count(), 1);
+        self.assertEqual(self.collection_status.count(), 1);
         self.assertEqual(self.collection_schedules.count(), 1);
         
         
     def test07_schedule_interaction_while_interaction_inschedule(self):
+        config = json.loads(self.configControl)
+        script = json.loads(self.simpleScript)
+        participant = {"phone":"06"}
+        
         dNow = datetime.now()
         dPast = datetime.now() - timedelta(minutes = 30)
         dFuture = datetime.now() + timedelta(minutes = 30)
         
-        program_name = "M5H"
-        
         #set up of the data
-        connection = pymongo.Connection("localhost",27017)
-        self.db = connection['test']
+        #connection = pymongo.Connection("localhost",27017)
+        #self.db = connection['test']
         
-        program = json.loads(self.simpleProgram)['program']
-        self.db.programs.save(program)
-        
+        #program = json.loads(self.simpleProgram)['program']
+        self.collection_scripts.save(script['script'])
+        self.collection_participants.save(participant)
+        self.worker.init_program_db(config['program']['database-name'])   
         #Declare collection for scheduling messages
-        self.collection_schedules = self.getCollection(self.db, ("%s_schedules" % program_name))
-        self.collection_schedules.drop()
         self.collection_schedules.save({"datetime":dFuture.isoformat(),
                                        "participant-phone": "06",
                                        "interaction-id": "1",
                                        "dialogue-id": "0"});
 
         #Declare collection for loging messages
-        self.collection_logs = self.getCollection (self.db, ("%s_logs" % program_name))
-        self.collection_logs.drop()
-        self.collection_logs.save({"datetime":dPast.isoformat(),
+        self.collection_status.save({"datetime":dPast.isoformat(),
                                    "participant-phone":"06",
                                    "interaction-id": "0",
                                    "dialogue-id": "0"});
                 
         #Starting the test
-        self.worker.init_program_db(program_name)   
-        schedules = self.worker.schedule_participant_dialogue(program['participants'][0], program['dialogues'][0])
+        schedules = self.worker.schedule_participant_dialogue(participant, script['script']['dialogues'][0])
         
-        self.assertEqual(self.collection_logs.count(), 1);
+        self.assertEqual(self.collection_status.count(), 1);
         self.assertEqual(self.collection_schedules.count(), 1);
       
     @inlineCallbacks 
     def test08_schedule_interaction_that_has_expired(self):
+        config = json.loads(self.configControl)
+        script = json.loads(self.simpleScript)
+        participant = {"phone":"06"}
+        
         dNow = datetime.now()
         dPast = datetime.now() - timedelta(minutes = 40)
         dLaterPast = datetime.now() - timedelta(minutes = 70)
         
-        program_name = "M5H"
-        
         #Message to be received
         event = Message.from_json(self.controlMessage)
         event['action'] = "resume"
-        event['content'] = program_name
         
-        #set up of the data
-        connection = pymongo.Connection("localhost",27017)
-        self.db = connection['test']
-        
-        self.db.programs.save(Message.from_json(self.simpleProgram)['program'])
-        
+        self.collection_scripts.save(script['script'])
+        self.collection_participants.save(participant)
+        self.worker.init_program_db(config['program']['database-name'])   
+
         #Declare collection for scheduling messages
-        self.collection_schedules = self.getCollection(self.db, ("%s_schedules" % program_name))
         self.collection_schedules.save({"datetime":dPast.isoformat(),
                                        "participant-phone": "06",
                                        "interaction-id": "0",
                                        "dialogue-id": "0"});
 
         #Declare collection for loging messages
-        self.collection_logs = self.getCollection (self.db, ("%s_logs" % program_name))
-        self.collection_logs.save({"datetime":dLaterPast.isoformat(),
+        self.collection_status.save({"datetime":dLaterPast.isoformat(),
                                        "participant-phone":"06",
                                        "interaction-id": "0",
                                        "dialogue-id": "0"});
@@ -425,40 +435,30 @@ class TestTtcGenericWorker(TestCase):
         #Starting the test
         yield self.send(event,'control')
         
-        self.assertEqual(self.collection_logs.count(), 2);
+        self.assertEqual(self.collection_status.count(), 2);
         self.assertEqual(self.collection_schedules.count(), 0);
         
         
   
     def test09_schedule_at_fixed_time(self):
+        config = json.loads(self.configControl);
+        script = json.loads(self.simpleProgram_announcement_fixedtime);
+        participant = {"phone":"08"}
+        
         dNow = datetime.now()
         dFuture = datetime.now() + timedelta(days=2, minutes=30)
+        script['script']['dialogues'][0]['interactions'][0]['year'] = dFuture.year
+        script['script']['dialogues'][0]['interactions'][0]['month'] = dFuture.month
+        script['script']['dialogues'][0]['interactions'][0]['day'] = dFuture.day
+        script['script']['dialogues'][0]['interactions'][0]['hour'] = dFuture.hour
+        script['script']['dialogues'][0]['interactions'][0]['minute'] = dFuture.minute        
         
-        program_name = "M5H"
+        self.collection_scripts.save(script['script'])
+        self.collection_participants.save(participant)
+        self.worker.init_program_db(config['program']['database-name'])   
         
-        #set up of the data
-        connection = pymongo.Connection("localhost",27017)
-        self.db = connection['test']
-        
-        program = json.loads(self.simpleProgram_announcement_fixedtime)['program']
-        program['dialogues'][0]['interactions'][0]['year'] = dFuture.year
-        program['dialogues'][0]['interactions'][0]['month'] = dFuture.month
-        program['dialogues'][0]['interactions'][0]['day'] = dFuture.day
-        program['dialogues'][0]['interactions'][0]['hour'] = dFuture.hour
-        program['dialogues'][0]['interactions'][0]['minute'] = dFuture.minute        
-        self.db.programs.save(program)
-        
-        #Declare collection for scheduling messages
-        self.collection_schedules = self.getCollection(self.db, ("%s_schedules" % program_name))
-        self.collection_schedules.drop()
- 
-        #Declare collection for loging messages
-        self.collection_logs = self.getCollection (self.db, ("%s_logs" % program_name))
-        self.collection_logs.drop()
-                
-        #Starting the test
-        self.worker.init_program_db(program_name)   
-        self.worker.schedule_participant_dialogue(program['participants'][0], program['dialogues'][0])
+        #starting test
+        self.worker.schedule_participant_dialogue(participant, script['script']['dialogues'][0])
         
         self.assertEqual(self.collection_schedules.count(), 1)
         schedule = self.collection_schedules.find_one()
