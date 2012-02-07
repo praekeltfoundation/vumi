@@ -1,9 +1,17 @@
+from urllib import urlencode
+
 from twisted.internet.defer import inlineCallbacks
+
 from vumi.transports.tests.test_base import TransportTestCase
 from vumi.transports.cellulant import CellulantTransport
 from vumi.message import TransportUserMessage
+from vumi.tests.utils import FakeRedis
 from vumi.utils import http_request
-from urllib import urlencode
+
+
+class NoExpireFakeRedis(FakeRedis):
+    def expire(self, *args, **kwargs):
+        pass
 
 
 class TestCellulantTransportTestCase(TransportTestCase):
@@ -15,13 +23,13 @@ class TestCellulantTransportTestCase(TransportTestCase):
     def setUp(self):
         yield super(TestCellulantTransportTestCase, self).setUp()
         self.config = {
-            'ussd_code': '*120*1#',
             'web_port': 0,
             'web_path': '/api/v1/ussd/cellulant/',
         }
         self.transport = yield self.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url(
             self.config['web_path'])
+        self.transport.r_server = NoExpireFakeRedis()
 
     def mk_request(self, **params):
         defaults = {
@@ -37,10 +45,10 @@ class TestCellulantTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_inbound_begin(self):
-        deferred = self.mk_request()
+        deferred = self.mk_request(INPUT="*120*1#")
 
         [msg] = yield self.wait_for_dispatched_messages(1)
-        self.assertEqual(msg['content'], '')
+        self.assertEqual(msg['content'], '*120*1#')
         self.assertEqual(msg['to_addr'], '*120*1#')
         self.assertEqual(msg['from_addr'], '27761234567'),
         self.assertEqual(msg['session_event'],
@@ -56,6 +64,12 @@ class TestCellulantTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_inbound_resume_and_reply_with_end(self):
+        # first pre-populate the redis datastore to siulate BEG message
+        self.transport.set_ussd_for_msisdn_session(
+                '27761234567',
+                '1',
+                '*120*1#',
+                )
         deferred = self.mk_request(INPUT='hi', opCode='')
 
         [msg] = yield self.wait_for_dispatched_messages(1)

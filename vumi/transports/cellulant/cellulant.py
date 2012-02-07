@@ -1,5 +1,7 @@
 # -*- test-case-name: vumi.transports.cellulant.tests.test_cellulant -*-
 
+import redis
+
 from vumi.transports.httprpc import HttpRpcTransport
 from vumi.message import TransportUserMessage
 
@@ -33,11 +35,38 @@ class CellulantTransport(HttpRpcTransport):
 
     def validate_config(self):
         super(CellulantTransport, self).validate_config()
-        self.to_addr = self.config['ussd_code']
         self.transport_type = self.config.get('transport_type', 'ussd')
+        self.transport_name = self.config.get('transport_type', 'cellulant_ussd')
+
+    def setup_transport(self):
+        super(CellulantTransport, self).setup_transport()
+        self.r_prefix = "vumi.transports.cellulant:%s" % self.transport_name
+        self.r_server = redis.Redis('localhost', db=13)
+
+    def set_ussd_for_msisdn_session(self, msisdn, session, ussd):
+        key = "%s:%s:%s" % (self.r_prefix, msisdn, session)
+        self.r_server.set(key, ussd)
+        self.r_server.expire(key, 600)
+
+    def get_ussd_for_msisdn_session(self, msisdn, session):
+        key = "%s:%s:%s" % (self.r_prefix, msisdn, session)
+        return self.r_server.get(key)
 
     def handle_raw_inbound_message(self, message_id, request):
         op_code = request.args.get('opCode')[0]
+        to_addr = None
+        if op_code == "BEG":
+            to_addr = request.args.get('INPUT')[0]
+            self.set_ussd_for_msisdn_session(
+                    request.args.get('MSISDN')[0],
+                    request.args.get('sessionID')[0],
+                    to_addr,
+                    )
+        else:
+            to_addr = self.get_ussd_for_msisdn_session(
+                    request.args.get('MSISDN')[0],
+                    request.args.get('sessionID')[0],
+                    )
         if ((request.args.get('ABORT')[0] not in ('0', 'null'))
             or (op_code == 'ABO')):
             # respond to phones aborting a session
@@ -53,7 +82,7 @@ class CellulantTransport(HttpRpcTransport):
         self.publish_message(
             message_id=message_id,
             content=request.args.get('INPUT')[0],
-            to_addr=self.to_addr,
+            to_addr=to_addr,
             from_addr=request.args.get('MSISDN')[0],
             session_event=event,
             transport_name=self.transport_name,
