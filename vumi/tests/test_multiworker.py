@@ -48,15 +48,13 @@ class MultiWorkerTestCase(TestCase):
     timeout = 3
 
     base_config = {
-        'worker_classes': {
+        'workers': {
             'worker1': "%s.ToyWorker" % (__name__,),
             'worker2': "%s.ToyWorker" % (__name__,),
             'worker3': "%s.ToyWorker" % (__name__,),
             },
-        'worker_config_extras': {
-            'worker1': {
-                'foo': 'bar',
-                }
+        'worker1': {
+            'foo': 'bar',
             },
         }
 
@@ -113,3 +111,14 @@ class MultiWorkerTestCase(TestCase):
         worker2 = worker.getServiceNamed("worker2")
         self.assertEqual({'foo': 'bar'}, worker1.config)
         self.assertEqual({}, worker2.config)
+
+    @inlineCallbacks
+    def test_default_config(self):
+        cfg = {'defaults': {'foo': 'baz'}}
+        cfg.update(self.base_config)
+        worker = self.get_multiworker(cfg)
+        yield worker.startWorker()
+        worker1 = worker.getServiceNamed("worker1")
+        worker2 = worker.getServiceNamed("worker2")
+        self.assertEqual({'foo': 'bar'}, worker1.config)
+        self.assertEqual({'foo': 'baz'}, worker2.config)

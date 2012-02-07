@@ -12,22 +12,17 @@ class MultiWorker(Worker):
 
     Config options:
 
-    :type worker_classes: dict
-    :param worker_classes:
+    :type workers: dict
+    :param workers:
         Dict of worker_name -> fully-qualified class name.
-    :type worker_config_extras: dict
-    :param worker_config_extras:
-        Dict of worker_name -> worker-specific config dict.
+    :type defaults: dict
+    :param defaults:
+        Default configuration for child workers.
 
-    All workers specified in the ``worker_classes`` config option are created
-    and started in :meth:`startWorker` and set as child services. They are
-    given config dicts that are copies of the :class:`MultiWorker`'s config
-    modified in the following way:
-
-     * Options specific to :class:`MultiWorker` are removed.
-
-     * Items in the ``worker_config_extras`` entry for the given worker name
-       are moved to the top level of the config.
+    Each entry in the ``workers`` config dict defines a child worker to start.
+    A child worker's configuration should be provided in a config dict keyed by
+    its name. Common configuration across child workers should go in the
+    ``defaults`` config dict.
     """
 
     WORKER_CREATOR = WorkerCreator
@@ -36,11 +31,8 @@ class MultiWorker(Worker):
         """
         Construct an appropriate configuration for the child worker.
         """
-        config = deepcopy(self.config)
-        config.setdefault('worker_config_extras', {})
-        config.update(config['worker_config_extras'].get(worker_name, {}))
-        config.pop('worker_classes')
-        config.pop('worker_config_extras')
+        config = deepcopy(self.config.get('defaults', {}))
+        config.update(self.config.get(worker_name, {}))
         return config
 
     def create_worker(self, worker_name, worker_class):
@@ -55,7 +47,7 @@ class MultiWorker(Worker):
     def startWorker(self):
         self.workers = []
         self.worker_creator = self.WORKER_CREATOR(self.options)
-        for wname, wclass in self.config.get('worker_classes', {}).items():
+        for wname, wclass in self.config.get('workers', {}).items():
             self.create_worker(wname, wclass)
 
         return DeferredList([maybeDeferred(w.startWorker) for w in self])
