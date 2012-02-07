@@ -97,7 +97,11 @@ class SmppTransport(Transport):
         if not hasattr(self, 'r_server'):
             # Only set up redis if we don't have a test stub already
             self.r_server = redis.Redis("localhost", db=dbindex)
-        self.r_prefix = "%(system_id)s@%(host)s:%(port)s" % self.config
+        self.r_prefix = "%s@%s:%s" % (
+                self.config.get('system_id'),
+                self.config.get('host'),
+                self.config.get('port')
+                )
         self.r_message_prefix = "%s#message_json" % self.r_prefix
         log.msg("Connected to Redis, prefix: %s" % self.r_prefix)
 

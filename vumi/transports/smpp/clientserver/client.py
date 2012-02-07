@@ -177,9 +177,9 @@ class EsmeTransceiver(Protocol):
                 }
         self.r_server = kvs
         self.r_prefix = "%s@%s:%s" % (
-                self.config['system_id'],
-                self.config['host'],
-                self.config['port'])
+                self.config.get('system_id'),
+                self.config.get('host'),
+                self.config.get('port'))
         self.sequence_number_prefix = "vumi_smpp_last_sequence_number#%s" % (
                 self.r_prefix)
         log.msg("r_prefix = %s" % self.r_prefix)

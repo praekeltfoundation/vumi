@@ -13,6 +13,7 @@ from vumi.transports.smpp.clientserver.client import (
 from vumi.transports.smpp.clientserver.tests.test_client import (
         KeyValueStoreTestCase)
 from vumi.transports.smpp.transport import SmppTransport
+from vumi.transports.smpp.clientserver.config import ClientConfig
 from vumi.transports.tests.test_base import TransportTestCase
 
 
@@ -118,20 +119,24 @@ class FakeRedisRespTestCase(TransportTestCase):
     def setUp(self):
         super(FakeRedisRespTestCase, self).setUp()
         self.config = {
-                "system_id": "vumitest-vumitest-vumitest",
-                "host": "host",
-                "port": "port",
                 "TRANSPORT_NAME": "redis_testing_transport",
                 }
         self.vumi_options = {
                 "vhost": "develop",
                 }
+        self.smpp_config = ClientConfig(
+                system_id="vumitest-vumitest-vumitest",
+                host="host",
+                port="port",
+                password='password',
+                )
+
 
         # hack a lot of transport setup
         self.transport = yield self.get_transport(self.config, start=False)
         self.transport.r_server = FakeRedis()
         self.esme = RedisTestEsmeTransceiver(
-                self.config,
+                self.smpp_config,
                 self.transport.r_server)
         self.esme.state = 'BOUND_TRX'
         self.transport.esme_client = self.esme
