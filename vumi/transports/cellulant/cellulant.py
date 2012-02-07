@@ -36,7 +36,8 @@ class CellulantTransport(HttpRpcTransport):
     def validate_config(self):
         super(CellulantTransport, self).validate_config()
         self.transport_type = self.config.get('transport_type', 'ussd')
-        self.transport_name = self.config.get('transport_type', 'cellulant_ussd')
+        self.transport_name = self.config.get('transport_type',
+                'cellulant_ussd')
 
     def setup_transport(self):
         super(CellulantTransport, self).setup_transport()

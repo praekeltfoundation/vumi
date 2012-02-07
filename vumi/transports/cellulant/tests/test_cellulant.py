@@ -64,17 +64,17 @@ class TestCellulantTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_inbound_resume_and_reply_with_end(self):
-        # first pre-populate the redis datastore to siulate BEG message
+        # first pre-populate the redis datastore to simulate BEG message
         self.transport.set_ussd_for_msisdn_session(
                 '27761234567',
                 '1',
-                '*120*1#',
+                '*120*VERY_FAKE_CODE#',
                 )
         deferred = self.mk_request(INPUT='hi', opCode='')
 
         [msg] = yield self.wait_for_dispatched_messages(1)
         self.assertEqual(msg['content'], 'hi')
-        self.assertEqual(msg['to_addr'], '*120*1#')
+        self.assertEqual(msg['to_addr'], '*120*VERY_FAKE_CODE#')
         self.assertEqual(msg['from_addr'], '27761234567')
         self.assertEqual(msg['session_event'],
                          TransportUserMessage.SESSION_RESUME)
