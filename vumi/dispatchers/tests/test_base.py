@@ -4,11 +4,9 @@ from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.message import TransportUserMessage, TransportEvent
-from vumi.dispatchers.base import (BaseDispatchWorker, ToAddrRouter,
-    UserGroupingRouter)
+from vumi.dispatchers.base import BaseDispatchWorker, ToAddrRouter
 from vumi.tests.utils import get_stubbed_worker, FakeRedis
 from vumi.tests.fake_amqp import FakeAMQPBroker
-from vumi.transports.tests.test_base import TransportTestCase
 
 
 class DispatcherTestCase(TestCase):
@@ -113,7 +111,7 @@ class DispatcherTestCase(TestCase):
 
     def dispatch(self, message, transport_name, direction='inbound',
                     exchange='vumi'):
-        rkey = '%s.%s'  % (transport_name, direction)
+        rkey = '%s.%s' % (transport_name, direction)
         self._amqp.publish_message(exchange, rkey, message)
         return self._amqp.kick_delivery()
 
@@ -407,7 +405,7 @@ class UserGroupingRouterTestCase(DispatcherTestCase):
 
     def test_round_robin_group_assignment(self):
         messages = [self.mkmsg_in(transport_name=self.transport_name,
-                        from_addr='from_%s' % (i,)) for i in range(0,4)]
+                        from_addr='from_%s' % (i,)) for i in range(0, 4)]
         groups = [self.router.get_group_for_user(message.user())
                     for message in messages]
         self.assertEqual(groups, [

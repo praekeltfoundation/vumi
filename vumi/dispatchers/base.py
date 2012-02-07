@@ -192,6 +192,7 @@ class ToAddrRouter(BaseDispatchRouter):
         name = msg['transport_name']
         self.dispatcher.transport_publisher[name].publish_message(msg)
 
+
 class UserGroupingRouter(BaseDispatchRouter):
     """
     Router that dispatches based on msg from_addr.
