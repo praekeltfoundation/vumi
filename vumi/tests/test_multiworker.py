@@ -53,6 +53,11 @@ class MultiWorkerTestCase(TestCase):
             'worker2': "%s.ToyWorker" % (__name__,),
             'worker3': "%s.ToyWorker" % (__name__,),
             },
+        'worker_config_extras': {
+            'worker1': {
+                'foo': 'bar',
+                }
+            },
         }
 
     def setUp(self):
@@ -99,3 +104,12 @@ class MultiWorkerTestCase(TestCase):
         yield self.dispatch(mkmsg("baz"), "worker3")
         self.assertEqual(['rab'], self.get_replies("worker2"))
         self.assertEqual(['zab'], self.get_replies("worker3"))
+
+    @inlineCallbacks
+    def test_config(self):
+        worker = self.get_multiworker(self.base_config)
+        yield worker.startWorker()
+        worker1 = worker.getServiceNamed("worker1")
+        worker2 = worker.getServiceNamed("worker2")
+        self.assertEqual({'foo': 'bar'}, worker1.config)
+        self.assertEqual({}, worker2.config)
