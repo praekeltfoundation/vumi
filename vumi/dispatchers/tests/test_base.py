@@ -111,8 +111,9 @@ class DispatcherTestCase(TestCase):
         return self._amqp.wait_messages('vumi', '%s.%s' % (
             transport_name, direction), amount)
 
-    def dispatch(self, message, transport_name, exchange='vumi'):
-        rkey = '%s.inbound'  % (transport_name,)
+    def dispatch(self, message, transport_name, direction='inbound',
+                    exchange='vumi'):
+        rkey = '%s.%s'  % (transport_name, direction)
         self._amqp.publish_message(exchange, rkey, message)
         return self._amqp.kick_delivery()
 
@@ -421,16 +422,34 @@ class UserGroupingRouterTestCase(DispatcherTestCase):
         })
 
     @inlineCallbacks
-    def test_routing(self):
+    def test_routing_to_application(self):
+        # generate 4 messages, 2 from each user
         msg1 = self.mkmsg_in(transport_name=self.transport_name,
                                 from_addr='from_1')
         msg2 = self.mkmsg_in(transport_name=self.transport_name,
                                 from_addr='from_2')
-        yield self.dispatch(msg1, transport_name=self.transport_name)
-        yield self.dispatch(msg2, transport_name=self.transport_name)
-        [msg_for_app1] = self.get_dispatched_messages('app1',
+        msg3 = self.mkmsg_in(transport_name=self.transport_name,
+                                from_addr='from_1')
+        msg4 = self.mkmsg_in(transport_name=self.transport_name,
+                                from_addr='from_2')
+        # send them through to the dispatcher
+        messages = [msg1, msg2, msg3, msg4]
+        for message in messages:
+            yield self.dispatch(message, transport_name=self.transport_name)
+
+        app1_messages = self.get_dispatched_messages('app1',
                                                         direction='inbound')
-        [msg_for_app2] = self.get_dispatched_messages('app2',
+        app2_messages = self.get_dispatched_messages('app2',
                                                         direction='inbound')
-        self.assertEqual(msg_for_app1, msg1)
-        self.assertEqual(msg_for_app2, msg2)
+        self.assertEqual(app1_messages, [msg1, msg3])
+        self.assertEqual(app2_messages, [msg2, msg4])
+
+    @inlineCallbacks
+    def test_routing_to_transport(self):
+        app_msg = self.mkmsg_in(transport_name=self.transport_name,
+                                from_addr='from_1')
+        yield self.dispatch(app_msg, transport_name='app1',
+                                direction='outbound')
+        [transport_msg] = self.get_dispatched_messages(self.transport_name,
+                                                direction='outbound')
+        self.assertEqual(app_msg, transport_msg)
