@@ -211,14 +211,15 @@ class ClientConfigTestCase(unittest.TestCase):
                 dest_addr_npi=0,
                 registered_delivery=0,
                 )
-        attr_to_check = [
+        params_to_check = [
                 'system_type',
                 'interface_version',
                 'dest_addr_ton',
                 'dest_addr_npi',
                 'registered_delivery',
+                'some_garbage_param_that_should_not_be_here'
                 ]
-        for a in attr_to_check:
+        for a in params_to_check:
             self.assertEqual(
                     self.clientConfig1.get(a),
                     self.clientConfig2.get(a))
@@ -234,16 +235,19 @@ class ClientConfigTestCase(unittest.TestCase):
                 dest_addr_ton=1,
                 dest_addr_npi=1,
                 registered_delivery=1,
+                some_garbage_param_that_should_not_be_here="foo"
                 )
-        attr_to_check = {
+        params_to_check = {
                 'system_type': "some_type",
                 'interface_version': "34",
                 'dest_addr_ton': 1,
                 'dest_addr_npi': 1,
                 'registered_delivery': 1,
                 }
-        for k, v in attr_to_check.items():
+        for k, v in params_to_check.items():
             self.assertEqual(self.clientConfig.get(k), v)
+        self.assertEqual(self.clientConfig.get(
+            'some_garbage_param_that_should_not_be_here'), None)
 
 
 class ESMETestCase(unittest.TestCase):
