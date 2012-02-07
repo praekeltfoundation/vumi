@@ -13,9 +13,11 @@ class NoExpireFakeRedis(FakeRedis):
     def expire(self, *args, **kwargs):
         pass
 
+
 class TestCellulantTransport(CellulantTransport):
     def connect_to_redis(self):
         self.r_server = NoExpireFakeRedis()
+
 
 class TestCellulantTransportTestCase(TransportTestCase):
 
@@ -68,7 +70,7 @@ class TestCellulantTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_inbound_resume_and_reply_with_end(self):
-        # first pre-populate the redis datastore to simulate BEG message
+        # first pre-populate the redis datastore to simulate prior BEG message
         self.transport.set_ussd_for_msisdn_session(
                 '27761234567',
                 '1',
