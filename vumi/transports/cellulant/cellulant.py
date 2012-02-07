@@ -42,12 +42,18 @@ class CellulantTransport(HttpRpcTransport):
     def setup_transport(self):
         super(CellulantTransport, self).setup_transport()
         self.r_prefix = "vumi.transports.cellulant:%s" % self.transport_name
-        self.r_server = redis.Redis('localhost', db=13)
+        self.r_db_index = int(self.config.get("redis_db_index", 13))
+        self.r_session_timeout = int(self.config.get("ussd_session_timeout",
+                                                                        600))
+        self.connect_to_redis()
+
+    def connect_to_redis(self):
+        self.r_server = redis.Redis('localhost', db=self.r_db_index)
 
     def set_ussd_for_msisdn_session(self, msisdn, session, ussd):
         key = "%s:%s:%s" % (self.r_prefix, msisdn, session)
         self.r_server.set(key, ussd)
-        self.r_server.expire(key, 600)
+        self.r_server.expire(key, self.r_session_timeout)
 
     def get_ussd_for_msisdn_session(self, msisdn, session):
         key = "%s:%s:%s" % (self.r_prefix, msisdn, session)

@@ -13,10 +13,13 @@ class NoExpireFakeRedis(FakeRedis):
     def expire(self, *args, **kwargs):
         pass
 
+class TestCellulantTransport(CellulantTransport):
+    def connect_to_redis(self):
+        self.r_server = NoExpireFakeRedis()
 
 class TestCellulantTransportTestCase(TransportTestCase):
 
-    transport_class = CellulantTransport
+    transport_class = TestCellulantTransport
     transport_name = 'test_cellulant'
 
     @inlineCallbacks
@@ -25,11 +28,12 @@ class TestCellulantTransportTestCase(TransportTestCase):
         self.config = {
             'web_port': 0,
             'web_path': '/api/v1/ussd/cellulant/',
+            'redis_db_index': 14,
+            'ussd_session_timeout': 555,
         }
         self.transport = yield self.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url(
             self.config['web_path'])
-        self.transport.r_server = NoExpireFakeRedis()
 
     def mk_request(self, **params):
         defaults = {
