@@ -1,3 +1,4 @@
+# -*- test-case-name: vumi.transports.smpp.clientserver.test.test_client -*-
 
 class ClientConfig(object):
 
