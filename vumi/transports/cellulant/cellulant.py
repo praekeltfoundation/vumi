@@ -4,6 +4,7 @@ import redis
 
 from vumi.transports.httprpc import HttpRpcTransport
 from vumi.message import TransportUserMessage
+from vumi import log
 
 
 def pack_ussd_message(message):
@@ -75,6 +76,7 @@ class CellulantTransport(HttpRpcTransport):
                     request.args.get('MSISDN')[0],
                     request.args.get('sessionID')[0],
                     )
+
         if ((request.args.get('ABORT')[0] not in ('0', 'null'))
             or (op_code == 'ABO')):
             # respond to phones aborting a session
@@ -84,19 +86,25 @@ class CellulantTransport(HttpRpcTransport):
             event = self.EVENT_MAP.get(op_code,
                 TransportUserMessage.SESSION_RESUME)
 
-        transport_metadata = {
-            'session_id': request.args.get('sessionID')[0],
-        }
-        self.publish_message(
-            message_id=message_id,
-            content=request.args.get('INPUT')[0],
-            to_addr=to_addr,
-            from_addr=request.args.get('MSISDN')[0],
-            session_event=event,
-            transport_name=self.transport_name,
-            transport_type=self.transport_type,
-            transport_metadata=transport_metadata,
-        )
+        if to_addr is None:
+            # we can't continue so finish request and log error
+            self.finish_request(message_id, '')
+            event = TransportUserMessage.SESSION_CLOSE
+            log.error("Failed redis USSD to_addr lookup for %s" % request.args)
+        else:
+            transport_metadata = {
+                'session_id': request.args.get('sessionID')[0],
+            }
+            self.publish_message(
+                message_id=message_id,
+                content=request.args.get('INPUT')[0],
+                to_addr=to_addr,
+                from_addr=request.args.get('MSISDN')[0],
+                session_event=event,
+                transport_name=self.transport_name,
+                transport_type=self.transport_type,
+                transport_metadata=transport_metadata,
+            )
 
     def handle_outbound_message(self, message):
         if message.payload.get('in_reply_to') and 'content' in message.payload:

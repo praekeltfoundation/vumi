@@ -45,6 +45,15 @@ class TestCellulantTransportTestCase(TransportTestCase):
         return http_request('%s?%s' % (self.transport_url,
             urlencode(defaults)), data='', method='GET')
 
+    def test_redis_caching(self):
+        self.assertEqual(
+                self.transport.get_ussd_for_msisdn_session("msisdn", "123"),
+                None)
+        self.transport.set_ussd_for_msisdn_session("msisdn", "123", "*bar#")
+        self.assertEqual(
+                self.transport.get_ussd_for_msisdn_session("msisdn", "123"),
+                "*bar#")
+
     @inlineCallbacks
     def test_inbound_begin(self):
         deferred = self.mk_request(INPUT="*120*1#")
@@ -91,7 +100,19 @@ class TestCellulantTransportTestCase(TransportTestCase):
         self.assertEqual(response, '1|hello world|null|null|end|null')
 
     @inlineCallbacks
+    def test_inbound_resume_with_failed_to_addr_lookup(self):
+        deferred = self.mk_request(INPUT='hi', opCode='')
+        response = yield deferred
+        self.assertEqual(response, '')
+
+    @inlineCallbacks
     def test_inbound_abort_opcode(self):
+        # first pre-populate the redis datastore to simulate prior BEG message
+        self.transport.set_ussd_for_msisdn_session(
+                '27761234567',
+                '1',
+                '*120*VERY_FAKE_CODE#',
+                )
         # this one should return immediately with a blank
         # as there isn't going to be a sensible response
         resp = yield self.mk_request(opCode='ABO')
