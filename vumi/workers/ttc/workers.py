@@ -123,7 +123,8 @@ class TtcGenericWorker(ApplicationWorker):
 
     def get_current_script(self):
         for script in self.collection_scripts.find({"activated":1}).sort("modified",pymongo.DESCENDING).limit(1):
-            return script
+            return script['script']
+        log.msg("Fatal Error: no active script found on in the database")
         
 
     def init_program_db(self, database_name):
@@ -170,8 +171,7 @@ class TtcGenericWorker(ApplicationWorker):
         #self.record.append(('config',message))
         if (message.get('program')):
             program = message['program']
-            #program_name = program['name']
-            #log.msg("Receive a program with name: %s" % program_name)
+            log.msg("Receive a config message: %s" % program['name'])
             #MongoDB#
             self.init_program_db(program['database-name'])
             #self.db.programs.save(program)
@@ -211,7 +211,7 @@ class TtcGenericWorker(ApplicationWorker):
             #self.record.append(('config',message))
             #yield self.saveParticipantsDB(message.get("participants"))
 
-        elif (message['action']=='resume' or message['action']=='start'):
+        elif (message.get('action')=='resume' or message.get('action')=='start'):
             log.msg("Getting an action: "+message['action'])
             #self.init_program_db(message.get('content'))
             #reconstruct the scheduling by replaying all the program for each participant

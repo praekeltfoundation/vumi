@@ -4,7 +4,7 @@ from twisted.internet.defer import inlineCallbacks
 
 import pymongo
 import json
-import ast
+
 from datetime import datetime, time, date, timedelta
 
 #from vumi.database.tests.test_base import UglyModelTestCase
@@ -55,7 +55,9 @@ class TestTtcGenericWorker(TestCase):
     }
     """
     
-    simpleScript= """{"script":{
+    simpleScript= """{
+    "activated":1,
+    "script":{
             "shortcode": "8282",
             "dialogues":
             [{"dialogue-id":"0","interactions":[
@@ -77,12 +79,12 @@ class TestTtcGenericWorker(TestCase):
 
     controlMessage="""
     {
-        "action":"",
-        "content":""
+        "action":"start"
     }"""
     
     simpleProgram_Question = """
-    {"script": {
+    { "activated" : 1,
+    "script": {
 		"shortcode": "8282",
 		"dialogues": [
 			{
@@ -107,7 +109,8 @@ class TestTtcGenericWorker(TestCase):
     }"""
     
     simpleProgram_announcement_fixedtime = """
-    {"script": {
+    {"activated" : 1,
+    "script": {
             "shortcode": "8282",
             "dialogues": [
                     {
@@ -209,22 +212,25 @@ class TestTtcGenericWorker(TestCase):
             yield self.send(event,'control')
         
         self.assertTrue(self.collection_schedules)
-        self.assertTrue(self.collection_status)
+        self.assertTrue(self.collection_status)    
         
     def test02_multiple_script_in_collection(self):
         config = json.loads(self.configControl)
+        dNow = datetime.now()
+        dPast1 = datetime.now() - timedelta(minutes = 30)
+        dPast2 = datetime.now() + timedelta(minutes = 60)
         
-        activeScript = {"script":"do something",
+        activeScript = {"script":{"do":"something"},
                   "activated":1,
-                  "modified":"45"}        
+                  "modified": dPast1}        
         self.collection_scripts.save(activeScript)
 
-        oldActiveScript = {"script":"do something else",
+        oldActiveScript = {"script":{"do": "something else"},
                   "activated":1,
-                  "modified":"23"}
+                  "modified":dPast2}
         self.collection_scripts.save(oldActiveScript)
 
-        draftScript = {"script":"do something else one more time",
+        draftScript = {"script":{"do": "something else one more time"},
                   "activated":0,
                   "modified":"50"}
         self.collection_scripts.save(draftScript)
@@ -233,7 +239,7 @@ class TestTtcGenericWorker(TestCase):
         self.worker.init_program_db(config['program']['database-name'])
          
         script = self.worker.get_current_script()
-        self.assertEqual(script['script'], activeScript['script'])
+        self.assertEqual(script, activeScript['script'])
             
     
     def test03_schedule_participant_dialogue(self):
@@ -265,10 +271,10 @@ class TestTtcGenericWorker(TestCase):
         
         config = json.loads(self.configControl)
         script = json.loads(self.simpleScript)
-        participant = {"phone":"08"}
+        participant = {"phone":"09"}
         dNow = datetime.now()
         
-        self.collection_scripts.save(script['script'])
+        self.collection_scripts.save(script)
         self.collection_participants.save(participant)
         self.worker.init_program_db(config['program']['database-name'])
         self.collection_schedules.save({"datetime":dNow.isoformat(),
@@ -291,13 +297,14 @@ class TestTtcGenericWorker(TestCase):
     @inlineCallbacks
     def test05_send_scheduled_only_in_past(self):
         config = json.loads(self.configControl)
-        script = ({"shortcode":"8282","dialogues":
+        script = {"activated":1,
+                  "script":{"shortcode":"8282","dialogues":
             [{"dialogue-id":"0","type":"sequential","interactions":[
             {"type":"announcement","interaction-id":"0","content":"Hello","schedule-type":"immediately"},
             {"type":"announcement","interaction-id":"1","content":"Today will be sunny","schedule-type":"wait-20"},
             {"type":"announcement","interaction-id":"2","content":"Today is the special day","schedule-type":"wait-20"}           
-            ]}
-            ]})
+            ]}]
+            }}
         participant = {"phone":"06"}
         
         dNow = datetime.now()
@@ -381,7 +388,7 @@ class TestTtcGenericWorker(TestCase):
         #self.db = connection['test']
         
         #program = json.loads(self.simpleProgram)['program']
-        self.collection_scripts.save(script['script'])
+        self.collection_scripts.save(script)
         self.collection_participants.save(participant)
         self.worker.init_program_db(config['program']['database-name'])   
         #Declare collection for scheduling messages
@@ -414,9 +421,9 @@ class TestTtcGenericWorker(TestCase):
         
         #Message to be received
         event = Message.from_json(self.controlMessage)
-        event['action'] = "resume"
+        #event['action'] = "resume"
         
-        self.collection_scripts.save(script['script'])
+        self.collection_scripts.save(script)
         self.collection_participants.save(participant)
         self.worker.init_program_db(config['program']['database-name'])   
 
@@ -453,7 +460,7 @@ class TestTtcGenericWorker(TestCase):
         script['script']['dialogues'][0]['interactions'][0]['hour'] = dFuture.hour
         script['script']['dialogues'][0]['interactions'][0]['minute'] = dFuture.minute        
         
-        self.collection_scripts.save(script['script'])
+        self.collection_scripts.save(script)
         self.collection_participants.save(participant)
         self.worker.init_program_db(config['program']['database-name'])   
         
