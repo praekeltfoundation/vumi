@@ -20,7 +20,7 @@ class TestCellulantTransportTestCase(TransportTestCase):
         self.config = {
             'web_port': 0,
             'web_path': '/api/v1/ussd/cellulant/',
-            'ussd_session_timeout': 555,
+            'ussd_session_timeout': 60,
             'redis': {}
         }
         self.transport = yield self.get_transport(self.config)
@@ -46,6 +46,8 @@ class TestCellulantTransportTestCase(TransportTestCase):
             urlencode(defaults)), data='', method='GET')
 
     def test_redis_caching(self):
+        # delete the key that shouldn't exist (in case of testing real redis)
+        self.transport.r_server.delete(self.transport.r_key("msisdn", "123"))
         self.assertEqual(
                 self.transport.get_ussd_for_msisdn_session("msisdn", "123"),
                 None)
@@ -101,7 +103,7 @@ class TestCellulantTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_inbound_resume_with_failed_to_addr_lookup(self):
-        deferred = self.mk_request(INPUT='hi', opCode='')
+        deferred = self.mk_request(MSISDN='123456', INPUT='hi', opCode='')
         response = yield deferred
         self.assertEqual(response, '')
 
