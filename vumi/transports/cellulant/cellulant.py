@@ -36,8 +36,6 @@ class CellulantTransport(HttpRpcTransport):
     def validate_config(self):
         super(CellulantTransport, self).validate_config()
         self.transport_type = self.config.get('transport_type', 'ussd')
-        self.transport_name = self.config.get('transport_type',
-                'cellulant_ussd')
 
     def setup_transport(self):
         super(CellulantTransport, self).setup_transport()
@@ -47,17 +45,20 @@ class CellulantTransport(HttpRpcTransport):
                                                                         600))
         self.connect_to_redis()
 
+    # the connection to redis is a seperate method to allow overriding in tests
     def connect_to_redis(self):
         self.r_server = redis.Redis(**self.redis_config)
 
+    def r_key(self, msisdn, session):
+        return "%s:%s:%s" % (self.r_prefix, msisdn, session)
+
     def set_ussd_for_msisdn_session(self, msisdn, session, ussd):
-        key = "%s:%s:%s" % (self.r_prefix, msisdn, session)
-        self.r_server.set(key, ussd)
-        self.r_server.expire(key, self.r_session_timeout)
+        self.r_server.set(self.r_key(msisdn, session), ussd)
+        self.r_server.expire(self.r_key(msisdn, session),
+                self.r_session_timeout)
 
     def get_ussd_for_msisdn_session(self, msisdn, session):
-        key = "%s:%s:%s" % (self.r_prefix, msisdn, session)
-        return self.r_server.get(key)
+        return self.r_server.get(self.r_key(msisdn, session))
 
     def handle_raw_inbound_message(self, message_id, request):
         op_code = request.args.get('opCode')[0]

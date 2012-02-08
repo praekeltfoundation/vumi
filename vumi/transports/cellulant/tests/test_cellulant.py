@@ -9,19 +9,9 @@ from vumi.tests.utils import FakeRedis
 from vumi.utils import http_request
 
 
-class NoExpireFakeRedis(FakeRedis):
-    def expire(self, *args, **kwargs):
-        pass
-
-
-class TestCellulantTransport(CellulantTransport):
-    def connect_to_redis(self):
-        self.r_server = NoExpireFakeRedis()
-
-
 class TestCellulantTransportTestCase(TransportTestCase):
 
-    transport_class = TestCellulantTransport
+    transport_class = CellulantTransport
     transport_name = 'test_cellulant'
 
     @inlineCallbacks
@@ -31,14 +21,17 @@ class TestCellulantTransportTestCase(TransportTestCase):
             'web_port': 0,
             'web_path': '/api/v1/ussd/cellulant/',
             'ussd_session_timeout': 555,
-            'redis': {
-                'host': 'localhost',
-                'db': 13,
-                }
+            'redis': {}
         }
         self.transport = yield self.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url(
             self.config['web_path'])
+        self.transport.r_server = FakeRedis()
+
+    @inlineCallbacks
+    def tearDown(self):
+        yield super(TestCellulantTransportTestCase, self).tearDown()
+        self.transport.r_server.teardown()
 
     def mk_request(self, **params):
         defaults = {
