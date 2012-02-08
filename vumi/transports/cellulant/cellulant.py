@@ -41,14 +41,14 @@ class CellulantTransport(HttpRpcTransport):
 
     def setup_transport(self):
         super(CellulantTransport, self).setup_transport()
+        self.redis_config = self.config.get('redis', {})
         self.r_prefix = "vumi.transports.cellulant:%s" % self.transport_name
-        self.r_db_index = int(self.config.get("redis_db_index", 13))
         self.r_session_timeout = int(self.config.get("ussd_session_timeout",
                                                                         600))
         self.connect_to_redis()
 
     def connect_to_redis(self):
-        self.r_server = redis.Redis('localhost', db=self.r_db_index)
+        self.r_server = redis.Redis(**self.redis_config)
 
     def set_ussd_for_msisdn_session(self, msisdn, session, ussd):
         key = "%s:%s:%s" % (self.r_prefix, msisdn, session)
