@@ -22,7 +22,6 @@ class TestCellulantTransport(CellulantTransport):
 class TestCellulantTransportTestCase(TransportTestCase):
 
     transport_class = TestCellulantTransport
-    #transport_class = CellulantTransport
     transport_name = 'test_cellulant'
 
     @inlineCallbacks
