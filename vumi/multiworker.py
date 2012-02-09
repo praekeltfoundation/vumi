@@ -2,7 +2,7 @@
 
 from copy import deepcopy
 
-from twisted.internet.defer import DeferredList, maybeDeferred
+from twisted.internet.defer import Deferred, DeferredList, maybeDeferred
 
 from vumi.service import Worker, WorkerCreator
 
@@ -43,11 +43,26 @@ class MultiWorker(Worker):
         worker = self.worker_creator.create_worker(worker_class, config)
         worker.setName(worker_name)
         worker.setServiceParent(self)
+        return worker
 
     def startWorker(self):
         self.workers = []
         self.worker_creator = self.WORKER_CREATOR(self.options)
         for wname, wclass in self.config.get('workers', {}).items():
-            self.create_worker(wname, wclass)
+            self.workers.append(self.create_worker(wname, wclass))
 
-        return DeferredList([maybeDeferred(w.startWorker) for w in self])
+        def start_worker(worker):
+            d = Deferred()
+            orig_startWorker = worker.startWorker
+
+            def start_wrapper():
+                maybeDeferred(orig_startWorker).addCallback(d.callback)
+
+            worker.startWorker = start_wrapper
+            return d
+
+        return DeferredList([start_worker(w) for w in self.workers])
+
+    def stopWorker(self):
+        return DeferredList([maybeDeferred(w.stopWorker)
+                             for w in self.workers])
