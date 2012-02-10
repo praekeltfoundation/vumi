@@ -2,8 +2,6 @@
 
 from copy import deepcopy
 
-from twisted.internet.defer import Deferred, DeferredList, maybeDeferred
-
 from vumi.service import Worker, WorkerCreator
 
 
