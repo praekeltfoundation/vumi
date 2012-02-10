@@ -205,7 +205,6 @@ class StubbedWorkerCreator(WorkerCreator):
         spec = get_spec(vumi_resource_path("amqp-spec-0-8.xml"))
         amq_client = FakeAMQClient(spec, self.options, self.broker)
         self.broker = amq_client.broker  # So we use the same broker for all.
-        reactor.callLater(0, worker.startService)
         reactor.callLater(0, worker._amqp_connected, amq_client)
 
 

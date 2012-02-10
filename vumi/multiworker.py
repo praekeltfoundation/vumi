@@ -45,24 +45,14 @@ class MultiWorker(Worker):
         worker.setServiceParent(self)
         return worker
 
-    def startWorker(self):
+    def startService(self):
+        super(MultiWorker, self).startService()
         self.workers = []
         self.worker_creator = self.WORKER_CREATOR(self.options)
         for wname, wclass in self.config.get('workers', {}).items():
-            self.workers.append(self.create_worker(wname, wclass))
+            worker = self.create_worker(wname, wclass)
+            worker.startService()
+            self.workers.append(worker)
 
-        def start_worker(worker):
-            d = Deferred()
-            orig_startWorker = worker.startWorker
-
-            def start_wrapper():
-                maybeDeferred(orig_startWorker).addCallback(d.callback)
-
-            worker.startWorker = start_wrapper
-            return d
-
-        return DeferredList([start_worker(w) for w in self.workers])
-
-    def stopWorker(self):
-        return DeferredList([maybeDeferred(w.stopWorker)
-                             for w in self.workers])
+    def startWorker(self):
+        pass
