@@ -1,5 +1,6 @@
 from twisted.trial.unittest import TestCase
-from twisted.internet.defer import Deferred, DeferredList, inlineCallbacks
+from twisted.internet.defer import (Deferred, DeferredList, inlineCallbacks,
+                                    returnValue)
 
 from vumi.tests.utils import StubbedWorkerCreator, get_stubbed_worker
 from vumi.service import Worker
@@ -36,10 +37,8 @@ class StubbedMultiWorker(MultiWorker):
         worker_creator.broker = self._amqp_client.broker
         return worker_creator
 
-    @inlineCallbacks
-    def startWorker(self):
-        yield super(StubbedMultiWorker, self).startWorker()
-        yield DeferredList([w._d for w in self.workers])
+    def wait_for_workers(self):
+        return DeferredList([w._d for w in self.workers])
 
 
 def mkmsg(content):
@@ -76,11 +75,13 @@ class MultiWorkerTestCase(TestCase):
         yield self.worker.stopService()
         ToyWorker.events[:] = []
 
+    @inlineCallbacks
     def get_multiworker(self, config):
         self.worker = get_stubbed_worker(StubbedMultiWorker, config)
         self.worker.startService()
         self.broker = self.worker._amqp_client.broker
-        return self.worker
+        yield self.worker.wait_for_workers()
+        returnValue(self.worker)
 
     def dispatch(self, message, worker_name):
         rkey = "%s.in" % (worker_name,)
@@ -93,9 +94,8 @@ class MultiWorkerTestCase(TestCase):
 
     @inlineCallbacks
     def test_start_stop_workers(self):
-        worker = self.get_multiworker(self.base_config)
         self.assertEqual([], ToyWorker.events)
-        yield worker.startWorker()
+        worker = yield self.get_multiworker(self.base_config)
         self.assertEqual(['START: worker%s' % (i + 1) for i in range(3)],
                          sorted(ToyWorker.events))
         ToyWorker.events[:] = []
@@ -105,8 +105,7 @@ class MultiWorkerTestCase(TestCase):
 
     @inlineCallbacks
     def test_message_flow(self):
-        worker = self.get_multiworker(self.base_config)
-        yield worker.startWorker()
+        yield self.get_multiworker(self.base_config)
         yield self.dispatch(mkmsg("foo"), "worker1")
         self.assertEqual(['oof'], self.get_replies("worker1"))
         yield self.dispatch(mkmsg("bar"), "worker2")
@@ -116,8 +115,7 @@ class MultiWorkerTestCase(TestCase):
 
     @inlineCallbacks
     def test_config(self):
-        worker = self.get_multiworker(self.base_config)
-        yield worker.startWorker()
+        worker = yield self.get_multiworker(self.base_config)
         worker1 = worker.getServiceNamed("worker1")
         worker2 = worker.getServiceNamed("worker2")
         self.assertEqual({'foo': 'bar'}, worker1.config)
@@ -127,8 +125,7 @@ class MultiWorkerTestCase(TestCase):
     def test_default_config(self):
         cfg = {'defaults': {'foo': 'baz'}}
         cfg.update(self.base_config)
-        worker = self.get_multiworker(cfg)
-        yield worker.startWorker()
+        worker = yield self.get_multiworker(cfg)
         worker1 = worker.getServiceNamed("worker1")
         worker2 = worker.getServiceNamed("worker2")
         self.assertEqual({'foo': 'bar'}, worker1.config)
