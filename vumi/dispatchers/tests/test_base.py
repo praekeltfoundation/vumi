@@ -414,7 +414,7 @@ class UserGroupingRouterTestCase(DispatcherTestCase):
             'group1',
             'group2',
         ])
-        self.assertEqual(self.router.get_groups(), {
+        self.assertEqual(self.router.groups, {
             'group1': 'app1',
             'group2': 'app2',
         })

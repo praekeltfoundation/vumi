@@ -209,20 +209,11 @@ class UserGroupingRouter(BaseDispatchRouter):
         self.r_config = config.get('redis_config', {})
         self.r_prefix = config['dispatcher_name']
         self.r_server = redis.Redis(**self.r_config)
+        self.groups = config['group_mappings']
         super(UserGroupingRouter, self).__init__(dispatcher, config)
 
     def setup_routing(self):
-        self.set_groups(self.config['group_mappings'])
-        self.nr_of_groups = len(self.config['group_mappings'])
-
-    def set_groups(self, group_mappings):
-        groups_key = self.r_key('groups')
-        self.r_server.hmset(groups_key, group_mappings)
-        return self.get_groups()
-
-    def get_groups(self):
-        groups_key = self.r_key('groups')
-        return self.r_server.hgetall(groups_key)
+        self.nr_of_groups = len(self.groups)
 
     def get_counter(self):
         counter_key = self.r_key('round-robin')
@@ -231,7 +222,7 @@ class UserGroupingRouter(BaseDispatchRouter):
     def get_next_group(self):
         counter = self.get_counter()
         current_group_id = counter % self.nr_of_groups
-        sorted_groups = sorted(self.get_groups().items())
+        sorted_groups = sorted(self.groups.items())
         group = sorted_groups[current_group_id]
         return group
 
@@ -254,7 +245,7 @@ class UserGroupingRouter(BaseDispatchRouter):
 
     def dispatch_inbound_message(self, msg):
         group = self.get_group_for_user(msg.user().encode('utf8'))
-        app = self.get_groups()[group]
+        app = self.groups[group]
         self.dispatcher.exposed_publisher[app].publish_message(msg)
 
     def dispatch_outbound_message(self, msg):
