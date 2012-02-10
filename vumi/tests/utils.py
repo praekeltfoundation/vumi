@@ -15,7 +15,7 @@ from twisted.internet.defer import DeferredQueue, inlineCallbacks
 from twisted.python import log
 
 from vumi.utils import vumi_resource_path, import_module
-from vumi.service import get_spec, Worker
+from vumi.service import get_spec, Worker, WorkerCreator
 from vumi.tests.fake_amqp import FakeAMQClient
 
 
@@ -196,6 +196,16 @@ def get_stubbed_worker(worker_class, config=None, broker=None):
     worker = worker_class({}, config)
     worker._amqp_client = amq_client
     return worker
+
+
+class StubbedWorkerCreator(WorkerCreator):
+    broker = None
+
+    def _connect(self, worker, timeout, bindAddress):
+        spec = get_spec(vumi_resource_path("amqp-spec-0-8.xml"))
+        amq_client = FakeAMQClient(spec, self.options, self.broker)
+        self.broker = amq_client.broker  # So we use the same broker for all.
+        worker._amqp_client = amq_client
 
 
 def get_stubbed_channel(broker=None, id=0):
