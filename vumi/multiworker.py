@@ -51,7 +51,6 @@ class MultiWorker(Worker):
         self.worker_creator = self.WORKER_CREATOR(self.options)
         for wname, wclass in self.config.get('workers', {}).items():
             worker = self.create_worker(wname, wclass)
-            worker.startService()
             self.workers.append(worker)
 
     def startWorker(self):
