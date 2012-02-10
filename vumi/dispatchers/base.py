@@ -195,7 +195,12 @@ class ToAddrRouter(BaseDispatchRouter):
 
 class UserGroupingRouter(BaseDispatchRouter):
     """
-    Router that dispatches based on msg from_addr.
+    Router that dispatches based on msg `from_addr`. Each unique
+    `from_addr` is round-robin assigned to one of the defined
+    groups in `group_mappings`. All messages from that
+    `from_addr` are then routed to the `app` assigned to that group.
+
+    Useful for A/B testing.
 
     :type group_mappings: dict
     :param group_mappings:
@@ -203,6 +208,11 @@ class UserGroupingRouter(BaseDispatchRouter):
         If a user is assigned to a given group the
         message is sent to the application listening
         on the given transport_name.
+
+    :type dispatcher_name: str
+    :param dispatcher_name:
+        The name of the dispatcher, used internally as
+        the prefix for Redis keys.
     """
 
     def __init__(self, dispatcher, config):
