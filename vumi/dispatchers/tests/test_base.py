@@ -16,7 +16,7 @@ class DispatcherTestCase(TestCase):
 
     """
 
-    # base timeout of 5s for all application tests
+    # base timeout of 5s for all dispatcher tests
     timeout = 5
 
     dispatcher_name = "sphex_dispatcher"

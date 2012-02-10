@@ -231,7 +231,8 @@ class UserGroupingRouter(BaseDispatchRouter):
     def get_next_group(self):
         counter = self.get_counter()
         current_group_id = counter % self.nr_of_groups
-        group = self.get_groups().items()[current_group_id]
+        sorted_groups = sorted(self.get_groups().items())
+        group = sorted_groups[current_group_id]
         return group
 
     def get_group_key(self, group_name):
@@ -252,7 +253,7 @@ class UserGroupingRouter(BaseDispatchRouter):
         return group
 
     def dispatch_inbound_message(self, msg):
-        group = self.get_group_for_user(msg.user())
+        group = self.get_group_for_user(msg.user().encode('utf8'))
         app = self.get_groups()[group]
         self.dispatcher.exposed_publisher[app].publish_message(msg)
 
