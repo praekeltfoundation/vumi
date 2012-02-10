@@ -30,9 +30,6 @@ class DispatcherTestCase(TestCase):
         for worker in self._workers:
             worker.stopWorker()
 
-    def rkey(self, name):
-        return "%s.%s" % (self.transport_name, name)
-
     @inlineCallbacks
     def get_dispatcher(self, config, cls=None, start=True):
         """
@@ -414,10 +411,6 @@ class UserGroupingRouterTestCase(DispatcherTestCase):
             'group1',
             'group2',
         ])
-        self.assertEqual(self.router.groups, {
-            'group1': 'app1',
-            'group2': 'app2',
-        })
 
     @inlineCallbacks
     def test_routing_to_application(self):
