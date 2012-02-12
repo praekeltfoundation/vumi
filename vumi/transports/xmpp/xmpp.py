@@ -5,8 +5,11 @@ from twisted.python import log
 from twisted.words.protocols.jabber.jid import JID
 from twisted.words.xish import domish
 from twisted.words.xish.domish import Element as DomishElement
+from twisted.internet.task import LoopingCall
+from twisted.internet.defer import inlineCallbacks
 
 from wokkel.client import XMPPClient
+from wokkel.ping import PingClientProtocol
 from wokkel.xmppim import (RosterClientProtocol, MessageProtocol,
                            PresenceClientProtocol)
 
@@ -93,23 +96,34 @@ class XMPPTransport(Transport):
     _xmpp_protocol = XMPPTransportProtocol
     _xmpp_client = XMPPClient
 
+    def validate_config(self):
+        self.host = self.config.pop('host')
+        self.port = int(self.config.pop('port'))
+        self.debug = self.config.pop('debug', False)
+        self.username = self.config.pop('username')
+        self.password = self.config.pop('password')
+        self.status = self.config.pop('status')
+        self.ping_interval = self.config.pop('ping_interval', 10)
+
     def setup_transport(self):
         log.msg("Starting XMPPTransport: %s" % self.transport_name)
 
-        username = self.config.pop('username')
-        password = self.config.pop('password')
-        statuses = {None: self.config.pop('status', '')}
-        host = self.config.pop('host')
-        port = int(self.config.pop('port'))
+        statuses = {None: self.status}
 
-        self.jid = JID(username)
-        self.xmpp_client = self._xmpp_client(self.jid, password, host, port)
-        self.xmpp_client.logTraffic = self.config.get('debug')
+        self.jid = JID(self.username)
+        self.xmpp_client = self._xmpp_client(self.jid, self.password,
+                                                self.host, self.port)
+        self.xmpp_client.logTraffic = self.debug
         self.xmpp_client.setServiceParent(self)
 
         presence = TransportPresenceClientProtocol()
         presence.setHandlerParent(self.xmpp_client)
         presence.available(statuses=statuses)
+
+        self.pinger = PingClientProtocol()
+        self.pinger.setHandlerParent(self.xmpp_client)
+        self.ping_call = LoopingCall(self.send_ping)
+        self.ping_call.start(self.ping_interval)
 
         roster = TransportRosterClientProtocol()
         roster.setHandlerParent(self.xmpp_client)
@@ -120,8 +134,16 @@ class XMPPTransport(Transport):
 
         log.msg("XMPPTransport %s started." % self.transport_name)
 
+    @inlineCallbacks
+    def send_ping(self):
+        if self.xmpp_client.xmlstream:
+            yield self.pinger.ping(self.jid)
+
     def teardown_transport(self):
         log.msg("XMPPTransport %s stopped." % self.transport_name)
+        ping_call = getattr(self, 'ping_call', None)
+        if ping_call and ping_call.running:
+            ping_call.stop()
 
     def handle_outbound_message(self, message):
         recipient = message['to_addr']
