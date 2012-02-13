@@ -122,13 +122,13 @@ class XMPPTransport(Transport):
     _xmpp_client = XMPPClient
 
     def validate_config(self):
-        self.host = self.config.pop('host')
-        self.port = int(self.config.pop('port'))
-        self.debug = self.config.pop('debug', False)
-        self.username = self.config.pop('username')
-        self.password = self.config.pop('password')
-        self.status = self.config.pop('status')
-        self.ping_interval = self.config.pop('ping_interval', 60)
+        self.host = self.config['host']
+        self.port = int(self.config['port'])
+        self.debug = self.config.get('debug', False)
+        self.username = self.config['username']
+        self.password = self.config['password']
+        self.status = self.config['status']
+        self.ping_interval = self.config.get('ping_interval', 60)
 
     def setup_transport(self):
         log.msg("Starting XMPPTransport: %s" % self.transport_name)
