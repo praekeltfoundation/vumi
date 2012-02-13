@@ -68,7 +68,7 @@ class KeyValueStoreTestCase(unittest.TestCase):
             self.assertEqual(self.kvs.incr(key1), 2)
             self.kvs.set(key1, "1")
             self.assertEqual(self.kvs.incr(key1), 2)
-            self.kvs.set(key1, "oops")
+            self.kvs.delete(key1)
             self.assertEqual(self.kvs.incr(key1), 1)
             self.assertEqual(self.kvs.incr(key1), 2)
             self.assertEqual(self.kvs.incr(key1), 3)
