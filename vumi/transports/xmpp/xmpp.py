@@ -121,6 +121,10 @@ class XMPPTransport(Transport):
     _xmpp_protocol = XMPPTransportProtocol
     _xmpp_client = XMPPClient
 
+    def __init__(self, options, config=None):
+        super(XMPPTransport, self).__init__(options, config=config)
+        self.ping_call = LoopingCall(self.send_ping)
+
     def validate_config(self):
         self.host = self.config['host']
         self.port = int(self.config['port'])
@@ -147,7 +151,6 @@ class XMPPTransport(Transport):
 
         self.pinger = PingClientProtocol()
         self.pinger.setHandlerParent(self.xmpp_client)
-        self.ping_call = LoopingCall(self.send_ping)
         self.ping_call.start(self.ping_interval)
 
         roster = TransportRosterClientProtocol()
