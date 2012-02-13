@@ -99,7 +99,7 @@ class XMPPTransport(Transport):
     :param port:
         The port on the XMPP host to connect to.
     :type debug: bool
-    :param port:
+    :param debug:
         Whether or not to show all the XMPP traffic. Defaults to False.
     :type username: str
     :param username:
