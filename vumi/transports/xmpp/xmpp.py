@@ -151,7 +151,7 @@ class XMPPTransport(Transport):
 
         self.pinger = PingClientProtocol()
         self.pinger.setHandlerParent(self.xmpp_client)
-        self.ping_call.start(self.ping_interval)
+        self.ping_call.start(self.ping_interval, now=False)
 
         roster = TransportRosterClientProtocol()
         roster.setHandlerParent(self.xmpp_client)
