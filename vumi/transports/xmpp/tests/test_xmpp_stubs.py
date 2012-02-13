@@ -9,6 +9,9 @@ class TestXMLStream(object):
     def send(self, message):
         self.outbox.append(message)
 
+    def addObserver(self, event, observerfn, *args, **kwargs):
+        """Ignore."""
+
 
 class TestXMPPClient(xmpp.XMPPClient):
     def __init__(self, *args, **kw):
