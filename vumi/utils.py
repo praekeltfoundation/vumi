@@ -61,7 +61,7 @@ def http_request_full(url, data=None, headers={}, method='POST'):
     agent = Agent(reactor)
     d = agent.request(method,
                       url,
-                      Headers(headers),
+                      mkheaders(headers),
                       StringProducer(data) if data else None)
 
     def handle_response(response):
@@ -69,6 +69,21 @@ def http_request_full(url, data=None, headers={}, method='POST'):
 
     d.addCallback(handle_response)
     return d
+
+
+def mkheaders(headers):
+    """
+    Turn a dict of HTTP headers into an instance of Headers.
+
+    Twisted expects a list of values, not a single value. We should
+    support both.
+    """
+    raw_headers = {}
+    for k, v in headers.iteritems():
+        if isinstance(v, basestring):
+            v = [v]
+        raw_headers[k] = v
+    return Headers(raw_headers)
 
 
 def http_request(url, data, headers={}, method='POST'):

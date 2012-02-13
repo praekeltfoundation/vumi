@@ -79,10 +79,9 @@ class KeyValueStore(object):
 
     def incr(self, key):
         old = self.get(key)
-        try:
-            new = int(old) + 1
-        except:
-            new = 1
+        if old is None:
+            old = 0
+        new = int(old) + 1
         self.set(key, new)
         return new
 

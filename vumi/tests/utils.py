@@ -15,7 +15,7 @@ from twisted.internet.defer import DeferredQueue, inlineCallbacks
 from twisted.python import log
 
 from vumi.utils import vumi_resource_path, import_module
-from vumi.service import get_spec, Worker
+from vumi.service import get_spec, Worker, WorkerCreator
 from vumi.tests.fake_amqp import FakeAMQClient
 
 
@@ -198,6 +198,16 @@ def get_stubbed_worker(worker_class, config=None, broker=None):
     return worker
 
 
+class StubbedWorkerCreator(WorkerCreator):
+    broker = None
+
+    def _connect(self, worker, timeout, bindAddress):
+        spec = get_spec(vumi_resource_path("amqp-spec-0-8.xml"))
+        amq_client = FakeAMQClient(spec, self.options, self.broker)
+        self.broker = amq_client.broker  # So we use the same broker for all.
+        reactor.callLater(0, worker._amqp_connected, amq_client)
+
+
 def get_stubbed_channel(broker=None, id=0):
     spec = get_spec(vumi_resource_path("amqp-spec-0-8.xml"))
     amq_client = FakeAMQClient(spec, {}, broker)
@@ -276,10 +286,9 @@ class FakeRedis(object):
     # The python redis lib combines incr & incrby into incr(key, increment=1)
     def incr(self, key, increment=1):
         old_value = self._data.get(key)
-        try:
-            new_value = int(old_value) + increment
-        except:
-            new_value = increment
+        if old_value is None:
+            old_value = 0
+        new_value = int(old_value) + increment
         self.set(key, new_value)
         return new_value
 
@@ -328,9 +337,9 @@ class FakeRedis(object):
 
     # Set operations
 
-    def sadd(self, key, value):
+    def sadd(self, key, *values):
         sval = self._data.setdefault(key, set())
-        sval.add(value)
+        sval.update(map(unicode, values))
 
     def smembers(self, key):
         return self._data.get(key, set())

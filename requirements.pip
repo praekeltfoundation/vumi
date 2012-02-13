@@ -4,7 +4,6 @@ txAMQP==0.5
 PyYAML==3.09
 iso8601==0.1.4
 supervisor
-psycopg2==2.4.1
 pyOpenSSL==0.11
 python-ssmi
 wokkel
@@ -15,3 +14,5 @@ pytz
 # oauth and simplejson are needed by twittytwister
 oauth
 simplejson
+# This is only needed for UglyModel, which core vumi does not use.
+# psycopg2==2.4.1

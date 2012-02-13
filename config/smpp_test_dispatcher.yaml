@@ -1,0 +1,13 @@
+
+route_mappings:
+    http_poster.inbound:
+     - vumitestsmsc.outbound
+
+    vumitestsmsc.inbound:
+     # - http_poster.outbound
+
+    vumitestsmsc.event:
+     # - http_poster.outbound
+
+    vumitestsmsc.failures:
+     # - http_poster.outbound
