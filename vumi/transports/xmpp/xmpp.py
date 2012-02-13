@@ -88,8 +88,33 @@ class XMPPTransportProtocol(MessageProtocol, object):
 
 
 class XMPPTransport(Transport):
-    """
-    The XMPPTransport for Gtalk
+    """XMPP transport.
+
+    Configuration parameters:
+
+    :type host: str
+    :param host:
+        The host of the XMPP server to connect to.
+    :type port: int
+    :param port:
+        The port on the XMPP host to connect to.
+    :type debug: bool
+    :param port:
+        Whether or not to show all the XMPP traffic. Defaults to False.
+    :type username: str
+    :param username:
+        The XMPP account username
+    :type password: str
+    :param password:
+        The XMPP account password
+    :type status: str
+    :param status:
+        The XMPP status to display
+    :type ping_interval: int
+    :param ping_interval:
+        How often (in seconds) to send a keep-alive ping to the XMPP server
+        to keep the connection alive. Defaults to 60 seconds.
+
     """
 
     start_message_consumer = False
@@ -103,7 +128,7 @@ class XMPPTransport(Transport):
         self.username = self.config.pop('username')
         self.password = self.config.pop('password')
         self.status = self.config.pop('status')
-        self.ping_interval = self.config.pop('ping_interval', 10)
+        self.ping_interval = self.config.pop('ping_interval', 60)
 
     def setup_transport(self):
         log.msg("Starting XMPPTransport: %s" % self.transport_name)
