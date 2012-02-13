@@ -13,7 +13,7 @@ Version 0.4
 
 * add HBase support. See :doc:`roadmap/datastore-access`.
 * add storing of all transport messages.
-* once-off scheduling of messages.
+* once-off scheduling of messages. *(done)*
 * remove UglyModel.
 * remove Django-based vumi.webapp.
 * add ability to identify a single user across multiple transports as

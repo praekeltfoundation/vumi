@@ -26,11 +26,15 @@ class UglyModelTestCase(TestCase):
             close_db(dbname)
         except:
             pass
-        # TODO: Pull this out into some kind of config?
-        self.db = setup_db(dbname, database=dbname,
-                           user=kw.get('dbuser', 'vumi'),
-                           password=kw.get('dbpassword', 'vumi'))
-        return self.db.runQuery("SELECT 1")
+
+        try:
+            # TODO: Pull this out into some kind of config?
+            self.db = setup_db(dbname, database=dbname,
+                               user=kw.get('dbuser', 'vumi'),
+                               password=kw.get('dbpassword', 'vumi'))
+            return self.db.runQuery("SELECT 1")
+        except ImportError, e:
+            raise SkipTest("Unable to import DBAPI module: %s" % (e,))
 
     def setup_db(self, *tables, **kw):
         dbname = kw.pop('dbname', 'test')

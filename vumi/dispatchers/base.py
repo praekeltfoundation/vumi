@@ -3,6 +3,7 @@
 """Basic tools for building dispatchers."""
 
 import re
+import redis
 
 from twisted.internet.defer import inlineCallbacks
 from twisted.python import log
@@ -186,6 +187,76 @@ class ToAddrRouter(BaseDispatchRouter):
         #   was dispatched to and dispatch this message there
         #   Perhaps there should be a message on the base class to support
         #   this.
+
+    def dispatch_outbound_message(self, msg):
+        name = msg['transport_name']
+        self.dispatcher.transport_publisher[name].publish_message(msg)
+
+
+class UserGroupingRouter(BaseDispatchRouter):
+    """
+    Router that dispatches based on msg `from_addr`. Each unique
+    `from_addr` is round-robin assigned to one of the defined
+    groups in `group_mappings`. All messages from that
+    `from_addr` are then routed to the `app` assigned to that group.
+
+    Useful for A/B testing.
+
+    :type group_mappings: dict
+    :param group_mappings:
+        Mapping of group names to transport_names.
+        If a user is assigned to a given group the
+        message is sent to the application listening
+        on the given transport_name.
+
+    :type dispatcher_name: str
+    :param dispatcher_name:
+        The name of the dispatcher, used internally as
+        the prefix for Redis keys.
+    """
+
+    def __init__(self, dispatcher, config):
+        self.r_config = config.get('redis_config', {})
+        self.r_prefix = config['dispatcher_name']
+        self.r_server = redis.Redis(**self.r_config)
+        self.groups = config['group_mappings']
+        super(UserGroupingRouter, self).__init__(dispatcher, config)
+
+    def setup_routing(self):
+        self.nr_of_groups = len(self.groups)
+
+    def get_counter(self):
+        counter_key = self.r_key('round-robin')
+        return self.r_server.incr(counter_key) - 1
+
+    def get_next_group(self):
+        counter = self.get_counter()
+        current_group_id = counter % self.nr_of_groups
+        sorted_groups = sorted(self.groups.items())
+        group = sorted_groups[current_group_id]
+        return group
+
+    def get_group_key(self, group_name):
+        return self.r_key('group', group_name)
+
+    def get_user_key(self, user_id):
+        return self.r_key('user', user_id)
+
+    def r_key(self, *parts):
+        return ':'.join([self.r_prefix] + map(str, parts))
+
+    def get_group_for_user(self, user_id):
+        user_key = self.get_user_key(user_id)
+        group = self.r_server.get(user_key)
+        if not group:
+            group, transport_name = self.get_next_group()
+            self.r_server.set(user_key, group)
+        return group
+
+    def dispatch_inbound_message(self, msg):
+        group = self.get_group_for_user(msg.user().encode('utf8'))
+        app = self.groups[group]
+        self.dispatcher.exposed_publisher[app].publish_message(msg)
 
     def dispatch_outbound_message(self, msg):
         name = msg['transport_name']
