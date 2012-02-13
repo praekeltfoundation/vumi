@@ -217,8 +217,9 @@ class Worker(MultiService, object):
 
     @inlineCallbacks
     def stopService(self):
-        yield self.stopWorker()
-        super(Worker, self).stopService()
+        if self.running:
+            yield self.stopWorker()
+        yield super(Worker, self).stopService()
 
     def routing_key_to_class_name(self, routing_key):
         return ''.join(map(lambda s: s.capitalize(), routing_key.split('.')))

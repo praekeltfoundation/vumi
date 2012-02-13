@@ -81,3 +81,10 @@ class FakeRedisTestCase(TestCase):
         self.assertRaises(Exception, hincrby, "inc", "field2")
         self.r_server.set("key", "string")
         self.assertRaises(Exception, self.r_server.hincrby, "key", "field1")
+
+    def test_sadd(self):
+        self.r_server = FakeRedis()
+        self.r_server.sadd('set', 1)
+        self.r_server.sadd('set', 2, 3, 4)
+        self.assertEqual(self.r_server.smembers('set'), set([
+            '1', '2', '3', '4']))

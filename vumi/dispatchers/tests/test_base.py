@@ -1,10 +1,116 @@
+from datetime import datetime
 
 from twisted.trial.unittest import TestCase
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.dispatchers.base import BaseDispatchWorker, ToAddrRouter
-from vumi.tests.utils import get_stubbed_worker
+from vumi.tests.utils import get_stubbed_worker, FakeRedis
+from vumi.tests.fake_amqp import FakeAMQPBroker
+
+
+class DispatcherTestCase(TestCase):
+
+    """
+    This is a base class for testing dispatcher workers.
+
+    """
+
+    # base timeout of 5s for all dispatcher tests
+    timeout = 5
+
+    dispatcher_name = "sphex_dispatcher"
+    dispatcher_class = None
+
+    def setUp(self):
+        self._workers = []
+        self._amqp = FakeAMQPBroker()
+
+    def tearDown(self):
+        for worker in self._workers:
+            worker.stopWorker()
+
+    @inlineCallbacks
+    def get_dispatcher(self, config, cls=None, start=True):
+        """
+        Get an instance of a dispatcher class.
+
+        :param config: Config dict.
+        :param cls: The Dispatcher class to instantiate.
+                    Defaults to :attr:`dispatcher_class`
+        :param start: True to start the displatcher (default), False otherwise.
+
+        Some default config values are helpfully provided in the
+        interests of reducing boilerplate:
+
+        * ``dispatcher_name`` defaults to :attr:`self.dispatcher_name`
+        """
+
+        if cls is None:
+            cls = self.dispatcher_class
+        config.setdefault('dispatcher_name', self.dispatcher_name)
+        worker = get_stubbed_worker(cls, config, self._amqp)
+        self._workers.append(worker)
+        if start:
+            yield worker.startWorker()
+        returnValue(worker)
+
+    def mkmsg_in(self, content='hello world', message_id='abc',
+                 to_addr='9292', from_addr='+41791234567',
+                 session_event=None, transport_type=None,
+                 helper_metadata=None, transport_metadata=None,
+                 transport_name=None):
+        if helper_metadata is None:
+            helper_metadata = {}
+        if transport_metadata is None:
+            transport_metadata = {}
+        return TransportUserMessage(
+            from_addr=from_addr,
+            to_addr=to_addr,
+            message_id=message_id,
+            transport_name=transport_name,
+            transport_type=transport_type,
+            transport_metadata=transport_metadata,
+            helper_metadata=helper_metadata,
+            content=content,
+            session_event=session_event,
+            timestamp=datetime.now(),
+            )
+
+    def mkmsg_out(self, content='hello world', message_id='1',
+                  to_addr='+41791234567', from_addr='9292',
+                  session_event=None, in_reply_to=None,
+                  transport_type=None, transport_metadata=None,
+                  transport_name=None):
+        if transport_metadata is None:
+            transport_metadata = {}
+        params = dict(
+            to_addr=to_addr,
+            from_addr=from_addr,
+            message_id=message_id,
+            transport_name=transport_name,
+            transport_type=transport_type,
+            transport_metadata=transport_metadata,
+            content=content,
+            session_event=session_event,
+            in_reply_to=in_reply_to,
+            )
+        return TransportUserMessage(**params)
+
+    def get_dispatched_messages(self, transport_name, direction='outbound'):
+        return self._amqp.get_messages('vumi', '%s.%s' % (
+            transport_name, direction))
+
+    def wait_for_dispatched_messages(self, transport_name, amount,
+                                        direction='outbound'):
+        return self._amqp.wait_messages('vumi', '%s.%s' % (
+            transport_name, direction), amount)
+
+    def dispatch(self, message, transport_name, direction='inbound',
+                    exchange='vumi'):
+        rkey = '%s.%s' % (transport_name, direction)
+        self._amqp.publish_message(exchange, rkey, message)
+        return self._amqp.kick_delivery()
 
 
 class MessageMakerMixIn(object):
@@ -254,3 +360,87 @@ class TestTransportToTransportRouter(TestCase, MessageMakerMixIn):
         yield self.dispatch(msg, 'transport1.inbound')
         self.assert_messages('transport2.outbound', [msg])
         self.assert_no_messages('transport2.inbound', 'transport1.outbound')
+
+
+class UserGroupingRouterTestCase(DispatcherTestCase):
+
+    dispatcher_class = BaseDispatchWorker
+    transport_name = 'test_transport'
+
+    @inlineCallbacks
+    def setUp(self):
+        yield super(UserGroupingRouterTestCase, self).setUp()
+        self.config = {
+            'dispatcher_name': 'user_group_dispatcher',
+            'router_class': 'vumi.dispatchers.base.UserGroupingRouter',
+            'transport_names': [
+                self.transport_name,
+            ],
+            'exposed_names': [
+                'app1',
+                'app2',
+            ],
+            'group_mappings': {
+                'group1': 'app1',
+                'group2': 'app2',
+                },
+            }
+
+        self.fake_redis = FakeRedis()
+        self.dispatcher = yield self.get_dispatcher(self.config)
+        self.router = self.dispatcher._router
+        self.router.r_server = self.fake_redis
+        self.router.setup_routing()
+
+    def test_group_assignment(self):
+        msg = self.mkmsg_in(transport_name=self.transport_name)
+        selected_group = self.router.get_group_for_user(msg.user())
+        self.assertTrue(selected_group)
+        for i in range(0, 10):
+            group = self.router.get_group_for_user(msg.user())
+            self.assertEqual(group, selected_group)
+
+    def test_round_robin_group_assignment(self):
+        messages = [self.mkmsg_in(transport_name=self.transport_name,
+                        from_addr='from_%s' % (i,)) for i in range(0, 4)]
+        groups = [self.router.get_group_for_user(message.user())
+                    for message in messages]
+        self.assertEqual(groups, [
+            'group1',
+            'group2',
+            'group1',
+            'group2',
+        ])
+
+    @inlineCallbacks
+    def test_routing_to_application(self):
+        # generate 4 messages, 2 from each user
+        msg1 = self.mkmsg_in(transport_name=self.transport_name,
+                                from_addr='from_1')
+        msg2 = self.mkmsg_in(transport_name=self.transport_name,
+                                from_addr='from_2')
+        msg3 = self.mkmsg_in(transport_name=self.transport_name,
+                                from_addr='from_1')
+        msg4 = self.mkmsg_in(transport_name=self.transport_name,
+                                from_addr='from_2')
+        # send them through to the dispatcher
+        messages = [msg1, msg2, msg3, msg4]
+        for message in messages:
+            yield self.dispatch(message, transport_name=self.transport_name)
+
+        app1_messages = self.get_dispatched_messages('app1',
+                                                        direction='inbound')
+        app2_messages = self.get_dispatched_messages('app2',
+                                                        direction='inbound')
+        self.assertEqual(app1_messages, [msg1, msg3])
+        self.assertEqual(app2_messages, [msg2, msg4])
+
+    @inlineCallbacks
+    def test_routing_to_transport(self):
+        app_msg = self.mkmsg_in(transport_name=self.transport_name,
+                                from_addr='from_1')
+        yield self.dispatch(app_msg, transport_name='app1',
+                                direction='outbound')
+        [transport_msg] = self.get_dispatched_messages(self.transport_name,
+                                                direction='outbound')
+        self.assertEqual(app_msg, transport_msg)

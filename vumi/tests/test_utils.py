@@ -83,7 +83,7 @@ class HttpUtilsTestCase(TestCase):
         def render(request):
             request.setHeader('Content-Type', 'text/plain')
             try:
-                data = f()
+                data = f(request)
                 request.setResponseCode(http.OK)
             except self.InterruptHttp:
                 reactor.callLater(0, d.callback, request)
@@ -97,13 +97,13 @@ class HttpUtilsTestCase(TestCase):
 
     @inlineCallbacks
     def test_http_request_ok(self):
-        self.set_render(lambda: "Yay")
+        self.set_render(lambda r: "Yay")
         data = yield http_request(self.url, '')
         self.assertEqual(data, "Yay")
 
     @inlineCallbacks
     def test_http_request_err(self):
-        def err():
+        def err(r):
             raise ValueError("Bad")
         self.set_render(err)
         data = yield http_request(self.url, '')
@@ -111,7 +111,7 @@ class HttpUtilsTestCase(TestCase):
 
     @inlineCallbacks
     def test_http_request_full_drop(self):
-        def interrupt():
+        def interrupt(r):
             raise self.InterruptHttp()
         got_request = Deferred()
         self.set_render(interrupt, got_request)
@@ -135,14 +135,30 @@ class HttpUtilsTestCase(TestCase):
 
     @inlineCallbacks
     def test_http_request_full_ok(self):
-        self.set_render(lambda: "Yay")
+        self.set_render(lambda r: "Yay")
         request = yield http_request_full(self.url, '')
         self.assertEqual(request.delivered_body, "Yay")
         self.assertEqual(request.code, http.OK)
 
     @inlineCallbacks
+    def test_http_request_full_headers(self):
+        def check_ua(request):
+            self.assertEqual('blah', request.getHeader('user-agent'))
+            return "Yay"
+        self.set_render(check_ua)
+
+        request = yield http_request_full(self.url, '',
+                                          {'User-Agent': ['blah']})
+        self.assertEqual(request.delivered_body, "Yay")
+        self.assertEqual(request.code, http.OK)
+
+        request = yield http_request_full(self.url, '', {'User-Agent': 'blah'})
+        self.assertEqual(request.delivered_body, "Yay")
+        self.assertEqual(request.code, http.OK)
+
+    @inlineCallbacks
     def test_http_request_full_err(self):
-        def err():
+        def err(r):
             raise ValueError("Bad")
         self.set_render(err)
         request = yield http_request_full(self.url, '')
