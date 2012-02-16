@@ -182,6 +182,7 @@ class TransportUserMessage(TransportMessage):
         fields.setdefault('content', None)
         fields.setdefault('transport_metadata', {})
         fields.setdefault('helper_metadata', {})
+        fields.setdefault('group', None)
         return fields
 
     def validate_fields(self):
@@ -197,6 +198,7 @@ class TransportUserMessage(TransportMessage):
             'transport_type',
             'transport_metadata',
             'helper_metadata',
+            'group',
             )
         if self['session_event'] not in self.SESSION_EVENTS:
             raise InvalidMessageField("Invalid session_event %r"
@@ -218,6 +220,11 @@ class TransportUserMessage(TransportMessage):
             transport_metadata=self['transport_metadata'],
             helper_metadata=self['helper_metadata'],
             **kw)
+        return out_msg
+
+    def reply_group(self, *args, **kw):
+        out_msg = self.reply(*args, **kw)
+        out_msg['to_addr'] = None
         return out_msg
 
     @classmethod

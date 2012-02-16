@@ -239,7 +239,7 @@ class TestIrcTransport(TransportTestCase):
         self.irc_server.client.privmsg(sender, recipient, text)
         [msg] = yield self.wait_for_dispatched_messages(1)
         self.assertEqual(msg['transport_name'], self.transport_name)
-        self.assertEqual(msg['to_addr'], "#zoo")
+        self.assertEqual(msg['to_addr'], None)
         self.assertEqual(msg['from_addr'], "user")
         self.assertEqual(msg['content'], text)
         self.assertEqual(msg['helper_metadata'], {

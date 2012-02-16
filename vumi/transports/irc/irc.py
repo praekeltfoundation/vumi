@@ -1,3 +1,5 @@
+# -*- test-case-name: vumi.transports.irc.tests.test_irc -*-
+
 """IRC transport."""
 
 from twisted.words.protocols import irc
@@ -199,17 +201,32 @@ class IrcTransport(Transport):
     def handle_inbound_irc_message(self, irc_msg):
         irc_server = "%s:%s" % (self.network, self.port)
         irc_channel = irc_msg.channel()
+        nickname = irc_msg.nickname
+
+        to_addr = None
+        content = irc_msg.content
+
+        if irc_channel is None:
+            # This is a direct message, not a channel message.
+            to_addr = irc_msg.recipient
+        elif irc_msg.addressed_to(nickname):
+            # This is a channel message, but we've been mentioned by name.
+            to_addr = nickname
+            # Strip the name prefix, so workers don't have to handle it.
+            content = (content.split(None, 1) + [''])[1]
+
         message_dict = {
-            'to_addr': irc_msg.recipient,
+            'to_addr': to_addr,
             'from_addr': irc_msg.sender,
-            'content': irc_msg.content,
+            'group': irc_channel,
+            'content': content,
             'transport_name': self.transport_name,
             'transport_type': self.config.get('transport_type', 'irc'),
             'helper_metadata': {
                 'irc': {
-                    'transport_nickname': irc_msg.nickname,
+                    'transport_nickname': nickname,
                     'addressed_to_transport':
-                        irc_msg.addressed_to(irc_msg.nickname),
+                        irc_msg.addressed_to(nickname),
                     'irc_server': irc_server,
                     'irc_channel': irc_channel,
                     'irc_command': irc_msg.command,
@@ -230,11 +247,14 @@ class IrcTransport(Transport):
         irc_metadata = msg['helper_metadata'].get('irc', {})
         transport_metadata = msg['transport_metadata']
         irc_command = irc_metadata.get('irc_command', 'PRIVMSG')
-        irc_channel = irc_metadata.get('irc_channel',
-                                       transport_metadata.get('irc_channel'))
+        # Continue to support pre-group-chat hackery.
+        irc_channel = msg.get('group') or transport_metadata.get('irc_channel')
         recipient = msg['to_addr'] if irc_channel is None else irc_channel
+        content = msg['content']
+        if irc_channel and msg['to_addr']:
+            content = "%s: %s" % (msg['to_addr'], content)
         irc_msg = IrcMessage(vumibot.nickname, irc_command, recipient,
-                             msg['content'])
+                             content)
         vumibot.consume_message(irc_msg)
         # intentionally duplicate message id in sent_message_id since
         # IRC doesn't have its own message ids.
