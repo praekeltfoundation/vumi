@@ -1,9 +1,10 @@
 import redis
 
-from twisted.internet import defer
+from twisted.internet.defer import inlineCallbacks
 from twisted.trial.unittest import TestCase
 from smpp.pdu_builder import SubmitSMResp, BindTransceiverResp
 
+from vumi.transports.tests.test_base import TransportTestCase
 from vumi.tests.utils import FakeRedis
 from vumi.message import Message
 from vumi.transports.smpp.clientserver.client import (
@@ -116,7 +117,7 @@ class FakeRedisRespTestCase(TransportTestCase):
     transport_name = "redis_testing_transport"
     transport_class = RedisTestSmppTransport
 
-    @defer.inlineCallbacks
+    @inlineCallbacks
     def setUp(self):
         super(FakeRedisRespTestCase, self).setUp()
         self.config = {
@@ -181,7 +182,7 @@ class FakeRedisRespTestCase(TransportTestCase):
         self.assertEqual(self.transport.r_get_message(
             message1.payload['message_id']), None)
 
-    @defer.inlineCallbacks
+    @inlineCallbacks
     def test_match_resp(self):
         message1 = self.mkmsg_out(
             message_id='444',
@@ -333,7 +334,7 @@ class FakeRedisRespTestCase(TransportTestCase):
             self.assertEquals(method,
                     self.esme.command_status_dispatch(response.get_obj()))
 
-    @defer.inlineCallbacks
+    @inlineCallbacks
     def test_reconnect(self):
         connected_chan_count = len(self._amqp.channels)
         disconnected_chan_count = connected_chan_count - 1
@@ -357,7 +358,37 @@ class MockSmppService(SmppService):
     pass
 
 
-class EsmeToSmscTestCase(TestCase):
+class EsmeToSmscTestCase(TransportTestCase):
 
     transport_name = "esme_testing_transport"
     transport_class = MockSmppTransport
+
+    @inlineCallbacks
+    def setUp(self):
+        yield super(EsmeToSmscTestCase, self).setUp()
+        self.config = {
+            "system_id": "vumitest-vumitest-vumitest",
+            "password": "password",
+            "host": "localhost",
+            "port": 2772,
+            "redis": {}
+        }
+        self.service = MockSmppService(self.config)
+        #print dir(self.service)
+        self.service.startWorker()
+        #print dir(self.service.factory)
+        self.transport = yield self.get_transport(self.config)
+        #self.transport.r_server = FakeRedis()
+        #self.service = MockSmppService(self.config)
+        #self.service.start()
+        #print dir(self.service)
+
+    @inlineCallbacks
+    def tearDown(self):
+        yield super(EsmeToSmscTestCase, self).tearDown()
+        #self.transport.r_server.teardown()
+        self.service.stopWorker()
+
+    def test_pass(self):
+        #print dir(self.transport)
+        pass

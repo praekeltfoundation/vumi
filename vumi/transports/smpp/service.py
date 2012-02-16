@@ -37,8 +37,8 @@ class SmppService(Worker):
         #self.publisher = yield SmppServicePublisher()
         #self.consumer = yield SmppServiceConsumer()
         # start the Smpp Service
-        factory = SmscServerFactory()
-        reactor.listenTCP(2772, factory)
+        self.factory = SmscServerFactory()
+        reactor.listenTCP(2772, self.factory)
 
-    def stopWorker(self):
-        log.msg("Stopping the SmppService")
+    #def stopWorker(self):
+        #log.msg("Stopping the SmppService")
