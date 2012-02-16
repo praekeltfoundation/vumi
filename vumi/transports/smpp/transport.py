@@ -119,9 +119,9 @@ class SmppTransport(Transport):
 
         if not hasattr(self, 'esme_client'):
             # start the Smpp transport (if we don't have one)
-            factory = EsmeTransceiverFactory(self.config,
+            factory = EsmeTransceiverFactory(self.clientConfig,
                                              self.r_server)
-            factory.loadDefaults(self.config)
+            factory.loadDefaults(self.clientConfig)
             factory.setConnectCallback(self.esme_connected)
             factory.setDisconnectCallback(self.esme_disconnected)
             factory.setSubmitSMRespCallback(self.submit_sm_resp)

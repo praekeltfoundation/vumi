@@ -13,6 +13,7 @@ from vumi.transports.smpp.clientserver.client import (
 from vumi.transports.smpp.clientserver.tests.test_client import (
         KeyValueStoreTestCase)
 from vumi.transports.smpp.transport import SmppTransport
+from vumi.transports.smpp.service import SmppService
 from vumi.transports.smpp.clientserver.config import ClientConfig
 from vumi.transports.tests.test_base import TransportTestCase
 
@@ -346,3 +347,17 @@ class FakeRedisRespTestCase(TransportTestCase):
         self.assertEqual(connected_chan_count, len(self._amqp.channels))
         yield self.transport.esme_connected(self.esme)
         self.assertEqual(connected_chan_count, len(self._amqp.channels))
+
+
+class MockSmppTransport(SmppTransport):
+    pass
+
+
+class MockSmppService(SmppService):
+    pass
+
+
+class EsmeToSmscTestCase(TestCase):
+
+    transport_name = "esme_testing_transport"
+    transport_class = MockSmppTransport
