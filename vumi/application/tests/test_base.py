@@ -140,6 +140,13 @@ class TestApplicationWorker(TestCase):
         expecteds = [msg.reply("More!"), msg.reply("End!", False)]
         self.assert_msgs_match(replies, expecteds)
 
+    def test_reply_to_group(self):
+        msg = FakeUserMessage()
+        self.worker.reply_to_group(msg, "Group!")
+        replies = self.recv()
+        expecteds = [msg.reply_group("Group!")]
+        self.assert_msgs_match(replies, expecteds)
+
     def test_send_to(self):
         sent_msg = self.worker.send_to('+12345', "Hi!")
         sends = self.recv()

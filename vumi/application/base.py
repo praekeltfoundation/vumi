@@ -172,11 +172,20 @@ class ApplicationWorker(Worker):
         """
         pass
 
-    def reply_to(self, original_message, content, continue_session=True,
-                 **kws):
-        reply = original_message.reply(content, continue_session, **kws)
+    def _reply_to(self, repl_func, content, continue_session=True, **kws):
+        reply = repl_func(content, continue_session, **kws)
         self.transport_publisher.publish_message(reply)
         return reply
+
+    def reply_to(self, original_message, content, continue_session=True,
+                 **kws):
+        return self._reply_to(
+            original_message.reply, content, continue_session, **kws)
+
+    def reply_to_group(self, original_message, content, continue_session=True,
+                       **kws):
+        return self._reply_to(
+            original_message.reply_group, content, continue_session, **kws)
 
     def send_to(self, to_addr, content, tag='default', **kw):
         if tag not in self.SEND_TO_TAGS:
