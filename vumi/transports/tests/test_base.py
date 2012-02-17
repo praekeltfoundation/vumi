@@ -110,6 +110,7 @@ class TransportTestCase(unittest.TestCase):
         return TransportUserMessage(
             from_addr='+41791234567',
             to_addr='9292',
+            group=None,
             message_id=message_id,
             transport_name=self.transport_name,
             transport_type=transport_type,
@@ -122,7 +123,7 @@ class TransportTestCase(unittest.TestCase):
     def mkmsg_out(self, content='hello world',
                   session_event=TransportUserMessage.SESSION_NONE,
                   message_id='1', to_addr='+41791234567', from_addr='9292',
-                  in_reply_to=None, transport_type=None,
+                  group=None, in_reply_to=None, transport_type=None,
                   transport_metadata=None):
         if transport_type is None:
             transport_type = self.transport_type
@@ -131,6 +132,7 @@ class TransportTestCase(unittest.TestCase):
         params = dict(
             to_addr=to_addr,
             from_addr=from_addr,
+            group=group,
             message_id=message_id,
             transport_name=self.transport_name,
             transport_type=transport_type,

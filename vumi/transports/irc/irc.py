@@ -247,14 +247,17 @@ class IrcTransport(Transport):
         irc_metadata = msg['helper_metadata'].get('irc', {})
         transport_metadata = msg['transport_metadata']
         irc_command = irc_metadata.get('irc_command', 'PRIVMSG')
+
         # Continue to support pre-group-chat hackery.
         irc_channel = msg.get('group') or transport_metadata.get('irc_channel')
-        recipient = msg['to_addr'] if irc_channel is None else irc_channel
+        recipient = irc_channel or msg['to_addr']
         content = msg['content']
+
         if irc_channel and msg['to_addr']:
+            # We have a directed channel message, so prefix with the nick.
             content = "%s: %s" % (msg['to_addr'], content)
-        irc_msg = IrcMessage(vumibot.nickname, irc_command, recipient,
-                             content)
+
+        irc_msg = IrcMessage(vumibot.nickname, irc_command, recipient, content)
         vumibot.consume_message(irc_msg)
         # intentionally duplicate message id in sent_message_id since
         # IRC doesn't have its own message ids.
