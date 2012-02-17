@@ -14,8 +14,9 @@ from smpp.pdu_inspector import binascii, unpack_pdu
 
 class SmscServer(Protocol):
 
-    def __init__(self):
+    def __init__(self, test_hook=None):
         log.msg('__init__', 'SmscServer')
+        self.test_hook = test_hook
         self.datastream = ''
 
     def popData(self):
@@ -29,7 +30,8 @@ class SmscServer(Protocol):
 
     def handleData(self, data):
         pdu = unpack_pdu(data)
-        print "SERVER <<", pdu
+        if self.test_hook:
+            self.test_hook(direction="inbound", pdu=pdu)
         log.msg('INCOMING <<<<', pdu)
         if pdu['header']['command_id'] == 'bind_transceiver':
             self.handle_bind_transceiver(pdu)
@@ -134,14 +136,19 @@ class SmscServer(Protocol):
             data = self.popData()
 
     def sendPDU(self, pdu):
-        print "SERVER >>", pdu.get_obj()
+        if self.test_hook:
+            self.test_hook(direction="outbound", pdu=pdu.get_obj())
         data = pdu.get_bin()
         log.msg('OUTGOING >>>>', unpack_pdu(data))
         self.transport.write(data)
 
 
 class SmscServerFactory(ServerFactory):
+
+    def __init__(self, test_hook=None):
+        self.test_hook = test_hook
+
     #protocol = SmscServer
     def buildProtocol(self, addr):
-        smsc = SmscServer()
-        return smsc
+        self.smsc = SmscServer(self.test_hook)
+        return self.smsc

@@ -32,12 +32,12 @@ class SmppService(Worker):
     The SmppService
     """
 
-    def startWorker(self):
+    def startWorker(self, test_hook=None):
         log.msg("Starting the SmppService")
         #self.publisher = yield SmppServicePublisher()
         #self.consumer = yield SmppServiceConsumer()
         # start the Smpp Service
-        self.factory = SmscServerFactory()
+        self.factory = SmscServerFactory(test_hook=test_hook)
         reactor.listenTCP(2772, self.factory)
 
     #def stopWorker(self):
