@@ -187,6 +187,8 @@ class TransportUserMessage(TransportMessage):
 
     def validate_fields(self):
         super(TransportUserMessage, self).validate_fields()
+        # We might get older message versions without the `group` field.
+        self.payload.setdefault('group', None)
         self.assert_field_present(
             'message_id',
             'to_addr',
