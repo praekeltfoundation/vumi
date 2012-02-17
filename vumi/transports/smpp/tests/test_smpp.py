@@ -367,6 +367,9 @@ class EsmeToSmscTestCase(TransportTestCase):
     def server_test_hook(self, **kwargs):
         print "SERVER_TEST_HOOK %s" % kwargs
 
+    def client_test_hook(self, **kwargs):
+        print "CLIENT_TEST_HOOK %s" % kwargs
+
     @inlineCallbacks
     def setUp(self):
         yield super(EsmeToSmscTestCase, self).setUp()
@@ -378,7 +381,8 @@ class EsmeToSmscTestCase(TransportTestCase):
             "redis": {}
         }
         self.service = MockSmppService(self.config)
-        self.service.startWorker(test_hook=self.server_test_hook)
+        self.service.set_test_hook(self.server_test_hook)
+        self.service.startWorker()
         self.transport = yield self.get_transport(self.config, start=False)
         self.transport.r_server = FakeRedis()
         self.transport.startWorker()
