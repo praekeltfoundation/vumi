@@ -256,6 +256,28 @@ class TestIrcTransport(TransportTestCase):
             })
 
     @inlineCallbacks
+    def test_handle_inbound_notice(self):
+        sender, recipient, text = "user!ident@host", "#zoo", "Hello gooites"
+        self.irc_server.client.notice(sender, recipient, text)
+        [msg] = yield self.wait_for_dispatched_messages(1)
+        self.assertEqual(msg['transport_name'], self.transport_name)
+        self.assertEqual(msg['to_addr'], "#zoo")
+        self.assertEqual(msg['from_addr'], "user")
+        self.assertEqual(msg['content'], text)
+        self.assertEqual(msg['helper_metadata'], {
+            'irc': {
+                'transport_nickname': self.nick,
+                'addressed_to_transport': False,
+                'irc_server': self.server_addr,
+                'irc_channel': '#zoo',
+                'irc_command': 'NOTICE',
+                }
+            })
+        self.assertEqual(msg['transport_metadata'], {
+            'irc_channel': '#zoo',
+            })
+
+    @inlineCallbacks
     def test_handle_outbound_message_while_disconnected(self):
         yield self.irc_connector.stopListening()
         self.transport.client.disconnect()

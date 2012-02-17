@@ -116,6 +116,12 @@ class VumiBotProtocol(irc.IRCClient):
                              self.nickname)
         self.publish_message(irc_msg)
 
+    def noticed(self, sender, recipient, message):
+        """This will get called when the bot receives a notice."""
+        irc_msg = IrcMessage(sender, 'NOTICE', recipient, message,
+                             self.nickname)
+        self.publish_message(irc_msg)
+
     def action(self, sender, recipient, message):
         """This will get called when the bot sees someone do an action."""
         irc_msg = IrcMessage(sender, 'ACTION', recipient, message,
