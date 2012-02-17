@@ -240,7 +240,7 @@ class TransportUserMessage(TransportMessage):
         If the `group` field is set to `None`, :meth:`reply_group` is identical
         to :meth:`reply`.
 
-        If the `group` field is not set to `Non`e, the reply message will have
+        If the `group` field is not set to `None`, the reply message will have
         its `to_addr` field set to `None`. This means that even if the original
         message is directed to an individual within the group (i.e. its
         `to_addr` is not set to `None`), the reply will be directed to the
