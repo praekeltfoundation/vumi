@@ -208,10 +208,22 @@ class TransportUserMessage(TransportMessage):
         return self['from_addr']
 
     def reply(self, content, continue_session=True, **kw):
+        """Construct a reply message.
+
+        The reply message will have its `to_addr` field set to the original
+        message's `from_addr`. This means that even if the original message is
+        directed to the group only (i.e. it has `to_addr` set to `None`), the
+        reply will be directed to the sender of the original message.
+
+        :meth:`reply` suitable for constructing both one-to-one messages (such
+        as SMS) and directed messages within a group chat (such as
+        name-prefixed content in an IRC channel message).
+        """
         session_event = None if continue_session else self.SESSION_CLOSE
         out_msg = TransportUserMessage(
             to_addr=self['from_addr'],
             from_addr=self['to_addr'],
+            group=self['group'],
             in_reply_to=self['message_id'],
             content=content,
             session_event=session_event,
@@ -223,8 +235,24 @@ class TransportUserMessage(TransportMessage):
         return out_msg
 
     def reply_group(self, *args, **kw):
+        """Construct a group reply message.
+
+        If the `group` field is set to `None`, :meth:`reply_group` is identical
+        to :meth:`reply`.
+
+        If the `group` field is not set to `Non`e, the reply message will have
+        its `to_addr` field set to `None`. This means that even if the original
+        message is directed to an individual within the group (i.e. its
+        `to_addr` is not set to `None`), the reply will be directed to the
+        group as a whole.
+
+        :meth:`reply_group` suitable for both one-to-one messages (such as SMS)
+        and undirected messages within a group chat (such as IRC channel
+        messages).
+        """
         out_msg = self.reply(*args, **kw)
-        out_msg['to_addr'] = None
+        if self['group'] is not None:
+            out_msg['to_addr'] = None
         return out_msg
 
     @classmethod
