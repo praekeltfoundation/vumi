@@ -385,6 +385,7 @@ class EsmeTransceiver(Protocol):
 
     def handleData(self, data):
         pdu = unpack_pdu(data)
+        print "CLIENT <<", pdu
         log.msg('INCOMING <<<< %s' % binascii.b2a_hex(data))
         log.msg('INCOMING <<<< %s' % pdu)
         error_handler = self.command_status_dispatch(pdu)
@@ -456,6 +457,7 @@ class EsmeTransceiver(Protocol):
             data = self.popData()
 
     def sendPDU(self, pdu):
+        print "CLIENT >>", pdu.get_obj()
         data = pdu.get_bin()
         log.msg('OUTGOING >>>> %s' % unpack_pdu(data))
         self.transport.write(data)

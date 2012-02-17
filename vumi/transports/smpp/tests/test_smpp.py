@@ -1,5 +1,6 @@
 import redis
 
+from twisted.internet import reactor, defer
 from twisted.internet.defer import inlineCallbacks
 from twisted.trial.unittest import TestCase
 from smpp.pdu_builder import SubmitSMResp, BindTransceiverResp
@@ -367,28 +368,28 @@ class EsmeToSmscTestCase(TransportTestCase):
     def setUp(self):
         yield super(EsmeToSmscTestCase, self).setUp()
         self.config = {
-            "system_id": "vumitest-vumitest-vumitest",
+            "system_id": "VumiTestSMSC",
             "password": "password",
             "host": "localhost",
             "port": 2772,
             "redis": {}
         }
         self.service = MockSmppService(self.config)
-        #print dir(self.service)
         self.service.startWorker()
-        #print dir(self.service.factory)
-        self.transport = yield self.get_transport(self.config)
-        #self.transport.r_server = FakeRedis()
-        #self.service = MockSmppService(self.config)
-        #self.service.start()
-        #print dir(self.service)
+        self.transport = yield self.get_transport(self.config, start=False)
+        self.transport.r_server = FakeRedis()
+        self.transport.startWorker()
 
     @inlineCallbacks
     def tearDown(self):
         yield super(EsmeToSmscTestCase, self).tearDown()
-        #self.transport.r_server.teardown()
+        self.transport.r_server.teardown()
         self.service.stopWorker()
 
     def test_pass(self):
-        #print dir(self.transport)
-        pass
+        d1 = defer.Deferred()
+        d2 = defer.Deferred()
+        d1.addCallback(d2.callback)
+        dl = defer.DeferredList([d1, d2])
+        reactor.callLater(4, d1.callback, None)
+        return dl

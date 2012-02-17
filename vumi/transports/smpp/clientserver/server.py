@@ -29,6 +29,7 @@ class SmscServer(Protocol):
 
     def handleData(self, data):
         pdu = unpack_pdu(data)
+        print "SERVER <<", pdu
         log.msg('INCOMING <<<<', pdu)
         if pdu['header']['command_id'] == 'bind_transceiver':
             self.handle_bind_transceiver(pdu)
@@ -133,6 +134,7 @@ class SmscServer(Protocol):
             data = self.popData()
 
     def sendPDU(self, pdu):
+        print "SERVER >>", pdu.get_obj()
         data = pdu.get_bin()
         log.msg('OUTGOING >>>>', unpack_pdu(data))
         self.transport.write(data)
