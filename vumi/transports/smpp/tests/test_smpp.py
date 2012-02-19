@@ -383,6 +383,7 @@ class EsmeToSmscTestCase(TransportTestCase):
             return None
 
     def server_test_hook(self, **kwargs):
+        print "\nSERVER", kwargs
         ok = False
         x = self.expected_on_server[0]
         if self.get_direction(**kwargs) == self.get_direction(**x)\
@@ -390,11 +391,18 @@ class EsmeToSmscTestCase(TransportTestCase):
         and self.get_command_id(**kwargs) == self.get_command_id(**x):
             self.expected_on_server.pop(0)['deferred'].callback(None)
             ok = True
-            print "XXXXXXXXXXXXXXXXX", x
         self.assertTrue(ok)
 
     def client_test_hook(self, **kwargs):
-        print "CLIENT_TEST_HOOK %s" % kwargs
+        print "\nCLIENT", kwargs
+        ok = False
+        x = self.expected_on_client[0]
+        if self.get_direction(**kwargs) == self.get_direction(**x)\
+        and self.get_command_status(**kwargs) == self.get_command_status(**x)\
+        and self.get_command_id(**kwargs) == self.get_command_id(**x):
+            self.expected_on_client.pop(0)['deferred'].callback(None)
+            ok = True
+        self.assertTrue(ok)
 
     @inlineCallbacks
     def setUp(self):
@@ -409,6 +417,7 @@ class EsmeToSmscTestCase(TransportTestCase):
         self.service = MockSmppService(self.config)
         self.service.set_test_hook(self.server_test_hook)
         self.transport = yield self.get_transport(self.config, start=False)
+        self.transport.set_test_hook(self.client_test_hook)
         self.transport.r_server = FakeRedis()
 
     @inlineCallbacks
@@ -422,7 +431,7 @@ class EsmeToSmscTestCase(TransportTestCase):
         self.transport.r_server.teardown()
         self.service.stopWorker()
 
-    def test_pass(self):
+    def test_handshake(self):
         self.expected_on_server = [
             {
                 "direction": "inbound",
@@ -465,15 +474,61 @@ class EsmeToSmscTestCase(TransportTestCase):
                 "deferred": defer.Deferred()
             },
         ]
+        self.expected_on_client = [
+            {
+                "direction": "outbound",
+                "pdu": {
+                    "header": {
+                        "command_status": "ESME_ROK",
+                        "command_id": "bind_transceiver",
+                    },
+                },
+                "deferred": defer.Deferred()
+            },
+            {
+                "direction": "inbound",
+                "pdu": {
+                    "header": {
+                        "command_status": "ESME_ROK",
+                        "command_id": "bind_transceiver_resp",
+                    },
+                },
+                "deferred": defer.Deferred()
+            },
+            {
+                "direction": "outbound",
+                "pdu": {
+                    "header": {
+                        "command_status": "ESME_ROK",
+                        "command_id": "enquire_link",
+                    },
+                },
+                "deferred": defer.Deferred()
+            },
+            {
+                "direction": "inbound",
+                "pdu": {
+                    "header": {
+                        "command_status": "ESME_ROK",
+                        "command_id": "enquire_link_resp",
+                    },
+                },
+                "deferred": defer.Deferred()
+            },
+        ]
         expected_deferreds = []
         for i in self.expected_on_server:
             expected_deferreds.append(i['deferred'])
-        print ">>>>>>>>>>>>>>", expected_deferreds
+        for i in self.expected_on_client:
+            expected_deferreds.append(i['deferred'])
         dl = defer.DeferredList(expected_deferreds)
         self.startWorkers()
-        self.d1 = defer.Deferred()
-        self.d2 = defer.Deferred()
-        self.d1.addCallback(self.d2.callback)
-        self.dl = defer.DeferredList([self.d1, self.d2])
-        reactor.callLater(4, self.d1.callback, None)
-        return self.dl
+
+        #d_alpha = defer.Deferred()
+        #d_beta = defer.Deferred()
+        #d_alpha.addCallback(d_beta.callback)
+        #dl_omega = defer.DeferredList([d_alpha, d_beta])
+        #reactor.callLater(4, d_alpha.callback, None)
+        #return dl_omega
+
+        return dl

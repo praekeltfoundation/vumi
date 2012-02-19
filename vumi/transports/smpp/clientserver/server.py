@@ -19,6 +19,10 @@ class SmscServer(Protocol):
         self.test_hook = test_hook
         self.datastream = ''
 
+    def try_test_hook(self, **kwargs):
+        if self.test_hook:
+            self.test_hook(**kwargs)
+
     def popData(self):
         data = None
         if(len(self.datastream) >= 16):
@@ -30,8 +34,7 @@ class SmscServer(Protocol):
 
     def handleData(self, data):
         pdu = unpack_pdu(data)
-        if self.test_hook:
-            self.test_hook(direction="inbound", pdu=pdu)
+        self.try_test_hook(direction="inbound", pdu=pdu)
         log.msg('INCOMING <<<<', pdu)
         if pdu['header']['command_id'] == 'bind_transceiver':
             self.handle_bind_transceiver(pdu)
@@ -136,8 +139,7 @@ class SmscServer(Protocol):
             data = self.popData()
 
     def sendPDU(self, pdu):
-        if self.test_hook:
-            self.test_hook(direction="outbound", pdu=pdu.get_obj())
+        self.try_test_hook(direction="outbound", pdu=pdu.get_obj())
         data = pdu.get_bin()
         log.msg('OUTGOING >>>>', unpack_pdu(data))
         self.transport.write(data)

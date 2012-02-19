@@ -152,7 +152,8 @@ class EsmeTransceiver(Protocol):
 
     callLater = reactor.callLater
 
-    def __init__(self, config, kvs):
+    def __init__(self, config, kvs, test_hook=None):
+        self.test_hook = test_hook
         self.build_maps()
         self.defaults = {}
         self.state = 'CLOSED'
@@ -183,6 +184,10 @@ class EsmeTransceiver(Protocol):
                 self.r_prefix)
         log.msg("r_prefix = %s" % self.r_prefix)
         self.incSeq()
+
+    def try_test_hook(self, **kwargs):
+        if self.test_hook:
+            self.test_hook(**kwargs)
 
     # Dummy error handler functions, just log invocation
     def dummy_ok(self, *args, **kwargs):
@@ -385,7 +390,7 @@ class EsmeTransceiver(Protocol):
 
     def handleData(self, data):
         pdu = unpack_pdu(data)
-        print "CLIENT <<", pdu
+        self.try_test_hook(direction="inbound", pdu=pdu)
         log.msg('INCOMING <<<< %s' % binascii.b2a_hex(data))
         log.msg('INCOMING <<<< %s' % pdu)
         error_handler = self.command_status_dispatch(pdu)
@@ -457,7 +462,7 @@ class EsmeTransceiver(Protocol):
             data = self.popData()
 
     def sendPDU(self, pdu):
-        print "CLIENT >>", pdu.get_obj()
+        self.try_test_hook(direction="outbound", pdu=pdu.get_obj())
         data = pdu.get_bin()
         log.msg('OUTGOING >>>> %s' % unpack_pdu(data))
         self.transport.write(data)
@@ -674,9 +679,10 @@ class EsmeTransceiver(Protocol):
 
 class EsmeTransceiverFactory(ReconnectingClientFactory):
 
-    def __init__(self, config, kvs):
+    def __init__(self, config, kvs, test_hook=None):
         self.config = config
         self.kvs = kvs
+        self.test_hook = test_hook
         self.esme = None
         self.__connect_callback = None
         self.__disconnect_callback = None
@@ -715,11 +721,11 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
         self._send_failure_callback = send_failure_callback
 
     def startedConnecting(self, connector):
-        print 'Started to connect.'
+        log.msg('Started to connect.')
 
     def buildProtocol(self, addr):
-        print 'Connected'
-        self.esme = EsmeTransceiver(self.config, self.kvs)
+        log.msg('Connected')
+        self.esme = EsmeTransceiver(self.config, self.kvs, self.test_hook)
         self.esme.loadDefaults(self.defaults)
         self.esme.setConnectCallback(
                 connect_callback=self.__connect_callback)
