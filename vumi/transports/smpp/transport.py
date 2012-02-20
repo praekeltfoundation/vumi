@@ -94,7 +94,6 @@ class SmppTransport(Transport):
     start_message_consumer = False
 
     def setup_transport(self):
-        print "CCCCCCCCCCCCCCCCCCCCCCCCCCCCC", self.config
         log.msg("Starting the SmppTransport with %s" % self.config)
         #self.clientConfig = ClientConfig(
                 #host=self.config['host'],
@@ -153,7 +152,6 @@ class SmppTransport(Transport):
         return self._setup_message_consumer()
 
     def handle_outbound_message(self, message):
-        print "\nHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH", message
         log.msg("Consumed outgoing message", message)
         log.msg("Unacknowledged message count: %s" % (
             self.esme_client.get_unacked_count()))
