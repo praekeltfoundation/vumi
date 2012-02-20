@@ -285,8 +285,10 @@ class DummyDispatcher(object):
         for transport in config['transport_names']:
             self.transport_publisher[transport] = self.DummyPublisher()
         self.exposed_publisher = {}
+        self.exposed_event_publisher = {}
         for exposed in config['exposed_names']:
             self.exposed_publisher[exposed] = self.DummyPublisher()
+            self.exposed_event_publisher[exposed] = self.DummyPublisher()
 
 
 class TestToAddrRouter(TestCase, MessageMakerMixIn):
@@ -386,8 +388,12 @@ class TestFromAddrMultiplexRouter(TestCase, MessageMakerMixIn):
         return self.mkmsg_in(
             transport_name, content=content, from_addr=from_addr)
 
+    def mkmsg_ack_mux(self, from_addr, transport_name):
+        return self.mkmsg_ack(
+            transport_name, from_addr=from_addr)
+
     def mkmsg_out_mux(self, content, from_addr):
-        return self.mkmsg_in(
+        return self.mkmsg_out(
             'muxed', content=content, from_addr=from_addr)
 
     def test_inbound_message_routing(self):
@@ -396,6 +402,14 @@ class TestFromAddrMultiplexRouter(TestCase, MessageMakerMixIn):
         msg2 = self.mkmsg_in_mux('mux 2', 'thing2@muxme', 'transport_2')
         self.router.dispatch_inbound_message(msg2)
         publishers = self.dispatcher.exposed_publisher
+        self.assertEqual(publishers['muxed'].msgs, [msg1, msg2])
+
+    def test_inbound_event_routing(self):
+        msg1 = self.mkmsg_ack_mux('thing1@muxme', 'transport_1')
+        self.router.dispatch_inbound_event(msg1)
+        msg2 = self.mkmsg_ack_mux('thing2@muxme', 'transport_2')
+        self.router.dispatch_inbound_event(msg2)
+        publishers = self.dispatcher.exposed_event_publisher
         self.assertEqual(publishers['muxed'].msgs, [msg1, msg2])
 
     def test_outbound_message_routing(self):

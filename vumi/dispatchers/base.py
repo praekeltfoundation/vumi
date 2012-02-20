@@ -226,7 +226,7 @@ class FromAddrMultiplexRouter(BaseDispatchRouter):
 
     def dispatch_inbound_event(self, msg):
         self._handle_inbound(
-            msg, self.dispatcher.exposed_event_publisher[self.exposed])
+            msg, self.dispatcher.exposed_event_publisher[self.exposed_name])
 
     def dispatch_outbound_message(self, msg):
         name = self.config['fromaddr_mappings'][msg['from_addr']]
