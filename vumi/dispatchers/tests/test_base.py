@@ -362,6 +362,85 @@ class TestTransportToTransportRouter(TestCase, MessageMakerMixIn):
         self.assert_no_messages('transport2.inbound', 'transport1.outbound')
 
 
+class TestFromAddrMultiplexRouter(TestCase, MessageMakerMixIn):
+
+    timeout = 3
+
+    @inlineCallbacks
+    def setUp(self):
+        config = {
+            "transport_names": [
+                "transport_1",
+                "transport_2",
+                "transport_3",
+                ],
+            "exposed_names": ["muxed"],
+            "router_class": "vumi.dispatchers.base.FromAddrMultiplexRouter",
+            "fromaddr_mappings": {
+                "thing1@muxme": "transport_1",
+                "thing2@muxme": "transport_2",
+                "thing3@muxme": "transport_3",
+                },
+            }
+        self.worker = get_stubbed_worker(BaseDispatchWorker, config)
+        self._amqp = self.worker._amqp_client.broker
+        yield self.worker.startWorker()
+
+    @inlineCallbacks
+    def tearDown(self):
+        yield self.worker.stopWorker()
+
+    def dispatch(self, rkey, message):
+        self._amqp.publish_message("vumi", rkey, message)
+        return self._amqp.kick_delivery()
+
+    def get_dispatched(self, rkey):
+        return self._amqp.get_messages('vumi', rkey)
+
+    def assert_message(self, msg, content, from_addr, transport_name):
+        self.assertEqual(content, msg['content'])
+        self.assertEqual(from_addr, msg['from_addr'])
+        self.assertEqual(transport_name, msg['transport_name'])
+
+    def assert_no_messages(self, *rkeys):
+        for rkey in rkeys:
+            self.assertEqual([], self._amqp.get_messages('vumi', rkey))
+
+    def clear_dispatched(self):
+        self._amqp.dispatched = {}
+
+    def mkmsg_in_mux(self, content, from_addr, transport_name):
+        return self.mkmsg_in(
+            transport_name, content=content, from_addr=from_addr)
+
+    def mkmsg_out_mux(self, content, from_addr):
+        return self.mkmsg_in(
+            'muxed', content=content, from_addr=from_addr)
+
+    @inlineCallbacks
+    def test_inbound_message_routing(self):
+        msg = self.mkmsg_in_mux('mux 1', 'thing1@muxme', 'transport_1')
+        yield self.dispatch('transport_1.inbound', msg)
+        msg = self.mkmsg_in_mux('mux 2', 'thing2@muxme', 'transport_2')
+        yield self.dispatch('transport_2.inbound', msg)
+
+        [muxed1, muxed2] = self.get_dispatched('muxed.inbound')
+        self.assert_message(muxed1, 'mux 1', 'thing1@muxme', 'muxed')
+        self.assert_message(muxed2, 'mux 2', 'thing2@muxme', 'muxed')
+
+    @inlineCallbacks
+    def test_outbound_message_routing(self):
+        msg = self.mkmsg_out_mux('mux 1', 'thing1@muxme')
+        yield self.dispatch('muxed.outbound', msg)
+        msg = self.mkmsg_out_mux('mux 2', 'thing2@muxme')
+        yield self.dispatch('muxed.outbound', msg)
+
+        [msg1] = self.get_dispatched('transport_1.outbound')
+        self.assert_message(msg1, 'mux 1', 'thing1@muxme', 'transport_1')
+        [msg2] = self.get_dispatched('transport_2.outbound')
+        self.assert_message(msg2, 'mux 2', 'thing2@muxme', 'transport_2')
+
+
 class UserGroupingRouterTestCase(DispatcherTestCase):
 
     dispatcher_class = BaseDispatchWorker
