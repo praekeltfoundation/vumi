@@ -7,7 +7,7 @@ from smpp.pdu_builder import SubmitSMResp, BindTransceiverResp
 
 from vumi.transports.tests.test_base import TransportTestCase
 from vumi.tests.utils import FakeRedis
-from vumi.message import Message
+from vumi.message import Message, TransportUserMessage
 from vumi.transports.smpp.clientserver.client import (
         EsmeTransceiver,
         ESME,
@@ -376,17 +376,42 @@ class EsmeToSmscTestCase(TransportTestCase):
         except:
             return None
 
+    def get_sequence_number(self, **kwargs):
+        try:
+            return kwargs['pdu']['header']['sequence_number']
+        except:
+            return None
+
     def get_direction(self, **kwargs):
         try:
             return kwargs['direction']
         except:
             return None
 
+    def format_pdu_display(self, **kwargs):
+        direction_map = {
+                "inbound": "<---",
+                "outbound": "--->",
+        }
+        direction = self.get_direction(**kwargs)
+        if direction:
+            direction = direction_map[direction]
+        command_id = self.get_command_id(**kwargs)
+        command_status = self.get_command_status(**kwargs)
+        sequence_number = self.get_sequence_number(**kwargs)
+        print kwargs
+        return "%s %s %s %s" % (
+                direction,
+                command_status,
+                sequence_number,
+                command_id)
+
     def server_test_hook(self, **kwargs):
-        print "\nSERVER", kwargs
+        print "\nSERVER", self.format_pdu_display(**kwargs)
         ok = False
         x = self.expected_on_server[0]
         if self.get_direction(**kwargs) == self.get_direction(**x)\
+        and self.get_sequence_number(**kwargs) == self.get_sequence_number(**x)\
         and self.get_command_status(**kwargs) == self.get_command_status(**x)\
         and self.get_command_id(**kwargs) == self.get_command_id(**x):
             self.expected_on_server.pop(0)['deferred'].callback(None)
@@ -394,10 +419,11 @@ class EsmeToSmscTestCase(TransportTestCase):
         self.assertTrue(ok)
 
     def client_test_hook(self, **kwargs):
-        print "\nCLIENT", kwargs
+        print "\nCLIENT", self.format_pdu_display(**kwargs)
         ok = False
         x = self.expected_on_client[0]
         if self.get_direction(**kwargs) == self.get_direction(**x)\
+        and self.get_sequence_number(**kwargs) == self.get_sequence_number(**x)\
         and self.get_command_status(**kwargs) == self.get_command_status(**x)\
         and self.get_command_id(**kwargs) == self.get_command_id(**x):
             self.expected_on_client.pop(0)['deferred'].callback(None)
@@ -412,7 +438,7 @@ class EsmeToSmscTestCase(TransportTestCase):
             "password": "password",
             "host": "localhost",
             "port": 2772,
-            "redis": {}
+            "redis": {},
         }
         self.service = MockSmppService(self.config)
         self.service.set_test_hook(self.server_test_hook)
@@ -422,8 +448,8 @@ class EsmeToSmscTestCase(TransportTestCase):
 
     @inlineCallbacks
     def startWorkers(self):
-        self.service.startWorker()
-        self.transport.startWorker()
+        yield self.service.startWorker()
+        yield self.transport.startWorker()
 
     @inlineCallbacks
     def tearDown(self):
@@ -431,6 +457,7 @@ class EsmeToSmscTestCase(TransportTestCase):
         self.transport.r_server.teardown()
         self.service.stopWorker()
 
+    @inlineCallbacks
     def test_handshake(self):
         self.expected_on_server = [
             {
@@ -439,6 +466,7 @@ class EsmeToSmscTestCase(TransportTestCase):
                     "header": {
                         "command_status": "ESME_ROK",
                         "command_id": "bind_transceiver",
+                        "sequence_number": 1,
                     },
                 },
                 "deferred": defer.Deferred()
@@ -449,6 +477,7 @@ class EsmeToSmscTestCase(TransportTestCase):
                     "header": {
                         "command_status": "ESME_ROK",
                         "command_id": "bind_transceiver_resp",
+                        "sequence_number": 1,
                     },
                 },
                 "deferred": defer.Deferred()
@@ -459,6 +488,7 @@ class EsmeToSmscTestCase(TransportTestCase):
                     "header": {
                         "command_status": "ESME_ROK",
                         "command_id": "enquire_link",
+                        "sequence_number": 2,
                     },
                 },
                 "deferred": defer.Deferred()
@@ -469,6 +499,7 @@ class EsmeToSmscTestCase(TransportTestCase):
                     "header": {
                         "command_status": "ESME_ROK",
                         "command_id": "enquire_link_resp",
+                        "sequence_number": 2,
                     },
                 },
                 "deferred": defer.Deferred()
@@ -481,6 +512,7 @@ class EsmeToSmscTestCase(TransportTestCase):
                     "header": {
                         "command_status": "ESME_ROK",
                         "command_id": "bind_transceiver",
+                        "sequence_number": 1,
                     },
                 },
                 "deferred": defer.Deferred()
@@ -491,6 +523,7 @@ class EsmeToSmscTestCase(TransportTestCase):
                     "header": {
                         "command_status": "ESME_ROK",
                         "command_id": "bind_transceiver_resp",
+                        "sequence_number": 1,
                     },
                 },
                 "deferred": defer.Deferred()
@@ -501,6 +534,7 @@ class EsmeToSmscTestCase(TransportTestCase):
                     "header": {
                         "command_status": "ESME_ROK",
                         "command_id": "enquire_link",
+                        "sequence_number": 2,
                     },
                 },
                 "deferred": defer.Deferred()
@@ -511,12 +545,62 @@ class EsmeToSmscTestCase(TransportTestCase):
                     "header": {
                         "command_status": "ESME_ROK",
                         "command_id": "enquire_link_resp",
+                        "sequence_number": 2,
+                    },
+                },
+                "deferred": defer.Deferred()
+            },
+        ]
+        expected_on_client_2 = [
+            {
+                "direction": "outbound",
+                "pdu": {
+                    "header": {
+                        "command_status": "ESME_ROK",
+                        "command_id": "submit_sm",
+                        "sequence_number": 3,
+                    },
+                },
+                "deferred": defer.Deferred()
+            },
+            {
+                "direction": "inbound",
+                "pdu": {
+                    "header": {
+                        "command_status": "ESME_ROK",
+                        "command_id": "submit_sm_resp",
+                        "sequence_number": 3,
+                    },
+                },
+                "deferred": defer.Deferred()
+            },
+        ]
+        expected_on_server_2 = [
+            {
+                "direction": "inbound",
+                "pdu": {
+                    "header": {
+                        "command_status": "ESME_ROK",
+                        "command_id": "submit_sm",
+                        "sequence_number": 3,
+                    },
+                },
+                "deferred": defer.Deferred()
+            },
+            {
+                "direction": "outbound",
+                "pdu": {
+                    "header": {
+                        "command_status": "ESME_ROK",
+                        "command_id": "submit_sm_resp",
+                        "sequence_number": 3,
                     },
                 },
                 "deferred": defer.Deferred()
             },
         ]
         expected_deferreds = []
+        #expected_deferreds.append(defer.Deferred())
         for i in self.expected_on_server:
             expected_deferreds.append(i['deferred'])
         for i in self.expected_on_client:
@@ -524,11 +608,23 @@ class EsmeToSmscTestCase(TransportTestCase):
         dl = defer.DeferredList(expected_deferreds)
         self.startWorkers()
 
-        #d_alpha = defer.Deferred()
-        #d_beta = defer.Deferred()
-        #d_alpha.addCallback(d_beta.callback)
-        #dl_omega = defer.DeferredList([d_alpha, d_beta])
-        #reactor.callLater(4, d_alpha.callback, None)
-        #return dl_omega
+        msg = self.mkmsg_in(self.transport_name)
+        msg.payload['timestamp'] = '0'
+        print msg
+        yield self.dispatch(msg)
+        print "DISPATCHED", self._amqp.dispatched
+        print self.get_dispatched_messages()
 
-        return dl
+        yield dl
+
+        self.expected_on_client = expected_on_client_2
+        self.expected_on_server = expected_on_server_2
+        for i in self.expected_on_client:
+            expected_deferreds.append(i['deferred'])
+        for i in self.expected_on_server:
+            expected_deferreds.append(i['deferred'])
+        dl_2 = defer.DeferredList(expected_deferreds)
+
+        self.transport.handle_outbound_message(msg)
+
+        yield dl_2
