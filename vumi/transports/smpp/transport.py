@@ -153,7 +153,7 @@ class SmppTransport(Transport):
         return self._setup_message_consumer()
 
     def handle_outbound_message(self, message):
-        print "HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH", message
+        print "\nHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH", message
         log.msg("Consumed outgoing message", message)
         log.msg("Unacknowledged message count: %s" % (
             self.esme_client.get_unacked_count()))

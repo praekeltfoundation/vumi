@@ -574,6 +574,52 @@ class EsmeToSmscTestCase(TransportTestCase):
                 },
                 "deferred": defer.Deferred()
             },
+            # the fake sm triggered by the sent sm
+            {
+                "direction": "inbound",
+                "pdu": {
+                    "header": {
+                        "command_status": "ESME_ROK",
+                        "command_id": "deliver_sm",
+                        "sequence_number": 555,
+                    },
+                },
+                "deferred": defer.Deferred()
+            },
+            {
+                "direction": "outbound",
+                "pdu": {
+                    "header": {
+                        "command_status": "ESME_ROK",
+                        "command_id": "deliver_sm_resp",
+                        "sequence_number": 555,
+                    },
+                },
+                "deferred": defer.Deferred()
+            },
+            # the delivery report
+            {
+                "direction": "inbound",
+                "pdu": {
+                    "header": {
+                        "command_status": "ESME_ROK",
+                        "command_id": "deliver_sm",
+                        "sequence_number": 1,
+                    },
+                },
+                "deferred": defer.Deferred()
+            },
+            {
+                "direction": "outbound",
+                "pdu": {
+                    "header": {
+                        "command_status": "ESME_ROK",
+                        "command_id": "deliver_sm_resp",
+                        "sequence_number": 1,
+                    },
+                },
+                "deferred": defer.Deferred()
+            },
         ]
         expected_on_server_2 = [
             {
@@ -598,9 +644,54 @@ class EsmeToSmscTestCase(TransportTestCase):
                 },
                 "deferred": defer.Deferred()
             },
+            # the fake sm triggered by the sent sm
+            {
+                "direction": "outbound",
+                "pdu": {
+                    "header": {
+                        "command_status": "ESME_ROK",
+                        "command_id": "deliver_sm",
+                        "sequence_number": 555,
+                    },
+                },
+                "deferred": defer.Deferred()
+            },
+            {
+                "direction": "inbound",
+                "pdu": {
+                    "header": {
+                        "command_status": "ESME_ROK",
+                        "command_id": "deliver_sm_resp",
+                        "sequence_number": 555,
+                    },
+                },
+                "deferred": defer.Deferred()
+            },
+            # the delivery report
+            {
+                "direction": "outbound",
+                "pdu": {
+                    "header": {
+                        "command_status": "ESME_ROK",
+                        "command_id": "deliver_sm",
+                        "sequence_number": 1,
+                    },
+                },
+                "deferred": defer.Deferred()
+            },
+            {
+                "direction": "inbound",
+                "pdu": {
+                    "header": {
+                        "command_status": "ESME_ROK",
+                        "command_id": "deliver_sm_resp",
+                        "sequence_number": 1,
+                    },
+                },
+                "deferred": defer.Deferred()
+            },
         ]
         expected_deferreds = []
-        #expected_deferreds.append(defer.Deferred())
         for i in self.expected_on_server:
             expected_deferreds.append(i['deferred'])
         for i in self.expected_on_client:
@@ -623,6 +714,7 @@ class EsmeToSmscTestCase(TransportTestCase):
             expected_deferreds.append(i['deferred'])
         for i in self.expected_on_server:
             expected_deferreds.append(i['deferred'])
+        #expected_deferreds.append(defer.Deferred())
         dl_2 = defer.DeferredList(expected_deferreds)
 
         self.transport.handle_outbound_message(msg)
