@@ -9,6 +9,7 @@ from twisted.internet.defer import inlineCallbacks
 from twisted.python import log
 
 from vumi.service import Worker
+from vumi.errors import ConfigError
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.utils import load_class_by_string
 
@@ -190,6 +191,46 @@ class ToAddrRouter(BaseDispatchRouter):
 
     def dispatch_outbound_message(self, msg):
         name = msg['transport_name']
+        self.dispatcher.transport_publisher[name].publish_message(msg)
+
+
+class FromAddrMultiplexRouter(BaseDispatchRouter):
+    """Router that multiplexes multiple transports based on msg from_addr.
+
+    :param dict fromaddr_mappings:
+        Mapping from message `from_addr` to `transport_name`.
+
+    This router is intended to be used to multiplex a pool of transports that
+    each only supports a single external address, and present them to
+    applications (or downstream dispatchers) as a single transport that
+    supports multiple external addresses. This is useful for multiplexing
+    :class:`vumi.transports.xmpp.XMPPTransport` instances, for example.
+
+    NOTE: This router rewrites `transport_name` in both directions. Also, only
+    one exposed name is supported.
+    """
+
+    def setup_routing(self):
+        if len(self.config['exposed_names']) != 1:
+            raise ConfigError("Only one exposed name allowed for %s." % (
+                    type(self).__name__,))
+        [self.exposed_name] = self.config['exposed_names']
+
+    def _handle_inbound(self, msg, publisher):
+        msg['transport_name'] = self.exposed_name
+        publisher.publish_message(msg)
+
+    def dispatch_inbound_message(self, msg):
+        self._handle_inbound(
+            msg, self.dispatcher.exposed_publisher[self.exposed_name])
+
+    def dispatch_inbound_event(self, msg):
+        self._handle_inbound(
+            msg, self.dispatcher.exposed_event_publisher[self.exposed_name])
+
+    def dispatch_outbound_message(self, msg):
+        name = self.config['fromaddr_mappings'][msg['from_addr']]
+        msg['transport_name'] = name
         self.dispatcher.transport_publisher[name].publish_message(msg)
 
 
