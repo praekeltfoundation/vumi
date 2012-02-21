@@ -411,7 +411,7 @@ class EsmeToSmscTestCase(TransportTestCase):
                 command_id)
 
     def server_test_hook(self, **kwargs):
-        print "\nSERVER", self.format_pdu_display(**kwargs)
+        #print "\nSERVER", self.format_pdu_display(**kwargs)
         ok = False
         x = self.expected_on_server[0]
         if self.get_direction(**kwargs) == self.get_direction(**x)\
@@ -423,7 +423,7 @@ class EsmeToSmscTestCase(TransportTestCase):
         self.assertTrue(ok)
 
     def client_test_hook(self, **kwargs):
-        print "\nCLIENT", self.format_pdu_display(**kwargs)
+        #print "\nCLIENT", self.format_pdu_display(**kwargs)
         ok = False
         x = self.expected_on_client[0]
         if self.get_direction(**kwargs) == self.get_direction(**x)\
@@ -734,8 +734,43 @@ class EsmeToSmscTestCase(TransportTestCase):
                 rkey='%s.outbound' % self.transport_name,
                 timestamp='0',
                 )
+        user_message_id = msg.payload["message_id"]
         yield self.dispatch(msg)
         #print "DISPATCHED", self._amqp.dispatched
-        #print self.get_dispatched_messages()
 
         yield dl_2
+
+        dispatched_messages = self.get_dispatched_messages()
+        dispatched_events = self.get_dispatched_events()
+        dispatched_failures = self.get_dispatched_failures()
+
+        mess = dispatched_messages[0].payload
+        ack = dispatched_events[0].payload
+        delv = dispatched_events[1].payload
+
+        #print ''
+        #print mess
+        #print ''
+        #print ack
+        #print ''
+        #print delv
+        #print ''
+
+        self.assertEqual(mess['message_type'], 'user_message')
+        self.assertEqual(mess['transport_name'], self.transport_name)
+        self.assertEqual(mess['content'], "Hi there, just a follow up")
+
+        self.assertEqual(ack['message_type'], 'event')
+        self.assertEqual(ack['event_type'], 'ack')
+        self.assertEqual(ack['transport_name'], self.transport_name)
+        self.assertEqual(ack['user_message_id'], user_message_id)
+
+        sent_message_id = ack['sent_message_id']
+
+        self.assertEqual(delv['message_type'], 'event')
+        self.assertEqual(delv['event_type'], 'delivery_report')
+        self.assertEqual(delv['transport_name'], self.transport_name)
+        self.assertEqual(delv['user_message_id'], sent_message_id)
+        self.assertEqual(delv['delivery_status'], 'delivered')
+
+
