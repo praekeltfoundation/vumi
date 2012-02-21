@@ -89,7 +89,6 @@ class SmppTransport(Transport):
     def set_test_hook(self, test_hook):
         self.test_hook = test_hook
 
-
     # We only want to start this after we finish connecting to SMPP.
     start_message_consumer = False
 
@@ -105,7 +104,6 @@ class SmppTransport(Transport):
             #if self.config.has_key(k):
                 #self.clientConfig.set(k, self.config[k])
         self.clientConfig = ClientConfig(**self.config)
-
 
         # TODO: move this to a config file
         dbindex = get_deploy_int(self._amqp_client.vhost)

@@ -77,16 +77,16 @@ class SmscServer(Protocol):
             #self.boomerang(pdu)
             #self.follow_up(pdu)
 
-    def follow_up(self, pdu):
-        sequence_number = 555
-        short_message = "Hi there, just a follow up"
-        destination_addr = pdu['body']['mandatory_parameters']['source_addr']
-        source_addr = pdu['body']['mandatory_parameters']['destination_addr']
-        pdu = DeliverSM(sequence_number,
-                short_message=short_message,
-                destination_addr=destination_addr,
-                source_addr=source_addr)
-        self.sendPDU(pdu)
+    #def follow_up(self, pdu):
+        #sequence_number = 555
+        #short_message = "Hi there, just a follow up"
+        #destination_addr = pdu['body']['mandatory_parameters']['source_addr']
+        #source_addr = pdu['body']['mandatory_parameters']['destination_addr']
+        #pdu = DeliverSM(sequence_number,
+                #short_message=short_message,
+                #destination_addr=destination_addr,
+                #source_addr=source_addr)
+        #self.sendPDU(pdu)
 
     def delivery_report(self, message_id):
         sequence_number = 1
