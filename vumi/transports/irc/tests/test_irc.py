@@ -294,13 +294,14 @@ class TestIrcTransport(TransportTestCase):
                                     irc_command="PRIVMSG")
 
     @inlineCallbacks
-    def test_handle_inbound_notice(self):
+    def test_handle_inbound_channel_notice(self):
         sender, recipient, text = "user!ident@host", "#zoo", "Hello gooites"
         self.irc_server.client.notice(sender, recipient, text)
         [msg] = yield self.wait_for_dispatched_messages(1)
         self.assertEqual(msg['transport_name'], self.transport_name)
-        self.assertEqual(msg['to_addr'], "#zoo")
+        self.assertEqual(msg['to_addr'], None)
         self.assertEqual(msg['from_addr'], "user")
+        self.assertEqual(msg['group'], "#zoo")
         self.assertEqual(msg['content'], text)
         self.assertEqual(msg['helper_metadata'], {
             'irc': {
@@ -313,6 +314,29 @@ class TestIrcTransport(TransportTestCase):
             })
         self.assertEqual(msg['transport_metadata'], {
             'irc_channel': '#zoo',
+            })
+
+    @inlineCallbacks
+    def test_handle_inbound_user_notice(self):
+        sender, recipient, text = "user!ident@host", "bot", "Hello gooites"
+        self.irc_server.client.notice(sender, recipient, text)
+        [msg] = yield self.wait_for_dispatched_messages(1)
+        self.assertEqual(msg['transport_name'], self.transport_name)
+        self.assertEqual(msg['to_addr'], "bot")
+        self.assertEqual(msg['from_addr'], "user")
+        self.assertEqual(msg['group'], None)
+        self.assertEqual(msg['content'], text)
+        self.assertEqual(msg['helper_metadata'], {
+            'irc': {
+                'transport_nickname': self.nick,
+                'addressed_to_transport': False,
+                'irc_server': self.server_addr,
+                'irc_channel': None,
+                'irc_command': 'NOTICE',
+                }
+            })
+        self.assertEqual(msg['transport_metadata'], {
+            'irc_channel': None,
             })
 
     @inlineCallbacks
