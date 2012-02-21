@@ -40,8 +40,6 @@ class SmscServer(Protocol):
             self.handle_bind_transceiver(pdu)
         if pdu['header']['command_id'] == 'submit_sm':
             self.handle_submit_sm(pdu)
-        #if pdu['header']['command_id'] == 'deliver_sm':
-            #self.handle_deliver_sm(pdu)
         if pdu['header']['command_id'] == 'enquire_link':
             self.handle_enquire_link(pdu)
 
@@ -75,8 +73,8 @@ class SmscServer(Protocol):
             pdu_resp = SubmitSMResp(
                     sequence_number, message_id, command_status)
             self.sendPDU(pdu_resp)
-            reactor.callLater(2, self.delivery_report, message_id)
-            self.boomerang(pdu)
+            reactor.callLater(1, self.delivery_report, message_id)
+            #self.boomerang(pdu)
             self.follow_up(pdu)
 
     def follow_up(self, pdu):
