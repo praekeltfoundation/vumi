@@ -724,8 +724,16 @@ class EsmeToSmscTestCase(TransportTestCase):
         #expected_deferreds.append(defer.Deferred())
         dl_2 = defer.DeferredList(expected_deferreds)
 
-        msg = self.mkmsg_in(self.transport_name)
-        msg.payload['timestamp'] = '1'
+        msg = TransportUserMessage(
+                to_addr="2772222222",
+                from_addr="2772000000",
+                content='hello world',
+                transport_name=self.transport_name,
+                transport_type='smpp',
+                transport_metadata={},
+                rkey='%s.outbound' % self.transport_name,
+                timestamp='0',
+                )
         yield self.dispatch(msg)
         #print "DISPATCHED", self._amqp.dispatched
         #print self.get_dispatched_messages()
