@@ -75,7 +75,7 @@ class SmscServer(Protocol):
             self.sendPDU(pdu_resp)
             reactor.callLater(1, self.delivery_report, message_id)
             #self.boomerang(pdu)
-            self.follow_up(pdu)
+            #self.follow_up(pdu)
 
     def follow_up(self, pdu):
         sequence_number = 555
