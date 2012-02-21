@@ -449,11 +449,7 @@ class EsmeToSmscTestCase(TransportTestCase):
             "transport_type": "smpp",
         }
         self.service = MockSmppService(self.config)
-        self.service.set_test_hook(self.server_test_hook)
-        self.transport = yield self.get_transport(self.config,
-                #MockSmppTransport,
-                start=False)
-        self.transport.set_test_hook(self.client_test_hook)
+        self.transport = yield self.get_transport(self.config, start=False)
         self.transport.r_server = FakeRedis()
 
     @inlineCallbacks
@@ -465,10 +461,11 @@ class EsmeToSmscTestCase(TransportTestCase):
     def tearDown(self):
         yield super(EsmeToSmscTestCase, self).tearDown()
         self.transport.r_server.teardown()
+        self.transport.factory.esme.connectionLost()
         self.service.stopWorker()
 
     @inlineCallbacks
-    def test_handshake(self):
+    def test_handshake_submit_and_deliver(self):
 
         # 1111111111111111111111111111111111111111111111111
         expected_on_client_1 = [
@@ -729,6 +726,11 @@ class EsmeToSmscTestCase(TransportTestCase):
         dl_1 = defer.DeferredList(expected_deferreds)
 
         self._block_till_bind = defer.Deferred()
+
+        # Set hooks and startup
+
+        self.service.set_test_hook(self.server_test_hook)
+        self.transport.set_test_hook(self.client_test_hook)
         yield self.startWorkers()
 
         yield dl_1
@@ -809,3 +811,68 @@ class EsmeToSmscTestCase(TransportTestCase):
 
         dispatched_failures = self.get_dispatched_failures()
         #print "DISPATCHED", self._amqp.dispatched
+
+    #@inlineCallbacks
+    #def test_submit_and_deliver(self):
+
+        #self._block_till_bind = defer.Deferred()
+
+        ## Startup
+
+        #yield self.startWorkers()
+
+        #yield self.transport._block_till_bind
+
+        ## Next the Client submits a SMS to the Server
+        ## and recieves an ack and a delivery_report
+
+        #msg = TransportUserMessage(
+                #to_addr="2772222222",
+                #from_addr="2772000000",
+                #content='hello world',
+                #transport_name=self.transport_name,
+                #transport_type='smpp',
+                #transport_metadata={},
+                #rkey='%s.outbound' % self.transport_name,
+                #timestamp='0',
+                #)
+        #yield self.dispatch(msg)
+
+        ## We need the user_message_id to check the ack
+        #user_message_id = msg.payload["message_id"]
+
+        #dispatched_events = self.get_dispatched_events()
+        #ack = dispatched_events[0].payload
+        #delv = dispatched_events[1].payload
+
+        #self.assertEqual(ack['message_type'], 'event')
+        #self.assertEqual(ack['event_type'], 'ack')
+        #self.assertEqual(ack['transport_name'], self.transport_name)
+        #self.assertEqual(ack['user_message_id'], user_message_id)
+
+        ## We need the sent_message_id to check the delivery_report
+        #sent_message_id = ack['sent_message_id']
+
+        #self.assertEqual(delv['message_type'], 'event')
+        #self.assertEqual(delv['event_type'], 'delivery_report')
+        #self.assertEqual(delv['transport_name'], self.transport_name)
+        #self.assertEqual(delv['user_message_id'], sent_message_id)
+        #self.assertEqual(delv['delivery_status'], 'delivered')
+
+        ## Finally the Server delivers a SMS to the Client
+
+        #pdu = DeliverSM(555,
+                #short_message="SMS from server",
+                #destination_addr="2772222222",
+                #source_addr="2772000000",
+                #)
+        #self.service.factory.smsc.sendPDU(pdu)
+
+        #dispatched_messages = self.get_dispatched_messages()
+        #mess = dispatched_messages[0].payload
+
+        #self.assertEqual(mess['message_type'], 'user_message')
+        #self.assertEqual(mess['transport_name'], self.transport_name)
+        #self.assertEqual(mess['content'], "SMS from server")
+
+        #dispatched_failures = self.get_dispatched_failures()
