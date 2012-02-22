@@ -321,7 +321,7 @@ class FakeRedis(object):
             for key, value in mapping.items()]))
 
     def hgetall(self, key):
-        return self._data.get(key, {})
+        return self._data.get(key, {}).copy()
 
     def hlen(self, key):
         return len(self._data.get(key, {}))
