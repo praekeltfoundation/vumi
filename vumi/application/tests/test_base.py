@@ -140,6 +140,13 @@ class TestApplicationWorker(TestCase):
         expecteds = [msg.reply("More!"), msg.reply("End!", False)]
         self.assert_msgs_match(replies, expecteds)
 
+    def test_reply_to_group(self):
+        msg = FakeUserMessage()
+        self.worker.reply_to_group(msg, "Group!")
+        replies = self.recv()
+        expecteds = [msg.reply_group("Group!")]
+        self.assert_msgs_match(replies, expecteds)
+
     def test_send_to(self):
         sent_msg = self.worker.send_to('+12345', "Hi!")
         sends = self.recv()
@@ -273,7 +280,7 @@ class ApplicationTestCase(TestCase):
         returnValue(worker)
 
     def mkmsg_in(self, content='hello world', message_id='abc',
-                 to_addr='9292', from_addr='+41791234567',
+                 to_addr='9292', from_addr='+41791234567', group=None,
                  session_event=None, transport_type=None,
                  helper_metadata=None, transport_metadata=None):
         if transport_type is None:
@@ -285,6 +292,7 @@ class ApplicationTestCase(TestCase):
         return TransportUserMessage(
             from_addr=from_addr,
             to_addr=to_addr,
+            group=group,
             message_id=message_id,
             transport_name=self.transport_name,
             transport_type=transport_type,
@@ -296,7 +304,7 @@ class ApplicationTestCase(TestCase):
             )
 
     def mkmsg_out(self, content='hello world', message_id='1',
-                  to_addr='+41791234567', from_addr='9292',
+                  to_addr='+41791234567', from_addr='9292', group=None,
                   session_event=None, in_reply_to=None,
                   transport_type=None, transport_metadata=None,
                   ):
@@ -307,6 +315,7 @@ class ApplicationTestCase(TestCase):
         params = dict(
             to_addr=to_addr,
             from_addr=from_addr,
+            group=group,
             message_id=message_id,
             transport_name=self.transport_name,
             transport_type=transport_type,

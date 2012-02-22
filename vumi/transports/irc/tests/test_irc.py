@@ -233,36 +233,75 @@ class TestIrcTransport(TransportTestCase):
         yield self.irc_connector.stopListening()
         super(TestIrcTransport, self).tearDown()
 
-    @inlineCallbacks
-    def test_handle_inbound(self):
-        sender, recipient, text = "user!ident@host", "#zoo", "Hello gooites"
-        self.irc_server.client.privmsg(sender, recipient, text)
-        [msg] = yield self.wait_for_dispatched_messages(1)
+    def assert_inbound_message(self, msg, to_addr, from_addr, channel, content,
+                               addressed_to_transport, irc_command):
         self.assertEqual(msg['transport_name'], self.transport_name)
-        self.assertEqual(msg['to_addr'], "#zoo")
-        self.assertEqual(msg['from_addr'], "user")
-        self.assertEqual(msg['content'], text)
+        self.assertEqual(msg['to_addr'], to_addr)
+        self.assertEqual(msg['from_addr'], from_addr)
+        self.assertEqual(msg['group'], channel)
+        self.assertEqual(msg['content'], content)
         self.assertEqual(msg['helper_metadata'], {
             'irc': {
                 'transport_nickname': self.nick,
-                'addressed_to_transport': False,
+                'addressed_to_transport': addressed_to_transport,
                 'irc_server': self.server_addr,
-                'irc_channel': '#zoo',
-                'irc_command': 'PRIVMSG',
+                'irc_channel': channel,
+                'irc_command': irc_command,
                 }
             })
         self.assertEqual(msg['transport_metadata'], {
-            'irc_channel': '#zoo',
+            'irc_channel': channel,
             })
 
+    def send_irc_message(self, content, recipient, sender="user!ident@host"):
+        self.irc_server.client.privmsg(sender, recipient, content)
+
     @inlineCallbacks
-    def test_handle_inbound_notice(self):
+    def test_handle_inbound_to_channel(self):
+        text = "Hello gooites"
+        self.send_irc_message(text, "#zoo")
+        [msg] = yield self.wait_for_dispatched_messages(1)
+        self.assert_inbound_message(msg,
+                                    to_addr=None,
+                                    from_addr="user",
+                                    channel="#zoo",
+                                    content=text,
+                                    addressed_to_transport=False,
+                                    irc_command="PRIVMSG")
+
+    @inlineCallbacks
+    def test_handle_inbound_to_channel_directed(self):
+        self.send_irc_message("%s: Hi" % (self.nick,), "#zoo")
+        [msg] = yield self.wait_for_dispatched_messages(1)
+        self.assert_inbound_message(msg,
+                                    to_addr=self.nick,
+                                    from_addr="user",
+                                    channel="#zoo",
+                                    content="Hi",
+                                    addressed_to_transport=True,
+                                    irc_command="PRIVMSG")
+
+    @inlineCallbacks
+    def test_handle_inbound_to_user(self):
+        self.send_irc_message("Hi there", "%s!bot@host" % (self.nick,))
+        [msg] = yield self.wait_for_dispatched_messages(1)
+        self.assert_inbound_message(msg,
+                                    to_addr=self.nick,
+                                    from_addr="user",
+                                    channel=None,
+                                    content="Hi there",
+                                    addressed_to_transport=True,
+                                    irc_command="PRIVMSG")
+
+    @inlineCallbacks
+    def test_handle_inbound_channel_notice(self):
         sender, recipient, text = "user!ident@host", "#zoo", "Hello gooites"
         self.irc_server.client.notice(sender, recipient, text)
         [msg] = yield self.wait_for_dispatched_messages(1)
         self.assertEqual(msg['transport_name'], self.transport_name)
-        self.assertEqual(msg['to_addr'], "#zoo")
+        self.assertEqual(msg['to_addr'], None)
         self.assertEqual(msg['from_addr'], "user")
+        self.assertEqual(msg['group'], "#zoo")
         self.assertEqual(msg['content'], text)
         self.assertEqual(msg['helper_metadata'], {
             'irc': {
@@ -278,6 +317,29 @@ class TestIrcTransport(TransportTestCase):
             })
 
     @inlineCallbacks
+    def test_handle_inbound_user_notice(self):
+        sender, recipient, text = "user!ident@host", "bot", "Hello gooites"
+        self.irc_server.client.notice(sender, recipient, text)
+        [msg] = yield self.wait_for_dispatched_messages(1)
+        self.assertEqual(msg['transport_name'], self.transport_name)
+        self.assertEqual(msg['to_addr'], "bot")
+        self.assertEqual(msg['from_addr'], "user")
+        self.assertEqual(msg['group'], None)
+        self.assertEqual(msg['content'], text)
+        self.assertEqual(msg['helper_metadata'], {
+            'irc': {
+                'transport_nickname': self.nick,
+                'addressed_to_transport': False,
+                'irc_server': self.server_addr,
+                'irc_channel': None,
+                'irc_command': 'NOTICE',
+                }
+            })
+        self.assertEqual(msg['transport_metadata'], {
+            'irc_channel': None,
+            })
+
+    @inlineCallbacks
     def test_handle_outbound_message_while_disconnected(self):
         yield self.irc_connector.stopListening()
         self.transport.client.disconnect()
@@ -290,13 +352,55 @@ class TestIrcTransport(TransportTestCase):
             " (state: 'disconnected')."))
 
     @inlineCallbacks
-    def test_handle_outbound_message(self):
+    def test_handle_outbound_to_channel_old(self):
         msg = self.mkmsg_out(to_addr="#vumitest", content='hello world')
         yield self.dispatch(msg)
 
         event = yield self.irc_server.filter_events('PRIVMSG')
         self.assertEqual(event, ('', 'PRIVMSG',
                                  ['#vumitest', 'hello world']))
+
+        [smsg] = self.get_dispatched_events()
+        self.assertEqual(self.mkmsg_ack(sent_message_id=msg['message_id']),
+                         smsg)
+
+    @inlineCallbacks
+    def test_handle_outbound_to_channel(self):
+        msg = self.mkmsg_out(
+            to_addr=None, group="#vumitest", content='hello world')
+        yield self.dispatch(msg)
+
+        event = yield self.irc_server.filter_events('PRIVMSG')
+        self.assertEqual(event, ('', 'PRIVMSG',
+                                 ['#vumitest', 'hello world']))
+
+        [smsg] = self.get_dispatched_events()
+        self.assertEqual(self.mkmsg_ack(sent_message_id=msg['message_id']),
+                         smsg)
+
+    @inlineCallbacks
+    def test_handle_outbound_to_channel_directed(self):
+        msg = self.mkmsg_out(
+            to_addr="user", group="#vumitest", content='hello world')
+        yield self.dispatch(msg)
+
+        event = yield self.irc_server.filter_events('PRIVMSG')
+        self.assertEqual(event, ('', 'PRIVMSG',
+                                 ['#vumitest', 'user: hello world']))
+
+        [smsg] = self.get_dispatched_events()
+        self.assertEqual(self.mkmsg_ack(sent_message_id=msg['message_id']),
+                         smsg)
+
+    @inlineCallbacks
+    def test_handle_outbound_to_user(self):
+        msg = self.mkmsg_out(
+            to_addr="user", group=None, content='hello world')
+        yield self.dispatch(msg)
+
+        event = yield self.irc_server.filter_events('PRIVMSG')
+        self.assertEqual(event, ('', 'PRIVMSG',
+                                 ['user', 'hello world']))
 
         [smsg] = self.get_dispatched_events()
         self.assertEqual(self.mkmsg_ack(sent_message_id=msg['message_id']),
