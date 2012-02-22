@@ -352,8 +352,6 @@ from vumi.transports.tests.test_base import TransportTestCase
 
 
 class MockSmppTransport(SmppTransport):
-    _block_till_bind = defer.Deferred()
-
     def _setup_message_consumer(self):
         super(MockSmppTransport, self)._setup_message_consumer()
         self._block_till_bind.callback(None)
@@ -411,7 +409,8 @@ class EsmeToSmscTestCase(TransportTestCase):
                 command_id)
 
     def server_test_hook(self, **kwargs):
-        print "\nSERVER", self.format_pdu_display(**kwargs)
+        if not self.expected_on_server: return
+        #print "\nSERVER", self.format_pdu_display(**kwargs)
         ok = False
         x = self.expected_on_server[0]
         if self.get_direction(**kwargs) == self.get_direction(**x)\
@@ -424,7 +423,8 @@ class EsmeToSmscTestCase(TransportTestCase):
         self.assertTrue(ok)
 
     def client_test_hook(self, **kwargs):
-        print "\nCLIENT", self.format_pdu_display(**kwargs)
+        if not self.expected_on_client: return
+        #print "\nCLIENT", self.format_pdu_display(**kwargs)
         ok = False
         x = self.expected_on_client[0]
         if self.get_direction(**kwargs) == self.get_direction(**x)\
@@ -443,18 +443,24 @@ class EsmeToSmscTestCase(TransportTestCase):
             "system_id": "VumiTestSMSC",
             "password": "password",
             "host": "localhost",
-            "port": 2772,
+            "port": 0,
             "redis": {},
             "transport_name": self.transport_name,
             "transport_type": "smpp",
         }
-        self.service = MockSmppService(self.config)
+        self.service = MockSmppService(None, config=self.config)
+        self.service.set_test_hook(self.server_test_hook)
+        self.expected_on_server = None
+        yield self.service.startWorker()
+        self.config['port'] = self.service.listening.getHost().port
         self.transport = yield self.get_transport(self.config, start=False)
         self.transport.r_server = FakeRedis()
+        self.expected_on_client = None
 
     @inlineCallbacks
-    def startWorkers(self):
-        yield self.service.startWorker()
+    def startTransport(self):
+        self.transport.set_test_hook(self.client_test_hook)
+        self.transport._block_till_bind = defer.Deferred()
         yield self.transport.startWorker()
 
     @inlineCallbacks
@@ -465,354 +471,348 @@ class EsmeToSmscTestCase(TransportTestCase):
         #self.transport.stopWorker()
         self.service.stopWorker()
 
-    #@inlineCallbacks
-    #def test_handshake_submit_and_deliver(self):
+    @inlineCallbacks
+    def test_handshake_submit_and_deliver(self):
 
-        ## 1111111111111111111111111111111111111111111111111
-        #expected_on_client_1 = [
-            #{
-                #"direction": "outbound",
-                #"pdu": {
-                    #"header": {
-                        #"command_status": "ESME_ROK",
-                        #"command_id": "bind_transceiver",
-                        #"sequence_number": 1,
-                    #},
-                #},
-                #"deferred": defer.Deferred()
-            #},
-            #{
-                #"direction": "inbound",
-                #"pdu": {
-                    #"header": {
-                        #"command_status": "ESME_ROK",
-                        #"command_id": "bind_transceiver_resp",
-                        #"sequence_number": 1,
-                    #},
-                #},
-                #"deferred": defer.Deferred()
-            #},
-            #{
-                #"direction": "outbound",
-                #"pdu": {
-                    #"header": {
-                        #"command_status": "ESME_ROK",
-                        #"command_id": "enquire_link",
-                        #"sequence_number": 2,
-                    #},
-                #},
-                #"deferred": defer.Deferred()
-            #},
-            #{
-                #"direction": "inbound",
-                #"pdu": {
-                    #"header": {
-                        #"command_status": "ESME_ROK",
-                        #"command_id": "enquire_link_resp",
-                        #"sequence_number": 2,
-                    #},
-                #},
-                #"deferred": defer.Deferred()
-            #},
-        #]
+        # 1111111111111111111111111111111111111111111111111
+        expected_on_client_1 = [
+            {
+                "direction": "outbound",
+                "pdu": {
+                    "header": {
+                        "command_status": "ESME_ROK",
+                        "command_id": "bind_transceiver",
+                        "sequence_number": 1,
+                    },
+                },
+                "deferred": defer.Deferred()
+            },
+            {
+                "direction": "inbound",
+                "pdu": {
+                    "header": {
+                        "command_status": "ESME_ROK",
+                        "command_id": "bind_transceiver_resp",
+                        "sequence_number": 1,
+                    },
+                },
+                "deferred": defer.Deferred()
+            },
+            {
+                "direction": "outbound",
+                "pdu": {
+                    "header": {
+                        "command_status": "ESME_ROK",
+                        "command_id": "enquire_link",
+                        "sequence_number": 2,
+                    },
+                },
+                "deferred": defer.Deferred()
+            },
+            {
+                "direction": "inbound",
+                "pdu": {
+                    "header": {
+                        "command_status": "ESME_ROK",
+                        "command_id": "enquire_link_resp",
+                        "sequence_number": 2,
+                    },
+                },
+                "deferred": defer.Deferred()
+            },
+        ]
 
-        #expected_on_server_1 = [
-            #{
-                #"direction": "inbound",
-                #"pdu": {
-                    #"header": {
-                        #"command_status": "ESME_ROK",
-                        #"command_id": "bind_transceiver",
-                        #"sequence_number": 1,
-                    #},
-                #},
-                #"deferred": defer.Deferred()
-            #},
-            #{
-                #"direction": "outbound",
-                #"pdu": {
-                    #"header": {
-                        #"command_status": "ESME_ROK",
-                        #"command_id": "bind_transceiver_resp",
-                        #"sequence_number": 1,
-                    #},
-                #},
-                #"deferred": defer.Deferred()
-            #},
-            #{
-                #"direction": "inbound",
-                #"pdu": {
-                    #"header": {
-                        #"command_status": "ESME_ROK",
-                        #"command_id": "enquire_link",
-                        #"sequence_number": 2,
-                    #},
-                #},
-                #"deferred": defer.Deferred()
-            #},
-            #{
-                #"direction": "outbound",
-                #"pdu": {
-                    #"header": {
-                        #"command_status": "ESME_ROK",
-                        #"command_id": "enquire_link_resp",
-                        #"sequence_number": 2,
-                    #},
-                #},
-                #"deferred": defer.Deferred()
-            #},
-        #]
+        expected_on_server_1 = [
+            {
+                "direction": "inbound",
+                "pdu": {
+                    "header": {
+                        "command_status": "ESME_ROK",
+                        "command_id": "bind_transceiver",
+                        "sequence_number": 1,
+                    },
+                },
+                "deferred": defer.Deferred()
+            },
+            {
+                "direction": "outbound",
+                "pdu": {
+                    "header": {
+                        "command_status": "ESME_ROK",
+                        "command_id": "bind_transceiver_resp",
+                        "sequence_number": 1,
+                    },
+                },
+                "deferred": defer.Deferred()
+            },
+            {
+                "direction": "inbound",
+                "pdu": {
+                    "header": {
+                        "command_status": "ESME_ROK",
+                        "command_id": "enquire_link",
+                        "sequence_number": 2,
+                    },
+                },
+                "deferred": defer.Deferred()
+            },
+            {
+                "direction": "outbound",
+                "pdu": {
+                    "header": {
+                        "command_status": "ESME_ROK",
+                        "command_id": "enquire_link_resp",
+                        "sequence_number": 2,
+                    },
+                },
+                "deferred": defer.Deferred()
+            },
+        ]
 
-        ## 2222222222222222222222222222222222222222222222222
-        #expected_on_client_2 = [
-            #{
-                #"direction": "outbound",
-                #"pdu": {
-                    #"header": {
-                        #"command_status": "ESME_ROK",
-                        #"command_id": "submit_sm",
-                        #"sequence_number": 3,
-                    #},
-                #},
-                #"deferred": defer.Deferred()
-            #},
-            #{
-                #"direction": "inbound",
-                #"pdu": {
-                    #"header": {
-                        #"command_status": "ESME_ROK",
-                        #"command_id": "submit_sm_resp",
-                        #"sequence_number": 3,
-                    #},
-                #},
-                #"deferred": defer.Deferred()
-            #},
-            ## the delivery report
-            #{
-                #"direction": "inbound",
-                #"pdu": {
-                    #"header": {
-                        #"command_status": "ESME_ROK",
-                        #"command_id": "deliver_sm",
-                        #"sequence_number": 1,
-                    #},
-                #},
-                #"deferred": defer.Deferred()
-            #},
-            #{
-                #"direction": "outbound",
-                #"pdu": {
-                    #"header": {
-                        #"command_status": "ESME_ROK",
-                        #"command_id": "deliver_sm_resp",
-                        #"sequence_number": 1,
-                    #},
-                #},
-                #"deferred": defer.Deferred()
-            #},
-        #]
+        # 2222222222222222222222222222222222222222222222222
+        expected_on_client_2 = [
+            {
+                "direction": "outbound",
+                "pdu": {
+                    "header": {
+                        "command_status": "ESME_ROK",
+                        "command_id": "submit_sm",
+                        "sequence_number": 3,
+                    },
+                },
+                "deferred": defer.Deferred()
+            },
+            {
+                "direction": "inbound",
+                "pdu": {
+                    "header": {
+                        "command_status": "ESME_ROK",
+                        "command_id": "submit_sm_resp",
+                        "sequence_number": 3,
+                    },
+                },
+                "deferred": defer.Deferred()
+            },
+            # the delivery report
+            {
+                "direction": "inbound",
+                "pdu": {
+                    "header": {
+                        "command_status": "ESME_ROK",
+                        "command_id": "deliver_sm",
+                        "sequence_number": 1,
+                    },
+                },
+                "deferred": defer.Deferred()
+            },
+            {
+                "direction": "outbound",
+                "pdu": {
+                    "header": {
+                        "command_status": "ESME_ROK",
+                        "command_id": "deliver_sm_resp",
+                        "sequence_number": 1,
+                    },
+                },
+                "deferred": defer.Deferred()
+            },
+        ]
 
-        #expected_on_server_2 = [
-            #{
-                #"direction": "inbound",
-                #"pdu": {
-                    #"header": {
-                        #"command_status": "ESME_ROK",
-                        #"command_id": "submit_sm",
-                        #"sequence_number": 3,
-                    #},
-                #},
-                #"deferred": defer.Deferred()
-            #},
-            #{
-                #"direction": "outbound",
-                #"pdu": {
-                    #"header": {
-                        #"command_status": "ESME_ROK",
-                        #"command_id": "submit_sm_resp",
-                        #"sequence_number": 3,
-                    #},
-                #},
-                #"deferred": defer.Deferred()
-            #},
-            ## the delivery report
-            #{
-                #"direction": "outbound",
-                #"pdu": {
-                    #"header": {
-                        #"command_status": "ESME_ROK",
-                        #"command_id": "deliver_sm",
-                        #"sequence_number": 1,
-                    #},
-                #},
-                #"deferred": defer.Deferred()
-            #},
-            #{
-                #"direction": "inbound",
-                #"pdu": {
-                    #"header": {
-                        #"command_status": "ESME_ROK",
-                        #"command_id": "deliver_sm_resp",
-                        #"sequence_number": 1,
-                    #},
-                #},
-                #"deferred": defer.Deferred()
-            #},
-        #]
+        expected_on_server_2 = [
+            {
+                "direction": "inbound",
+                "pdu": {
+                    "header": {
+                        "command_status": "ESME_ROK",
+                        "command_id": "submit_sm",
+                        "sequence_number": 3,
+                    },
+                },
+                "deferred": defer.Deferred()
+            },
+            {
+                "direction": "outbound",
+                "pdu": {
+                    "header": {
+                        "command_status": "ESME_ROK",
+                        "command_id": "submit_sm_resp",
+                        "sequence_number": 3,
+                    },
+                },
+                "deferred": defer.Deferred()
+            },
+            # the delivery report
+            {
+                "direction": "outbound",
+                "pdu": {
+                    "header": {
+                        "command_status": "ESME_ROK",
+                        "command_id": "deliver_sm",
+                        "sequence_number": 1,
+                    },
+                },
+                "deferred": defer.Deferred()
+            },
+            {
+                "direction": "inbound",
+                "pdu": {
+                    "header": {
+                        "command_status": "ESME_ROK",
+                        "command_id": "deliver_sm_resp",
+                        "sequence_number": 1,
+                    },
+                },
+                "deferred": defer.Deferred()
+            },
+        ]
 
-        ## 3333333333333333333333333333333333333333333333333
-        #expected_on_client_3 = [
-            ## a sms delivered by the smsc
-            #{
-                #"direction": "inbound",
-                #"pdu": {
-                    #"header": {
-                        #"command_status": "ESME_ROK",
-                        #"command_id": "deliver_sm",
-                        #"sequence_number": 555,
-                    #},
-                #},
-                #"deferred": defer.Deferred()
-            #},
-            #{
-                #"direction": "outbound",
-                #"pdu": {
-                    #"header": {
-                        #"command_status": "ESME_ROK",
-                        #"command_id": "deliver_sm_resp",
-                        #"sequence_number": 555,
-                    #},
-                #},
-                #"deferred": defer.Deferred()
-            #},
-        #]
+        # 3333333333333333333333333333333333333333333333333
+        expected_on_client_3 = [
+            # a sms delivered by the smsc
+            {
+                "direction": "inbound",
+                "pdu": {
+                    "header": {
+                        "command_status": "ESME_ROK",
+                        "command_id": "deliver_sm",
+                        "sequence_number": 555,
+                    },
+                },
+                "deferred": defer.Deferred()
+            },
+            {
+                "direction": "outbound",
+                "pdu": {
+                    "header": {
+                        "command_status": "ESME_ROK",
+                        "command_id": "deliver_sm_resp",
+                        "sequence_number": 555,
+                    },
+                },
+                "deferred": defer.Deferred()
+            },
+        ]
 
-        #expected_on_server_3 = [
-            ## a sms delivered by the smsc
-            #{
-                #"direction": "outbound",
-                #"pdu": {
-                    #"header": {
-                        #"command_status": "ESME_ROK",
-                        #"command_id": "deliver_sm",
-                        #"sequence_number": 555,
-                    #},
-                #},
-                #"deferred": defer.Deferred()
-            #},
-            #{
-                #"direction": "inbound",
-                #"pdu": {
-                    #"header": {
-                        #"command_status": "ESME_ROK",
-                        #"command_id": "deliver_sm_resp",
-                        #"sequence_number": 555,
-                    #},
-                #},
-                #"deferred": defer.Deferred()
-            #},
-        #]
+        expected_on_server_3 = [
+            # a sms delivered by the smsc
+            {
+                "direction": "outbound",
+                "pdu": {
+                    "header": {
+                        "command_status": "ESME_ROK",
+                        "command_id": "deliver_sm",
+                        "sequence_number": 555,
+                    },
+                },
+                "deferred": defer.Deferred()
+            },
+            {
+                "direction": "inbound",
+                "pdu": {
+                    "header": {
+                        "command_status": "ESME_ROK",
+                        "command_id": "deliver_sm_resp",
+                        "sequence_number": 555,
+                    },
+                },
+                "deferred": defer.Deferred()
+            },
+        ]
 
-        #expected_deferreds = []
+        expected_deferreds = []
 
-        ## First we make sure the Client binds to the Server
-        ## and enquire_link pdu's are exchanged as expected
+        # First we make sure the Client binds to the Server
+        # and enquire_link pdu's are exchanged as expected
 
-        #self.expected_on_client = expected_on_client_1
-        #self.expected_on_server = expected_on_server_1
-        #for i in self.expected_on_server:
-            #expected_deferreds.append(i['deferred'])
-        #for i in self.expected_on_client:
-            #expected_deferreds.append(i['deferred'])
-        #dl_1 = defer.DeferredList(expected_deferreds)
+        self.expected_on_client = expected_on_client_1
+        self.expected_on_server = expected_on_server_1
+        for i in self.expected_on_server:
+            expected_deferreds.append(i['deferred'])
+        for i in self.expected_on_client:
+            expected_deferreds.append(i['deferred'])
+        dl_1 = defer.DeferredList(expected_deferreds)
 
-        #self._block_till_bind = defer.Deferred()
+        self._block_till_bind = defer.Deferred()
 
-        ## Set hooks and startup
+        ## Startup
+        yield self.startTransport()
+        yield dl_1
+        yield self.transport._block_till_bind
 
-        #self.service.set_test_hook(self.server_test_hook)
-        #self.transport.set_test_hook(self.client_test_hook)
-        #yield self.startWorkers()
+        # Next the Client submits a SMS to the Server
+        # and recieves an ack and a delivery_report
 
-        #yield dl_1
-        #yield self.transport._block_till_bind
+        self.expected_on_client = expected_on_client_2
+        self.expected_on_server = expected_on_server_2
+        for i in self.expected_on_client:
+            expected_deferreds.append(i['deferred'])
+        for i in self.expected_on_server:
+            expected_deferreds.append(i['deferred'])
+        dl_2 = defer.DeferredList(expected_deferreds)
 
-        ## Next the Client submits a SMS to the Server
-        ## and recieves an ack and a delivery_report
+        msg = TransportUserMessage(
+                to_addr="2772222222",
+                from_addr="2772000000",
+                content='hello world',
+                transport_name=self.transport_name,
+                transport_type='smpp',
+                transport_metadata={},
+                rkey='%s.outbound' % self.transport_name,
+                timestamp='0',
+                )
+        yield self.dispatch(msg)
 
-        #self.expected_on_client = expected_on_client_2
-        #self.expected_on_server = expected_on_server_2
-        #for i in self.expected_on_client:
-            #expected_deferreds.append(i['deferred'])
-        #for i in self.expected_on_server:
-            #expected_deferreds.append(i['deferred'])
-        #dl_2 = defer.DeferredList(expected_deferreds)
+        # We need the user_message_id to check the ack
+        user_message_id = msg.payload["message_id"]
 
-        #msg = TransportUserMessage(
-                #to_addr="2772222222",
-                #from_addr="2772000000",
-                #content='hello world',
-                #transport_name=self.transport_name,
-                #transport_type='smpp',
-                #transport_metadata={},
-                #rkey='%s.outbound' % self.transport_name,
-                #timestamp='0',
-                #)
-        #yield self.dispatch(msg)
+        yield dl_2
 
-        ## We need the user_message_id to check the ack
-        #user_message_id = msg.payload["message_id"]
+        dispatched_events = self.get_dispatched_events()
+        ack = dispatched_events[0].payload
+        delv = dispatched_events[1].payload
 
-        #yield dl_2
+        self.assertEqual(ack['message_type'], 'event')
+        self.assertEqual(ack['event_type'], 'ack')
+        self.assertEqual(ack['transport_name'], self.transport_name)
+        self.assertEqual(ack['user_message_id'], user_message_id)
 
-        #dispatched_events = self.get_dispatched_events()
-        #ack = dispatched_events[0].payload
-        #delv = dispatched_events[1].payload
+        # We need the sent_message_id to check the delivery_report
+        sent_message_id = ack['sent_message_id']
 
-        #self.assertEqual(ack['message_type'], 'event')
-        #self.assertEqual(ack['event_type'], 'ack')
-        #self.assertEqual(ack['transport_name'], self.transport_name)
-        #self.assertEqual(ack['user_message_id'], user_message_id)
+        self.assertEqual(delv['message_type'], 'event')
+        self.assertEqual(delv['event_type'], 'delivery_report')
+        self.assertEqual(delv['transport_name'], self.transport_name)
+        self.assertEqual(delv['user_message_id'], sent_message_id)
+        self.assertEqual(delv['delivery_status'], 'delivered')
 
-        ## We need the sent_message_id to check the delivery_report
-        #sent_message_id = ack['sent_message_id']
+        # Finally the Server delivers a SMS to the Client
 
-        #self.assertEqual(delv['message_type'], 'event')
-        #self.assertEqual(delv['event_type'], 'delivery_report')
-        #self.assertEqual(delv['transport_name'], self.transport_name)
-        #self.assertEqual(delv['user_message_id'], sent_message_id)
-        #self.assertEqual(delv['delivery_status'], 'delivered')
+        self.expected_on_client = expected_on_client_3
+        self.expected_on_server = expected_on_server_3
+        for i in self.expected_on_client:
+            expected_deferreds.append(i['deferred'])
+        for i in self.expected_on_server:
+            expected_deferreds.append(i['deferred'])
+        #expected_deferreds.append(defer.Deferred())
+        dl_3 = defer.DeferredList(expected_deferreds)
 
-        ## Finally the Server delivers a SMS to the Client
+        pdu = DeliverSM(555,
+                short_message="SMS from server",
+                destination_addr="2772222222",
+                source_addr="2772000000",
+                )
+        self.service.factory.smsc.sendPDU(pdu)
 
-        #self.expected_on_client = expected_on_client_3
-        #self.expected_on_server = expected_on_server_3
-        #for i in self.expected_on_client:
-            #expected_deferreds.append(i['deferred'])
-        #for i in self.expected_on_server:
-            #expected_deferreds.append(i['deferred'])
-        ##expected_deferreds.append(defer.Deferred())
-        #dl_3 = defer.DeferredList(expected_deferreds)
+        yield dl_3
 
-        #pdu = DeliverSM(555,
-                #short_message="SMS from server",
-                #destination_addr="2772222222",
-                #source_addr="2772000000",
-                #)
-        #self.service.factory.smsc.sendPDU(pdu)
+        dispatched_messages = self.get_dispatched_messages()
+        mess = dispatched_messages[0].payload
 
-        #yield dl_3
+        self.assertEqual(mess['message_type'], 'user_message')
+        self.assertEqual(mess['transport_name'], self.transport_name)
+        self.assertEqual(mess['content'], "SMS from server")
 
-        #dispatched_messages = self.get_dispatched_messages()
-        #mess = dispatched_messages[0].payload
-
-        #self.assertEqual(mess['message_type'], 'user_message')
-        #self.assertEqual(mess['transport_name'], self.transport_name)
-        #self.assertEqual(mess['content'], "SMS from server")
-
-        #dispatched_failures = self.get_dispatched_failures()
-        ##print "DISPATCHED", self._amqp.dispatched
-        ##print "DDDDDDDDDDDDDDDDDD", dir(self._amqp)
+        dispatched_failures = self.get_dispatched_failures()
 
     @inlineCallbacks
     def test_submit_and_deliver(self):
@@ -820,9 +820,7 @@ class EsmeToSmscTestCase(TransportTestCase):
         self._block_till_bind = defer.Deferred()
 
         # Startup
-
-        yield self.startWorkers()
-
+        yield self.startTransport()
         yield self.transport._block_till_bind
 
         # Next the Client submits a SMS to the Server

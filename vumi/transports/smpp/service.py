@@ -33,6 +33,8 @@ class SmppService(Worker):
     """
     test_hook = None
 
+    #def
+
     def set_test_hook(self, test_hook):
         self.test_hook = test_hook
 
@@ -42,7 +44,7 @@ class SmppService(Worker):
         #self.consumer = yield SmppServiceConsumer()
         # start the Smpp Service
         self.factory = SmscServerFactory(test_hook=self.test_hook)
-        reactor.listenTCP(2772, self.factory)
+        self.listening = reactor.listenTCP(self.config['port'], self.factory)
 
     #def stopWorker(self):
         #log.msg("Stopping the SmppService")
