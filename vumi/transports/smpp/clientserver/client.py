@@ -739,13 +739,13 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
         return self.esme
 
     def clientConnectionLost(self, connector, reason):
-        print 'Lost connection.  Reason:', reason
+        log.msg('Lost connection.  Reason:', reason)
         self.__disconnect_callback()
         ReconnectingClientFactory.clientConnectionLost(
                 self, connector, reason)
 
     def clientConnectionFailed(self, connector, reason):
-        print 'Connection failed. Reason:', reason
+        log.msg('Connection failed. Reason:', reason)
         ReconnectingClientFactory.clientConnectionFailed(
                 self, connector, reason)
 

@@ -123,7 +123,8 @@ class Transport(Worker):
         if self.message_consumer is None:
             log.msg("Consumer does not exist, not stopping.")
             return
-        self._consumers.remove(self.message_consumer)
+        if self.message_consumer in self._consumers:
+            self._consumers.remove(self.message_consumer)
         consumer, self.message_consumer = self.message_consumer, None
         return consumer.stop()
 

@@ -465,11 +465,15 @@ class EsmeToSmscTestCase(TransportTestCase):
 
     @inlineCallbacks
     def tearDown(self):
+        from twisted.internet.base import DelayedCall
+        DelayedCall.debug = True
+
         yield super(EsmeToSmscTestCase, self).tearDown()
         self.transport.r_server.teardown()
-        self.transport.factory.esme.connectionLost()
-        #self.transport.stopWorker()
-        self.service.stopWorker()
+        self.transport.factory.stopTrying()
+        self.transport.factory.esme.transport.loseConnection()
+        yield self.service.listening.stopListening()
+        yield self.service.listening.loseConnection()
 
     @inlineCallbacks
     def test_handshake_submit_and_deliver(self):
