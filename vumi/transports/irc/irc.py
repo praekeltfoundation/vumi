@@ -256,7 +256,7 @@ class IrcTransport(Transport):
 
         # Continue to support pre-group-chat hackery.
         irc_channel = msg.get('group') or transport_metadata.get('irc_channel')
-        recipient = msg['to_addr'] if irc_channel is None else irc_channel
+        recipient = irc_channel if irc_channel is not None else msg['to_addr']
         content = msg['content']
 
         if irc_channel and msg['to_addr']:
