@@ -259,7 +259,7 @@ class IrcTransport(Transport):
         recipient = irc_channel if irc_channel is not None else msg['to_addr']
         content = msg['content']
 
-        if irc_channel and msg['to_addr']:
+        if irc_channel and msg['to_addr'] and (irc_command != 'ACTION'):
             # We have a directed channel message, so prefix with the nick.
             content = "%s: %s" % (msg['to_addr'], content)
 

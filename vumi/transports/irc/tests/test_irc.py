@@ -233,6 +233,13 @@ class TestIrcTransport(TransportTestCase):
         yield self.irc_connector.stopListening()
         super(TestIrcTransport, self).tearDown()
 
+    def mkmsg_out_irc(self, *args, **kw):
+        helper_metadata = kw.setdefault('helper_metadata', {'irc': {}})
+        irc_command = kw.pop('irc_command', None)
+        if irc_command is not None:
+            helper_metadata['irc']['irc_command'] = irc_command
+        return self.mkmsg_out(*args, **kw)
+
     def assert_inbound_message(self, msg, to_addr, from_addr, channel, content,
                                addressed_to_transport, irc_command):
         self.assertEqual(msg['transport_name'], self.transport_name)
@@ -344,7 +351,7 @@ class TestIrcTransport(TransportTestCase):
         yield self.irc_connector.stopListening()
         self.transport.client.disconnect()
 
-        msg = self.mkmsg_out()
+        msg = self.mkmsg_out_irc()
         yield self.dispatch(msg)
         [error] = self.get_dispatched_failures()
         self.assertTrue(error['reason'].strip().endswith(
@@ -353,7 +360,7 @@ class TestIrcTransport(TransportTestCase):
 
     @inlineCallbacks
     def test_handle_outbound_to_channel_old(self):
-        msg = self.mkmsg_out(to_addr="#vumitest", content='hello world')
+        msg = self.mkmsg_out_irc(to_addr="#vumitest", content='hello world')
         yield self.dispatch(msg)
 
         event = yield self.irc_server.filter_events('PRIVMSG')
@@ -366,7 +373,7 @@ class TestIrcTransport(TransportTestCase):
 
     @inlineCallbacks
     def test_handle_outbound_to_channel(self):
-        msg = self.mkmsg_out(
+        msg = self.mkmsg_out_irc(
             to_addr=None, group="#vumitest", content='hello world')
         yield self.dispatch(msg)
 
@@ -380,7 +387,7 @@ class TestIrcTransport(TransportTestCase):
 
     @inlineCallbacks
     def test_handle_outbound_to_channel_directed(self):
-        msg = self.mkmsg_out(
+        msg = self.mkmsg_out_irc(
             to_addr="user", group="#vumitest", content='hello world')
         yield self.dispatch(msg)
 
@@ -394,13 +401,58 @@ class TestIrcTransport(TransportTestCase):
 
     @inlineCallbacks
     def test_handle_outbound_to_user(self):
-        msg = self.mkmsg_out(
+        msg = self.mkmsg_out_irc(
             to_addr="user", group=None, content='hello world')
         yield self.dispatch(msg)
 
         event = yield self.irc_server.filter_events('PRIVMSG')
         self.assertEqual(event, ('', 'PRIVMSG',
                                  ['user', 'hello world']))
+
+        [smsg] = self.get_dispatched_events()
+        self.assertEqual(self.mkmsg_ack(sent_message_id=msg['message_id']),
+                         smsg)
+
+    @inlineCallbacks
+    def test_handle_outbound_action_to_channel(self):
+        msg = self.mkmsg_out_irc(
+            to_addr=None, group="#vumitest", content='hello world',
+            irc_command='ACTION')
+        yield self.dispatch(msg)
+
+        event = yield self.irc_server.filter_events('PRIVMSG')
+        self.assertEqual(event, ('', 'PRIVMSG',
+                                 ['#vumitest', '\x01ACTION hello world\x01']))
+
+        [smsg] = self.get_dispatched_events()
+        self.assertEqual(self.mkmsg_ack(sent_message_id=msg['message_id']),
+                         smsg)
+
+    @inlineCallbacks
+    def test_handle_outbound_action_to_channel_directed(self):
+        msg = self.mkmsg_out_irc(
+            to_addr="user", group="#vumitest", content='hello world',
+            irc_command='ACTION')
+        yield self.dispatch(msg)
+
+        event = yield self.irc_server.filter_events('PRIVMSG')
+        self.assertEqual(event, ('', 'PRIVMSG',
+                                 ['#vumitest', '\x01ACTION hello world\x01']))
+
+        [smsg] = self.get_dispatched_events()
+        self.assertEqual(self.mkmsg_ack(sent_message_id=msg['message_id']),
+                         smsg)
+
+    @inlineCallbacks
+    def test_handle_outbound_action_to_user(self):
+        msg = self.mkmsg_out_irc(
+            to_addr="user", group=None, content='hello world',
+            irc_command='ACTION')
+        yield self.dispatch(msg)
+
+        event = yield self.irc_server.filter_events('PRIVMSG')
+        self.assertEqual(event, ('', 'PRIVMSG',
+                                 ['user', '\x01ACTION hello world\x01']))
 
         [smsg] = self.get_dispatched_events()
         self.assertEqual(self.mkmsg_ack(sent_message_id=msg['message_id']),
