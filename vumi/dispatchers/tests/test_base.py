@@ -4,7 +4,8 @@ from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.message import TransportUserMessage, TransportEvent
-from vumi.dispatchers.base import BaseDispatchWorker, ToAddrRouter
+from vumi.dispatchers.base import (BaseDispatchWorker, ToAddrRouter,
+                                   FromAddrMultiplexRouter)
 from vumi.tests.utils import get_stubbed_worker, FakeRedis
 from vumi.tests.fake_amqp import FakeAMQPBroker
 
@@ -284,8 +285,10 @@ class DummyDispatcher(object):
         for transport in config['transport_names']:
             self.transport_publisher[transport] = self.DummyPublisher()
         self.exposed_publisher = {}
+        self.exposed_event_publisher = {}
         for exposed in config['exposed_names']:
             self.exposed_publisher[exposed] = self.DummyPublisher()
+            self.exposed_event_publisher[exposed] = self.DummyPublisher()
 
 
 class TestToAddrRouter(TestCase, MessageMakerMixIn):
@@ -360,6 +363,63 @@ class TestTransportToTransportRouter(TestCase, MessageMakerMixIn):
         yield self.dispatch(msg, 'transport1.inbound')
         self.assert_messages('transport2.outbound', [msg])
         self.assert_no_messages('transport2.inbound', 'transport1.outbound')
+
+
+class TestFromAddrMultiplexRouter(TestCase, MessageMakerMixIn):
+    def setUp(self):
+        config = {
+            "transport_names": [
+                "transport_1",
+                "transport_2",
+                "transport_3",
+                ],
+            "exposed_names": ["muxed"],
+            "router_class": "vumi.dispatchers.base.FromAddrMultiplexRouter",
+            "fromaddr_mappings": {
+                "thing1@muxme": "transport_1",
+                "thing2@muxme": "transport_2",
+                "thing3@muxme": "transport_3",
+                },
+            }
+        self.dispatcher = DummyDispatcher(config)
+        self.router = FromAddrMultiplexRouter(self.dispatcher, config)
+
+    def mkmsg_in_mux(self, content, from_addr, transport_name):
+        return self.mkmsg_in(
+            transport_name, content=content, from_addr=from_addr)
+
+    def mkmsg_ack_mux(self, from_addr, transport_name):
+        return self.mkmsg_ack(
+            transport_name, from_addr=from_addr)
+
+    def mkmsg_out_mux(self, content, from_addr):
+        return self.mkmsg_out(
+            'muxed', content=content, from_addr=from_addr)
+
+    def test_inbound_message_routing(self):
+        msg1 = self.mkmsg_in_mux('mux 1', 'thing1@muxme', 'transport_1')
+        self.router.dispatch_inbound_message(msg1)
+        msg2 = self.mkmsg_in_mux('mux 2', 'thing2@muxme', 'transport_2')
+        self.router.dispatch_inbound_message(msg2)
+        publishers = self.dispatcher.exposed_publisher
+        self.assertEqual(publishers['muxed'].msgs, [msg1, msg2])
+
+    def test_inbound_event_routing(self):
+        msg1 = self.mkmsg_ack_mux('thing1@muxme', 'transport_1')
+        self.router.dispatch_inbound_event(msg1)
+        msg2 = self.mkmsg_ack_mux('thing2@muxme', 'transport_2')
+        self.router.dispatch_inbound_event(msg2)
+        publishers = self.dispatcher.exposed_event_publisher
+        self.assertEqual(publishers['muxed'].msgs, [msg1, msg2])
+
+    def test_outbound_message_routing(self):
+        msg1 = self.mkmsg_out_mux('mux 1', 'thing1@muxme')
+        self.router.dispatch_outbound_message(msg1)
+        msg2 = self.mkmsg_out_mux('mux 2', 'thing2@muxme')
+        self.router.dispatch_outbound_message(msg2)
+        publishers = self.dispatcher.transport_publisher
+        self.assertEqual(publishers['transport_1'].msgs, [msg1])
+        self.assertEqual(publishers['transport_2'].msgs, [msg2])
 
 
 class UserGroupingRouterTestCase(DispatcherTestCase):

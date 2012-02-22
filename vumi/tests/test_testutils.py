@@ -88,3 +88,25 @@ class FakeRedisTestCase(TestCase):
         self.r_server.sadd('set', 2, 3, 4)
         self.assertEqual(self.r_server.smembers('set'), set([
             '1', '2', '3', '4']))
+
+    def test_smove(self):
+        self.r_server = FakeRedis()
+        self.r_server.sadd('set1', 1)
+        self.r_server.sadd('set2', 2)
+        self.assertEqual(self.r_server.smove('set1', 'set2', '1'), True)
+        self.assertEqual(self.r_server.smembers('set1'), set())
+        self.assertEqual(self.r_server.smembers('set2'), set(['1', '2']))
+
+        self.assertEqual(self.r_server.smove('set1', 'set2', '1'), False)
+
+        self.assertEqual(self.r_server.smove('set2', 'set3', '1'), True)
+        self.assertEqual(self.r_server.smembers('set2'), set(['2']))
+        self.assertEqual(self.r_server.smembers('set3'), set(['1']))
+
+    def test_sunion(self):
+        self.r_server = FakeRedis()
+        self.r_server.sadd('set1', 1)
+        self.r_server.sadd('set2', 2)
+        self.assertEqual(self.r_server.sunion('set1'), set(['1']))
+        self.assertEqual(self.r_server.sunion('set1', 'set2'), set(['1', '2']))
+        self.assertEqual(self.r_server.sunion('other'), set())

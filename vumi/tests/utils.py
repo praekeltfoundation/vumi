@@ -360,6 +360,18 @@ class FakeRedis(object):
     def scard(self, key):
         return len(self._data.get(key, set()))
 
+    def smove(self, src, dst, value):
+        result = self.srem(src, value)
+        if result:
+            self.sadd(dst, value)
+        return result
+
+    def sunion(self, key, *args):
+        union = set()
+        for rkey in (key,) + args:
+            union.update(self._data.get(rkey, set()))
+        return union
+
     # Sorted set operations
 
     def zadd(self, key, **valscores):

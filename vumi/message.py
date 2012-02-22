@@ -182,10 +182,13 @@ class TransportUserMessage(TransportMessage):
         fields.setdefault('content', None)
         fields.setdefault('transport_metadata', {})
         fields.setdefault('helper_metadata', {})
+        fields.setdefault('group', None)
         return fields
 
     def validate_fields(self):
         super(TransportUserMessage, self).validate_fields()
+        # We might get older message versions without the `group` field.
+        self.payload.setdefault('group', None)
         self.assert_field_present(
             'message_id',
             'to_addr',
@@ -197,6 +200,7 @@ class TransportUserMessage(TransportMessage):
             'transport_type',
             'transport_metadata',
             'helper_metadata',
+            'group',
             )
         if self['session_event'] not in self.SESSION_EVENTS:
             raise InvalidMessageField("Invalid session_event %r"
@@ -206,10 +210,22 @@ class TransportUserMessage(TransportMessage):
         return self['from_addr']
 
     def reply(self, content, continue_session=True, **kw):
+        """Construct a reply message.
+
+        The reply message will have its `to_addr` field set to the original
+        message's `from_addr`. This means that even if the original message is
+        directed to the group only (i.e. it has `to_addr` set to `None`), the
+        reply will be directed to the sender of the original message.
+
+        :meth:`reply` suitable for constructing both one-to-one messages (such
+        as SMS) and directed messages within a group chat (such as
+        name-prefixed content in an IRC channel message).
+        """
         session_event = None if continue_session else self.SESSION_CLOSE
         out_msg = TransportUserMessage(
             to_addr=self['from_addr'],
             from_addr=self['to_addr'],
+            group=self['group'],
             in_reply_to=self['message_id'],
             content=content,
             session_event=session_event,
@@ -218,6 +234,27 @@ class TransportUserMessage(TransportMessage):
             transport_metadata=self['transport_metadata'],
             helper_metadata=self['helper_metadata'],
             **kw)
+        return out_msg
+
+    def reply_group(self, *args, **kw):
+        """Construct a group reply message.
+
+        If the `group` field is set to `None`, :meth:`reply_group` is identical
+        to :meth:`reply`.
+
+        If the `group` field is not set to `None`, the reply message will have
+        its `to_addr` field set to `None`. This means that even if the original
+        message is directed to an individual within the group (i.e. its
+        `to_addr` is not set to `None`), the reply will be directed to the
+        group as a whole.
+
+        :meth:`reply_group` suitable for both one-to-one messages (such as SMS)
+        and undirected messages within a group chat (such as IRC channel
+        messages).
+        """
+        out_msg = self.reply(*args, **kw)
+        if self['group'] is not None:
+            out_msg['to_addr'] = None
         return out_msg
 
     @classmethod

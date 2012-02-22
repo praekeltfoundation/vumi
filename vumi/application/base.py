@@ -172,11 +172,19 @@ class ApplicationWorker(Worker):
         """
         pass
 
+    def _publish_message(self, message):
+        self.transport_publisher.publish_message(message)
+        return message
+
     def reply_to(self, original_message, content, continue_session=True,
                  **kws):
         reply = original_message.reply(content, continue_session, **kws)
-        self.transport_publisher.publish_message(reply)
-        return reply
+        return self._publish_message(reply)
+
+    def reply_to_group(self, original_message, content, continue_session=True,
+                       **kws):
+        reply = original_message.reply_group(content, continue_session, **kws)
+        return self._publish_message(reply)
 
     def send_to(self, to_addr, content, tag='default', **kw):
         if tag not in self.SEND_TO_TAGS:
@@ -184,8 +192,7 @@ class ApplicationWorker(Worker):
         options = copy.deepcopy(self.send_to_options[tag])
         options.update(kw)
         msg = TransportUserMessage.send(to_addr, content, **options)
-        self.transport_publisher.publish_message(msg)
-        return msg
+        return self._publish_message(msg)
 
     @inlineCallbacks
     def _setup_transport_publisher(self):
