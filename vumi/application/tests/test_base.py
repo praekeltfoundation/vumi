@@ -2,10 +2,11 @@ from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.errors import ConfigError
-from vumi.application.base import ApplicationWorker, SESSION_NEW, SESSION_CLOSE
+from vumi.application.base import (ApplicationWorker, DecisionTreeWorker,
+                                    SESSION_NEW, SESSION_CLOSE)
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.tests.fake_amqp import FakeAMQPBroker
-from vumi.tests.utils import get_stubbed_worker
+from vumi.tests.utils import get_stubbed_worker, FakeRedis
 from datetime import datetime
 
 
@@ -339,9 +340,9 @@ class ApplicationTestCase(TestCase):
         return self._amqp.kick_delivery()
 
 
-    class MockDecisionTreeWorker(DecisionTreeWorker):
+class MockDecisionTreeWorker(DecisionTreeWorker):
 
-        test_yaml = '''
+    test_yaml = '''
         __data__:
             url: localhost:8080/api/get_data
             username: admin
@@ -409,7 +410,7 @@ class ApplicationTestCase(TestCase):
             password: pass
             params:
                 - result
-        '''
+    '''
 
     def post_result(self, result):
         self.mock_result = result
@@ -460,13 +461,40 @@ class TestDecisionTreeWorker(TestCase):
             })
         self.broker = self.worker._amqp_client.broker
         self.worker.r_server = FakeRedis()
-        self.worker.set_yaml_template(self.test_yaml)
+        self.worker.set_yaml_template(self.worker.test_yaml)
         yield self.worker.startWorker()
 
     @inlineCallbacks
     def tearDown(self):
-        self.fake_redis.teardown()
+        self.worker.r_server.teardown()
         yield self.worker.stopWorker()
+
+    @inlineCallbacks
+    def send(self, content, session_event=None, from_addr=None):
+        if from_addr is None:
+            from_addr = "456789"
+        msg = TransportUserMessage(content=content,
+                                   session_event=session_event,
+                                   from_addr=from_addr,
+                                   to_addr='+5678',
+                                   transport_name=self.transport_name,
+                                   transport_type='fake',
+                                   transport_metadata={})
+        self.broker.publish_message('vumi', '%s.inbound' % self.transport_name,
+                                    msg)
+        yield self.broker.kick_delivery()
+
+    @inlineCallbacks
+    def recv(self, n=0):
+        msgs = yield self.broker.wait_messages('vumi', '%s.outbound'
+                                                % self.transport_name, n)
+
+        def reply_code(msg):
+            if msg['session_event'] == TransportUserMessage.SESSION_CLOSE:
+                return 'end'
+            return 'reply'
+
+        returnValue([(reply_code(msg), msg['content']) for msg in msgs])
 
     def test_pass(self):
         pass
