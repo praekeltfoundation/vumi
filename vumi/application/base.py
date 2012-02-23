@@ -3,6 +3,7 @@
 """Basic tools for building a vumi ApplicationWorker."""
 
 import copy
+import json
 
 from twisted.internet.defer import inlineCallbacks
 from twisted.python import log
@@ -10,6 +11,7 @@ from twisted.python import log
 from vumi.service import Worker
 from vumi.errors import ConfigError
 from vumi.message import TransportUserMessage, TransportEvent
+from vumi.session import getVumiSession, delVumiSession, TraversedDecisionTree
 
 
 SESSION_NEW = TransportUserMessage.SESSION_NEW

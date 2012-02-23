@@ -1,3 +1,5 @@
+import re
+
 from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks, returnValue
 
@@ -366,9 +368,9 @@ class MockDecisionTreeWorker(DecisionTreeWorker):
             question:
                 english: "What kind of toys did you make?"
             options: name
-            next: quantityToys
+            next: quantityMade
 
-        quantityToys:
+        quantityMade:
             question:
                 english: "How many toys did you make?"
             validate: integer
@@ -443,6 +445,7 @@ class MockDecisionTreeWorker(DecisionTreeWorker):
                     "msisdn": "456789"
                 }'''
 
+
 class TestDecisionTreeWorker(TestCase):
 
     def replace_timestamp(self, string):
@@ -498,3 +501,44 @@ class TestDecisionTreeWorker(TestCase):
 
     def test_pass(self):
         pass
+
+    @inlineCallbacks
+    def test_session_new(self):
+        yield self.send(None, TransportUserMessage.SESSION_NEW)
+        [reply] = yield self.recv(1)
+        self.assertEqual(reply[0], "reply")
+        self.assertEqual(reply[1], "What kind of toys did you make?"
+                                    "\n1. truck\n2. car")
+
+    @inlineCallbacks
+    def test_session_complete_menu_traversal(self):
+        yield self.send(None, TransportUserMessage.SESSION_NEW)
+        yield self.send("1", TransportUserMessage.SESSION_RESUME)
+        yield self.send("14", TransportUserMessage.SESSION_RESUME)
+        yield self.send("10", TransportUserMessage.SESSION_RESUME)
+        yield self.send("2", TransportUserMessage.SESSION_RESUME)
+        replys = yield self.recv(1)
+        self.assertEqual(len(replys), 5)
+        self.assertEqual(replys[0][0], "reply")
+        self.assertEqual(replys[0][1], "What kind of toys did you make?"
+                                    "\n1. truck\n2. car")
+        self.assertEqual(replys[1][0], "reply")
+        self.assertEqual(replys[1][1], "How many toys did you make?")
+        self.assertEqual(replys[2][0], "reply")
+        self.assertEqual(replys[2][1], "How many toys did you sell?")
+        self.assertEqual(replys[3][0], "reply")
+        self.assertEqual(replys[3][1], "When did this happen?"
+                            + "\n1. Today\n2. Yesterday\n3. An earlier day")
+        self.assertEqual(replys[4][0], "end")
+        self.assertEqual(replys[4][1], "Thank you! Your work was"
+                                    + " recorded successfully.")
+        self.assertEqual(self.replace_timestamp(self.worker.mock_result),
+                self.replace_timestamp(
+                '{"msisdn": "456789", "users": '
+                '[{"timestamp": "0", "userId": "user1", "name": "David", '
+                '"toys": [{"quantitySold": "10", "toyId": "toy1", '
+                '"quantityMade": "14", "name": "truck", '
+                '"recordTimestamp": "0"}, {"quantitySold": 0, '
+                '"toyId": "toy2", "quantityMade": 0, "name": "car", '
+                '"recordTimestamp": 0}]}]}'
+                ))
