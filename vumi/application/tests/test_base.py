@@ -360,7 +360,7 @@ class MockDecisionTreeWorker(DecisionTreeWorker):
 
         users:
             question:
-                english: "Hi. There are multiple users with this phone number. Who are you?"
+                english: "Who are you?"
             options: name
             next: toys
 
@@ -439,6 +439,10 @@ class MockDecisionTreeWorker(DecisionTreeWorker):
                                 }
                             ],
                             "userId": "user1"
+                        },
+                        {
+                            "name":"Simon",
+                            "userId": "user1"
                         }
                     ],
                     "msisdn": "456789"
@@ -506,30 +510,32 @@ class TestDecisionTreeWorker(TestCase):
         yield self.send(None, TransportUserMessage.SESSION_NEW)
         [reply] = yield self.recv(1)
         self.assertEqual(reply[0], "reply")
-        self.assertEqual(reply[1], "What kind of toys did you make?"
-                                    "\n1. truck\n2. car")
+        self.assertEqual(reply[1], "Who are you?\n1. David\n2. Simon")
 
     @inlineCallbacks
     def test_session_complete_menu_traversal(self):
         yield self.send(None, TransportUserMessage.SESSION_NEW)
         yield self.send("1", TransportUserMessage.SESSION_RESUME)
+        yield self.send("1", TransportUserMessage.SESSION_RESUME)
         yield self.send("14", TransportUserMessage.SESSION_RESUME)
         yield self.send("10", TransportUserMessage.SESSION_RESUME)
         yield self.send("2", TransportUserMessage.SESSION_RESUME)
         replys = yield self.recv(1)
-        self.assertEqual(len(replys), 5)
+        self.assertEqual(len(replys), 6)
         self.assertEqual(replys[0][0], "reply")
-        self.assertEqual(replys[0][1], "What kind of toys did you make?"
-                                    "\n1. truck\n2. car")
+        self.assertEqual(replys[0][1], "Who are you?\n1. David\n2. Simon")
         self.assertEqual(replys[1][0], "reply")
-        self.assertEqual(replys[1][1], "How many toys did you make?")
+        self.assertEqual(replys[1][1], "What kind of toys did you make?"
+                                    "\n1. truck\n2. car")
         self.assertEqual(replys[2][0], "reply")
-        self.assertEqual(replys[2][1], "How many toys did you sell?")
+        self.assertEqual(replys[2][1], "How many toys did you make?")
         self.assertEqual(replys[3][0], "reply")
-        self.assertEqual(replys[3][1], "When did this happen?"
+        self.assertEqual(replys[3][1], "How many toys did you sell?")
+        self.assertEqual(replys[4][0], "reply")
+        self.assertEqual(replys[4][1], "When did this happen?"
                             + "\n1. Today\n2. Yesterday\n3. An earlier day")
-        self.assertEqual(replys[4][0], "end")
-        self.assertEqual(replys[4][1], "Thank you! Your work was"
+        self.assertEqual(replys[5][0], "end")
+        self.assertEqual(replys[5][1], "Thank you! Your work was"
                                     + " recorded successfully.")
         self.assertEqual(self.replace_timestamp(self.worker.mock_result),
                 self.replace_timestamp(
@@ -539,11 +545,42 @@ class TestDecisionTreeWorker(TestCase):
                 '"quantityMade": "14", "name": "truck", '
                 '"recordTimestamp": "0"}, {"quantitySold": 0, '
                 '"toyId": "toy2", "quantityMade": 0, "name": "car", '
-                '"recordTimestamp": 0}]}]}'
+                '"recordTimestamp": 0}]}, '
+                '{"userId": "user1", "name": "Simon"}]}'
                 ))
 
     @inlineCallbacks
     def test_session_complete_menu_traversal_with_bad_entries(self):
+        # And strip the second user out of the retrieved data
+        # to check that the first question is then skipped
+        def call_for_json():
+            return '''{
+                        "users": [
+                            {
+                                "name":"David",
+                                "toys": [
+                                    {
+                                        "name":"truck",
+                                        "quantityMade": 0,
+                                        "recordTimestamp": 0,
+                                        "toyId": "toy1",
+                                        "quantitySold": 0
+                                    },
+                                    {
+                                        "name": "car",
+                                        "quantityMade": 0,
+                                        "recordTimestamp": 0,
+                                        "toyId": "toy2",
+                                        "quantitySold": 0
+                                    }
+                                ],
+                                "userId": "user1"
+                            }
+                        ],
+                        "msisdn": "456789"
+                    }'''
+        self.worker.call_for_json = call_for_json
+
         yield self.send(None, TransportUserMessage.SESSION_NEW)
         yield self.send("3", TransportUserMessage.SESSION_RESUME)
         # '3' was out of range, so repeat with '1'
@@ -587,4 +624,3 @@ class TestDecisionTreeWorker(TestCase):
                 '"toyId": "toy2", "quantityMade": 0, "name": "car", '
                 '"recordTimestamp": 0}]}]}'
                 ))
-
