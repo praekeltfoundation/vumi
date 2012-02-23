@@ -337,3 +337,136 @@ class ApplicationTestCase(TestCase):
             rkey = self.rkey('inbound')
         self._amqp.publish_message(exchange, rkey, message)
         return self._amqp.kick_delivery()
+
+
+    class MockDecisionTreeWorker(DecisionTreeWorker):
+
+        test_yaml = '''
+        __data__:
+            url: localhost:8080/api/get_data
+            username: admin
+            password: pass
+            params:
+                - telNo
+            json: "{}"
+
+        __start__:
+            display:
+                english: "Hello."
+            next: users
+
+        users:
+            question:
+                english: "Hi. There are multiple users with this phone number. Who are you?"
+            options: name
+            next: toys
+
+        toys:
+            question:
+                english: "What kind of toys did you make?"
+            options: name
+            next: quantityToys
+
+        quantityToys:
+            question:
+                english: "How many toys did you make?"
+            validate: integer
+            next: quantitySold
+
+        quantitySold:
+            question:
+                english: "How many toys did you sell?"
+            validate: integer
+            next: recordTimestamp
+
+        recordTimestamp:
+            question:
+                english: "When did this happen?"
+            options:
+                  - display:
+                        english: "Today"
+                    default: today
+                    next: __finish__
+                  - display:
+                        english: "Yesterday"
+                    default: yesterday
+                    next: __finish__
+                  - display:
+                        english: "An earlier day"
+                    next:
+                        question:
+                            english: "Which day was it [dd/mm/yyyy]?"
+                        validate: date
+                        next: __finish__
+
+        __finish__:
+            display:
+                english: "Thank you! Your work was recorded successfully."
+
+        __post__:
+            url: localhost:8080/api/save_data
+            username: admin
+            password: pass
+            params:
+                - result
+        '''
+
+    def post_result(self, result):
+        self.mock_result = result
+
+    def call_for_json(self):
+        return '''{
+                    "users": [
+                        {
+                            "name":"David",
+                            "toys": [
+                                {
+                                    "name":"truck",
+                                    "quantityMade": 0,
+                                    "recordTimestamp": 0,
+                                    "toyId": "toy1",
+                                    "quantitySold": 0
+                                },
+                                {
+                                    "name": "car",
+                                    "quantityMade": 0,
+                                    "recordTimestamp": 0,
+                                    "toyId": "toy2",
+                                    "quantitySold": 0
+                                }
+                            ],
+                            "timestamp": "1309852944",
+                            "userId": "user1"
+                        }
+                    ],
+                    "msisdn": "456789"
+                }'''
+
+class TestDecisionTreeWorker(TestCase):
+
+    def replace_timestamp(self, string):
+        newstring = re.sub(r'imestamp": "\d*"',
+                            'imestamp": "0"',
+                            string)
+        return newstring
+
+    @inlineCallbacks
+    def setUp(self):
+        self.transport_name = 'test_transport'
+        self.worker = get_stubbed_worker(MockDecisionTreeWorker, {
+            'transport_name': self.transport_name,
+            'worker_name': 'test_decision_tree',
+            'redis': {}
+            })
+        self.broker = self.worker._amqp_client.broker
+        self.worker.r_server = FakeRedis()
+        self.worker.set_yaml_template(self.test_yaml)
+        yield self.worker.startWorker()
+
+    @inlineCallbacks
+    def tearDown(self):
+        self.fake_redis.teardown()
+        yield self.worker.stopWorker()
+
+    def test_pass(self):
+        pass

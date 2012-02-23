@@ -221,9 +221,9 @@ class DecisionTreeWorker(ApplicationWorker):
     @inlineCallbacks
     def startWorker(self):
         self.worker_name = self.config['worker_name']
-        self.yaml_template = None
+        #self.yaml_template = None
         #self.r_server = FakeRedis()
-        self.r_server = None
+        #self.r_server = None
         yield super(DecisionTreeWorker, self).startWorker()
 
     @inlineCallbacks
@@ -237,7 +237,8 @@ class DecisionTreeWorker(ApplicationWorker):
             continue_session = False
             if True:
                 if not self.yaml_template:
-                    self.set_yaml_template(self.test_yaml)
+                    raise Exception("yaml_template is missing")
+                    #self.set_yaml_template(self.test_yaml)
                 sess = self.get_session(msg.user())
                 if not sess.get_decision_tree().is_started():
                     # TODO check this corresponds to session_event = new
