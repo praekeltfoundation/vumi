@@ -438,7 +438,6 @@ class MockDecisionTreeWorker(DecisionTreeWorker):
                                     "quantitySold": 0
                                 }
                             ],
-                            "timestamp": "1309852944",
                             "userId": "user1"
                         }
                     ],
@@ -535,10 +534,57 @@ class TestDecisionTreeWorker(TestCase):
         self.assertEqual(self.replace_timestamp(self.worker.mock_result),
                 self.replace_timestamp(
                 '{"msisdn": "456789", "users": '
-                '[{"timestamp": "0", "userId": "user1", "name": "David", '
+                '[{"userId": "user1", "name": "David", '
                 '"toys": [{"quantitySold": "10", "toyId": "toy1", '
                 '"quantityMade": "14", "name": "truck", '
                 '"recordTimestamp": "0"}, {"quantitySold": 0, '
                 '"toyId": "toy2", "quantityMade": 0, "name": "car", '
                 '"recordTimestamp": 0}]}]}'
                 ))
+
+    @inlineCallbacks
+    def test_session_complete_menu_traversal_with_bad_entries(self):
+        yield self.send(None, TransportUserMessage.SESSION_NEW)
+        yield self.send("3", TransportUserMessage.SESSION_RESUME)
+        # '3' was out of range, so repeat with '1'
+        yield self.send("1", TransportUserMessage.SESSION_RESUME)
+        yield self.send("14", TransportUserMessage.SESSION_RESUME)
+        yield self.send("very little", TransportUserMessage.SESSION_RESUME)
+        # 'very litte' was not an integer so repeat with '0.5'
+        yield self.send("0.5", TransportUserMessage.SESSION_RESUME)
+        # '0.5' is of course still not an integer so repeat with '0'
+        yield self.send("0", TransportUserMessage.SESSION_RESUME)
+        yield self.send("2", TransportUserMessage.SESSION_RESUME)
+        replys = yield self.recv(1)
+        self.assertEqual(len(replys), 8)
+        self.assertEqual(replys[0][0], "reply")
+        self.assertEqual(replys[0][1], "What kind of toys did you make?"
+                                    "\n1. truck\n2. car")
+        self.assertEqual(replys[1][0], "reply")
+        self.assertEqual(replys[1][1], "What kind of toys did you make?"
+                                    "\n1. truck\n2. car")
+        self.assertEqual(replys[2][0], "reply")
+        self.assertEqual(replys[2][1], "How many toys did you make?")
+        self.assertEqual(replys[3][0], "reply")
+        self.assertEqual(replys[3][1], "How many toys did you sell?")
+        self.assertEqual(replys[4][0], "reply")
+        self.assertEqual(replys[4][1], "How many toys did you sell?")
+        self.assertEqual(replys[5][0], "reply")
+        self.assertEqual(replys[5][1], "How many toys did you sell?")
+        self.assertEqual(replys[6][0], "reply")
+        self.assertEqual(replys[6][1], "When did this happen?"
+                            + "\n1. Today\n2. Yesterday\n3. An earlier day")
+        self.assertEqual(replys[7][0], "end")
+        self.assertEqual(replys[7][1], "Thank you! Your work was"
+                                    + " recorded successfully.")
+        self.assertEqual(self.replace_timestamp(self.worker.mock_result),
+                self.replace_timestamp(
+                '{"msisdn": "456789", "users": '
+                '[{"userId": "user1", "name": "David", '
+                '"toys": [{"quantitySold": "0", "toyId": "toy1", '
+                '"quantityMade": "14", "name": "truck", '
+                '"recordTimestamp": "0"}, {"quantitySold": 0, '
+                '"toyId": "toy2", "quantityMade": 0, "name": "car", '
+                '"recordTimestamp": 0}]}]}'
+                ))
+
