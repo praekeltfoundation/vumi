@@ -61,10 +61,47 @@ class OperaReceiveResource(Resource):
 
 class OperaTransport(Transport):
     """
-    Base class that provides Redis mechanics for maintaining mapping
-    of internal vs external message ids, used to link a delivery
-    receipt back to the message of the message that was originally
-    sent out.
+    Opera transport.
+
+    See https://dragon.sa.operatelecom.com:1089/ for documentation
+    on the Opera XML-RPC interface.
+
+    Configuration options:
+
+    :type message_id_lifetime: int
+    :param message_id_lifetime:
+        Seconds message ids should be kept for before expiring. Once
+        an id expires, delivery reports can no longer be associated
+        with the original message id. Default is one week.
+    :type web_receipt_path: str
+    :param web_receipt_path:
+        Path part of JSON reply URL (should match value given to Opera).
+        E.g. /api/v1/sms/opera/receipt.json
+    :type web_receive_path: str
+    :param web_receive_path:
+        Path part of XML reply URL (should match value given to Opera).
+        E.g. /api/v1/sms/opera/receive.xml
+    :type web_port: int
+    :param web_port:
+        Port the transport listens to for responses from Opera.
+        Affects both web_receipt_path and web_receive_path.
+    :type url: str
+    :param url:
+        Opera XML-RPC gateway. E.g.
+        https://dragon.sa.operatelecom.com:1089/Gateway
+    :type channel: str
+    :param channel:
+        Opera channel number.
+    :type password: str
+    :param password:
+        Opera password.
+    :type service: str
+    :param service:
+        Opera service number.
+    :type max_segments: int
+    :param max_segments:
+        Maximum number of segments to allow messages to be broken
+        into. Default is 9. Minimum is 1. Maximum is 9.
     """
 
     # After how many seconds should the transport expire keys
