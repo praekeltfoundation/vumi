@@ -121,6 +121,7 @@ class OperaTransport(Transport):
         self.opera_channel = self.config['channel']
         self.opera_password = self.config['password']
         self.opera_service = self.config['service']
+        self.max_segments = self.config.get('max_segments', 9)
         self.transport_name = self.config['transport_name']
 
     def set_message_id_for_identifier(self, identifier, message_id):
@@ -221,6 +222,7 @@ class OperaTransport(Transport):
         xmlrpc_payload['Expiry'] = expiry
         xmlrpc_payload['Priority'] = priority
         xmlrpc_payload['Receipt'] = receipt
+        xmlrpc_payload['MaxSegments'] = self.max_segments
 
         log.msg("Sending SMS via Opera: %s" % xmlrpc_payload)
 
