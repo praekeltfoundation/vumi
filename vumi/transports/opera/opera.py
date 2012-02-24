@@ -101,7 +101,9 @@ class OperaTransport(Transport):
     :type max_segments: int
     :param max_segments:
         Maximum number of segments to allow messages to be broken
-        into. Default is 9. Minimum is 1. Maximum is 9.
+        into. Default is 9. Minimum is 1. Maximum is 9. Note: Opera's
+        own default is 1. This transport defaults to 9 to minimise the
+        possibility of message sends failing.
     """
 
     # After how many seconds should the transport expire keys
