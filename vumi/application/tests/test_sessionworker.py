@@ -291,3 +291,41 @@ class TestDecisionTreeWorker(TestCase):
                 '"toyId": "toy2", "quantityMade": 0, "name": "car", '
                 '"recordTimestamp": 0}]}]}'
                 ))
+
+    @inlineCallbacks
+    def test_session_with_long_menus(self):
+        # Replace the 'retrieved' data with many simple users
+        def call_for_json():
+            return '''{
+                        "users": [
+                            {"name":"Abrahem Smith"},
+                            {"name":"Dominick Perez"},
+                            {"name":"Hendrick Roux"},
+                            {"name":"Jacoline Kennedy"},
+                            {"name":"Kimberley Clarke"},
+                            {"name":"Larry Suit"},
+                            {"name":"Linda Lace"},
+                            {"name":"Nkosazana Zuma"},
+                            {"name":"Obama Perez"},
+                            {"name":"Siphiwe Mbeki"},
+                            {"name":"Thaba Zuma"},
+                            {"name":"Thandiwe Mandela"}
+                        ],
+                        "msisdn": "456789"
+                    }'''
+        self.worker.call_for_json = call_for_json
+
+        yield self.send(None, TransportUserMessage.SESSION_NEW)
+        yield self.send("0", TransportUserMessage.SESSION_RESUME)
+        replys = yield self.recv(1)
+        self.assertEqual(len(replys), 2)
+        self.assertTrue(len(replys[0][1]) <= 140)
+        self.assertEqual(replys[0][0], "reply")
+        self.assertEqual(replys[0][1], "Who are you?\n1. Abrahem Smith"
+                "\n2. Dominick Perez\n3. Hendrick Roux\n4. Jacoline Kennedy"
+                "\n5. Kimberley Clarke\n6. Larry Suit\n7. Linda Lace\n0. ...")
+        self.assertTrue(len(replys[1][1]) <= 140)
+        self.assertEqual(replys[1][0], "reply")
+        self.assertEqual(replys[1][1], "Who are you?\n1. Nkosazana Zuma"
+                "\n2. Obama Perez\n3. Siphiwe Mbeki\n4. Thaba Zuma"
+                "\n5. Thandiwe Mandela")
