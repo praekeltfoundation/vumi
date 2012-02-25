@@ -76,7 +76,7 @@ class TestRockPaperScissorsWorker(unittest.TestCase):
         worker.startWorker()
         return worker
 
-    def mkmsg(self, from_addr, sid, content='', sev=None):
+    def mkmsg(self, from_addr, content='', sev=None):
         if sev is None:
             sev = TransportUserMessage.SESSION_RESUME
         return TransportUserMessage(
@@ -86,7 +86,6 @@ class TestRockPaperScissorsWorker(unittest.TestCase):
             from_addr=from_addr,
             to_addr='12345',
             content=content,
-            session_id=sid,
             session_event=sev,
             )
 
@@ -98,32 +97,35 @@ class TestRockPaperScissorsWorker(unittest.TestCase):
         self.assertEquals({}, worker.games)
         self.assertEquals(None, worker.open_game)
 
-        worker.dispatch_user_message(self.mkmsg(
-                '+27831234567', 'sp1', sev=TransportUserMessage.SESSION_NEW))
-        self.assertNotEquals(None, worker.open_game)
-        game = worker.open_game
-        self.assertEquals({'sp1': game}, worker.games)
+        user1 = '+27831234567'
+        user2 = '+27831234568'
 
         worker.dispatch_user_message(self.mkmsg(
-                '+27831234568', 'sp2', sev=TransportUserMessage.SESSION_NEW))
+                user1, sev=TransportUserMessage.SESSION_NEW))
+        self.assertNotEquals(None, worker.open_game)
+        game = worker.open_game
+        self.assertEquals({user1: game}, worker.games)
+
+        worker.dispatch_user_message(self.mkmsg(
+                user2, sev=TransportUserMessage.SESSION_NEW))
         self.assertEquals(None, worker.open_game)
-        self.assertEquals({'sp1': game, 'sp2': game}, worker.games)
+        self.assertEquals({user1: game, user2: game}, worker.games)
 
         self.assertEquals(2, len(self.get_msgs()))
 
     def test_moves(self):
         worker = self.get_worker()
         worker.dispatch_user_message(self.mkmsg(
-                '+27831234567', 'sp1', sev=TransportUserMessage.SESSION_NEW))
+                '+27831234567', sev=TransportUserMessage.SESSION_NEW))
         game = worker.open_game
         worker.dispatch_user_message(self.mkmsg(
-                '+27831234568', 'sp2', sev=TransportUserMessage.SESSION_NEW))
+                '+27831234568', sev=TransportUserMessage.SESSION_NEW))
 
         self.assertEquals(2, len(self.get_msgs()))
         worker.dispatch_user_message(self.mkmsg(
-                '+27831234568', 'sp2', content='1'))
+                '+27831234568', content='1'))
         self.assertEquals(2, len(self.get_msgs()))
         worker.dispatch_user_message(self.mkmsg(
-                '+27831234567', 'sp1', content='2'))
+                '+27831234567', content='2'))
         self.assertEquals(4, len(self.get_msgs()))
         self.assertEquals((0, 1), game.scores)
