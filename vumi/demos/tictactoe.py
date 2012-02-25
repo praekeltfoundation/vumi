@@ -81,14 +81,15 @@ class TicTacToeWorker(ApplicationWorker):
         self.open_game = None
         self.messages = {}
 
-    def reply(self, player, content):
+    def reply(self, player, content, continue_session=True):
         orig = self.messages.pop(player, None)
         if orig is None:
             log.msg("Can't reply to %s, no stored message.")
             return
-        return self.reply_to(orig, content, continue_session=True)
+        return self.reply_to(orig, content, continue_session=continue_session)
 
-    # TODO: implement end(player, content) or similar
+    def end(self, player, content):
+        return self.reply(player, content, continue_session=False)
 
     def new_session(self, msg):
         log.msg("New session:", msg)
