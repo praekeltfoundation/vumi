@@ -1,6 +1,9 @@
 from twisted.trial import unittest
+from twisted.internet.defer import inlineCallbacks
 
 from vumi.demos.tictactoe import TicTacToeGame, TicTacToeWorker
+from vumi.application.tests.test_base import ApplicationTestCase
+from vumi.message import TransportUserMessage
 
 
 class TestTicTacToeGame(unittest.TestCase):
@@ -66,6 +69,54 @@ class TestTicTacToeGame(unittest.TestCase):
         self.assertEqual('X', game.check_win())
 
 
-class TestTicTacToeWorker(unittest.TestCase):
-    def test_fail(self):
-        raise unittest.SkipTest("No tests for %r." % TicTacToeGame)
+class TestTicTacToeWorker(ApplicationTestCase):
+
+    application_class = TicTacToeWorker
+
+    @inlineCallbacks
+    def setUp(self):
+        yield super(TestTicTacToeWorker, self).setUp()
+        self.worker = yield self.get_application({})
+
+    @inlineCallbacks
+    def test_new_sessions(self):
+        self.assertEquals({}, self.worker.games)
+        self.assertEquals(None, self.worker.open_game)
+
+        user1 = '+27831234567'
+        user2 = '+27831234568'
+
+        yield self.dispatch(self.mkmsg_in(from_addr=user1,
+                session_event=TransportUserMessage.SESSION_NEW))
+        self.assertNotEquals(None, self.worker.open_game)
+        game = self.worker.open_game
+        self.assertEquals({user1: game}, self.worker.games)
+
+        yield self.dispatch(self.mkmsg_in(from_addr=user2,
+                session_event=TransportUserMessage.SESSION_NEW))
+        self.assertEquals(None, self.worker.open_game)
+        self.assertEquals({user1: game, user2: game}, self.worker.games)
+
+        [msg] = self.get_dispatched_messages()
+        self.assertTrue(msg['content'].startswith('+---+---+---+'))
+
+    @inlineCallbacks
+    def test_moves(self):
+        user1 = '+27831234567'
+        user2 = '+27831234568'
+
+        yield self.dispatch(self.mkmsg_in(from_addr=user1,
+                session_event=TransportUserMessage.SESSION_NEW))
+        game = self.worker.open_game
+        yield self.dispatch(self.mkmsg_in(from_addr=user2,
+                session_event=TransportUserMessage.SESSION_NEW))
+        self.assertEquals(1, len(self.get_dispatched_messages()))
+
+        yield self.dispatch(self.mkmsg_in(from_addr=user1, content='1'))
+        self.assertEquals(2, len(self.get_dispatched_messages()))
+
+        yield self.dispatch(self.mkmsg_in(from_addr=user2, content='2'))
+        self.assertEquals(3, len(self.get_dispatched_messages()))
+
+        self.assertEqual('X', game.board[0][0])
+        self.assertEqual('O', game.board[0][1])

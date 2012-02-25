@@ -6,7 +6,6 @@ from twisted.internet.defer import inlineCallbacks
 from twisted.python import log
 
 from vumi.application import ApplicationWorker
-from vumi.utils import safe_routing_key
 
 
 class TicTacToeGame(object):
@@ -77,66 +76,72 @@ class TicTacToeWorker(ApplicationWorker):
     @inlineCallbacks
     def startWorker(self):
         """docstring for startWorker"""
+        yield super(TicTacToeWorker, self).startWorker()
         self.games = {}
         self.open_game = None
-        self.publisher = yield self.publish_to(
-            'ussd.outbound.%(transport_name)s' % self.config)
-        self.consumer = yield self.consume('ussd.inbound.%s.%s' % (
-            self.config['transport_name'],
-            safe_routing_key(self.config['ussd_code'])
-        ), self.consume_message)
+        self.messages = {}
 
-    def new_session(self, data):
-        log.msg("New session:", data)
+    def reply(self, player, content):
+        orig = self.messages.pop(player, None)
+        if orig is None:
+            log.msg("Can't reply to %s, no stored message.")
+            return
+        return self.reply_to(orig, content, continue_session=True)
+
+    def new_session(self, msg):
+        log.msg("New session:", msg)
         log.msg("Open game:", self.open_game)
         log.msg("Games:", self.games)
-        session_id = data['transport_session_id']
+        user_id = msg.user()
+        self.messages[user_id] = msg
         if self.open_game:
             game = self.open_game
-            game.set_player_O(session_id)
+            game.set_player_O(user_id)
             self.open_game = None
             self.reply(game.player_X, game.draw_board())
         else:
-            game = TicTacToeGame(session_id)
+            game = TicTacToeGame(user_id)
             self.open_game = game
-        self.games[session_id] = game
+        self.games[user_id] = game
 
-    def close_session(self, data):
-        log.msg("Close session:", data)
-        game = self.games.get(data['transport_session_id'])
+    def close_session(self, msg):
+        log.msg("Close session:", msg)
+        user_id = msg.user()
+        game = self.games.get(user_id)
         if game:
             if self.open_game == game:
                 self.open_game = None
-            for sid in (game.player_X, game.player_O):
-                if sid is not None:
-                    self.games.pop(sid, None)
-                    self.end(sid, "Other side timed out.")
+            for uid in (game.player_X, game.player_O):
+                if uid is not None:
+                    self.games.pop(uid, None)
+                    self.end(uid, "Other side timed out.")
 
-    def resume_session(self, data):
-        log.msg("Resume session:", data)
-        session_id = data['transport_session_id']
-        if session_id not in self.games:
+    def consume_user_message(self, msg):
+        log.msg("Resume session:", msg)
+        user_id = msg.user()
+        self.messages[user_id] = msg
+        if user_id not in self.games:
             return
-        game = self.games[session_id]
-        move = self.parse_move(data['message'])
+        game = self.games[user_id]
+        move = self.parse_move(msg['content'])
         if move is None:
             self.end(game.player_X, "Cheerio.")
             self.end(game.player_O, "Cheerio.")
             return
         log.msg("Move:", move)
-        resp, other_sid = game.move(session_id, *move)
+        resp, other_uid = game.move(user_id, *move)
 
         if game.check_win():
-            self.end(session_id, "You won!")
-            self.end(other_sid, "You lost!")
+            self.end(user_id, "You won!")
+            self.end(user_id, "You lost!")
             return
 
         if game.check_draw():
-            self.end(session_id, "Draw. :-(")
-            self.end(other_sid, "Draw. :-(")
+            self.end(user_id, "Draw. :-(")
+            self.end(other_uid, "Draw. :-(")
             return
 
-        self.reply(other_sid, game.draw_board())
+        self.reply(other_uid, game.draw_board())
 
     def parse_move(self, move):
         moves = {
