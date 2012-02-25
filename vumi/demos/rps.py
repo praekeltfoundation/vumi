@@ -40,11 +40,11 @@ class MultiPlayerGameWorker(ApplicationWorker):
             if self.open_game == game:
                 self.open_game = None
             self.clean_up_game(game)
-            for sid, sgame in self.games.items():
+            for uid, sgame in self.games.items():
                 if game == sgame:
-                    self.games.pop(sid, None)
+                    self.games.pop(uid, None)
                     msg = "Game terminated due to remote player disconnect."
-                    self.end(sid, msg)
+                    self.end(uid, msg)
         self.messages.pop(user_id, None)
 
     def consume_user_message(self, msg):
@@ -77,6 +77,8 @@ class MultiPlayerGameWorker(ApplicationWorker):
             log.msg("Can't reply to %s, no stored message.")
             return
         return self.reply_to(orig, content, continue_session=True)
+
+    # TODO: implement end(player, content) or similar
 
 
 class RockPaperScissorsGame(object):

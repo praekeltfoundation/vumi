@@ -88,6 +88,8 @@ class TicTacToeWorker(ApplicationWorker):
             return
         return self.reply_to(orig, content, continue_session=True)
 
+    # TODO: implement end(player, content) or similar
+
     def new_session(self, msg):
         log.msg("New session:", msg)
         log.msg("Open game:", self.open_game)
