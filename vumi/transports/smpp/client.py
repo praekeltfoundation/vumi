@@ -1,9 +1,12 @@
+# -*- test-case-name: vumi.transports.smpp.test.test_client -*-
+
 import re
 import json
 import uuid
 import redis
 
 from twisted.python import log
+from twisted.internet import reactor
 from twisted.internet.protocol import Protocol, ReconnectingClientFactory
 from twisted.internet.task import LoopingCall
 
@@ -82,6 +85,8 @@ ESME_command_status_map = {
 
 class EsmeTransceiver(Protocol):
 
+    callLater = reactor.callLater
+
     def __init__(self, seq, config, vumi_options):
         self.build_maps()
         self.name = 'Proto' + str(seq)
@@ -93,6 +98,7 @@ class EsmeTransceiver(Protocol):
         self.config = config
         self.vumi_options = vumi_options
         self.inc = int(self.config['smpp_increment'])
+        self.smpp_bind_timeout = int(self.config.get('smpp_bind_timeout', 30))
         self.incSeq()
         self.datastream = ''
         self.__connect_callback = None
@@ -288,8 +294,15 @@ class EsmeTransceiver(Protocol):
     def getSeq(self):
         return self.seq[0]
 
+    # TODO From VUMI 0.4 onwards incSeq and smpp_offset/smpp_increment
+    # will fall away and getSeq will run off the Redis incr function
+    # with one shared value per system_id@host:port account credential
     def incSeq(self):
         self.seq[0] += self.inc
+        # SMPP supports a max sequence_number of: FFFFFFFF = 4,294,967,295
+        # so start recycling @ 4,000,000,000 just to keep the numbers round
+        if self.seq[0] > 4000000000:
+            self.seq[0] = self.seq[0] % self.inc + self.inc
 
     def popData(self):
         data = None
@@ -345,6 +358,15 @@ class EsmeTransceiver(Protocol):
         log.msg(pdu.get_obj())
         self.incSeq()
         self.sendPDU(pdu)
+        self._lose_conn = self.callLater(
+            self.smpp_bind_timeout, self.lose_unbound_connection, 'BOUND_TRX')
+
+    def lose_unbound_connection(self, required_state):
+        if self.state != required_state:
+            log.msg('Breaking connection due to binding delay, %s != %s\n' % (
+                self.state, required_state))
+            self._lose_conn = None
+            self.transport.loseConnection()
 
     def connectionLost(self, *args, **kwargs):
         self.state = 'CLOSED'
@@ -373,6 +395,9 @@ class EsmeTransceiver(Protocol):
             self.state = 'BOUND_TRX'
             self.lc_enquire = LoopingCall(self.enquire_link)
             self.lc_enquire.start(55.0)
+            if self._lose_conn is not None:
+                self._lose_conn.cancel()
+                self._lose_conn = None
             self.__connect_callback(self)
         log.msg('%s STATE: %s' % (self.name, self.state))
 
@@ -426,8 +451,14 @@ class EsmeTransceiver(Protocol):
         if codec is None or message is None:
             log.msg("WARNING: Not decoding message with data_coding=%s" % (
                     data_coding,))
-            return message
-        return message.decode(codec)
+        else:
+            try:
+                return message.decode(codec)
+            except Exception, e:
+                log.msg("Error decoding message with data_coding=%s" % (
+                        data_coding,))
+                log.err(e)
+        return message
 
     def handle_deliver_sm(self, pdu):
         if pdu['header']['command_status'] == 'ESME_ROK':
@@ -579,8 +610,8 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
             raise Exception("increment may not be less than offset")
         if int(self.config['smpp_increment']) < 1:
             raise Exception("increment may not be less than 1")
-        if int(self.config['smpp_offset']) < 1:
-            raise Exception("offset may not be less than 1")
+        if int(self.config['smpp_offset']) < 0:
+            raise Exception("offset may not be less than 0")
         self.esme = None
         self.__connect_callback = None
         self.__disconnect_callback = None

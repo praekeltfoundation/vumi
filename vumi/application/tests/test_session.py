@@ -8,12 +8,12 @@ from vumi.application import SessionManager
 
 class SessionManagerTestCase(TestCase):
     def setUp(self):
-        self.sm = SessionManager(db=0, prefix="test")
-        self.sm.r_server = FakeRedis()  # stub out redis
+        self.fake_redis = FakeRedis()
+        self.sm = SessionManager(self.fake_redis, prefix="test")
 
     def tearDown(self):
         self.sm.stop()
-        self.sm.r_server.teardown()  # teardown fake redis
+        self.fake_redis.teardown()
 
     def test_active_sessions(self):
         def get_sessions():
@@ -25,7 +25,8 @@ class SessionManagerTestCase(TestCase):
         self.assertEqual(ids(), [])
         self.sm.create_session("u1")
         self.assertEqual(ids(), ["u1"])
-        self.sm.create_session("u2")
+         # 10 seconds later
+        self.sm.create_session("u2", created_at=time.time() + 10)
         self.assertEqual(ids(), ["u1", "u2"])
 
         s1, s2 = get_sessions()
@@ -35,10 +36,10 @@ class SessionManagerTestCase(TestCase):
         self.sm.max_session_length = 60.0
         self.sm.create_session("u1")
 
-    def test_create_and_retreive_session(self):
+    def test_create_and_retrieve_session(self):
         session = self.sm.create_session("u1")
         self.assertEqual(sorted(session.keys()), ['created_at'])
-        self.assertTrue(time.time() - session['created_at'] < 10.0)
+        self.assertTrue(time.time() - float(session['created_at']) < 10.0)
         loaded = self.sm.load_session("u1")
         self.assertEqual(loaded, session)
 
@@ -48,4 +49,10 @@ class SessionManagerTestCase(TestCase):
         self.sm.save_session("u1", test_session)
         session = self.sm.load_session("u1")
         self.assertTrue(session.pop('created_at') is not None)
-        self.assertEqual(session, test_session)
+        # Redis saves & returns all session values as strings
+        self.assertEqual(session, dict([map(str, kvs) for kvs
+                                        in test_session.items()]))
+
+    def test_lazy_clearing(self):
+        self.sm.save_session('user_id', {})
+        self.assertEqual(list(self.sm.active_sessions()), [])

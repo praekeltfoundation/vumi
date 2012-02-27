@@ -36,30 +36,32 @@ class VumiService(Service):
             worker_class = self.options.pop('worker_class')
 
         if not worker_class:
-            raise VumiError("please specify --worker_class")
+            raise VumiError("please specify --worker-class")
 
         config = {}
         # load the config file if specified
         config_file = self.options.pop('config')
         if config_file:
             with file(config_file, 'r') as stream:
-                config.update(yaml.load(stream))
+                config.update(yaml.safe_load(stream))
 
         # add options set with --set-option
         config.update(self.options.set_options)
 
-        worker_creator.create_worker(worker_class, config)
+        self.worker = worker_creator.create_worker(worker_class, config)
+        return self.worker.startService()
 
     # Twistd calls this method at shutdown
     def stopService(self):
         log.msg("Stopping VumiService")
+        return self.worker.stopService()
 
 
 # Extend the default Vumi options with whatever options your service needs
 class BasicSet(Options):
     optFlags = [
         ["worker-help", None, "Print out a usage message for the worker_class"
-                              " and exit"]
+                              " and exit"],
         ]
     optParameters = Options.optParameters + [
         ["worker-class", None, None, "Class of a worker to start"],

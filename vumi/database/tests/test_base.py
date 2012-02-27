@@ -26,11 +26,15 @@ class UglyModelTestCase(TestCase):
             close_db(dbname)
         except:
             pass
-        # TODO: Pull this out into some kind of config?
-        self.db = setup_db(dbname, database=dbname,
-                           user=kw.get('dbuser', 'vumi'),
-                           password=kw.get('dbpassword', 'vumi'))
-        return self.db.runQuery("SELECT 1")
+
+        try:
+            # TODO: Pull this out into some kind of config?
+            self.db = setup_db(dbname, database=dbname,
+                               user=kw.get('dbuser', 'vumi'),
+                               password=kw.get('dbpassword', 'vumi'))
+            return self.db.runQuery("SELECT 1")
+        except ImportError, e:
+            raise SkipTest("Unable to import DBAPI module: %s" % (e,))
 
     def setup_db(self, *tables, **kw):
         dbname = kw.pop('dbname', 'test')
@@ -56,8 +60,15 @@ class UglyModelTestCase(TestCase):
 
     def shutdown_db(self):
         d = succeed(None)
+
+        def add_callback(func, *args, **kw):
+            # This function exists to create a closure around a
+            # variable in the correct scope. If we just add the
+            # callback directly in the loops below, we only get the
+            # final value of "table", not each intermediate value.
+            d.addCallback(lambda _: func(self.db, *args, **kw))
         for tbl in reversed(self._test_tables):
-            d.addCallback(lambda _: tbl.drop_table(self.db))
+            add_callback(tbl.drop_table)
 
         def _cb(_):
             close_db(self._dbname)

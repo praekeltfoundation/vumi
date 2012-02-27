@@ -15,6 +15,9 @@ class TransportTestCase(unittest.TestCase):
     Not to be confused with BaseTransportTestCase below.
     """
 
+    # have transport tests timeout after 5s by default
+    timeout = 5
+
     transport_name = "sphex"
     transport_type = None
     transport_class = None
@@ -23,9 +26,10 @@ class TransportTestCase(unittest.TestCase):
         self._workers = []
         self._amqp = FakeAMQPBroker()
 
+    @inlineCallbacks
     def tearDown(self):
         for worker in self._workers:
-            worker.stopWorker()
+            yield worker.stopWorker()
 
     def rkey(self, name):
         return "%s.%s" % (self.transport_name, name)
@@ -95,8 +99,10 @@ class TransportTestCase(unittest.TestCase):
             transport_metadata=transport_metadata,
             )
 
-    def mkmsg_in(self, content='hello world', message_id='abc',
-                 transport_type=None, transport_metadata=None):
+    def mkmsg_in(self, content='hello world',
+                 session_event=TransportUserMessage.SESSION_NONE,
+                 message_id='abc', transport_type=None,
+                 transport_metadata=None):
         if transport_type is None:
             transport_type = self.transport_type
         if transport_metadata is None:
@@ -104,34 +110,40 @@ class TransportTestCase(unittest.TestCase):
         return TransportUserMessage(
             from_addr='+41791234567',
             to_addr='9292',
+            group=None,
             message_id=message_id,
             transport_name=self.transport_name,
             transport_type=transport_type,
             transport_metadata=transport_metadata,
             content=content,
+            session_event=session_event,
             timestamp=UTCNearNow(),
             )
 
-    def mkmsg_out(self, content='hello world', message_id='1',
-                  to_addr='+41791234567', from_addr='9292',
-                  in_reply_to=None, transport_type=None,
-                  transport_metadata=None, stubs=False):
+    def mkmsg_out(self, content='hello world',
+                  session_event=TransportUserMessage.SESSION_NONE,
+                  message_id='1', to_addr='+41791234567', from_addr='9292',
+                  group=None, in_reply_to=None, transport_type=None,
+                  transport_metadata=None, helper_metadata=None):
         if transport_type is None:
             transport_type = self.transport_type
         if transport_metadata is None:
             transport_metadata = {}
+        if helper_metadata is None:
+            helper_metadata = {}
         params = dict(
             to_addr=to_addr,
             from_addr=from_addr,
+            group=group,
             message_id=message_id,
             transport_name=self.transport_name,
             transport_type=transport_type,
             transport_metadata=transport_metadata,
             content=content,
+            session_event=session_event,
             in_reply_to=in_reply_to,
+            helper_metadata=helper_metadata,
             )
-        if stubs:
-            params['timestamp'] = UTCNearNow()
         return TransportUserMessage(**params)
 
     def mkmsg_fail(self, message, reason,
@@ -151,6 +163,12 @@ class TransportTestCase(unittest.TestCase):
 
     def get_dispatched_failures(self):
         return self._amqp.get_messages('vumi', self.rkey('failures'))
+
+    def wait_for_dispatched_messages(self, amount):
+        return self._amqp.wait_messages('vumi', self.rkey('inbound'), amount)
+
+    def clear_dispatched_messages(self):
+        self._amqp.clear_messages('vumi', self.rkey('inbound'))
 
     def dispatch(self, message, rkey=None, exchange='vumi'):
         if rkey is None:
@@ -174,3 +192,10 @@ class BaseTransportTestCase(TransportTestCase):
         tr = yield self.get_transport({})
         self.assertEqual(self.transport_name, tr.transport_name)
         self.assert_basic_rkeys(tr)
+
+    @inlineCallbacks
+    def test_consumer_registry(self):
+        tr = yield self.get_transport({})
+        self.assertEqual(len(tr._consumers), 1)
+        yield tr.stopWorker()
+        self.assertEqual(len(tr._consumers), 0)

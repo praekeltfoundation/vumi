@@ -10,6 +10,7 @@ from twisted.internet import reactor
 from vumi.utils import get_operator_number, get_deploy_int
 from vumi.transports.base import Transport
 from vumi.transports.smpp.client import EsmeTransceiverFactory
+from vumi.transports.failures import FailureMessage
 from vumi.message import Message
 
 
@@ -110,6 +111,7 @@ class SmppTransport(Transport):
             # Only set up redis if we don't have a test stub already
             self.r_server = redis.Redis("localhost", db=dbindex)
         self.r_prefix = "%(system_id)s@%(host)s:%(port)s" % self.config
+        self.r_message_prefix = "%s#message_json" % self.r_prefix
         log.msg("Connected to Redis, prefix: %s" % self.r_prefix)
         last_sequence_number = int(self.r_get_last_sequence()
                                    or self.smpp_offset)
@@ -149,6 +151,7 @@ class SmppTransport(Transport):
         log.msg("Unacknowledged message count: %s" % (
             self.esme_client.get_unacked_count()))
         #self.conn_throttle(unacked=self.esme_client.get_unacked_count())
+        self.r_set_message(message)
         sequence_number = self.send_smpp(message)
         self.r_set_last_sequence(sequence_number)
         self.r_set_id_for_sequence(sequence_number,
@@ -156,35 +159,90 @@ class SmppTransport(Transport):
 
     def esme_disconnected(self):
         log.msg("ESME Disconnected")
+        return self._teardown_message_consumer()
+
+    # Redis message storing methods
+
+    def r_message_key(self, message_id):
+        return "%s#%s" % (self.r_message_prefix, message_id)
+
+    def r_set_message(self, message):
+        message_id = message.payload['message_id']
+        self.r_server.set(self.r_message_key(message_id), message.to_json())
+
+    def r_get_message_json(self, message_id):
+        return self.r_server.get(self.r_message_key(message_id))
+
+    def r_get_message(self, message_id):
+        json_string = self.r_get_message_json(message_id)
+        if json_string:
+            return Message.from_json(json_string)
+        else:
+            return None
+
+    def r_delete_message(self, message_id):
+        return self.r_server.delete(self.r_message_key(message_id))
+
+    # Redis sequence number storing methods
+
+    def r_sequence_number_key(self, sequence_number):
+        return "%s#%s" % (self.r_prefix, sequence_number)
 
     def r_get_id_for_sequence(self, sequence_number):
-        return self.r_server.get("%s#%s" % (self.r_prefix, sequence_number))
+        return self.r_server.get(self.r_sequence_number_key(sequence_number))
 
     def r_delete_for_sequence(self, sequence_number):
-        return self.r_server.delete("%s#%s" % (self.r_prefix, sequence_number))
+        return self.r_server.delete(
+                self.r_sequence_number_key(sequence_number))
 
     def r_set_id_for_sequence(self, sequence_number, id):
-        self.r_server.set("%s#%s" % (self.r_prefix, sequence_number), id)
+        self.r_server.set(self.r_sequence_number_key(sequence_number), id)
+
+    def r_last_sequence_number_key(self):
+        return "%s_%s#last_sequence_number" % (self.r_prefix, self.smpp_offset)
 
     def r_get_last_sequence(self):
-        return self.r_server.get("%s_%s#last_sequence_number" % (
-            self.r_prefix, self.smpp_offset))
+        return self.r_server.get(self.r_last_sequence_number_key())
 
     def r_set_last_sequence(self, sequence_number):
-        self.r_server.set("%s_%s#last_sequence_number" % (
-            self.r_prefix, self.smpp_offset),
-                sequence_number)
+        self.r_server.set(self.r_last_sequence_number_key(), sequence_number)
 
-    def submit_sm_resp(self, *args, **kwargs):
+    def submit_sm_resp(self, *args, **kwargs):  # TODO the client does too much
         transport_msg_id = kwargs['message_id']
         sent_sms_id = self.r_get_id_for_sequence(kwargs['sequence_number'])
-        self.r_delete_for_sequence(kwargs['sequence_number'])
+        if sent_sms_id is None:
+            log.err("Sequence number lookup failed for:%s" % (
+                kwargs['sequence_number']))
+        else:
+            self.r_delete_for_sequence(kwargs['sequence_number'])
+            if kwargs['command_status'] == 'ESME_ROK':
+                # The sms was submitted ok
+                self.submit_sm_success(sent_sms_id, transport_msg_id)
+            else:
+                # We have an error
+                self.submit_sm_failure(sent_sms_id, kwargs['command_status'])
+
+    def submit_sm_success(self, sent_sms_id, transport_msg_id):
+        self.r_delete_message(sent_sms_id)
         log.msg("Mapping transport_msg_id=%s to sent_sms_id=%s" % (
             transport_msg_id, sent_sms_id))
-        log.msg("PUBLISHING ACK: (%s -> %s)" % (sent_sms_id, transport_msg_id))
-        return self.publish_ack(
+        log.msg("PUBLISHING ACK: (%s -> %s)" % (
+            sent_sms_id, transport_msg_id))
+        self.publish_ack(
             user_message_id=sent_sms_id,
             sent_message_id=transport_msg_id)
+
+    def submit_sm_failure(self, sent_sms_id, reason, failure_code=None):
+        error_message = self.r_get_message(sent_sms_id)
+        if error_message is None:
+            log.err("Could not retrieve failed message:%s" % (
+                sent_sms_id))
+        else:
+            self.r_delete_message(sent_sms_id)
+            self.failure_publisher.publish_message(FailureMessage(
+                    message=error_message.payload,
+                    failure_code=None,
+                    reason=reason))
 
     def delivery_status(self, state):
         if state in [
@@ -221,7 +279,15 @@ class SmppTransport(Transport):
                 transport_type='sms',
                 content=kwargs.get('short_message'))
         log.msg("PUBLISHING INBOUND: %s" % (message,))
-        return self.publish_message(**message)
+        # TODO: This logs messages that fail to serialize to JSON
+        #       Usually this happens when an SMPP message has content
+        #       we can't decode (e.g. data_coding == 4). We should
+        #       remove the try-except once we handle such messages
+        #       better.
+        try:
+            return self.publish_message(**message)
+        except Exception, e:
+            log.err(e)
 
     def send_smpp(self, message):
         log.msg("Sending SMPP message: %s" % (message))

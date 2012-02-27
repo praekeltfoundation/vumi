@@ -3,10 +3,10 @@ import os.path
 from twisted.trial.unittest import TestCase
 from twisted.internet import reactor
 from twisted.internet.defer import Deferred, inlineCallbacks
-from twisted.internet.error import ConnectionDone
 from twisted.web.server import Site, NOT_DONE_YET
 from twisted.web.resource import Resource
 from twisted.web import http
+from twisted.internet.protocol import Protocol, Factory
 
 
 from vumi.utils import (normalize_msisdn, vumi_resource_path, cleanup_msisdn,
@@ -52,7 +52,15 @@ class UtilsTestCase(TestCase):
         self.assertEqual('UNKNOWN', get_operator_name('27801234567', mapping))
 
 
+class FakeHTTP10(Protocol):
+    def dataReceived(self, data):
+        self.transport.write(self.factory.response_body)
+        self.transport.loseConnection()
+
+
 class HttpUtilsTestCase(TestCase):
+
+    timeout = 3
 
     class InterruptHttp(Exception):
         """Indicates that test server should halt http reply"""
@@ -75,7 +83,7 @@ class HttpUtilsTestCase(TestCase):
         def render(request):
             request.setHeader('Content-Type', 'text/plain')
             try:
-                data = f()
+                data = f(request)
                 request.setResponseCode(http.OK)
             except self.InterruptHttp:
                 reactor.callLater(0, d.callback, request)
@@ -89,13 +97,13 @@ class HttpUtilsTestCase(TestCase):
 
     @inlineCallbacks
     def test_http_request_ok(self):
-        self.set_render(lambda: "Yay")
+        self.set_render(lambda r: "Yay")
         data = yield http_request(self.url, '')
         self.assertEqual(data, "Yay")
 
     @inlineCallbacks
     def test_http_request_err(self):
-        def err():
+        def err(r):
             raise ValueError("Bad")
         self.set_render(err)
         data = yield http_request(self.url, '')
@@ -103,7 +111,7 @@ class HttpUtilsTestCase(TestCase):
 
     @inlineCallbacks
     def test_http_request_full_drop(self):
-        def interrupt():
+        def interrupt(r):
             raise self.InterruptHttp()
         got_request = Deferred()
         self.set_render(interrupt, got_request)
@@ -127,16 +135,51 @@ class HttpUtilsTestCase(TestCase):
 
     @inlineCallbacks
     def test_http_request_full_ok(self):
-        self.set_render(lambda: "Yay")
+        self.set_render(lambda r: "Yay")
         request = yield http_request_full(self.url, '')
         self.assertEqual(request.delivered_body, "Yay")
         self.assertEqual(request.code, http.OK)
 
     @inlineCallbacks
+    def test_http_request_full_headers(self):
+        def check_ua(request):
+            self.assertEqual('blah', request.getHeader('user-agent'))
+            return "Yay"
+        self.set_render(check_ua)
+
+        request = yield http_request_full(self.url, '',
+                                          {'User-Agent': ['blah']})
+        self.assertEqual(request.delivered_body, "Yay")
+        self.assertEqual(request.code, http.OK)
+
+        request = yield http_request_full(self.url, '', {'User-Agent': 'blah'})
+        self.assertEqual(request.delivered_body, "Yay")
+        self.assertEqual(request.code, http.OK)
+
+    @inlineCallbacks
     def test_http_request_full_err(self):
-        def err():
+        def err(r):
             raise ValueError("Bad")
         self.set_render(err)
         request = yield http_request_full(self.url, '')
         self.assertEqual(request.delivered_body, "Bad")
         self.assertEqual(request.code, http.INTERNAL_SERVER_ERROR)
+
+    @inlineCallbacks
+    def test_http_request_potential_data_loss(self):
+        self.webserver.loseConnection()
+        factory = Factory()
+        factory.protocol = FakeHTTP10
+        factory.response_body = (
+            "HTTP/1.0 201 CREATED\r\n"
+            "Date: Mon, 23 Jan 2012 15:08:47 GMT\r\n"
+            "Server: Fake HTTP 1.0\r\n"
+            "Content-Type: text/html; charset=utf-8\r\n"
+            "\r\n"
+            "Yay")
+        self.webserver = yield reactor.listenTCP(0, factory)
+        addr = self.webserver.getHost()
+        self.url = "http://%s:%s/" % (addr.host, addr.port)
+
+        data = yield http_request(self.url, '')
+        self.assertEqual(data, "Yay")

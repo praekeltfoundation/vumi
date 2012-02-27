@@ -1,12 +1,17 @@
 from twisted.trial.unittest import TestCase
-from twisted.internet.defer import inlineCallbacks
-from vumi.tests.utils import get_stubbed_worker
+from twisted.internet.defer import inlineCallbacks, returnValue
 
+from vumi.errors import ConfigError
 from vumi.application.base import ApplicationWorker, SESSION_NEW, SESSION_CLOSE
 from vumi.message import TransportUserMessage, TransportEvent
+from vumi.tests.fake_amqp import FakeAMQPBroker
+from vumi.tests.utils import get_stubbed_worker
+from datetime import datetime
 
 
 class DummyApplicationWorker(ApplicationWorker):
+
+    SEND_TO_TAGS = frozenset(['default', 'outbound1'])
 
     def __init__(self, *args, **kwargs):
         super(ApplicationWorker, self).__init__(*args, **kwargs)
@@ -46,7 +51,17 @@ class TestApplicationWorker(TestCase):
     @inlineCallbacks
     def setUp(self):
         self.transport_name = 'test'
-        self.config = {'transport_name': self.transport_name}
+        self.config = {
+            'transport_name': self.transport_name,
+            'send_to': {
+                'default': {
+                    'transport_name': 'default_transport',
+                    },
+                'outbound1': {
+                    'transport_name': 'outbound1_transport',
+                    },
+                },
+            }
         self.worker = get_stubbed_worker(DummyApplicationWorker,
                                          config=self.config)
         self.broker = self.worker._amqp_client.broker
@@ -69,6 +84,16 @@ class TestApplicationWorker(TestCase):
     def recv(self, routing_suffix='outbound'):
         routing_key = "%s.%s" % (self.transport_name, routing_suffix)
         return self.broker.get_messages("vumi", routing_key)
+
+    def assert_msgs_match(self, msgs, expected_msgs):
+        for key in ['timestamp', 'message_id']:
+            for msg in msgs + expected_msgs:
+                self.assertTrue(key in msg.payload)
+                msg[key] = 'OVERRIDDEN_BY_TEST'
+
+        for msg, expected_msg in zip(msgs, expected_msgs):
+            self.assertEqual(msg, expected_msg)
+        self.assertEqual(len(msgs), len(expected_msgs))
 
     @inlineCallbacks
     def test_event_dispatch(self):
@@ -113,13 +138,71 @@ class TestApplicationWorker(TestCase):
         self.worker.reply_to(msg, "End!", False)
         replies = self.recv()
         expecteds = [msg.reply("More!"), msg.reply("End!", False)]
-        for key in ['timestamp', 'message_id']:
-            for msg in expecteds + replies:
-                del msg.payload[key]
+        self.assert_msgs_match(replies, expecteds)
 
-        for reply, expected in zip(replies, expecteds):
-            self.assertEqual(reply, expected)
-        self.assertEqual(len(replies), len(expecteds))
+    def test_reply_to_group(self):
+        msg = FakeUserMessage()
+        self.worker.reply_to_group(msg, "Group!")
+        replies = self.recv()
+        expecteds = [msg.reply_group("Group!")]
+        self.assert_msgs_match(replies, expecteds)
+
+    def test_send_to(self):
+        sent_msg = self.worker.send_to('+12345', "Hi!")
+        sends = self.recv()
+        expecteds = [TransportUserMessage.send('+12345', "Hi!",
+                transport_name='default_transport')]
+        self.assert_msgs_match(sends, expecteds)
+        self.assert_msgs_match(sends, [sent_msg])
+
+    def test_send_to_with_options(self):
+        sent_msg = self.worker.send_to('+12345', "Hi!",
+                transport_type=TransportUserMessage.TT_USSD)
+        sends = self.recv()
+        expecteds = [TransportUserMessage.send('+12345', "Hi!",
+                transport_type=TransportUserMessage.TT_USSD,
+                transport_name='default_transport')]
+        self.assert_msgs_match(sends, expecteds)
+        self.assert_msgs_match(sends, [sent_msg])
+
+    def test_send_to_with_tag(self):
+        sent_msg = self.worker.send_to('+12345', "Hi!", "outbound1",
+                transport_type=TransportUserMessage.TT_USSD)
+        sends = self.recv()
+        expecteds = [TransportUserMessage.send('+12345', "Hi!",
+                transport_type=TransportUserMessage.TT_USSD,
+                transport_name='outbound1_transport')]
+        self.assert_msgs_match(sends, expecteds)
+        self.assert_msgs_match(sends, [sent_msg])
+
+    def test_send_to_with_bad_tag(self):
+        self.assertRaises(ValueError, self.worker.send_to,
+                          '+12345', "Hi!", "outbound_unknown")
+
+    @inlineCallbacks
+    def test_send_to_with_no_send_to_tags(self):
+        config = {'transport_name': 'notags_app'}
+        notags_worker = get_stubbed_worker(ApplicationWorker,
+                                           config=config)
+        yield notags_worker.startWorker()
+        self.assertRaises(ValueError, notags_worker.send_to,
+                          '+12345', "Hi!")
+
+    @inlineCallbacks
+    def test_send_to_with_bad_config(self):
+        config = {'transport_name': 'badconfig_app',
+                  'send_to': {
+                      'default': {},  # missing transport_name
+                      'outbound1': {},  # also missing transport_name
+                      },
+                  }
+        badcfg_worker = get_stubbed_worker(DummyApplicationWorker,
+                                           config=config)
+        errors = []
+        d = badcfg_worker.startWorker()
+        d.addErrback(lambda result: errors.append(result))
+        yield d
+        self.assertEqual(errors[0].type, ConfigError)
 
     def test_subclassing_api(self):
         worker = get_stubbed_worker(ApplicationWorker,
@@ -136,3 +219,121 @@ class TestApplicationWorker(TestCase):
         worker.consume_user_message(FakeUserMessage())
         worker.new_session(FakeUserMessage())
         worker.close_session(FakeUserMessage())
+
+
+class ApplicationTestCase(TestCase):
+
+    """
+    This is a base class for testing application workers.
+
+    """
+
+    # base timeout of 5s for all application tests
+    timeout = 5
+
+    transport_name = "sphex"
+    transport_type = None
+    application_class = None
+
+    def setUp(self):
+        self._workers = []
+        self._amqp = FakeAMQPBroker()
+
+    def tearDown(self):
+        for worker in self._workers:
+            worker.stopWorker()
+
+    def rkey(self, name):
+        return "%s.%s" % (self.transport_name, name)
+
+    @inlineCallbacks
+    def get_application(self, config, cls=None, start=True):
+        """
+        Get an instance of a worker class.
+
+        :param config: Config dict.
+        :param cls: The Application class to instantiate.
+                    Defaults to :attr:`application_class`
+        :param start: True to start the application (default), False otherwise.
+
+        Some default config values are helpfully provided in the
+        interests of reducing boilerplate:
+
+        * ``transport_name`` defaults to :attr:`self.transport_name`
+        * ``send_to`` defaults to a dictionary with config for each tag
+          defined in worker's SEND_TO_TAGS attribute. Each tag's config
+          contains a transport_name set to ``<tag>_outbound``.
+        """
+
+        if cls is None:
+            cls = self.application_class
+        config.setdefault('transport_name', self.transport_name)
+        if 'send_to' not in config and cls.SEND_TO_TAGS:
+            config['send_to'] = {}
+            for tag in cls.SEND_TO_TAGS:
+                config['send_to'][tag] = {
+                    'transport_name': '%s_outbound' % tag}
+        worker = get_stubbed_worker(cls, config, self._amqp)
+        self._workers.append(worker)
+        if start:
+            yield worker.startWorker()
+        returnValue(worker)
+
+    def mkmsg_in(self, content='hello world', message_id='abc',
+                 to_addr='9292', from_addr='+41791234567', group=None,
+                 session_event=None, transport_type=None,
+                 helper_metadata=None, transport_metadata=None):
+        if transport_type is None:
+            transport_type = self.transport_type
+        if helper_metadata is None:
+            helper_metadata = {}
+        if transport_metadata is None:
+            transport_metadata = {}
+        return TransportUserMessage(
+            from_addr=from_addr,
+            to_addr=to_addr,
+            group=group,
+            message_id=message_id,
+            transport_name=self.transport_name,
+            transport_type=transport_type,
+            transport_metadata=transport_metadata,
+            helper_metadata=helper_metadata,
+            content=content,
+            session_event=session_event,
+            timestamp=datetime.now(),
+            )
+
+    def mkmsg_out(self, content='hello world', message_id='1',
+                  to_addr='+41791234567', from_addr='9292', group=None,
+                  session_event=None, in_reply_to=None,
+                  transport_type=None, transport_metadata=None,
+                  ):
+        if transport_type is None:
+            transport_type = self.transport_type
+        if transport_metadata is None:
+            transport_metadata = {}
+        params = dict(
+            to_addr=to_addr,
+            from_addr=from_addr,
+            group=group,
+            message_id=message_id,
+            transport_name=self.transport_name,
+            transport_type=transport_type,
+            transport_metadata=transport_metadata,
+            content=content,
+            session_event=session_event,
+            in_reply_to=in_reply_to,
+            )
+        return TransportUserMessage(**params)
+
+    def get_dispatched_messages(self):
+        return self._amqp.get_messages('vumi', self.rkey('outbound'))
+
+    def wait_for_dispatched_messages(self, amount):
+        return self._amqp.wait_messages('vumi', self.rkey('outbound'), amount)
+
+    def dispatch(self, message, rkey=None, exchange='vumi'):
+        if rkey is None:
+            rkey = self.rkey('inbound')
+        self._amqp.publish_message(exchange, rkey, message)
+        return self._amqp.kick_delivery()

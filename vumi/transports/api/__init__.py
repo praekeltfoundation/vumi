@@ -1,6 +1,9 @@
 """API transports to inject messages into VUMI."""
 
-from vumi.transports.api.http import (
-            HttpTransport)
+from vumi.transports.api.api import HttpApiTransport
+from vumi.transports.api.oldapi import (OldSimpleHttpTransport,
+                                        OldTemplateHttpTransport)
 
-__all__ = ['HttpTransport']
+__all__ = ['HttpApiTransport',
+            'OldSimpleHttpTransport',
+            'OldTemplateHttpTransport']

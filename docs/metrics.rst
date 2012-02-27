@@ -6,7 +6,7 @@ Metrics
 Metrics are a means for workers to publish statistics about their
 operations for real-time plotting and later analysis. Vumi provides
 built-in support for publishing metric values to Carbon (the storage
-engine used by `Grahpite <http://http://graphite.wikidot.com/>`_).
+engine used by `Graphite`_).
 
 
 Using metrics from a worker
@@ -83,8 +83,7 @@ Aggregation fulfils two primary purposes:
   value (e.g. to determine the average time taken or total number of
   requests processed across multiple works).
 * To produce metric values at fixed time intervals (as is commonly
-  required by metric storage backends such as `Graphite
-  <http://graphite.wikidot.com/>`_ and `RRD Tool
+  required by metric storage backends such as `Graphite`_ and `RRD Tool
   <http://oss.oetiker.ch/rrdtool/>`_).
 
 The aggregation functions currently available are:
@@ -174,3 +173,5 @@ If you have the metric aggregation system configured as in the section
 above you can start Carbon cache using::
 
   carbon-cache.py --config <config file> --debug start
+
+.. _Graphite: http://graphite.wikidot.com/

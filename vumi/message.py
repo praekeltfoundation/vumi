@@ -85,8 +85,8 @@ class Message(object):
 
     def __eq__(self, other):
         if isinstance(other, Message):
-            other = other.payload
-        return self.payload == other
+            return self.payload == other.payload
+        return False
 
     def __getitem__(self, key):
         return self.payload[key]
@@ -107,6 +107,17 @@ class TransportMessage(Message):
     # sub-classes should set the message type
     MESSAGE_TYPE = None
     MESSAGE_VERSION = '20110921'
+
+    @staticmethod
+    def generate_id():
+        """
+        Generate a unique message id.
+
+        There are places where we want a message id before we can
+        build a complete message. This lets us do that in a consistent
+        manner.
+        """
+        return uuid4().get_hex()
 
     def process_fields(self, fields):
         fields.setdefault('message_version', self.MESSAGE_VERSION)
@@ -152,17 +163,32 @@ class TransportUserMessage(TransportMessage):
     SESSION_EVENTS = frozenset([SESSION_NONE, SESSION_NEW, SESSION_RESUME,
                                 SESSION_CLOSE])
 
+    # canonical transport types
+    TT_HTTP_API = 'http_api'
+    TT_IRC = 'irc'
+    TT_TELNET = 'telnet'
+    TT_TWITTER = 'twitter'
+    TT_SMS = 'sms'
+    TT_USSD = 'ussd'
+    TT_XMPP = 'xmpp'
+    TRANSPORT_TYPES = set([TT_HTTP_API, TT_IRC, TT_TELNET, TT_TWITTER, TT_SMS,
+                           TT_USSD, TT_XMPP])
+
     def process_fields(self, fields):
         fields = super(TransportUserMessage, self).process_fields(fields)
-        fields.setdefault('message_id', uuid4().get_hex())
+        fields.setdefault('message_id', self.generate_id())
         fields.setdefault('in_reply_to', None)
         fields.setdefault('session_event', None)
         fields.setdefault('content', None)
+        fields.setdefault('transport_metadata', {})
         fields.setdefault('helper_metadata', {})
+        fields.setdefault('group', None)
         return fields
 
     def validate_fields(self):
         super(TransportUserMessage, self).validate_fields()
+        # We might get older message versions without the `group` field.
+        self.payload.setdefault('group', None)
         self.assert_field_present(
             'message_id',
             'to_addr',
@@ -174,6 +200,7 @@ class TransportUserMessage(TransportMessage):
             'transport_type',
             'transport_metadata',
             'helper_metadata',
+            'group',
             )
         if self['session_event'] not in self.SESSION_EVENTS:
             raise InvalidMessageField("Invalid session_event %r"
@@ -183,10 +210,22 @@ class TransportUserMessage(TransportMessage):
         return self['from_addr']
 
     def reply(self, content, continue_session=True, **kw):
+        """Construct a reply message.
+
+        The reply message will have its `to_addr` field set to the original
+        message's `from_addr`. This means that even if the original message is
+        directed to the group only (i.e. it has `to_addr` set to `None`), the
+        reply will be directed to the sender of the original message.
+
+        :meth:`reply` suitable for constructing both one-to-one messages (such
+        as SMS) and directed messages within a group chat (such as
+        name-prefixed content in an IRC channel message).
+        """
         session_event = None if continue_session else self.SESSION_CLOSE
         out_msg = TransportUserMessage(
             to_addr=self['from_addr'],
             from_addr=self['to_addr'],
+            group=self['group'],
             in_reply_to=self['message_id'],
             content=content,
             session_event=session_event,
@@ -194,6 +233,40 @@ class TransportUserMessage(TransportMessage):
             transport_type=self['transport_type'],
             transport_metadata=self['transport_metadata'],
             helper_metadata=self['helper_metadata'],
+            **kw)
+        return out_msg
+
+    def reply_group(self, *args, **kw):
+        """Construct a group reply message.
+
+        If the `group` field is set to `None`, :meth:`reply_group` is identical
+        to :meth:`reply`.
+
+        If the `group` field is not set to `None`, the reply message will have
+        its `to_addr` field set to `None`. This means that even if the original
+        message is directed to an individual within the group (i.e. its
+        `to_addr` is not set to `None`), the reply will be directed to the
+        group as a whole.
+
+        :meth:`reply_group` suitable for both one-to-one messages (such as SMS)
+        and undirected messages within a group chat (such as IRC channel
+        messages).
+        """
+        out_msg = self.reply(*args, **kw)
+        if self['group'] is not None:
+            out_msg['to_addr'] = None
+        return out_msg
+
+    @classmethod
+    def send(cls, to_addr, content, **kw):
+        kw.setdefault('from_addr', None)
+        kw.setdefault('transport_name', None)
+        kw.setdefault('transport_type', None)
+        out_msg = cls(
+            to_addr=to_addr,
+            in_reply_to=None,
+            content=content,
+            session_event=cls.SESSION_NONE,
             **kw)
         return out_msg
 
@@ -216,7 +289,7 @@ class TransportEvent(TransportMessage):
 
     def process_fields(self, fields):
         fields = super(TransportEvent, self).process_fields(fields)
-        fields.setdefault('event_id', uuid4().get_hex())
+        fields.setdefault('event_id', self.generate_id())
         return fields
 
     def validate_fields(self):

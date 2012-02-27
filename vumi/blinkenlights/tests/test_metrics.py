@@ -57,6 +57,12 @@ class TestMetricManager(TestCase):
         self.assertEqual(cnt.name, "vumi.test.my.count")
         self.assertEqual(mm._metrics, [cnt])
 
+    def test_double_register(self):
+        mm = metrics.MetricManager("vumi.test.")
+        mm.register(metrics.Count("my.count"))
+        self.assertRaises(metrics.MetricRegistrationError,
+                          mm.register, metrics.Count("my.count"))
+
     def test_lookup(self):
         mm = metrics.MetricManager("vumi.test.")
         cnt = mm.register(metrics.Count("my.count"))
@@ -85,6 +91,11 @@ class TestMetricManager(TestCase):
             self._check_msg(broker, cnt, [1, 1])
         finally:
             mm.stop()
+
+    def test_stop_unstarted(self):
+        mm = metrics.MetricManager("vumi.test.", 0.1, self.on_publish)
+        mm.stop()
+        mm.stop()  # Check that .stop() is idempotent.
 
     @inlineCallbacks
     def test_in_worker(self):

@@ -88,9 +88,9 @@ class Vas2NetsFailureWorkerTestCase(unittest.TestCase):
     def mk_failure_worker(self, config, broker, redis):
         w = get_stubbed_worker(FailureWorker, config, broker)
         self.workers.append(w)
-        yield w.startWorker()
         w.retry_publisher = yield self.worker.publish_to("foo")
         w.r_server = redis
+        yield w.startWorker()
         returnValue(w)
 
     @inlineCallbacks
@@ -174,7 +174,7 @@ class Vas2NetsFailureWorkerTestCase(unittest.TestCase):
         self.assert_dispatched_count(1, 'vas2nets.failures')
         [fmsg] = self.get_dispatched('vas2nets.failures')
         fmsg = from_json(fmsg.body)
-        self.assertEqual(msg, fmsg['message'])
+        self.assertEqual(msg.payload, fmsg['message'])
         self.assertEqual(FailureMessage.FC_TEMPORARY,
                          fmsg['failure_code'])
         self.assertTrue(fmsg['reason'].strip().endswith("connection refused"))

@@ -9,7 +9,8 @@ from twisted.web.server import Site
 from twisted.web.resource import Resource
 from twisted.web.static import Data
 
-from vumi.tests.utils import get_stubbed_worker, FakeRedis
+from vumi.tests.utils import FakeRedis
+from vumi.application.tests.test_base import ApplicationTestCase
 from vumi.demos.hangman import HangmanGame, HangmanWorker
 from vumi.message import TransportUserMessage
 
@@ -131,9 +132,13 @@ class TestHangmanGame(unittest.TestCase):
         self.assertTrue(game.won())
 
 
-class TestHangmanWorker(unittest.TestCase):
+class TestHangmanWorker(ApplicationTestCase):
+
+    application_class = HangmanWorker
+
     @inlineCallbacks
     def setUp(self):
+        super(TestHangmanWorker, self).setUp()
         root = Resource()
         # data is elephant with a UTF-8 encoded BOM
         # it is a sad elephant (as seen in the wild)
@@ -143,32 +148,20 @@ class TestHangmanWorker(unittest.TestCase):
         addr = self.webserver.getHost()
         random_word_url = "http://%s:%s/word" % (addr.host, addr.port)
 
-        self.transport_name = 'test_transport'
-        self.worker = get_stubbed_worker(HangmanWorker, {
-                'transport_name': self.transport_name,
+        self.worker = yield self.get_application({
                 'worker_name': 'test_hangman',
                 'random_word_url': random_word_url,
                 })
-        self.broker = self.worker._amqp_client.broker
-        yield self.worker.startWorker()
         self.worker.r_server = FakeRedis()
 
     @inlineCallbacks
     def send(self, content, session_event=None):
-        msg = TransportUserMessage(content=content,
-                                   session_event=session_event,
-                                   from_addr='+1234', to_addr='+134567',
-                                   transport_name='test',
-                                   transport_type='fake',
-                                   transport_metadata={})
-        self.broker.publish_message('vumi', '%s.inbound' % self.transport_name,
-                                    msg)
-        yield self.broker.kick_delivery()
+        msg = self.mkmsg_in(content=content, session_event=session_event)
+        yield self.dispatch(msg)
 
     @inlineCallbacks
     def recv(self, n=0):
-        msgs = yield self.broker.wait_messages('vumi', '%s.outbound'
-                                                % self.transport_name, n)
+        msgs = yield self.wait_for_dispatched_messages(n)
 
         def reply_code(msg):
             if msg['session_event'] == TransportUserMessage.SESSION_CLOSE:

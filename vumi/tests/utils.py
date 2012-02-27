@@ -2,7 +2,6 @@
 
 import re
 import json
-import importlib
 import fnmatch
 from datetime import datetime, timedelta
 from collections import namedtuple
@@ -10,9 +9,13 @@ from contextlib import contextmanager
 
 import pytz
 from twisted.internet import defer, reactor
+from twisted.web.resource import Resource
+from twisted.web.server import Site
+from twisted.internet.defer import DeferredQueue, inlineCallbacks
+from twisted.python import log
 
-from vumi.utils import vumi_resource_path
-from vumi.service import get_spec, Worker
+from vumi.utils import vumi_resource_path, import_module
+from vumi.service import get_spec, Worker, WorkerCreator
 from vumi.tests.fake_amqp import FakeAMQClient
 
 
@@ -69,7 +72,7 @@ class Mocking(object):
 
     def __enter__(self):
         """Overwrite whatever module the function is part of"""
-        self.mod = importlib.import_module(self.function.__module__)
+        self.mod = import_module(self.function.__module__)
         setattr(self.mod, self.function.__name__, self)
         return self
 
@@ -190,8 +193,19 @@ class TestChannel(object):
 def get_stubbed_worker(worker_class, config=None, broker=None):
     spec = get_spec(vumi_resource_path("amqp-spec-0-8.xml"))
     amq_client = FakeAMQClient(spec, {}, broker)
-    worker = worker_class(amq_client, config)
+    worker = worker_class({}, config)
+    worker._amqp_client = amq_client
     return worker
+
+
+class StubbedWorkerCreator(WorkerCreator):
+    broker = None
+
+    def _connect(self, worker, timeout, bindAddress):
+        spec = get_spec(vumi_resource_path("amqp-spec-0-8.xml"))
+        amq_client = FakeAMQClient(spec, self.options, self.broker)
+        self.broker = amq_client.broker  # So we use the same broker for all.
+        reactor.callLater(0, worker._amqp_connected, amq_client)
 
 
 def get_stubbed_channel(broker=None, id=0):
@@ -218,6 +232,17 @@ class TestResourceWorker(Worker):
 
 
 class FakeRedis(object):
+    """In process and memory implementation of redis-like data store.
+
+    It's intended to match the Python redis module API closely so that
+    it can be used in place of the redis module when testing.
+
+    Known limitations:
+
+    * Exceptions raised are not guaranteed to match the exception
+      types raised by the real Python redis module.
+    """
+
     def __init__(self):
         self._data = {}
         self._expiries = {}
@@ -252,14 +277,28 @@ class FakeRedis(object):
         self._data[key] = value
 
     def delete(self, key):
+        existed = self.exists(key)
         self._data.pop(key, None)
+        return existed
+
+    # Integer operations
+
+    # The python redis lib combines incr & incrby into incr(key, increment=1)
+    def incr(self, key, increment=1):
+        old_value = self._data.get(key)
+        try:
+            new_value = int(old_value) + increment
+        except:
+            new_value = increment
+        self.set(key, new_value)
+        return new_value
 
     # Hash operations
 
     def hset(self, key, field, value):
         mapping = self._data.setdefault(key, {})
         new_field = field not in mapping
-        mapping[field] = value
+        mapping[field] = unicode(value)
         return int(new_field)
 
     def hget(self, key, field):
@@ -278,16 +317,30 @@ class FakeRedis(object):
 
     def hmset(self, key, mapping):
         hval = self._data.setdefault(key, {})
-        hval.update(mapping)
+        hval.update(dict([(key, unicode(value))
+            for key, value in mapping.items()]))
 
     def hgetall(self, key):
-        return self._data.get(key, {})
+        return self._data.get(key, {}).copy()
+
+    def hlen(self, key):
+        return len(self._data.get(key, {}))
+
+    def hvals(self, key):
+        return self._data.get(key, {}).values()
+
+    def hincrby(self, key, field, amount=1):
+        value = self._data.get(key, {}).get(field, "0")
+        # the int(str(..)) coerces amount to an int but rejects floats
+        value = int(value) + int(str(amount))
+        self._data.setdefault(key, {})[field] = str(value)
+        return value
 
     # Set operations
 
-    def sadd(self, key, value):
+    def sadd(self, key, *values):
         sval = self._data.setdefault(key, set())
-        sval.add(value)
+        sval.update(map(unicode, values))
 
     def smembers(self, key):
         return self._data.get(key, set())
@@ -298,8 +351,27 @@ class FakeRedis(object):
             return None
         return sval.pop()
 
+    def srem(self, key, value):
+        sval = self._data.get(key, set())
+        if value in sval:
+            sval.remove(value)
+            return 1
+        return 0
+
     def scard(self, key):
         return len(self._data.get(key, set()))
+
+    def smove(self, src, dst, value):
+        result = self.srem(src, value)
+        if result:
+            self.sadd(dst, value)
+        return result
+
+    def sunion(self, key, *args):
+        union = set()
+        for rkey in (key,) + args:
+            union.update(self._data.get(rkey, set()))
+        return union
 
     # Sorted set operations
 
@@ -319,12 +391,43 @@ class FakeRedis(object):
     def zcard(self, key):
         return len(self._data.get(key, []))
 
-    def zrange(self, key, start, stop):
+    def zrange(self, key, start, stop, desc=False, withscores=False,
+                score_cast_func=float):
         zval = self._data.get(key, [])
         stop += 1  # redis start/stop are element indexes
         if stop == 0:
             stop = None
-        return [val[1] for val in zval[start:stop]]
+        results = sorted(zval[start:stop],
+                    key=lambda (score, _): score_cast_func(score))
+        if desc:
+            results.reverse()
+        if withscores:
+            return results
+        else:
+            return [v for k, v in results]
+
+    # List operations
+    def llen(self, key):
+        return len(self._data.get(key, []))
+
+    def lpop(self, key):
+        if self.llen(key):
+            return self._data[key].pop(0)
+
+    def lpush(self, key, obj):
+        self._data.setdefault(key, []).insert(0, obj)
+
+    def rpush(self, key, obj):
+        self._data.setdefault(key, []).append(obj)
+        return self.llen(key) - 1
+
+    def lrange(self, key, start, end):
+        lval = self._data.get(key, [])
+        if end >= 0 or end < -1:
+            end += 1
+        else:
+            end = None
+        return lval[start:end]
 
     # Expiry operations
 
@@ -337,3 +440,63 @@ class FakeRedis(object):
         delayed = self._expiries.get(key)
         if delayed is not None and not delayed.cancelled:
             delayed.cancel()
+
+
+class LogCatcher(object):
+    """Gather logs."""
+
+    def __init__(self):
+        self.logs = []
+
+    @property
+    def errors(self):
+        return [ev for ev in self.logs if ev["isError"]]
+
+    def _gather_logs(self, event_dict):
+        self.logs.append(event_dict)
+
+    def __enter__(self):
+        log.theLogPublisher.addObserver(self._gather_logs)
+        return self
+
+    def __exit__(self, *exc_info):
+        log.theLogPublisher.removeObserver(self._gather_logs)
+
+
+class MockResource(Resource):
+    isLeaf = True
+
+    def __init__(self, handler):
+        Resource.__init__(self)
+        self.handler = handler
+
+    def render_GET(self, request):
+        return self.handler(request)
+
+    def render_POST(self, request):
+        return self.handler(request)
+
+
+class MockHttpServer(object):
+
+    def __init__(self, handler=None):
+        self.queue = DeferredQueue()
+        self._handler = handler or self.handle_request
+        self._webserver = None
+        self.addr = None
+        self.url = None
+
+    def handle_request(self, request):
+        self.queue.put(request)
+
+    @inlineCallbacks
+    def start(self):
+        root = MockResource(self._handler)
+        site_factory = Site(root)
+        self._webserver = yield reactor.listenTCP(0, site_factory)
+        self.addr = self._webserver.getHost()
+        self.url = "http://%s:%s/" % (self.addr.host, self.addr.port)
+
+    @inlineCallbacks
+    def stop(self):
+        yield self._webserver.loseConnection()

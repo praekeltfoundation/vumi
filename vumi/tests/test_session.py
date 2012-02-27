@@ -1,8 +1,10 @@
+import yaml
 from twisted.trial.unittest import TestCase
 
 from vumi.session import (VumiSession, TemplatedDecisionTree,
                           PopulatedDecisionTree, TraversedDecisionTree)
 from vumi.workers.session.worker import SessionConsumer
+from vumi.tests.utils import FakeRedis
 
 
 class SessionTestCase(TestCase):
@@ -319,9 +321,7 @@ class SessionTestCase(TestCase):
         '''
 
         sc = SessionConsumer(None)
-
-        r_server = sc.r_server
-        r_server.flushall()
+        sc.r_server = FakeRedis()
 
         sc.set_yaml_template(test_yaml)
         sc.del_session("12345")
@@ -422,27 +422,19 @@ class SessionTestCase(TestCase):
         sess4.delete()
         sess4.save()
 
-        #print r_server.info()
-        #print r_server.keys()
 
-        #r0 = redis.Redis("localhost", db=0)
-        #r7 = redis.Redis("localhost", db=7)
-        #r9 = redis.Redis("localhost", db=9)
-        #r0.flushall()
-        #r7.flushall()
-        #r9.flushall()
-        #r0.set('a','a')
-        #r7.set('a','a')
-        #r9.set('c','c')
-        #print r0.info()
-        #print r0.keys()
-        #print r7.info()
-        #print r7.keys()
-        #print r9.info()
-        #print r9.keys()
-        #r0.flushall()
-        #r7.flushall()
-        #r9.flushall()
+class TemplatedDecisionTreeTestCase(TestCase):
+    """
+    Tests for `TemplatedDecisionTree`.
+    """
 
-        #print "\n\n"
-        #time.sleep(2)
+    def test_load_yaml_template_unsafe(self):
+        """
+        `load_yaml_template()` should not allow unsafe YAML tag execution.
+        """
+        dt = TemplatedDecisionTree()
+        self.assertRaises(yaml.constructor.ConstructorError,
+            lambda: dt.load_yaml_template('!!python/object/apply:int []'))
+        # These attributes should not have been set.
+        self.assertIdentical(dt.template, None)
+        self.assertIdentical(dt.template_current, None)

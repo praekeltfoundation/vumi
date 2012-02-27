@@ -92,8 +92,9 @@ class WikipediaWorker(ApplicationWorker):
 
     @inlineCallbacks
     def startWorker(self):
-        self.session_manager = SessionManager(
-            get_deploy_int(self._amqp_client.vhost),
+        db = get_deploy_int(self._amqp_client.vhost)
+        self.r_server = redis.Redis(db)
+        self.session_manager = SessionManager(self.r_server,
             "%(worker_name)s:%(transport_name)s" % self.config,
             max_session_length=self.MAX_SESSION_LENGTH)
 
@@ -107,7 +108,7 @@ class WikipediaWorker(ApplicationWorker):
     def consume_user_message(self, msg):
         user_id = msg.user()
         session = self.session_manager.load_session(user_id)
-        if session:
+        if session and msg['content'] is not None:
             self.resume_wikipedia_session(msg, session)
         else:
             session = self.session_manager.create_session(user_id)

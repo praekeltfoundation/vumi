@@ -2,16 +2,30 @@
 
 import os.path
 import re
+import sys
+import base64
 
-import importlib
 import pkg_resources
 from zope.interface import implements
 from twisted.internet import defer
 from twisted.internet import reactor, protocol
-from twisted.internet.defer import succeed, fail
+from twisted.internet.defer import succeed
 from twisted.web.client import Agent, ResponseDone
 from twisted.web.http_headers import Headers
 from twisted.web.iweb import IBodyProducer
+from twisted.web.http import PotentialDataLoss
+
+
+def import_module(name):
+    """
+    This is a simpler version of `importlib.import_module` and does
+    not support relative imports.
+
+    It's here so that we can avoid using importlib and not have to
+    juggle different deps between Python versions.
+    """
+    __import__(name)
+    return sys.modules[name]
 
 
 class SimplishReceiver(protocol.Protocol):
@@ -30,6 +44,15 @@ class SimplishReceiver(protocol.Protocol):
     def connectionLost(self, reason):
         if reason.check(ResponseDone):
             self.deferred.callback(self.response)
+        elif reason.check(PotentialDataLoss):
+            # This is only (and always!) raised if we have an HTTP 1.0 request
+            # with no Content-Length.
+            # See http://twistedmatrix.com/trac/ticket/4840 for sadness.
+            #
+            # We ignore this and treat the call as success. If we care about
+            # checking for potential data loss, we should do that in all cases
+            # rather than trying to figure out if we might need to.
+            self.deferred.callback(self.response)
         else:
             self.deferred.errback(reason)
 
@@ -38,7 +61,7 @@ def http_request_full(url, data=None, headers={}, method='POST'):
     agent = Agent(reactor)
     d = agent.request(method,
                       url,
-                      Headers(headers),
+                      mkheaders(headers),
                       StringProducer(data) if data else None)
 
     def handle_response(response):
@@ -48,9 +71,33 @@ def http_request_full(url, data=None, headers={}, method='POST'):
     return d
 
 
+def mkheaders(headers):
+    """
+    Turn a dict of HTTP headers into an instance of Headers.
+
+    Twisted expects a list of values, not a single value. We should
+    support both.
+    """
+    raw_headers = {}
+    for k, v in headers.iteritems():
+        if isinstance(v, basestring):
+            v = [v]
+        raw_headers[k] = v
+    return Headers(raw_headers)
+
+
 def http_request(url, data, headers={}, method='POST'):
     d = http_request_full(url, data, headers=headers, method=method)
     return d.addCallback(lambda r: r.delivered_body)
+
+
+def basic_auth_string(username, password):
+    """
+    Encode a username and password for use in an HTTP Basic Authentication
+    header
+    """
+    b64 = base64.encodestring('%s:%s' % (username, password)).strip()
+    return 'Basic %s' % b64
 
 
 def normalize_msisdn(raw, country_code=''):
@@ -114,13 +161,13 @@ def load_class(module_name, class_name):
     >>>
 
     """
-    mod = importlib.import_module(module_name)
+    mod = import_module(module_name)
     return getattr(mod, class_name)
 
 
 def load_class_by_string(class_path):
     """
-    Load a class when given it's full name, including modules in python
+    Load a class when given its full name, including modules in python
     dot notation
 
     >>> cls = 'vumi.workers.example.ExampleWorker'

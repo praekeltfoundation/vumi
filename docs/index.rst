@@ -12,14 +12,14 @@ Contents:
    :maxdepth: 1
 
    overview.rst
-   roadmap.rst
    installation.rst
-   api.rst
+   getting-started.rst
+   first-smpp-bind.rst
    client.rst
-   deploying.rst
-   keywords.rst
    transports.rst
    metrics.rst
+   roadmap.rst
+   release-notes.rst
 
 For developers:
 
