@@ -17,43 +17,44 @@ class MultiPlayerGameWorker(ApplicationWorker):
         self.messages = {}
         yield super(MultiPlayerGameWorker, self).startWorker()
 
-    def new_session(self, data):
-        log.msg("New session:", data)
+    def new_session(self, msg):
+        log.msg("New session:", msg)
         log.msg("Open game:", self.open_game)
         log.msg("Games:", self.games)
-        session_id = data['session_id']
-        self.messages[data['session_id']] = data
+        user_id = msg.user()
+        self.messages[user_id] = msg
         if self.open_game:
             game = self.open_game
-            if not self.add_player_to_game(game, session_id):
+            if not self.add_player_to_game(game, user_id):
                 self.open_game = None
         else:
-            game = self.create_new_game(session_id)
+            game = self.create_new_game(user_id)
             self.open_game = game
-        self.games[session_id] = game
+        self.games[user_id] = game
 
-    def close_session(self, data):
-        log.msg("Close session:", data)
-        game = self.games.get(data['session_id'])
+    def close_session(self, msg):
+        log.msg("Close session:", msg)
+        user_id = msg.user()
+        game = self.games.get(user_id)
         if game:
             if self.open_game == game:
                 self.open_game = None
             self.clean_up_game(game)
-            for sid, sgame in self.games.items():
+            for uid, sgame in self.games.items():
                 if game == sgame:
-                    self.games.pop(sid, None)
+                    self.games.pop(uid, None)
                     msg = "Game terminated due to remote player disconnect."
-                    self.end(sid, msg)
-        self.messages.pop(data['session_id'], None)
+                    self.end(uid, msg)
+        self.messages.pop(user_id, None)
 
-    def consume_user_message(self, data):
-        log.msg("Resume session:", data)
-        self.messages[data['session_id']] = data
-        session_id = data['session_id']
-        if session_id not in self.games:
+    def consume_user_message(self, msg):
+        log.msg("Resume session:", msg)
+        user_id = msg.user()
+        self.messages[user_id] = msg
+        if user_id not in self.games:
             return
-        game = self.games[session_id]
-        self.continue_game(game, session_id, data['content'])
+        game = self.games[user_id]
+        self.continue_game(game, user_id, msg['content'])
 
     def game_setup(self):
         pass
@@ -70,12 +71,15 @@ class MultiPlayerGameWorker(ApplicationWorker):
     def continue_game(self, game, session_id, message):
         pass
 
-    def reply(self, player, content):
+    def reply(self, player, content, continue_session=True):
         orig = self.messages.pop(player, None)
         if orig is None:
             log.msg("Can't reply to %s, no stored message.")
             return
-        return self.reply_to(orig, content, continue_session=True)
+        return self.reply_to(orig, content, continue_session=continue_session)
+
+    def end(self, player, content):
+        return self.reply(player, content, continue_session=False)
 
 
 class RockPaperScissorsGame(object):
