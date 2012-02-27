@@ -1,8 +1,8 @@
 from twisted.trial import unittest
+from twisted.internet.defer import inlineCallbacks
 
+from vumi.application.tests.test_base import ApplicationTestCase
 from vumi.message import TransportUserMessage
-from vumi.tests.utils import get_stubbed_worker
-from vumi.tests.fake_amqp import FakeAMQPBroker
 from vumi.demos.rps import RockPaperScissorsGame, RockPaperScissorsWorker
 
 
@@ -58,74 +58,49 @@ class TestRockPaperScissorsGame(unittest.TestCase):
         self.assertEquals((1, 2), game.scores)
 
 
-class TestRockPaperScissorsWorker(unittest.TestCase):
+class TestRockPaperScissorsWorker(ApplicationTestCase):
+
+    application_class = RockPaperScissorsWorker
+
+    @inlineCallbacks
     def setUp(self):
-        self._amqp = FakeAMQPBroker()
-        self._workers = []
+        super(TestRockPaperScissorsWorker, self).setUp()
+        self.worker = yield self.get_application({})
 
-    def tearDown(self):
-        for worker in self._workers:
-            worker.stopWorker()
-
-    def get_worker(self):
-        worker = get_stubbed_worker(RockPaperScissorsWorker, {
-                'transport_name': 'foo',
-                'ussd_code': '99999',
-                }, self._amqp)
-        self._workers.append(worker)
-        worker.startWorker()
-        return worker
-
-    def mkmsg(self, from_addr, content='', sev=None):
-        if sev is None:
-            sev = TransportUserMessage.SESSION_RESUME
-        return TransportUserMessage(
-            transport_name='sphex',
-            transport_type='ussd',
-            transport_metadata={},
-            from_addr=from_addr,
-            to_addr='12345',
-            content=content,
-            session_event=sev,
-            )
-
-    def get_msgs(self):
-        return self._amqp.get_messages('vumi', 'foo.outbound')
-
+    @inlineCallbacks
     def test_new_sessions(self):
-        worker = self.get_worker()
-        self.assertEquals({}, worker.games)
-        self.assertEquals(None, worker.open_game)
+        self.assertEquals({}, self.worker.games)
+        self.assertEquals(None, self.worker.open_game)
 
         user1 = '+27831234567'
         user2 = '+27831234568'
 
-        worker.dispatch_user_message(self.mkmsg(
-                user1, sev=TransportUserMessage.SESSION_NEW))
-        self.assertNotEquals(None, worker.open_game)
-        game = worker.open_game
-        self.assertEquals({user1: game}, worker.games)
+        yield self.dispatch(self.mkmsg_in(from_addr=user1,
+                            session_event=TransportUserMessage.SESSION_NEW))
+        self.assertNotEquals(None, self.worker.open_game)
+        game = self.worker.open_game
+        self.assertEquals({user1: game}, self.worker.games)
 
-        worker.dispatch_user_message(self.mkmsg(
-                user2, sev=TransportUserMessage.SESSION_NEW))
-        self.assertEquals(None, worker.open_game)
-        self.assertEquals({user1: game, user2: game}, worker.games)
+        yield self.dispatch(self.mkmsg_in(from_addr=user2,
+                            session_event=TransportUserMessage.SESSION_NEW))
+        self.assertEquals(None, self.worker.open_game)
+        self.assertEquals({user1: game, user2: game}, self.worker.games)
 
-        self.assertEquals(2, len(self.get_msgs()))
+        self.assertEquals(2, len(self.get_dispatched_messages()))
 
+    @inlineCallbacks
     def test_moves(self):
-        worker = self.get_worker()
-        worker.dispatch_user_message(self.mkmsg(
-                '+27831234567', sev=TransportUserMessage.SESSION_NEW))
-        game = worker.open_game
-        worker.dispatch_user_message(self.mkmsg(
-                '+27831234568', sev=TransportUserMessage.SESSION_NEW))
+        yield self.dispatch(self.mkmsg_in(from_addr='+27831234567',
+                            session_event=TransportUserMessage.SESSION_NEW))
+        game = self.worker.open_game
+        yield self.dispatch(self.mkmsg_in(from_addr='+27831234568',
+                            session_event=TransportUserMessage.SESSION_NEW))
 
-        self.assertEquals(2, len(self.get_msgs()))
-        worker.dispatch_user_message(self.mkmsg(
-                '+27831234568', content='1'))
-        self.assertEquals(2, len(self.get_msgs()))
-        worker.dispatch_user_message(self.mkmsg(
-                '+27831234567', content='2'))
-        self.assertEquals(4, len(self.get_msgs()))
+        self.assertEquals(2, len(self.get_dispatched_messages()))
+        yield self.dispatch(self.mkmsg_in(from_addr='+27831234568',
+                                          content='1'))
+        self.assertEquals(2, len(self.get_dispatched_messages()))
+        yield self.dispatch(self.mkmsg_in(from_addr='+27831234567',
+                                          content='2'))
+        self.assertEquals(4, len(self.get_dispatched_messages()))
         self.assertEquals((0, 1), game.scores)
