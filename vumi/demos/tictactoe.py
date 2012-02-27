@@ -136,7 +136,7 @@ class TicTacToeWorker(ApplicationWorker):
 
         if game.check_win():
             self.end(user_id, "You won!")
-            self.end(user_id, "You lost!")
+            self.end(other_uid, "You lost!")
             return
 
         if game.check_draw():

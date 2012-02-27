@@ -120,3 +120,27 @@ class TestTicTacToeWorker(ApplicationTestCase):
 
         self.assertEqual('X', game.board[0][0])
         self.assertEqual('O', game.board[0][1])
+
+    @inlineCallbacks
+    def test_full_game(self):
+        user1 = '+27831234567'
+        user2 = '+27831234568'
+        yield self.dispatch(self.mkmsg_in(from_addr=user1,
+                            session_event=TransportUserMessage.SESSION_NEW))
+        game = self.worker.open_game
+        yield self.dispatch(self.mkmsg_in(from_addr=user2,
+                            session_event=TransportUserMessage.SESSION_NEW))
+
+        for user, content in [
+            (user1, '1'), (user2, '4'),
+            (user1, '2'), (user2, '5'),
+            (user1, '3'),
+            ]:
+            yield self.dispatch(self.mkmsg_in(from_addr=user, content=content))
+
+        self.assertEqual('X', game.check_win())
+        [end1, end2] = self.get_dispatched_messages()[-2:]
+        self.assertEqual(user1, end1["to_addr"])
+        self.assertEqual("You won!", end1["content"])
+        self.assertEqual(user2, end2["to_addr"])
+        self.assertEqual("You lost!", end2["content"])
