@@ -121,4 +121,6 @@ class TestRockPaperScissorsWorker(ApplicationTestCase):
         self.assertEqual((5, 0), game.scores)
         [end1, end2] = self.get_dispatched_messages()[-2:]
         self.assertEqual("You won! :-)", end1["content"])
+        self.assertEqual(user1, end1["to_addr"])
         self.assertEqual("You lost. :-(", end2["content"])
+        self.assertEqual(user2, end2["to_addr"])
