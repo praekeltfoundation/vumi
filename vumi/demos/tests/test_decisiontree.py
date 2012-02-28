@@ -4,7 +4,7 @@ from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.application.base import SESSION_NEW, SESSION_CLOSE
-from vumi.application import DecisionTreeWorker
+from vumi.demos.decisiontree import DecisionTreeWorker
 from vumi.message import TransportUserMessage
 from vumi.tests.utils import get_stubbed_worker, FakeRedis
 
