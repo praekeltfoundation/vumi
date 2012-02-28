@@ -1,16 +1,14 @@
-# -*- test-case-name: vumi.application.tests.test_base -*-
+# -*- test-case-name: vumi.demos.tests.test_decisiontree -*-
 
 """Basic tools for building a vumi ApplicationWorker."""
 
-import copy
 import json
 
 from twisted.internet.defer import inlineCallbacks
 from twisted.python import log
 
-from vumi.service import Worker
 from vumi.errors import ConfigError
-from vumi.message import TransportUserMessage, TransportEvent
+from vumi.message import TransportUserMessage
 from vumi.session import getVumiSession, delVumiSession, TraversedDecisionTree
 from vumi.application import ApplicationWorker
 
@@ -24,17 +22,12 @@ class DecisionTreeWorker(ApplicationWorker):
 
     @inlineCallbacks
     def startWorker(self):
-        self.worker_name = self.config['worker_name']
-        #self.yaml_template = None
-        #self.r_server = FakeRedis()
-        #self.r_server = None
         yield super(DecisionTreeWorker, self).startWorker()
 
     @inlineCallbacks
     def stopWorker(self):
         yield super(DecisionTreeWorker, self).stopWorker()
 
-    @inlineCallbacks
     def consume_user_message(self, msg):
         try:
             response = ''
@@ -42,7 +35,6 @@ class DecisionTreeWorker(ApplicationWorker):
             if True:
                 if not self.yaml_template:
                     raise Exception("yaml_template is missing")
-                    #self.set_yaml_template(self.test_yaml)
                 sess = self.get_session(msg.user())
                 if not sess.get_decision_tree().is_started():
                     # TODO check this corresponds to session_event = new
@@ -63,9 +55,7 @@ class DecisionTreeWorker(ApplicationWorker):
                 sess.save()
         except Exception, e:
             print e
-        user_id = msg.user()
         self.reply_to(msg, response, continue_session)
-        yield None
 
     def set_yaml_template(self, yaml_template):
         self.yaml_template = yaml_template
@@ -79,8 +69,6 @@ class DecisionTreeWorker(ApplicationWorker):
     def post_result(self, result):
         # TODO need actual post but
         # just need this to override in testing for now
-        #print self.post_url
-        #print result
         pass
 
     def call_for_json(self):
@@ -88,15 +76,7 @@ class DecisionTreeWorker(ApplicationWorker):
         # just need this to override in testing for now
         return '{}'
 
-    def consume_message(self, message):
-        # TODO: Eep! This code is broken!
-        log.msg("session message %s consumed by %s" % (
-            json.dumps(dictionary), self.__class__.__name__))
-        #dictionary = message.get('short_message')
-
     def get_session(self, MSISDN):
-        #sess = getVumiSession(self.r_server,
-                              #self.routing_key + '.' + MSISDN)
         sess = getVumiSession(self.r_server,
                 self.transport_name + '.' + MSISDN)
         if not sess.get_decision_tree():
