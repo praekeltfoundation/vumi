@@ -10,7 +10,7 @@ from vumi.demos.decisiontree import (DecisionTreeWorker, TemplatedDecisionTree,
                                      TraversedDecisionTree)
 from vumi.message import TransportUserMessage
 from vumi.application.tests.test_base import ApplicationTestCase
-from vumi.tests.utils import get_stubbed_worker, FakeRedis
+from vumi.tests.utils import FakeRedis
 
 
 class DecisionTreeTestCase(TestCase):
