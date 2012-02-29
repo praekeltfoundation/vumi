@@ -357,7 +357,7 @@ class DecisionTreeWorker(ApplicationWorker):
         log.msg(tree.dump_json_data())
 
     def call_for_json(self, tree):
-        return tree.load_dummy_data()
+        return tree.get_initial_data()
 
     def get_decision_tree(self, user_id):
         data = self.session_manager.load_session(user_id)

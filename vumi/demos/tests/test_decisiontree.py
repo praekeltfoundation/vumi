@@ -110,13 +110,36 @@ class MockDecisionTreeWorker(DecisionTreeWorker):
 
     test_yaml = '''
         __data__:
-            url: localhost:8080/api/get_data
-            username: admin
-            password: pass
-            params:
-                - telNo
-            json: "{}"
-
+            json: >
+                {
+                    "users": [
+                        {
+                            "name":"David",
+                            "toys": [
+                                {
+                                    "name":"truck",
+                                    "quantityMade": 0,
+                                    "recordTimestamp": 0,
+                                    "toyId": "toy1",
+                                    "quantitySold": 0
+                                },
+                                {
+                                    "name": "car",
+                                    "quantityMade": 0,
+                                    "recordTimestamp": 0,
+                                    "toyId": "toy2",
+                                    "quantitySold": 0
+                                }
+                            ],
+                            "userId": "user1"
+                        },
+                        {
+                            "name":"Simon",
+                            "userId": "user1"
+                        }
+                    ],
+                    "msisdn": "456789"
+                }
         __start__:
             display:
                 english: "Hello."
@@ -169,48 +192,10 @@ class MockDecisionTreeWorker(DecisionTreeWorker):
         __finish__:
             display:
                 english: "Thank you! Your work was recorded successfully."
-
-        __post__:
-            url: localhost:8080/api/save_data
-            username: admin
-            password: pass
-            params:
-                - result
     '''
 
     def post_result(self, tree):
         self.mock_result = json.dumps(tree.get_data())
-
-    def call_for_json(self, tree):
-        return '''{
-                    "users": [
-                        {
-                            "name":"David",
-                            "toys": [
-                                {
-                                    "name":"truck",
-                                    "quantityMade": 0,
-                                    "recordTimestamp": 0,
-                                    "toyId": "toy1",
-                                    "quantitySold": 0
-                                },
-                                {
-                                    "name": "car",
-                                    "quantityMade": 0,
-                                    "recordTimestamp": 0,
-                                    "toyId": "toy2",
-                                    "quantitySold": 0
-                                }
-                            ],
-                            "userId": "user1"
-                        },
-                        {
-                            "name":"Simon",
-                            "userId": "user1"
-                        }
-                    ],
-                    "msisdn": "456789"
-                }'''
 
 
 class TestDecisionTreeWorker(ApplicationTestCase):
@@ -303,31 +288,9 @@ class TestDecisionTreeWorker(ApplicationTestCase):
         # And strip the second user out of the retrieved data
         # to check that the first question is then skipped
         def call_for_json(tree):
-            return '''{
-                        "users": [
-                            {
-                                "name":"David",
-                                "toys": [
-                                    {
-                                        "name":"truck",
-                                        "quantityMade": 0,
-                                        "recordTimestamp": 0,
-                                        "toyId": "toy1",
-                                        "quantitySold": 0
-                                    },
-                                    {
-                                        "name": "car",
-                                        "quantityMade": 0,
-                                        "recordTimestamp": 0,
-                                        "toyId": "toy2",
-                                        "quantitySold": 0
-                                    }
-                                ],
-                                "userId": "user1"
-                            }
-                        ],
-                        "msisdn": "456789"
-                    }'''
+            data = json.loads(tree.get_initial_data())
+            del data["users"][1]
+            return json.dumps(data)
         self.worker.call_for_json = call_for_json
 
         yield self.send(None, TransportUserMessage.SESSION_NEW)
