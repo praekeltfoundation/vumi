@@ -4,7 +4,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.python import log
 
 from vumi.application import ApplicationWorker
-from vumi.utils import get_deploy_int, http_request
+from vumi.utils import http_request
 
 import redis
 import string
@@ -133,12 +133,13 @@ class HangmanWorker(ApplicationWorker):
            E.g. http://randomword.setgetgo.com/get.php
        """
 
-    @inlineCallbacks
-    def startWorker(self):
+    def validate_config(self):
+        self.r_config = self.config.get('redis', {})
+
+    def setup_application(self):
         """Start the worker"""
         # Connect to Redis
-        self.r_server = redis.Redis("localhost",
-                                    db=get_deploy_int(self._amqp_client.vhost))
+        self.r_server = redis.Redis(**self.r_config)
         log.msg("Connected to Redis")
         self.r_prefix = "hangman:%s:%s" % (
                 self.config['transport_name'],
@@ -146,8 +147,6 @@ class HangmanWorker(ApplicationWorker):
         log.msg("r_prefix = %s" % self.r_prefix)
         self.random_word_url = self.config['random_word_url']
         log.msg("random_word_url = %s" % self.random_word_url)
-
-        yield super(HangmanWorker, self).startWorker()
 
     def random_word(self):
         log.msg('Fetching random word from %s' % (self.random_word_url,))
