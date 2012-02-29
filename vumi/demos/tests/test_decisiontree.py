@@ -109,6 +109,7 @@ class TraversedDecisionTreeTestCase(TestCase):
 class MockDecisionTreeWorker(DecisionTreeWorker):
 
     def post_result(self, tree):
+        super(MockDecisionTreeWorker, self).post_result(tree)
         self.mock_result = json.dumps(tree.get_data())
 
 
