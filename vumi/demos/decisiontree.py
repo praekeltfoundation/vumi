@@ -353,18 +353,17 @@ class DecisionTreeWorker(ApplicationWorker):
         decision_tree = self.get_decision_tree(user_id)
         if not decision_tree.is_started():
             decision_tree.start()
+        elif not decision_tree.is_completed():
+            decision_tree.answer(msg.payload['content'])
+
+        if not decision_tree.is_completed():
             response += decision_tree.question()
             continue_session = True
+            self.save_decision_tree(user_id, decision_tree)
         else:
-            decision_tree.answer(msg.payload['content'])
-            if not decision_tree.is_completed():
-                response += decision_tree.question()
-                continue_session = True
             response += decision_tree.finish() or ''
-            if decision_tree.is_completed():
-                self.post_result(decision_tree)
-                self.delete_decision_tree(user_id)
-        self.save_decision_tree(user_id, decision_tree)
+            self.post_result(decision_tree)
+            self.delete_decision_tree(user_id)
 
         self.reply_to(msg, response, continue_session)
 
