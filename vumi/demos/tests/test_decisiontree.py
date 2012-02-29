@@ -269,7 +269,13 @@ class TestDecisionTreeWorker(ApplicationTestCase):
                             {"name":"Obama Perez"},
                             {"name":"Siphiwe Mbeki"},
                             {"name":"Thaba Zuma"},
-                            {"name":"Thandiwe Mandela"}
+                            {"name":"Thandiwe Mandela"},
+                            {"name":"User 13"},
+                            {"name":"User 15"},
+                            {"name":"User 16"},
+                            {"name":"User 17"},
+                            {"name":"User 18"},
+                            {"name":"User 19"}
                         ],
                         "msisdn": "456789"
                     }'''
@@ -277,8 +283,9 @@ class TestDecisionTreeWorker(ApplicationTestCase):
 
         yield self.send(None, TransportUserMessage.SESSION_NEW)
         yield self.send("0", TransportUserMessage.SESSION_RESUME)
+        yield self.send("0", TransportUserMessage.SESSION_RESUME)
         replys = yield self.recv(1)
-        self.assertEqual(len(replys), 2)
+        self.assertEqual(len(replys), 3)
         self.assertTrue(len(replys[0][1]) <= 140)
         self.assertEqual(replys[0][0], "reply")
         self.assertEqual(replys[0][1], "Who are you?\n1. Abrahem Smith"
@@ -288,4 +295,9 @@ class TestDecisionTreeWorker(ApplicationTestCase):
         self.assertEqual(replys[1][0], "reply")
         self.assertEqual(replys[1][1], "Who are you?\n1. Nkosazana Zuma"
                 "\n2. Obama Perez\n3. Siphiwe Mbeki\n4. Thaba Zuma"
-                "\n5. Thandiwe Mandela")
+                "\n5. Thandiwe Mandela\n6. User 13\n7. User 15"
+                "\n8. User 16\n0. ...")
+        self.assertTrue(len(replys[2][1]) <= 140)
+        self.assertEqual(replys[2][0], "reply")
+        self.assertEqual(replys[2][1], "Who are you?\n1. User 17\n2. User 18"
+                "\n3. User 19")
