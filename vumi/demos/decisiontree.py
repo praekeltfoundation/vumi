@@ -341,9 +341,6 @@ class DecisionTreeWorker(ApplicationWorker):
     def teardown_application(self):
         self.session_manager.stop()
 
-    def set_yaml_template(self, yaml_template):
-        self.yaml_template = yaml_template
-
     def consume_user_message(self, msg):
         user_id = msg.user()
         response = ''
