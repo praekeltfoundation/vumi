@@ -3,7 +3,7 @@ __data__:
         {
             "users": [
                 {
-                    "name":"David",
+                    "name": "David",
                     "toys": [
                         {
                             "name":"truck",
@@ -23,8 +23,17 @@ __data__:
                     "userId": "user1"
                 },
                 {
-                    "name":"Simon",
-                    "userId": "user1"
+                    "name": "Simon",
+                    "toys": [
+                        {
+                            "name":"truck",
+                            "quantityMade": 0,
+                            "recordTimestamp": 0,
+                            "toyId": "toy1",
+                            "quantitySold": 0
+                        }
+                    ],
+                    "userId": "user2"
                 }
             ],
             "msisdn": "456789"

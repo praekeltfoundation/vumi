@@ -193,7 +193,10 @@ class TestDecisionTreeWorker(ApplicationTestCase):
                 '"recordTimestamp": "0"}, {"quantitySold": 0, '
                 '"toyId": "toy2", "quantityMade": 0, "name": "car", '
                 '"recordTimestamp": 0}]}, '
-                '{"userId": "user1", "name": "Simon"}]}'
+                '{"userId": "user2", "name": "Simon", '
+                '"toys": [{"quantitySold": 0, "toyId": "toy1", '
+                '"quantityMade": 0, "name": "truck", '
+                '"recordTimestamp": 0}]}]}'
                 )
 
     @inlineCallbacks
