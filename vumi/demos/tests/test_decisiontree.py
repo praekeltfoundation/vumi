@@ -14,71 +14,16 @@ from vumi.application.tests.test_base import ApplicationTestCase
 from vumi.tests.utils import FakeRedis
 
 
-class DecisionTreeTestCase(TestCase):
+class TemplatedDecisionTreeTestCase(TestCase):
 
     def setUp(self):
         self.test_yaml = resource_string(__name__, "decision_tree_test.yaml")
 
-    def test_session_decision_tree(self):
-        dt1 = TemplatedDecisionTree()
-        dt2 = PopulatedDecisionTree()
-        dt3 = TraversedDecisionTree()
-        # the new TraversedDecisionTree should not be completed
-        self.assertFalse(dt3.is_completed())
-
-        # just check the load operations don't blow up
-        self.assertEquals(dt1.load_yaml_template(self.test_yaml), None)
-        self.assertEquals(dt2.load_yaml_template(self.test_yaml), None)
-        self.assertEquals(dt2.load_dummy_data(), None)
-        self.assertEquals(dt3.load_yaml_template(self.test_yaml), None)
-        self.assertEquals(dt3.load_dummy_data(), None)
-
-        # simple backtracking test
-        before = dt3.dumps()
-        dt3.start()
-        dt3.go_back()
-        self.assertEquals(before, dt3.dumps())
-        #dt3.set_language("swahili")
-
-        # a fake interaction
-        self.assertEquals(dt3.start(),
-                'Hello.')
-        self.assertEquals(dt3.question(),
-                'Who are you?\n1. Simon\n2. David')
-        dt3.answer(1)
-        self.assertEquals(dt3.question(),
-                'Which item?\n1. alpha\n2. beta')
-        dt3.answer(1)
-        self.assertEquals(dt3.question(),
-                'How much stuff?')
-        dt3.answer(42)
-        self.assertEquals(dt3.question(),
-                'How many things?')
-        dt3.answer(23)
-        dt3.go_up()
-        self.assertEquals(dt3.question(),
-                'Which item?\n1. alpha\n2. beta')
-        dt3.answer(2)
-        self.assertEquals(dt3.question(),
-                'How much stuff?')
-        dt3.answer(22)
-        self.assertEquals(dt3.question(),
-                'How many things?')
-        dt3.answer(222)
-        self.assertEquals(dt3.question(),
-                'Which day was it?\n1. Today\n2. Yesterday\n3. An earlier day')
-        dt3.answer(3)
-        self.assertEquals(dt3.question(),
-                'Which day was it [dd/mm/yyyy]?')
-        dt3.answer("03/03/2011")
-        self.assertEquals(dt3.finish(),
-                'Thank you and goodbye.')
-
-
-class TemplatedDecisionTreeTestCase(TestCase):
-    """
-    Tests for `TemplatedDecisionTree`.
-    """
+    def test_load_decision_tree(self):
+        dt = TemplatedDecisionTree()
+        dt.load_yaml_template(self.test_yaml)
+        self.assertTrue('__start__' in dt.template)
+        self.assertNotEqual(dt.template_current, None)
 
     def test_load_yaml_template_unsafe(self):
         """
@@ -86,10 +31,78 @@ class TemplatedDecisionTreeTestCase(TestCase):
         """
         dt = TemplatedDecisionTree()
         self.assertRaises(yaml.constructor.ConstructorError,
-            lambda: dt.load_yaml_template('!!python/object/apply:int []'))
+                          dt.load_yaml_template,
+                          '!!python/object/apply:int []')
         # These attributes should not have been set.
         self.assertIdentical(dt.template, None)
         self.assertIdentical(dt.template_current, None)
+
+
+class PopulatedDecisionTreeTestCase(TestCase):
+
+    def setUp(self):
+        self.test_yaml = resource_string(__name__, "decision_tree_test.yaml")
+
+    def test_load_decision_tree(self):
+        dt = PopulatedDecisionTree()
+        dt.load_yaml_template(self.test_yaml)
+        dt.load_dummy_data()
+        self.assertTrue('users' in dt.data)
+
+
+class TraversedDecisionTreeTestCase(TestCase):
+
+    def setUp(self):
+        self.test_yaml = resource_string(__name__, "decision_tree_test.yaml")
+
+    def test_decision_tree(self):
+        dt = TraversedDecisionTree()
+        dt.load_yaml_template(self.test_yaml)
+        dt.load_dummy_data()
+
+        # the new TraversedDecisionTree should not be completed
+        self.assertFalse(dt.is_completed())
+
+        # simple backtracking test
+        before = dt.dumps()
+        dt.start()
+        dt.go_back()
+        self.assertEquals(before, dt.dumps())
+        #dt.set_language("swahili")
+
+        # a fake interaction
+        self.assertEquals(dt.start(),
+                'Hello.')
+        self.assertEquals(dt.question(),
+                'Who are you?\n1. Simon\n2. David')
+        dt.answer(1)
+        self.assertEquals(dt.question(),
+                'Which item?\n1. alpha\n2. beta')
+        dt.answer(1)
+        self.assertEquals(dt.question(),
+                'How much stuff?')
+        dt.answer(42)
+        self.assertEquals(dt.question(),
+                'How many things?')
+        dt.answer(23)
+        dt.go_up()
+        self.assertEquals(dt.question(),
+                'Which item?\n1. alpha\n2. beta')
+        dt.answer(2)
+        self.assertEquals(dt.question(),
+                'How much stuff?')
+        dt.answer(22)
+        self.assertEquals(dt.question(),
+                'How many things?')
+        dt.answer(222)
+        self.assertEquals(dt.question(),
+                'Which day was it?\n1. Today\n2. Yesterday\n3. An earlier day')
+        dt.answer(3)
+        self.assertEquals(dt.question(),
+                'Which day was it [dd/mm/yyyy]?')
+        dt.answer("03/03/2011")
+        self.assertEquals(dt.finish(),
+                'Thank you and goodbye.')
 
 
 class MockDecisionTreeWorker(DecisionTreeWorker):
