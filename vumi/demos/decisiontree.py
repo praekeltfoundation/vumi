@@ -7,100 +7,29 @@ import yaml
 import time
 import datetime
 
+import redis
+
 from twisted.internet.defer import inlineCallbacks
 from twisted.python import log
 
 from vumi.errors import ConfigError, VumiError
 from vumi.message import TransportUserMessage
-from vumi.application import ApplicationWorker
+from vumi.application import ApplicationWorker, SessionManager
 
 SESSION_NEW = TransportUserMessage.SESSION_NEW
 SESSION_CLOSE = TransportUserMessage.SESSION_CLOSE
 SESSION_RESUME = TransportUserMessage.SESSION_RESUME
 
 
-def getVumiSession(r_server, key):
-    sess = r_server.get(key)
-    if sess:
-        session = yaml.safe_load(sess)
-        session.set_r_server(r_server)
-        return session
-    else:
-        session = VumiSession()
-        session.set_r_server(r_server)
-        session.set_key(key)
-        session.save()
-        return session
+class TemplatedDecisionTree(yaml.YAMLObject):
 
-
-def delVumiSession(r_server, key):
-    return r_server.delete(key)
-
-
-class VumiSession(yaml.YAMLObject):
     # Allow use with safe_load() / safe_dump()
     yaml_loader = yaml.SafeLoader
     yaml_dumper = yaml.SafeDumper
-
-    yaml_tag = u'VumiSession'
-
-    key = None
-    decision_tree = None
-    r_server = None
-
-    def __init__(self, **kwargs):
-        pass
-
-    def set_decision_tree(self, decision_tree):
-        self.decision_tree = decision_tree
-
-    def get_decision_tree(self):
-        return self.decision_tree
-
-    def set_key(self, key):
-        self.key = key
-
-    def get_key(self):
-        return self.key
-
-    def set_r_server(self, r_server):
-        self.r_server = r_server
-
-    def save(self):
-        if self.r_server:
-            r_server = self.r_server
-            self.r_server = None
-            r_server.set(self.get_key(), yaml.safe_dump(self))
-            self.r_server = r_server
-
-    def delete(self):
-        self.r_server.delete(self.get_key())
-        self.r_server = None
-
-
-class DecisionTree(yaml.YAMLObject):
-    # Allow use with safe_load() / safe_dump()
-    yaml_loader = yaml.SafeLoader
-    yaml_dumper = yaml.SafeDumper
-
-    yaml_tag = u'DecisionTree'
-
-    def __init__(self):
-        pass
-
-    def serialize_to_json(self):
-        return json.dumps(self.__dict__)
-
-    def deserialize_from_json(self, string):
-        self.__dict__ = json.loads(string)
-
-
-class TemplatedDecisionTree(DecisionTree):
 
     yaml_tag = u'TemplatedDecisionTree'
 
     def __init__(self):
-        DecisionTree.__init__(self)
         self.template = None
         self.template_current = None
         self.template_history = []
@@ -400,41 +329,50 @@ class TraversedDecisionTree(PopulatedDecisionTree):
 
 class DecisionTreeWorker(ApplicationWorker):
 
-    @inlineCallbacks
-    def startWorker(self):
-        yield super(DecisionTreeWorker, self).startWorker()
+    MAX_SESSION_LENGTH = 3 * 60
 
-    @inlineCallbacks
-    def stopWorker(self):
-        yield super(DecisionTreeWorker, self).stopWorker()
+    def validate_config(self):
+        if "worker_name" not in self.config:
+            raise ConfigError("DecisionTreeWorker requires a worker_name"
+                              " in its configuration.")
+
+    def setup_application(self):
+        self.r_server = redis.Redis(**self.config.get('redis', {}))
+        self.session_manager = SessionManager(self.r_server,
+             "%(worker_name)s:%(transport_name)s" % self.config,
+             max_session_length=self.MAX_SESSION_LENGTH)
+
+    def teardown_application(self):
+        self.session_manager.stop()
 
     def consume_user_message(self, msg):
-        try:
-            response = ''
-            continue_session = False
-            if True:
-                if not self.yaml_template:
-                    raise Exception("yaml_template is missing")
-                sess = self.get_session(msg.user())
-                if not sess.get_decision_tree().is_started():
-                    # TODO check this corresponds to session_event = new
-                    sess.get_decision_tree().start()
-                    response += sess.get_decision_tree().question()
-                    continue_session = True
-                else:
-                    # TODO check this corresponds to session_event = resume
-                    sess.get_decision_tree().answer(msg.payload['content'])
-                    if not sess.get_decision_tree().is_completed():
-                        response += sess.get_decision_tree().question()
-                        continue_session = True
-                    response += sess.get_decision_tree().finish() or ''
-                    if sess.get_decision_tree().is_completed():
-                        self.post_result(json.dumps(
-                            sess.get_decision_tree().get_data()))
-                        sess.delete()
-                sess.save()
-        except Exception, e:
-            print e
+        user_id = msg.user()
+        response = ''
+        continue_session = False
+
+        if not self.yaml_template:
+            log.err("yaml_template is missing")
+            return
+
+        decision_tree = self.get_decision_tree(user_id)
+        if not decision_tree.is_started():
+            # TODO check this corresponds to session_event = new
+            decision_tree.start()
+            response += decision_tree.question()
+            continue_session = True
+        else:
+            # TODO check this corresponds to session_event = resume
+            decision_tree.answer(msg.payload['content'])
+            if not decision_tree.is_completed():
+                response += decision_tree.question()
+                continue_session = True
+            response += decision_tree.finish() or ''
+            if decision_tree.is_completed():
+                self.post_result(json.dumps(
+                    decision_tree.get_data()))
+                self.delete_decision_tree(user_id)
+        self.save_decision_tree(user_id, decision_tree)
+
         self.reply_to(msg, response, continue_session)
 
     def set_yaml_template(self, yaml_template):
@@ -456,17 +394,24 @@ class DecisionTreeWorker(ApplicationWorker):
         # just need this to override in testing for now
         return '{}'
 
-    def get_session(self, MSISDN):
-        sess = getVumiSession(self.r_server,
-                self.transport_name + '.' + MSISDN)
-        if not sess.get_decision_tree():
-            sess.set_decision_tree(self.setup_new_decision_tree(MSISDN))
-        return sess
+    def get_decision_tree(self, user_id):
+        data = self.session_manager.load_session(user_id)
+        if not data:
+            data = self.session_manager.create_session(user_id)
+        if 'decision_tree' in data:
+            return yaml.safe_load(data['decision_tree'])
+        else:
+            return self.setup_new_decision_tree()
 
-    def del_session(self, MSISDN):
-        return delVumiSession(self.r_server, MSISDN)
+    def save_decision_tree(self, user_id, tree):
+        data = {}
+        data['decision_tree'] = yaml.safe_dump(tree)
+        self.session_manager.save_session(user_id, data)
 
-    def setup_new_decision_tree(self, MSISDN, **kwargs):
+    def delete_decision_tree(self, user_id):
+        self.session_manager.clear_session(user_id)
+
+    def setup_new_decision_tree(self):
         decision_tree = TraversedDecisionTree()
         yaml_template = self.yaml_template
         decision_tree.load_yaml_template(yaml_template)

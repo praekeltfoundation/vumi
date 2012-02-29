@@ -7,33 +7,18 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from vumi.application.base import SESSION_NEW, SESSION_CLOSE
 from vumi.demos.decisiontree import (DecisionTreeWorker, TemplatedDecisionTree,
                                      PopulatedDecisionTree,
-                                     TraversedDecisionTree, VumiSession)
+                                     TraversedDecisionTree)
 from vumi.message import TransportUserMessage
+from vumi.application.tests.test_base import ApplicationTestCase
 from vumi.tests.utils import get_stubbed_worker, FakeRedis
 
 
-class SessionTestCase(TestCase):
-
-    def setUp(self):
-        pass
-
-    def tearDown(self):
-        pass
+class DecisionTreeTestCase(TestCase):
 
     def test_session_decision_tree(self):
-        sess1 = VumiSession()
-        sess2 = VumiSession()
-        sess3 = VumiSession()
         dt1 = TemplatedDecisionTree()
         dt2 = PopulatedDecisionTree()
         dt3 = TraversedDecisionTree()
-        sess1.set_decision_tree(dt1)
-        sess2.set_decision_tree(dt2)
-        sess3.set_decision_tree(dt3)
-        # baby steps
-        self.assertEquals(sess1.get_decision_tree(), dt1)
-        self.assertEquals(sess2.get_decision_tree(), dt2)
-        self.assertEquals(sess3.get_decision_tree(), dt3)
         # the new TraversedDecisionTree should not be completed
         self.assertFalse(dt3.is_completed())
 
@@ -451,31 +436,29 @@ class MockDecisionTreeWorker(DecisionTreeWorker):
                 }'''
 
 
-class TestDecisionTreeWorker(TestCase):
+class TestDecisionTreeWorker(ApplicationTestCase):
+
+    application_class = MockDecisionTreeWorker
+
+    @inlineCallbacks
+    def setUp(self):
+        super(TestDecisionTreeWorker, self).setUp()
+        self.worker = yield self.get_application({
+            'worker_name': 'test_decision_tree_worker',
+            })
+        self.worker.r_server = FakeRedis()
+        self.worker.session_manager.r_server = self.worker.r_server
+        self.worker.set_yaml_template(self.worker.test_yaml)
+
+    def tearDown(self):
+        super(TestDecisionTreeWorker, self).tearDown()
+        self.worker.r_server.teardown()
 
     def replace_timestamp(self, string):
         newstring = re.sub(r'imestamp": "\d*"',
                             'imestamp": "0"',
                             string)
         return newstring
-
-    @inlineCallbacks
-    def setUp(self):
-        self.transport_name = 'test_transport'
-        self.worker = get_stubbed_worker(MockDecisionTreeWorker, {
-            'transport_name': self.transport_name,
-            'worker_name': 'test_decision_tree',
-            'redis': {}
-            })
-        self.broker = self.worker._amqp_client.broker
-        self.worker.r_server = FakeRedis()
-        self.worker.set_yaml_template(self.worker.test_yaml)
-        yield self.worker.startWorker()
-
-    @inlineCallbacks
-    def tearDown(self):
-        self.worker.r_server.teardown()
-        yield self.worker.stopWorker()
 
     @inlineCallbacks
     def send(self, content, session_event=None, from_addr=None):
@@ -488,14 +471,11 @@ class TestDecisionTreeWorker(TestCase):
                                    transport_name=self.transport_name,
                                    transport_type='fake',
                                    transport_metadata={})
-        self.broker.publish_message('vumi', '%s.inbound' % self.transport_name,
-                                    msg)
-        yield self.broker.kick_delivery()
+        yield self.dispatch(msg)
 
     @inlineCallbacks
     def recv(self, n=0):
-        msgs = yield self.broker.wait_messages('vumi', '%s.outbound'
-                                                % self.transport_name, n)
+        msgs = yield self.wait_for_dispatched_messages(n)
 
         def reply_code(msg):
             if msg['session_event'] == TransportUserMessage.SESSION_CLOSE:
@@ -503,9 +483,6 @@ class TestDecisionTreeWorker(TestCase):
             return 'reply'
 
         returnValue([(reply_code(msg), msg['content']) for msg in msgs])
-
-    def test_pass(self):
-        pass
 
     @inlineCallbacks
     def test_session_new(self):
