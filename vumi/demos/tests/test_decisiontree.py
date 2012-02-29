@@ -1,5 +1,6 @@
 import re
 import yaml
+from pkg_resources import resource_string
 
 from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks, returnValue
@@ -15,6 +16,9 @@ from vumi.tests.utils import FakeRedis
 
 class DecisionTreeTestCase(TestCase):
 
+    def setUp(self):
+        self.test_yaml = resource_string(__name__, "decision_tree_test.yaml")
+
     def test_session_decision_tree(self):
         dt1 = TemplatedDecisionTree()
         dt2 = PopulatedDecisionTree()
@@ -22,121 +26,11 @@ class DecisionTreeTestCase(TestCase):
         # the new TraversedDecisionTree should not be completed
         self.assertFalse(dt3.is_completed())
 
-        test_yaml = '''
-        __data__:
-            url:
-            username:
-            password:
-            json: >
-                {
-                    "users": [
-                        {
-                            "name": "Simon",
-                            "items": [
-                                {
-                                    "name": "alpha",
-                                    "stuff": 0,
-                                    "things": 0,
-                                    "timestamp": 0,
-                                    "id": "1.1"
-                                },
-                                {
-                                    "name": "beta",
-                                    "stuff": 0,
-                                    "things": 0,
-                                    "timestamp": 0,
-                                    "id": "1.2"
-                                }
-                            ],
-                            "timestamp": "1234567890",
-                            "id": "1"
-                        },
-                        {
-                            "name": "David",
-                            "items": [],
-                            "timestamp": "1234567890",
-                            "id": "2"
-                        }
-                    ],
-                    "msisdn": "12345"
-                }
-
-        __start__:
-            display:
-                english: "Hello."
-                swahili: "Salamu."
-            next: users
-
-        users:
-            question:
-                english: "Who are you?"
-                swahili: "Ninyi ni nani?"
-            options: name
-            next: items
-
-        items:
-            question:
-                english: "Which item?"
-                swahili: "Ambayo kitu?"
-            options: name
-            next: stuff
-            new:
-                name:
-                stuff: 0
-                things: 0
-                timestamp: 0
-                id:
-
-        stuff:
-            question:
-                english: "How much stuff?"
-                swahili: "Kiasi gani stuff?"
-            validate: integer
-            next: things
-
-        things:
-            question:
-                english: "How many things?"
-                swahili: "Mambo mangapi?"
-            validate: integer
-            next: timestamp
-
-        timestamp:
-            question:
-                english: "Which day was it?"
-                swahili: "Siku ambayo ilikuwa ni?"
-            options:
-                  - display:
-                        english: "Today"
-                        swahili: "Leo"
-                    default: today
-                    next: __finish__
-                  - display:
-                        english: "Yesterday"
-                        swahili: "Jana"
-                    default: yesterday
-                    next: __finish__
-                  - display:
-                        english: "An earlier day"
-                        swahili: "Mapema siku ya"
-                    next:
-                        question:
-                            english: "Which day was it [dd/mm/yyyy]?"
-                            swahili: "Kuwaambia ambayo siku [dd/mm/yyyy]?"
-                        validate: date
-                        next: __finish__
-
-        __finish__:
-            display:
-                english: "Thank you and goodbye."
-                swahili: "Asante na kwaheri."
-        '''
-
         # just check the load operations don't blow up
-        self.assertEquals(dt1.load_yaml_template(test_yaml), None)
-        self.assertEquals(dt2.load_yaml_template(test_yaml), None)
+        self.assertEquals(dt1.load_yaml_template(self.test_yaml), None)
+        self.assertEquals(dt2.load_yaml_template(self.test_yaml), None)
         self.assertEquals(dt2.load_dummy_data(), None)
-        self.assertEquals(dt3.load_yaml_template(test_yaml), None)
+        self.assertEquals(dt3.load_yaml_template(self.test_yaml), None)
         self.assertEquals(dt3.load_dummy_data(), None)
 
         # simple backtracking test
