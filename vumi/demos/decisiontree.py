@@ -373,7 +373,7 @@ class DecisionTreeWorker(ApplicationWorker):
     def post_result(self, tree):
         log.msg(tree.dump_json_data())
 
-    def call_for_json(self, tree):
+    def get_initial_data(self, tree):
         return tree.get_initial_data()
 
     def get_decision_tree(self, user_id):
@@ -396,6 +396,6 @@ class DecisionTreeWorker(ApplicationWorker):
     def setup_new_decision_tree(self):
         decision_tree = TraversedDecisionTree()
         decision_tree.load_yaml_template(self.yaml_template)
-        json_string = self.call_for_json(decision_tree)
+        json_string = self.get_initial_data(decision_tree)
         decision_tree.load_json_data(json_string)
         return decision_tree

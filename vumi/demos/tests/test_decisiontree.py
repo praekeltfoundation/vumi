@@ -200,11 +200,11 @@ class TestDecisionTreeWorker(ApplicationTestCase):
     def test_session_complete_menu_traversal_with_bad_entries(self):
         # And strip the second user out of the retrieved data
         # to check that the first question is then skipped
-        def call_for_json(tree):
+        def get_initial_data(tree):
             data = json.loads(tree.get_initial_data())
             del data["users"][1]
             return json.dumps(data)
-        self.worker.call_for_json = call_for_json
+        self.worker.get_initial_data = get_initial_data
 
         yield self.send(None, TransportUserMessage.SESSION_NEW)
         yield self.send("3", TransportUserMessage.SESSION_RESUME)
@@ -253,7 +253,7 @@ class TestDecisionTreeWorker(ApplicationTestCase):
     @inlineCallbacks
     def test_session_with_long_menus(self):
         # Replace the 'retrieved' data with many simple users
-        def call_for_json(tree):
+        def get_initial_data(tree):
             return '''{
                         "users": [
                             {"name":"Abrahem Smith"},
@@ -271,7 +271,7 @@ class TestDecisionTreeWorker(ApplicationTestCase):
                         ],
                         "msisdn": "456789"
                     }'''
-        self.worker.call_for_json = call_for_json
+        self.worker.get_initial_data = get_initial_data
 
         yield self.send(None, TransportUserMessage.SESSION_NEW)
         yield self.send("0", TransportUserMessage.SESSION_RESUME)
