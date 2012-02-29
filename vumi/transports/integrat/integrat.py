@@ -45,7 +45,11 @@ class IntegratHttpResource(Resource):
 
         if hxg_msg['EventType'] == 'Request':
             if text == 'REQ':
-                session_event = TransportUserMessage.SESSION_NEW
+                # This indicates a new session event but Integrat
+                # also sends a non-request message with type 'open'
+                # below (and that is the one we use to trigger Vumi's
+                # new session message.
+                return ''
             else:
                 session_event = TransportUserMessage.SESSION_RESUME
         else:
