@@ -461,16 +461,9 @@ class TestDecisionTreeWorker(ApplicationTestCase):
         return newstring
 
     @inlineCallbacks
-    def send(self, content, session_event=None, from_addr=None):
-        if from_addr is None:
-            from_addr = "456789"
-        msg = TransportUserMessage(content=content,
-                                   session_event=session_event,
-                                   from_addr=from_addr,
-                                   to_addr='+5678',
-                                   transport_name=self.transport_name,
-                                   transport_type='fake',
-                                   transport_metadata={})
+    def send(self, content, session_event=None, from_addr="456789"):
+        msg = self.mkmsg_in(content, session_event=session_event,
+                            from_addr=from_addr)
         yield self.dispatch(msg)
 
     @inlineCallbacks
