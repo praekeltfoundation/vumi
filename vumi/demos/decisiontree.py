@@ -1,93 +1,36 @@
-import yaml
+# -*- test-case-name: vumi.demos.tests.test_decisiontree -*-
+
+"""Basic tools for building a vumi ApplicationWorker."""
+
 import json
+import yaml
 import time
 import datetime
+from pkg_resources import resource_string
 
-from vumi.errors import VumiError
+import redis
 
+from twisted.python import log
 
-def getVumiSession(r_server, key):
-    sess = r_server.get(key)
-    if sess:
-        session = yaml.safe_load(sess)
-        session.set_r_server(r_server)
-        return session
-    else:
-        session = VumiSession()
-        session.set_r_server(r_server)
-        session.set_key(key)
-        session.save()
-        return session
+from vumi.errors import ConfigError, VumiError
+from vumi.message import TransportUserMessage
+from vumi.application import ApplicationWorker, SessionManager
+
+SESSION_NEW = TransportUserMessage.SESSION_NEW
+SESSION_CLOSE = TransportUserMessage.SESSION_CLOSE
+SESSION_RESUME = TransportUserMessage.SESSION_RESUME
 
 
-def delVumiSession(r_server, key):
-    return r_server.delete(key)
+class TemplatedDecisionTree(yaml.YAMLObject):
+    """A YAML based decision tree."""
 
-
-class VumiSession(yaml.YAMLObject):
     # Allow use with safe_load() / safe_dump()
     yaml_loader = yaml.SafeLoader
     yaml_dumper = yaml.SafeDumper
-
-    yaml_tag = u'VumiSession'
-
-    key = None
-    decision_tree = None
-    r_server = None
-
-    def __init__(self, **kwargs):
-        pass
-
-    def set_decision_tree(self, decision_tree):
-        self.decision_tree = decision_tree
-
-    def get_decision_tree(self):
-        return self.decision_tree
-
-    def set_key(self, key):
-        self.key = key
-
-    def get_key(self):
-        return self.key
-
-    def set_r_server(self, r_server):
-        self.r_server = r_server
-
-    def save(self):
-        if self.r_server:
-            r_server = self.r_server
-            self.r_server = None
-            r_server.set(self.get_key(), yaml.safe_dump(self))
-            self.r_server = r_server
-
-    def delete(self):
-        self.r_server.delete(self.get_key())
-        self.r_server = None
-
-
-class DecisionTree(yaml.YAMLObject):
-    # Allow use with safe_load() / safe_dump()
-    yaml_loader = yaml.SafeLoader
-    yaml_dumper = yaml.SafeDumper
-
-    yaml_tag = u'DecisionTree'
-
-    def __init__(self):
-        pass
-
-    def serialize_to_json(self):
-        return json.dumps(self.__dict__)
-
-    def deserialize_from_json(self, string):
-        self.__dict__ = json.loads(string)
-
-
-class TemplatedDecisionTree(DecisionTree):
 
     yaml_tag = u'TemplatedDecisionTree'
 
     def __init__(self):
-        DecisionTree.__init__(self)
         self.template = None
         self.template_current = None
         self.template_history = []
@@ -96,39 +39,9 @@ class TemplatedDecisionTree(DecisionTree):
         self.template = yaml.safe_load(yaml_string)
         self.template_current = self.template.get('__start__')
 
-    def get_template(self):
-        return self.template
-
-    def get_data_source(self):
-        if self.template:
-            if self.template.get('__data__'):
-                return {
-                    "url": self.template['__data__'].get('url'),
-                    "username": self.template['__data__'].get('username'),
-                    "password": self.template['__data__'].get('password'),
-                    "params": self.template['__data__'].get('params', []),
-                    }
-        return {"url": None, "username": None, "password": None, "params": []}
-
-    def get_post_source(self):
-        if self.template:
-            if self.template.get('__post__'):
-                return {
-                    "url": self.template['__post__'].get('url'),
-                    "username": self.template['__post__'].get('username'),
-                    "password": self.template['__post__'].get('password'),
-                    "params": self.template['__post__'].get('params', []),
-                    }
-        return {"url": None, "username": None, "password": None, "params": []}
-
-    def get_dummy_data(self):
-        if self.template:
-            if self.template.get('__data__'):
-                return self.template['__data__'].get('json')
-        return None
-
 
 class PopulatedDecisionTree(TemplatedDecisionTree):
+    """A decision tree with data."""
 
     yaml_tag = u'PopulatedDecisionTree'
 
@@ -143,11 +56,14 @@ class PopulatedDecisionTree(TemplatedDecisionTree):
     def load_json_data(self, json_string):
         self.data = json.loads(json_string)
 
-    def load_dummy_data(self):
-        self.load_json_data(self.get_dummy_data())
-
     def dump_json_data(self):
         return json.dumps(self.data)
+
+    def get_initial_data(self):
+        if self.template:
+            if self.template.get('__data__'):
+                return self.template['__data__'].get('json')
+        return None
 
     def get_data(self):
         return self.data
@@ -160,6 +76,9 @@ class PopulatedDecisionTree(TemplatedDecisionTree):
 
 
 class TraversedDecisionTree(PopulatedDecisionTree):
+    """A decision tree with data and information about where in the
+    tree a user currently is.
+    """
 
     yaml_tag = u'TraversedDecisionTree'
 
@@ -383,3 +302,97 @@ class TraversedDecisionTree(PopulatedDecisionTree):
                 (datetime.date.today() - datetime.timedelta(days=1))
                 .timetuple())))
         return default
+
+
+class DecisionTreeWorker(ApplicationWorker):
+    """Demo application that serves a series of questions.
+
+    Configuration options:
+
+    :type worker_name: str
+    :param worker_name:
+        Worker name. Used as part of the redis prefix for session data.
+    :type yaml_template: str
+    :param yaml_template:
+        Name of file containing the YAML template for the decision tree.
+        Optional. If left out, a demo decision tree is read from
+        vumi.demos/toy_decision_tree.yaml.
+    """
+
+    MAX_SESSION_LENGTH = 3 * 60
+
+    def validate_config(self):
+        if "worker_name" not in self.config:
+            raise ConfigError("DecisionTreeWorker requires a worker_name"
+                              " in its configuration.")
+
+    def setup_application(self):
+        if "yaml_template" in self.config:
+            with open(self.config["yaml_template"], "rb") as f:
+                self.yaml_template = f.read()
+        else:
+            self.yaml_template = resource_string(__name__,
+                                                 "toy_decision_tree.yaml")
+        self.r_server = redis.Redis(**self.config.get('redis', {}))
+        self.session_manager = SessionManager(self.r_server,
+             "%(worker_name)s:%(transport_name)s" % self.config,
+             max_session_length=self.MAX_SESSION_LENGTH)
+
+    def teardown_application(self):
+        self.session_manager.stop()
+
+    def consume_user_message(self, msg):
+        user_id = msg.user()
+        response = ''
+        continue_session = False
+
+        if not self.yaml_template:
+            log.err("yaml_template is missing")
+            return
+
+        decision_tree = self.get_decision_tree(user_id)
+        if not decision_tree.is_started():
+            decision_tree.start()
+        elif not decision_tree.is_completed():
+            decision_tree.answer(msg.payload['content'])
+
+        if not decision_tree.is_completed():
+            response += decision_tree.question()
+            continue_session = True
+            self.save_decision_tree(user_id, decision_tree)
+        else:
+            response += decision_tree.finish() or ''
+            self.post_result(decision_tree)
+            self.delete_decision_tree(user_id)
+
+        self.reply_to(msg, response, continue_session)
+
+    def post_result(self, tree):
+        log.msg(tree.dump_json_data())
+
+    def get_initial_data(self, tree):
+        return tree.get_initial_data()
+
+    def get_decision_tree(self, user_id):
+        data = self.session_manager.load_session(user_id)
+        if not data:
+            data = self.session_manager.create_session(user_id)
+        if 'decision_tree' in data:
+            return yaml.safe_load(data['decision_tree'])
+        else:
+            return self.setup_new_decision_tree()
+
+    def save_decision_tree(self, user_id, tree):
+        data = {}
+        data['decision_tree'] = yaml.safe_dump(tree)
+        self.session_manager.save_session(user_id, data)
+
+    def delete_decision_tree(self, user_id):
+        self.session_manager.clear_session(user_id)
+
+    def setup_new_decision_tree(self):
+        decision_tree = TraversedDecisionTree()
+        decision_tree.load_yaml_template(self.yaml_template)
+        json_string = self.get_initial_data(decision_tree)
+        decision_tree.load_json_data(json_string)
+        return decision_tree
