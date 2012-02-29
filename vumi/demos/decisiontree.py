@@ -6,6 +6,7 @@ import json
 import yaml
 import time
 import datetime
+from pkg_resources import resource_string
 
 import redis
 
@@ -304,6 +305,19 @@ class TraversedDecisionTree(PopulatedDecisionTree):
 
 
 class DecisionTreeWorker(ApplicationWorker):
+    """Demo application that serves a series of questions.
+
+    Configuration options:
+
+    :type worker_name: str
+    :param worker_name:
+        Worker name. Used as part of the redis prefix for session data.
+    :type yaml_template: str
+    :param yaml_template:
+        Name of file containing the YAML template for the decision tree.
+        Optional. If left out, a demo decision tree is read from
+        vumi.demos/toy_decision_tree.yaml.
+    """
 
     MAX_SESSION_LENGTH = 3 * 60
 
@@ -313,6 +327,12 @@ class DecisionTreeWorker(ApplicationWorker):
                               " in its configuration.")
 
     def setup_application(self):
+        if "yaml_template" in self.config:
+            with open(self.config["yaml_template"], "rb") as f:
+                self.yaml_template = f.read()
+        else:
+            self.yaml_template = resource_string(__name__,
+                                                 "toy_decision_tree.yaml")
         self.r_server = redis.Redis(**self.config.get('redis', {}))
         self.session_manager = SessionManager(self.r_server,
              "%(worker_name)s:%(transport_name)s" % self.config,
