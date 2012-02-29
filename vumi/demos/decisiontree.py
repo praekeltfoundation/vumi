@@ -352,12 +352,10 @@ class DecisionTreeWorker(ApplicationWorker):
 
         decision_tree = self.get_decision_tree(user_id)
         if not decision_tree.is_started():
-            # TODO check this corresponds to session_event = new
             decision_tree.start()
             response += decision_tree.question()
             continue_session = True
         else:
-            # TODO check this corresponds to session_event = resume
             decision_tree.answer(msg.payload['content'])
             if not decision_tree.is_completed():
                 response += decision_tree.question()
