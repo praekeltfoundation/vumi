@@ -9,7 +9,6 @@ import datetime
 
 import redis
 
-from twisted.internet.defer import inlineCallbacks
 from twisted.python import log
 
 from vumi.errors import ConfigError, VumiError
@@ -22,6 +21,7 @@ SESSION_RESUME = TransportUserMessage.SESSION_RESUME
 
 
 class TemplatedDecisionTree(yaml.YAMLObject):
+    """A YAML based decision tree."""
 
     # Allow use with safe_load() / safe_dump()
     yaml_loader = yaml.SafeLoader
@@ -38,39 +38,9 @@ class TemplatedDecisionTree(yaml.YAMLObject):
         self.template = yaml.safe_load(yaml_string)
         self.template_current = self.template.get('__start__')
 
-    def get_template(self):
-        return self.template
-
-    def get_data_source(self):
-        if self.template:
-            if self.template.get('__data__'):
-                return {
-                    "url": self.template['__data__'].get('url'),
-                    "username": self.template['__data__'].get('username'),
-                    "password": self.template['__data__'].get('password'),
-                    "params": self.template['__data__'].get('params', []),
-                    }
-        return {"url": None, "username": None, "password": None, "params": []}
-
-    def get_post_source(self):
-        if self.template:
-            if self.template.get('__post__'):
-                return {
-                    "url": self.template['__post__'].get('url'),
-                    "username": self.template['__post__'].get('username'),
-                    "password": self.template['__post__'].get('password'),
-                    "params": self.template['__post__'].get('params', []),
-                    }
-        return {"url": None, "username": None, "password": None, "params": []}
-
-    def get_dummy_data(self):
-        if self.template:
-            if self.template.get('__data__'):
-                return self.template['__data__'].get('json')
-        return None
-
 
 class PopulatedDecisionTree(TemplatedDecisionTree):
+    """A decision tree with data."""
 
     yaml_tag = u'PopulatedDecisionTree'
 
@@ -85,11 +55,14 @@ class PopulatedDecisionTree(TemplatedDecisionTree):
     def load_json_data(self, json_string):
         self.data = json.loads(json_string)
 
-    def load_dummy_data(self):
-        self.load_json_data(self.get_dummy_data())
-
     def dump_json_data(self):
         return json.dumps(self.data)
+
+    def get_initial_data(self):
+        if self.template:
+            if self.template.get('__data__'):
+                return self.template['__data__'].get('json')
+        return None
 
     def get_data(self):
         return self.data
@@ -102,6 +75,9 @@ class PopulatedDecisionTree(TemplatedDecisionTree):
 
 
 class TraversedDecisionTree(PopulatedDecisionTree):
+    """A decision tree with data and information about where in the
+    tree a user currently is.
+    """
 
     yaml_tag = u'TraversedDecisionTree'
 
@@ -345,6 +321,9 @@ class DecisionTreeWorker(ApplicationWorker):
     def teardown_application(self):
         self.session_manager.stop()
 
+    def set_yaml_template(self, yaml_template):
+        self.yaml_template = yaml_template
+
     def consume_user_message(self, msg):
         user_id = msg.user()
         response = ''
@@ -368,31 +347,17 @@ class DecisionTreeWorker(ApplicationWorker):
                 continue_session = True
             response += decision_tree.finish() or ''
             if decision_tree.is_completed():
-                self.post_result(json.dumps(
-                    decision_tree.get_data()))
+                self.post_result(decision_tree)
                 self.delete_decision_tree(user_id)
         self.save_decision_tree(user_id, decision_tree)
 
         self.reply_to(msg, response, continue_session)
 
-    def set_yaml_template(self, yaml_template):
-        self.yaml_template = yaml_template
+    def post_result(self, tree):
+        log.msg(tree.dump_json_data())
 
-    def set_data_url(self, data_source):
-        self.data_url = data_source
-
-    def set_post_url(self, post_source):
-        self.post_url = post_source
-
-    def post_result(self, result):
-        # TODO need actual post but
-        # just need this to override in testing for now
-        pass
-
-    def call_for_json(self):
-        # TODO need actual retrieval but
-        # just need this to override in testing for now
-        return '{}'
+    def call_for_json(self, tree):
+        return tree.load_dummy_data()
 
     def get_decision_tree(self, user_id):
         data = self.session_manager.load_session(user_id)
@@ -413,13 +378,7 @@ class DecisionTreeWorker(ApplicationWorker):
 
     def setup_new_decision_tree(self):
         decision_tree = TraversedDecisionTree()
-        yaml_template = self.yaml_template
-        decision_tree.load_yaml_template(yaml_template)
-        self.set_data_url(decision_tree.get_data_source())
-        self.set_post_url(decision_tree.get_post_source())
-        if self.data_url.get('url'):
-            json_string = self.call_for_json()
-            decision_tree.load_json_data(json_string)
-        else:
-            decision_tree.load_dummy_data()
+        decision_tree.load_yaml_template(self.yaml_template)
+        json_string = self.call_for_json(decision_tree)
+        decision_tree.load_json_data(json_string)
         return decision_tree

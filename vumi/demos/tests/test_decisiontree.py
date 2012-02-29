@@ -1,5 +1,6 @@
 import re
 import yaml
+import json
 from pkg_resources import resource_string
 
 from twisted.trial.unittest import TestCase
@@ -46,7 +47,7 @@ class PopulatedDecisionTreeTestCase(TestCase):
     def test_load_decision_tree(self):
         dt = PopulatedDecisionTree()
         dt.load_yaml_template(self.test_yaml)
-        dt.load_dummy_data()
+        dt.load_json_data(dt.get_initial_data())
         self.assertTrue('users' in dt.data)
 
 
@@ -58,7 +59,7 @@ class TraversedDecisionTreeTestCase(TestCase):
     def test_decision_tree(self):
         dt = TraversedDecisionTree()
         dt.load_yaml_template(self.test_yaml)
-        dt.load_dummy_data()
+        dt.load_json_data(dt.get_initial_data())
 
         # the new TraversedDecisionTree should not be completed
         self.assertFalse(dt.is_completed())
@@ -177,10 +178,10 @@ class MockDecisionTreeWorker(DecisionTreeWorker):
                 - result
     '''
 
-    def post_result(self, result):
-        self.mock_result = result
+    def post_result(self, tree):
+        self.mock_result = json.dumps(tree.get_data())
 
-    def call_for_json(self):
+    def call_for_json(self, tree):
         return '''{
                     "users": [
                         {
@@ -301,7 +302,7 @@ class TestDecisionTreeWorker(ApplicationTestCase):
     def test_session_complete_menu_traversal_with_bad_entries(self):
         # And strip the second user out of the retrieved data
         # to check that the first question is then skipped
-        def call_for_json():
+        def call_for_json(tree):
             return '''{
                         "users": [
                             {
@@ -376,7 +377,7 @@ class TestDecisionTreeWorker(ApplicationTestCase):
     @inlineCallbacks
     def test_session_with_long_menus(self):
         # Replace the 'retrieved' data with many simple users
-        def call_for_json():
+        def call_for_json(tree):
             return '''{
                         "users": [
                             {"name":"Abrahem Smith"},

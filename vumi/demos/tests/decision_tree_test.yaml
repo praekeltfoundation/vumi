@@ -1,7 +1,4 @@
 __data__:
-   url:
-   username:
-   password:
    json: >
        {
            "users": [
