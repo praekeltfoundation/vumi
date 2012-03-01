@@ -31,9 +31,9 @@ class ClientConfig(dict):
         # we only want to add expected keys
         for key, value in kwargs.items():
             if key in self.required_keys \
-                or key in self.smpp_defaults.keys() \
-                or key in self.client_defaults.keys():
-                    self[key] = value
+            or key in self.smpp_defaults.keys() \
+            or key in self.client_defaults.keys():
+                self[key] = value
 
 
 if __name__ == '__main__':
