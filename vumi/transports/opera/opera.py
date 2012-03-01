@@ -9,7 +9,7 @@ from twisted.web import xmlrpc, http
 from twisted.web.resource import Resource
 from twisted.internet.defer import inlineCallbacks
 
-from vumi.utils import normalize_msisdn, get_deploy_int
+from vumi.utils import normalize_msisdn
 from vumi.transports import Transport
 from vumi.transports.failures import TemporaryFailure, PermanentFailure
 from vumi.transports.opera import utils
@@ -61,10 +61,49 @@ class OperaReceiveResource(Resource):
 
 class OperaTransport(Transport):
     """
-    Base class that provides Redis mechanics for maintaining mapping
-    of internal vs external message ids, used to link a delivery
-    receipt back to the message of the message that was originally
-    sent out.
+    Opera transport.
+
+    See https://dragon.sa.operatelecom.com:1089/ for documentation
+    on the Opera XML-RPC interface.
+
+    Configuration options:
+
+    :type message_id_lifetime: int
+    :param message_id_lifetime:
+        Seconds message ids should be kept for before expiring. Once
+        an id expires, delivery reports can no longer be associated
+        with the original message id. Default is one week.
+    :type web_receipt_path: str
+    :param web_receipt_path:
+        Path part of JSON reply URL (should match value given to Opera).
+        E.g. /api/v1/sms/opera/receipt.json
+    :type web_receive_path: str
+    :param web_receive_path:
+        Path part of XML reply URL (should match value given to Opera).
+        E.g. /api/v1/sms/opera/receive.xml
+    :type web_port: int
+    :param web_port:
+        Port the transport listens to for responses from Opera.
+        Affects both web_receipt_path and web_receive_path.
+    :type url: str
+    :param url:
+        Opera XML-RPC gateway. E.g.
+        https://dragon.sa.operatelecom.com:1089/Gateway
+    :type channel: str
+    :param channel:
+        Opera channel number.
+    :type password: str
+    :param password:
+        Opera password.
+    :type service: str
+    :param service:
+        Opera service number.
+    :type max_segments: int
+    :param max_segments:
+        Maximum number of segments to allow messages to be broken
+        into. Default is 9. Minimum is 1. Maximum is 9. Note: Opera's
+        own default is 1. This transport defaults to 9 to minimise the
+        possibility of message sends failing.
     """
 
     # After how many seconds should the transport expire keys
@@ -84,6 +123,8 @@ class OperaTransport(Transport):
         self.opera_channel = self.config['channel']
         self.opera_password = self.config['password']
         self.opera_service = self.config['service']
+        self.max_segments = self.config.get('max_segments', 9)
+        self.r_config = self.config.get('redis', {})
         self.transport_name = self.config['transport_name']
 
     def set_message_id_for_identifier(self, identifier, message_id):
@@ -138,10 +179,7 @@ class OperaTransport(Transport):
     def setup_transport(self):
         log.msg('Starting the OperaInboundTransport config: %s' %
             self.transport_name)
-
-        dbindex = get_deploy_int(self._amqp_client.vhost)
-        redis_config = self.config.get('redis', {})
-        self.r_server = yield redis.Redis(db=dbindex, **redis_config)
+        self.r_server = redis.Redis(**self.r_config)
         self.r_prefix = "%(transport_name)s@%(url)s" % self.config
 
         self.proxy = xmlrpc.Proxy(self.opera_url)
@@ -184,6 +222,7 @@ class OperaTransport(Transport):
         xmlrpc_payload['Expiry'] = expiry
         xmlrpc_payload['Priority'] = priority
         xmlrpc_payload['Receipt'] = receipt
+        xmlrpc_payload['MaxSegments'] = self.max_segments
 
         log.msg("Sending SMS via Opera: %s" % xmlrpc_payload)
 

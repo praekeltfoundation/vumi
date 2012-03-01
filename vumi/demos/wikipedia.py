@@ -2,10 +2,11 @@
 
 from twisted.internet.defer import inlineCallbacks, returnValue
 from vumi.application import ApplicationWorker, SessionManager
-from vumi.utils import http_request, get_deploy_int
+from vumi.utils import http_request
 from xml.etree import ElementTree
 from urllib import urlencode
 import json
+import redis
 
 
 class OpenSearch(object):
@@ -90,10 +91,12 @@ class WikipediaWorker(ApplicationWorker):
 
     MAX_SESSION_LENGTH = 3 * 60
 
+    def validate_config(self):
+        self.r_config = self.config.get('redis', {})
+
     @inlineCallbacks
     def startWorker(self):
-        db = get_deploy_int(self._amqp_client.vhost)
-        self.r_server = redis.Redis(db)
+        self.r_server = redis.Redis(**self.r_config)
         self.session_manager = SessionManager(self.r_server,
             "%(worker_name)s:%(transport_name)s" % self.config,
             max_session_length=self.MAX_SESSION_LENGTH)

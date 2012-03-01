@@ -164,6 +164,7 @@ class OperaTransportTestCase(TransportTestCase):
             self.assertEqual(xmlrpc_payload['SMSText'], 'hello world')
             self.assertEqual(xmlrpc_payload['Service'], 'service')
             self.assertEqual(xmlrpc_payload['Receipt'], 'Y')
+            self.assertEqual(xmlrpc_payload['MaxSegments'], 9)
             self.assertEqual(xmlrpc_payload['Numbers'], '27761234567')
             self.assertEqual(xmlrpc_payload['Password'], 'password')
             self.assertEqual(xmlrpc_payload['Channel'], 'channel')

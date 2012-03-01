@@ -11,11 +11,23 @@ Version 0.4
 
 :Projected date: end of February 2012
 
-* add HBase support. See :doc:`roadmap/datastore-access`.
-* add storing of all transport messages.
 * once-off scheduling of messages. *(done)*
-* remove UglyModel.
-* remove Django-based vumi.webapp.
+* addition of MultiWorker. *(done)*
+* addition of support for grouped messages. *(done)*
+* remove UglyModel. *(done)*
+* remove Django-based vumi.webapp. *(done)*
+* clean-up of SMPP transport.
+* add HBase support with ability to use Redis for small
+  deployments. See :doc:`roadmap/datastore-access`.
+* add storing of all transport messages.
+* add support for tag pools.
+
+
+Version 0.5
+-----------
+
+:Projected date: end of April 2012
+
 * add ability to identify a single user across multiple transports as
   per :doc:`roadmap/identity-datastore`.
 * associate messages with billing accounts. See

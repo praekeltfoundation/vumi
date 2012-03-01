@@ -69,6 +69,15 @@ class FakeRedisTestCase(TestCase):
         self.assertEqual(self.r_server.zrange('set', 0, -1, desc=True,
             withscores=True), [(0.3, 'three'), (0.2, 'two'), (0.1, 'one')])
 
+    def test_hgetall_returns_copy(self):
+        self.r_server = FakeRedis()
+        self.r_server.hset("hash", "foo", "1")
+        data = self.r_server.hgetall("hash")
+        data["foo"] = "2"
+        self.assertEqual(self.r_server.hgetall("hash"), {
+            "foo": "1",
+            })
+
     def test_hincrby(self):
         self.r_server = FakeRedis()
         hincrby = self.r_server.hincrby

@@ -10,7 +10,6 @@ from twisted.internet.task import LoopingCall
 from twisted.python import log
 
 from vumi.service import Worker
-from vumi.utils import get_deploy_int
 from vumi.message import TransportMessage, to_json
 
 
@@ -91,8 +90,7 @@ class FailureWorker(Worker):
 
     def set_up_redis(self):
         if not hasattr(self, 'r_server'):
-            self.r_server = redis.Redis(
-                "localhost", db=get_deploy_int(self._amqp_client.vhost))
+            self.r_server = redis.Redis(**self.config.get('redis', {}))
         log.msg("Connected to Redis")
         self.r_prefix = "failures:%s" % (self.config['transport_name'],)
         log.msg("r_prefix = %s" % self.r_prefix)

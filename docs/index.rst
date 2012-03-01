@@ -15,7 +15,6 @@ Contents:
    installation.rst
    getting-started.rst
    first-smpp-bind.rst
-   client.rst
    transports.rst
    metrics.rst
    roadmap.rst

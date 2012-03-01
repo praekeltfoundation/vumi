@@ -88,18 +88,21 @@ class TestIntegratHttpResource(TestCase):
 
     @inlineCallbacks
     def test_new_session(self):
+        # this should not generate a message since we use
+        # the 'open' event to start a new sesison.
         xml = self.make_ussd(ussd_type='New', text="")
+        yield self.check_response(xml, [])
+
+    @inlineCallbacks
+    def test_new_session_via_request(self):
+        # this should not generate a message since we use
+        # the 'open' event to start a new sesison.
+        xml = self.make_ussd(ussd_type='Request', text="REQ")
         yield self.check_response(xml, [])
 
     @inlineCallbacks
     def test_open_session(self):
         xml = self.make_ussd(ussd_type='Open', text="")
-        yield self.check_response(xml, [{
-            'session_event': TransportUserMessage.SESSION_NEW,
-            'content': None,
-            }])
-
-        xml = self.make_ussd(ussd_type='Request', text="REQ")
         yield self.check_response(xml, [{
             'session_event': TransportUserMessage.SESSION_NEW,
             'content': None,
