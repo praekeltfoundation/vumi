@@ -12,7 +12,6 @@ from twisted.internet.defer import inlineCallbacks
 from vumi.message import TransportUserMessage
 from vumi.transports.httprpc import HttpRpcTransport
 from vumi.transports.failures import PermanentFailure
-from vumi.utils import get_deploy_int
 
 
 class InfobipTransport(HttpRpcTransport):
@@ -97,11 +96,13 @@ class InfobipTransport(HttpRpcTransport):
                 "handle_infobip_end", True),
         }
 
+    def validate_config(self):
+        self.r_config = self.config.get('redis', {})
+
     @inlineCallbacks
     def setup_transport(self):
         yield super(InfobipTransport, self).setup_transport()
-        self.r_server = redis.Redis("localhost",
-                                    db=get_deploy_int(self._amqp_client.vhost))
+        self.r_server = redis.Redis(**self.r_config)
         log.msg("Connected to Redis")
         self.r_prefix = "infobip:%s" % (self.transport_name,)
         log.msg("r_prefix = %s" % self.r_prefix)

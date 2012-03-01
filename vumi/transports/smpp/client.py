@@ -25,8 +25,6 @@ from smpp.pdu_inspector import (MultipartMessage,
                                 multipart_key,
                                 )
 
-from vumi.utils import get_deploy_int
-
 
 # TODO this will move to pdu_inspector in python-smpp
 ESME_command_status_map = {
@@ -115,8 +113,7 @@ class EsmeTransceiver(Protocol):
                 "conn_throttle": self.dummy_conn_throttle,
                 "unknown": self.dummy_unknown,
                 }
-        self.r_server = redis.Redis("localhost",
-                db=get_deploy_int(self.vumi_options['vhost']))
+        self.r_server = redis.Redis(**self.config.get('redis', {}))
         log.msg("Connected to Redis")
         self.r_prefix = "%s@%s:%s" % (
                 self.config['system_id'],

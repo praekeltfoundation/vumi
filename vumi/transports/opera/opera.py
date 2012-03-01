@@ -9,7 +9,7 @@ from twisted.web import xmlrpc, http
 from twisted.web.resource import Resource
 from twisted.internet.defer import inlineCallbacks
 
-from vumi.utils import normalize_msisdn, get_deploy_int
+from vumi.utils import normalize_msisdn
 from vumi.transports import Transport
 from vumi.transports.failures import TemporaryFailure, PermanentFailure
 from vumi.transports.opera import utils
@@ -124,6 +124,7 @@ class OperaTransport(Transport):
         self.opera_password = self.config['password']
         self.opera_service = self.config['service']
         self.max_segments = self.config.get('max_segments', 9)
+        self.r_config = self.config.get('redis', {})
         self.transport_name = self.config['transport_name']
 
     def set_message_id_for_identifier(self, identifier, message_id):
@@ -178,10 +179,7 @@ class OperaTransport(Transport):
     def setup_transport(self):
         log.msg('Starting the OperaInboundTransport config: %s' %
             self.transport_name)
-
-        dbindex = get_deploy_int(self._amqp_client.vhost)
-        redis_config = self.config.get('redis', {})
-        self.r_server = yield redis.Redis(db=dbindex, **redis_config)
+        self.r_server = redis.Redis(**self.r_config)
         self.r_prefix = "%(transport_name)s@%(url)s" % self.config
 
         self.proxy = xmlrpc.Proxy(self.opera_url)
