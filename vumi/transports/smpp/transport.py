@@ -6,10 +6,6 @@ import redis
 from twisted.python import log
 from twisted.internet import reactor
 
-<<<<<<< HEAD
-=======
-# from vumi.service import Worker
->>>>>>> develop
 from vumi.utils import get_operator_number
 from vumi.transports.base import Transport
 from vumi.transports.smpp.clientserver.client import EsmeTransceiverFactory

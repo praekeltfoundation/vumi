@@ -1,13 +1,12 @@
 import redis
 
-from twisted.internet import reactor, defer
+from twisted.internet import defer
 from twisted.internet.defer import inlineCallbacks
 from twisted.trial.unittest import TestCase
 from smpp.pdu_builder import SubmitSMResp, BindTransceiverResp, DeliverSM
 
-from vumi.transports.tests.test_base import TransportTestCase
 from vumi.tests.utils import FakeRedis
-from vumi.message import Message, TransportUserMessage
+from vumi.message import TransportUserMessage
 from vumi.transports.smpp.clientserver.client import (
         EsmeTransceiver,
         ESME,
@@ -137,7 +136,6 @@ class FakeRedisRespTestCase(TransportTestCase):
                 port=self.config['port'],
                 password=self.config['password'],
                 )
-
 
         # hack a lot of transport setup
         self.transport = yield self.get_transport(self.config, start=False)
@@ -409,7 +407,8 @@ class EsmeToSmscTestCase(TransportTestCase):
                 command_id)
 
     def server_test_hook(self, **kwargs):
-        if not self.expected_on_server: return
+        if not self.expected_on_server:
+            return
         #print "\nSERVER", self.format_pdu_display(**kwargs)
         ok = False
         x = self.expected_on_server[0]
@@ -423,7 +422,8 @@ class EsmeToSmscTestCase(TransportTestCase):
         self.assertTrue(ok)
 
     def client_test_hook(self, **kwargs):
-        if not self.expected_on_client: return
+        if not self.expected_on_client:
+            return
         #print "\nCLIENT", self.format_pdu_display(**kwargs)
         ok = False
         x = self.expected_on_client[0]
@@ -817,6 +817,7 @@ class EsmeToSmscTestCase(TransportTestCase):
         self.assertEqual(mess['content'], "SMS from server")
 
         dispatched_failures = self.get_dispatched_failures()
+        self.assertEqual(dispatched_failures, [])
 
     @inlineCallbacks
     def test_submit_and_deliver(self):
@@ -894,4 +895,4 @@ class EsmeToSmscTestCase(TransportTestCase):
         self.assertEqual(mess['content'], "SMS from server")
 
         dispatched_failures = self.get_dispatched_failures()
-
+        self.assertEqual(dispatched_failures, [])
