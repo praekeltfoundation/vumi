@@ -6,7 +6,7 @@ import redis
 from twisted.python import log
 from twisted.internet import reactor
 
-from vumi.utils import get_operator_number, get_deploy_int
+from vumi.utils import get_operator_number
 from vumi.transports.base import Transport
 from vumi.transports.smpp.clientserver.client import EsmeTransceiverFactory
 from vumi.transports.smpp.clientserver.config import ClientConfig
@@ -105,13 +105,10 @@ class SmppTransport(Transport):
                 #self.clientConfig.set(k, self.config[k])
         self.clientConfig = ClientConfig(**self.config)
 
-        # TODO: move this to a config file
-        dbindex = get_deploy_int(self._amqp_client.vhost)
-
         # Connect to Redis
         if not hasattr(self, 'r_server'):
             # Only set up redis if we don't have a test stub already
-            self.r_server = redis.Redis("localhost", db=dbindex)
+            self.r_server = redis.Redis(**self.config.get('redis', {}))
         self.r_prefix = "%s@%s:%s" % (
                 self.config.get('system_id'),
                 self.config.get('host'),
