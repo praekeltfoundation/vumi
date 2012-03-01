@@ -696,7 +696,7 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
                 }
 
     def loadDefaults(self, defaults):
-        self.defaults = dict(self.defaults, **defaults.dictionary)
+        self.defaults = dict(self.defaults, **defaults)
 
     def setConnectCallback(self, connect_callback):
         self.__connect_callback = connect_callback

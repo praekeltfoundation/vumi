@@ -6,10 +6,6 @@ import redis
 from twisted.python import log
 from twisted.internet import reactor
 
-<<<<<<< HEAD
-=======
-# from vumi.service import Worker
->>>>>>> develop
 from vumi.utils import get_operator_number
 from vumi.transports.base import Transport
 from vumi.transports.smpp.clientserver.client import EsmeTransceiverFactory
@@ -98,15 +94,6 @@ class SmppTransport(Transport):
 
     def setup_transport(self):
         log.msg("Starting the SmppTransport with %s" % self.config)
-        #self.clientConfig = ClientConfig(
-                #host=self.config['host'],
-                #port=self.config['port'],
-                #system_id=self.config['system_id'],
-                #password=self.config['password'],
-                #)
-        #for k in self.clientConfig.options.keys():
-            #if self.config.has_key(k):
-                #self.clientConfig.set(k, self.config[k])
         self.clientConfig = ClientConfig(**self.config)
 
         # Connect to Redis
@@ -144,7 +131,6 @@ class SmppTransport(Transport):
         self.esme_client = client
         self.esme_client.update_error_handlers({
             "mess_tempfault": self.mess_tempfault,
-            "conn_throttle": self.conn_throttle,
             })
 
         # Start the consumer
@@ -154,7 +140,6 @@ class SmppTransport(Transport):
         log.msg("Consumed outgoing message", message)
         log.msg("Unacknowledged message count: %s" % (
             self.esme_client.get_unacked_count()))
-        #self.conn_throttle(unacked=self.esme_client.get_unacked_count())
         self.r_set_message(message)
         sequence_number = self.send_smpp(message)
         self.r_set_id_for_sequence(sequence_number,
@@ -319,14 +304,3 @@ class SmppTransport(Transport):
         reason = pdu['header']['command_status']
         # TODO: Get real message here.
         self.send_failure(Message(id=id), reason)
-
-    def conn_throttle(self, *args, **kwargs):
-        log.msg("*********** conn_throttle: %s" % kwargs)
-        unacked = kwargs.get('unacked', 0)
-        if unacked > 100:
-            # do something
-            pass
-        pdu = kwargs.get('pdu')
-        if pdu:
-            # do as above
-            pass

@@ -74,19 +74,6 @@ class SmscServer(Protocol):
                     sequence_number, message_id, command_status)
             self.sendPDU(pdu_resp)
             reactor.callLater(1, self.delivery_report, message_id)
-            #self.boomerang(pdu)
-            #self.follow_up(pdu)
-
-    #def follow_up(self, pdu):
-        #sequence_number = 555
-        #short_message = "Hi there, just a follow up"
-        #destination_addr = pdu['body']['mandatory_parameters']['source_addr']
-        #source_addr = pdu['body']['mandatory_parameters']['destination_addr']
-        #pdu = DeliverSM(sequence_number,
-                #short_message=short_message,
-                #destination_addr=destination_addr,
-                #source_addr=source_addr)
-        #self.sendPDU(pdu)
 
     def delivery_report(self, message_id):
         sequence_number = 1
@@ -97,37 +84,34 @@ class SmscServer(Protocol):
         pdu = DeliverSM(sequence_number, short_message=short_message)
         self.sendPDU(pdu)
 
-    def boomerang(self, pdu):
-        if pdu['body']['mandatory_parameters']['short_message'] == "boomerang":
-            destination_addr = (pdu['body']['mandatory_parameters']
-                                   ['source_addr'])
-            source_addr = (pdu['body']['mandatory_parameters']
-                              ['destination_addr'])
+    def multipart_tester(self, to_addr, from_addr):
+        destination_addr = to_addr
+        source_addr = from_addr
 
-            sequence_number = 1
-            short_message1 = "\x05\x00\x03\xff\x03\x01back"
-            pdu1 = DeliverSM(sequence_number,
-                    short_message=short_message1,
-                    destination_addr=destination_addr,
-                    source_addr=source_addr)
+        sequence_number = 1
+        short_message1 = "\x05\x00\x03\xff\x03\x01back"
+        pdu1 = DeliverSM(sequence_number,
+                short_message=short_message1,
+                destination_addr=destination_addr,
+                source_addr=source_addr)
 
-            sequence_number = 2
-            short_message2 = "\x05\x00\x03\xff\x03\x02 at"
-            pdu2 = DeliverSM(sequence_number,
-                    short_message=short_message2,
-                    destination_addr=destination_addr,
-                    source_addr=source_addr)
+        sequence_number = 2
+        short_message2 = "\x05\x00\x03\xff\x03\x02 at"
+        pdu2 = DeliverSM(sequence_number,
+                short_message=short_message2,
+                destination_addr=destination_addr,
+                source_addr=source_addr)
 
-            sequence_number = 3
-            short_message3 = "\x05\x00\x03\xff\x03\x03 you"
-            pdu3 = DeliverSM(sequence_number,
-                    short_message=short_message3,
-                    destination_addr=destination_addr,
-                    source_addr=source_addr)
+        sequence_number = 3
+        short_message3 = "\x05\x00\x03\xff\x03\x03 you"
+        pdu3 = DeliverSM(sequence_number,
+                short_message=short_message3,
+                destination_addr=destination_addr,
+                source_addr=source_addr)
 
-            self.sendPDU(pdu2)
-            self.sendPDU(pdu3)
-            self.sendPDU(pdu1)
+        self.sendPDU(pdu2)
+        self.sendPDU(pdu3)
+        self.sendPDU(pdu1)
 
     def dataReceived(self, data):
         self.datastream += data
@@ -148,7 +132,6 @@ class SmscServerFactory(ServerFactory):
     def __init__(self, test_hook=None):
         self.test_hook = test_hook
 
-    #protocol = SmscServer
     def buildProtocol(self, addr):
         self.smsc = SmscServer(self.test_hook)
         return self.smsc

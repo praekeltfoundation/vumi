@@ -1,15 +1,16 @@
 # -*- test-case-name: vumi.transports.smpp.clientserver.test.test_client -*-
 
-class ClientConfig(object):
 
-    required = [
+class ClientConfig(dict):
+
+    required_keys = [
             'host',
             'port',
             'system_id',  # in SMPP system_id is the username
             'password',
             ]
 
-    smpp_options = {
+    smpp_defaults = {
             'system_type': "",
             'interface_version': "34",
             'dest_addr_ton': 0,
@@ -17,29 +18,25 @@ class ClientConfig(object):
             'registered_delivery': 0,
             }
 
-    client_options = {
+    client_defaults = {
             'smpp_bind_timeout': 30,
             }
 
     def __init__(self, **kwargs):
-        self.dictionary = {}
-        #print ""
-        for i in self.required:
-            self.dictionary[i] = kwargs[i]
-            #print "%s: %s" % (i, self.dictionary[i])
-        for k, v in self.smpp_options.items():
-            self.dictionary[k] = kwargs.get(k, self.smpp_options[k])
-            #print "%s: %s" % (k, self.dictionary[k])
-        for k, v in self.client_options.items():
-            self.dictionary[k] = kwargs.get(k, self.client_options[k])
-            #print "%s: %s" % (k, self.dictionary[k])
+        self.update(self.smpp_defaults)
+        self.update(self.client_defaults)
+        for key in self.required_keys:
+            if key not in kwargs:
+                raise ValueError("'%s' is required" % key)
+        # we only want to add expected keys
+        for key, value in kwargs.items():
+            if key in self.required_keys \
+                or key in self.smpp_defaults.keys() \
+                or key in self.client_defaults.keys():
+                    self[key] = value
 
-    # a get method that performs like a dictionary's get method
-    def get(self, key, default=None):
-        try:
-            return self.dictionary[key]
-        except:
-            return default
 
-    def set(self, key, value):
-        self.dictionary[key] = value
+if __name__ == '__main__':
+    cc = ClientConfig(host='127.0.0.1', port=2773,
+                        system_id='id', password='pw',
+                        dest_addr_npi=12)
