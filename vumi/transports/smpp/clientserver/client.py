@@ -361,10 +361,9 @@ class EsmeTransceiver(Protocol):
 
     def get_seq(self):
         seq = self.r_server.get(self.sequence_number_prefix)
-        try:
-            return int(seq)
-        except:
+        if seq is None:
             return 0
+        return int(seq)
 
     def get_next_seq(self):
         seq = self.r_server.incr(self.sequence_number_prefix)
