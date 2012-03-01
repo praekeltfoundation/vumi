@@ -183,7 +183,7 @@ class EsmeTransceiver(Protocol):
         self.sequence_number_prefix = "vumi_smpp_last_sequence_number#%s" % (
                 self.r_prefix)
         log.msg("r_prefix = %s" % self.r_prefix)
-        self.incSeq()
+        self.get_next_seq()
 
     def try_test_hook(self, **kwargs):
         if self.test_hook:
@@ -356,28 +356,25 @@ class EsmeTransceiver(Protocol):
     def dispatch_unknown(self):
         return self.error_handlers.get("unknown")
 
-    def setSeq(self, seq):
+    def set_seq(self, seq):
         self.r_server.set(self.sequence_number_prefix, int(seq))
 
-    def getSeq(self):
+    def get_seq(self):
         seq = self.r_server.get(self.sequence_number_prefix)
         try:
             return int(seq)
         except:
             return 0
 
-    def getNextSeq(self):
+    def get_next_seq(self):
         seq = self.r_server.incr(self.sequence_number_prefix)
         # SMPP supports a max sequence_number of: FFFFFFFF = 4,294,967,295
         # so start recycling @ 4,000,000,000 just to keep the numbers round
         if seq > 4000000000:
             self.r_server.delete(self.sequence_number_prefix)
-            return self.getNextSeq()
+            return self.get_next_seq()
         else:
             return seq
-
-    def incSeq(self):
-        self.getNextSeq()
 
     def popData(self):
         data = None
@@ -430,9 +427,9 @@ class EsmeTransceiver(Protocol):
     def connectionMade(self):
         self.state = 'OPEN'
         log.msg('STATE: %s' % (self.state))
-        pdu = BindTransceiver(self.getSeq(), **self.defaults)
+        pdu = BindTransceiver(self.get_seq(), **self.defaults)
         log.msg(pdu.get_obj())
-        self.incSeq()
+        self.get_next_seq()
         self.sendPDU(pdu)
         self._lose_conn = self.callLater(
             self.smpp_bind_timeout, self.lose_unbound_connection, 'BOUND_TRX')
@@ -619,9 +616,9 @@ class EsmeTransceiver(Protocol):
 
     def submit_sm(self, **kwargs):
         if self.state in ['BOUND_TX', 'BOUND_TRX']:
-            sequence_number = self.getSeq()
+            sequence_number = self.get_seq()
             pdu = SubmitSM(sequence_number, **dict(self.defaults, **kwargs))
-            self.incSeq()
+            self.get_next_seq()
             self.sendPDU(pdu)
             self.push_unacked(sequence_number)
             return sequence_number
@@ -629,7 +626,7 @@ class EsmeTransceiver(Protocol):
 
     def submit_multi(self, dest_address=[], **kwargs):
         if self.state in ['BOUND_TX', 'BOUND_TRX']:
-            sequence_number = self.getSeq()
+            sequence_number = self.get_seq()
             pdu = SubmitMulti(sequence_number, **dict(self.defaults, **kwargs))
             for item in dest_address:
                 if isinstance(item, str):
@@ -650,28 +647,28 @@ class EsmeTransceiver(Protocol):
                                 )
                     elif item.get('dest_flag') == 2:
                         pdu.addDistributionList(item.get('dl_name'))
-            self.incSeq()
+            self.get_next_seq()
             self.sendPDU(pdu)
             return sequence_number
         return 0
 
     def enquire_link(self, **kwargs):
         if self.state in ['BOUND_TX', 'BOUND_TRX']:
-            sequence_number = self.getSeq()
+            sequence_number = self.get_seq()
             pdu = EnquireLink(sequence_number, **dict(self.defaults, **kwargs))
-            self.incSeq()
+            self.get_next_seq()
             self.sendPDU(pdu)
             return sequence_number
         return 0
 
     def query_sm(self, message_id, source_addr, **kwargs):
         if self.state in ['BOUND_TX', 'BOUND_TRX']:
-            sequence_number = self.getSeq()
+            sequence_number = self.get_seq()
             pdu = QuerySM(sequence_number,
                     message_id=message_id,
                     source_addr=source_addr,
                     **dict(self.defaults, **kwargs))
-            self.incSeq()
+            self.get_next_seq()
             self.sendPDU(pdu)
             return sequence_number
         return 0

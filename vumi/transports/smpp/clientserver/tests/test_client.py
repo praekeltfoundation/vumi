@@ -107,13 +107,13 @@ class EsmeSequenceNumberTestCase(unittest.TestCase):
 
     def test_sequence_rollover(self):
         esme = FakeEsmeTransceiver()
-        self.assertEqual(0, esme.getSeq())
-        esme.incSeq()
-        self.assertEqual(1, esme.getSeq())
-        esme.setSeq(4004004004)
-        self.assertEqual(4004004004, esme.getSeq())
-        esme.incSeq()
-        self.assertEqual(1, esme.getSeq())
+        self.assertEqual(0, esme.get_seq())
+        esme.get_next_seq()
+        self.assertEqual(1, esme.get_seq())
+        esme.set_seq(4004004004)
+        self.assertEqual(4004004004, esme.get_seq())
+        esme.get_next_seq()
+        self.assertEqual(1, esme.get_seq())
 
 
 class EsmeTransceiverTestCase(unittest.TestCase):
