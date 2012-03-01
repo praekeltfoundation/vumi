@@ -15,8 +15,8 @@ Version 0.4
 * addition of MultiWorker. *(done)*
 * addition of support for grouped messages. *(done)*
 * remove UglyModel. *(done)*
+* remove Django-based vumi.webapp. *(done)*
 * clean-up of SMPP transport.
-* remove Django-based vumi.webapp.
 * add HBase support with ability to use Redis for small
   deployments. See :doc:`roadmap/datastore-access`.
 * add storing of all transport messages.
