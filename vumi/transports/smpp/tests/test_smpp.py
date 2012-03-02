@@ -794,7 +794,6 @@ class EsmeToSmscTestCase(TransportTestCase):
             expected_deferreds.append(i['deferred'])
         for i in self.expected_on_server:
             expected_deferreds.append(i['deferred'])
-        #expected_deferreds.append(defer.Deferred())
         dl_3 = defer.DeferredList(expected_deferreds)
 
         pdu = DeliverSM(555,
