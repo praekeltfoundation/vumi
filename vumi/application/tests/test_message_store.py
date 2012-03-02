@@ -1,12 +1,11 @@
 # -*- coding: utf-8 -*-
 
-"""Tests for go.vumitools.message_store."""
+"""Tests for vumi.application.message_store."""
 
 from vumi.message import TransportEvent
 from vumi.tests.utils import FakeRedis
 from vumi.application.tests.test_base import ApplicationTestCase
-
-from go.vumitools.message_store import MessageStore
+from vumi.application.message_store import MessageStore
 
 
 class TestMessageStore(ApplicationTestCase):

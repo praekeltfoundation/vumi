@@ -1,4 +1,4 @@
-# -*- test-case-name: go.vumitools.tests.test_message_store -*-
+# -*- test-case-name: vumi.application.tests.test_message_store -*-
 # -*- coding: utf-8 -*-
 
 """Message store."""
