@@ -34,9 +34,3 @@ class ClientConfig(dict):
             or key in self.smpp_defaults.keys() \
             or key in self.client_defaults.keys():
                 self[key] = value
-
-
-if __name__ == '__main__':
-    cc = ClientConfig(host='127.0.0.1', port=2773,
-                        system_id='id', password='pw',
-                        dest_addr_npi=12)
