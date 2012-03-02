@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-"""Tests for go.vumitools.tagpool."""
+"""Tests for vumi.application.tagpool."""
 
 from twisted.trial.unittest import TestCase
 
