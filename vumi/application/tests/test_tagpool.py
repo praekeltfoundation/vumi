@@ -6,7 +6,7 @@ from twisted.trial.unittest import TestCase
 
 from vumi.tests.utils import FakeRedis
 
-from go.vumitools.tagpool import TagpoolManager
+from vumi.application.tagpool import TagpoolManager
 
 
 class TestTagpoolManager(TestCase):

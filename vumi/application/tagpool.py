@@ -1,4 +1,4 @@
-# -*- test-case-name: go.vumitools.tests.test_tagpool -*-
+# -*- test-case-name: vumi.application.tests.test_tagpool -*-
 # -*- coding: utf-8 -*-
 
 """Tag pool manager."""
