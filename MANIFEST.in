@@ -9,12 +9,6 @@ include requirements.pip requirements-dev.pip requirements-webapp.pip
 include setup.cfg
 include setup.py
 include tox.ini
-# Django configs
-include environments/README
-exclude environments/*.py
-include environments/__init__.py
-include environments/development.py
-include environments/template.py
 
 recursive-include config *
 recursive-include docs *
@@ -29,11 +23,6 @@ include vumi/demos/tests/wikipedia_sample.xml
 include vumi/scripts/tests/sample-smpp-output.log
 include vumi/webapp/api/test_data/devquiz.yaml
 recursive-include vumi/resources *
-# Django apps
-recursive-include vumi/webapp/api/fixtures *
-recursive-include vumi/webapp/prelaunch/static *
-recursive-include vumi/webapp/prelaunch/templates *
-recursive-include vumi/webapp/templates *
 
 # Prune stray bytecode files.
 global-exclude *.pyc
