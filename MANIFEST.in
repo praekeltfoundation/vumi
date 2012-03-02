@@ -4,7 +4,6 @@ include LICENSE
 include README.rst
 include Vagrantfile
 include logs/README tmp/pids/README
-include manage.py
 include requirements.pip requirements-dev.pip requirements-webapp.pip
 include setup.cfg
 include setup.py
@@ -21,7 +20,6 @@ recursive-include utils *.sh
 include twisted/plugins/*.py
 include vumi/demos/tests/wikipedia_sample.xml
 include vumi/scripts/tests/sample-smpp-output.log
-include vumi/webapp/api/test_data/devquiz.yaml
 recursive-include vumi/resources *
 
 # Prune stray bytecode files.
