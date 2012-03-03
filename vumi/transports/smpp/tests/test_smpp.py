@@ -876,19 +876,31 @@ class EsmeToSmscTestCase(TransportTestCase):
                 )
         self.service.factory.smsc.sendPDU(pdu)
 
+        # Have the server fire of an out-of-order multipart sms
+        self.service.factory.smsc.multipart_tester(
+                to_addr="2772222222",
+                from_addr="2772000000",
+                )
+
         wait_for_inbound = self._amqp.wait_messages(
                 "vumi",
                 "%s.inbound" % self.transport_name,
-                1,
+                2,
                 )
         yield wait_for_inbound
 
         dispatched_messages = self.get_dispatched_messages()
         mess = dispatched_messages[0].payload
+        multipart = dispatched_messages[1].payload
 
         self.assertEqual(mess['message_type'], 'user_message')
         self.assertEqual(mess['transport_name'], self.transport_name)
         self.assertEqual(mess['content'], "SMS from server")
+
+        # Check the incomming multipart is re-assembled correctly
+        self.assertEqual(multipart['message_type'], 'user_message')
+        self.assertEqual(multipart['transport_name'], self.transport_name)
+        self.assertEqual(multipart['content'], "back at you")
 
         dispatched_failures = self.get_dispatched_failures()
         self.assertEqual(dispatched_failures, [])
