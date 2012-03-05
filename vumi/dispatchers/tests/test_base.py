@@ -154,9 +154,16 @@ class MessageMakerMixIn(object):
 
 
 class TestBaseDispatchWorker(TestCase, MessageMakerMixIn):
+    timeout = 3
 
     @inlineCallbacks
     def setUp(self):
+        yield self.get_worker()
+
+    @inlineCallbacks
+    def get_worker(self, **config_extras):
+        if getattr(self, 'worker', None) is not None:
+            yield self.worker.stopWorker()
         config = {
             "transport_names": [
                 "transport1",
@@ -175,6 +182,7 @@ class TestBaseDispatchWorker(TestCase, MessageMakerMixIn):
                 "transport3": ["app1", "app3"]
                 },
             }
+        config.update(config_extras)
         self.worker = get_stubbed_worker(BaseDispatchWorker, config)
         self._amqp = self.worker._amqp_client.broker
         yield self.worker.startWorker()
@@ -269,6 +277,16 @@ class TestBaseDispatchWorker(TestCase, MessageMakerMixIn):
         yield self.dispatch(msgs[2], 'app3.outbound')
         self.assert_messages('transport3.outbound', msgs)
         self.assert_no_messages('transport1.outbound', 'transport2.outbound')
+
+    @inlineCallbacks
+    def test_outbound_message_routing_transport_mapping(self):
+        yield self.get_worker(transport_mappings={'dispatcher1': 'transport1'})
+        msgs = [self.mkmsg_out('dispatcher1') for _ in range(3)]
+        yield self.dispatch(msgs[0], 'app1.outbound')
+        yield self.dispatch(msgs[1], 'app2.outbound')
+        yield self.dispatch(msgs[2], 'app3.outbound')
+        self.assert_messages('transport1.outbound', msgs)
+        self.assert_no_messages('transport2.outbound', 'transport3.outbound')
 
 
 class DummyDispatcher(object):
