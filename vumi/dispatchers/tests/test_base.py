@@ -281,12 +281,22 @@ class TestBaseDispatchWorker(TestCase, MessageMakerMixIn):
     @inlineCallbacks
     def test_outbound_message_routing_transport_mapping(self):
         yield self.get_worker(transport_mappings={'dispatcher1': 'transport1'})
+
         msgs = [self.mkmsg_out('dispatcher1') for _ in range(3)]
         yield self.dispatch(msgs[0], 'app1.outbound')
         yield self.dispatch(msgs[1], 'app2.outbound')
         yield self.dispatch(msgs[2], 'app3.outbound')
         self.assert_messages('transport1.outbound', msgs)
-        self.assert_no_messages('transport2.outbound', 'transport3.outbound')
+        self.assert_no_messages('transport2.outbound', 'transport3.outbound',
+                                'dispatcher1.outbound')
+
+        self.clear_dispatched()
+        msgs = [self.mkmsg_out('transport2') for _ in range(3)]
+        yield self.dispatch(msgs[0], 'app1.outbound')
+        yield self.dispatch(msgs[1], 'app2.outbound')
+        yield self.dispatch(msgs[2], 'app3.outbound')
+        self.assert_messages('transport2.outbound', msgs)
+        self.assert_no_messages('transport1.outbound', 'transport3.outbound')
 
 
 class DummyDispatcher(object):
