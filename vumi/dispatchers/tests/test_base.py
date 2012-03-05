@@ -280,15 +280,18 @@ class TestBaseDispatchWorker(TestCase, MessageMakerMixIn):
 
     @inlineCallbacks
     def test_outbound_message_routing_transport_mapping(self):
-        yield self.get_worker(transport_mappings={'dispatcher1': 'transport1'})
+        """
+        Test that transport mappings are applied for outbound messages.
+        """
+        yield self.get_worker(transport_mappings={'upstream1': 'transport1'})
 
-        msgs = [self.mkmsg_out('dispatcher1') for _ in range(3)]
+        msgs = [self.mkmsg_out('upstream1') for _ in range(3)]
         yield self.dispatch(msgs[0], 'app1.outbound')
         yield self.dispatch(msgs[1], 'app2.outbound')
         yield self.dispatch(msgs[2], 'app3.outbound')
         self.assert_messages('transport1.outbound', msgs)
         self.assert_no_messages('transport2.outbound', 'transport3.outbound',
-                                'dispatcher1.outbound')
+                                'upstream1.outbound')
 
         self.clear_dispatched()
         msgs = [self.mkmsg_out('transport2') for _ in range(3)]
@@ -350,10 +353,10 @@ class TestToAddrRouter(TestCase, MessageMakerMixIn):
 
         self.dispatcher.transport_publisher['transport1'].clear()
         self.config['transport_mappings'] = {
-            'dispatcher1': 'transport1',
+            'upstream1': 'transport1',
             }
 
-        msg = self.mkmsg_out(transport_name='dispatcher1')
+        msg = self.mkmsg_out(transport_name='upstream1')
         self.router.dispatch_outbound_message(msg)
         publishers = self.dispatcher.transport_publisher
         self.assertEqual(publishers['transport1'].msgs, [msg])
@@ -486,7 +489,7 @@ class UserGroupingRouterTestCase(DispatcherTestCase):
                 'group2': 'app2',
                 },
             'transport_mappings': {
-                'dispatcher1': self.transport_name,
+                'upstream1': self.transport_name,
                 }
             }
 
@@ -551,7 +554,7 @@ class UserGroupingRouterTestCase(DispatcherTestCase):
 
     @inlineCallbacks
     def test_routing_to_transport_mapped(self):
-        app_msg = self.mkmsg_in(transport_name='dispatcher1',
+        app_msg = self.mkmsg_in(transport_name='upstream1',
                                 from_addr='from_1')
         yield self.dispatch(app_msg, transport_name='app1',
                                 direction='outbound')
