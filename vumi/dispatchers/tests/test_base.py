@@ -308,6 +308,9 @@ class DummyDispatcher(object):
         def publish_message(self, msg):
             self.msgs.append(msg)
 
+        def clear(self):
+            self.msgs[:] = []
+
     def __init__(self, config):
         self.transport_publisher = {}
         for transport in config['transport_names']:
@@ -341,6 +344,16 @@ class TestToAddrRouter(TestCase, MessageMakerMixIn):
 
     def test_dispatch_outbound_message(self):
         msg = self.mkmsg_out(transport_name='transport1')
+        self.router.dispatch_outbound_message(msg)
+        publishers = self.dispatcher.transport_publisher
+        self.assertEqual(publishers['transport1'].msgs, [msg])
+
+        self.dispatcher.transport_publisher['transport1'].clear()
+        self.config['transport_mappings'] = {
+            'dispatcher1': 'transport1',
+            }
+
+        msg = self.mkmsg_out(transport_name='dispatcher1')
         self.router.dispatch_outbound_message(msg)
         publishers = self.dispatcher.transport_publisher
         self.assertEqual(publishers['transport1'].msgs, [msg])
@@ -472,6 +485,9 @@ class UserGroupingRouterTestCase(DispatcherTestCase):
                 'group1': 'app1',
                 'group2': 'app2',
                 },
+            'transport_mappings': {
+                'dispatcher1': self.transport_name,
+                }
             }
 
         self.fake_redis = FakeRedis()
@@ -526,6 +542,16 @@ class UserGroupingRouterTestCase(DispatcherTestCase):
     @inlineCallbacks
     def test_routing_to_transport(self):
         app_msg = self.mkmsg_in(transport_name=self.transport_name,
+                                from_addr='from_1')
+        yield self.dispatch(app_msg, transport_name='app1',
+                                direction='outbound')
+        [transport_msg] = self.get_dispatched_messages(self.transport_name,
+                                                direction='outbound')
+        self.assertEqual(app_msg, transport_msg)
+
+    @inlineCallbacks
+    def test_routing_to_transport_mapped(self):
+        app_msg = self.mkmsg_in(transport_name='dispatcher1',
                                 from_addr='from_1')
         yield self.dispatch(app_msg, transport_name='app1',
                                 direction='outbound')

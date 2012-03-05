@@ -159,7 +159,7 @@ class TransportToTransportRouter(BaseDispatchRouter):
         pass
 
 
-class ToAddrRouter(BaseDispatchRouter):
+class ToAddrRouter(SimpleDispatchRouter):
     """Router that dispatches based on msg to_addr.
 
     :type toaddr_mappings: dict
@@ -189,10 +189,6 @@ class ToAddrRouter(BaseDispatchRouter):
         #   was dispatched to and dispatch this message there
         #   Perhaps there should be a message on the base class to support
         #   this.
-
-    def dispatch_outbound_message(self, msg):
-        name = msg['transport_name']
-        self.dispatcher.transport_publisher[name].publish_message(msg)
 
 
 class FromAddrMultiplexRouter(BaseDispatchRouter):
@@ -235,7 +231,7 @@ class FromAddrMultiplexRouter(BaseDispatchRouter):
         self.dispatcher.transport_publisher[name].publish_message(msg)
 
 
-class UserGroupingRouter(BaseDispatchRouter):
+class UserGroupingRouter(SimpleDispatchRouter):
     """
     Router that dispatches based on msg `from_addr`. Each unique
     `from_addr` is round-robin assigned to one of the defined
@@ -299,7 +295,3 @@ class UserGroupingRouter(BaseDispatchRouter):
         group = self.get_group_for_user(msg.user().encode('utf8'))
         app = self.groups[group]
         self.dispatcher.exposed_publisher[app].publish_message(msg)
-
-    def dispatch_outbound_message(self, msg):
-        name = msg['transport_name']
-        self.dispatcher.transport_publisher[name].publish_message(msg)
