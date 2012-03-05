@@ -30,7 +30,7 @@ setup(
     long_description=open('README.rst', 'r').read(),
     author='Praekelt Foundation',
     author_email='dev@praekeltfoundation.org',
-    packages=find_packages(exclude=['environments']) + [
+    packages=find_packages() + [
         # NOTE:2012-01-18: This is commented out for now, pending a fix for
         # https://github.com/pypa/pip/issues/355
         #'twisted.plugins',
