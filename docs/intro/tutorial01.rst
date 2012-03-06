@@ -49,7 +49,7 @@ Testing the Environment
 
 Let's verify this worked. As a test you can create a Telnet worker and an *echo* application, both of which are included in Vumi.
 
-.. note:: Philosophy
+.. admonition:: Philosophy
 
     A complete Vumi instance consists of a *transport worker* and an *application worker* which are managed as seperate processes. A *transport worker* is responsible for sending messages to and receiving messages from some communications medium. An *application worker* processes messages received from a *transport worker* and generates replies.
 
@@ -59,7 +59,7 @@ Start the Telnet transport worker by executing the following command::
 
 This utilizes Twisted_ to start a Telnet process listening on port 9010. Specifically it uses Vumi's builtin ``TelnetServerTransport`` to handle communication with Telnet clients. Note that we specify ``telnet`` as the transport name when providing ``--set-option=transport_name:telnet``. When starting the *application worker* as described next the same name should be used, thus connecting the *transport worker* with the *application worker*.
 
-.. note:: Philosophy
+.. admonition:: Philosophy
 
     A *transport worker* is responsible for sending messages over and receiving messages from some communication medium. For this example we are using a very simple transport that communicates over Telnet. Other transport mechanisms Vumi supports include SMPP, XMPP, Twitter, IRC, HTTP and a variety of mobile network aggregator specific messaging protocols. In subsequent parts of this tutorial we'll be using the XMPP transport to communicate over Google Talk.
 
@@ -81,7 +81,7 @@ In a new commandline session start the echo *application worker* by executing th
 
 This utilizes Twisted_ to start a Vumi ``EchoWorker`` process connected to the previously created ``telnet`` *transport worker*. 
 
-.. note:: Philosophy
+.. admonition:: Philosophy
 
     An *application worker* is responsible for processing messages received from a *transport worker* and generating replies - it holds the application logic. For this example we are using an *echo* worker that will simply echo messages it receives back to the *transport worker*. In subsequent parts of this tutorial we'll be utilizing A.I. to generate seemingly inteligent replies.
 
