@@ -4,15 +4,13 @@ Writing your first Vumi app - Part 1
 
 This is the first part in a series of tutorials demonstrating how to develop Vumi apps.
 
-In this tutorial we'll be developing a simple chat bot with which you can communicate via XMPP (in particular Google Talk).
-
 We'll assume you have a working knowledge of Python_, RabbitMQ_ and VirtualEnv_.
 
 .. admonition:: Where to get help:
 
     If you're having trouble at any point feel free to drop by `#vumi`_ on irc.freenode.net to chat with other Vumi users who might be able to help.
 
-In this first part of the tutorial we'll be creating and testing a simple working environment. 
+In this part of the tutorial we'll be creating and testing a simple working environment. 
 
 Environment Setup
 =================
@@ -91,7 +89,11 @@ Now if you enter something in your previously created telnet session you should 
 
     2012-03-06 12:10:39+0200 [WorkerAMQClient,client] User message: hallo world
 
+
+That concludes part 1 of this tutorial. In :doc: `part 2</intro/tutorial02>` we'll be creating a `Google Talk`_ chat bot.
+
 .. _`#vumi`: irc://irc.freenode.net/vumi
+.. _Google Talk: https://www.google.com/talk/
 .. _Python: https://python.org/
 .. _RabbitMQ: https://www.rabbitmq.com/
 .. _Twisted: https://twistedmatrix.com/trac/
