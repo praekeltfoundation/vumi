@@ -53,7 +53,7 @@ Let's verify this worked. As a test you can create a Telnet worker and an *echo*
 
 .. note:: Philosophy
 
-    A complete Vumi instance consists of a *transport worker* and an *application worker* which are managed as seperate processes. A *transport worker* is responsible for sending messages to and receiving messages from some communications medium. An *application worker* processes messages from a transport worker and sends replies.
+    A complete Vumi instance consists of a *transport worker* and an *application worker* which are managed as seperate processes. A *transport worker* is responsible for sending messages to and receiving messages from some communications medium. An *application worker* processes messages received from a *transport worker* and generates replies.
 
 Start the Telnet transport worker by executing the following command::
 
@@ -63,7 +63,7 @@ This utilizes Twisted_ to start a Telnet process listening on port 9010. Specifi
 
 .. note:: Philosophy
 
-    A *transport worker* is responsible for sending messages over and receiving messages from some communication medium. For this example we are using a very simple transport that interacts with a user over telnet. Other transport mechanisms Vumi supports include SMPP, XMPP, Twitter, IRC, HTTP and a variety of mobile network aggregator specific messaging protocols. In subsequent parts of this tutorial we'll be using the XMPP transport to communicate over Google Talk.
+    A *transport worker* is responsible for sending messages over and receiving messages from some communication medium. For this example we are using a very simple transport that communicates over Telnet. Other transport mechanisms Vumi supports include SMPP, XMPP, Twitter, IRC, HTTP and a variety of mobile network aggregator specific messaging protocols. In subsequent parts of this tutorial we'll be using the XMPP transport to communicate over Google Talk.
 
 In a commandline session you should now be able to connect to the *transport worker* via telnet::
 
@@ -85,7 +85,7 @@ This utilizes Twisted_ to start a Vumi ``EchoWorker`` process connected to the p
 
 .. note:: Philosophy
 
-    An *application worker* is responsible for processing messages received from a *transport worker* and sending replies – it holds the application logic. For this example we are using an *echo* worker that will simply echo messages it receives back to the *transport worker*. In subsequent parts of this tutorial we'll be creating utilizing A.I. to generate inteligent replies.
+    An *application worker* is responsible for processing messages received from a *transport worker* and generating replies - it holds the application logic. For this example we are using an *echo* worker that will simply echo messages it receives back to the *transport worker*. In subsequent parts of this tutorial we'll be utilizing A.I. to generate seemingly inteligent replies.
 
 Now if you enter something in your previously created telnet session you should immediately receive an *echo*. The *application worker's* output should reflecting the activity, for example when entering ``hallo world``::
 
