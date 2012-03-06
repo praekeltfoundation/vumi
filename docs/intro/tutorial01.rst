@@ -12,7 +12,7 @@ We'll assume you have a working knowledge of Python_, RabbitMQ_ and VirtualEnv_.
 
     If you're having trouble at any point feel free to drop by #vumi_ on irc.freenode.net to chat with other Vumi users who might be able to help.
 
-In this first part of the tutorial we'll be creating a working environment and a project skeleton. 
+In this first part of the tutorial we'll be creating and testing a working environment. 
 
 Environment Setup
 =================
@@ -44,11 +44,25 @@ If this is your first Vumi application you need to take care of some initial Rab
 
 .. note::
 
-    Vumi worker communicate over RabbitMQ_ and requires it being installed and running. You can tell it's installed and its current status by executing ``sudo rabbitmq-server`` from the command line. If the command is not found you can install RabbitMQ by executing ``sudo apt-get install rabbitmq-server`` from the command line (assuming you are on a Debian based distribution).
+    Vumi workers communicate over RabbitMQ_ and requires it being installed and running. You can tell it's installed and its current status by executing ``sudo rabbitmq-server`` from the command line. If the command is not found you can install RabbitMQ by executing ``sudo apt-get install rabbitmq-server`` from the command line (assuming you are on a Debian based distribution).
 
+Testing the Environment
+=======================
+
+Let's verify this worked. A telnet worker and an echo application is included with Vumi which you can use to test your environment.
+
+Start the worker by executing the following command::
+
+    $ twistd -n start_worker --worker-class vumi.transports.telnet.TelnetServerTransport --set-option=transport_name:telnet --set-option=telnet_port:9010
+
+This starts a Twisted_ application listening on port 9010. Specifically it uses Vumi's builtin ``TelnetServerTransport`` to handle communication with Telnet clients. Note that we specify ``telnet`` as the transport name when specifying ``--set-option=transport_name:telnet``. When starting the Vumi application as described next the same name should be used, hence connecting the application with the transport.
+
+.. note::
+
+    A transport worker is responsible for sending messages to and receiving messages from users in the big wide world. For this example we are using a very simple transport that interacts with a user over telnet. Other transport mechanisms Vumi supports include SMPP, XMPP, Twitter, IRC, HTTP and a variety of mobile network aggregator specific messaging protocols.
 
 .. _#vumi: irc://irc.freenode.net/vumi
 .. _Python: https://python.org/
 .. _RabbitMQ: https://www.rabbitmq.com/
+.. _Twisted: https://twistedmatrix.com/trac/
 .. _VirtualEnv: https://pypi.python.org/pypi/virtualenv
-
