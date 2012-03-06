@@ -44,7 +44,7 @@ If this is your first Vumi application you need to take care of some initial Rab
 
 .. note::
 
-    Vumi worker communicate over RabbitMQ_ and hence RabbitMQ is required to be installed and running. You can tell it's installed and its current status by executing ``sudo rabbitmq-server`` from the command line. If the command is not found you can install RabbitMQ by executing ``sudo apt-get install rabbitmq-server`` from the command line (assuming you are on a Debian based distribution).
+    Vumi worker communicate over RabbitMQ_ and requires it being installed and running. You can tell it's installed and its current status by executing ``sudo rabbitmq-server`` from the command line. If the command is not found you can install RabbitMQ by executing ``sudo apt-get install rabbitmq-server`` from the command line (assuming you are on a Debian based distribution).
 
 
 .. _#vumi: irc://irc.freenode.net/vumi
