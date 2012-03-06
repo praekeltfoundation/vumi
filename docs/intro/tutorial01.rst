@@ -49,13 +49,17 @@ If this is your first Vumi application you need to take care of some initial Rab
 Testing the Environment
 =======================
 
-Let's verify this worked. A telnet worker and an echo application is included with Vumi which you can use to test your environment.
+Let's verify this worked. A Telnet worker and an echo application is included in Vumi which you can use to test your environment.
 
-Start the worker by executing the following command::
+.. note::
+
+    A complete Vumi instance consists of a *transport worker* and an *application worker* which are managed as seperate processes. A *transport worker* is responsible for sending messages to and receiving messages. An *application worker* processes messages from a transport worker and sends replies.
+
+Start the Telnet transport worker by executing the following command::
 
     $ twistd -n start_worker --worker-class vumi.transports.telnet.TelnetServerTransport --set-option=transport_name:telnet --set-option=telnet_port:9010
 
-This starts a Twisted_ application listening on port 9010. Specifically it uses Vumi's builtin ``TelnetServerTransport`` to handle communication with Telnet clients. Note that we specify ``telnet`` as the transport name when specifying ``--set-option=transport_name:telnet``. When starting the Vumi application as described next the same name should be used, hence connecting the application with the transport.
+This utilizes Twisted_ to start a Telnet process listening on port 9010. Specifically it uses Vumi's builtin ``TelnetServerTransport`` to handle communication with Telnet clients. Note that we specify ``telnet`` as the transport name when providing ``--set-option=transport_name:telnet``. When starting the *application worker* as described next the same name should be used, thus connecting the *transport worker* with the *application worker*.
 
 .. note::
 
