@@ -28,7 +28,7 @@ Once the virtual environment has been created activate it by running ``. ve/bin/
    
 .. note::
 
-    For this to work VirtualEnv_ needs to be installed. You can tell it's installed by executing ``virtualenv`` from the command line. If that command runs successfully with no errors VirtualEnv_ is installed. If not you can install it by executing ``pip install virtualenv`` from the command line.
+    For this to work VirtualEnv_ needs to be installed. You can tell it's installed by executing ``virtualenv`` from the command line. If that command runs successfully with no errors VirtualEnv_ is installed. If not you can install it by executing ``sudo pip install virtualenv`` from the command line.
 
 Now that you created and activated the virtual environment install Vumi with the following command::
     
@@ -37,6 +37,15 @@ Now that you created and activated the virtual environment install Vumi with the
 .. note::
 
     This will install the development version of Vumi containing the latest-and-greatest features. Although the development branch is kept stable it is not recommended for production environments.
+
+If this is your first Vumi application you need to take care of some initial RabbitMQ_ setup. Namely you need to add a ``vumi`` user and a ``develop`` virtual host and grant permissions. Vumi includes a script to do this for you which you can execute with the following command::
+    
+    $ sudo ./ve/src/vumi/utils/rabbitmq.setup.sh
+
+.. note::
+
+    Vumi worker communicate over RabbitMQ_ and hence RabbitMQ is required to be installed and running. You can tell it's installed and its current status by executing ``sudo rabbitmq-server``. If the command is not found you can install RabbitMQ by executing ``sudo apt-get install rabbitmq-server`` from the command line (this assumes you are working on a Debian based distribution).
+
 
 .. _#vumi: irc://irc.freenode.net/vumi
 .. _Python: https://python.org/
