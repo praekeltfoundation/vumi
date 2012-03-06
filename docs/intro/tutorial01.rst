@@ -53,7 +53,7 @@ Let's verify this worked. As a test you can create a Telnet worker and an *echo*
 
 .. note:: Philosophy
 
-    A complete Vumi instance consists of a *transport worker* and an *application worker* which are managed as seperate processes. A *transport worker* is responsible for sending messages to and receiving messages. An *application worker* processes messages from a transport worker and sends replies.
+    A complete Vumi instance consists of a *transport worker* and an *application worker* which are managed as seperate processes. A *transport worker* is responsible for sending messages to and receiving messages from some communications medium. An *application worker* processes messages from a transport worker and sends replies.
 
 Start the Telnet transport worker by executing the following command::
 
