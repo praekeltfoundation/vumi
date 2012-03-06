@@ -19,6 +19,7 @@ Contents:
    metrics.rst
    roadmap.rst
    release-notes.rst
+   :doc:`Tutorial Part 1</intro/tutorial01>`
 
 For developers:
 
