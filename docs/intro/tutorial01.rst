@@ -12,7 +12,7 @@ We'll assume you have a working knowledge of Python_, RabbitMQ_ and VirtualEnv_.
 
     If you're having trouble at any point feel free to drop by `#vumi`_ on irc.freenode.net to chat with other Vumi users who might be able to help.
 
-In this first part of the tutorial we'll be creating and testing a working environment. 
+In this first part of the tutorial we'll be creating and testing a simple working environment. 
 
 Environment Setup
 =================
@@ -49,9 +49,9 @@ If this is your first Vumi application you need to take care of some initial Rab
 Testing the Environment
 =======================
 
-Let's verify this worked. As a test you can create a Telnet worker and an echo application, both of which are included in Vumi.
+Let's verify this worked. As a test you can create a Telnet worker and an *echo* application, both of which are included in Vumi.
 
-.. philosophy::
+.. note:: Philosophy
 
     A complete Vumi instance consists of a *transport worker* and an *application worker* which are managed as seperate processes. A *transport worker* is responsible for sending messages to and receiving messages. An *application worker* processes messages from a transport worker and sends replies.
 
@@ -61,7 +61,7 @@ Start the Telnet transport worker by executing the following command::
 
 This utilizes Twisted_ to start a Telnet process listening on port 9010. Specifically it uses Vumi's builtin ``TelnetServerTransport`` to handle communication with Telnet clients. Note that we specify ``telnet`` as the transport name when providing ``--set-option=transport_name:telnet``. When starting the *application worker* as described next the same name should be used, thus connecting the *transport worker* with the *application worker*.
 
-.. philosophy::
+.. note:: Philosophy
 
     A *transport worker* is responsible for sending messages over and receiving messages from some communication medium. For this example we are using a very simple transport that interacts with a user over telnet. Other transport mechanisms Vumi supports include SMPP, XMPP, Twitter, IRC, HTTP and a variety of mobile network aggregator specific messaging protocols. In subsequent parts of this tutorial we'll be using the XMPP transport to communicate over Google Talk.
 
@@ -83,7 +83,7 @@ In a new commandline session start the echo *application worker* by executing th
 
 This utilizes Twisted_ to start a Vumi ``EchoWorker`` process connected to the previously created ``telnet`` *transport worker*. 
 
-.. philosophy::
+.. note:: Philosophy
 
     An *application worker* is responsible for processing messages received from a *transport worker* and sending replies – it holds the application logic. For this example we are using an *echo* worker that will simply echo messages it receives back to the *transport worker*. In subsequent parts of this tutorial we'll be creating utilizing A.I. to generate inteligent replies.
 
