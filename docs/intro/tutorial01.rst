@@ -38,13 +38,13 @@ Now that you created and activated the virtual environment install Vumi with the
 
     This will install the development version of Vumi containing the latest-and-greatest features. Although the development branch is kept stable it is not recommended for production environments.
 
-If this is your first Vumi application you need to take care of some initial RabbitMQ_ setup. Namely you need to add a ``vumi`` user and a ``develop`` virtual host and grant permissions. Vumi includes a script to do this for you which you can execute with the following command::
+If this is your first Vumi application you need to take care of some initial RabbitMQ_ setup. Namely you need to add a ``vumi`` user and a ``develop`` virtual host and grant the required permissions. Vumi includes a script to do this for you which you can execute with the following command::
     
     $ sudo ./ve/src/vumi/utils/rabbitmq.setup.sh
 
 .. note::
 
-    Vumi worker communicate over RabbitMQ_ and hence RabbitMQ is required to be installed and running. You can tell it's installed and its current status by executing ``sudo rabbitmq-server``. If the command is not found you can install RabbitMQ by executing ``sudo apt-get install rabbitmq-server`` from the command line (this assumes you are working on a Debian based distribution).
+    Vumi worker communicate over RabbitMQ_ and hence RabbitMQ is required to be installed and running. You can tell it's installed and its current status by executing ``sudo rabbitmq-server`` from the command line. If the command is not found you can install RabbitMQ by executing ``sudo apt-get install rabbitmq-server`` from the command line (assuming you are on a Debian based distribution).
 
 
 .. _#vumi: irc://irc.freenode.net/vumi
