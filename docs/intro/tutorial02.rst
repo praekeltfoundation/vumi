@@ -34,7 +34,7 @@ Going through that line by line:
 
 ``password: "password"`` - the `Google Talk`_ account password to which the *transport worker* will connect.
 
-``status: Playing with Vumi`` - causes the `Google Talk`_ account's status to change to `Playing with Vumi.`
+``status: Playing with Vumi`` - causes the `Google Talk`_ account's chat status to change to `Playing with Vumi.`
     
 ``host: talk.google.com`` - The XMPP host to connect to. `Google Talk`_ uses ``talk.google.com``.
 
