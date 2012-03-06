@@ -59,7 +59,7 @@ This starts a Twisted_ application listening on port 9010. Specifically it uses 
 
 .. note::
 
-    A transport worker is responsible for sending messages to and receiving messages from users in the big wide world. For this example we are using a very simple transport that interacts with a user over telnet. Other transport mechanisms Vumi supports include SMPP, XMPP, Twitter, IRC, HTTP and a variety of mobile network aggregator specific messaging protocols.
+    A transport worker is responsible for sending messages to and receiving messages from users in the big wide world. For this example we are using a very simple transport that interacts with a user over telnet. Other transport mechanisms Vumi supports include SMPP, XMPP, Twitter, IRC, HTTP and a variety of mobile network aggregator specific messaging protocols. In subsequent parts of this tutorial we'll be using the XMPP transport to communicate over Google Talk.
 
 .. _#vumi: irc://irc.freenode.net/vumi
 .. _Python: https://python.org/
