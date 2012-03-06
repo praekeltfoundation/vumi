@@ -1,12 +1,12 @@
-===================================
-Writing your first Vumi app, part 1
-===================================
+====================================
+Writing your first Vumi app - Part 1
+====================================
 
 This is the first part in a series of tutorials demonstrating how to develop Vumi apps.
 
 In this tutorial we'll be developing a simple chat bot with which you can communicate via XMPP (in particular Google Talk).
 
-We'll assume you have a working knowledge of Python_ and VirtualEnv_.
+We'll assume you have a working knowledge of Python_, RabbitMQ_ and VirtualEnv_.
 
 .. admonition:: Where to get help:
 
@@ -28,11 +28,7 @@ Once the virtual environment has been created activate it by running ``. ve/bin/
    
 .. note::
 
-    For this to work VirtualEnv_ needs to be installed. You can tell it's installed by executing ``virtualenv`` from the command line. If that command runs successfully, with no errors, VirtualEnv_ is installed. If not you can install it by executing ``pip install virtualenv`` from the command line.
-
-.. _#vumi: irc://irc.freenode.net/vumi
-.. _Python: https://python.org/
-.. _VirtualEnv: https://pypi.python.org/pypi/virtualenv
+    For this to work VirtualEnv_ needs to be installed. You can tell it's installed by executing ``virtualenv`` from the command line. If that command runs successfully with no errors VirtualEnv_ is installed. If not you can install it by executing ``pip install virtualenv`` from the command line.
 
 Now that you created and activated the virtual environment install Vumi with the following command::
     
@@ -40,4 +36,10 @@ Now that you created and activated the virtual environment install Vumi with the
 
 .. note::
 
-    This will install the latest development version of Vumi containing the latest-and-greatest features. The development branch is kept stable but is not recommended for production environments.
+    This will install the development version of Vumi containing the latest-and-greatest features. Although the development branch is kept stable it is not recommended for production environments.
+
+.. _#vumi: irc://irc.freenode.net/vumi
+.. _Python: https://python.org/
+.. _RabbitMQ: https://www.rabbitmq.com/
+.. _VirtualEnv: https://pypi.python.org/pypi/virtualenv
+
