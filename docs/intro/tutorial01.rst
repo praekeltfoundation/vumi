@@ -51,7 +51,7 @@ Testing the Environment
 
 Let's verify this worked. A Telnet worker and an echo application is included in Vumi which you can use to test your environment.
 
-.. note::
+.. philosophy::
 
     A complete Vumi instance consists of a *transport worker* and an *application worker* which are managed as seperate processes. A *transport worker* is responsible for sending messages to and receiving messages. An *application worker* processes messages from a transport worker and sends replies.
 
