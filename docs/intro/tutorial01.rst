@@ -55,7 +55,7 @@ Let's verify this worked. As a test you can create a Telnet worker and an *echo*
 
 .. admonition:: Philosophy
 
-    A complete Vumi instance consists of a *transport worker* and an *application worker* which are managed as seperate processes. A *transport worker* is responsible for sending messages to and receiving messages from some communications medium. An *application worker* processes messages received from a *transport worker* and generates replies.
+    A complete Vumi instance consists of a *transport worker* and an *application worker* which are managed as separate processes. A *transport worker* is responsible for sending messages to and receiving messages from some communications medium. An *application worker* processes messages received from a *transport worker* and generates replies.
 
 Start the Telnet *transport worker* by executing the following command::
 
@@ -87,7 +87,7 @@ This utilizes Twisted_ to start a Vumi ``EchoWorker`` process connected to the p
 
 .. admonition:: Philosophy
 
-    An *application worker* is responsible for processing messages received from a *transport worker* and generating replies - it holds the application logic. For this example we are using an *echo* worker that will simply echo messages it receives back to the *transport worker*. In subsequent parts of this tutorial we'll be utilizing A.I. to generate seemingly inteligent replies.
+    An *application worker* is responsible for processing messages received from a *transport worker* and generating replies - it holds the application logic. For this example we are using an *echo* worker that will simply echo messages it receives back to the *transport worker*. In subsequent parts of this tutorial we'll be utilizing A.I. to generate *seemingly intelligent* replies.
 
 Now if you enter something in your previously created Telnet session you should immediately receive an *echo*. The *application worker's* output should reflecting the activity, for example when entering ``hallo world``::
 

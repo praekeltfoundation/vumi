@@ -8,7 +8,7 @@ If you haven't done so already you might want to work through :doc:`part 1 of th
 
 In this part of the tutorial we'll be creating a simple chat bot communicating over `Google Talk`_.
 
-More specifically we'll be utilizing Vumi's XMPP *transport worker* to log into a `Google Talk`_ account and listen for incomming chat messages. When messages are received an `Alice Bot`_ based *application worker* will determine an appropriate response based on the incomming message. The XMPP *transport worker* will then send the response. For another `Google Talk`_ user chatting with the Vumi connected account it should *appear* as if she is conversing with another human being. 
+More specifically we'll be utilizing Vumi's XMPP *transport worker* to log into a `Google Talk`_ account and listen for incoming chat messages. When messages are received an `Alice Bot`_ based *application worker* will determine an appropriate response based on the incoming message. The XMPP *transport worker* will then send the response. For another `Google Talk`_ user chatting with the Vumi connected account it should *appear* as if she is conversing with another human being. 
 
 .. note::
     
@@ -17,7 +17,7 @@ More specifically we'll be utilizing Vumi's XMPP *transport worker* to log into 
 XMPP Transport Worker
 =====================
 
-Continuing from :doc:`part 1 of this tutorial</intro/tutorial01>`, instead of using the Telnet *transport worker* we'll be using the Vumi builtin XMPP *transport worker* to communicate over Google Talk.
+Continuing from :doc:`part 1 of this tutorial</intro/tutorial01>`, instead of using the Telnet *transport worker* we'll be using Vumi's built-in XMPP *transport worker* to communicate over Google Talk.
 
 In order to use the XMPP *transport worker* you first need to create a configuration file. 
 
@@ -36,9 +36,9 @@ Going through that line by line:
 
 ``username: "username"`` - the `Google Talk`_ account username to which the *transport worker* will connect.
 
-``password: "password"`` - the `Google Talk`_ account password to which the *transport worker* will connect.
+``password: "password"`` - the `Google Talk`_ account password.
 
-``status: Playing with Vumi`` - causes the `Google Talk`_ account's chat status to change to `Playing with Vumi.`
+``status: Playing with Vumi`` - causes the `Google Talk`_ account's chat status to change to ``Playing with Vumi.``
     
 ``host: talk.google.com`` - The XMPP host to connect to. `Google Talk`_ uses ``talk.google.com``.
 
@@ -66,11 +66,11 @@ This causes a Vumi XMPP *transport worker* to connect to the configuration speci
 Alice Bot Application Worker
 ============================
 
-Continuing from :doc:`part 1 of this tutorial</intro/tutorial01>`, instead of using the *echo application worker* we'll be creating our own worker to generate seemingly intelligent responses. 
+Continuing from :doc:`part 1 of this tutorial</intro/tutorial01>`, instead of using the *echo application worker* we'll be creating our own worker to generate *seemingly intelligent* responses. 
 
 .. admonition:: Philosophy
 
-    Remember *application workers* are responsible for processing messages received from a *transport worker* and generating replies - it holds the application logic. When developing Vumi applications you'll mostly be implementing *application workers* to process messages based on your use case. For the most part you'll be relying on Vumi's builtin *transport workers* to take care of the communications medium. This enables you to forget about the hairy details and implementation of the communications medium to instead focus on the fun stuff.
+    Remember *application workers* are responsible for processing messages received from *transport workers* and generating replies - it holds the application logic. When developing Vumi applications you'll mostly be implementing *application workers* to process messages based on your use case. For the most part you'll be relying on Vumi's built-in *transport workers* to take care of the communications medium. This enables you to forget about the hairy details of the communications medium and instead focus on the fun stuff.
 
 Before we proceed let's install our dependencies. We'll be using PyAIML_ to provide our bot with *knowledge*. Install it by executing the following command::
 
@@ -102,7 +102,7 @@ Now we can move on to creating the *application worker*. Create a ``workers.py``
             response = self.bot.respond(message_content, message_user)
             self.reply_to(message, response)
 
-The code is straightforward. *Application workers* are represented by a class that subclasses :class:`vumi.application.base.ApplicationWorker`. In this example the ``__init__`` method is overriden to initialize our bot's brain. The hart of *application workers* though is the ``consume_user_message`` method, which is passed messages for processing as they are received by *transport workers*. The message argument can be used to retrieve details on the received message. In this example the content of the message is retrieved from ``message['content']``, and the `Google Talk`_ user sending the message is determined by calling ``message.user()``. A response is then generated uniquely for the specific user utilizing the bot by calling ``self.bot.respond(message_content, message_user)``. This response is then sent as a reply to the original message by calling ``self.reply_to(message, response)``. The *transport worker* then takes care of sending the response to the correct user over the communications medium.
+The code is straightforward. *Application workers* are represented by a class that subclasses :class:`vumi.application.base.ApplicationWorker`. In this example the ``__init__`` method is overridden to initialize our bot's brain. The hart of *application workers* though is the ``consume_user_message`` method, which is passed messages for processing as they are received by *transport workers*. The message argument contains details on the received message. In this example the content of the message is retrieved from ``message['content']``, and the `Google Talk`_ user sending the message is determined by calling ``message.user()``. A response is then generated for the specific user utilizing the bot by calling ``self.bot.respond(message_content, message_user)``. This response is then sent as a reply to the original message by calling ``self.reply_to(message, response)``. The *transport worker* then takes care of sending the response to the correct user over the communications medium.
 
 .. admonition:: Philosophy
 
