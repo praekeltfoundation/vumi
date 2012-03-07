@@ -28,6 +28,10 @@ Once the virtual environment has been created activate it by running ``. ve/bin/
 
     For this to work VirtualEnv_ needs to be installed. You can tell it's installed by executing ``virtualenv`` from the command line. If that command runs successfully with no errors VirtualEnv_ is installed. If not you can install it by executing ``sudo pip install virtualenv`` from the command line.
 
+.. note::
+    
+    From this point onwards your virtual environment should always be active. The virtualenv is activated by running ``. ve/bin/activate``.
+
 Now that you created and activated the virtual environment install Vumi with the following command::
     
     $ pip install -e git+git://github.com/praekelt/vumi.git@develop#egg=vumi
