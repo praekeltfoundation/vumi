@@ -22,7 +22,7 @@ From the command line ``cd`` into a directory were you'd like to store your code
     $ virtualenv --no-site-packages ve
 
 This will create a ``ve`` directory where any libraries you install will go, thus isolating your environment.
-Once the virtual environment has been created activate it by running ``. ve/bin/activate``.
+Once the virtual environment has been created activate it by running ``source ve/bin/activate``.
    
 .. note::
 
@@ -30,7 +30,7 @@ Once the virtual environment has been created activate it by running ``. ve/bin/
 
 .. note::
     
-    From this point onwards your virtual environment should always be active. The virtualenv is activated by running ``. ve/bin/activate``.
+    From this point onwards your virtual environment should always be active. The virtualenv is activated by running ``source ve/bin/activate``.
 
 Now that you created and activated the virtual environment install Vumi with the following command::
     
