@@ -12,7 +12,7 @@ More specifically we'll be utilizing Vumi's XMPP *transport worker* to log into 
 
 .. note::
     
-    Remember your virtual environment should be active. Activate it by running running ``. ve/bin/activate``.
+    Remember your virtual environment should be active. Activate it by running running ``source ve/bin/activate``.
 
 XMPP Transport Worker
 =====================
