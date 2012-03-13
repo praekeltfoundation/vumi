@@ -9,7 +9,7 @@ python-ssmi
 wokkel
 redis
 https://github.com/dmaclay/python-smpp/zipball/develop#egg=python-smpp
-https://github.com/dustin/twitty-twister/zipball/master#egg=twitty-twister
+https://github.com/dustin/twitty-twister/zipball/master#egg=twittytwister
 pytz
 # oauth and simplejson are needed by twittytwister
 oauth
