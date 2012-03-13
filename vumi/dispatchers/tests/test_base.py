@@ -5,7 +5,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.dispatchers.base import (BaseDispatchWorker, ToAddrRouter,
-                                   FromAddrMultiplexRouter)
+                                   FromAddrMultiplexRouter, ContentKeywordRouter)
 from vumi.tests.utils import get_stubbed_worker, FakeRedis
 from vumi.tests.fake_amqp import FakeAMQPBroker
 
@@ -561,3 +561,59 @@ class UserGroupingRouterTestCase(DispatcherTestCase):
         [transport_msg] = self.get_dispatched_messages(self.transport_name,
                                                 direction='outbound')
         self.assertEqual(app_msg, transport_msg)
+
+
+class TestContentKeywordRouter(TestCase, MessageMakerMixIn):
+
+    def setUp(self):
+        self.config = {
+            'transport_names': ['transport1'],
+            'exposed_names': ['m4h', 'mrs'],
+            'router_class': 'dispatchers.ContentKeywordRouter',
+            'keyword_mappings': {
+                'm4h': 'BT',
+                'mrs': 'LOVE'
+                }
+            }
+        self.dispatcher = DummyDispatcher(self.config)
+        self.router = ContentKeywordRouter(self.dispatcher, self.config)
+        self.router.r_server = FakeRedis()
+        
+    def tearDown(self):
+        self.router.r_server.teardown()
+    
+    def test_inbound_message_routing(self):
+        msg = self.mkmsg_in(content='BT rest of a msg', transport_name='transport1')
+        self.router.dispatch_inbound_message(msg)
+        publishers = self.dispatcher.exposed_publisher
+        self.assertEqual(publishers['m4h'].msgs, [msg])
+    
+    def test_inbound_event_routing_ok(self):
+        msg = self.mkmsg_ack(content='LOVE is in the air', transport_name='transport1')
+        self.router.r_server.set(msg['user_message_id'],'mrs')
+        
+        self.router.dispatch_inbound_event(msg)
+        
+        publishers = self.dispatcher.exposed_publisher
+        self.assertEqual(publishers['mrs'].msgs, [msg])
+    
+    def test_inbound_event_routing_failing_publisher_not_defined(self):
+        msg = self.mkmsg_ack(content='HATE is in the air', transport_name='transport1')
+        self.router.dispatch_inbound_event(msg)
+        publishers = self.dispatcher.exposed_publisher
+        self.assertEqual(publishers['mrs'].msgs, [])
+        self.assertEqual(publishers['m4h'].msgs, [])
+   
+    def test_inbound_event_routing_failing_no_routing_back_in_redis(self):
+        msg = self.mkmsg_ack(content='LOVE is in the air', transport_name='transport1')
+        self.router.dispatch_inbound_event(msg)
+        publishers = self.dispatcher.exposed_publisher
+        self.assertEqual(publishers['mrs'].msgs, [])
+        self.assertEqual(publishers['m4h'].msgs, [])
+    
+        
+    def test_outbound_message_routing(self):
+        msg = self.mkmsg_out(content="BT rest of msg", transport_name='transport1')
+        self.router.dispatch_outbound_message(msg)
+        publishers = self.dispatcher.transport_publisher
+        self.assertEqual(publishers['transport1'].msgs, [msg])
