@@ -34,11 +34,11 @@ Once the virtual environment has been created activate it by running ``source ve
 
 Now that you created and activated the virtual environment install Vumi with the following command::
     
-    $ pip install -e git+git://github.com/praekelt/vumi.git@develop#egg=vumi
+    $ pip install vumi
 
 .. note::
 
-    This will install the development version of Vumi containing the latest-and-greatest features. Although the development branch is kept stable it is not recommended for production environments.
+    This will install the latest stable release of Vumi. The development version of Vumi containing the latest-and-greatest features is available on GitHub_. Although the development branch is kept stable it is not recommended for production environments.
 
 If this is your first Vumi application you need to take care of some initial RabbitMQ_ setup. Namely you need to add a ``vumi`` user and a ``develop`` virtual host and grant the required permissions. Vumi includes a script to do this for you which you can execute with the following command::
     
@@ -102,3 +102,4 @@ That concludes part 1 of this tutorial. In :doc:`part 2</intro/tutorial02>` we'l
 .. _RabbitMQ: https://www.rabbitmq.com/
 .. _Twisted: https://twistedmatrix.com/trac/
 .. _VirtualEnv: https://pypi.python.org/pypi/virtualenv
+.. _GitHub: http://github.com/praekelt/vumi
