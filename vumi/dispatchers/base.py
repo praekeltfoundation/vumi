@@ -319,10 +319,10 @@ class ContentKeywordRouter(BaseDispatchRouter):
     def dispatch_inbound_message(self, msg):
         log.msg('Inbound message')
         keyword = msg['content'].split()[0]
-        for name, application in self.mappings:
-            if (keyword == application):
-                log.msg('Message is routed to %s' % (name,))
-                self.dispatcher.exposed_publisher[name].publish_message(msg)
+        for applicationName, applicationKeyword in self.mappings:
+            if (keyword.lower() == applicationKeyword.lower()):
+                log.msg('Message is routed to %s' % (applicationName,))
+                self.dispatcher.exposed_publisher[applicationName].publish_message(msg)
     
     def dispatch_inbound_event(self, msg):
         log.msg("Inbound event")

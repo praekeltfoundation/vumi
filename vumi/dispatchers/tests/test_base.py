@@ -568,11 +568,11 @@ class TestContentKeywordRouter(TestCase, MessageMakerMixIn):
     def setUp(self):
         self.config = {
             'transport_names': ['transport1'],
-            'exposed_names': ['m4h', 'mrs'],
+            'exposed_names': ['app1', 'app2'],
             'router_class': 'dispatchers.ContentKeywordRouter',
             'keyword_mappings': {
-                'm4h': 'BT',
-                'mrs': 'LOVE'
+                'app1': 'KEYWORD1',
+                'app2': 'KEYWORD2'
                 }
             }
         self.dispatcher = DummyDispatcher(self.config)
@@ -583,37 +583,40 @@ class TestContentKeywordRouter(TestCase, MessageMakerMixIn):
         self.router.r_server.teardown()
     
     def test_inbound_message_routing(self):
-        msg = self.mkmsg_in(content='BT rest of a msg', transport_name='transport1')
+        msg = self.mkmsg_in(content='KEYWORD1 rest of a msg', transport_name='transport1')
         self.router.dispatch_inbound_message(msg)
         publishers = self.dispatcher.exposed_publisher
-        self.assertEqual(publishers['m4h'].msgs, [msg])
+        self.assertEqual(publishers['app1'].msgs, [msg])
+    
+    def test_inbound_message_routing_not_casesensitive(self):
+        msg = self.mkmsg_in(content='keyword1 rest of a msg', transport_name='transport1')
+        self.router.dispatch_inbound_message(msg)
+        publishers = self.dispatcher.exposed_publisher
+        self.assertEqual(publishers['app1'].msgs, [msg])
     
     def test_inbound_event_routing_ok(self):
-        msg = self.mkmsg_ack(content='LOVE is in the air', transport_name='transport1')
-        self.router.r_server.set(msg['user_message_id'],'mrs')
-        
-        self.router.dispatch_inbound_event(msg)
-        
+        msg = self.mkmsg_ack(content='KEYWORD2 is in the air', transport_name='transport1')
+        self.router.r_server.set(msg['user_message_id'],'app2')
+        self.router.dispatch_inbound_event(msg)    
         publishers = self.dispatcher.exposed_publisher
-        self.assertEqual(publishers['mrs'].msgs, [msg])
+        self.assertEqual(publishers['app2'].msgs, [msg])
     
     def test_inbound_event_routing_failing_publisher_not_defined(self):
-        msg = self.mkmsg_ack(content='HATE is in the air', transport_name='transport1')
+        msg = self.mkmsg_ack(content='UNDEFINEDKEYWORD is in the air', transport_name='transport1')
         self.router.dispatch_inbound_event(msg)
         publishers = self.dispatcher.exposed_publisher
-        self.assertEqual(publishers['mrs'].msgs, [])
-        self.assertEqual(publishers['m4h'].msgs, [])
+        self.assertEqual(publishers['app2'].msgs, [])
+        self.assertEqual(publishers['app1'].msgs, [])
    
     def test_inbound_event_routing_failing_no_routing_back_in_redis(self):
-        msg = self.mkmsg_ack(content='LOVE is in the air', transport_name='transport1')
+        msg = self.mkmsg_ack(content='KEYWORD2 is in the air', transport_name='transport1')
         self.router.dispatch_inbound_event(msg)
         publishers = self.dispatcher.exposed_publisher
-        self.assertEqual(publishers['mrs'].msgs, [])
-        self.assertEqual(publishers['m4h'].msgs, [])
+        self.assertEqual(publishers['app2'].msgs, [])
+        self.assertEqual(publishers['app1'].msgs, [])
     
-        
     def test_outbound_message_routing(self):
-        msg = self.mkmsg_out(content="BT rest of msg", transport_name='transport1')
+        msg = self.mkmsg_out(content="KEYWORD1 rest of msg", transport_name='transport1')
         self.router.dispatch_outbound_message(msg)
         publishers = self.dispatcher.transport_publisher
         self.assertEqual(publishers['transport1'].msgs, [msg])
