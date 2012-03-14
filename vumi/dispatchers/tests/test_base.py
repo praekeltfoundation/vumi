@@ -598,13 +598,17 @@ class TestContentKeywordRouter(DispatcherTestCase):
                 'app1': 'KEYWORD1',
                 'app2': 'KEYWORD2'
                 },
-            'expire_routing_memory': '0'
+            'expire_routing_memory': '3'
             }
         self.fake_redis = FakeRedis()
         self.dispatcher = yield self.get_dispatcher(self.config)
         self.router = self.dispatcher._router
         self.router.r_server = self.fake_redis
         self.router.setup_routing()
+        
+    def tearDown(self):
+        self.fake_redis.teardown()
+        super(TestContentKeywordRouter, self).tearDown()
     
     @inlineCallbacks
     def test01_inbound_message_routing(self):
