@@ -98,6 +98,20 @@ class DispatcherTestCase(TestCase):
             )
         return TransportUserMessage(**params)
 
+    def mkmsg_ack(self, event_type='ack', user_message_id='1', 
+                  send_message_id='abc', transport_name=None, 
+                  transport_metadata=None):
+        if transport_metadata is None:
+            transport_metadata = {}
+        params = dict(
+            event_type=event_type,
+            user_message_id=user_message_id,
+            sent_message_id=send_message_id,
+            transport_name=transport_name,
+            transport_metadata=transport_metadata,
+            )
+        return TransportEvent(**params)
+
     def get_dispatched_messages(self, transport_name, direction='outbound'):
         return self._amqp.get_messages('vumi', '%s.%s' % (
             transport_name, direction))
@@ -563,60 +577,87 @@ class UserGroupingRouterTestCase(DispatcherTestCase):
         self.assertEqual(app_msg, transport_msg)
 
 
-class TestContentKeywordRouter(TestCase, MessageMakerMixIn):
+class TestContentKeywordRouter(DispatcherTestCase):
 
+    dispatcher_class = BaseDispatchWorker
+    transport_name = 'test_transport'
+
+    @inlineCallbacks
     def setUp(self):
+        yield super(TestContentKeywordRouter, self).setUp()
         self.config = {
-            'transport_names': ['transport1'],
+            'dispatcher_name': 'content_keyword_dispatcher',
+            'router_class': 'vumi.dispatchers.base.ContentKeywordRouter',
+            'transport_names': ['transport1', 'transport2'],
             'exposed_names': ['app1', 'app2'],
-            'router_class': 'dispatchers.ContentKeywordRouter',
             'keyword_mappings': {
                 'app1': 'KEYWORD1',
                 'app2': 'KEYWORD2'
                 }
             }
-        self.dispatcher = DummyDispatcher(self.config)
-        self.router = ContentKeywordRouter(self.dispatcher, self.config)
-        self.router.r_server = FakeRedis()
-        
-    def tearDown(self):
-        self.router.r_server.teardown()
+        self.fake_redis = FakeRedis()
+        self.dispatcher = yield self.get_dispatcher(self.config)
+        self.router = self.dispatcher._router
+        self.router.r_server = self.fake_redis
+        self.router.setup_routing()
     
-    def test_inbound_message_routing(self):
+    def test01_inbound_message_routing(self):
         msg = self.mkmsg_in(content='KEYWORD1 rest of a msg', transport_name='transport1')
+        
         self.router.dispatch_inbound_message(msg)
-        publishers = self.dispatcher.exposed_publisher
-        self.assertEqual(publishers['app1'].msgs, [msg])
-    
-    def test_inbound_message_routing_not_casesensitive(self):
+        
+        app1_inbound_msg = self.get_dispatched_messages('app1', direction = 'inbound')
+        self.assertEqual(app1_inbound_msg, [msg])
+        app2_inbound_msg = self.get_dispatched_messages('app2', direction = 'inbound')
+        self.assertEqual(app2_inbound_msg, [])
+        
+    def test02_inbound_message_routing_not_casesensitive(self):
         msg = self.mkmsg_in(content='keyword1 rest of a msg', transport_name='transport1')
+        
         self.router.dispatch_inbound_message(msg)
-        publishers = self.dispatcher.exposed_publisher
-        self.assertEqual(publishers['app1'].msgs, [msg])
+        
+        app1_inbound_msg = self.get_dispatched_messages('app1', direction = 'inbound')
+        self.assertEqual(app1_inbound_msg, [msg])
     
-    def test_inbound_event_routing_ok(self):
-        msg = self.mkmsg_ack(content='KEYWORD2 is in the air', transport_name='transport1')
+    def test03_inbound_event_routing_ok(self):
+        msg = self.mkmsg_ack(transport_name='transport1')
         self.router.r_server.set(msg['user_message_id'],'app2')
+        
         self.router.dispatch_inbound_event(msg)    
-        publishers = self.dispatcher.exposed_publisher
-        self.assertEqual(publishers['app2'].msgs, [msg])
+        
+        app2_event_msg = self.get_dispatched_messages('app2', direction = 'event')
+        self.assertEqual(app2_event_msg, [msg])
+        app1_event_msg = self.get_dispatched_messages('app1', direction = 'event')
+        self.assertEqual(app1_event_msg, [])
     
-    def test_inbound_event_routing_failing_publisher_not_defined(self):
-        msg = self.mkmsg_ack(content='UNDEFINEDKEYWORD is in the air', transport_name='transport1')
+    def test04_inbound_event_routing_failing_publisher_not_defined(self):
+        msg = self.mkmsg_ack(transport_name='transport1')
+        
         self.router.dispatch_inbound_event(msg)
-        publishers = self.dispatcher.exposed_publisher
-        self.assertEqual(publishers['app2'].msgs, [])
-        self.assertEqual(publishers['app1'].msgs, [])
+        
+        app1_routed_msg = self.get_dispatched_messages('app1', direction = 'inbound')
+        self.assertEqual(app1_routed_msg, [])
+        app2_routed_msg = self.get_dispatched_messages('app2', direction = 'inbound')
+        self.assertEqual(app2_routed_msg, [])
    
-    def test_inbound_event_routing_failing_no_routing_back_in_redis(self):
-        msg = self.mkmsg_ack(content='KEYWORD2 is in the air', transport_name='transport1')
+    def test05_inbound_event_routing_failing_no_routing_back_in_redis(self):
+        msg = self.mkmsg_ack(transport_name='transport1')
+        
         self.router.dispatch_inbound_event(msg)
-        publishers = self.dispatcher.exposed_publisher
-        self.assertEqual(publishers['app2'].msgs, [])
-        self.assertEqual(publishers['app1'].msgs, [])
+        
+        app1_routed_msg = self.get_dispatched_messages('app1', direction = 'inbound')
+        self.assertEqual(app1_routed_msg, [])
+        app2_routed_msg = self.get_dispatched_messages('app2', direction = 'inbound')
+        self.assertEqual(app2_routed_msg, [])
     
-    def test_outbound_message_routing(self):
+    def test06_outbound_message_routing(self):
         msg = self.mkmsg_out(content="KEYWORD1 rest of msg", transport_name='transport1')
+        
         self.router.dispatch_outbound_message(msg)
-        publishers = self.dispatcher.transport_publisher
-        self.assertEqual(publishers['transport1'].msgs, [msg])
+        
+        transport1_routed_msg = self.get_dispatched_messages('transport1', direction = 'outbound')
+        self.assertEqual(transport1_routed_msg, [msg])
+        transport2_routed_msg = self.get_dispatched_messages('transport2', direction = 'outbound')
+        self.assertEqual(transport2_routed_msg, [])
+        
+        
