@@ -314,16 +314,19 @@ class ContentKeywordRouter(SimpleDispatchRouter):
         self.r_config = config.get('redis_config', {})
         self.r_prefix = config['dispatcher_name']
         self.r_server = redis.Redis(**self.r_config)
-        self.mappings = []
+        self.keyword_mappings = []
         for name, keyword in config['keyword_mappings'].items():
-            self.mappings.append((name, keyword)) 
+            self.keyword_mappings.append((name, keyword))
+        self.transport_mappings = []
+        for name, transport in config['transport_mappings'].items():
+            self.transport_mappings.append((name, transport))
         super(ContentKeywordRouter, self).__init__(dispatcher, config)
     
     def setup_routing(self):
         pass
     
-    def get_keyword_key(self, keyword):
-        return self.r_key('keyword', keyword)
+    def get_message_key(self, message):
+        return self.r_key('message', message)
     
     def r_key(self, *parts):
         return ':'.join([self.r_prefix] + map(str, parts))
@@ -331,14 +334,15 @@ class ContentKeywordRouter(SimpleDispatchRouter):
     def dispatch_inbound_message(self, msg):
         debug('Inbound message')
         keyword = msg['content'].split()[0]
-        for application_name, application_keyword in self.mappings:
+        for application_name, application_keyword in self.keyword_mappings:
             if (keyword.lower() == application_keyword.lower()):
                 debug('Message is routed to %s' % (application_name,))
                 self.dispatcher.exposed_publisher[application_name].publish_message(msg)
     
     def dispatch_inbound_event(self, msg):
         debug("Inbound event")
-        name = self.r_server.get(msg['user_message_id'])
+        message_key = self.get_message_key(msg['user_message_id'])
+        name = self.r_server.get(message_key)
         if (not name):
             error("Error not route back tuple stored in Redis for %s" % (msg['user_message_id'],))
         try:
@@ -347,10 +351,17 @@ class ContentKeywordRouter(SimpleDispatchRouter):
         except:
             error("Error no publishing route for %s" % (name,))
         
+    @inlineCallbacks
     def dispatch_outbound_message(self, msg):
         debug("Outbound message")
-        if not msg.payload['transport_name'] in self.config['transport_names']:
-            error("Error transport is not registered %s" % (msg['transport_name'],))
+        if msg['from_addr'] in self.config['transport_mappings'].items():
+            error("Error transport is not registered %s" % (msg['from_addr'],))
             return
-        self.dispatcher.transport_publisher[msg.payload['transport_name']].publish_message(msg)
-        self.r_server.set(msg['message_id'], msg['transport_name'])
+        for (name, transport_name) in self.config['transport_mappings'].items():
+            if (name == msg['from_addr']):
+                self.dispatcher.transport_publisher[transport_name].publish_message(msg)
+                message_key = self.get_message_key(msg['message_id'])
+                self.r_server.set(message_key, msg['transport_name'])
+                yield self.r_server.expire(message_key, int(self.config['expire_routing_memory']))
+            
+            
