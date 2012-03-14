@@ -612,9 +612,9 @@ class TestContentKeywordRouter(DispatcherTestCase):
     
     @inlineCallbacks
     def test01_inbound_message_routing(self):
-        msg = self.mkmsg_in(content='KEYWORD1 rest of a msg')
+        msg = self.mkmsg_in(content = 'KEYWORD1 rest of a msg')
         
-        yield self.dispatch(msg, transport_name='transport1', direction = 'inbound')
+        yield self.dispatch(msg, transport_name = 'transport1', direction = 'inbound')
         
         app1_inbound_msg = self.get_dispatched_messages('app1', direction = 'inbound')
         self.assertEqual(app1_inbound_msg, [msg])
@@ -623,49 +623,55 @@ class TestContentKeywordRouter(DispatcherTestCase):
         
     @inlineCallbacks
     def test02_inbound_message_routing_not_casesensitive(self):
-        msg = self.mkmsg_in(content='keyword1 rest of a msg')
+        msg = self.mkmsg_in(content = 'keyword1 rest of a msg')
         
         yield self.dispatch(msg, transport_name='transport1', direction = 'inbound')
         
         app1_inbound_msg = self.get_dispatched_messages('app1', direction = 'inbound')
         self.assertEqual(app1_inbound_msg, [msg])
     
+    @inlineCallbacks
     def test03_inbound_event_routing_ok(self):
-        msg = self.mkmsg_ack(user_message_id = '1', transport_name='transport1')
+        msg = self.mkmsg_ack(user_message_id = '1', 
+                             transport_name = 'transport1')
         self.router.r_server.set('content_keyword_dispatcher:message:1','app2')
         
-        self.router.dispatch_inbound_event(msg)    
+        yield self.dispatch(msg, transport_name = 'transport1', direction = 'event')    
         
         app2_event_msg = self.get_dispatched_messages('app2', direction = 'event')
         self.assertEqual(app2_event_msg, [msg])
         app1_event_msg = self.get_dispatched_messages('app1', direction = 'event')
         self.assertEqual(app1_event_msg, [])
     
+    @inlineCallbacks
     def test04_inbound_event_routing_failing_publisher_not_defined(self):
-        msg = self.mkmsg_ack(transport_name='transport1')
+        msg = self.mkmsg_ack(transport_name = 'transport1')
         
-        self.router.dispatch_inbound_event(msg)
+        yield self.dispatch(msg, transport_name = 'transport1', direction = 'event')
         
-        app1_routed_msg = self.get_dispatched_messages('app1', direction = 'inbound')
+        app1_routed_msg = self.get_dispatched_messages('app1', direction = 'event')
         self.assertEqual(app1_routed_msg, [])
-        app2_routed_msg = self.get_dispatched_messages('app2', direction = 'inbound')
+        app2_routed_msg = self.get_dispatched_messages('app2', direction = 'event')
         self.assertEqual(app2_routed_msg, [])
-   
+    
+    @inlineCallbacks
     def test05_inbound_event_routing_failing_no_routing_back_in_redis(self):
-        msg = self.mkmsg_ack(transport_name='transport1')
+        msg = self.mkmsg_ack(transport_name = 'transport1')
         
-        self.router.dispatch_inbound_event(msg)
+        yield self.dispatch(msg, transport_name = 'transport1', direction = 'event')
         
-        app1_routed_msg = self.get_dispatched_messages('app1', direction = 'inbound')
+        app1_routed_msg = self.get_dispatched_messages('app1', direction = 'event')
         self.assertEqual(app1_routed_msg, [])
-        app2_routed_msg = self.get_dispatched_messages('app2', direction = 'inbound')
+        app2_routed_msg = self.get_dispatched_messages('app2', direction = 'event')
         self.assertEqual(app2_routed_msg, [])
     
     @inlineCallbacks
     def test06_outbound_message_routing(self):
-        msg = self.mkmsg_out(content="KEYWORD1 rest of msg", from_addr ='shortcode1', transport_name='app2')
+        msg = self.mkmsg_out(content = "KEYWORD1 rest of msg", 
+                             from_addr = 'shortcode1', 
+                             transport_name = 'app2')
         
-        yield self.dispatch(msg, transport_name='app2', direction = 'outbound')
+        yield self.dispatch(msg, transport_name = 'app2', direction = 'outbound')
         
         transport1_routed_msg = self.get_dispatched_messages('transport1', direction = 'outbound')
         self.assertEqual(transport1_routed_msg, [msg])
