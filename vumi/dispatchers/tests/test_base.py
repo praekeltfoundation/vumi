@@ -589,11 +589,16 @@ class TestContentKeywordRouter(DispatcherTestCase):
             'dispatcher_name': 'content_keyword_dispatcher',
             'router_class': 'vumi.dispatchers.base.ContentKeywordRouter',
             'transport_names': ['transport1', 'transport2'],
+            'transport_mappings': {
+                'shortcode1' : 'transport1',
+                'shortcode2' : 'transport2'
+                },
             'exposed_names': ['app1', 'app2'],
             'keyword_mappings': {
                 'app1': 'KEYWORD1',
                 'app2': 'KEYWORD2'
-                }
+                },
+            'expire_routing_memory': '0'
             }
         self.fake_redis = FakeRedis()
         self.dispatcher = yield self.get_dispatcher(self.config)
@@ -601,27 +606,29 @@ class TestContentKeywordRouter(DispatcherTestCase):
         self.router.r_server = self.fake_redis
         self.router.setup_routing()
     
+    @inlineCallbacks
     def test01_inbound_message_routing(self):
-        msg = self.mkmsg_in(content='KEYWORD1 rest of a msg', transport_name='transport1')
+        msg = self.mkmsg_in(content='KEYWORD1 rest of a msg')
         
-        self.router.dispatch_inbound_message(msg)
+        yield self.dispatch(msg, transport_name='transport1', direction = 'inbound')
         
         app1_inbound_msg = self.get_dispatched_messages('app1', direction = 'inbound')
         self.assertEqual(app1_inbound_msg, [msg])
         app2_inbound_msg = self.get_dispatched_messages('app2', direction = 'inbound')
         self.assertEqual(app2_inbound_msg, [])
         
+    @inlineCallbacks
     def test02_inbound_message_routing_not_casesensitive(self):
-        msg = self.mkmsg_in(content='keyword1 rest of a msg', transport_name='transport1')
+        msg = self.mkmsg_in(content='keyword1 rest of a msg')
         
-        self.router.dispatch_inbound_message(msg)
+        yield self.dispatch(msg, transport_name='transport1', direction = 'inbound')
         
         app1_inbound_msg = self.get_dispatched_messages('app1', direction = 'inbound')
         self.assertEqual(app1_inbound_msg, [msg])
     
     def test03_inbound_event_routing_ok(self):
-        msg = self.mkmsg_ack(transport_name='transport1')
-        self.router.r_server.set(msg['user_message_id'],'app2')
+        msg = self.mkmsg_ack(user_message_id = '1', transport_name='transport1')
+        self.router.r_server.set('content_keyword_dispatcher:message:1','app2')
         
         self.router.dispatch_inbound_event(msg)    
         
@@ -650,14 +657,16 @@ class TestContentKeywordRouter(DispatcherTestCase):
         app2_routed_msg = self.get_dispatched_messages('app2', direction = 'inbound')
         self.assertEqual(app2_routed_msg, [])
     
+    @inlineCallbacks
     def test06_outbound_message_routing(self):
-        msg = self.mkmsg_out(content="KEYWORD1 rest of msg", transport_name='transport1')
+        msg = self.mkmsg_out(content="KEYWORD1 rest of msg", from_addr ='shortcode1', transport_name='app2')
         
-        self.router.dispatch_outbound_message(msg)
+        yield self.dispatch(msg, transport_name='app2', direction = 'outbound')
         
         transport1_routed_msg = self.get_dispatched_messages('transport1', direction = 'outbound')
         self.assertEqual(transport1_routed_msg, [msg])
         transport2_routed_msg = self.get_dispatched_messages('transport2', direction = 'outbound')
         self.assertEqual(transport2_routed_msg, [])
         
-        
+        app_to_route = self.fake_redis.get('content_keyword_dispatcher:message:1')
+        self.assertEqual(app_to_route, 'app2')
