@@ -594,10 +594,15 @@ class TestContentKeywordRouter(DispatcherTestCase):
                 'shortcode1': 'transport1',
                 'shortcode2': 'transport2'
                 },
-            'exposed_names': ['app1', 'app2'],
+            'exposed_names': ['app1', 'app2', 'app3'],
             'keyword_mappings': {
-                'app1': 'KEYWORD1',
-                'app2': 'KEYWORD2'
+                'app1': {
+                    'keyword': 'KEYWORD1',
+                    'to_addr': '8181',
+                    'prefix': '+256'
+                    },
+                'app2': 'KEYWORD2',
+                'app3': 'KEYWORD1'
                 },
             'expire_routing_memory': '3'
             }
@@ -613,7 +618,9 @@ class TestContentKeywordRouter(DispatcherTestCase):
 
     @inlineCallbacks
     def test_inbound_message_routing(self):
-        msg = self.mkmsg_in(content='KEYWORD1 rest of a msg')
+        msg = self.mkmsg_in(content='KEYWORD1 rest of a msg',
+                            to_addr='8181',
+                            from_addr='+256788601462')
 
         yield self.dispatch(msg,
                             transport_name='transport1',
@@ -625,6 +632,9 @@ class TestContentKeywordRouter(DispatcherTestCase):
         app2_inbound_msg = self.get_dispatched_messages('app2',
                                                         direction='inbound')
         self.assertEqual(app2_inbound_msg, [])
+        app3_inbound_msg = self.get_dispatched_messages('app3',
+                                                        direction='inbound')
+        self.assertEqual(app3_inbound_msg, [msg])
 
     @inlineCallbacks
     def test_inbound_message_routing_empty_message_content(self):
@@ -643,7 +653,9 @@ class TestContentKeywordRouter(DispatcherTestCase):
 
     @inlineCallbacks
     def test_inbound_message_routing_not_casesensitive(self):
-        msg = self.mkmsg_in(content='keyword1 rest of a msg')
+        msg = self.mkmsg_in(content='keyword1 rest of a msg',
+                            to_addr='8181',
+                            from_addr='+256788601462')
 
         yield self.dispatch(msg,
                             transport_name='transport1',
