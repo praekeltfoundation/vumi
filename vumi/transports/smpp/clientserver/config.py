@@ -18,8 +18,20 @@ class ClientConfig(dict):
             'registered_delivery': 0,
             }
 
+    # SMPP v3.4 Issue 1.2 pg. 167 is wrong on id length for delivery reports
+    delivery_report_regex = 'id:(?P<id>\S{,65})' \
+                        + ' +sub:(?P<sub>...)' \
+                        + ' +dlvrd:(?P<dlvrd>...)' \
+                        + ' +submit date:(?P<submit_date>\d*)' \
+                        + ' +done date:(?P<done_date>\d*)' \
+                        + ' +stat:(?P<stat>[A-Z]{7})' \
+                        + ' +err:(?P<err>...)' \
+                        + ' +[Tt]ext:(?P<text>.{,20})' \
+                        + '.*'
+
     client_defaults = {
             'smpp_bind_timeout': 30,
+            'delivery_report_regex': delivery_report_regex,
             }
 
     def __init__(self, **kwargs):

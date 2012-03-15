@@ -443,7 +443,7 @@ class EsmeToSmscTestCase(TransportTestCase):
             "port": 0,
             "redis": {},
             "transport_name": self.transport_name,
-            "transport_type": "smpp",
+            "transport_type": "smpp"
         }
         self.service = MockSmppService(None, config=self.config)
         self.service.set_test_hook(self.server_test_hook)
@@ -453,6 +453,7 @@ class EsmeToSmscTestCase(TransportTestCase):
         self.transport = yield self.get_transport(self.config, start=False)
         self.transport.r_server = FakeRedis()
         self.expected_on_client = None
+        self.expected_delivery_status = 'delivered'
 
     @inlineCallbacks
     def startTransport(self):
@@ -784,7 +785,7 @@ class EsmeToSmscTestCase(TransportTestCase):
         self.assertEqual(delv['event_type'], 'delivery_report')
         self.assertEqual(delv['transport_name'], self.transport_name)
         self.assertEqual(delv['user_message_id'], sent_message_id)
-        self.assertEqual(delv['delivery_status'], 'delivered')
+        self.assertEqual(delv['delivery_status'], self.expected_delivery_status)
 
         # Finally the Server delivers a SMS to the Client
 
@@ -865,7 +866,7 @@ class EsmeToSmscTestCase(TransportTestCase):
         self.assertEqual(delv['event_type'], 'delivery_report')
         self.assertEqual(delv['transport_name'], self.transport_name)
         self.assertEqual(delv['user_message_id'], sent_message_id)
-        self.assertEqual(delv['delivery_status'], 'delivered')
+        self.assertEqual(delv['delivery_status'], self.expected_delivery_status)
 
         # Finally the Server delivers a SMS to the Client
 
@@ -904,3 +905,49 @@ class EsmeToSmscTestCase(TransportTestCase):
 
         dispatched_failures = self.get_dispatched_failures()
         self.assertEqual(dispatched_failures, [])
+
+
+class EsmeToSmscTestCaseDeliveryYo(EsmeToSmscTestCase):
+    # This tests a slightly non-standard delivery report format for Yo!
+    # the following delivery_report_regex is required as a config option
+    # "id:(?P<id>\S{,65}) +sub:(?P<sub>.{1,3}) +dlvrd:(?P<dlvrd>.{1,3})"
+    # " +submit date:(?P<submit_date>\d*) +done date:(?P<done_date>\d*)"
+    # " +stat:(?P<stat>[0-9,A-Z]{1,7}) +err:(?P<err>.{1,3})"
+    #" +[Tt]ext:(?P<text>.{,20}).*
+
+    @inlineCallbacks
+    def setUp(self):
+        yield super(EsmeToSmscTestCase, self).setUp()
+        delivery_report_regex = "id:(?P<id>\S{,65})" \
+            " +sub:(?P<sub>.{1,3})" \
+            " +dlvrd:(?P<dlvrd>.{1,3})" \
+            " +submit date:(?P<submit_date>\d*)" \
+            " +done date:(?P<done_date>\d*)" \
+            " +stat:(?P<stat>[0-9,A-Z]{1,7})" \
+            " +err:(?P<err>.{1,3})" \
+            " +[Tt]ext:(?P<text>.{,20}).*" \
+
+        self.config = {
+            "system_id": "VumiTestSMSC",
+            "password": "password",
+            "host": "localhost",
+            "port": 0,
+            "redis": {},
+            "transport_name": self.transport_name,
+            "transport_type": "smpp",
+            "delivery_report_regex": delivery_report_regex
+        }
+        self.service = MockSmppService(None, config=self.config)
+        self.service.set_test_hook(self.server_test_hook)
+        delivery_report_string = 'id:%' \
+                's sub:1 dlvrd:1 submit date:%' \
+                's done date:%' \
+                's stat:0 err:0 text:If a general electio'
+        self.service.set_delivery_report_string(delivery_report_string)
+        self.expected_on_server = None
+        yield self.service.startWorker()
+        self.config['port'] = self.service.listening.getHost().port
+        self.transport = yield self.get_transport(self.config, start=False)
+        self.transport.r_server = FakeRedis()
+        self.expected_on_client = None
+        self.expected_delivery_status = 'pending'  # stat:0 treated as pending

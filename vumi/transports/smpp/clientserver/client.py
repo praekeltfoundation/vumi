@@ -541,16 +541,9 @@ class EsmeTransceiver(Protocol):
                     **self.defaults)
             self.sendPDU(pdu_resp)
             pdu_params = pdu['body']['mandatory_parameters']
+            delivery_report_regex = self.config['delivery_report_regex']
             delivery_report = re.search(
-                    # SMPP v3.4 Issue 1.2 pg. 167 is wrong on id length
-                      'id:(?P<id>\S{,65}) +sub:(?P<sub>...)'
-                    + ' +dlvrd:(?P<dlvrd>...)'
-                    + ' +submit date:(?P<submit_date>\d*)'
-                    + ' +done date:(?P<done_date>\d*)'
-                    + ' +stat:(?P<stat>[A-Z]{7})'
-                    + ' +err:(?P<err>...)'
-                    + ' +[Tt]ext:(?P<text>.{,20})'
-                    + '.*',
+                    delivery_report_regex,
                     pdu_params['short_message'] or ''
                     )
             if delivery_report:

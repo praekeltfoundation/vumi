@@ -14,9 +14,15 @@ from smpp.pdu_inspector import binascii, unpack_pdu
 
 class SmscServer(Protocol):
 
-    def __init__(self, test_hook=None):
+    def __init__(self, test_hook=None, delivery_report_string=None):
         log.msg('__init__', 'SmscServer')
         self.test_hook = test_hook
+        self.delivery_report_string = delivery_report_string
+        if self.delivery_report_string is None:
+            self.delivery_report_string = 'id:%' \
+                    's sub:001 dlvrd:001 submit date:%' \
+                    's done date:%' \
+                    's stat:DELIVRD err:000 text:'
         self.datastream = ''
 
     def try_test_hook(self, **kwargs):
@@ -77,8 +83,7 @@ class SmscServer(Protocol):
 
     def delivery_report(self, message_id):
         sequence_number = 1
-        short_message = ('id:%s sub:001 dlvrd:001 submit date:%s'
-                         ' done date:%s stat:DELIVRD err:000 text:' % (
+        short_message = (self.delivery_report_string % (
                          message_id, datetime.now().strftime("%y%m%d%H%M%S"),
                          datetime.now().strftime("%y%m%d%H%M%S")))
         pdu = DeliverSM(sequence_number, short_message=short_message)
@@ -129,9 +134,10 @@ class SmscServer(Protocol):
 
 class SmscServerFactory(ServerFactory):
 
-    def __init__(self, test_hook=None):
+    def __init__(self, test_hook=None, delivery_report_string=None):
         self.test_hook = test_hook
+        self.delivery_report_string = delivery_report_string
 
     def buildProtocol(self, addr):
-        self.smsc = SmscServer(self.test_hook)
+        self.smsc = SmscServer(self.test_hook, self.delivery_report_string)
         return self.smsc
