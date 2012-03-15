@@ -304,10 +304,23 @@ class ContentKeywordRouter(SimpleDispatchRouter):
 
     :type keyword_mappings: dict
     :param keyword_mappings:
-        Mapping from application transport names to keyword.
+        Mapping from application's transport names to keyword.
         If a message's content first word is matching a given keyword,
         the message is send to the application listenning on the given
          transport name.
+
+    :type transport_mappings: dict
+    :param transport_mappings:
+        Mapping from from_addr to transport's transport name.
+        If a message's from_addr is matching a given from_addr,
+        the message is send to the given transport.
+
+    :type expire_routing_memory: int
+    :param expire_routing_memory:
+        Duration in second of storage of outbound message's id in redis.
+        The stored id is used to route back the Event to
+        the application worker.
+
     """
 
     def __init__(self, dispatcher, config):
