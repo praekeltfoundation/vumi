@@ -349,14 +349,25 @@ class ContentKeywordRouter(SimpleDispatchRouter):
     def publish_exposed_event(self, name, msg):
         self.dispatcher.exposed_event_publisher[name].publish_message(msg)
 
+    def is_msg_matching_routing_rules(self, msg, routing_rules):
+        return (get_first_word(msg['content']).lower() == routing_rules['keyword'].lower()
+                and (
+                    (not 'to_add' in routing_rules)
+                    or msg['to_addr'] == routing_rules['to_addr'])
+                and (
+                    (not 'prefix' in routing_rules)
+                    or msg['from_addr'].startswith(routing_rules['prefix'])))
+
     def dispatch_inbound_message(self, msg):
         log.debug('Inbound message')
         msg_keyword = get_first_word(msg['content'])
         if (msg_keyword == ''):
             log.error('Message has not keyword')
             return
-        for name, keyword in self.keyword_mappings:
-            if (msg_keyword.lower() == keyword.lower()):
+        for name, routing_rules in self.keyword_mappings:
+            if (type(routing_rules) != dict):
+                routing_rules = {'keyword': routing_rules}
+            if self.is_msg_matching_routing_rules(msg, routing_rules):
                 log.debug('Message is routed to %s' % (name,))
                 self.publish_exposed_inbound(name, msg)
 
