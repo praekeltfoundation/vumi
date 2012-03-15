@@ -950,4 +950,4 @@ class EsmeToSmscTestCaseDeliveryYo(EsmeToSmscTestCase):
         self.transport = yield self.get_transport(self.config, start=False)
         self.transport.r_server = FakeRedis()
         self.expected_on_client = None
-        self.expected_delivery_status = 'pending'  # stat:0 treated as pending
+        self.expected_delivery_status = 'delivered'  # stat:0 treated as delivered

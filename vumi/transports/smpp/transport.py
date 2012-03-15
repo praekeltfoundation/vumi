@@ -225,7 +225,8 @@ class SmppTransport(Transport):
 
     def delivery_status(self, state):
         if state in [
-                "DELIVRD"
+                "DELIVRD",
+                "0"  # Currently we will accept this for Yo! TODO: investigate
                 ]:
             return "delivered"
         if state in [
