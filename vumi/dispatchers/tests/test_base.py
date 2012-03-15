@@ -627,6 +627,21 @@ class TestContentKeywordRouter(DispatcherTestCase):
         self.assertEqual(app2_inbound_msg, [])
 
     @inlineCallbacks
+    def test_inbound_message_routing_empty_message_content(self):
+        msg = self.mkmsg_in(content=None)
+
+        yield self.dispatch(msg,
+                            transport_name='transport1',
+                            direction='inbound')
+
+        app1_inbound_msg = self.get_dispatched_messages('app1',
+                                                        direction='inbound')
+        self.assertEqual(app1_inbound_msg, [])
+        app2_inbound_msg = self.get_dispatched_messages('app2',
+                                                        direction='inbound')
+        self.assertEqual(app2_inbound_msg, [])
+
+    @inlineCallbacks
     def test_inbound_message_routing_not_casesensitive(self):
         msg = self.mkmsg_in(content='keyword1 rest of a msg')
 

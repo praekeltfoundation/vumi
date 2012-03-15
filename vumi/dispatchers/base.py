@@ -11,7 +11,7 @@ from twisted.python import log
 from vumi.service import Worker
 from vumi.errors import ConfigError
 from vumi.message import TransportUserMessage, TransportEvent
-from vumi.utils import load_class_by_string
+from vumi.utils import load_class_by_string, get_first_word
 from vumi import log
 
 
@@ -338,7 +338,10 @@ class ContentKeywordRouter(SimpleDispatchRouter):
 
     def dispatch_inbound_message(self, msg):
         log.debug('Inbound message')
-        msg_keyword = msg['content'].split()[0]
+        msg_keyword = get_first_word(msg['content'])
+        if (msg_keyword == ''):
+            log.error('Message has not keyword')
+            return
         for name, keyword in self.keyword_mappings:
             if (msg_keyword.lower() == keyword.lower()):
                 log.debug('Message is routed to %s' % (name,))
