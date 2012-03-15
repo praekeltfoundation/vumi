@@ -12,7 +12,7 @@ from vumi.service import Worker
 from vumi.errors import ConfigError
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.utils import load_class_by_string
-from vumi.log import (debug, error)
+from vumi import log
 
 
 class BaseDispatchWorker(Worker):
@@ -299,69 +299,75 @@ class UserGroupingRouter(SimpleDispatchRouter):
 
 
 class ContentKeywordRouter(SimpleDispatchRouter):
-    """Router that dispatches based on msg content first word also named as the keyw
-    ord in the sms context.
-    
+    """Router that dispatches based on msg content first word also named as the
+     keyword in the sms context.
+
     :type keyword_mappings: dict
     :param keyword_mappings:
         Mapping from application transport names to keyword.
         If a message's content first word is matching a given keyword,
-        the message is send to the application listenning on the given transport name.
-    
+        the message is send to the application listenning on the given
+         transport name.
     """
-    
+
     def __init__(self, dispatcher, config):
         self.r_config = config.get('redis_config', {})
         self.r_prefix = config['dispatcher_name']
         self.r_server = redis.Redis(**self.r_config)
-        self.keyword_mappings = []
-        for name, keyword in config['keyword_mappings'].items():
-            self.keyword_mappings.append((name, keyword))
-        self.transport_mappings = []
-        for name, transport in config['transport_mappings'].items():
-            self.transport_mappings.append((name, transport))
+        self.keyword_mappings = config['keyword_mappings'].items()
+        self.transport_mappings = config['transport_mappings'].items()
         super(ContentKeywordRouter, self).__init__(dispatcher, config)
-    
+
     def setup_routing(self):
         pass
-    
+
     def get_message_key(self, message):
         return self.r_key('message', message)
-    
+
     def r_key(self, *parts):
         return ':'.join([self.r_prefix] + map(str, parts))
-            
+
+    def publish_transport(self, name, msg):
+        self.dispatcher.transport_publisher[name].publish_message(msg)
+
+    def publish_exposed_inbound(self, name, msg):
+        self.dispatcher.exposed_publisher[name].publish_message(msg)
+
+    def publish_exposed_event(self, name, msg):
+        self.dispatcher.exposed_event_publisher[name].publish_message(msg)
+
     def dispatch_inbound_message(self, msg):
-        debug('Inbound message')
-        keyword = msg['content'].split()[0]
-        for application_name, application_keyword in self.keyword_mappings:
-            if (keyword.lower() == application_keyword.lower()):
-                debug('Message is routed to %s' % (application_name,))
-                self.dispatcher.exposed_publisher[application_name].publish_message(msg)
-    
+        log.debug('Inbound message')
+        msg_keyword = msg['content'].split()[0]
+        for name, keyword in self.keyword_mappings:
+            if (msg_keyword.lower() == keyword.lower()):
+                log.debug('Message is routed to %s' % (name,))
+                self.publish_exposed_inbound(name, msg)
+
     def dispatch_inbound_event(self, msg):
-        debug("Inbound event")
+        log.debug("Inbound event")
         message_key = self.get_message_key(msg['user_message_id'])
         name = self.r_server.get(message_key)
         if (not name):
-            error("Error not route back tuple stored in Redis for %s" % (msg['user_message_id'],))
+            log.error("Not route back tuple stored in Redis for %s"
+                  % (msg['user_message_id'],))
         try:
-            debug('Event is routed to %s' %(name,))
-            self.dispatcher.exposed_event_publisher[name].publish_message(msg)
+            log.debug('Event is routed to %s' % (name,))
+            self.publish_exposed_event(name, msg)
         except:
-            error("Error no publishing route for %s" % (name,))
-        
+            log.error("No publishing route for %s" % (name,))
+
     @inlineCallbacks
     def dispatch_outbound_message(self, msg):
-        debug("Outbound message")
+        log.debug("Outbound message")
         if msg['from_addr'] in self.config['transport_mappings'].items():
-            error("Error transport is not registered %s" % (msg['from_addr'],))
+            log.error("Transport is not registered %s" % (msg['from_addr'],))
             return
-        for (name, transport_name) in self.config['transport_mappings'].items():
+        for (name, transport) in self.config['transport_mappings'].items():
             if (name == msg['from_addr']):
-                self.dispatcher.transport_publisher[transport_name].publish_message(msg)
+                self.publish_transport(transport, msg)
                 message_key = self.get_message_key(msg['message_id'])
                 self.r_server.set(message_key, msg['transport_name'])
-                yield self.r_server.expire(message_key, int(self.config['expire_routing_memory']))
-            
-            
+                yield self.r_server.expire(
+                    message_key,
+                    int(self.config['expire_routing_memory']))
