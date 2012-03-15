@@ -376,8 +376,8 @@ class ContentKeywordRouter(SimpleDispatchRouter):
     @inlineCallbacks
     def dispatch_outbound_message(self, msg):
         log.debug("Outbound message")
-        if msg['from_addr'] in self.config['transport_mappings'].items():
-            log.error("Transport is not registered %s" % (msg['from_addr'],))
+        if not msg['from_addr'] in self.config['transport_mappings']:
+            log.error("No transport registered for %s" % (msg['from_addr'],))
             return
         for (name, transport) in self.config['transport_mappings'].items():
             if (name == msg['from_addr']):
