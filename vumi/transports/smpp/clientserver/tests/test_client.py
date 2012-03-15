@@ -90,7 +90,16 @@ class FakeTransport(object):
 class FakeEsmeTransceiver(EsmeTransceiver):
     def __init__(self):
         self.defaults = {}
-        self.config = {}
+        delivery_report_regex = 'id:(?P<id>\S{,65})' \
+                            + ' +sub:(?P<sub>...)' \
+                            + ' +dlvrd:(?P<dlvrd>...)' \
+                            + ' +submit date:(?P<submit_date>\d*)' \
+                            + ' +done date:(?P<done_date>\d*)' \
+                            + ' +stat:(?P<stat>[A-Z]{7})' \
+                            + ' +err:(?P<err>...)' \
+                            + ' +[Tt]ext:(?P<text>.{,20})' \
+                            + '.*'
+        self.config = {"delivery_report_regex": delivery_report_regex}
         self.smpp_bind_timeout = 10
         self.clock = Clock()
         self.callLater = self.clock.callLater
