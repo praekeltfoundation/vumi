@@ -53,10 +53,11 @@ class UtilsTestCase(TestCase):
         self.assertEqual('UNKNOWN', get_operator_name('27801234567', mapping))
 
     def test_get_first_word(self):
-        self.assertEqual('KEYWORD', get_first_word('KEYWORD rest of the message'))
+        self.assertEqual('KEYWORD',
+                         get_first_word('KEYWORD rest of the message'))
         self.assertEqual('', get_first_word(''))
         self.assertEqual('', get_first_word(None))
-        
+
 
 class FakeHTTP10(Protocol):
     def dataReceived(self, data):
