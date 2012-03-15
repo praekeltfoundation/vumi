@@ -195,14 +195,15 @@ def filter_options_on_prefix(options, prefix, delimiter='-'):
                 for key, value in options.items()
                 if key.startswith(prefix))
 
+
 def get_first_word(content, delimiter=' '):
     """
     splits a string to get the first word
-    
+
     >>>get_first_word('KEYWORD rest of message')
     'KEYWORD'
     >>>
-    
+
     """
     return (content or '').split(delimiter)[0]
 
