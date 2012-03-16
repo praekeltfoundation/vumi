@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 from datetime import datetime, timedelta
+from urlparse import parse_qs
 import redis
 
 from twisted.python import log
@@ -13,6 +14,13 @@ from vumi.utils import normalize_msisdn
 from vumi.transports import Transport
 from vumi.transports.failures import TemporaryFailure, PermanentFailure
 from vumi.transports.opera import utils
+
+
+def get_receipts_xml(content):
+    if content.startswith('<'):
+        return content
+    decoded = parse_qs(content)
+    return decoded['XmlMsg'][0]
 
 
 class OperaHealthResource(Resource):
@@ -30,7 +38,8 @@ class OperaReceiptResource(Resource):
         Resource.__init__(self)
 
     def render_POST(self, request):
-        receipts = utils.parse_receipts_xml(request.content.read())
+        content = get_receipts_xml(request.content.read())
+        receipts = utils.parse_receipts_xml(content)
         for receipt in receipts:
             self.callback(receipt)
 
@@ -45,7 +54,7 @@ class OperaReceiveResource(Resource):
         Resource.__init__(self)
 
     def render_POST(self, request):
-        content = request.content.read()
+        content = get_receipts_xml(request.content.read())
         sms = utils.parse_post_event_xml(content)
         self.callback(
             to_addr=normalize_msisdn(sms['Local'], country_code='27'),
