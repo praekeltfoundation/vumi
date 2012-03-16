@@ -443,7 +443,7 @@ class EsmeToSmscTestCase(TransportTestCase):
             "port": 0,
             "redis": {},
             "transport_name": self.transport_name,
-            "transport_type": "smpp"
+            "transport_type": "smpp",
         }
         self.service = MockSmppService(None, config=self.config)
         self.service.set_test_hook(self.server_test_hook)
@@ -935,7 +935,7 @@ class EsmeToSmscTestCaseDeliveryYo(EsmeToSmscTestCase):
             "redis": {},
             "transport_name": self.transport_name,
             "transport_type": "smpp",
-            "delivery_report_regex": delivery_report_regex
+            "delivery_report_regex": delivery_report_regex,
         }
         self.service = MockSmppService(None, config=self.config)
         self.service.set_test_hook(self.server_test_hook)
