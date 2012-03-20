@@ -52,9 +52,8 @@ class MediafoneTransport(HttpRpcTransport):
             'msg': message['content'],
             }
         log.msg("Sending outbound message: %s" % (message,))
-        response = yield http_request(
-            '%s?%s' % (self._outbound_url, urlencode(params)),
-            method='GET')
+        url = '%s?%s' % (self._outbound_url, urlencode(params))
+        response = yield http_request(url, '', method='GET')
         log.msg("Response: %s" % (response,))
 
     def get_field_values(self, request, *fields):
