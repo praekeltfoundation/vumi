@@ -1,4 +1,4 @@
-# -*- test-case-name: vumi.transports.mediafoneme.tests.test_mediafonemc -*-
+# -*- test-case-name: vumi.transports.mediafonemc.tests.test_mediafonemc -*-
 
 import json
 from urllib import urlencode
@@ -80,7 +80,7 @@ class MediafoneTransport(HttpRpcTransport):
             return
         values['to_addr'] = self._to_addr
         log.msg(('MediafoneTransport sending from %(from)s to %(to_addr)s '
-                 'message "%(content)s"') % values)
+                 'message "%(sms)s"') % values)
         yield self.publish_message(
             message_id=message_id,
             content=values['sms'],
