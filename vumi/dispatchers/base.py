@@ -387,14 +387,15 @@ class ContentKeywordRouter(SimpleDispatchRouter):
     @inlineCallbacks
     def dispatch_outbound_message(self, msg):
         log.debug("Outbound message")
-        if not msg['from_addr'] in self.config['transport_mappings']:
-            log.error("No transport registered for %s" % (msg['from_addr'],))
-            return
+        has_been_forwarded = False
         for (name, transport) in self.config['transport_mappings'].items():
-            if (name == msg['from_addr']):
-                self.publish_transport(transport, msg)
+            if (transport == msg['from_addr']):
+                has_been_forwarded = True
+                self.publish_transport(name, msg)
                 message_key = self.get_message_key(msg['message_id'])
                 self.r_server.set(message_key, msg['transport_name'])
                 yield self.r_server.expire(
                     message_key,
                     int(self.config['expire_routing_memory']))
+        if not has_been_forwarded:
+            log.error("No transport for %s" % (msg['from_addr'],))
