@@ -2,7 +2,8 @@
 
 import json
 from urllib import urlencode
-from twisted.internet.defer import inlineCallbacks
+
+from twisted.internet.defer import inlineCallbacks, DeferredQueue
 
 from vumi.utils import http_request, http_request_full
 from vumi.tests.utils import MockHttpServer
@@ -21,8 +22,8 @@ class TestMediafoneTransport(TransportTestCase):
     def setUp(self):
         super(TestMediafoneTransport, self).setUp()
 
+        self.mediafone_calls = DeferredQueue()
         self.mock_mediafone = MockHttpServer(self.handle_request)
-        self.requests = []
         yield self.mock_mediafone.start()
 
         self.config = {
@@ -43,7 +44,7 @@ class TestMediafoneTransport(TransportTestCase):
         yield super(TestMediafoneTransport, self).tearDown()
 
     def handle_request(self, request):
-        self.requests.put(request)
+        self.mediafone_calls.put(request)
         return ''
 
     def mkurl(self, content, from_addr="2371234567", **kw):
@@ -78,6 +79,19 @@ class TestMediafoneTransport(TransportTestCase):
         self.assertEqual(msg['content'], "hello")
         self.assertEqual(json.loads(response),
                          {'message_id': msg['message_id']})
+
+    @inlineCallbacks
+    def test_outbound(self):
+        yield self.dispatch(self.mkmsg_out(to_addr="2371234567"))
+        req = yield self.mediafone_calls.get()
+        self.assertEqual(req.path, '/')
+        self.assertEqual(req.method, 'GET')
+        self.assertEqual({
+                'username': ['user'],
+                'phone': ['2371234567'],
+                'password': ['pass'],
+                'msg': ['hello world'],
+                }, req.args)
 
     @inlineCallbacks
     def test_handle_non_ascii_input(self):
