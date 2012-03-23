@@ -55,6 +55,7 @@ class KeyValueStore(object):
     A minimal implementation of KeyValueBase
     It is specifically not a subclass of KeyValueBase
     so that the ABC register() method can be used in testing
+    This can be used in testing, but should not be used in production
     """
 
     def __init__(self):
