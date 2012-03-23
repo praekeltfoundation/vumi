@@ -27,6 +27,11 @@ from smpp.pdu_inspector import (MultipartMessage,
 
 
 class KeyValueBase(object):
+    """
+    This is an API sepecification to ensure that any Key Value store adheres
+    to the portion of the redis API used by the SMPP client
+    """
+
     __metaclass__ = abc.ABCMeta
 
     @abc.abstractmethod
