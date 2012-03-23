@@ -351,6 +351,16 @@ class MockSmppTransport(SmppTransport):
         self._block_till_bind.callback(None)
 
 
+def mk_expected_pdu(direction, sequence_number, command_id, **extras):
+    headers = {
+        'command_status': 'ESME_ROK',
+        'sequence_number': sequence_number,
+        'command_id': command_id,
+        }
+    headers.update(extras)
+    return {"direction": direction, "pdu": {"header": headers}}
+
+
 class EsmeToSmscTestCase(TransportTestCase):
 
     transport_name = "esme_testing_transport"
@@ -407,117 +417,27 @@ class EsmeToSmscTestCase(TransportTestCase):
     def test_handshake_submit_and_deliver(self):
 
         # 1111111111111111111111111111111111111111111111111
-        expected_on_server_1 = [
-            {
-                "direction": "inbound",
-                "pdu": {
-                    "header": {
-                        "command_status": "ESME_ROK",
-                        "command_id": "bind_transceiver",
-                        "sequence_number": 1,
-                    },
-                },
-            },
-            {
-                "direction": "outbound",
-                "pdu": {
-                    "header": {
-                        "command_status": "ESME_ROK",
-                        "command_id": "bind_transceiver_resp",
-                        "sequence_number": 1,
-                    },
-                },
-            },
-            {
-                "direction": "inbound",
-                "pdu": {
-                    "header": {
-                        "command_status": "ESME_ROK",
-                        "command_id": "enquire_link",
-                        "sequence_number": 2,
-                    },
-                },
-            },
-            {
-                "direction": "outbound",
-                "pdu": {
-                    "header": {
-                        "command_status": "ESME_ROK",
-                        "command_id": "enquire_link_resp",
-                        "sequence_number": 2,
-                    },
-                },
-            },
+        expected_pdus_1 = [
+            mk_expected_pdu("inbound", 1, "bind_transceiver"),
+            mk_expected_pdu("outbound", 1, "bind_transceiver_resp"),
+            mk_expected_pdu("inbound", 2, "enquire_link"),
+            mk_expected_pdu("outbound", 2, "enquire_link_resp"),
         ]
 
         # 2222222222222222222222222222222222222222222222222
-        expected_on_server_2 = [
-            {
-                "direction": "inbound",
-                "pdu": {
-                    "header": {
-                        "command_status": "ESME_ROK",
-                        "command_id": "submit_sm",
-                        "sequence_number": 3,
-                    },
-                },
-            },
-            {
-                "direction": "outbound",
-                "pdu": {
-                    "header": {
-                        "command_status": "ESME_ROK",
-                        "command_id": "submit_sm_resp",
-                        "sequence_number": 3,
-                    },
-                },
-            },
+        expected_pdus_2 = [
+            mk_expected_pdu("inbound", 3, "submit_sm"),
+            mk_expected_pdu("outbound", 3, "submit_sm_resp"),
             # the delivery report
-            {
-                "direction": "outbound",
-                "pdu": {
-                    "header": {
-                        "command_status": "ESME_ROK",
-                        "command_id": "deliver_sm",
-                        "sequence_number": 1,
-                    },
-                },
-            },
-            {
-                "direction": "inbound",
-                "pdu": {
-                    "header": {
-                        "command_status": "ESME_ROK",
-                        "command_id": "deliver_sm_resp",
-                        "sequence_number": 1,
-                    },
-                },
-            },
+            mk_expected_pdu("outbound", 1, "deliver_sm"),
+            mk_expected_pdu("inbound", 1, "deliver_sm_resp"),
         ]
 
         # 3333333333333333333333333333333333333333333333333
-        expected_on_server_3 = [
+        expected_pdus_3 = [
             # a sms delivered by the smsc
-            {
-                "direction": "outbound",
-                "pdu": {
-                    "header": {
-                        "command_status": "ESME_ROK",
-                        "command_id": "deliver_sm",
-                        "sequence_number": 555,
-                    },
-                },
-            },
-            {
-                "direction": "inbound",
-                "pdu": {
-                    "header": {
-                        "command_status": "ESME_ROK",
-                        "command_id": "deliver_sm_resp",
-                        "sequence_number": 555,
-                    },
-                },
-            },
+            mk_expected_pdu("outbound", 555, "deliver_sm"),
+            mk_expected_pdu("inbound", 555, "deliver_sm_resp"),
         ]
 
         ## Startup
@@ -528,7 +448,7 @@ class EsmeToSmscTestCase(TransportTestCase):
         # and enquire_link pdu's are exchanged as expected
         pdu_queue = self.service.factory.smsc.pdu_queue
 
-        for expected_message in expected_on_server_1:
+        for expected_message in expected_pdus_1:
             actual_message = yield pdu_queue.get()
             self.assert_server_pdu(expected_message, actual_message)
 
@@ -547,7 +467,7 @@ class EsmeToSmscTestCase(TransportTestCase):
                 )
         yield self.dispatch(msg)
 
-        for expected_message in expected_on_server_2:
+        for expected_message in expected_pdus_2:
             actual_message = yield pdu_queue.get()
             self.assert_server_pdu(expected_message, actual_message)
 
@@ -582,7 +502,7 @@ class EsmeToSmscTestCase(TransportTestCase):
                 )
         self.service.factory.smsc.sendPDU(pdu)
 
-        for expected_message in expected_on_server_3:
+        for expected_message in expected_pdus_3:
             actual_message = yield pdu_queue.get()
             self.assert_server_pdu(expected_message, actual_message)
 
