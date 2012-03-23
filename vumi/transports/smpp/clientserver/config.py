@@ -1,4 +1,4 @@
-# -*- test-case-name: vumi.transports.smpp.clientserver.test.test_client -*-
+# -*- test-case-name: vumi.transports.smpp.clientserver.tests.test_client -*-
 
 
 class ClientConfig(dict):

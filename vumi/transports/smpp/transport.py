@@ -84,10 +84,6 @@ class SmppTransport(Transport):
         from address specified by the message sender). E.g. { 'NETWORK1':
         '27761234567'}.
     """
-    test_hook = None
-
-    def set_test_hook(self, test_hook):
-        self.test_hook = test_hook
 
     # We only want to start this after we finish connecting to SMPP.
     start_message_consumer = False
@@ -111,8 +107,7 @@ class SmppTransport(Transport):
         if not hasattr(self, 'esme_client'):
             # start the Smpp transport (if we don't have one)
             self.factory = EsmeTransceiverFactory(self.clientConfig,
-                                             self.r_server,
-                                             self.test_hook)
+                                             self.r_server)
             self.factory.loadDefaults(self.clientConfig)
             self.factory.setConnectCallback(self.esme_connected)
             self.factory.setDisconnectCallback(self.esme_disconnected)

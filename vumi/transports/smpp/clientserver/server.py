@@ -14,9 +14,8 @@ from smpp.pdu_inspector import binascii, unpack_pdu
 
 class SmscServer(Protocol):
 
-    def __init__(self, test_hook=None, delivery_report_string=None):
+    def __init__(self, delivery_report_string=None):
         log.msg('__init__', 'SmscServer')
-        self.test_hook = test_hook
         self.delivery_report_string = delivery_report_string
         if self.delivery_report_string is None:
             self.delivery_report_string = 'id:%' \
@@ -24,10 +23,6 @@ class SmscServer(Protocol):
                     's done date:%' \
                     's stat:DELIVRD err:000 text:'
         self.datastream = ''
-
-    def try_test_hook(self, **kwargs):
-        if self.test_hook:
-            self.test_hook(**kwargs)
 
     def popData(self):
         data = None
@@ -40,7 +35,6 @@ class SmscServer(Protocol):
 
     def handleData(self, data):
         pdu = unpack_pdu(data)
-        self.try_test_hook(direction="inbound", pdu=pdu)
         log.msg('INCOMING <<<<', pdu)
         if pdu['header']['command_id'] == 'bind_transceiver':
             self.handle_bind_transceiver(pdu)
@@ -79,7 +73,7 @@ class SmscServer(Protocol):
             pdu_resp = SubmitSMResp(
                     sequence_number, message_id, command_status)
             self.sendPDU(pdu_resp)
-            reactor.callLater(1, self.delivery_report, message_id)
+            reactor.callLater(0, self.delivery_report, message_id)
 
     def delivery_report(self, message_id):
         sequence_number = 1
@@ -126,18 +120,17 @@ class SmscServer(Protocol):
             data = self.popData()
 
     def sendPDU(self, pdu):
-        self.try_test_hook(direction="outbound", pdu=pdu.get_obj())
         data = pdu.get_bin()
         log.msg('OUTGOING >>>>', unpack_pdu(data))
         self.transport.write(data)
 
 
 class SmscServerFactory(ServerFactory):
+    protocol = SmscServer
 
-    def __init__(self, test_hook=None, delivery_report_string=None):
-        self.test_hook = test_hook
+    def __init__(self, delivery_report_string=None):
         self.delivery_report_string = delivery_report_string
 
     def buildProtocol(self, addr):
-        self.smsc = SmscServer(self.test_hook, self.delivery_report_string)
+        self.smsc = self.protocol(self.delivery_report_string)
         return self.smsc
