@@ -6,7 +6,7 @@ from urllib import urlencode
 from twisted.python import log
 from twisted.internet.defer import inlineCallbacks
 
-from vumi.utils import http_request
+from vumi.utils import http_request_full
 from vumi.transports.httprpc import HttpRpcTransport
 
 
@@ -53,8 +53,8 @@ class MediafoneTransport(HttpRpcTransport):
             }
         log.msg("Sending outbound message: %s" % (message,))
         url = '%s?%s' % (self._outbound_url, urlencode(params))
-        response = yield http_request(url, '', method='GET')
-        log.msg("Response: %s" % (response,))
+        response = yield http_request_full(url, '', method='GET')
+        log.msg("Response: (%s) %s" % (response.code, response.delivered_body))
 
     def get_field_values(self, request, *fields):
         values = {}
