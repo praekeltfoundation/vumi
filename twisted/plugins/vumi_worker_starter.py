@@ -24,7 +24,8 @@ class VumiService(Service):
         vumi_options = {}
         for opt in [i[0] for i in Options.optParameters]:
             vumi_options[opt] = self.options.pop(opt)
-
+            if opt in self.options.set_options:
+                vumi_options[opt] = self.options.set_options.pop(opt)
         worker_creator = WorkerCreator(vumi_options)
 
         # We need an initial worker. This would either be a normal
