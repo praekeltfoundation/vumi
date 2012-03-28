@@ -1,5 +1,0 @@
-smpp/clientserver/client.py
-  - remove test_hook and friends
-  - remove __ on methods
-  - gather callbacks onto a callback object (EsmeCallbacks)
-  - remove loadDefaults
