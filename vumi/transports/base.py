@@ -13,6 +13,7 @@ from vumi.errors import ConfigError
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.service import Worker
 from vumi.transports.failures import FailureMessage
+from vumi.middleware import MiddlewareStack, setup_middlewares_from_config
 
 
 class Transport(Worker):
@@ -54,6 +55,8 @@ class Transport(Worker):
         yield self._setup_event_publisher()
 
         yield self.setup_transport()
+
+        yield self.setup_middleware()
 
         self.message_consumer = None
         if self.start_message_consumer:
@@ -98,6 +101,17 @@ class Transport(Worker):
         Clean-up of setup done in setup_transport should happen here.
         """
         pass
+
+    @inlineCallbacks
+    def setup_middleware(self):
+        """
+        Middleware setup happens here.
+
+        Subclasses should not override this unless they need to do nonstandard
+        middleware setup.
+        """
+        middlewares = yield setup_middlewares_from_config(self, self.config)
+        self._middlewares = MiddlewareStack(middlewares)
 
     @inlineCallbacks
     def _setup_message_publisher(self):
