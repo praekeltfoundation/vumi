@@ -106,11 +106,11 @@ class EsmeTransceiver(Protocol):
     def __init__(self, config, kvs, test_hook=None):
         self.test_hook = test_hook
         self.build_maps()
-        self.defaults = {}
+        self.config = config
+        self.defaults = config.to_dict()
         self.state = 'CLOSED'
         log.msg('STATE: %s' % (self.state))
-        self.config = config
-        self.smpp_bind_timeout = int(self.config.get('smpp_bind_timeout', 30))
+        self.smpp_bind_timeout = self.config.smpp_bind_timeout
         self.datastream = ''
         self.__connect_callback = None
         self.__submit_sm_resp_callback = None
@@ -128,9 +128,9 @@ class EsmeTransceiver(Protocol):
                 }
         self.r_server = kvs
         self.r_prefix = "%s@%s:%s" % (
-                self.config.get('system_id'),
-                self.config.get('host'),
-                self.config.get('port'))
+                self.config.system_id,
+                self.config.host,
+                self.config.port)
         self.sequence_number_prefix = "vumi_smpp_last_sequence_number#%s" % (
                 self.r_prefix)
         log.msg("r_prefix = %s" % self.r_prefix)
@@ -356,9 +356,6 @@ class EsmeTransceiver(Protocol):
             self.handle_enquire_link_resp(pdu)
         log.msg('STATE: %s' % (self.state))
 
-    def loadDefaults(self, defaults):
-        self.defaults = dict(self.defaults, **defaults)
-
     def setConnectCallback(self, connect_callback):
         self.__connect_callback = connect_callback
 
@@ -492,9 +489,7 @@ class EsmeTransceiver(Protocol):
                     **self.defaults)
             self.sendPDU(pdu_resp)
             pdu_params = pdu['body']['mandatory_parameters']
-            delivery_report_regex = self.config['delivery_report_regex']
-            delivery_report = re.search(
-                    delivery_report_regex,
+            delivery_report = self.config.delivery_report_re.search(
                     pdu_params['short_message'] or ''
                     )
             if delivery_report:
@@ -629,18 +624,8 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
         self.__submit_sm_resp_callback = None
         self.__delivery_report_callback = None
         self.__deliver_sm_callback = None
-        self.initialDelay = float(
-            self.config.get('initial_reconnect_delay', 5))
+        self.initialDelay = self.config.initial_reconnect_delay
         self.maxDelay = max(45, self.initialDelay)
-        self.defaults = {
-                'host': '127.0.0.1',
-                'port': 2775,
-                'dest_addr_ton': 0,
-                'dest_addr_npi': 0,
-                }
-
-    def loadDefaults(self, defaults):
-        self.defaults = dict(self.defaults, **defaults)
 
     def setConnectCallback(self, connect_callback):
         self.__connect_callback = connect_callback
@@ -666,7 +651,6 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
     def buildProtocol(self, addr):
         log.msg('Connected')
         self.esme = EsmeTransceiver(self.config, self.kvs, self.test_hook)
-        self.esme.loadDefaults(self.defaults)
         self.esme.setConnectCallback(
                 connect_callback=self.__connect_callback)
         self.esme.setSubmitSMRespCallback(

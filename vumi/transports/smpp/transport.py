@@ -92,38 +92,39 @@ class SmppTransport(Transport):
     # We only want to start this after we finish connecting to SMPP.
     start_message_consumer = False
 
+    def validate_config(self):
+        self.client_config = ClientConfig.from_config(self.config)
+
     def setup_transport(self):
         log.msg("Starting the SmppTransport with %s" % self.config)
-        self.clientConfig = ClientConfig(**self.config)
 
         # Connect to Redis
         if not hasattr(self, 'r_server'):
             # Only set up redis if we don't have a test stub already
             self.r_server = redis.Redis(**self.config.get('redis', {}))
+
         self.r_prefix = "%s@%s:%s" % (
-                self.config.get('system_id'),
-                self.config.get('host'),
-                self.config.get('port')
+                self.client_config.system_id,
+                self.client_config.host,
+                self.client_config.port,
                 )
         self.r_message_prefix = "%s#message_json" % self.r_prefix
         log.msg("Connected to Redis, prefix: %s" % self.r_prefix)
 
         if not hasattr(self, 'esme_client'):
             # start the Smpp transport (if we don't have one)
-            self.factory = EsmeTransceiverFactory(self.clientConfig,
+            self.factory = EsmeTransceiverFactory(self.client_config,
                                              self.r_server,
                                              self.test_hook)
-            self.factory.loadDefaults(self.clientConfig)
             self.factory.setConnectCallback(self.esme_connected)
             self.factory.setDisconnectCallback(self.esme_disconnected)
             self.factory.setSubmitSMRespCallback(self.submit_sm_resp)
             self.factory.setDeliveryReportCallback(self.delivery_report)
             self.factory.setDeliverSMCallback(self.deliver_sm)
             self.factory.setSendFailureCallback(self.send_failure)
-            log.msg(self.factory.defaults)
             reactor.connectTCP(
-                self.factory.defaults['host'],
-                self.factory.defaults['port'],
+                self.client_config.host,
+                self.client_config.port,
                 self.factory)
 
     def esme_connected(self, client):

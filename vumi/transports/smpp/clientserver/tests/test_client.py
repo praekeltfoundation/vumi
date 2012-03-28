@@ -99,7 +99,9 @@ class FakeEsmeTransceiver(EsmeTransceiver):
                             + ' +err:(?P<err>...)' \
                             + ' +[Tt]ext:(?P<text>.{,20})' \
                             + '.*'
-        self.config = {"delivery_report_regex": delivery_report_regex}
+        self.config = ClientConfig(
+            host="127.0.0.1", port="0", system_id="1234", password="password",
+            delivery_report_regex=delivery_report_regex)
         self.smpp_bind_timeout = 10
         self.clock = Clock()
         self.callLater = self.clock.callLater
@@ -191,77 +193,6 @@ class EsmeTransceiverTestCase(unittest.TestCase):
         self.assertEqual(True, esme.transport.connected)
         self.assertEqual(None, esme._lose_conn)
         esme.lc_enquire.stop()
-
-
-class ClientConfigTestCase(unittest.TestCase):
-
-    def test_minimal_instantiation(self):
-        self.clientConfig = ClientConfig(
-                host='localhost',
-                port=2775,
-                system_id='test_system',
-                password='password',
-                )
-
-    def test_instantiation_defaults(self):
-        self.clientConfig1 = ClientConfig(
-                host='localhost',
-                port=2775,
-                system_id='test_system',
-                password='password',
-                )
-        self.clientConfig2 = ClientConfig(
-                host='localhost',
-                port=2775,
-                system_id='test_system',
-                password='password',
-                system_type="",
-                interface_version="34",
-                dest_addr_ton=0,
-                dest_addr_npi=0,
-                registered_delivery=0,
-                )
-        params_to_check = [
-                'system_type',
-                'interface_version',
-                'dest_addr_ton',
-                'dest_addr_npi',
-                'registered_delivery',
-                'some_garbage_param_that_should_not_be_here'
-                ]
-        for a in params_to_check:
-            self.assertEqual(
-                    self.clientConfig1.get(a),
-                    self.clientConfig2.get(a))
-
-    def test_instantiation_extended(self):
-        self.clientConfig = ClientConfig(
-                host='localhost',
-                port=2775,
-                system_id='test_system',
-                password='password',
-                system_type="some_type",
-                interface_version="34",
-                dest_addr_ton=1,
-                dest_addr_npi=1,
-                registered_delivery=1,
-                smpp_bind_timeout=33,
-                some_garbage_param_that_should_not_be_here="foo"
-                )
-        params_to_check = {
-                # smpp
-                'system_type': "some_type",
-                'interface_version': "34",
-                'dest_addr_ton': 1,
-                'dest_addr_npi': 1,
-                'registered_delivery': 1,
-                # client
-                'smpp_bind_timeout': 33,
-                }
-        for k, v in params_to_check.items():
-            self.assertEqual(self.clientConfig.get(k), v)
-        self.assertEqual(self.clientConfig.get(
-            'some_garbage_param_that_should_not_be_here'), None)
 
 
 class ESMETestCase(unittest.TestCase):
