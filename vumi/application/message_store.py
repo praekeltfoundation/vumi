@@ -172,7 +172,10 @@ class MessageStore(object):
         # TODO: this eventually needs to become more generic to support
         #       additional transports
         transport_type = msg['transport_type']
-        if transport_type == 'sms':
+        transport_name = msg['transport_name']
+        if transport_name == 'yo_transport' and transport_type == 'sms':
+            tag = ('ambient', msg['to_addr'])
+        elif transport_type == 'sms':
             tag = ("ambient", "default%s" % (msg['to_addr'][-5:],))
         elif transport_type == 'xmpp':
             tag = ("gtalk", msg['to_addr'])
