@@ -2,7 +2,9 @@
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.trial.unittest import TestCase
 
-from vumi.middleware.base import BaseMiddleware, MiddlewareStack
+from vumi.middleware.base import (BaseMiddleware, MiddlewareStack,
+                                  create_middlewares_from_config,
+                                  setup_middlewares_from_config)
 
 
 class ToyMiddleware(BaseMiddleware):
@@ -66,3 +68,32 @@ class MiddlewareStackTestCase(TestCase):
                 ('mw2', 'inbound', 'dummy_msg.mw3.mw2', 'end_foo'),
                 ('mw1', 'inbound', 'dummy_msg.mw3.mw2.mw1', 'end_foo'),
                 ])
+
+
+class UtilityFunctionsTestCase(TestCase):
+
+    TEST_CONFIG_1 = {
+        "middleware": [
+            {"name": "mw1",
+             "cls": "vumi.middleware.tests.test_base.ToyMiddleware"},
+            {"name": "mw2",
+             "cls": "vumi.middleware.tests.test_base.ToyMiddleware"},
+            ],
+        "mw1": {
+            "param_foo": 1,
+            "param_bar": 2,
+            }
+        }
+
+    def test_create_middleware_from_config(self):
+        worker = object()
+        middlewares = create_middlewares_from_config(worker,
+                                                     self.TEST_CONFIG_1)
+        self.assertEqual([type(mw) for mw in middlewares],
+                         [ToyMiddleware, ToyMiddleware])
+        self.assertEqual(middlewares[0].config,
+                         {"param_foo": 1, "param_bar": 2})
+        self.assertEqual(middlewares[1].config, {})
+
+    def test_setup_middleware_from_config(self):
+        pass
