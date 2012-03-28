@@ -10,6 +10,7 @@ from twisted.python import log
 from vumi.service import Worker
 from vumi.errors import ConfigError
 from vumi.message import TransportUserMessage, TransportEvent
+from vumi.middleware import MiddlewareStack, middlewares_from_config
 
 
 SESSION_NEW = TransportUserMessage.SESSION_NEW
@@ -81,6 +82,8 @@ class ApplicationWorker(Worker):
 
         yield self.setup_application()
 
+        yield self.setup_middleware()
+
         if self.start_message_consumer:
             yield self._setup_transport_consumer()
             yield self._setup_event_consumer()
@@ -128,6 +131,17 @@ class ApplicationWorker(Worker):
         Clean-up of setup done in setup_application should happen here.
         """
         pass
+
+    @inlineCallbacks
+    def setup_middleware(self):
+        """
+        Middleware setup happens here.
+
+        Subclasses should not override this unless they need to do nonstandard
+        middleware setup.
+        """
+        middlewares = yield middlewares_from_config(self.config)
+        self._middlewares = MiddlewareStack(middlewares)
 
     def dispatch_event(self, event):
         """Dispatch to event_type specific handlers."""
