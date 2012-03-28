@@ -2,6 +2,9 @@
 
 from twisted.internet.defer import inlineCallbacks, returnValue
 
+from vumi.utils import load_class_by_string
+from vumi.errors import ConfigError
+
 
 class BaseMiddleware(object):
     """Common middleware base class.
@@ -46,6 +49,25 @@ class MiddlewareStack(object):
 
     def __init__(self, middlewares):
         self.middlewares = middlewares
+
+    @staticmethod
+    def middlewares_from_config(worker, config):
+        """Return a list of middleware objects created from a worker
+           configuration.
+           """
+        middlewares = []
+        for item in config.get("middleware", []):
+            if not "name" in item:
+                raise ConfigError("Middleware items must specify a name.")
+            middleware_name = item["name"]
+            middleware_config = config.get(middleware_name)
+            if not "cls" in item:
+                raise ConfigError("Middleware items must specify a class.")
+            cls_name = item["cls"]
+            cls = load_class_by_string(cls_name)
+            middleware = cls(worker, middleware_config)
+            middlewares.append(middleware)
+        return middlewares
 
     @inlineCallbacks
     def _handle(self, middlewares, handler_name, message, endpoint_name):
