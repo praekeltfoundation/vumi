@@ -6,25 +6,22 @@ from vumi.middleware.base import BaseMiddleware, MiddlewareStack
 
 
 class ToyMiddleware(BaseMiddleware):
-    def setup_middleware(self):
-        self.name = self.config['name']
-
-    def _handle(self, direction, message, endpoint_name):
+    def _handle(self, direction, message, endpoint):
         message = '%s.%s' % (message, self.name)
-        self.worker.processed(self.name, direction, message, endpoint_name)
+        self.worker.processed(self.name, direction, message, endpoint)
         return message
 
-    def handle_inbound(self, message, endpoint_name):
-        return self._handle('inbound', message, endpoint_name)
+    def handle_inbound(self, message, endpoint):
+        return self._handle('inbound', message, endpoint)
 
-    def handle_outbound(self, message, endpoint_name):
-        return self._handle('outbound', message, endpoint_name)
+    def handle_outbound(self, message, endpoint):
+        return self._handle('outbound', message, endpoint)
 
-    def handle_event(self, message, endpoint_name):
-        return self._handle('event', message, endpoint_name)
+    def handle_event(self, message, endpoint):
+        return self._handle('event', message, endpoint)
 
-    def handle_failure(self, message, endpoint_name):
-        return self._handle('failure', message, endpoint_name)
+    def handle_failure(self, message, endpoint):
+        return self._handle('failure', message, endpoint)
 
 
 class MiddlewareStackTestCase(TestCase):
@@ -40,7 +37,7 @@ class MiddlewareStackTestCase(TestCase):
 
     @inlineCallbacks
     def mkmiddleware(self, name):
-        mw = ToyMiddleware(self, {'name': name})
+        mw = ToyMiddleware(name, {}, self)
         yield mw.setup_middleware()
         returnValue(mw)
 
