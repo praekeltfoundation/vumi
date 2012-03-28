@@ -8,10 +8,17 @@ from vumi.middleware.base import (BaseMiddleware, MiddlewareStack,
 
 
 class ToyMiddleware(BaseMiddleware):
+
+    # simple attribute to check that setup_middleware is called
+    _setup_done = False
+
     def _handle(self, direction, message, endpoint):
         message = '%s.%s' % (message, self.name)
         self.worker.processed(self.name, direction, message, endpoint)
         return message
+
+    def setup_middleware(self):
+        self._setup_done = True
 
     def handle_inbound(self, message, endpoint):
         return self._handle('inbound', message, endpoint)
@@ -91,9 +98,20 @@ class UtilityFunctionsTestCase(TestCase):
                                                      self.TEST_CONFIG_1)
         self.assertEqual([type(mw) for mw in middlewares],
                          [ToyMiddleware, ToyMiddleware])
+        self.assertEqual([mw._setup_done for mw in middlewares],
+                         [False, False])
         self.assertEqual(middlewares[0].config,
                          {"param_foo": 1, "param_bar": 2})
         self.assertEqual(middlewares[1].config, {})
 
     def test_setup_middleware_from_config(self):
-        pass
+        worker = object()
+        middlewares = yield setup_middlewares_from_config(worker,
+                                                          self.TEST_CONFIG_1)
+        self.assertEqual([type(mw) for mw in middlewares],
+                         [ToyMiddleware, ToyMiddleware])
+        self.assertEqual([mw._setup_done for mw in middlewares],
+                         [True, True])
+        self.assertEqual(middlewares[0].config,
+                         {"param_foo": 1, "param_bar": 2})
+        self.assertEqual(middlewares[1].config, {})
