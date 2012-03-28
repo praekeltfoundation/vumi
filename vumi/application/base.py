@@ -10,7 +10,7 @@ from twisted.python import log
 from vumi.service import Worker
 from vumi.errors import ConfigError
 from vumi.message import TransportUserMessage, TransportEvent
-from vumi.middleware import MiddlewareStack, middlewares_from_config
+from vumi.middleware import MiddlewareStack, setup_middlewares_from_config
 
 
 SESSION_NEW = TransportUserMessage.SESSION_NEW
@@ -140,7 +140,7 @@ class ApplicationWorker(Worker):
         Subclasses should not override this unless they need to do nonstandard
         middleware setup.
         """
-        middlewares = yield middlewares_from_config(self.config)
+        middlewares = yield setup_middlewares_from_config(self, self.config)
         self._middlewares = MiddlewareStack(middlewares)
 
     def dispatch_event(self, event):

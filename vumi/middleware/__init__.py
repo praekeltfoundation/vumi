@@ -3,8 +3,8 @@
 
 from vumi.middleware.base import (
     TransportMiddleware, ApplicationMiddleware, MiddlewareStack,
-    middlewares_from_config)
+    create_middlewares_from_config, setup_middlewares_from_config)
 
 __all__ = [
     'TransportMiddleware', 'ApplicationMiddleware', 'MiddlewareStack',
-    'middlewares_from_config']
+    'create_middlewares_from_config', 'setup_middlewares_from_config']
