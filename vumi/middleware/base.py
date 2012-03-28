@@ -52,25 +52,6 @@ class MiddlewareStack(object):
     def __init__(self, middlewares):
         self.middlewares = middlewares
 
-    @staticmethod
-    def middlewares_from_config(worker, config):
-        """Return a list of middleware objects created from a worker
-           configuration.
-           """
-        middlewares = []
-        for item in config.get("middleware", []):
-            if not "name" in item:
-                raise ConfigError("Middleware items must specify a name.")
-            middleware_name = item["name"]
-            middleware_config = config.get(middleware_name)
-            if not "cls" in item:
-                raise ConfigError("Middleware items must specify a class.")
-            cls_name = item["cls"]
-            cls = load_class_by_string(cls_name)
-            middleware = cls(worker, middleware_config)
-            middlewares.append(middleware)
-        return middlewares
-
     @inlineCallbacks
     def _handle(self, middlewares, handler_name, message, endpoint):
         method_name = 'handle_%s' % (handler_name,)
@@ -88,8 +69,31 @@ class MiddlewareStack(object):
             reversed(self.middlewares), handler_name, message, endpoint)
 
 
+def create_middlewares_from_config(worker, config):
+    """Return a list of middleware objects created from a worker
+       configuration.
+       """
+    middlewares = []
+    for item in config.get("middleware", []):
+        if not "name" in item:
+            raise ConfigError("Middleware items must specify a name.")
+        middleware_name = item["name"]
+        middleware_config = config.get(middleware_name)
+        if not "cls" in item:
+            raise ConfigError("Middleware items must specify a class.")
+        cls_name = item["cls"]
+        cls = load_class_by_string(cls_name)
+        middleware = cls(worker, middleware_config)
+        middlewares.append(middleware)
+    return middlewares
+
+
 @inlineCallbacks
-def middlewares_from_config(config):
-    # TODO: Implement this.
-    yield None
-    returnValue([])
+def setup_middlewares_from_config(worker, config):
+    """Create a list of middleware objects, call .setup_middleware() on
+       then and then return the list.
+       """
+    middlewares = create_middlewares_from_config(worker, config)
+    for mw in middlewares:
+        yield mw.setup_middleware()
+    returnValue(middlewares)
