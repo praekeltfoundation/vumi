@@ -143,12 +143,18 @@ class ApplicationWorker(Worker):
         middlewares = yield setup_middlewares_from_config(self, self.config)
         self._middlewares = MiddlewareStack(middlewares)
 
-    def dispatch_event(self, event):
-        """Dispatch to event_type specific handlers."""
+    def _dispatch_event_raw(self, event):
         event_type = event.get('event_type')
         handler = self._event_handlers.get(event_type,
                                            self.consume_unknown_event)
         return handler(event)
+
+    def dispatch_event(self, event):
+        """Dispatch to event_type specific handlers."""
+        d = self._middlewares.apply_consume("event", event,
+                                            self.transport_name)
+        d.addCallback(self._dispatch_event_raw)
+        return d
 
     def consume_unknown_event(self, event):
         log.msg("Unknown event type in message %r" % (event,))
@@ -161,12 +167,18 @@ class ApplicationWorker(Worker):
         """Handle a delivery report."""
         pass
 
-    def dispatch_user_message(self, message):
-        """Dispatch user messages to handler."""
+    def _dispatch_user_message_raw(self, message):
         session_event = message.get('session_event')
         handler = self._session_handlers.get(session_event,
                                              self.consume_user_message)
         return handler(message)
+
+    def dispatch_user_message(self, message):
+        """Dispatch user messages to handler."""
+        d = self._middlewares.apply_consume("inbound", message,
+                                            self.transport_name)
+        d.addCallback(self._dispatch_user_message_raw)
+        return d
 
     def consume_user_message(self, message):
         """Respond to user message."""
@@ -187,8 +199,10 @@ class ApplicationWorker(Worker):
         pass
 
     def _publish_message(self, message):
-        self.transport_publisher.publish_message(message)
-        return message
+        d = self._middlewares.apply_publish("outbound", message,
+                                            self.transport_name)
+        d.addCallback(self.transport_publisher.publish_message)
+        return d
 
     def reply_to(self, original_message, content, continue_session=True,
                  **kws):

@@ -132,48 +132,50 @@ class TestApplicationWorker(TestCase):
             self.assertEqual(self.worker.record, [(name, message)])
             del self.worker.record[:]
 
+    @inlineCallbacks
     def test_reply_to(self):
         msg = FakeUserMessage()
-        self.worker.reply_to(msg, "More!")
-        self.worker.reply_to(msg, "End!", False)
+        yield self.worker.reply_to(msg, "More!")
+        yield self.worker.reply_to(msg, "End!", False)
         replies = self.recv()
         expecteds = [msg.reply("More!"), msg.reply("End!", False)]
         self.assert_msgs_match(replies, expecteds)
 
+    @inlineCallbacks
     def test_reply_to_group(self):
         msg = FakeUserMessage()
-        self.worker.reply_to_group(msg, "Group!")
+        yield self.worker.reply_to_group(msg, "Group!")
         replies = self.recv()
         expecteds = [msg.reply_group("Group!")]
         self.assert_msgs_match(replies, expecteds)
 
+    @inlineCallbacks
     def test_send_to(self):
-        sent_msg = self.worker.send_to('+12345', "Hi!")
+        yield self.worker.send_to('+12345', "Hi!")
         sends = self.recv()
         expecteds = [TransportUserMessage.send('+12345', "Hi!",
                 transport_name='default_transport')]
         self.assert_msgs_match(sends, expecteds)
-        self.assert_msgs_match(sends, [sent_msg])
 
+    @inlineCallbacks
     def test_send_to_with_options(self):
-        sent_msg = self.worker.send_to('+12345', "Hi!",
+        yield self.worker.send_to('+12345', "Hi!",
                 transport_type=TransportUserMessage.TT_USSD)
         sends = self.recv()
         expecteds = [TransportUserMessage.send('+12345', "Hi!",
                 transport_type=TransportUserMessage.TT_USSD,
                 transport_name='default_transport')]
         self.assert_msgs_match(sends, expecteds)
-        self.assert_msgs_match(sends, [sent_msg])
 
+    @inlineCallbacks
     def test_send_to_with_tag(self):
-        sent_msg = self.worker.send_to('+12345', "Hi!", "outbound1",
+        yield self.worker.send_to('+12345', "Hi!", "outbound1",
                 transport_type=TransportUserMessage.TT_USSD)
         sends = self.recv()
         expecteds = [TransportUserMessage.send('+12345', "Hi!",
                 transport_type=TransportUserMessage.TT_USSD,
                 transport_name='outbound1_transport')]
         self.assert_msgs_match(sends, expecteds)
-        self.assert_msgs_match(sends, [sent_msg])
 
     def test_send_to_with_bad_tag(self):
         self.assertRaises(ValueError, self.worker.send_to,
