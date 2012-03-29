@@ -6,7 +6,6 @@ from vumi.tests.utils import get_stubbed_worker, UTCNearNow, RegexMatcher
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.transports.base import Transport
 from vumi.transports.failures import FailureMessage
-from vumi.middleware.base import BaseMiddleware
 
 
 class TransportTestCase(unittest.TestCase):
@@ -178,25 +177,6 @@ class TransportTestCase(unittest.TestCase):
         return self._amqp.kick_delivery()
 
 
-class ToyMiddleware(BaseMiddleware):
-    def _handle(self, direction, message, endpoint):
-        record = message.payload.setdefault('record', [])
-        record.append((self.name, direction, endpoint))
-        return message
-
-    def handle_inbound(self, message, endpoint):
-        return self._handle('inbound', message, endpoint)
-
-    def handle_outbound(self, message, endpoint):
-        return self._handle('outbound', message, endpoint)
-
-    def handle_event(self, message, endpoint):
-        return self._handle('event', message, endpoint)
-
-    def handle_failure(self, message, endpoint):
-        return self._handle('failure', message, endpoint)
-
-
 class BaseTransportTestCase(TransportTestCase):
     """
     This is a test for the base Transport class.
@@ -210,9 +190,9 @@ class BaseTransportTestCase(TransportTestCase):
     TEST_MIDDLEWARE_CONFIG = {
        "middleware": [
             {"name": "mw1",
-             "cls": "vumi.transports.tests.test_base.ToyMiddleware"},
+             "cls": "vumi.middleware.tests.utils.RecordingMiddleware"},
             {"name": "mw2",
-             "cls": "vumi.transports.tests.test_base.ToyMiddleware"},
+             "cls": "vumi.middleware.tests.utils.RecordingMiddleware"},
             ],
         }
 
