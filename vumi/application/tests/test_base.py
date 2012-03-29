@@ -328,6 +328,31 @@ class ApplicationTestCase(TestCase):
             )
         return TransportUserMessage(**params)
 
+    def mkmsg_ack(self, user_message_id='1', sent_message_id='abc',
+                  transport_metadata=None):
+        if transport_metadata is None:
+            transport_metadata = {}
+        return TransportEvent(
+            event_type='ack',
+            user_message_id=user_message_id,
+            sent_message_id=sent_message_id,
+            transport_name=self.transport_name,
+            transport_metadata=transport_metadata,
+            )
+
+    def mkmsg_delivery(self, status='delivered', user_message_id='abc',
+                       transport_metadata=None):
+        if transport_metadata is None:
+            transport_metadata = {}
+        return TransportEvent(
+            event_type='delivery_report',
+            transport_name=self.transport_name,
+            user_message_id=user_message_id,
+            delivery_status=status,
+            to_addr='+41791234567',
+            transport_metadata=transport_metadata,
+            )
+
     def get_dispatched_messages(self):
         return self._amqp.get_messages('vumi', self.rkey('outbound'))
 
@@ -339,3 +364,59 @@ class ApplicationTestCase(TestCase):
             rkey = self.rkey('inbound')
         self._amqp.publish_message(exchange, rkey, message)
         return self._amqp.kick_delivery()
+
+
+class TestApplicationMiddlewareHooks(ApplicationTestCase):
+
+    transport_name = 'carrier_pigeon'
+    application_class = ApplicationWorker
+
+    TEST_MIDDLEWARE_CONFIG = {
+       "middleware": [
+            {"name": "mw1",
+             "cls": "vumi.transports.tests.test_base.ToyMiddleware"},
+            {"name": "mw2",
+             "cls": "vumi.transports.tests.test_base.ToyMiddleware"},
+            ],
+        }
+
+    @inlineCallbacks
+    def test_middleware_for_inbound_messages(self):
+        app = yield self.get_application(self.TEST_MIDDLEWARE_CONFIG)
+        msgs = []
+        app.consume_user_message = msgs.append
+        orig_msg = self.mkmsg_in()
+        orig_msg['timestamp'] = 0
+        yield app.dispatch_user_message(orig_msg)
+        [msg] = msgs
+        self.assertEqual(msg['record'], [
+            ('mw1', 'inbound', self.transport_name),
+            ('mw2', 'inbound', self.transport_name),
+            ])
+
+    @inlineCallbacks
+    def test_middleware_for_events(self):
+        app = yield self.get_application(self.TEST_MIDDLEWARE_CONFIG)
+        msgs = []
+        app._event_handlers['ack'] = msgs.append
+        orig_msg = self.mkmsg_ack()
+        orig_msg['event_id'] = 1234
+        orig_msg['timestamp'] = 0
+        yield app.dispatch_event(orig_msg)
+        [msg] = msgs
+        self.assertEqual(msg['record'], [
+            ('mw1', 'event', self.transport_name),
+            ('mw2', 'event', self.transport_name),
+            ])
+
+    @inlineCallbacks
+    def test_middleware_for_outbound_messages(self):
+        app = yield self.get_application(self.TEST_MIDDLEWARE_CONFIG)
+        orig_msg = self.mkmsg_out()
+        yield app.reply_to(orig_msg, 'Hello!')
+        msgs = self.get_dispatched_messages()
+        [msg] = msgs
+        self.assertEqual(msg['record'], [
+            ['mw2', 'outbound', self.transport_name],
+            ['mw1', 'outbound', self.transport_name],
+            ])
