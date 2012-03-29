@@ -74,9 +74,10 @@ class TestMessageStore(ApplicationTestCase):
         self.assertEqual(self.store.get_inbound_message(msg_id), msg)
 
     def test_add_inbound_message_with_tag(self):
-        batch_id = self.store.batch_start([("ambient", "default10001")])
+        batch_id = self.store.batch_start([("pool1", "default10001")])
         msg = self.mkmsg_in(content="infoo", to_addr="+1234567810001",
                             transport_type="sms")
+        msg['tag'] = ["pool1", "default10001"]
         msg_id = msg['message_id']
         self.store.add_inbound_message(msg)
 

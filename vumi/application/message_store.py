@@ -169,16 +169,12 @@ class MessageStore(object):
         return "%s:%s" % tag
 
     def _map_inbound_msg_to_tag(self, msg):
-        # TODO: this eventually needs to become more generic to support
-        #       additional transports
-        transport_type = msg['transport_type']
-        if transport_type == 'sms':
-            tag = ("ambient", "default%s" % (msg['to_addr'][-5:],))
-        elif transport_type == 'xmpp':
-            tag = ("gtalk", msg['to_addr'])
-        else:
-            tag = None
-        return tag
+        # usually this tag is set by tagging middleware attached to
+        # the transport
+        tag = msg.get('tag')
+        if tag is None:
+            return None
+        return tuple(msg.get('tag'))
 
     # interface to redis -- intentionally made to look
     # like a limited subset of HBase.
