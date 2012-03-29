@@ -374,9 +374,9 @@ class TestApplicationMiddlewareHooks(ApplicationTestCase):
     TEST_MIDDLEWARE_CONFIG = {
        "middleware": [
             {"name": "mw1",
-             "cls": "vumi.transports.tests.test_base.ToyMiddleware"},
+             "cls": "vumi.middleware.tests.utils.RecordingMiddleware"},
             {"name": "mw2",
-             "cls": "vumi.transports.tests.test_base.ToyMiddleware"},
+             "cls": "vumi.middleware.tests.utils.RecordingMiddleware"},
             ],
         }
 
