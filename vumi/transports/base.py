@@ -6,7 +6,7 @@ Common infrastructure for transport workers.
 This is likely to get used heavily fast, so try get your changes in early.
 """
 
-from twisted.internet.defer import inlineCallbacks, maybeDeferred
+from twisted.internet.defer import inlineCallbacks, maybeDeferred, returnValue
 from twisted.python import log
 
 from vumi.errors import ConfigError
@@ -149,14 +149,18 @@ class Transport(Worker):
     def _setup_failure_publisher(self):
         self.failure_publisher = yield self.publish_rkey('failures')
 
+    @inlineCallbacks
     def send_failure(self, message, exception, traceback):
         """Send a failure report."""
         try:
             failure_code = getattr(exception, "failure_code",
                                    FailureMessage.FC_UNSPECIFIED)
-            self.failure_publisher.publish_message(FailureMessage(
+            failure_msg = FailureMessage(
                     message=message.payload, failure_code=failure_code,
-                    reason=traceback))
+                    reason=traceback)
+            failure_msg = yield self._middlewares.apply_publish("failure",
+                    failure_msg, self.transport_name)
+            self.failure_publisher.publish_message(failure_msg)
             self.failure_published()
         except:
             log.err("Error publishing failure: %s, %s, %s"
@@ -166,6 +170,7 @@ class Transport(Worker):
     def failure_published(self):
         pass
 
+    @inlineCallbacks
     def publish_message(self, **kw):
         """
         Publish a :class:`TransportUserMessage` message.
@@ -175,9 +180,12 @@ class Transport(Worker):
         """
         kw.setdefault('transport_name', self.transport_name)
         kw.setdefault('transport_metadata', {})
-        return self.message_publisher.publish_message(
-            TransportUserMessage(**kw))
+        msg = TransportUserMessage(**kw)
+        msg = yield self._middlewares.apply_publish("inbound", msg,
+                                                    self.transport_name)
+        yield self.message_publisher.publish_message(msg)
 
+    @inlineCallbacks
     def publish_event(self, **kw):
         """
         Publish a :class:`TransportEvent` message.
@@ -187,7 +195,10 @@ class Transport(Worker):
         """
         kw.setdefault('transport_name', self.transport_name)
         kw.setdefault('transport_metadata', {})
-        return self.event_publisher.publish_message(TransportEvent(**kw))
+        event = TransportEvent(**kw)
+        event = yield self._middlewares.apply_publish("event", event,
+                                                      self.transport_name)
+        yield self.event_publisher.publish_message(event)
 
     def publish_ack(self, user_message_id, sent_message_id, **kw):
         """
@@ -211,7 +222,10 @@ class Transport(Worker):
             if self.SUPPRESS_FAILURE_EXCEPTIONS:
                 return None
             return f
-        d = maybeDeferred(self.handle_outbound_message, message)
+
+        d = self._middlewares.apply_consume("outbound", message,
+                                            self.transport_name)
+        d.addCallback(self.handle_outbound_message)
         d.addErrback(_send_failure)
         return d
 
