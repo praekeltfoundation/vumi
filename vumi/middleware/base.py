@@ -75,13 +75,16 @@ def create_middlewares_from_config(worker, config):
        """
     middlewares = []
     for item in config.get("middleware", []):
-        if not "name" in item:
-            raise ConfigError("Middleware items must specify a name.")
-        middleware_name = item["name"]
+        keys = item.keys()
+        if len(keys) != 1:
+            raise ConfigError("Middleware items contain only a single"
+                              " key-value pair. The key should be a name"
+                              " for the middleware. The value should be"
+                              " the full dotted name of the class"
+                              " implementing the middleware.")
+        middleware_name = keys[0]
+        cls_name = item[middleware_name]
         middleware_config = config.get(middleware_name, {})
-        if not "cls" in item:
-            raise ConfigError("Middleware items must specify a class.")
-        cls_name = item["cls"]
         cls = load_class_by_string(cls_name)
         middleware = cls(middleware_name, middleware_config, worker)
         middlewares.append(middleware)

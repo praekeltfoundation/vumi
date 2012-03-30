@@ -2,6 +2,8 @@
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.trial.unittest import TestCase
 
+import yaml
+
 from vumi.middleware.base import (BaseMiddleware, MiddlewareStack,
                                   create_middlewares_from_config,
                                   setup_middlewares_from_config)
@@ -81,16 +83,20 @@ class UtilityFunctionsTestCase(TestCase):
 
     TEST_CONFIG_1 = {
         "middleware": [
-            {"name": "mw1",
-             "cls": "vumi.middleware.tests.test_base.ToyMiddleware"},
-            {"name": "mw2",
-             "cls": "vumi.middleware.tests.test_base.ToyMiddleware"},
+            {"mw1": "vumi.middleware.tests.test_base.ToyMiddleware"},
+            {"mw2": "vumi.middleware.tests.test_base.ToyMiddleware"},
             ],
         "mw1": {
             "param_foo": 1,
             "param_bar": 2,
             }
         }
+
+    TEST_YAML = """
+        middleware:
+          - mw1: vumi.middleware.tests.test_base.ToyMiddleware
+          - mw2: vumi.middleware.tests.test_base.ToyMiddleware
+        """
 
     def test_create_middleware_from_config(self):
         worker = object()
@@ -115,3 +121,14 @@ class UtilityFunctionsTestCase(TestCase):
         self.assertEqual(middlewares[0].config,
                          {"param_foo": 1, "param_bar": 2})
         self.assertEqual(middlewares[1].config, {})
+
+    def test_parse_yaml(self):
+        # this test is here to ensure the YAML one has to
+        # type looks nice
+        worker = object()
+        config = yaml.safe_load(self.TEST_YAML)
+        middlewares = create_middlewares_from_config(worker, config)
+        self.assertEqual([type(mw) for mw in middlewares],
+                         [ToyMiddleware, ToyMiddleware])
+        self.assertEqual([mw._setup_done for mw in middlewares],
+                         [False, False])
