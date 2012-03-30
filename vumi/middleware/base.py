@@ -17,7 +17,6 @@ class BaseMiddleware(object):
         self.name = name
         self.config = config
         self.worker = worker
-        self.endpoints = set(config.get('endpoints', []))
 
     def setup_middleware(self):
         pass
