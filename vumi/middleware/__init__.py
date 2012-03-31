@@ -2,9 +2,14 @@
 """
 
 from vumi.middleware.base import (
-    TransportMiddleware, ApplicationMiddleware, MiddlewareStack,
-    create_middlewares_from_config, setup_middlewares_from_config)
+    BaseMiddleware, TransportMiddleware, ApplicationMiddleware,
+    MiddlewareStack, create_middlewares_from_config,
+    setup_middlewares_from_config)
+
+from vumi.middleware.logging import LoggingMiddleware
 
 __all__ = [
-    'TransportMiddleware', 'ApplicationMiddleware', 'MiddlewareStack',
-    'create_middlewares_from_config', 'setup_middlewares_from_config']
+    'BaseMiddleware', 'TransportMiddleware', 'ApplicationMiddleware',
+    'MiddlewareStack', 'create_middlewares_from_config',
+    'setup_middlewares_from_config',
+    'LoggingMiddleware']

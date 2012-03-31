@@ -9,30 +9,78 @@ from vumi.errors import ConfigError
 class BaseMiddleware(object):
     """Common middleware base class.
 
-    This is a convenient repository for commonalities between the various
-    middlewares. You should not subclass or instantiate this directly.
+    This is a convenient definition of and set of common functionality
+    for middleware classes. You need not subclass this and should not
+    instantiate this directly.
+
+    The :meth:`__init__` method should take exactly the following
+    options so that your class can be instantiated from configuration
+    in a standard way:
+
+    :param string name: Name of the middleware.
+    :param dict config: Dictionary of configuraiton items.
+    :type worker: vumi.service.Worker
+    :param worker:
+         Reference to the transport or application being wrapped by
+         this middleware.
+
+    If you are subclassing this class, you should not override
+    :meth:`__init__`. Custom setup should be done in
+    :meth:`setup_middleware` instead.
     """
 
     def __init__(self, name, config, worker):
         self.name = name
         self.config = config
         self.worker = worker
-        self.endpoints = set(config.get('endpoints', []))
 
     def setup_middleware(self):
+        """Any custom setup may be done here.
+
+        :rtype: Deferred or None
+        :returns: May return a deferred that is called when setup is
+                  complete.
+        """
         pass
 
     def handle_inbound(self, message, endpoint):
+        """Called when an inbound transport user message is published
+        or consumed.
+
+        The other methods -- :meth:`handle_outbound`,
+        :meth:`handle_event`, :meth:`handle_failure` -- all function
+        in the same way. Only the kind of message being processed
+        differs.
+
+        :param vumi.message.TransportUserMessage message:
+            Inbound message to process.
+        :param string endpoint:
+            The `transport_name` of the endpoint the message is being
+            received on or send to.
+        :rtype: vumi.message.TransportUserMessage
+        :returns: The processed message.
+        """
         return message
 
     def handle_outbound(self, message, endpoint):
+        """Called to process an outbound transport user message.
+        See :meth:`handle_inbound`.
+        """
         return message
 
-    def handle_event(self, message, endpoint):
-        return message
+    def handle_event(self, event, endpoint):
+        """Called to process an event message (
+        :class:`vumi.message.TransportEvent`).
+        See :meth:`handle_inbound`.
+        """
+        return event
 
-    def handle_failure(self, message, endpoint):
-        return message
+    def handle_failure(self, failure, endpoint):
+        """Called to process a failure message (
+        :class:`vumi.transports.failures.FailureMessage`).
+        See :meth:`handle_inbound`.
+        """
+        return failure
 
 
 class TransportMiddleware(BaseMiddleware):
@@ -75,13 +123,16 @@ def create_middlewares_from_config(worker, config):
        """
     middlewares = []
     for item in config.get("middleware", []):
-        if not "name" in item:
-            raise ConfigError("Middleware items must specify a name.")
-        middleware_name = item["name"]
+        keys = item.keys()
+        if len(keys) != 1:
+            raise ConfigError("Middleware items contain only a single"
+                              " key-value pair. The key should be a name"
+                              " for the middleware. The value should be"
+                              " the full dotted name of the class"
+                              " implementing the middleware.")
+        middleware_name = keys[0]
+        cls_name = item[middleware_name]
         middleware_config = config.get(middleware_name, {})
-        if not "cls" in item:
-            raise ConfigError("Middleware items must specify a class.")
-        cls_name = item["cls"]
         cls = load_class_by_string(cls_name)
         middleware = cls(middleware_name, middleware_config, worker)
         middlewares.append(middleware)
