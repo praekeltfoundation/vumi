@@ -9,8 +9,24 @@ from vumi.errors import ConfigError
 class BaseMiddleware(object):
     """Common middleware base class.
 
-    This is a convenient repository for commonalities between the various
-    middlewares. You should not subclass or instantiate this directly.
+    This is a convenient definition of and set of common functionality
+    for middleware classes. You need not subclass this and should not
+    instantiate this directly.
+
+    The :meth:`__init__` method should take exactly the following
+    options so that your class can be instantiated from configuration
+    in a standard way:
+
+    :param string name: Name of the middleware.
+    :param dict config: Dictionary of configuraiton items.
+    :type worker: vumi.service.Worker
+    :param worker:
+         Reference to the transport or application being wrapped by
+         this middleware.
+
+    If you are subclassing this class, you should not override
+    :meth:`__init__`. Custom setup should be done in
+    :meth:`setup_middleware` instead.
     """
 
     def __init__(self, name, config, worker):
@@ -19,19 +35,52 @@ class BaseMiddleware(object):
         self.worker = worker
 
     def setup_middleware(self):
+        """Any custom setup may be done here.
+
+        :rtype: Deferred or None
+        :returns: May return a deferred that is called when setup is
+                  complete.
+        """
         pass
 
     def handle_inbound(self, message, endpoint):
+        """Called when an inbound transport user message is published
+        or consumed.
+
+        The other methods -- :meth:`handle_outbound`,
+        :meth:`handle_event`, :meth:`handle_failure` -- all function
+        in the same way. Only the kind of message being processed
+        differs.
+
+        :param vumi.message.TransportUserMessage message:
+            Inbound message to process.
+        :param string endpoint:
+            The `transport_name` of the endpoint the message is being
+            received on or send to.
+        :rtype: vumi.message.TransportUserMessage
+        :returns: The processed message.
+        """
         return message
 
     def handle_outbound(self, message, endpoint):
+        """Called to process an outbound transport user message.
+        See :meth:`handle_inbound`.
+        """
         return message
 
-    def handle_event(self, message, endpoint):
-        return message
+    def handle_event(self, event, endpoint):
+        """Called to process an event message (
+        :class:`vumi.message.TransportEvent`).
+        See :meth:`handle_inbound`.
+        """
+        return event
 
-    def handle_failure(self, message, endpoint):
-        return message
+    def handle_failure(self, failure, endpoint):
+        """Called to process a failure message (
+        :class:`vumi.transports.failures.FailureMessage`).
+        See :meth:`handle_inbound`.
+        """
+        return failure
 
 
 class TransportMiddleware(BaseMiddleware):
