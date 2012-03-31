@@ -14,7 +14,7 @@ class TaggingMiddleware(TransportMiddleware):
     need to ensure that incoming messages are provided with a tag by this
     or some other middleware.
 
-    Configuration options::
+    Configuration options:
 
     :param string addr_pattern:
         Regular expression matching the to_addr of incoming messages.

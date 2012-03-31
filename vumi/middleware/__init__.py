@@ -7,9 +7,10 @@ from vumi.middleware.base import (
     setup_middlewares_from_config)
 
 from vumi.middleware.logging import LoggingMiddleware
+from vumi.middleware.tagger import TaggingMiddleware
 
 __all__ = [
     'BaseMiddleware', 'TransportMiddleware', 'ApplicationMiddleware',
     'MiddlewareStack', 'create_middlewares_from_config',
     'setup_middlewares_from_config',
-    'LoggingMiddleware']
+    'LoggingMiddleware', 'TaggingMiddleware']
