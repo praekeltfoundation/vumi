@@ -16,6 +16,7 @@ Version 0.4
 * addition of support for grouped messages. *(done)*
 * remove UglyModel. *(done)*
 * remove Django-based vumi.webapp. *(done)*
+* add middleware for transports and applicatons. *(done)*
 * clean-up of SMPP transport.
 * add HBase support with ability to use Redis for small
   deployments. See :doc:`roadmap/datastore-access`.
