@@ -14,10 +14,11 @@ Contents:
    overview.rst
    first-smpp-bind.rst
    transports.rst
+   middleware.rst
    metrics.rst
    roadmap.rst
    release-notes.rst
-  
+
 Getting Started:
 
 * :doc:`installation`
