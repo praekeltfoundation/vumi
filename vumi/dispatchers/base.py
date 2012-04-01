@@ -325,7 +325,12 @@ class ContentKeywordRouter(SimpleDispatchRouter):
         self.r_config = self.config.get('redis_config', {})
         self.r_prefix = self.config['dispatcher_name']
         self.r_server = redis.Redis(**self.r_config)
-        self.keyword_mappings = self.config['keyword_mappings'].items()
+        self.keyword_mappings = self.config['keyword_mappings']
+        for transport_name, routing_rule in self.keyword_mappings.items():
+            if isinstance(routing_rule, basestring):
+                self.keyword_mappings[transport_name] = {
+                    'keyword': routing_rule,
+                    }
         self.transport_mappings = self.config['transport_mappings']
         self.expire_routing_timeout = int(self.config['expire_routing_memory'])
 
@@ -359,9 +364,7 @@ class ContentKeywordRouter(SimpleDispatchRouter):
         if (msg_keyword == ''):
             log.error('Message has not keyword')
             return
-        for name, routing_rules in self.keyword_mappings:
-            if (type(routing_rules) != dict):
-                routing_rules = {'keyword': routing_rules}
+        for name, routing_rules in self.keyword_mappings.iteritems():
             if self.is_msg_matching_routing_rules(msg, routing_rules):
                 log.debug('Message is routed to %s' % (name,))
                 self.publish_exposed_inbound(name, msg)
