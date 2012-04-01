@@ -330,7 +330,7 @@ class ContentKeywordRouter(SimpleDispatchRouter):
         super(ContentKeywordRouter, self).__init__(dispatcher, config)
 
     def setup_routing(self):
-        pass
+        self.expire_routing_timeout = int(self.config['expire_routing_memory'])
 
     def get_message_key(self, message):
         return self.r_key('message', message)
@@ -392,8 +392,7 @@ class ContentKeywordRouter(SimpleDispatchRouter):
                 self.publish_transport(name, msg)
                 message_key = self.get_message_key(msg['message_id'])
                 self.r_server.set(message_key, msg['transport_name'])
-                yield self.r_server.expire(
-                    message_key,
-                    int(self.config['expire_routing_memory']))
+                yield self.r_server.expire(message_key,
+                                           self.expire_routing_timeout)
         if not has_been_forwarded:
             log.error("No transport for %s" % (msg['from_addr'],))
