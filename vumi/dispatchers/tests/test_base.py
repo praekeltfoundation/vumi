@@ -591,8 +591,8 @@ class TestContentKeywordRouter(DispatcherTestCase):
             'router_class': 'vumi.dispatchers.base.ContentKeywordRouter',
             'transport_names': ['transport1', 'transport2'],
             'transport_mappings': {
-                'transport1': 'shortcode1',
-                'transport2': 'shortcode2'
+                'shortcode1': 'transport1',
+                'shortcode2': 'transport2',
                 },
             'exposed_names': ['app1', 'app2', 'app3'],
             'keyword_mappings': {
