@@ -347,7 +347,7 @@ class ContentKeywordRouter(SimpleDispatchRouter):
     def is_msg_matching_routing_rules(self, msg, routing_rules):
         return (get_first_word(msg['content']).lower() == routing_rules['keyword'].lower()
                 and (
-                    (not 'to_add' in routing_rules)
+                    (not 'to_addr' in routing_rules)
                     or msg['to_addr'] == routing_rules['to_addr'])
                 and (
                     (not 'prefix' in routing_rules)
