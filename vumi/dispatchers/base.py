@@ -328,9 +328,10 @@ class ContentKeywordRouter(SimpleDispatchRouter):
         self.keyword_mappings = self.config['keyword_mappings']
         for transport_name, routing_rule in self.keyword_mappings.items():
             if isinstance(routing_rule, basestring):
-                self.keyword_mappings[transport_name] = {
+                self.keyword_mappings[transport_name] = routing_rule = {
                     'keyword': routing_rule,
                     }
+            routing_rule['keyword'] = routing_rule['keyword'].lower()
         self.transport_mappings = self.config['transport_mappings']
         self.expire_routing_timeout = int(self.config['expire_routing_memory'])
 
@@ -349,23 +350,21 @@ class ContentKeywordRouter(SimpleDispatchRouter):
     def publish_exposed_event(self, name, msg):
         self.dispatcher.exposed_event_publisher[name].publish_message(msg)
 
-    def is_msg_matching_routing_rules(self, msg, routing_rules):
-        return (get_first_word(msg['content']).lower() == routing_rules['keyword'].lower()
-                and (
-                    (not 'to_addr' in routing_rules)
-                    or msg['to_addr'] == routing_rules['to_addr'])
-                and (
-                    (not 'prefix' in routing_rules)
-                    or msg['from_addr'].startswith(routing_rules['prefix'])))
+    def is_msg_matching_routing_rules(self, keyword, msg, routing_rules):
+        return all([keyword == routing_rules['keyword'],
+                    (not 'to_addr' in routing_rules) or
+                    (msg['to_addr'] == routing_rules['to_addr']),
+                    (not 'prefix' in routing_rules) or
+                    (msg['from_addr'].startswith(routing_rules['prefix']))])
 
     def dispatch_inbound_message(self, msg):
         log.debug('Inbound message')
-        msg_keyword = get_first_word(msg['content'])
-        if msg_keyword == '':
+        keyword = get_first_word(msg['content']).lower()
+        if keyword == '':
             log.error('Message has no keyword')
             return
         for transport_name, routing_rules in self.keyword_mappings.iteritems():
-            if self.is_msg_matching_routing_rules(msg, routing_rules):
+            if self.is_msg_matching_routing_rules(keyword, msg, routing_rules):
                 log.debug('Message is routed to %s' % (transport_name,))
                 self.publish_exposed_inbound(transport_name, msg)
 
