@@ -378,7 +378,7 @@ class ContentKeywordRouter(SimpleDispatchRouter):
         log.debug("Inbound event")
         message_key = self.get_message_key(msg['user_message_id'])
         name = self.r_server.get(message_key)
-        if (not name):
+        if not name:
             log.error("Not route back tuple stored in Redis for %s"
                   % (msg['user_message_id'],))
         try:
