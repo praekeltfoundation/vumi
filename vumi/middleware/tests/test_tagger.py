@@ -20,10 +20,14 @@ class TaggingMiddlewareTestCase(TestCase):
         self.mw = TaggingMiddleware("dummy_tagger", config, dummy_worker)
         self.mw.setup_middleware()
 
-    def get_tag(self, to_addr):
+    def mk_msg(self, to_addr):
         msg = TransportUserMessage(to_addr=to_addr, from_addr="12345",
                                    transport_name="dummy_endpoint",
                                    transport_type="dummy_transport_type")
+        return msg
+
+    def get_tag(self, to_addr):
+        msg = self.mk_msg(to_addr)
         msg = self.mw.handle_inbound(msg, "dummy_endpoint")
         return msg['tag']
 
@@ -35,3 +39,10 @@ class TaggingMiddlewareTestCase(TestCase):
     def test_nonmatching_to_addr(self):
         self.mk_tagger()
         self.assertEqual(self.get_tag("a1234"), None)
+
+    def test_map_msg_to_tag(self):
+        msg = self.mk_msg("123456")
+        self.assertEqual(TaggingMiddleware.map_msg_to_tag(msg), None)
+        msg["tag"] = ["pool", "mytag"]
+        self.assertEqual(TaggingMiddleware.map_msg_to_tag(msg),
+                         ("pool", "mytag"))

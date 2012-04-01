@@ -40,3 +40,13 @@ class TaggingMiddleware(TransportMiddleware):
             tag = None
         message['tag'] = tag
         return message
+
+    @staticmethod
+    def map_msg_to_tag(msg):
+        """Convenience method for retrieving a tag that was added
+        to a message by this middleware.
+        """
+        tag = msg.get('tag')
+        if tag is None:
+            return None
+        return tuple(msg.get('tag'))

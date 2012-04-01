@@ -73,18 +73,22 @@ class MessageStore(object):
                 self._put_common('tags', self._tag_key(tag), 'common',
                                  tag_common)
 
-    def add_message(self, batch_id, msg):
+    def add_outbound_message(self, msg, tag=None, batch_id=None):
         msg_id = msg['message_id']
         self._put_msg('messages', msg_id, 'body', msg)
         self._put_row('messages', msg_id, 'events', {})
 
-        self._put_row('messages', msg_id, 'batches', {batch_id: '1'})
-        self._put_row('batches', batch_id, 'messages', {msg_id: '1'})
+        if batch_id is None and tag is not None:
+            batch_id = self.tag_common(tag)['current_batch_id']
 
-        self._inc_status(batch_id, 'message')
-        self._inc_status(batch_id, 'sent')
+        if batch_id is not None:
+            self._put_row('messages', msg_id, 'batches', {batch_id: '1'})
+            self._put_row('batches', batch_id, 'messages', {msg_id: '1'})
 
-    def get_message(self, msg_id):
+            self._inc_status(batch_id, 'message')
+            self._inc_status(batch_id, 'sent')
+
+    def get_outbound_message(self, msg_id):
         return self._get_msg('messages', msg_id, 'body', TransportUserMessage)
 
     def add_event(self, event):
@@ -101,14 +105,15 @@ class MessageStore(object):
         return self._get_msg('events', event_id, 'body',
                              TransportEvent)
 
-    def add_inbound_message(self, msg):
+    def add_inbound_message(self, msg, tag=None, batch_id=None):
         msg_id = msg['message_id']
         self._put_msg('inbound_messages', msg_id, 'body', msg)
-        tag = self._map_inbound_msg_to_tag(msg)
-        if tag is not None:
+
+        if batch_id is None and tag is not None:
             batch_id = self.tag_common(tag)['current_batch_id']
-            if batch_id is not None:
-                self._put_row('batches', batch_id, 'replies', {msg_id: '1'})
+
+        if batch_id is not None:
+            self._put_row('batches', batch_id, 'replies', {msg_id: '1'})
 
     def get_inbound_message(self, msg_id):
         return self._get_msg('inbound_messages', msg_id, 'body',
@@ -167,14 +172,6 @@ class MessageStore(object):
 
     def _tag_key(self, tag):
         return "%s:%s" % tag
-
-    def _map_inbound_msg_to_tag(self, msg):
-        # usually this tag is set by tagging middleware attached to
-        # the transport
-        tag = msg.get('tag')
-        if tag is None:
-            return None
-        return tuple(msg.get('tag'))
 
     # interface to redis -- intentionally made to look
     # like a limited subset of HBase.
