@@ -298,28 +298,27 @@ class UserGroupingRouter(SimpleDispatchRouter):
 
 
 class ContentKeywordRouter(SimpleDispatchRouter):
-    """Router that dispatches based on msg content first word also named as the
-     keyword in the sms context.
+    """Router that dispatches based on the first word of the message
+    content. In the context of SMSes the first word is sometimes called
+    the 'keyword'.
 
-    :type keyword_mappings: dict
-    :param keyword_mappings:
-        Mapping from application's transport names to keyword.
-        If a message's content first word is matching a given keyword,
-        the message is send to the application listenning on the given
-         transport name.
+    :param dict keyword_mappings:
+        Mapping from application transport names to keywords.  If a
+        message's first word matches a given keyword, the message is
+        sent to the application listening on the associated transport
+        name.
 
-    :type transport_mappings: dict
-    :param transport_mappings:
-        Mapping from from_addr to transport's transport name.
-        If a message's from_addr is matching a given from_addr,
-        the message is send to the given transport.
+    :param dict transport_mappings:
+        Mapping from message `from_addr`es to transports names.  If a
+        message's from_addr matches a given from_addr, the message is
+        sent to the associated transport.
 
-    :type expire_routing_memory: int
-    :param expire_routing_memory:
-        Duration in second of storage of outbound message's id in redis.
-        The stored id is used to route back the Event to
-        the application worker.
-
+    :param int expire_routing_memory:
+        Time in seconds before outbound message's ids are expired from
+        the redis routing store. Outbound message ids are stored along
+        with the transport_name the message came in on and are used to
+        route events such as acknowledgements and delivery reports
+        back to the application that sent the outgoing message.
     """
 
     def __init__(self, dispatcher, config):
