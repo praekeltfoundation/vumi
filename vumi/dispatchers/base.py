@@ -326,7 +326,7 @@ class ContentKeywordRouter(SimpleDispatchRouter):
         self.r_prefix = self.config['dispatcher_name']
         self.r_server = redis.Redis(**self.r_config)
         self.keyword_mappings = self.config['keyword_mappings'].items()
-        self.transport_mappings = self.config['transport_mappings'].items()
+        self.transport_mappings = self.config['transport_mappings']
         self.expire_routing_timeout = int(self.config['expire_routing_memory'])
 
     def get_message_key(self, message):
@@ -382,14 +382,12 @@ class ContentKeywordRouter(SimpleDispatchRouter):
     @inlineCallbacks
     def dispatch_outbound_message(self, msg):
         log.debug("Outbound message")
-        has_been_forwarded = False
-        for (name, transport) in self.config['transport_mappings'].items():
-            if (transport == msg['from_addr']):
-                has_been_forwarded = True
-                self.publish_transport(name, msg)
-                message_key = self.get_message_key(msg['message_id'])
-                self.r_server.set(message_key, msg['transport_name'])
-                yield self.r_server.expire(message_key,
-                                           self.expire_routing_timeout)
-        if not has_been_forwarded:
+        transport_name = self.transport_mappings.get(msg['from_addr'])
+        if transport_name is not None:
+            self.publish_transport(transport_name, msg)
+            message_key = self.get_message_key(msg['message_id'])
+            self.r_server.set(message_key, msg['transport_name'])
+            yield self.r_server.expire(message_key,
+                                       self.expire_routing_timeout)
+        else:
             log.error("No transport for %s" % (msg['from_addr'],))
