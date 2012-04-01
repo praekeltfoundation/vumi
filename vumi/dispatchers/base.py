@@ -303,10 +303,16 @@ class ContentKeywordRouter(SimpleDispatchRouter):
     the 'keyword'.
 
     :param dict keyword_mappings:
-        Mapping from application transport names to keywords.  If a
-        message's first word matches a given keyword, the message is
-        sent to the application listening on the associated transport
-        name.
+        Mapping from application transport names to routing rules. A
+        routing rule may either be a simple keyword or a
+        dictionary. Dictionaries must contain a key called 'keyword'
+        and may optionally contain keys named 'to_addr' and 'prefix'.
+        If a message's first word matches a given keyword, the message
+        is sent to the application listening on the associated
+        transport name. If a 'to_addr' key is supplied, the message
+        `to_addr` must also match the value of the 'to_addr' key. If a
+        'prefix' is supplied, the message `from_addr` must *start
+        with* the value of the 'prefix' key.
 
     :param dict transport_mappings:
         Mapping from message `from_addr`es to transports names.  If a
