@@ -361,8 +361,8 @@ class ContentKeywordRouter(SimpleDispatchRouter):
     def dispatch_inbound_message(self, msg):
         log.debug('Inbound message')
         msg_keyword = get_first_word(msg['content'])
-        if (msg_keyword == ''):
-            log.error('Message has not keyword')
+        if msg_keyword == '':
+            log.error('Message has no keyword')
             return
         for transport_name, routing_rules in self.keyword_mappings.iteritems():
             if self.is_msg_matching_routing_rules(msg, routing_rules):
