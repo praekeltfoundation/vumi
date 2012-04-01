@@ -6,7 +6,6 @@ import re
 import redis
 
 from twisted.internet.defer import inlineCallbacks
-from twisted.python import log
 
 from vumi.service import Worker
 from vumi.errors import ConfigError
