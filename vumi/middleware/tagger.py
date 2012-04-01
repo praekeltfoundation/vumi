@@ -9,10 +9,12 @@ class TaggingMiddleware(TransportMiddleware):
     """
     Transport middleware for adding tag names to inbound messages.
 
-    Transports that wish to eventually have incoming messages associated
-    with an existing message batch by :class:`vumi.application.MessageStore`
-    need to ensure that incoming messages are provided with a tag by this
-    or some other middleware.
+    Transports that wish to eventually have incoming messages
+    associated with an existing message batch by
+    :class:`vumi.application.MessageStore` or via
+    :class:`vumi.middleware.StoringMiddleware` need to ensure that
+    incoming messages are provided with a tag by this or some other
+    middleware.
 
     Configuration options:
 

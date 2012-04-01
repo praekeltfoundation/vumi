@@ -21,3 +21,8 @@ TaggingMiddleware
 
 .. autoclass:: TaggingMiddleware
 
+
+StoringMiddleware
+^^^^^^^^^^^^^^^^^
+
+.. autoclass:: StoringMiddleware
