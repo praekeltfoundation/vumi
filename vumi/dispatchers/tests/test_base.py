@@ -610,7 +610,6 @@ class TestContentKeywordRouter(DispatcherTestCase):
         self.dispatcher = yield self.get_dispatcher(self.config)
         self.router = self.dispatcher._router
         self.router.r_server = self.fake_redis
-        self.router.setup_routing()
 
     def tearDown(self):
         self.fake_redis.teardown()

@@ -321,15 +321,12 @@ class ContentKeywordRouter(SimpleDispatchRouter):
         back to the application that sent the outgoing message.
     """
 
-    def __init__(self, dispatcher, config):
-        self.r_config = config.get('redis_config', {})
-        self.r_prefix = config['dispatcher_name']
-        self.r_server = redis.Redis(**self.r_config)
-        self.keyword_mappings = config['keyword_mappings'].items()
-        self.transport_mappings = config['transport_mappings'].items()
-        super(ContentKeywordRouter, self).__init__(dispatcher, config)
-
     def setup_routing(self):
+        self.r_config = self.config.get('redis_config', {})
+        self.r_prefix = self.config['dispatcher_name']
+        self.r_server = redis.Redis(**self.r_config)
+        self.keyword_mappings = self.config['keyword_mappings'].items()
+        self.transport_mappings = self.config['transport_mappings'].items()
         self.expire_routing_timeout = int(self.config['expire_routing_memory'])
 
     def get_message_key(self, message):
