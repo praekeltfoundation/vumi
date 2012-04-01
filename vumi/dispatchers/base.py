@@ -364,10 +364,10 @@ class ContentKeywordRouter(SimpleDispatchRouter):
         if (msg_keyword == ''):
             log.error('Message has not keyword')
             return
-        for name, routing_rules in self.keyword_mappings.iteritems():
+        for transport_name, routing_rules in self.keyword_mappings.iteritems():
             if self.is_msg_matching_routing_rules(msg, routing_rules):
-                log.debug('Message is routed to %s' % (name,))
-                self.publish_exposed_inbound(name, msg)
+                log.debug('Message is routed to %s' % (transport_name,))
+                self.publish_exposed_inbound(transport_name, msg)
 
     def dispatch_inbound_event(self, msg):
         log.debug("Inbound event")
