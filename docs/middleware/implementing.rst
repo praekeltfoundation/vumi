@@ -4,7 +4,7 @@ Implementing your own middleware
 .. py:module:: vumi.middleware
 
 A middleware class provides four handler functions, one for processing
-each of the four kinds of message transports and applications typical
+each of the four kinds of messages transports and applications typical
 sent and receive (i.e. inbound user messages, outbound user messages,
 event messages and failure messages).
 
