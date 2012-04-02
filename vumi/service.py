@@ -471,7 +471,9 @@ class Publisher(object):
                                          routing_key=routing_key)
 
     def publish_message(self, message, **kwargs):
-        return self.publish_raw(message.to_json(), **kwargs)
+        d = self.publish_raw(message.to_json(), **kwargs)
+        d.addCallback(lambda r: message)
+        return d
 
     def publish_json(self, data, **kw):
         """helper method"""
