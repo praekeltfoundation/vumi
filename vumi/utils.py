@@ -204,6 +204,13 @@ def get_first_word(content, delimiter=' '):
     'KEYWORD'
     >>>
 
+    :param str content:
+        Content from which the word will be retrive.
+
+    :param str delimiter
+        Delimiter identify the string which is following the returned value.
+        In case the delimiter is not present in the content, the all content
+        is returned.
     """
     return (content or '').split(delimiter)[0]
 
