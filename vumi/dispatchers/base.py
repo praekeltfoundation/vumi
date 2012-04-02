@@ -364,10 +364,9 @@ class ContentKeywordRouter(SimpleDispatchRouter):
                     (msg['from_addr'].startswith(routing_rules['prefix']))])
 
     def dispatch_inbound_message(self, msg):
-        log.debug('Inbound message')
         keyword = get_first_word(msg['content']).lower()
         if keyword == '':
-            log.error('Message has no keyword')
+            log.error('Message has no keyword to be routed %s' % (msg,))
             return
         for transport_name, routing_rules in self.keyword_mappings.iteritems():
             if self.is_msg_matching_routing_rules(keyword, msg, routing_rules):
@@ -375,21 +374,19 @@ class ContentKeywordRouter(SimpleDispatchRouter):
                 self.publish_exposed_inbound(transport_name, msg)
 
     def dispatch_inbound_event(self, msg):
-        log.debug("Inbound event")
         message_key = self.get_message_key(msg['user_message_id'])
         name = self.r_server.get(message_key)
         if not name:
             log.error("Not route back tuple stored in Redis for %s"
                   % (msg['user_message_id'],))
         try:
-            log.debug('Event is routed to %s' % (name,))
+            log.debug("Event is routed to %s" % (name,))
             self.publish_exposed_event(name, msg)
         except:
             log.error("No publishing route for %s" % (name,))
 
     @inlineCallbacks
     def dispatch_outbound_message(self, msg):
-        log.debug("Outbound message")
         transport_name = self.transport_mappings.get(msg['from_addr'])
         if transport_name is not None:
             self.publish_transport(transport_name, msg)
