@@ -25,10 +25,14 @@ class LoggingMiddlewareTestCase(TestCase):
     def test_default_config(self):
         mw = self.mklogger({})
         with LogCatcher() as lc:
-            mw.handle_inbound(DummyMessage("inbound"), "endpoint")
-            mw.handle_outbound(DummyMessage("outbound"), "endpoint")
-            mw.handle_event(DummyMessage("event"), "endpoint")
-            mw.handle_failure(DummyMessage("failure"), "endpoint")
+            for handler, endpoint in [
+                (mw.handle_inbound, "inbound"),
+                (mw.handle_outbound, "outbound"),
+                (mw.handle_event, "event"),
+                (mw.handle_failure, "failure")]:
+                msg = DummyMessage(endpoint)
+                result = handler(msg, "endpoint")
+                self.assertEqual(result, msg)
             logs = lc.logs
         self.assertEqual([log['logLevel'] for log in logs],
                          [20, 20, 20, 40])
@@ -42,7 +46,9 @@ class LoggingMiddlewareTestCase(TestCase):
     def test_custom_log_level(self):
         mw = self.mklogger({'log_level': 'warning'})
         with LogCatcher() as lc:
-            mw.handle_inbound(DummyMessage("inbound"), "endpoint")
+            msg = DummyMessage("inbound")
+            result = mw.handle_inbound(msg, "endpoint")
+            self.assertEqual(result, msg)
             logs = lc.logs
         self.assertEqual([log['logLevel'] for log in logs], [30])
         self.assertEqual([log['message'][0] for log in logs], [
@@ -52,7 +58,9 @@ class LoggingMiddlewareTestCase(TestCase):
     def test_custom_failure_log_level(self):
         mw = self.mklogger({'failure_log_level': 'info'})
         with LogCatcher() as lc:
-            mw.handle_failure(DummyMessage("failure"), "endpoint")
+            msg = DummyMessage("failure")
+            result = mw.handle_failure(msg, "endpoint")
+            self.assertEqual(result, msg)
             logs = lc.logs
         self.assertEqual([log['logLevel'] for log in logs], [20])
         self.assertEqual([log['message'][0] for log in logs], [

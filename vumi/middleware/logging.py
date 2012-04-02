@@ -27,6 +27,7 @@ class LoggingMiddleware(BaseMiddleware):
     def _log(self, direction, logger, msg, endpoint):
         logger("Processed %s message for %s: %s" % (direction, endpoint,
                                                     msg.to_json()))
+        return msg
 
     def handle_inbound(self, message, endpoint):
         return self._log("inbound", self.message_logger, message, endpoint)
