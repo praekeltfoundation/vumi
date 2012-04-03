@@ -29,22 +29,24 @@ only the logic for routing messages (see :sec:`Routers`). The
 pluggable dispatcher worker handles setting up endpoints for all the
 transports and application workers the dispatcher communicates with.
 
-.. tikz:: A simple dispatcher setup
+.. tikz:: A simple dispatcher configuration. Boxes represent workers. Edges are routing links between workers. Edges are labelled with endpoint names (i.e. transport_names).
    :filename: images/tikz/simple-dispatcher-example.png
    :libs: arrows,shadows,decorations.pathmorphing,shapes,positioning
 
    \tikzstyle{place}=[double copy shadow,
                       shape=rounded rectangle,
                       thick,
+                      font=\scriptsize,
                       inner sep=0pt,
-                      outer sep=0.5ex,
-                      minimum height=2em,
-                      minimum width=10em,
-                      node distance=10em,
+                      outer sep=0.3ex,
+                      minimum height=1.5em,
+                      minimum width=8em,
+                      node distance=8em,
                      ];
 
-   \tikzstyle{link}=[->,
+   \tikzstyle{link}=[<->,
                      >=stealth,
+                     font=\scriptsize,
                      line width=0.2ex,
                      auto,
                      ];
@@ -59,9 +61,9 @@ transports and application workers the dispatcher communicates with.
    \tikzstyle{application}=[draw=darkblue!50,fill=darkblue!20]
    \tikzstyle{dispatcher}=[draw=black!50,fill=black!20]
 
-   \node[place,transport] (smpp_transport) {SMPP Transport};
-   \node[place,transport] (xmpp_transport) [below=of smpp_transport] {XMPP Transport};
-   \node[place,dispatcher] (dispatcher) [right=of smpp_transport] {Dispatcher};
+   \node[place,dispatcher] (dispatcher) {Dispatcher};
+   \node[place,transport] (smpp_transport) [above left=of dispatcher] {SMPP Transport};
+   \node[place,transport] (xmpp_transport) [below left=of dispatcher] {XMPP Transport};
    \node[place,application] (my_application) [right=of dispatcher] {My Application};
 
    \draw[link,transport_name] (smpp_transport) to node [route] {smpp\_transport} (dispatcher);
