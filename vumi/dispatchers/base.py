@@ -370,17 +370,16 @@ class ContentKeywordRouter(SimpleDispatchRouter):
             return
         for transport_name, routing_rules in self.keyword_mappings.iteritems():
             if self.is_msg_matching_routing_rules(keyword, msg, routing_rules):
-                log.debug('Message is routed to %s' % (transport_name,))
                 self.publish_exposed_inbound(transport_name, msg)
 
     def dispatch_inbound_event(self, msg):
         message_key = self.get_message_key(msg['user_message_id'])
         name = self.r_server.get(message_key)
         if not name:
-            log.error("Not route back tuple stored in Redis for %s"
-                  % (msg['user_message_id'],))
+            log.error("No transport_name for return route found in Redis"
+                      " while dispatching transport event for message %s"
+                      % (msg['user_message_id'],))
         try:
-            log.debug("Event is routed to %s" % (name,))
             self.publish_exposed_event(name, msg)
         except:
             log.error("No publishing route for %s" % (name,))
