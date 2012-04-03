@@ -29,8 +29,47 @@ only the logic for routing messages (see :sec:`Routers`). The
 pluggable dispatcher worker handles setting up endpoints for all the
 transports and application workers the dispatcher communicates with.
 
+.. tikz:: A simple dispatcher setup
+   :filename: images/tikz/simple-dispatcher-example.png
+   :libs: arrows,shadows,decorations.pathmorphing,shapes,positioning
+
+   \tikzstyle{place}=[double copy shadow,
+                      shape=rounded rectangle,
+                      thick,
+                      inner sep=0pt,
+                      outer sep=0.5ex,
+                      minimum height=2em,
+                      minimum width=10em,
+                      node distance=10em,
+                     ];
+
+   \tikzstyle{link}=[->,
+                     >=stealth,
+                     line width=0.2ex,
+                     auto,
+                     ];
+
+   \definecolor{darkgreen}{rgb}{0,0.5,0};
+   \definecolor{darkblue}{rgb}{0,0,0.5};
+
+   \tikzstyle{route}=[sloped,midway,above=0.1em];
+   \tikzstyle{transport_name}=[draw=darkgreen];
+   \tikzstyle{exposed_name}=[draw=darkblue];
+   \tikzstyle{transport}=[draw=darkgreen!50,fill=darkgreen!20]
+   \tikzstyle{application}=[draw=darkblue!50,fill=darkblue!20]
+   \tikzstyle{dispatcher}=[draw=black!50,fill=black!20]
+
+   \node[place,transport] (smpp_transport) {SMPP Transport};
+   \node[place,transport] (xmpp_transport) [below=of smpp_transport] {XMPP Transport};
+   \node[place,dispatcher] (dispatcher) [right=of smpp_transport] {Dispatcher};
+   \node[place,application] (my_application) [right=of dispatcher] {My Application};
+
+   \draw[link,transport_name] (smpp_transport) to node [route] {smpp\_transport} (dispatcher);
+   \draw[link,transport_name] (xmpp_transport) to node [route] {xmpp\_transport} (dispatcher);
+   \draw[link,exposed_name] (my_application) to node [route] {my\_application} (dispatcher);
+
 A simple :class:`BaseDispatchWorker` YAML configuration file for the
-first example above might look like::
+example above might look like::
 
   # dispatcher config
 
