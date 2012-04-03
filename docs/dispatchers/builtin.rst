@@ -1,17 +1,41 @@
-Builtin middleware
-==================
+Builtin routers
+===============
 
-Vumi ships with a small set of generically useful middleware:
+Vumi ships with a small set of generically useful routers:
 
-.. contents:: Vumi middleware
+.. contents:: Vumi routers
     :local:
 
+.. py:module:: vumi.dispatchers
 
-LoggingMiddleware
-^^^^^^^^^^^^^^^^^
 
-Logs messages, events and failures as they enter or leave a transport.
+SimpleDispatchRouter
+^^^^^^^^^^^^^^^^^^^^
 
-.. py:module:: vumi.middleware
+.. autoclass:: SimpleDispatchRouter
 
-.. autoclass:: LoggingMiddleware
+
+TransportToTransportRouter
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. autoclass:: TransportToTransportRouter
+
+
+ToAddrRouter
+^^^^^^^^^^^^
+
+.. autoclass:: ToAddrRouter
+
+
+FromAddrMultiplexRouter
+^^^^^^^^^^^^^^^^^^^^^^^
+
+.. autoclass:: FromAddrMultiplexRouter
+
+
+UserGroupingRouter
+^^^^^^^^^^^^^^^^^^
+
+.. autoclass:: UserGroupingRouter
+
+
