@@ -118,8 +118,7 @@ Routers
 
 .. TODO::
 
-   A drawing showing a bunch of transports and applications connected
-   to a dispatcher with endpoint names on all the links.
+   Describe routers here.
 
 Further reading:
 
