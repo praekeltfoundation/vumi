@@ -4,45 +4,32 @@ Dispatchers
 Dispatchers are vumi workers that route messages between sets of
 transports and sets of application workers.
 
-Middleware provides additional functionality that can be attached to
-any existing transport or application worker. For example, middleware
-could log inbound and outbound messages, store delivery reports in a
-database or modify a message.
+Vumi transports and application workers both have a single *endpoint*
+on which messages are sent and received (the name of the endpoint is
+given by the *transport_name* configuration option). Connecting sets
+of transports and applications requires a kind of worker with
+*multiple* endpoints. This class of workers is the dispatcher.
 
-Attaching middleware to your transport or application worker is fairly
-straight forward. Just extend your YAML configuration file with lines like::
+Examples of use cases for dispatchers:
 
-    middleware:
-        - mw1: vumi.middleware.DebuggingMiddleware
+* A single application that sends and receives both SMSes and XMPP
+  messages.
 
-    mw1:
-        debug_level: info
+* A single SMPP transports that sends and receives SMSes on behalf of
+  multiple applications.
 
-The `middleware` section contains a list of middleware items. Each
-time consists of a `name` (e.g. `mw1`) for that middleware instance
-and a `class` (e.g. :class:`vumi.middleware.DebuggingMiddleware`)
-which is the full Python path to the class implementing the
-middleware. A `name` can be any string that doesn't clash with another
-top-level configuration option -- it's just used to look up the
-configuration for the middleware itself.
+* Multiple applications that all send and receive SMSes in multiple
+  countries using a common set of SMPP transports.
 
-If a middleware class doesn't require any additional parameters, the
-configuration section (i.e. the `mw1: debug_level ...` in the example
-above) may simply be omitted.
+.. TODO::
 
-Multiple layers of middleware may be specified as follows::
+   A drawing showing a bunch of transports and applications connected
+   to a dispatcher with endpoint names on all the links.
 
-    middleware:
-        - mw1: vumi.middleware.LoggingMiddleware
-        - mw2: mypackage.CustomMiddleware
+.. TODO::
 
-You can think of the layers of middleware sitting on top of the
-underlying transport or application worker. Messages being consumed by
-the worker enter from the top and are processed by the middleware in
-the order you have defined them and eventually reach the worker at the
-bottom. Messages published by the worker start at the bottom and
-travel up through the layers of middleware before finally exiting the
-middleware at the top.
+   Mention routing classes.
+   Example configuration.
 
 Further reading:
 
