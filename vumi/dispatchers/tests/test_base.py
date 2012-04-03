@@ -5,8 +5,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.dispatchers.base import (BaseDispatchWorker, ToAddrRouter,
-                                   FromAddrMultiplexRouter,
-                                   ContentKeywordRouter)
+                                   FromAddrMultiplexRouter)
 from vumi.tests.utils import get_stubbed_worker, FakeRedis
 from vumi.tests.fake_amqp import FakeAMQPBroker
 
