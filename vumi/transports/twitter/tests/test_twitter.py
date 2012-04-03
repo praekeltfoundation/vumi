@@ -67,6 +67,8 @@ class TwitterTransportTestCase(TransportTestCase):
         yield self.transport._setup_message_publisher()
         yield self.transport._setup_event_publisher()
 
+        yield self.transport.setup_middleware()
+
     def test_handle_replies(self):
         reply = Thing(
             id=1,
