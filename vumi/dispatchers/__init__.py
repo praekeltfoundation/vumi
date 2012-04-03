@@ -2,10 +2,11 @@
 
 __all__ = ["BaseDispatchWorker", "BaseDispatchRouter", "SimpleDispatchRouter",
            "TransportToTransportRouter", "ToAddrRouter",
-           "FromAddrMultiplexRouter", "UserGroupingRouter"]
+           "FromAddrMultiplexRouter", "UserGroupingRouter",
+           "ContentKeywordRouter"]
 
 from vumi.dispatchers.base import (BaseDispatchWorker, BaseDispatchRouter,
                                    SimpleDispatchRouter,
                                    TransportToTransportRouter, ToAddrRouter,
                                    FromAddrMultiplexRouter,
-                                   UserGroupingRouter)
+                                   UserGroupingRouter, ContentKeywordRouter)
