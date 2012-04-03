@@ -198,21 +198,25 @@ def filter_options_on_prefix(options, prefix, delimiter='-'):
 
 def get_first_word(content, delimiter=' '):
     """
-    splits a string to get the first word
+    Returns the first word from a string.
 
-    >>>get_first_word('KEYWORD rest of message')
-    'KEYWORD'
-    >>>
+    Example::
 
-    :param str content:
-        Content from which the word will be retrive.
+      >>> get_first_word('KEYWORD rest of message')
+      'KEYWORD'
 
-    :param str delimiter
-        Delimiter identify the string which is following the returned value.
-        In case the delimiter is not present in the content, the all content
-        is returned.
+    :type content: str or None
+    :param content:
+        Content from which the first word will be retrieved. If the
+        content is None it is treated as an empty string (this is a
+        convenience for dealing with content-less messages).
+    :param str delimiter:
+        Delimiter to split the string on. Default is ' '.
+        Passed to :func:`string.partition`.
+    :returns:
+        A string containing the first word.
     """
-    return (content or '').split(delimiter)[0]
+    return (content or '').partition(delimiter)[0]
 
 
 def cleanup_msisdn(number, country_code):
