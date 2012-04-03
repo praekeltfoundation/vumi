@@ -25,7 +25,7 @@ Examples of use cases for dispatchers:
 
 Vumi provides a pluggable dispatch worker :class:`BaseDispatchWorker`
 that may be extended by much simpler *routing classes* that implement
-only the logic for routing messages (see :ref:`Routers`). The
+only the logic for routing messages (see :sec:`Routers`). The
 pluggable dispatcher worker handles setting up endpoints for all the
 transports and application workers the dispatcher communicates with.
 
@@ -69,7 +69,7 @@ should be sent to. In this simple example message from both transports
 are sent to the same application worker.
 
 Other router classes will have different router configuration
-options. These are described in :ref:`dispatchers/builtin.rst`.
+options. These are described in :doc:`dispatchers/builtin`.
 
 
 Routers
