@@ -370,16 +370,21 @@ class ContentKeywordRouter(SimpleDispatchRouter):
     the 'keyword'.
 
     :param dict keyword_mappings:
-        Mapping from application transport names to routing rules. A
-        routing rule may either be a simple keyword or a
-        dictionary. Dictionaries must contain a key called 'keyword'
-        and may optionally contain keys named 'to_addr' and 'prefix'.
-        If a message's first word matches a given keyword, the message
-        is sent to the application listening on the associated
-        transport name. If a 'to_addr' key is supplied, the message
-        `to_addr` must also match the value of the 'to_addr' key. If a
-        'prefix' is supplied, the message `from_addr` must *start
-        with* the value of the 'prefix' key.
+        Mapping from application transport names to simple keywords.
+        This is purely a convenience for constructing simple routing
+        rules. The rules generated from this option are appened to
+        the of rules supplied via the *rules* option.
+
+    :param list rules:
+        A list of routing rules. A routing rule is a dictionary. It
+        must have `app` and `keyword` keys and may contain `to_addr`
+        and `prefix` keys. If a message's first word matches a given
+        keyword, the message is sent to the application listening on
+        the transport name given by the value of `app`. If a 'to_addr'
+        key is supplied, the message `to_addr` must also match the
+        value of the 'to_addr' key. If a 'prefix' is supplied, the
+        message `from_addr` must *start with* the value of the
+        'prefix' key.
 
     :param dict transport_mappings:
         Mapping from message `from_addr`es to transports names.  If a
@@ -398,13 +403,18 @@ class ContentKeywordRouter(SimpleDispatchRouter):
         self.r_config = self.config.get('redis_config', {})
         self.r_prefix = self.config['dispatcher_name']
         self.r_server = redis.Redis(**self.r_config)
-        self.keyword_mappings = self.config['keyword_mappings']
-        for transport_name, routing_rule in self.keyword_mappings.items():
-            if isinstance(routing_rule, basestring):
-                self.keyword_mappings[transport_name] = routing_rule = {
-                    'keyword': routing_rule,
-                    }
-            routing_rule['keyword'] = routing_rule['keyword'].lower()
+        self.rules = []
+        for rule in self.config.get('rules', []):
+            if 'keyword' not in rule or 'app' not in rule:
+                raise ConfigError("Rule definition %r must contain values for"
+                                  " both 'app' and 'keyword'" % rule)
+            rule = rule.copy()
+            rule['keyword'] = rule['keyword'].lower()
+            self.rules.append(rule)
+        keyword_mappings = self.config.get('keyword_mappings', {})
+        for transport_name, keyword in keyword_mappings.items():
+            self.rules.append({'app': transport_name,
+                               'keyword': keyword.lower()})
         self.transport_mappings = self.config['transport_mappings']
         self.expire_routing_timeout = int(self.config['expire_routing_memory'])
 
@@ -423,21 +433,21 @@ class ContentKeywordRouter(SimpleDispatchRouter):
     def publish_exposed_event(self, name, msg):
         self.dispatcher.exposed_event_publisher[name].publish_message(msg)
 
-    def is_msg_matching_routing_rules(self, keyword, msg, routing_rules):
-        return all([keyword == routing_rules['keyword'],
-                    (not 'to_addr' in routing_rules) or
-                    (msg['to_addr'] == routing_rules['to_addr']),
-                    (not 'prefix' in routing_rules) or
-                    (msg['from_addr'].startswith(routing_rules['prefix']))])
+    def is_msg_matching_routing_rules(self, keyword, msg, rule):
+        return all([keyword == rule['keyword'],
+                    (not 'to_addr' in rule) or
+                    (msg['to_addr'] == rule['to_addr']),
+                    (not 'prefix' in rule) or
+                    (msg['from_addr'].startswith(rule['prefix']))])
 
     def dispatch_inbound_message(self, msg):
         keyword = get_first_word(msg['content']).lower()
         if keyword == '':
             log.error('Message has no keyword to be routed %s' % (msg,))
             return
-        for transport_name, routing_rules in self.keyword_mappings.iteritems():
-            if self.is_msg_matching_routing_rules(keyword, msg, routing_rules):
-                self.publish_exposed_inbound(transport_name, msg)
+        for rule in self.rules:
+            if self.is_msg_matching_routing_rules(keyword, msg, rule):
+                self.publish_exposed_inbound(rule['app'], msg)
 
     def dispatch_inbound_event(self, msg):
         message_key = self.get_message_key(msg['user_message_id'])

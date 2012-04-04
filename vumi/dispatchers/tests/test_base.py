@@ -594,16 +594,17 @@ class TestContentKeywordRouter(DispatcherTestCase):
                 'shortcode2': 'transport2',
                 },
             'exposed_names': ['app1', 'app2', 'app3'],
+            'rules': [{'app': 'app1',
+                       'keyword': 'KEYWORD1',
+                       'to_addr': '8181',
+                       'prefix': '+256'
+                       }],
+
             'keyword_mappings': {
-                'app1': {
-                    'keyword': 'KEYWORD1',
-                    'to_addr': '8181',
-                    'prefix': '+256'
-                    },
-                'app2': ['KEYWORD2', 'KEYWORD3'],
-                'app3': 'KEYWORD1'
+                'app2': 'KEYWORD2',
+                'app3': 'KEYWORD1',
                 },
-            'expire_routing_memory': '3'
+            'expire_routing_memory': '3',
             }
         self.fake_redis = FakeRedis()
         self.dispatcher = yield self.get_dispatcher(self.config)
