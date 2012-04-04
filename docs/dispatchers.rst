@@ -112,6 +112,7 @@ are sent to the same application worker.
 Other router classes will have different router configuration
 options. These are described in :doc:`dispatchers/builtin`.
 
+
 .. _routers-section:
 
 Routers
@@ -134,10 +135,8 @@ Many routers follow a simple pattern:
   its common for the application to simply provide the name of the
   transport the message should be routed to).
 
-
-
-Further reading
-^^^^^^^^^^^^^^^
+You can read more about the routers Vumi provides and about how to
+write your own router class in the following sections:
 
 .. toctree::
     :maxdepth: 1
