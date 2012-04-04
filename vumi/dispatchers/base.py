@@ -93,6 +93,23 @@ class BaseDispatchWorker(Worker):
 
 class BaseDispatchRouter(object):
     """Base class for dispatch routing logic.
+
+    This is a convenient definition of and set of common functionality
+    for router classes. You need not subclass this and should not
+    instantiate this directly.
+
+    The :meth:`__init__` method should take exactly the following
+    options so that your class can be instantiated from configuration
+    in a standard way:
+
+    :param vumi.dispatchers.BaseDispatchWorker dispatcher:
+        The dispatcher this routing class is part of.
+    :param dict config:
+        The configuration options passed to the dispatcher.
+
+    If you are subclassing this class, you should not override
+    :meth:`__init__`. Custom setup should be done in
+    :meth:`setup_routing` instead.
     """
 
     def __init__(self, dispatcher, config):
@@ -101,16 +118,31 @@ class BaseDispatchRouter(object):
         self.setup_routing()
 
     def setup_routing(self):
-        """Setup any things needed for routing."""
+        """Perform setup required for routing messages."""
         pass
 
     def dispatch_inbound_message(self, msg):
+        """Dispatch an inbound user message to a publisher.
+
+        :param vumi.message.TransportUserMessage msg:
+            Message to dispatch.
+        """
         raise NotImplementedError()
 
     def dispatch_inbound_event(self, msg):
+        """Dispatch an event to a publisher.
+
+        :param vumi.message.TransportEvent msg:
+            Message to dispatch.
+        """
         raise NotImplementedError()
 
     def dispatch_outbound_message(self, msg):
+        """Dispatch an outbound user message to a publisher.
+
+        :param vumi.message.TransportUserMessage msg:
+            Message to dispatch.
+        """
         raise NotImplementedError()
 
 
