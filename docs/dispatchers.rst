@@ -26,7 +26,7 @@ Examples of use cases for dispatchers:
 Vumi provides a pluggable dispatch worker :class:`BaseDispatchWorker`
 that may be extended by much simpler *routing classes* that implement
 only the logic for routing messages (see :ref:`routers-section`). The
-pluggable dispatcher worker handles setting up endpoints for all the
+pluggable dispatcher handles setting up endpoints for all the
 transports and application workers the dispatcher communicates with.
 
 .. tikz:: A simple dispatcher configuration. Boxes represent workers. Edges are routing links between workers. Edges are labelled with endpoint names (i.e. transport_names).
@@ -117,11 +117,27 @@ options. These are described in :doc:`dispatchers/builtin`.
 Routers
 ^^^^^^^
 
-.. TODO::
+Router classes implement dispatching of inbound and outbound messages
+and events. Inbound messages and events come from transports and are
+typically dispatched to an application. Outbound messages come from
+applications and are typically dispatched to a transport.
 
-   Describe routers here.
+Many routers follow a simple pattern:
 
-Further reading:
+* `inbound` messages are routed using custom routing logic.
+* `events` are routed towards the same application the associated
+  message was routed to.
+* `outbound` messages that are replies are routed towards the
+  transport that the original message came from.
+* `outbound` messages that are not replies are routed based on
+  additional information provided by the application (in simple setups
+  its common for the application to simply provide the name of the
+  transport the message should be routed to).
+
+
+
+Further reading
+^^^^^^^^^^^^^^^
 
 .. toctree::
     :maxdepth: 1
