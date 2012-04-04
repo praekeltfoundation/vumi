@@ -597,11 +597,13 @@ class TestContentKeywordRouter(DispatcherTestCase):
             'rules': [{'app': 'app1',
                        'keyword': 'KEYWORD1',
                        'to_addr': '8181',
-                       'prefix': '+256'
+                       'prefix': '+256',
+                       },
+                      {'app': 'app2',
+                       'keyword': 'KEYWORD2',
                        }],
-
             'keyword_mappings': {
-                'app2': 'KEYWORD2',
+                'app2': 'KEYWORD3',
                 'app3': 'KEYWORD1',
                 },
             'expire_routing_memory': '3',
@@ -625,12 +627,28 @@ class TestContentKeywordRouter(DispatcherTestCase):
                             transport_name='transport1',
                             direction='inbound')
 
+        msg2 = self.mkmsg_in(content='KEYWORD2 rest of a msg',
+                            to_addr='8181',
+                            from_addr='+256788601462')
+
+        yield self.dispatch(msg2,
+                            transport_name='transport1',
+                            direction='inbound')
+
+        msg3 = self.mkmsg_in(content='KEYWORD3 rest of a msg',
+                            to_addr='8181',
+                            from_addr='+256788601462')
+
+        yield self.dispatch(msg3,
+                            transport_name='transport1',
+                            direction='inbound')
+
         app1_inbound_msg = self.get_dispatched_messages('app1',
                                                         direction='inbound')
         self.assertEqual(app1_inbound_msg, [msg])
         app2_inbound_msg = self.get_dispatched_messages('app2',
                                                         direction='inbound')
-        self.assertEqual(app2_inbound_msg, [])
+        self.assertEqual(app2_inbound_msg, [msg2, msg3])
         app3_inbound_msg = self.get_dispatched_messages('app3',
                                                         direction='inbound')
         self.assertEqual(app3_inbound_msg, [msg])
