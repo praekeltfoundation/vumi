@@ -593,7 +593,7 @@ class TestContentKeywordRouter(DispatcherTestCase):
                 'shortcode1': 'transport1',
                 'shortcode2': 'transport2',
                 },
-            'exposed_names': ['app1', 'app2', 'app3'],
+            'exposed_names': ['app1', 'app2', 'app3', 'fallback_app'],
             'rules': [{'app': 'app1',
                        'keyword': 'KEYWORD1',
                        'to_addr': '8181',
@@ -604,6 +604,7 @@ class TestContentKeywordRouter(DispatcherTestCase):
                 'app2': 'KEYWORD2',
                 'app3': 'KEYWORD1',
                 },
+            'fallback_application': 'fallback_app',
             'expire_routing_memory': '3',
             }
         self.fake_redis = FakeRedis()
@@ -665,6 +666,9 @@ class TestContentKeywordRouter(DispatcherTestCase):
         app2_inbound_msg = self.get_dispatched_messages('app2',
                                                         direction='inbound')
         self.assertEqual(app2_inbound_msg, [])
+        fallback_msgs = self.get_dispatched_messages('fallback_app',
+                                                     direction='inbound')
+        self.assertEqual(fallback_msgs, [msg])
 
     @inlineCallbacks
     def test_inbound_message_routing_not_casesensitive(self):
