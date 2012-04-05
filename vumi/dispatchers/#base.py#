@@ -320,9 +320,7 @@ class ContentKeywordRouter(SimpleDispatchRouter):
         'prefix' key.
 
     :param str fallback_application:
-        Optional application transport name to forward inbound messages
-        that match no rule to. If omitted, unrouted inbound messages
-        are just logged.
+        The application transport name to forward in
 
     :param dict transport_mappings:
         Mapping from message `from_addr`es to transports names.  If a
@@ -353,7 +351,6 @@ class ContentKeywordRouter(SimpleDispatchRouter):
         for transport_name, keyword in keyword_mappings.items():
             self.rules.append({'app': transport_name,
                                'keyword': keyword.lower()})
-        self.fallback_application = self.config.get('fallback_application')
         self.transport_mappings = self.config['transport_mappings']
         self.expire_routing_timeout = int(self.config['expire_routing_memory'])
 
@@ -381,16 +378,12 @@ class ContentKeywordRouter(SimpleDispatchRouter):
 
     def dispatch_inbound_message(self, msg):
         keyword = get_first_word(msg['content']).lower()
-        matched = False
+        if keyword == '':
+            log.error('Message has no keyword to be routed %s' % (msg,))
+            return
         for rule in self.rules:
             if self.is_msg_matching_routing_rules(keyword, msg, rule):
-                matched = True
                 self.publish_exposed_inbound(rule['app'], msg)
-        if not matched:
-            if self.fallback_application is not None:
-                self.publish_exposed_inbound(self.fallback_application, msg)
-            else:
-                log.error('Message could not be routed: %r' % (msg,))
 
     def dispatch_inbound_event(self, msg):
         message_key = self.get_message_key(msg['user_message_id'])
