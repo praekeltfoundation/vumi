@@ -8,7 +8,8 @@ from twisted.internet import reactor
 
 from vumi.utils import get_operator_number
 from vumi.transports.base import Transport
-from vumi.transports.smpp.clientserver.client import EsmeTransceiverFactory
+from vumi.transports.smpp.clientserver.client import (EsmeTransceiverFactory,
+                                                      EsmeCallbacks)
 from vumi.transports.smpp.clientserver.config import ClientConfig
 from vumi.transports.failures import FailureMessage
 from vumi.message import Message
@@ -107,16 +108,18 @@ class SmppTransport(Transport):
         self.r_message_prefix = "%s#message_json" % self.r_prefix
         log.msg("Connected to Redis, prefix: %s" % self.r_prefix)
 
+        self.esme_callbacks = EsmeCallbacks(
+            connect=self.esme_connected,
+            disconnect=self.esme_disconnected,
+            submit_sm_resp=self.submit_sm_resp,
+            delivery_report=self.delivery_report,
+            deliver_sm=self.deliver_sm)
+
         if not hasattr(self, 'esme_client'):
             # start the Smpp transport (if we don't have one)
             self.factory = EsmeTransceiverFactory(self.client_config,
-                                                  self.r_server)
-            self.factory.setConnectCallback(self.esme_connected)
-            self.factory.setDisconnectCallback(self.esme_disconnected)
-            self.factory.setSubmitSMRespCallback(self.submit_sm_resp)
-            self.factory.setDeliveryReportCallback(self.delivery_report)
-            self.factory.setDeliverSMCallback(self.deliver_sm)
-            self.factory.setSendFailureCallback(self.send_failure)
+                                                  self.r_server,
+                                                  self.esme_callbacks)
             reactor.connectTCP(
                 self.client_config.host,
                 self.client_config.port,

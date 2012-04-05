@@ -103,19 +103,14 @@ class EsmeTransceiver(Protocol):
 
     callLater = reactor.callLater
 
-    def __init__(self, config, kvs):
+    def __init__(self, config, kvs, esme_callbacks):
         self.config = config
+        self.esme_callbacks = esme_callbacks
         self.defaults = config.to_dict()
         self.state = 'CLOSED'
         log.msg('STATE: %s' % (self.state))
         self.smpp_bind_timeout = self.config.smpp_bind_timeout
         self.datastream = ''
-        # TODO: remove double underscores
-        self.__connect_callback = None
-        self.__submit_sm_resp_callback = None
-        self.__delivery_report_callback = None
-        self.__deliver_sm_callback = None
-        self._send_failure_callback = None
         self.r_server = kvs
         self.r_prefix = "%s@%s:%s" % (
                 self.config.system_id,
@@ -173,21 +168,6 @@ class EsmeTransceiver(Protocol):
             self.handle_enquire_link_resp(pdu)
         log.msg('STATE: %s' % (self.state))
 
-    def setConnectCallback(self, connect_callback):
-        self.__connect_callback = connect_callback
-
-    def setSubmitSMRespCallback(self, submit_sm_resp_callback):
-        self.__submit_sm_resp_callback = submit_sm_resp_callback
-
-    def setDeliveryReportCallback(self, delivery_report_callback):
-        self.__delivery_report_callback = delivery_report_callback
-
-    def setDeliverSMCallback(self, deliver_sm_callback):
-        self.__deliver_sm_callback = deliver_sm_callback
-
-    def setSendFailureCallback(self, send_failure_callback):
-        self._send_failure_callback = send_failure_callback
-
     def connectionMade(self):
         self.state = 'OPEN'
         log.msg('STATE: %s' % (self.state))
@@ -235,14 +215,14 @@ class EsmeTransceiver(Protocol):
             if self._lose_conn is not None:
                 self._lose_conn.cancel()
                 self._lose_conn = None
-            self.__connect_callback(self)
+            self.esme_callbacks.connect(self)
         log.msg('STATE: %s' % (self.state))
 
     def handle_submit_sm_resp(self, pdu):
         self.pop_unacked()
         message_id = pdu.get('body', {}).get(
                 'mandatory_parameters', {}).get('message_id')
-        self.__submit_sm_resp_callback(
+        self.esme_callbacks.submit_sm_resp(
                 sequence_number=pdu['header']['sequence_number'],
                 command_status=pdu['header']['command_status'],
                 command_id=pdu['header']['command_id'],
@@ -309,7 +289,7 @@ class EsmeTransceiver(Protocol):
                     pdu_params['short_message'] or ''
                     )
             if delivery_report:
-                self.__delivery_report_callback(
+                self.esme_callbacks.delivery_report(
                         destination_addr=pdu_params['destination_addr'],
                         source_addr=pdu_params['source_addr'],
                         delivery_report=delivery_report.groupdict(),
@@ -327,7 +307,7 @@ class EsmeTransceiver(Protocol):
                     self.r_server.delete(redis_key)
                     log.msg("Reassembled Message: %s" % (completed['message']))
                     # and we can finally pass the whole message on
-                    self.__deliver_sm_callback(
+                    self.esme_callbacks.deliver_sm(
                             destination_addr=completed['to_msisdn'],
                             source_addr=completed['from_msisdn'],
                             short_message=completed['message'],
@@ -338,7 +318,7 @@ class EsmeTransceiver(Protocol):
             else:
                 decoded_msg = self._decode_message(pdu_params['short_message'],
                                                    pdu_params['data_coding'])
-                self.__deliver_sm_callback(
+                self.esme_callbacks.deliver_sm(
                         destination_addr=pdu_params['destination_addr'],
                         source_addr=pdu_params['source_addr'],
                         short_message=decoded_msg,
@@ -430,56 +410,26 @@ class EsmeTransceiver(Protocol):
 
 class EsmeTransceiverFactory(ReconnectingClientFactory):
 
-    def __init__(self, config, kvs):
+    def __init__(self, config, kvs, esme_callbacks):
         self.config = config
         self.kvs = kvs
         self.esme = None
-        self.__connect_callback = None
-        self.__disconnect_callback = None
-        self.__submit_sm_resp_callback = None
-        self.__delivery_report_callback = None
-        self.__deliver_sm_callback = None
+        self.esme_callbacks = esme_callbacks
         self.initialDelay = self.config.initial_reconnect_delay
         self.maxDelay = max(45, self.initialDelay)
-
-    def setConnectCallback(self, connect_callback):
-        self.__connect_callback = connect_callback
-
-    def setDisconnectCallback(self, disconnect_callback):
-        self.__disconnect_callback = disconnect_callback
-
-    def setSubmitSMRespCallback(self, submit_sm_resp_callback):
-        self.__submit_sm_resp_callback = submit_sm_resp_callback
-
-    def setDeliveryReportCallback(self, delivery_report_callback):
-        self.__delivery_report_callback = delivery_report_callback
-
-    def setDeliverSMCallback(self, deliver_sm_callback):
-        self.__deliver_sm_callback = deliver_sm_callback
-
-    def setSendFailureCallback(self, send_failure_callback):
-        self._send_failure_callback = send_failure_callback
 
     def startedConnecting(self, connector):
         log.msg('Started to connect.')
 
     def buildProtocol(self, addr):
         log.msg('Connected')
-        self.esme = EsmeTransceiver(self.config, self.kvs)
-        self.esme.setConnectCallback(
-                connect_callback=self.__connect_callback)
-        self.esme.setSubmitSMRespCallback(
-                submit_sm_resp_callback=self.__submit_sm_resp_callback)
-        self.esme.setDeliveryReportCallback(
-                delivery_report_callback=self.__delivery_report_callback)
-        self.esme.setDeliverSMCallback(
-                deliver_sm_callback=self.__deliver_sm_callback)
+        self.esme = EsmeTransceiver(self.config, self.kvs, self.esme_callbacks)
         self.resetDelay()
         return self.esme
 
     def clientConnectionLost(self, connector, reason):
         log.msg('Lost connection.  Reason:', reason)
-        self.__disconnect_callback()
+        self.esme_callbacks.disconnect()
         ReconnectingClientFactory.clientConnectionLost(
                 self, connector, reason)
 
@@ -490,9 +440,18 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
 
 
 class EsmeCallbacks(object):
+    """Callbacks for ESME factory and protocol."""
 
-    #self.connect
-    pass
+    def __init__(self, connect=None, disconnect=None, submit_sm_resp=None,
+                 delivery_report=None, deliver_sm=None):
+        self.connect = connect or self.fallback
+        self.disconnect = disconnect or self.fallback
+        self.submit_sm_resp = submit_sm_resp or self.fallback
+        self.delivery_report = delivery_report or self.fallback
+        self.deliver_sm = deliver_sm or self.fallback
+
+    def fallback(self, *args, **kwargs):
+        pass
 
 
 class ESME(object):
@@ -503,9 +462,11 @@ class ESME(object):
         * Transmitter and/or Receiver
     but currently only Transceiver is implemented
     """
-    def __init__(self, clientConfig, keyValueStore):
-        self.config = clientConfig
-        self.kvs = keyValueStore
+    def __init__(self, client_config, kvs, esme_callbacks):
+        self.config = client_config
+        self.kvs = kvs
+        self.esme_callbacks = esme_callbacks
 
     def bindTransciever(self):
-        self.factory = EsmeTransceiverFactory(self.config, self.kvs)
+        self.factory = EsmeTransceiverFactory(self.config, self.kvs,
+                                              self.esme_callbacks)

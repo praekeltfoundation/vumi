@@ -3,12 +3,12 @@ import redis
 from twisted.internet import defer
 from twisted.internet.defer import inlineCallbacks
 from twisted.trial.unittest import TestCase
-from smpp.pdu_builder import SubmitSMResp, BindTransceiverResp, DeliverSM
+from smpp.pdu_builder import SubmitSMResp, DeliverSM
 
 from vumi.tests.utils import FakeRedis
 from vumi.message import TransportUserMessage
 from vumi.transports.smpp.clientserver.client import (
-        EsmeTransceiver, ESME, KeyValueStore)
+        EsmeTransceiver, ESME, KeyValueStore, EsmeCallbacks)
 from vumi.transports.smpp.clientserver.tests.test_client import (
         KeyValueStoreTestCase)
 from vumi.transports.smpp.transport import SmppTransport
@@ -22,30 +22,21 @@ class EsmeClientInitTestcase(TestCase):
 
     def test_esme_init_with_redis(self):
         r_server = redis.Redis("localhost", db=13)
-        self.esme = ESME(
-                None,
-                r_server,
-                )
+        self.esme = ESME(None, r_server, None)
         kvstc = KeyValueStoreTestCase()
         kvstc.prefix = __name__
         kvstc.run_all_tests_on_instance(self.esme.kvs)
 
     def test_esme_init_with_fakeredis(self):
         fake_redis = FakeRedis()
-        self.esme = ESME(
-                None,
-                fake_redis,
-                )
+        self.esme = ESME(None, fake_redis, None)
         kvstc = KeyValueStoreTestCase()
         kvstc.prefix = __name__
         kvstc.run_all_tests_on_instance(self.esme.kvs)
 
     def test_esme_init_with_simple_keyvaluestore(self):
         key_value_store = KeyValueStore()
-        self.esme = ESME(
-                None,
-                key_value_store,
-                )
+        self.esme = ESME(None, key_value_store, None)
         kvstc = KeyValueStoreTestCase()
         kvstc.prefix = __name__
         kvstc.run_all_tests_on_instance(self.esme.kvs)
@@ -53,10 +44,7 @@ class EsmeClientInitTestcase(TestCase):
 
     def test_esme_init_with_bad_object(self):
         key_value_store = self
-        self.esme = ESME(
-                None,
-                key_value_store,
-                )
+        self.esme = ESME(None, key_value_store, None)
         kvstc = KeyValueStoreTestCase()
         kvstc.prefix = __name__
         exception_expected = None
@@ -115,12 +103,17 @@ class FakeRedisRespTestCase(TransportTestCase):
         # hack a lot of transport setup
         self.transport = yield self.get_transport(self.config, start=False)
         self.transport.r_server = FakeRedis()
+        self.esme_callbacks = EsmeCallbacks(
+            connect=lambda: None, disconnect=lambda: None,
+            submit_sm_resp=self.transport.submit_sm_resp,
+            delivery_report=lambda: None, deliver_sm=lambda: None)
+
         self.esme = RedisTestEsmeTransceiver(
                 self.clientConfig,
-                self.transport.r_server)
+                self.transport.r_server,
+                self.esme_callbacks)
         self.esme.state = 'BOUND_TRX'
         self.transport.esme_client = self.esme
-        self.esme.setSubmitSMRespCallback(self.transport.submit_sm_resp)
 
         yield self.transport.startWorker()
         self.transport.esme_connected(self.esme)

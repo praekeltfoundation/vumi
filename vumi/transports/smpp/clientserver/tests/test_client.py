@@ -8,6 +8,7 @@ from smpp.pdu import unpack_pdu
 from vumi.tests.utils import FakeRedis
 from vumi.transports.smpp.clientserver.client import (
         EsmeTransceiver,
+        EsmeCallbacks,
         KeyValueBase,
         KeyValueStore,
         ESME)
@@ -88,28 +89,12 @@ class FakeTransport(object):
 
 
 class FakeEsmeTransceiver(EsmeTransceiver):
-    def __init__(self):
-        self.defaults = {}
-        delivery_report_regex = 'id:(?P<id>\S{,65})' \
-                            + ' +sub:(?P<sub>...)' \
-                            + ' +dlvrd:(?P<dlvrd>...)' \
-                            + ' +submit date:(?P<submit_date>\d*)' \
-                            + ' +done date:(?P<done_date>\d*)' \
-                            + ' +stat:(?P<stat>[A-Z]{7})' \
-                            + ' +err:(?P<err>...)' \
-                            + ' +[Tt]ext:(?P<text>.{,20})' \
-                            + '.*'
-        self.config = ClientConfig(
-            host="127.0.0.1", port="0", system_id="1234", password="password",
-            delivery_report_regex=delivery_report_regex)
-        self.smpp_bind_timeout = 10
+
+    def __init__(self, *args, **kwargs):
+        EsmeTransceiver.__init__(self, *args, **kwargs)
+        self.transport = FakeTransport()
         self.clock = Clock()
         self.callLater = self.clock.callLater
-        self.transport = FakeTransport()
-        self.r_server = FakeRedis()
-        self.r_prefix = "system_id@host:port"
-        self.sequence_number_prefix = "vumi_smpp_last_sequence_number#%s" % (
-                self.r_prefix)
 
     def sendPDU(self, *args):
         pass
@@ -118,10 +103,12 @@ class FakeEsmeTransceiver(EsmeTransceiver):
 class EsmeSequenceNumberTestCase(unittest.TestCase):
 
     def test_sequence_rollover(self):
-        esme = FakeEsmeTransceiver()
-        self.assertEqual(0, esme.get_seq())
-        esme.get_next_seq()
+        config = ClientConfig(host="127.0.0.1", port="0",
+                              system_id="1234", password="password")
+        esme = FakeEsmeTransceiver(config, FakeRedis(), None)
         self.assertEqual(1, esme.get_seq())
+        esme.get_next_seq()
+        self.assertEqual(2, esme.get_seq())
         esme.set_seq(4004004004)
         self.assertEqual(4004004004, esme.get_seq())
         esme.get_next_seq()
@@ -129,9 +116,11 @@ class EsmeSequenceNumberTestCase(unittest.TestCase):
 
 
 class EsmeTransceiverTestCase(unittest.TestCase):
-    def get_esme(self):
-        esme = FakeEsmeTransceiver()
-        esme.setDeliverSMCallback(lambda *a, **k: None)
+    def get_esme(self, **callbacks):
+        config = ClientConfig(host="127.0.0.1", port="0",
+                              system_id="1234", password="password")
+        esme_callbacks = EsmeCallbacks(**callbacks)
+        esme = FakeEsmeTransceiver(config, FakeRedis(), esme_callbacks)
         return esme
 
     def get_sm(self, msg, data_coding=3):
@@ -140,31 +129,28 @@ class EsmeTransceiverTestCase(unittest.TestCase):
 
     def test_deliver_sm_simple(self):
         """A simple message should be delivered."""
-        esme = self.get_esme()
-
-        def _cb(**kw):
+        def cb(**kw):
             self.assertEqual(u'hello', kw['short_message'])
-        esme.setDeliverSMCallback(_cb)
+
+        esme = self.get_esme(deliver_sm=cb)
         esme.handle_deliver_sm(self.get_sm('hello'))
 
     def test_deliver_sm_ucs2(self):
         """A UCS-2 message should be delivered."""
-        esme = self.get_esme()
-
-        def _cb(**kw):
+        def cb(**kw):
             self.assertEqual(u'hello', kw['short_message'])
-        esme.setDeliverSMCallback(_cb)
+
+        esme = self.get_esme(deliver_sm=cb)
         esme.handle_deliver_sm(self.get_sm('\x00h\x00e\x00l\x00l\x00o', 8))
 
     def test_bad_sm_ucs2(self):
         """An invalid UCS-2 message should be discarded."""
-        esme = self.get_esme()
-        bad_msg = '\n\x00h\x00e\x00l\x00l\x00o'
-
-        def _cb(**kw):
+        def cb(**kw):
             self.assertEqual(bad_msg, kw['short_message'])
             self.flushLoggedErrors()
-        esme.setDeliverSMCallback(_cb)
+
+        esme = self.get_esme(deliver_sm=cb)
+        bad_msg = '\n\x00h\x00e\x00l\x00l\x00o'
         esme.handle_deliver_sm(self.get_sm(bad_msg, 8))
 
     def test_bind_timeout(self):
@@ -181,7 +167,6 @@ class EsmeTransceiverTestCase(unittest.TestCase):
 
     def test_bind_no_timeout(self):
         esme = self.get_esme()
-        esme.setConnectCallback(lambda *a, **kw: None)
         esme.connectionMade()
 
         self.assertEqual(True, esme.transport.connected)
@@ -198,16 +183,16 @@ class EsmeTransceiverTestCase(unittest.TestCase):
 class ESMETestCase(unittest.TestCase):
 
     def setUp(self):
-        self.clientConfig = ClientConfig(
+        self.client_config = ClientConfig(
                 host='localhost',
                 port=2775,
                 system_id='test_system',
                 password='password',
                 )
-
-        self.keyValueStore = None
-        self.esme = ESME(self.clientConfig, self.keyValueStore)
+        self.kvs = None
+        self.esme_callbacks = None
+        self.esme = ESME(self.client_config, self.kvs,
+                         self.esme_callbacks)
 
     def test_bind_as_transceiver(self):
         self.esme.bindTransciever()
-        pass
