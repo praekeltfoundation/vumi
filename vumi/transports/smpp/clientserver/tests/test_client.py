@@ -96,7 +96,7 @@ class FakeEsmeTransceiver(EsmeTransceiver):
         self.clock = Clock()
         self.callLater = self.clock.callLater
 
-    def sendPDU(self, *args):
+    def send_pdu(self, *args):
         pass
 
 

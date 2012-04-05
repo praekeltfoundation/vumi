@@ -139,7 +139,7 @@ class EsmeTransceiver(Protocol):
         else:
             return seq
 
-    def popData(self):
+    def pop_data(self):
         data = None
         if(len(self.datastream) >= 16):
             command_length = int(binascii.b2a_hex(self.datastream[0:4]), 16)
@@ -148,7 +148,7 @@ class EsmeTransceiver(Protocol):
                 self.datastream = self.datastream[command_length:]
         return data
 
-    def handleData(self, data):
+    def handle_data(self, data):
         pdu = unpack_pdu(data)
         log.msg('INCOMING <<<< %s' % binascii.b2a_hex(data))
         log.msg('INCOMING <<<< %s' % pdu)
@@ -173,7 +173,7 @@ class EsmeTransceiver(Protocol):
         pdu = BindTransceiver(self.get_seq(), **self.defaults)
         log.msg(pdu.get_obj())
         self.get_next_seq()
-        self.sendPDU(pdu)
+        self.send_pdu(pdu)
         self._lose_conn = self.callLater(
             self.smpp_bind_timeout, self.lose_unbound_connection, 'BOUND_TRX')
 
@@ -196,12 +196,12 @@ class EsmeTransceiver(Protocol):
 
     def dataReceived(self, data):
         self.datastream += data
-        data = self.popData()
+        data = self.pop_data()
         while data != None:
-            self.handleData(data)
-            data = self.popData()
+            self.handle_data(data)
+            data = self.pop_data()
 
-    def sendPDU(self, pdu):
+    def send_pdu(self, pdu):
         data = pdu.get_bin()
         log.msg('OUTGOING >>>> %s' % unpack_pdu(data))
         self.transport.write(data)
@@ -282,7 +282,7 @@ class EsmeTransceiver(Protocol):
             message_id = str(uuid.uuid4())
             pdu_resp = DeliverSMResp(sequence_number,
                     **self.defaults)
-            self.sendPDU(pdu_resp)
+            self.send_pdu(pdu_resp)
             pdu_params = pdu['body']['mandatory_parameters']
             delivery_report = self.config.delivery_report_re.search(
                     pdu_params['short_message'] or ''
@@ -328,7 +328,7 @@ class EsmeTransceiver(Protocol):
         if pdu['header']['command_status'] == 'ESME_ROK':
             sequence_number = pdu['header']['sequence_number']
             pdu_resp = EnquireLinkResp(sequence_number)
-            self.sendPDU(pdu_resp)
+            self.send_pdu(pdu_resp)
 
     def handle_enquire_link_resp(self, pdu):
         if pdu['header']['command_status'] == 'ESME_ROK':
@@ -352,7 +352,7 @@ class EsmeTransceiver(Protocol):
             sequence_number = self.get_seq()
             pdu = SubmitSM(sequence_number, **dict(self.defaults, **kwargs))
             self.get_next_seq()
-            self.sendPDU(pdu)
+            self.send_pdu(pdu)
             self.push_unacked(sequence_number)
             return sequence_number
         return 0
@@ -381,7 +381,7 @@ class EsmeTransceiver(Protocol):
                     elif item.get('dest_flag') == 2:
                         pdu.addDistributionList(item.get('dl_name'))
             self.get_next_seq()
-            self.sendPDU(pdu)
+            self.send_pdu(pdu)
             return sequence_number
         return 0
 
@@ -390,7 +390,7 @@ class EsmeTransceiver(Protocol):
             sequence_number = self.get_seq()
             pdu = EnquireLink(sequence_number, **dict(self.defaults, **kwargs))
             self.get_next_seq()
-            self.sendPDU(pdu)
+            self.send_pdu(pdu)
             return sequence_number
         return 0
 
@@ -402,7 +402,7 @@ class EsmeTransceiver(Protocol):
                     source_addr=source_addr,
                     **dict(self.defaults, **kwargs))
             self.get_next_seq()
-            self.sendPDU(pdu)
+            self.send_pdu(pdu)
             return sequence_number
         return 0
 

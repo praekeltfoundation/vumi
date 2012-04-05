@@ -58,7 +58,7 @@ class EsmeClientInitTestcase(TestCase):
 
 class RedisTestEsmeTransceiver(EsmeTransceiver):
 
-    def sendPDU(self, pdu):
+    def send_pdu(self, pdu):
         pass  # don't actually send anything
 
 
@@ -158,8 +158,8 @@ class FakeRedisRespTestCase(TransportTestCase):
         yield self.transport._process_message(message2)
 
         # respond out of order - just to keep things interesting
-        self.esme.handleData(response2.get_bin())
-        self.esme.handleData(response1.get_bin())
+        self.esme.handle_data(response2.get_bin())
+        self.esme.handle_data(response1.get_bin())
 
         self.assertEqual([
                 self.mkmsg_ack('445', '3rd_party_id_2'),
@@ -174,7 +174,7 @@ class FakeRedisRespTestCase(TransportTestCase):
         response3 = SubmitSMResp(sequence_num3, "3rd_party_id_3",
                 command_status="ESME_RSUBMITFAIL")
         self.transport._process_message(message3)
-        self.esme.handleData(response3.get_bin())
+        self.esme.handle_data(response3.get_bin())
         # There should be no ack
         self.assertEqual([], self.get_dispatched_events()[2:])
 
@@ -190,7 +190,7 @@ class FakeRedisRespTestCase(TransportTestCase):
         response4 = SubmitSMResp(sequence_num4, "3rd_party_id_4",
                 command_status="ESME_RTHROTTLED")
         self.transport._process_message(message4)
-        self.esme.handleData(response4.get_bin())
+        self.esme.handle_data(response4.get_bin())
         # There should be no ack
         self.assertEqual([], self.get_dispatched_events()[3:])
 
@@ -369,7 +369,7 @@ class EsmeToSmscTestCase(TransportTestCase):
                 destination_addr="2772222222",
                 source_addr="2772000000",
                 )
-        self.service.factory.smsc.sendPDU(pdu)
+        self.service.factory.smsc.send_pdu(pdu)
 
         for expected_message in expected_pdus_3:
             actual_message = yield pdu_queue.get()
@@ -445,7 +445,7 @@ class EsmeToSmscTestCase(TransportTestCase):
                 destination_addr="2772222222",
                 source_addr="2772000000",
                 )
-        self.service.factory.smsc.sendPDU(pdu)
+        self.service.factory.smsc.send_pdu(pdu)
 
         # Have the server fire of an out-of-order multipart sms
         self.service.factory.smsc.multipart_tester(

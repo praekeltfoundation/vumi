@@ -33,7 +33,7 @@ class SmscServer(Protocol):
                 self.datastream = self.datastream[command_length:]
         return data
 
-    def handleData(self, data):
+    def handle_data(self, data):
         pdu = unpack_pdu(data)
         log.msg('INCOMING <<<<', pdu)
         if pdu['header']['command_id'] == 'bind_transceiver':
@@ -50,13 +50,13 @@ class SmscServer(Protocol):
             pdu_resp = BindTransceiverResp(sequence_number,
                     system_id=system_id
                     )
-            self.sendPDU(pdu_resp)
+            self.send_pdu(pdu_resp)
 
     def handle_enquire_link(self, pdu):
         if pdu['header']['command_status'] == 'ESME_ROK':
             sequence_number = pdu['header']['sequence_number']
             pdu_resp = EnquireLinkResp(sequence_number)
-            self.sendPDU(pdu_resp)
+            self.send_pdu(pdu_resp)
 
     def command_status(self, pdu):
         if pdu['body']['mandatory_parameters']['short_message'][:5] == "ESME_":
@@ -72,7 +72,7 @@ class SmscServer(Protocol):
             command_status = self.command_status(pdu)
             pdu_resp = SubmitSMResp(
                     sequence_number, message_id, command_status)
-            self.sendPDU(pdu_resp)
+            self.send_pdu(pdu_resp)
             reactor.callLater(0, self.delivery_report, message_id)
 
     def delivery_report(self, message_id):
@@ -81,7 +81,7 @@ class SmscServer(Protocol):
                          message_id, datetime.now().strftime("%y%m%d%H%M%S"),
                          datetime.now().strftime("%y%m%d%H%M%S")))
         pdu = DeliverSM(sequence_number, short_message=short_message)
-        self.sendPDU(pdu)
+        self.send_pdu(pdu)
 
     def multipart_tester(self, to_addr, from_addr):
         destination_addr = to_addr
@@ -108,18 +108,18 @@ class SmscServer(Protocol):
                 destination_addr=destination_addr,
                 source_addr=source_addr)
 
-        self.sendPDU(pdu2)
-        self.sendPDU(pdu3)
-        self.sendPDU(pdu1)
+        self.send_pdu(pdu2)
+        self.send_pdu(pdu3)
+        self.send_pdu(pdu1)
 
     def dataReceived(self, data):
         self.datastream += data
         data = self.popData()
         while data != None:
-            self.handleData(data)
+            self.handle_data(data)
             data = self.popData()
 
-    def sendPDU(self, pdu):
+    def send_pdu(self, pdu):
         data = pdu.get_bin()
         log.msg('OUTGOING >>>>', unpack_pdu(data))
         self.transport.write(data)

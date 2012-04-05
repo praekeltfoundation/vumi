@@ -17,16 +17,16 @@ class SmscTestServer(SmscServer):
         self.pdu_queue = DeferredQueue()
         SmscServer.__init__(self, delivery_report_string)
 
-    def handleData(self, data):
+    def handle_data(self, data):
         self.pdu_queue.put({
                 'direction': 'inbound',
                 'pdu': unpack_pdu(data),
                 })
-        return SmscServer.handleData(self, data)
+        return SmscServer.handle_data(self, data)
 
-    def sendPDU(self, pdu):
+    def send_pdu(self, pdu):
         self.pdu_queue.put({
                 'direction': 'outbound',
                 'pdu': pdu.get_obj(),
                 })
-        return SmscServer.sendPDU(self, pdu)
+        return SmscServer.send_pdu(self, pdu)
