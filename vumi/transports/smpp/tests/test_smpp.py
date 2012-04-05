@@ -385,6 +385,35 @@ class EsmeToSmscTestCase(TransportTestCase):
         dispatched_failures = self.get_dispatched_failures()
         self.assertEqual(dispatched_failures, [])
 
+    def send_out_of_order_multipart(self, smsc, to_addr, from_addr):
+        destination_addr = to_addr
+        source_addr = from_addr
+
+        sequence_number = 1
+        short_message1 = "\x05\x00\x03\xff\x03\x01back"
+        pdu1 = DeliverSM(sequence_number,
+                short_message=short_message1,
+                destination_addr=destination_addr,
+                source_addr=source_addr)
+
+        sequence_number = 2
+        short_message2 = "\x05\x00\x03\xff\x03\x02 at"
+        pdu2 = DeliverSM(sequence_number,
+                short_message=short_message2,
+                destination_addr=destination_addr,
+                source_addr=source_addr)
+
+        sequence_number = 3
+        short_message3 = "\x05\x00\x03\xff\x03\x03 you"
+        pdu3 = DeliverSM(sequence_number,
+                short_message=short_message3,
+                destination_addr=destination_addr,
+                source_addr=source_addr)
+
+        smsc.send_pdu(pdu2)
+        smsc.send_pdu(pdu3)
+        smsc.send_pdu(pdu1)
+
     @inlineCallbacks
     def test_submit_and_deliver(self):
 
@@ -448,10 +477,9 @@ class EsmeToSmscTestCase(TransportTestCase):
         self.service.factory.smsc.send_pdu(pdu)
 
         # Have the server fire of an out-of-order multipart sms
-        self.service.factory.smsc.multipart_tester(
-                to_addr="2772222222",
-                from_addr="2772000000",
-                )
+        self.send_out_of_order_multipart(self.service.factory.smsc,
+                                         to_addr="2772222222",
+                                         from_addr="2772000000")
 
         wait_for_inbound = self._amqp.wait_messages(
                 "vumi",

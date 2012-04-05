@@ -83,35 +83,6 @@ class SmscServer(Protocol):
         pdu = DeliverSM(sequence_number, short_message=short_message)
         self.send_pdu(pdu)
 
-    def multipart_tester(self, to_addr, from_addr):
-        destination_addr = to_addr
-        source_addr = from_addr
-
-        sequence_number = 1
-        short_message1 = "\x05\x00\x03\xff\x03\x01back"
-        pdu1 = DeliverSM(sequence_number,
-                short_message=short_message1,
-                destination_addr=destination_addr,
-                source_addr=source_addr)
-
-        sequence_number = 2
-        short_message2 = "\x05\x00\x03\xff\x03\x02 at"
-        pdu2 = DeliverSM(sequence_number,
-                short_message=short_message2,
-                destination_addr=destination_addr,
-                source_addr=source_addr)
-
-        sequence_number = 3
-        short_message3 = "\x05\x00\x03\xff\x03\x03 you"
-        pdu3 = DeliverSM(sequence_number,
-                short_message=short_message3,
-                destination_addr=destination_addr,
-                source_addr=source_addr)
-
-        self.send_pdu(pdu2)
-        self.send_pdu(pdu3)
-        self.send_pdu(pdu1)
-
     def dataReceived(self, data):
         self.datastream += data
         data = self.popData()
