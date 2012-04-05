@@ -20,7 +20,11 @@ from vumi.transports.tests.test_base import TransportTestCase
 
 class EsmeClientInitTestcase(TestCase):
 
-    def test_esme_init_with_redis(self):
+    # TODO: replace this with a more generic means of
+    #       swapping in a real redis server.
+    # tests esme using real redis server -- uncomment
+    # only for debugging
+    def dont_test_esme_init_with_redis(self):
         r_server = redis.Redis("localhost", db=13)
         self.esme = ESME(None, r_server, None)
         kvstc = KeyValueStoreTestCase()
