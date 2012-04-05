@@ -104,27 +104,18 @@ class EsmeTransceiver(Protocol):
     callLater = reactor.callLater
 
     def __init__(self, config, kvs):
-        self.build_maps()
         self.config = config
         self.defaults = config.to_dict()
         self.state = 'CLOSED'
         log.msg('STATE: %s' % (self.state))
         self.smpp_bind_timeout = self.config.smpp_bind_timeout
         self.datastream = ''
+        # TODO: remove double underscores
         self.__connect_callback = None
         self.__submit_sm_resp_callback = None
         self.__delivery_report_callback = None
         self.__deliver_sm_callback = None
         self._send_failure_callback = None
-        self.error_handlers = {
-                "ok": self.dummy_ok,
-                "mess_permfault": self.dummy_mess_permfault,
-                "mess_tempfault": self.dummy_mess_tempfault,
-                "conn_permfault": self.dummy_conn_permfault,
-                "conn_tempfault": self.dummy_conn_tempfault,
-                "conn_throttle": self.dummy_conn_throttle,
-                "unknown": self.dummy_unknown,
-                }
         self.r_server = kvs
         self.r_prefix = "%s@%s:%s" % (
                 self.config.system_id,
@@ -134,173 +125,6 @@ class EsmeTransceiver(Protocol):
                 self.r_prefix)
         log.msg("r_prefix = %s" % self.r_prefix)
         self.get_next_seq()
-
-    # Dummy error handler functions, just log invocation
-    def dummy_ok(self, *args, **kwargs):
-        pass
-
-    # Dummy error handler functions, just log invocation
-    def dummy_mess_permfault(self, *args, **kwargs):
-            m = "%s.%s(*args=%s, **kwargs=%s)" % (
-                __name__,
-                "dummy_mess_permfault",
-                args,
-                kwargs)
-            log.msg(m)
-
-    # Dummy error handler functions, just log invocation
-    def dummy_mess_tempfault(self, *args, **kwargs):
-            m = "%s.%s(*args=%s, **kwargs=%s)" % (
-                __name__,
-                "dummy_mess_tempfault",
-                args,
-                kwargs)
-            log.msg(m)
-
-    # Dummy error handler functions, just log invocation
-    def dummy_conn_permfault(self, *args, **kwargs):
-            m = "%s.%s(*args=%s, **kwargs=%s)" % (
-                __name__,
-                "dummy_conn_permfault",
-                args,
-                kwargs)
-            log.msg(m)
-
-    # Dummy error handler functions, just log invocation
-    def dummy_conn_tempfault(self, *args, **kwargs):
-            m = "%s.%s(*args=%s, **kwargs=%s)" % (
-                __name__,
-                "dummy_conn_tempfault",
-                args,
-                kwargs)
-            log.msg(m)
-
-    # Dummy error handler functions, just log invocation
-    def dummy_conn_throttle(self, *args, **kwargs):
-            m = "%s.%s(*args=%s, **kwargs=%s)" % (
-                __name__,
-                "dummy_conn_throttle",
-                args,
-                kwargs)
-            log.msg(m)
-
-    # Dummy error handler functions, just log invocation
-    def dummy_unknown(self, *args, **kwargs):
-            m = "%s.%s(*args=%s, **kwargs=%s)" % (
-                __name__,
-                "dummy_unknown",
-                args,
-                kwargs)
-            log.msg(m)
-
-    def build_maps(self):
-        self.ESME_command_status_dispatch_map = {
-            "ESME_ROK": self.dispatch_ok,
-            "ESME_RINVMSGLEN": self.dispatch_mess_permfault,
-            "ESME_RINVCMDLEN": self.dispatch_mess_permfault,
-            "ESME_RINVCMDID": self.dispatch_mess_permfault,
-
-            "ESME_RINVBNDSTS": self.dispatch_conn_tempfault,
-            "ESME_RALYBND": self.dispatch_conn_tempfault,
-
-            "ESME_RINVPRTFLG": self.dispatch_mess_permfault,
-            "ESME_RINVREGDLVFLG": self.dispatch_mess_permfault,
-
-            "ESME_RSYSERR": self.dispatch_conn_permfault,
-
-            "ESME_RINVSRCADR": self.dispatch_mess_permfault,
-            "ESME_RINVDSTADR": self.dispatch_mess_permfault,
-            "ESME_RINVMSGID": self.dispatch_mess_permfault,
-
-            "ESME_RBINDFAIL": self.dispatch_conn_permfault,
-            "ESME_RINVPASWD": self.dispatch_conn_permfault,
-            "ESME_RINVSYSID": self.dispatch_conn_permfault,
-
-            "ESME_RCANCELFAIL": self.dispatch_mess_permfault,
-            "ESME_RREPLACEFAIL": self.dispatch_mess_permfault,
-
-            "ESME_RMSGQFUL": self.dispatch_conn_throttle,
-
-            "ESME_RINVSERTYP": self.dispatch_conn_permfault,
-
-            "ESME_RINVNUMDESTS": self.dispatch_mess_permfault,
-            "ESME_RINVDLNAME": self.dispatch_mess_permfault,
-            "ESME_RINVDESTFLAG": self.dispatch_mess_permfault,
-            "ESME_RINVSUBREP": self.dispatch_mess_permfault,
-            "ESME_RINVESMCLASS": self.dispatch_mess_permfault,
-            "ESME_RCNTSUBDL": self.dispatch_mess_permfault,
-
-            "ESME_RSUBMITFAIL": self.dispatch_mess_tempfault,
-
-            "ESME_RINVSRCTON": self.dispatch_mess_permfault,
-            "ESME_RINVSRCNPI": self.dispatch_mess_permfault,
-            "ESME_RINVDSTTON": self.dispatch_mess_permfault,
-            "ESME_RINVDSTNPI": self.dispatch_mess_permfault,
-
-            "ESME_RINVSYSTYP": self.dispatch_conn_permfault,
-
-            "ESME_RINVREPFLAG": self.dispatch_mess_permfault,
-
-            "ESME_RINVNUMMSGS": self.dispatch_mess_tempfault,
-
-            "ESME_RTHROTTLED": self.dispatch_conn_throttle,
-
-            "ESME_RINVSCHED": self.dispatch_mess_permfault,
-            "ESME_RINVEXPIRY": self.dispatch_mess_permfault,
-            "ESME_RINVDFTMSGID": self.dispatch_mess_permfault,
-
-            "ESME_RX_T_APPN": self.dispatch_mess_tempfault,
-
-            "ESME_RX_P_APPN": self.dispatch_mess_permfault,
-            "ESME_RX_R_APPN": self.dispatch_mess_permfault,
-            "ESME_RQUERYFAIL": self.dispatch_mess_permfault,
-            "ESME_RINVOPTPARSTREAM": self.dispatch_mess_permfault,
-            "ESME_ROPTPARNOTALLWD": self.dispatch_mess_permfault,
-            "ESME_RINVPARLEN": self.dispatch_mess_permfault,
-            "ESME_RMISSINGOPTPARAM": self.dispatch_mess_permfault,
-            "ESME_RINVOPTPARAMVAL": self.dispatch_mess_permfault,
-
-            "ESME_RDELIVERYFAILURE": self.dispatch_mess_tempfault,
-            "ESME_RUNKNOWNERR": self.dispatch_mess_tempfault,
-        }
-
-    def command_status_dispatch(self, pdu):
-        method = self.ESME_command_status_dispatch_map.get(
-                pdu['header']['command_status'],
-                self.dispatch_unknown)
-        handler = method()
-        if pdu['header']['command_status'] != "ESME_ROK":
-            log.msg("ERROR handler:%s pdu:%s" % (handler, pdu))
-        return handler
-
-    # This maps SMPP error states to VUMI error states
-    # For now assume VUMI understands:
-    # connection -> temp fault or permanent fault
-    # message -> temp fault or permanent fault
-    # and the need to throttle the traffic on the connection
-    def dispatch_ok(self):
-        return self.error_handlers.get("ok")
-
-    def dispatch_conn_permfault(self):
-        return self.error_handlers.get("conn_permfault")
-
-    def dispatch_mess_permfault(self):
-        return self.error_handlers.get("mess_permfault")
-
-    def dispatch_conn_tempfault(self):
-        return self.error_handlers.get("conn_tempfault")
-
-    def dispatch_mess_tempfault(self):
-        return self.error_handlers.get("mess_tempfault")
-
-    def dispatch_conn_throttle(self):
-        return self.error_handlers.get("conn_throttle")
-
-    def update_error_handlers(self, handler_dict={}):
-        self.error_handlers.update(handler_dict)
-
-    def dispatch_unknown(self):
-        return self.error_handlers.get("unknown")
 
     def set_seq(self, seq):
         self.r_server.set(self.sequence_number_prefix, int(seq))
@@ -334,8 +158,7 @@ class EsmeTransceiver(Protocol):
         pdu = unpack_pdu(data)
         log.msg('INCOMING <<<< %s' % binascii.b2a_hex(data))
         log.msg('INCOMING <<<< %s' % pdu)
-        error_handler = self.command_status_dispatch(pdu)
-        error_handler(pdu=pdu)
+        # TODO: convert this to a dispatch map
         if pdu['header']['command_id'] == 'bind_transceiver_resp':
             self.handle_bind_transceiver_resp(pdu)
         if pdu['header']['command_id'] == 'submit_sm_resp':

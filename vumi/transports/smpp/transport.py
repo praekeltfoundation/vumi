@@ -125,10 +125,6 @@ class SmppTransport(Transport):
     def esme_connected(self, client):
         log.msg("ESME Connected, adding handlers")
         self.esme_client = client
-        self.esme_client.update_error_handlers({
-            "mess_tempfault": self.mess_tempfault,
-            })
-
         # Start the consumer
         return self._setup_message_consumer()
 
@@ -293,11 +289,3 @@ class SmppTransport(Transport):
         log.msg("Failed to send: %s reason: %s" % (message, reason))
         return super(SmppTransport, self).send_failure(message,
                                                        exception, reason)
-
-    def mess_tempfault(self, *args, **kwargs):
-        pdu = kwargs.get('pdu')
-        sequence_number = pdu['header']['sequence_number']
-        id = self.r_get_id_for_sequence(sequence_number)
-        reason = pdu['header']['command_status']
-        # TODO: Get real message here.
-        self.send_failure(Message(id=id), reason)
