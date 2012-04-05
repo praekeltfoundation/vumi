@@ -24,7 +24,7 @@ class SmscServer(Protocol):
                     's stat:DELIVRD err:000 text:'
         self.datastream = ''
 
-    def popData(self):
+    def pop_data(self):
         data = None
         if(len(self.datastream) >= 16):
             command_length = int(binascii.b2a_hex(self.datastream[0:4]), 16)
@@ -85,10 +85,10 @@ class SmscServer(Protocol):
 
     def dataReceived(self, data):
         self.datastream += data
-        data = self.popData()
+        data = self.pop_data()
         while data != None:
             self.handle_data(data)
-            data = self.popData()
+            data = self.pop_data()
 
     def send_pdu(self, pdu):
         data = pdu.get_bin()
