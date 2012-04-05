@@ -181,7 +181,7 @@ class SmppTransport(Transport):
     def r_set_id_for_sequence(self, sequence_number, id):
         self.r_server.set(self.r_sequence_number_key(sequence_number), id)
 
-    def submit_sm_resp(self, *args, **kwargs):  # TODO the client does too much
+    def submit_sm_resp(self, *args, **kwargs):
         transport_msg_id = kwargs['message_id']
         sent_sms_id = self.r_get_id_for_sequence(kwargs['sequence_number'])
         if sent_sms_id is None:
