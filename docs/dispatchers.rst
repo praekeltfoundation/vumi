@@ -17,11 +17,14 @@ Examples of use cases for dispatchers:
 * A single application that sends and receives both SMSes and XMPP
   messages.
 
-* A single SMPP transports that sends and receives SMSes on behalf of
+* A single application that sends and receives SMSes in multiple
+  countries using a different transport in each.
+
+* A single SMPP transport that sends and receives SMSes on behalf of
   multiple applications.
 
 * Multiple applications that all send and receive SMSes in multiple
-  countries using a common set of SMPP transports.
+  countries using a shared set of SMPP transports.
 
 Vumi provides a pluggable dispatch worker :class:`BaseDispatchWorker`
 that may be extended by much simpler *routing classes* that implement
