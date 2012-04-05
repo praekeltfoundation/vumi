@@ -1,6 +1,5 @@
 # -*- test-case-name: vumi.transports.smpp.clientserver.tests.test_client -*-
 
-import re
 import abc
 import json
 import uuid
