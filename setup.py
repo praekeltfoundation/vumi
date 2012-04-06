@@ -1,4 +1,3 @@
-import re
 from setuptools import setup, find_packages
 
 
@@ -12,7 +11,10 @@ def parse_requirements(filename):
     for requirement in listify(filename):
         if requirement.startswith("https:") or requirement.startswith("http:"):
             (_, _, name) = requirement.partition('#egg=')
-            requirement = re.sub("==", "-", requirement)
+            if '-' in name:
+                # egg names with versions need to be converted to
+                # an == requirement.
+                name = "==".join(name.split('-', 1))
             install_requires.append(name)
             dependency_links.append(requirement)
         else:

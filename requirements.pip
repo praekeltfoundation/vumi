@@ -10,4 +10,4 @@ wokkel
 redis
 python-smpp
 pytz
-https://github.com/praekelt/twitty-twister/tarball/master#egg=twittytwister==0.1.1
+https://github.com/praekelt/twitty-twister/tarball/master#egg=twittytwister-0.1.1
