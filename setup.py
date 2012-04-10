@@ -1,8 +1,12 @@
 from setuptools import setup, find_packages
+import re
 
 
 def listify(filename):
     return filter(None, open(filename, 'r').read().split('\n'))
+
+
+_SIMPLE_VERSION_RE = re.compile("(?P<name>.*)-(?P<version>[0-9.]+)$")
 
 
 def parse_requirements(filename):
@@ -11,10 +15,11 @@ def parse_requirements(filename):
     for requirement in listify(filename):
         if requirement.startswith("https:") or requirement.startswith("http:"):
             (_, _, name) = requirement.partition('#egg=')
-            if '-' in name:
+            ver_match = _SIMPLE_VERSION_RE.match(name)
+            if ver_match:
                 # egg names with versions need to be converted to
                 # an == requirement.
-                name = "==".join(name.split('-', 1))
+                name = "%(name)s==%(version)s" % ver_match.groupdict()
             install_requires.append(name)
             dependency_links.append(requirement)
         else:
