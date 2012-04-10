@@ -7,7 +7,9 @@ from vumi.middleware.base import TransportMiddleware
 
 class TaggingMiddleware(TransportMiddleware):
     """
-    Transport middleware for adding tag names to inbound messages.
+    Transport middleware for adding tag names to inbound messages and
+    for adding additional parameters to outbound messages based on
+    their tag.
 
     Transports that wish to eventually have incoming messages
     associated with an existing message batch by
@@ -26,12 +28,21 @@ class TaggingMiddleware(TransportMiddleware):
         `addr_pattern`. Tags are a `(tagpool, tag_name)` pair and are
         produced using `(match.expand(tag_template[0]),
         match.expand(tag_template[1]))`.
+    :param string tag_pattern:
+        Regular expression matching the tag name of outgoing messages.
+        Note: The tag pool the tag belongs to is not examined.
+    :param dict msg_template:
+        A dictionary of additional key-value pairs to add to the
+        outgoing message payloads whose tag mataches `tag_pattern`.
+        Values are expanded using `match.expand(value)`.
     """
-
     def setup_middleware(self):
         self.to_addr_re = re.compile(self.config['addr_pattern'])
         self.tagpool_template, self.tagname_template = \
                                self.config['tag_template']
+
+        self.tag_re = re.compile(self.config['tag_pattern'])
+        self.msg_template = self.config['msg_template']
 
     def handle_inbound(self, message, endpoint):
         match = self.to_addr_re.match(message['to_addr'])
@@ -41,6 +52,18 @@ class TaggingMiddleware(TransportMiddleware):
         else:
             tag = None
         message['tag'] = tag
+        return message
+
+    def handle_outbound(self, message, endpoint):
+        tag = message.get('tag')
+        if tag is not None:
+            match = self.tag_re.match(tag[1])
+        else:
+            match = None
+        if match is not None:
+            for key, value in self.msg_template.iteritems():
+                value = match.expand(value)
+                message[key] = value
         return message
 
     @staticmethod
