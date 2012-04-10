@@ -1,5 +1,7 @@
 """Tests for vumi.middleware.tagger."""
 
+import re
+
 from twisted.trial.unittest import TestCase
 
 from vumi.middleware.tagger import TaggingMiddleware
@@ -70,6 +72,22 @@ class TaggingMiddlewareTestCase(TestCase):
     def test_outbound_no_tag(self):
         self.mk_tagger()
         self.assertEqual(self.get_from_addr("111", None), None)
+
+    def test_deepupdate(self):
+        orig = {'a': {'b': "foo"}, 'c': "bar"}
+        TaggingMiddleware._deepupdate(re.match(".*", "foo"), orig,
+                                      {'a': {'b': "baz"}, 'd': r'\g<0>!',
+                                       'e': 1})
+        self.assertEqual(orig, {'a': {'b': "baz"}, 'c': "bar", 'd': "foo!",
+                                'e': 1})
+
+    def test_deepupdate_with_recursion(self):
+        self.mk_tagger()
+        orig = {'a': {'b': "foo"}, 'c': "bar"}
+        new = {'a': {'b': "baz"}}
+        new['a']['d'] = new
+        TaggingMiddleware._deepupdate(re.match(".*", "foo"), orig, new)
+        self.assertEqual(orig, {'a': {'b': "baz"}, 'c': "bar"})
 
     def test_map_msg_to_tag(self):
         msg = self.mk_msg("123456")

@@ -34,7 +34,9 @@ class TaggingMiddleware(TransportMiddleware):
     :param dict msg_template:
         A dictionary of additional key-value pairs to add to the
         outgoing message payloads whose tag mataches `tag_pattern`.
-        Values are expanded using `match.expand(value)`.
+        Values which are strings are expanded using
+        `match.expand(value)`.  Values which are dicts are recursed
+        into. Values which are neither are left as is.
     """
     def setup_middleware(self):
         self.to_addr_re = re.compile(self.config['addr_pattern'])
@@ -65,10 +67,27 @@ class TaggingMiddleware(TransportMiddleware):
         else:
             match = None
         if match is not None:
-            for key, value in self.msg_template.iteritems():
-                value = match.expand(value)
-                message[key] = value
+            self._deepupdate(match, message.payload, self.msg_template)
         return message
+
+    @staticmethod
+    def _deepupdate(match, origdict, newdict):
+        # set of ids of processed dicts (to avoid recursion)
+        seen = set([id(newdict)])
+        stack = [(origdict, newdict)]
+        while stack:
+            current_dict, current_new_dict = stack.pop()
+            for key, value in current_new_dict.iteritems():
+                if isinstance(value, dict):
+                    if id(value) in seen:
+                        continue
+                    next_dict = current_dict.setdefault(key, {})
+                    seen.add(id(value))
+                    stack.append((next_dict, value))
+                elif isinstance(value, basestring):
+                    current_dict[key] = match.expand(value)
+                else:
+                    current_dict[key] = value
 
     @staticmethod
     def map_msg_to_tag(msg):
