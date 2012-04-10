@@ -45,7 +45,11 @@ class TaggingMiddleware(TransportMiddleware):
         self.msg_template = self.config['msg_template']
 
     def handle_inbound(self, message, endpoint):
-        match = self.to_addr_re.match(message['to_addr'])
+        to_addr = message.get('to_addr')
+        if to_addr is not None:
+            match = self.to_addr_re.match(to_addr)
+        else:
+            match = None
         if match is not None:
             tag = (match.expand(self.tagpool_template),
                    match.expand(self.tagname_template))

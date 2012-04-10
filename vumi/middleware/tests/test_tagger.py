@@ -51,6 +51,10 @@ class TaggingMiddlewareTestCase(TestCase):
         self.mk_tagger()
         self.assertEqual(self.get_tag("a1234"), None)
 
+    def test_inbound_none_to_addr(self):
+        self.mk_tagger()
+        self.assertEqual(self.get_tag(None), None)
+
     def test_outbound_matching_tag(self):
         self.mk_tagger()
         self.assertEqual(self.get_from_addr("111", ("pool1", "mytag-456")),
