@@ -286,10 +286,9 @@ class FakeRedis(object):
     # The python redis lib combines incr & incrby into incr(key, increment=1)
     def incr(self, key, increment=1):
         old_value = self._data.get(key)
-        try:
-            new_value = int(old_value) + increment
-        except:
-            new_value = increment
+        if old_value is None:
+            old_value = 0
+        new_value = int(old_value) + increment
         self.set(key, new_value)
         return new_value
 

@@ -1,0 +1,12 @@
+system_id: VumiTestSMSC
+password: password
+host: localhost
+port: 2772
+
+interface_version: "34"
+dest_addr_ton: 1
+dest_addr_npi: 1
+registered_delivery: 1
+
+transport_name: vumitestsmsc
+smpp_bind_timeout: 5

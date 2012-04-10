@@ -93,6 +93,23 @@ class BaseDispatchWorker(Worker):
 
 class BaseDispatchRouter(object):
     """Base class for dispatch routing logic.
+
+    This is a convenient definition of and set of common functionality
+    for router classes. You need not subclass this and should not
+    instantiate this directly.
+
+    The :meth:`__init__` method should take exactly the following
+    options so that your class can be instantiated from configuration
+    in a standard way:
+
+    :param vumi.dispatchers.BaseDispatchWorker dispatcher:
+        The dispatcher this routing class is part of.
+    :param dict config:
+        The configuration options passed to the dispatcher.
+
+    If you are subclassing this class, you should not override
+    :meth:`__init__`. Custom setup should be done in
+    :meth:`setup_routing` instead.
     """
 
     def __init__(self, dispatcher, config):
@@ -101,21 +118,52 @@ class BaseDispatchRouter(object):
         self.setup_routing()
 
     def setup_routing(self):
-        """Setup any things needed for routing."""
+        """Perform setup required for routing messages."""
         pass
 
     def dispatch_inbound_message(self, msg):
+        """Dispatch an inbound user message to a publisher.
+
+        :param vumi.message.TransportUserMessage msg:
+            Message to dispatch.
+        """
         raise NotImplementedError()
 
     def dispatch_inbound_event(self, msg):
+        """Dispatch an event to a publisher.
+
+        :param vumi.message.TransportEvent msg:
+            Message to dispatch.
+        """
         raise NotImplementedError()
 
     def dispatch_outbound_message(self, msg):
+        """Dispatch an outbound user message to a publisher.
+
+        :param vumi.message.TransportUserMessage msg:
+            Message to dispatch.
+        """
         raise NotImplementedError()
 
 
 class SimpleDispatchRouter(BaseDispatchRouter):
     """Simple dispatch router that maps transports to apps.
+
+    Configuration options:
+
+    :param dict route_mappings:
+        A map of *transport_names* to *exposed_names*. Inbound
+        messages and events received from a given transport are
+        dispatched to the application attached to the corresponding
+        exposed name.
+
+    :param dict transport_mappings: An optional re-mapping of
+        *transport_names* to *transport_names*.  By default, outbound
+        messages are dispatched to the transport attached to the
+        *endpoint* with the same name as the transport name given in
+        the message. If a transport name is present in this
+        dictionary, the message is instead dispatched to the new
+        transport name given by the re-mapping.
     """
 
     def dispatch_inbound_message(self, msg):
@@ -135,7 +183,22 @@ class SimpleDispatchRouter(BaseDispatchRouter):
 
 
 class TransportToTransportRouter(BaseDispatchRouter):
-    """Simple dispatch router that maps transports to apps.
+    """Simple dispatch router that connects transports to other
+    transports.
+
+    .. note::
+
+       Connecting transports to one results in event messages being
+       discarded since transports cannot receive events. Outbound
+       messages never need to be dispatched because transports only
+       send inbound messages.
+
+    Configuration options:
+
+    :param dict route_mappings:
+        A map of *transport_names* to *transport_names*. Inbound
+        messages received from a transport are sent as outbound
+        messages to the associated transport.
     """
 
     def dispatch_inbound_message(self, msg):
@@ -194,17 +257,21 @@ class ToAddrRouter(SimpleDispatchRouter):
 class FromAddrMultiplexRouter(BaseDispatchRouter):
     """Router that multiplexes multiple transports based on msg from_addr.
 
-    :param dict fromaddr_mappings:
-        Mapping from message `from_addr` to `transport_name`.
-
     This router is intended to be used to multiplex a pool of transports that
     each only supports a single external address, and present them to
     applications (or downstream dispatchers) as a single transport that
     supports multiple external addresses. This is useful for multiplexing
     :class:`vumi.transports.xmpp.XMPPTransport` instances, for example.
 
-    NOTE: This router rewrites `transport_name` in both directions. Also, only
-    one exposed name is supported.
+    .. note::
+
+       This router rewrites `transport_name` in both directions. Also, only
+       one exposed name is supported.
+
+    Configuration options:
+
+    :param dict fromaddr_mappings:
+        Mapping from message `from_addr` to `transport_name`.
     """
 
     def setup_routing(self):
@@ -240,15 +307,15 @@ class UserGroupingRouter(SimpleDispatchRouter):
 
     Useful for A/B testing.
 
-    :type group_mappings: dict
-    :param group_mappings:
+    Configuration options:
+
+    :param dict group_mappings:
         Mapping of group names to transport_names.
         If a user is assigned to a given group the
         message is sent to the application listening
         on the given transport_name.
 
-    :type dispatcher_name: str
-    :param dispatcher_name:
+    :param str dispatcher_name:
         The name of the dispatcher, used internally as
         the prefix for Redis keys.
     """
