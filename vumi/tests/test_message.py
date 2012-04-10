@@ -13,6 +13,10 @@ class MessageTest(TestCase):
         self.assertNotEqual(Message(a=5), Message(a=6))
         self.assertNotEqual(Message(a=5), {'a': 5})
 
+    def test_message_contains(self):
+        self.assertTrue('a' in Message(a=5))
+        self.assertFalse('a' in Message(b=5))
+
     def test_transport_message(self):
         msg = TransportMessage(
             message_type='foo',
