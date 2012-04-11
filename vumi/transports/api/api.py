@@ -40,6 +40,8 @@ class HttpApiTransport(HttpRpcTransport):
         'content',
         'to_addr',
         'from_addr',
+        'group',
+        'session_event',
         )
 
     def setup_transport(self):
