@@ -39,13 +39,35 @@ class TestMessageStore(ApplicationTestCase):
         self.assertEqual(self.store.tag_common(tag1),
                          {"current_batch_id": None})
 
-    def test_add_message(self):
+    def test_add_outbound_message(self):
+        msg = self.mkmsg_out(content="outfoo")
+        msg_id = msg['message_id']
+        self.store.add_outbound_message(msg)
+
+        self.assertEqual(self.store.get_outbound_message(msg_id), msg)
+        self.assertEqual(self.store.message_events(msg_id), [])
+
+    def test_add_outbound_message_with_batch_id(self):
         batch_id = self.store.batch_start([("pool", "tag")])
         msg = self.mkmsg_out(content="outfoo")
         msg_id = msg['message_id']
-        self.store.add_message(batch_id, msg)
+        self.store.add_outbound_message(msg, batch_id=batch_id)
 
-        self.assertEqual(self.store.get_message(msg_id), msg)
+        self.assertEqual(self.store.get_outbound_message(msg_id), msg)
+        self.assertEqual(self.store.message_batches(msg_id), [batch_id])
+        self.assertEqual(self.store.batch_messages(batch_id), [msg_id])
+        self.assertEqual(self.store.message_events(msg_id), [])
+        self.assertEqual(self.store.batch_status(batch_id), {
+            'ack': 0, 'delivery_report': 0, 'message': 1, 'sent': 1,
+            })
+
+    def test_add_outbound_message_with_tag(self):
+        batch_id = self.store.batch_start([("pool", "tag")])
+        msg = self.mkmsg_out(content="outfoo")
+        msg_id = msg['message_id']
+        self.store.add_outbound_message(msg, tag=("pool", "tag"))
+
+        self.assertEqual(self.store.get_outbound_message(msg_id), msg)
         self.assertEqual(self.store.message_batches(msg_id), [batch_id])
         self.assertEqual(self.store.batch_messages(batch_id), [msg_id])
         self.assertEqual(self.store.message_events(msg_id), [])
@@ -60,7 +82,7 @@ class TestMessageStore(ApplicationTestCase):
         ack = TransportEvent(user_message_id=msg_id, event_type='ack',
                              sent_message_id='xyz')
         ack_id = ack['event_id']
-        self.store.add_message(batch_id, msg)
+        self.store.add_outbound_message(msg, batch_id=batch_id)
         self.store.add_event(ack)
 
         self.assertEqual(self.store.get_event(ack_id), ack)
@@ -73,12 +95,22 @@ class TestMessageStore(ApplicationTestCase):
 
         self.assertEqual(self.store.get_inbound_message(msg_id), msg)
 
-    def test_add_inbound_message_with_tag(self):
-        batch_id = self.store.batch_start([("ambient", "default10001")])
+    def test_add_inbound_message_with_batch_id(self):
+        batch_id = self.store.batch_start([("pool1", "default10001")])
         msg = self.mkmsg_in(content="infoo", to_addr="+1234567810001",
                             transport_type="sms")
         msg_id = msg['message_id']
-        self.store.add_inbound_message(msg)
+        self.store.add_inbound_message(msg, batch_id=batch_id)
+
+        self.assertEqual(self.store.get_inbound_message(msg_id), msg)
+        self.assertEqual(self.store.batch_replies(batch_id), [msg_id])
+
+    def test_add_inbound_message_with_tag(self):
+        batch_id = self.store.batch_start([("pool1", "default10001")])
+        msg = self.mkmsg_in(content="infoo", to_addr="+1234567810001",
+                            transport_type="sms")
+        msg_id = msg['message_id']
+        self.store.add_inbound_message(msg, tag=("pool1", "default10001"))
 
         self.assertEqual(self.store.get_inbound_message(msg_id), msg)
         self.assertEqual(self.store.batch_replies(batch_id), [msg_id])
