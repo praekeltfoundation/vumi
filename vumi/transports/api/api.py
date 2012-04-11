@@ -46,8 +46,8 @@ class HttpApiTransport(HttpRpcTransport):
 
     def setup_transport(self):
         self.reply_expected = self.config.get('reply_expected', False)
-        self.allowed_fields = self.config.get('allowed_fields',
-                                              self.DEFAULT_ALLOWED_FIELDS)
+        self.allowed_fields = set(self.config.get('allowed_fields',
+                                                  self.DEFAULT_ALLOWED_FIELDS))
         self.field_defaults = self.config.get('field_defaults', {})
         return super(HttpApiTransport, self).setup_transport()
 
@@ -57,25 +57,23 @@ class HttpApiTransport(HttpRpcTransport):
                 message)
         log.msg("HttpApiTransport dropping outbound message: %s" % (message))
 
-    def get_field_values(self, request, *fields):
-        values = {}
+    def get_field_values(self, request, required_fields):
+        values = self.field_defaults.copy()
         errors = {}
-        for field in fields:
-            value = self.field_defaults.get(field, None)
-            value = request.args.get(field, [value])[0]
-            if value is None:
-                errors.setdefault('missing_parameter', []).append(field)
-            else:
-                values[field] = str(value)
         for field in request.args:
             if field not in self.allowed_fields:
                 errors.setdefault('unexpected_parameter', []).append(field)
+            else:
+                values[field] = str(request.args.get(field)[0])
+        for field in required_fields:
+            if field not in values and field in self.allowed_fields:
+                errors.setdefault('missing_parameter', []).append(field)
         return values, errors
 
     @inlineCallbacks
     def handle_raw_inbound_message(self, message_id, request):
-        values, errors = self.get_field_values(
-            request, 'content', 'to_addr', 'from_addr')
+        values, errors = self.get_field_values(request, ['content', 'to_addr',
+                                                         'from_addr'])
         if errors:
             yield self.finish_request(message_id, json.dumps(errors), code=400)
             return
