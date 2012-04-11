@@ -10,9 +10,4 @@ wokkel
 redis
 python-smpp
 pytz
-# oauth and simplejson are needed by twittytwister
-oauth
-simplejson
-# This is only needed for UglyModel, which core vumi does not use.
-# psycopg2==2.4.1
-https://github.com/dustin/twitty-twister/zipball/master#egg=twittytwister
+https://github.com/dustin/twitty-twister/tarball/master#egg=twittytwister-0.1.1
