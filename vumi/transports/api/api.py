@@ -84,6 +84,7 @@ class HttpApiTransport(HttpRpcTransport):
         payload = {
             'message_id': message_id,
             'transport_type': self.transport_type,
+            'transport_name': self.transport_name,
             }
         payload.update(values)
         yield self.publish_message(**payload)
