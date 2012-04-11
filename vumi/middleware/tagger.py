@@ -57,11 +57,11 @@ class TaggingMiddleware(TransportMiddleware):
                    match.expand(self.tagname_template))
         else:
             tag = None
-        message['tag'] = tag
+        self.add_tag_to_msg(message, tag)
         return message
 
     def handle_outbound(self, message, endpoint):
-        tag = message.get('tag')
+        tag = self.map_msg_to_tag(message)
         if tag is not None:
             match = self.tag_re.match(tag[1])
         else:
@@ -90,11 +90,18 @@ class TaggingMiddleware(TransportMiddleware):
                     current_dict[key] = value
 
     @staticmethod
+    def add_tag_to_msg(msg, tag):
+        """Convenience method for adding a tag to a message."""
+        tag_metadata = msg['helper_metadata'].setdefault('tag', {})
+        tag_metadata['tag'] = tag
+
+    @staticmethod
     def map_msg_to_tag(msg):
         """Convenience method for retrieving a tag that was added
         to a message by this middleware.
         """
-        tag = msg.get('tag')
-        if tag is None:
-            return None
-        return tuple(msg.get('tag'))
+        tag = msg['helper_metadata'].get('tag', {}).get('tag')
+        if tag is not None:
+            # convert JSON list to a proper tag tuple
+            return tuple(tag)
+        return None

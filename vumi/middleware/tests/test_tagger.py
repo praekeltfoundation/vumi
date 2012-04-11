@@ -31,13 +31,13 @@ class TaggingMiddlewareTestCase(TestCase):
                                    transport_name="dummy_endpoint",
                                    transport_type="dummy_transport_type")
         if tag is not None:
-            msg['tag'] = tag
+            self.mw.add_tag_to_msg(msg, tag)
         return msg
 
     def get_tag(self, to_addr):
         msg = self.mk_msg(to_addr)
         msg = self.mw.handle_inbound(msg, "dummy_endpoint")
-        return msg['tag']
+        return self.mw.map_msg_to_tag(msg)
 
     def get_from_addr(self, to_addr, tag):
         msg = self.mk_msg(to_addr, tag, from_addr=None)
@@ -92,6 +92,13 @@ class TaggingMiddlewareTestCase(TestCase):
     def test_map_msg_to_tag(self):
         msg = self.mk_msg("123456")
         self.assertEqual(TaggingMiddleware.map_msg_to_tag(msg), None)
-        msg["tag"] = ["pool", "mytag"]
+        msg['helper_metadata']['tag'] = {'tag': ['pool', 'mytag']}
         self.assertEqual(TaggingMiddleware.map_msg_to_tag(msg),
                          ("pool", "mytag"))
+
+    def test_add_tag_to_msg(self):
+        msg = self.mk_msg("123456")
+        TaggingMiddleware.add_tag_to_msg(msg, ('pool', 'mytag'))
+        self.assertEqual(msg['helper_metadata']['tag'], {
+            'tag': ('pool', 'mytag'),
+            })

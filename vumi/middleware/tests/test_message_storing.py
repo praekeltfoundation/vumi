@@ -3,6 +3,7 @@
 from twisted.trial.unittest import TestCase
 
 from vumi.middleware.message_storing import StoringMiddleware
+from vumi.middleware.tagger import TaggingMiddleware
 from vumi.tests.utils import FakeRedis
 from vumi.message import TransportUserMessage, TransportEvent
 
@@ -43,7 +44,7 @@ class StoringMiddlewareTestCase(TestCase):
         batch_id = self.store.batch_start([("pool", "tag")])
         msg = self.mk_msg()
         msg_id = msg['message_id']
-        msg['tag'] = ["pool", "tag"]
+        TaggingMiddleware.add_tag_to_msg(msg, ["pool", "tag"])
         self.mw.handle_outbound(msg, "dummy_endpoint")
         self.assertEqual(self.store.get_outbound_message(msg_id), msg)
         self.assertEqual(self.store.message_batches(msg_id), [batch_id])
@@ -61,7 +62,7 @@ class StoringMiddlewareTestCase(TestCase):
         batch_id = self.store.batch_start([("pool", "tag")])
         msg = self.mk_msg()
         msg_id = msg['message_id']
-        msg['tag'] = ["pool", "tag"]
+        TaggingMiddleware.add_tag_to_msg(msg, ["pool", "tag"])
         self.mw.handle_inbound(msg, "dummy_endpoint")
         self.assertEqual(self.store.get_inbound_message(msg_id), msg)
         self.assertEqual(self.store.batch_messages(batch_id), [])
