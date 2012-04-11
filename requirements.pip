@@ -1,18 +1,15 @@
 zope.interface
-Twisted==10.1
-txAMQP==0.5
-PyYAML==3.09
-iso8601==0.1.4
+Twisted
+# txAMQP prior to 0.5 does not support modern rabbitMQ versions.
+txAMQP>=0.5
+PyYAML
+iso8601
 supervisor
+# Newer pyOpenSSL fails to build on MacOS X 10.6.
 pyOpenSSL==0.11
 python-ssmi
 wokkel
 redis
 python-smpp
 pytz
-# oauth and simplejson are needed by twittytwister
-oauth
-simplejson
-# This is only needed for UglyModel, which core vumi does not use.
-# psycopg2==2.4.1
-https://github.com/dustin/twitty-twister/zipball/master#egg=twittytwister
+https://github.com/dustin/twitty-twister/tarball/master#egg=twittytwister-0.1.1

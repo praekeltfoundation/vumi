@@ -16,7 +16,7 @@ straight forward. Just extend your YAML configuration file with lines like::
         debug_level: info
 
 The `middleware` section contains a list of middleware items. Each
-time consists of a `name` (e.g. `mw1`) for that middleware instance
+item consists of a `name` (e.g. `mw1`) for that middleware instance
 and a `class` (e.g. :class:`vumi.middleware.DebuggingMiddleware`)
 which is the full Python path to the class implementing the
 middleware. A `name` can be any string that doesn't clash with another

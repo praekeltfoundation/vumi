@@ -6,10 +6,11 @@ import redis
 from twisted.python import log
 from twisted.internet import reactor
 
-# from vumi.service import Worker
 from vumi.utils import get_operator_number
 from vumi.transports.base import Transport
-from vumi.transports.smpp.client import EsmeTransceiverFactory
+from vumi.transports.smpp.clientserver.client import (EsmeTransceiverFactory,
+                                                      EsmeCallbacks)
+from vumi.transports.smpp.clientserver.config import ClientConfig
 from vumi.transports.failures import FailureMessage
 from vumi.message import Message
 
@@ -20,17 +21,6 @@ class SmppTransport(Transport):
 
     The SMPP transport has many configuration parameters. These are
     divided up into sections below.
-
-    SMPP sequence number configuration options:
-
-    :type smpp_increment: int
-    :param smpp_increment:
-        Increment for SMPP sequence number (must be >= number of
-        SMPP workers on a single SMPP account).
-    :type smpp_offset: int
-    :param smpp_offset:
-        Offset for this worker's SMPP sequence numbers (no duplicates
-        on a single SMPP account and must be <= increment)
 
     SMPP server account configuration options:
 
@@ -99,49 +89,45 @@ class SmppTransport(Transport):
     # We only want to start this after we finish connecting to SMPP.
     start_message_consumer = False
 
+    def validate_config(self):
+        self.client_config = ClientConfig.from_config(self.config)
+
     def setup_transport(self):
         log.msg("Starting the SmppTransport with %s" % self.config)
-
-        # TODO: move this to a config file
-        self.smpp_offset = int(self.config['smpp_offset'])
 
         # Connect to Redis
         if not hasattr(self, 'r_server'):
             # Only set up redis if we don't have a test stub already
             self.r_server = redis.Redis(**self.config.get('redis', {}))
-        self.r_prefix = "%(system_id)s@%(host)s:%(port)s" % self.config
+
+        self.r_prefix = "%s@%s:%s" % (
+                self.client_config.system_id,
+                self.client_config.host,
+                self.client_config.port,
+                )
         self.r_message_prefix = "%s#message_json" % self.r_prefix
         log.msg("Connected to Redis, prefix: %s" % self.r_prefix)
-        last_sequence_number = int(self.r_get_last_sequence()
-                                   or self.smpp_offset)
-        log.msg("Last sequence_number: %s" % last_sequence_number)
+
+        self.esme_callbacks = EsmeCallbacks(
+            connect=self.esme_connected,
+            disconnect=self.esme_disconnected,
+            submit_sm_resp=self.submit_sm_resp,
+            delivery_report=self.delivery_report,
+            deliver_sm=self.deliver_sm)
 
         if not hasattr(self, 'esme_client'):
             # start the Smpp transport (if we don't have one)
-            factory = EsmeTransceiverFactory(self.config,
-                                             self._amqp_client.vumi_options)
-            factory.loadDefaults(self.config)
-            factory.setLastSequenceNumber(last_sequence_number)
-            factory.setConnectCallback(self.esme_connected)
-            factory.setDisconnectCallback(self.esme_disconnected)
-            factory.setSubmitSMRespCallback(self.submit_sm_resp)
-            factory.setDeliveryReportCallback(self.delivery_report)
-            factory.setDeliverSMCallback(self.deliver_sm)
-            factory.setSendFailureCallback(self.send_failure)
-            log.msg(factory.defaults)
+            self.factory = EsmeTransceiverFactory(self.client_config,
+                                                  self.r_server,
+                                                  self.esme_callbacks)
             reactor.connectTCP(
-                factory.defaults['host'],
-                factory.defaults['port'],
-                factory)
+                self.client_config.host,
+                self.client_config.port,
+                self.factory)
 
     def esme_connected(self, client):
         log.msg("ESME Connected, adding handlers")
         self.esme_client = client
-        self.esme_client.update_error_handlers({
-            "mess_tempfault": self.mess_tempfault,
-            "conn_throttle": self.conn_throttle,
-            })
-
         # Start the consumer
         return self._setup_message_consumer()
 
@@ -149,10 +135,8 @@ class SmppTransport(Transport):
         log.msg("Consumed outgoing message", message)
         log.msg("Unacknowledged message count: %s" % (
             self.esme_client.get_unacked_count()))
-        #self.conn_throttle(unacked=self.esme_client.get_unacked_count())
         self.r_set_message(message)
         sequence_number = self.send_smpp(message)
-        self.r_set_last_sequence(sequence_number)
         self.r_set_id_for_sequence(sequence_number,
                                    message.payload.get("message_id"))
 
@@ -197,16 +181,7 @@ class SmppTransport(Transport):
     def r_set_id_for_sequence(self, sequence_number, id):
         self.r_server.set(self.r_sequence_number_key(sequence_number), id)
 
-    def r_last_sequence_number_key(self):
-        return "%s_%s#last_sequence_number" % (self.r_prefix, self.smpp_offset)
-
-    def r_get_last_sequence(self):
-        return self.r_server.get(self.r_last_sequence_number_key())
-
-    def r_set_last_sequence(self, sequence_number):
-        self.r_server.set(self.r_last_sequence_number_key(), sequence_number)
-
-    def submit_sm_resp(self, *args, **kwargs):  # TODO the client does too much
+    def submit_sm_resp(self, *args, **kwargs):
         transport_msg_id = kwargs['message_id']
         sent_sms_id = self.r_get_id_for_sequence(kwargs['sequence_number'])
         if sent_sms_id is None:
@@ -245,7 +220,8 @@ class SmppTransport(Transport):
 
     def delivery_status(self, state):
         if state in [
-                "DELIVRD"
+                "DELIVRD",
+                "0"  # Currently we will accept this for Yo! TODO: investigate
                 ]:
             return "delivered"
         if state in [
@@ -316,22 +292,3 @@ class SmppTransport(Transport):
         log.msg("Failed to send: %s reason: %s" % (message, reason))
         return super(SmppTransport, self).send_failure(message,
                                                        exception, reason)
-
-    def mess_tempfault(self, *args, **kwargs):
-        pdu = kwargs.get('pdu')
-        sequence_number = pdu['header']['sequence_number']
-        id = self.r_get_id_for_sequence(sequence_number)
-        reason = pdu['header']['command_status']
-        # TODO: Get real message here.
-        self.send_failure(Message(id=id), reason)
-
-    def conn_throttle(self, *args, **kwargs):
-        log.msg("*********** conn_throttle: %s" % kwargs)
-        unacked = kwargs.get('unacked', 0)
-        if unacked > 100:
-            # do something
-            pass
-        pdu = kwargs.get('pdu')
-        if pdu:
-            # do as above
-            pass
