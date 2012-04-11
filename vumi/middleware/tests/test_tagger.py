@@ -11,11 +11,16 @@ from vumi.message import TransportUserMessage
 class TaggingMiddlewareTestCase(TestCase):
 
     DEFAULT_CONFIG = {
-        'addr_pattern': r'^\d+(\d{3})$',
-        'tag_template': [r'pool1', r'mytag-\1'],
-        'tag_pattern': r'mytag-(\d{3})$',
-        'msg_template': {
-            'from_addr': r'1234*\1',
+        'incoming': {
+            'addr_pattern': r'^\d+(\d{3})$',
+            'tagpool_template': r'pool1',
+            'tagname_template': r'mytag-\1',
+            },
+        'outgoing': {
+            'tagname_pattern': r'mytag-(\d{3})$',
+            'msg_template': {
+                'from_addr': r'1234*\1',
+                },
             },
         }
 

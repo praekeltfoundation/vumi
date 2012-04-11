@@ -20,31 +20,39 @@ class TaggingMiddleware(TransportMiddleware):
 
     Configuration options:
 
-    :param string addr_pattern:
-        Regular expression matching the to_addr of incoming messages.
-    :type tag_template: a pair of strings
-    :param string tag_template:
-        Template for producing tag from successful matches of
-        `addr_pattern`. Tags are a `(tagpool, tag_name)` pair and are
-        produced using `(match.expand(tag_template[0]),
-        match.expand(tag_template[1]))`.
-    :param string tag_pattern:
-        Regular expression matching the tag name of outgoing messages.
-        Note: The tag pool the tag belongs to is not examined.
-    :param dict msg_template:
-        A dictionary of additional key-value pairs to add to the
-        outgoing message payloads whose tag mataches `tag_pattern`.
-        Values which are strings are expanded using
-        `match.expand(value)`.  Values which are dicts are recursed
-        into. Values which are neither are left as is.
+    :param dict incoming:
+
+        * **addr_pattern** (*string*): Regular expression matching the
+          to_addr of incoming messages.
+        * **tagpool_template** (*string*): Template for producing tag pool
+          from successful matches of `addr_pattern`. The string is
+          expanded using `match.expand(tagpool_template)`.
+        * **tagname_template** (*string*): Template for producing tag name
+          from successful matches of `addr_pattern`. The string is
+          expanded using `match.expand(tagname_template)`.
+
+    :param dict outgoing:
+
+        * **tagname_pattern** (*string*): Regular expression matching
+          the tag name of outgoing messages. Note: The tag pool the
+          tag belongs to is not examined.
+        * **msg_template** (*dict*): A dictionary of additional key-value
+          pairs to add to the outgoing message payloads whose tag
+          matches `tag_pattern`.  Values which are strings are
+          expanded using `match.expand(value)`.  Values which are
+          dicts are recursed into. Values which are neither are left
+          as is.
     """
     def setup_middleware(self):
-        self.to_addr_re = re.compile(self.config['addr_pattern'])
-        self.tagpool_template, self.tagname_template = \
-                               self.config['tag_template']
+        config_incoming = self.config['incoming']
+        config_outgoing = self.config['outgoing']
 
-        self.tag_re = re.compile(self.config['tag_pattern'])
-        self.msg_template = self.config['msg_template']
+        self.to_addr_re = re.compile(config_incoming['addr_pattern'])
+        self.tagpool_template = config_incoming['tagpool_template']
+        self.tagname_template = config_incoming['tagname_template']
+
+        self.tag_re = re.compile(config_outgoing['tagname_pattern'])
+        self.msg_template = config_outgoing['msg_template']
 
     def handle_inbound(self, message, endpoint):
         to_addr = message.get('to_addr')
