@@ -79,14 +79,12 @@ class HttpApiTransport(HttpRpcTransport):
             return
         log.msg(('HttpApiTransport sending from %(from_addr)s to %(to_addr)s '
                  'message "%(content)s"') % values)
-        yield self.publish_message(
-            message_id=message_id,
-            content=values['content'],
-            to_addr=values['to_addr'],
-            from_addr=values['from_addr'],
-            provider='vumi',
-            transport_type=self.transport_type,
-        )
+        payload = {
+            'message_id': message_id,
+            'transport_type': self.transport_type,
+            }
+        payload.update(values)
+        yield self.publish_message(**payload)
         if not self.reply_expected:
             yield self.finish_request(message_id,
                                       json.dumps({'message_id': message_id}))
