@@ -80,7 +80,7 @@ class VumiOptions(usage.Options):
 
 class StartWorkerOptions(VumiOptions):
     """
-    Options to the start_worker twistd plugin.
+    Options to the vumi_worker twistd plugin.
     """
 
     optFlags = [
