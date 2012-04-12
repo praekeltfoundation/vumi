@@ -6,12 +6,12 @@ import re
 import redis
 
 from twisted.internet.defer import inlineCallbacks
-from twisted.python import log
 
 from vumi.service import Worker
 from vumi.errors import ConfigError
 from vumi.message import TransportUserMessage, TransportEvent
-from vumi.utils import load_class_by_string
+from vumi.utils import load_class_by_string, get_first_word
+from vumi import log
 
 
 class BaseDispatchWorker(Worker):
@@ -362,3 +362,127 @@ class UserGroupingRouter(SimpleDispatchRouter):
         group = self.get_group_for_user(msg.user().encode('utf8'))
         app = self.groups[group]
         self.dispatcher.exposed_publisher[app].publish_message(msg)
+
+
+class ContentKeywordRouter(SimpleDispatchRouter):
+    """Router that dispatches based on the first word of the message
+    content. In the context of SMSes the first word is sometimes called
+    the 'keyword'.
+
+    :param dict keyword_mappings:
+        Mapping from application transport names to simple keywords.
+        This is purely a convenience for constructing simple routing
+        rules. The rules generated from this option are appened to
+        the of rules supplied via the *rules* option.
+
+    :param list rules:
+        A list of routing rules. A routing rule is a dictionary. It
+        must have `app` and `keyword` keys and may contain `to_addr`
+        and `prefix` keys. If a message's first word matches a given
+        keyword, the message is sent to the application listening on
+        the transport name given by the value of `app`. If a 'to_addr'
+        key is supplied, the message `to_addr` must also match the
+        value of the 'to_addr' key. If a 'prefix' is supplied, the
+        message `from_addr` must *start with* the value of the
+        'prefix' key.
+
+    :param str fallback_application:
+        Optional application transport name to forward inbound messages
+        that match no rule to. If omitted, unrouted inbound messages
+        are just logged.
+
+    :param dict transport_mappings:
+        Mapping from message `from_addr`es to transports names.  If a
+        message's from_addr matches a given from_addr, the message is
+        sent to the associated transport.
+
+    :param int expire_routing_memory:
+        Time in seconds before outbound message's ids are expired from
+        the redis routing store. Outbound message ids are stored along
+        with the transport_name the message came in on and are used to
+        route events such as acknowledgements and delivery reports
+        back to the application that sent the outgoing
+        message. Default is seven days.
+    """
+
+    DEFAULT_ROUTING_TIMEOUT = 60 * 60 * 24 * 7  # 7 days
+
+    def setup_routing(self):
+        self.r_config = self.config.get('redis_config', {})
+        self.r_prefix = self.config['dispatcher_name']
+        self.r_server = redis.Redis(**self.r_config)
+        self.rules = []
+        for rule in self.config.get('rules', []):
+            if 'keyword' not in rule or 'app' not in rule:
+                raise ConfigError("Rule definition %r must contain values for"
+                                  " both 'app' and 'keyword'" % rule)
+            rule = rule.copy()
+            rule['keyword'] = rule['keyword'].lower()
+            self.rules.append(rule)
+        keyword_mappings = self.config.get('keyword_mappings', {})
+        for transport_name, keyword in keyword_mappings.items():
+            self.rules.append({'app': transport_name,
+                               'keyword': keyword.lower()})
+        self.fallback_application = self.config.get('fallback_application')
+        self.transport_mappings = self.config['transport_mappings']
+        self.expire_routing_timeout = int(self.config.get(
+            'expire_routing_memory', self.DEFAULT_ROUTING_TIMEOUT))
+
+    def get_message_key(self, message):
+        return self.r_key('message', message)
+
+    def r_key(self, *parts):
+        return ':'.join([self.r_prefix] + map(str, parts))
+
+    def publish_transport(self, name, msg):
+        self.dispatcher.transport_publisher[name].publish_message(msg)
+
+    def publish_exposed_inbound(self, name, msg):
+        self.dispatcher.exposed_publisher[name].publish_message(msg)
+
+    def publish_exposed_event(self, name, msg):
+        self.dispatcher.exposed_event_publisher[name].publish_message(msg)
+
+    def is_msg_matching_routing_rules(self, keyword, msg, rule):
+        return all([keyword == rule['keyword'],
+                    (not 'to_addr' in rule) or
+                    (msg['to_addr'] == rule['to_addr']),
+                    (not 'prefix' in rule) or
+                    (msg['from_addr'].startswith(rule['prefix']))])
+
+    def dispatch_inbound_message(self, msg):
+        keyword = get_first_word(msg['content']).lower()
+        matched = False
+        for rule in self.rules:
+            if self.is_msg_matching_routing_rules(keyword, msg, rule):
+                matched = True
+                self.publish_exposed_inbound(rule['app'], msg)
+        if not matched:
+            if self.fallback_application is not None:
+                self.publish_exposed_inbound(self.fallback_application, msg)
+            else:
+                log.error('Message could not be routed: %r' % (msg,))
+
+    def dispatch_inbound_event(self, msg):
+        message_key = self.get_message_key(msg['user_message_id'])
+        name = self.r_server.get(message_key)
+        if not name:
+            log.error("No transport_name for return route found in Redis"
+                      " while dispatching transport event for message %s"
+                      % (msg['user_message_id'],))
+        try:
+            self.publish_exposed_event(name, msg)
+        except:
+            log.error("No publishing route for %s" % (name,))
+
+    @inlineCallbacks
+    def dispatch_outbound_message(self, msg):
+        transport_name = self.transport_mappings.get(msg['from_addr'])
+        if transport_name is not None:
+            self.publish_transport(transport_name, msg)
+            message_key = self.get_message_key(msg['message_id'])
+            self.r_server.set(message_key, msg['transport_name'])
+            yield self.r_server.expire(message_key,
+                                       self.expire_routing_timeout)
+        else:
+            log.error("No transport for %s" % (msg['from_addr'],))
