@@ -103,8 +103,7 @@ class StartWorkerOptions(VumiOptions):
         sys.exit(0)
 
     def do_worker_help(self):
-        "Print out a usage message for the worker-class and exit"
-
+        """Print out a usage message for the worker-class and exit"""
         worker_class = load_class_by_string(self.worker_class)
         print worker_class.__doc__
         self.exit()
