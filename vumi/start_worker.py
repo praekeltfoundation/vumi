@@ -1,6 +1,7 @@
 # -*- test-case-name: vumi.tests.test_start_worker -*-
 
 import sys
+import warnings
 
 import yaml
 from twisted.python import log, usage
@@ -115,7 +116,9 @@ class StartWorkerOptions(VumiOptions):
         depr_worker_class = self.opts.pop('worker_class')
 
         if depr_worker_class is not None:
-            # TODO: Warn about this being deprecated.
+            warnings.warn("The --worker_class option is deprecated since"
+                          " Vumi 0.3. Please use --worker-class instead.",
+                          category=DeprecationWarning)
             if worker_class is None:
                 worker_class = depr_worker_class
 
