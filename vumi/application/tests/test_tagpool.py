@@ -6,7 +6,7 @@ from twisted.trial.unittest import TestCase
 
 from vumi.tests.utils import FakeRedis
 
-from vumi.application.tagpool import TagpoolManager
+from vumi.application.tagpool import TagpoolManager, TagpoolError
 
 
 class TestTagpoolManager(TestCase):
@@ -29,6 +29,31 @@ class TestTagpoolManager(TestCase):
         tag3 = ("poolA", "tag3")
         self.tagpool.declare_tags([tag2, tag3])
         self.assertEqual(self.tagpool.acquire_tag("poolA"), tag3)
+
+    def test_delete_tags(self):
+        tag1, tag2 = ("poolA", "tag1"), ("poolA", "tag2")
+        self.tagpool.declare_tags([tag1, tag2])
+        self.tagpool.delete_tags([tag1])
+        self.assertEqual(self.tagpool.acquire_tag("poolA"), tag2)
+        self.assertEqual(self.tagpool.acquire_tag("poolA"), None)
+
+    def test_delete_inuse_tags(self):
+        tag1, tag2 = ("poolA", "tag1"), ("poolA", "tag2")
+        self.tagpool.declare_tags([tag1, tag2])
+        self.assertEqual(self.tagpool.acquire_tag('poolA'), tag1)
+        self.assertRaises(TagpoolError, self.tagpool.delete_tags, [tag1])
+
+    def test_purge_pool(self):
+        tag1, tag2 = ("poolA", "tag1"), ("poolA", "tag2")
+        self.tagpool.declare_tags([tag1, tag2])
+        self.tagpool.purge_pool('poolA')
+        self.assertEqual(self.tagpool.acquire_tag('poolA'), None)
+
+    def test_purge_inuse_pool(self):
+        tag1, tag2 = ("poolA", "tag1"), ("poolA", "tag2")
+        self.tagpool.declare_tags([tag1, tag2])
+        self.assertEqual(self.tagpool.acquire_tag('poolA'), tag1)
+        self.assertRaises(TagpoolError, self.tagpool.purge_pool, 'poolA')
 
     def test_acquire_tag(self):
         tkey = self.pool_key_generator("poolA")
