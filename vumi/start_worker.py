@@ -67,6 +67,8 @@ class VumiOptions(usage.Options):
 
         config_file = vumi_option_params.pop('vumi-config')
 
+        # non-recursive overlay is safe because vumi options are
+        # all simple key-value pairs
         return overlay_configs(
             self.default_vumi_options,
             read_yaml_config(config_file),
@@ -130,6 +132,8 @@ class StartWorkerOptions(VumiOptions):
     def get_worker_config(self):
         config_file = self.opts.pop('config')
 
+        # non-recursive overlay is safe because set_options
+        # can only contain simple key-value pairs.
         return overlay_configs(
             read_yaml_config(config_file),
             self.set_options)
