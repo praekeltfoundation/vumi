@@ -95,6 +95,15 @@ class TestHttpApiTransport(TransportTestCase):
         self.assertEqual(response, 'OK')
 
     @inlineCallbacks
+    def test_good_optional_parameter(self):
+        url = self.mkurl('hello', group='#channel')
+        response = yield http_request(url, '', method='GET')
+        [msg] = self.get_dispatched_messages()
+        self.assertEqual(msg['group'], '#channel')
+        self.assertEqual(json.loads(response),
+                         {'message_id': msg['message_id']})
+
+    @inlineCallbacks
     def test_bad_parameter(self):
         url = self.mkurl('hello', foo='bar')
         response = yield http_request_full(url, '', method='GET')
