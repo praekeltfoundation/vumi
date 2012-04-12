@@ -39,16 +39,6 @@ class TagpoolManager(object):
             self.r_server.delete(free_list_key)
             self.r_server.delete(inuse_set_key)
 
-    def delete_tags(self, tags):
-        for pool, local_tag in tags:
-            tag_pool_keys = self._tag_pool_keys(pool)
-            free_list_key, free_set_key, inuse_set_key = tag_pool_keys
-            if self.r_server.sismember(inuse_set_key, local_tag):
-                raise TagpoolError('tag %s in pool %s is still in use.'
-                                    % (local_tag, pool))
-            self.r_server.srem(free_set_key, local_tag)
-            self.r_server.lrem(free_list_key, local_tag)
-
     def _tag_pool_keys(self, pool):
         return tuple(":".join([self.r_prefix, "tagpools", pool, state])
                      for state in ("free:list", "free:set", "inuse:set"))
