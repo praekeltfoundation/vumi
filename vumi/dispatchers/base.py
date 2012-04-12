@@ -401,8 +401,11 @@ class ContentKeywordRouter(SimpleDispatchRouter):
         the redis routing store. Outbound message ids are stored along
         with the transport_name the message came in on and are used to
         route events such as acknowledgements and delivery reports
-        back to the application that sent the outgoing message.
+        back to the application that sent the outgoing
+        message. Default is seven days.
     """
+
+    DEFAULT_ROUTING_TIMEOUT = 60 * 60 * 24 * 7  # 7 days
 
     def setup_routing(self):
         self.r_config = self.config.get('redis_config', {})
@@ -422,7 +425,8 @@ class ContentKeywordRouter(SimpleDispatchRouter):
                                'keyword': keyword.lower()})
         self.fallback_application = self.config.get('fallback_application')
         self.transport_mappings = self.config['transport_mappings']
-        self.expire_routing_timeout = int(self.config['expire_routing_memory'])
+        self.expire_routing_timeout = int(self.config.get(
+            'expire_routing_memory', self.DEFAULT_ROUTING_TIMEOUT))
 
     def get_message_key(self, message):
         return self.r_key('message', message)
