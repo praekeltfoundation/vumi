@@ -42,6 +42,19 @@ class TestTagpoolManager(TestCase):
         self.assertEqual(self.tagpool.acquire_tag('poolA'), tag1)
         self.assertRaises(TagpoolError, self.tagpool.purge_pool, 'poolA')
 
+    def test_delete_tags(self):
+        tag1, tag2 = ("poolA", "tag1"), ("poolA", "tag2")
+        self.tagpool.declare_tags([tag1, tag2])
+        self.tagpool.delete_tags([tag1])
+        self.assertEqual(self.tagpool.acquire_tag("poolA"), tag2)
+        self.assertEqual(self.tagpool.acquire_tag("poolA"), None)
+
+    def test_delete_inuse_tags(self):
+        tag1, tag2 = ("poolA", "tag1"), ("poolA", "tag2")
+        self.tagpool.declare_tags([tag1, tag2])
+        self.assertEqual(self.tagpool.acquire_tag('poolA'), tag1)
+        self.assertRaises(TagpoolError, self.tagpool.delete_tags, [tag1])
+
     def test_acquire_tag(self):
         tkey = self.pool_key_generator("poolA")
         tag1, tag2 = ("poolA", "tag1"), ("poolA", "tag2")

@@ -448,6 +448,11 @@ class FakeRedis(object):
         if delayed is not None and not delayed.cancelled:
             delayed.cancel()
 
+    # transaction operations
+
+    def transaction(self, func, *watches, **kwargs):
+        func(self)
+
 
 class LogCatcher(object):
     """Gather logs."""
