@@ -119,3 +119,13 @@ class FakeRedisTestCase(TestCase):
         self.assertEqual(self.r_server.sunion('set1'), set(['1']))
         self.assertEqual(self.r_server.sunion('set1', 'set2'), set(['1', '2']))
         self.assertEqual(self.r_server.sunion('other'), set())
+
+    def test_transaction(self):
+        self.r_server = FakeRedis()
+        args = []
+
+        def func(pipe):
+            args.append(pipe)
+
+        self.r_server.transaction(func, "mykey", "myotherkey")
+        self.assertEqual(args, [self.r_server])
