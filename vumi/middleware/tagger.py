@@ -63,9 +63,7 @@ class TaggingMiddleware(TransportMiddleware):
         if match is not None:
             tag = (match.expand(self.tagpool_template),
                    match.expand(self.tagname_template))
-        else:
-            tag = None
-        self.add_tag_to_msg(message, tag)
+            self.add_tag_to_msg(message, tag)
         return message
 
     def handle_outbound(self, message, endpoint):
