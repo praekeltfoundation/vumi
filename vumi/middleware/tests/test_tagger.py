@@ -105,5 +105,5 @@ class TaggingMiddlewareTestCase(TestCase):
         msg = self.mk_msg("123456")
         TaggingMiddleware.add_tag_to_msg(msg, ('pool', 'mytag'))
         self.assertEqual(msg['helper_metadata']['tag'], {
-            'tag': ('pool', 'mytag'),
+            'tag': ['pool', 'mytag'],
             })
