@@ -23,7 +23,8 @@ class TaggingMiddleware(TransportMiddleware):
     :param dict incoming:
 
         * **addr_pattern** (*string*): Regular expression matching the
-          to_addr of incoming messages.
+          to_addr of incoming messages. Incoming messages with to_addr
+          values that don't match the pattern are not modified.
         * **tagpool_template** (*string*): Template for producing tag pool
           from successful matches of `addr_pattern`. The string is
           expanded using `match.expand(tagpool_template)`.
@@ -34,8 +35,10 @@ class TaggingMiddleware(TransportMiddleware):
     :param dict outgoing:
 
         * **tagname_pattern** (*string*): Regular expression matching
-          the tag name of outgoing messages. Note: The tag pool the
-          tag belongs to is not examined.
+          the tag name of outgoing messages. Outgoing messages with
+          tag names that don't match the pattern are not
+          modified. Note: The tag pool the tag belongs to is not
+          examined.
         * **msg_template** (*dict*): A dictionary of additional key-value
           pairs to add to the outgoing message payloads whose tag
           matches `tag_pattern`.  Values which are strings are
@@ -99,7 +102,8 @@ class TaggingMiddleware(TransportMiddleware):
     def add_tag_to_msg(msg, tag):
         """Convenience method for adding a tag to a message."""
         tag_metadata = msg['helper_metadata'].setdefault('tag', {})
-        tag_metadata['tag'] = tag
+        # convert tag to list so that msg == json.loads(json.dumps(msg))
+        tag_metadata['tag'] = list(tag)
 
     @staticmethod
     def map_msg_to_tag(msg):
