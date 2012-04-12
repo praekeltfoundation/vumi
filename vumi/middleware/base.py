@@ -107,9 +107,9 @@ class MiddlewareStack(object):
         for middleware in middlewares:
             handler = getattr(middleware, method_name)
             message = yield handler(message, endpoint)
-            if not message:
+            if message is None:
                 raise MiddlewareError('Returned value of %s.%s should never ' \
-                                'resolve to False' % (middleware, method_name,))
+                                'be None' % (middleware, method_name,))
         returnValue(message)
 
     def apply_consume(self, handler_name, message, endpoint):
