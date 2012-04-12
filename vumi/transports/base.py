@@ -54,9 +54,9 @@ class Transport(Worker):
         yield self._setup_message_publisher()
         yield self._setup_event_publisher()
 
-        yield self.setup_transport()
-
         yield self.setup_middleware()
+
+        yield self.setup_transport()
 
         self.message_consumer = None
         if self.start_message_consumer:
