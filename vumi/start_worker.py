@@ -12,7 +12,7 @@ from vumi.errors import VumiError
 
 
 def overlay_configs(*configs):
-    # TODO: Make this recursive?
+    """Non-recursively overlay a set of configuration dictionaries"""
     config = {}
 
     for overlay in configs:
@@ -22,10 +22,12 @@ def overlay_configs(*configs):
 
 
 def filter_null_values(config):
+    """Remove keys with None values from a dictionary."""
     return dict(item for item in config.iteritems() if item[1] is not None)
 
 
 def read_yaml_config(config_file, optional=True):
+    """Parse an (usually) optional YAML config file."""
     if optional and config_file is None:
         return {}
     with file(config_file, 'r') as stream:
