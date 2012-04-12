@@ -58,6 +58,14 @@ class TaggingMiddlewareTestCase(TestCase):
         self.mk_tagger()
         self.assertEqual(self.get_tag("a1234"), None)
 
+    def test_inbound_nonmatching_to_addr_leaves_msg_unmodified(self):
+        self.mk_tagger()
+        tag = ("dont", "modify")
+        orig_msg = self.mk_msg("a1234", tag=tag)
+        msg = orig_msg.from_json(orig_msg.to_json())
+        msg = self.mw.handle_inbound(msg, "dummy_endpoint")
+        self.assertEqual(msg, orig_msg)
+
     def test_inbound_none_to_addr(self):
         self.mk_tagger()
         self.assertEqual(self.get_tag(None), None)
@@ -73,6 +81,15 @@ class TaggingMiddlewareTestCase(TestCase):
         self.mk_tagger()
         self.assertEqual(self.get_from_addr("111", ("pool1", "othertag-456")),
                          None)
+
+    def test_outbound_nonmatching_tag_leaves_msg_unmodified(self):
+        self.mk_tagger()
+        orig_msg = self.mk_msg("a1234", tag=("pool1", "othertag-456"))
+        msg = orig_msg.from_json(orig_msg.to_json())
+        msg = self.mw.handle_outbound(msg, "dummy_endpoint")
+        for key in msg.payload.keys():
+            self.assertEqual(msg[key], orig_msg[key], "Key %r not equal" % key)
+        self.assertEqual(msg, orig_msg)
 
     def test_outbound_no_tag(self):
         self.mk_tagger()
