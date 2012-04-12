@@ -1,5 +1,5 @@
 from twisted.trial.unittest import TestCase
-from vumi.scripts.parse_smpp_log_messages import LogParser
+from vumi.scripts.parse_smpp_log_messages import LogParser, LOG_PATTERN
 from pkg_resources import resource_string
 import json
 
@@ -22,11 +22,12 @@ class ParseSMPPLogMessagesTestCase(TestCase):
         parser = DummyLogParser({
             'from': None,
             'until': None,
-        })
+        }, log_pattern=LOG_PATTERN)
         parser.readline("2011-11-15 02:04:48+0000 [EsmeTransceiver,client] "
             "PUBLISHING INBOUND: {'content': u'AFN9WH79', 'transport_type': "
             "'sms', 'to_addr': '1458', 'message_id': 'ec443820-62a8-4051-92e7"
             "-66adaa487d20', 'from_addr': '23xxxxxxxx'}")
+
         self.assertEqual(json.loads(parser.emit_log[0]), {
             "content": "AFN9WH79",
             "transport_type": "sms",
@@ -40,7 +41,7 @@ class ParseSMPPLogMessagesTestCase(TestCase):
         parser = DummyLogParser({
             'from': '2011-11-15 00:23:59',
             'until': '2011-11-15 00:24:26'
-        })
+        }, log_pattern=LOG_PATTERN)
         for line in sample.split('\n'):
             parser.readline(line)
 
