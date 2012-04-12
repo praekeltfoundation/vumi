@@ -1,6 +1,6 @@
 from twisted.trial.unittest import TestCase
 
-from vumi.start_worker import VumiOptions, StartWorkerOptions
+from vumi.servicemaker import VumiOptions, StartWorkerOptions
 
 
 class OptionsTestCase(TestCase):

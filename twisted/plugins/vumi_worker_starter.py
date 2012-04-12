@@ -2,14 +2,14 @@ from zope.interface import implements
 from twisted.application.service import IServiceMaker
 from twisted.plugin import IPlugin
 
-from vumi.start_worker import VumiService, StartWorkerOptions
+from vumi.servicemaker import VumiService, StartWorkerOptions
 
 
 # This create the service, runnable on command line with twistd
 class VumiServiceMaker(object):
     implements(IServiceMaker, IPlugin)
     # the name of our plugin, this will be the subcommand for twistd
-    # e.g. $ twistd -n start_worker --option1= ...
+    # e.g. $ twistd -n vumi_worker --option1= ...
     tapname = "vumi_worker"
     # description, also for twistd
     description = "Start a Vumi worker"

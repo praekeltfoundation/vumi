@@ -1,4 +1,4 @@
-# -*- test-case-name: vumi.tests.test_start_worker -*-
+# -*- test-case-name: vumi.tests.test_servicemaker -*-
 
 import sys
 import warnings

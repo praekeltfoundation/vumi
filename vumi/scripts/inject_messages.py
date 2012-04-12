@@ -7,7 +7,7 @@ from twisted.internet.defer import (maybeDeferred, DeferredQueue,
                                     inlineCallbacks)
 from vumi.message import TransportUserMessage
 from vumi.service import Worker, WorkerCreator
-from vumi.start_worker import VumiOptions
+from vumi.servicemaker import VumiOptions
 
 
 class InjectorOptions(VumiOptions):
