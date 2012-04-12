@@ -102,7 +102,7 @@ class TaggingMiddleware(TransportMiddleware):
     def add_tag_to_msg(msg, tag):
         """Convenience method for adding a tag to a message."""
         tag_metadata = msg['helper_metadata'].setdefault('tag', {})
-        tag_metadata['tag'] = tag
+        tag_metadata['tag'] = list(tag)
 
     @staticmethod
     def map_msg_to_tag(msg):
