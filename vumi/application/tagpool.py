@@ -1,5 +1,6 @@
 # -*- test-case-name: vumi.application.tests.test_tagpool -*-
 # -*- coding: utf-8 -*-
+
 """Tag pool manager."""
 
 from vumi.errors import VumiError
