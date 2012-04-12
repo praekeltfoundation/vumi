@@ -157,29 +157,6 @@ class StartWorkerOptions(VumiOptions):
         self.worker_config = self.get_worker_config()
 
 
-class VumiService(Service):
-    """Service started by the twistd plugin.
-
-    This is a wrapper around a :class:`vumi.service.Worker` that handles
-    configuration and service creation from the command line.
-    """
-
-    def __init__(self, options):
-        self.options = options
-
-    def startService(self):
-        log.msg("Starting VumiService")
-
-        worker_creator = WorkerCreator(self.options.vumi_options)
-        self.worker = worker_creator.create_worker(
-            self.options.worker_class, self.options.worker_config)
-        return self.worker.startService()
-
-    def stopService(self):
-        log.msg("Stopping VumiService")
-        return self.worker.stopService()
-
-
 class VumiWorkerServiceMaker(object):
     implements(IServiceMaker, IPlugin)
     # the name of our plugin, this will be the subcommand for twistd
@@ -191,7 +168,10 @@ class VumiWorkerServiceMaker(object):
     options = StartWorkerOptions
 
     def makeService(self, options):
-        return VumiService(options)
+        worker_creator = WorkerCreator(options.vumi_options)
+        worker = worker_creator.create_worker(options.worker_class,
+                                              options.worker_config)
+        return worker
 
 
 class DeprecatedStartWorkerServiceMaker(VumiWorkerServiceMaker):
