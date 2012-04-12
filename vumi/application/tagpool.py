@@ -6,7 +6,9 @@
 from vumi.errors import VumiError
 
 
-class TagpoolError(VumiError): pass
+class TagpoolError(VumiError):
+    """An error occurred during an operation on a tag pool."""
+
 
 class TagpoolManager(object):
 
