@@ -1,5 +1,3 @@
-from tempfile import NamedTemporaryFile
-
 from twisted.trial.unittest import TestCase
 
 from vumi.start_worker import VumiOptions, StartWorkerOptions
@@ -9,22 +7,14 @@ class OptionsTestCase(TestCase):
     "Base class for handling options files"
 
     def mk_config_file(self, name, lines=None):
-        self.tempfile[name] = NamedTemporaryFile()
-        self.config_file[name] = self.tempfile[name].name
+        self.config_file[name] = self.mktemp()
+        tempfile = open(self.config_file[name], 'w')
         if lines is not None:
-            self.write_config_lines(name, lines)
+            tempfile.write('\n'.join(lines))
+        tempfile.close()
 
     def setUp(self):
-        self.tempfile = {}
         self.config_file = {}
-
-    def tearDown(self):
-        for tf in self.tempfile.values():
-            tf.close()
-
-    def write_config_lines(self, name, lines):
-        self.tempfile[name].file.write('\n'.join(lines))
-        self.tempfile[name].flush()
 
 
 class VumiOptionsTestCase(OptionsTestCase):
