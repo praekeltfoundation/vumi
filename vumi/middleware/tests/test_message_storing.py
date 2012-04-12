@@ -35,7 +35,8 @@ class StoringMiddlewareTestCase(TestCase):
     def test_handle_outbound(self):
         msg = self.mk_msg()
         msg_id = msg['message_id']
-        self.mw.handle_outbound(msg, "dummy_endpoint")
+        response = self.mw.handle_outbound(msg, "dummy_endpoint")
+        self.assertTrue(isinstance(response, TransportUserMessage))
         self.assertEqual(self.store.get_outbound_message(msg_id), msg)
         self.assertEqual(self.store.message_batches(msg_id), [])
         self.assertEqual(self.store.message_events(msg_id), [])
@@ -45,7 +46,8 @@ class StoringMiddlewareTestCase(TestCase):
         msg = self.mk_msg()
         msg_id = msg['message_id']
         TaggingMiddleware.add_tag_to_msg(msg, ["pool", "tag"])
-        self.mw.handle_outbound(msg, "dummy_endpoint")
+        response = self.mw.handle_outbound(msg, "dummy_endpoint")
+        self.assertTrue(isinstance(response, TransportUserMessage))
         self.assertEqual(self.store.get_outbound_message(msg_id), msg)
         self.assertEqual(self.store.message_batches(msg_id), [batch_id])
         self.assertEqual(self.store.message_events(msg_id), [])
@@ -55,7 +57,8 @@ class StoringMiddlewareTestCase(TestCase):
     def test_handle_inbound(self):
         msg = self.mk_msg()
         msg_id = msg['message_id']
-        self.mw.handle_inbound(msg, "dummy_endpoint")
+        response = self.mw.handle_inbound(msg, "dummy_endpoint")
+        self.assertTrue(isinstance(response, TransportUserMessage))
         self.assertEqual(self.store.get_inbound_message(msg_id), msg)
 
     def test_handle_inbound_with_tag(self):
@@ -63,7 +66,8 @@ class StoringMiddlewareTestCase(TestCase):
         msg = self.mk_msg()
         msg_id = msg['message_id']
         TaggingMiddleware.add_tag_to_msg(msg, ["pool", "tag"])
-        self.mw.handle_inbound(msg, "dummy_endpoint")
+        response = self.mw.handle_inbound(msg, "dummy_endpoint")
+        self.assertTrue(isinstance(response, TransportUserMessage))
         self.assertEqual(self.store.get_inbound_message(msg_id), msg)
         self.assertEqual(self.store.batch_messages(batch_id), [])
         self.assertEqual(self.store.batch_replies(batch_id), [msg_id])
@@ -71,6 +75,7 @@ class StoringMiddlewareTestCase(TestCase):
     def test_handle_event(self):
         ack = self.mk_ack()
         event_id = ack['event_id']
-        self.mw.handle_event(ack, "dummy_endpoint")
+        response = self.mw.handle_event(ack, "dummy_endpoint")
+        self.assertTrue(isinstance(response, TransportEvent))
         self.assertEqual(self.store.get_event(event_id), ack)
         self.assertEqual(self.store.message_events("1"), [event_id])
