@@ -43,13 +43,15 @@ class VumiOptions(usage.Options):
     Options global to everything vumi.
     """
     optParameters = [
-        ["hostname", None, None, "AMQP broker"],
-        ["port", None, None, "AMQP port", int],
-        ["username", None, None, "AMQP username"],
-        ["password", None, None, "AMQP password"],
-        ["vhost", None, None, "AMQP virtual host"],
-        ["specfile", None, None, "AMQP spec file"],
-        ["vumi-config", None, None, "vumi config file"],
+        ["hostname", None, None, "AMQP broker (*)"],
+        ["port", None, None, "AMQP port (*)", int],
+        ["username", None, None, "AMQP username (*)"],
+        ["password", None, None, "AMQP password (*)"],
+        ["vhost", None, None, "AMQP virtual host (*)"],
+        ["specfile", None, None, "AMQP spec file (*)"],
+        ["vumi-config", None, None,
+         "YAML config file for setting core vumi options (any command-line"
+         " parameter marked with an asterisk)"],
     ]
 
     default_vumi_options = {
@@ -93,15 +95,19 @@ class StartWorkerOptions(VumiOptions):
     optParameters = [
         ["worker-class", None, None, "Class of a worker to start"],
         ["worker_class", None, None, "Deprecated. See --worker-class instead"],
-        ["config", None, None, "YAML config file to load"],
+        ["config", None, None, "YAML config file for worker configuration"
+         " options"],
     ]
+
+    longdesc = """Launch an instance of a vumi worker process."""
 
     def __init__(self):
         VumiOptions.__init__(self)
         self.set_options = {}
 
     def opt_set_option(self, keyvalue):
-        """Set a VUMI option (overrides config file values)."""
+        """Set a worker configuration option (overrides values
+        specified in the file passed to --config)."""
         key, _sep, value = keyvalue.partition(':')
         self.set_options[key] = value
 
