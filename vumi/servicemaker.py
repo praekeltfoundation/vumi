@@ -4,8 +4,10 @@ import sys
 import warnings
 
 import yaml
+from zope.interface import implements
 from twisted.python import log, usage
-from twisted.application.service import Service
+from twisted.application.service import Service, IServiceMaker
+from twisted.plugin import IPlugin
 
 from vumi.service import WorkerCreator
 from vumi.utils import load_class_by_string
@@ -170,3 +172,22 @@ class VumiService(Service):
     def stopService(self):
         log.msg("Stopping VumiService")
         return self.worker.stopService()
+
+
+class VumiWorkerServiceMaker(object):
+    implements(IServiceMaker, IPlugin)
+    # the name of our plugin, this will be the subcommand for twistd
+    # e.g. $ twistd -n vumi_worker --option1= ...
+    tapname = "vumi_worker"
+    # description, also for twistd
+    description = "Start a Vumi worker"
+    # what command line options does this service expose
+    options = StartWorkerOptions
+
+    def makeService(self, options):
+        return VumiService(options)
+
+
+class DeprecatedStartWorkerServiceMaker(VumiWorkerServiceMaker):
+    tapname = "start_worker"
+    description = "Deprecated copy of vumi_worker. Use vumi_worker instead."
