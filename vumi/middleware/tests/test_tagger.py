@@ -36,13 +36,13 @@ class TaggingMiddlewareTestCase(TestCase):
                                    transport_name="dummy_endpoint",
                                    transport_type="dummy_transport_type")
         if tag is not None:
-            self.mw.add_tag_to_msg(msg, tag)
+            TaggingMiddleware.add_tag_to_msg(msg, tag)
         return msg
 
     def get_tag(self, to_addr):
         msg = self.mk_msg(to_addr)
         msg = self.mw.handle_inbound(msg, "dummy_endpoint")
-        return self.mw.map_msg_to_tag(msg)
+        return TaggingMiddleware.map_msg_to_tag(msg)
 
     def get_from_addr(self, to_addr, tag):
         msg = self.mk_msg(to_addr, tag, from_addr=None)
