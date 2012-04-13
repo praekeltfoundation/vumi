@@ -7,6 +7,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.utils import http_request
 from vumi.transports.infobip.infobip import InfobipTransport
+from vumi.transports.failures import FailureMessage, PermanentFailure
 from vumi.message import TransportUserMessage
 from vumi.tests.utils import get_stubbed_worker, FakeRedis, LogCatcher
 
@@ -253,21 +254,27 @@ class TestInfobipUssdTransport(TestCase):
         with LogCatcher() as logger:
             self.broker.publish_message("vumi", "test_infobip.outbound", msg)
             yield self.broker.kick_delivery()
-            [error] = logger.errors
+            [error, logged_failure] = logger.errors
+
+        expected_error = ("Infobip transport cannot process outbound message"
+                          " that is not a reply.")
+
+        twisted_failure = logged_failure['failure']
+        self.assertEqual(self.flushLoggedErrors(PermanentFailure),
+                         [twisted_failure])
+        failure = twisted_failure.value
+        self.assertEqual(failure.failure_code, FailureMessage.FC_PERMANENT)
+        self.assertEqual(str(failure), expected_error)
 
         [errmsg] = error['message']
-        self.assertTrue(errmsg.startswith("'Infobip transport cannot process"
-                                          " outbound message that is not a"
-                                          " reply:"))
-
+        expected_logged_error = "'" + expected_error.replace('.', ':')
+        self.assertTrue(errmsg.startswith(expected_logged_error))
         [msg] = yield self.broker.wait_messages("vumi",
                                                 "test_infobip.failures",
                                                 1)
         self.assertEqual(msg['failure_code'], "permanent")
         last_line = msg['reason'].splitlines()[-1].strip()
-        self.assertTrue(last_line.endswith("Infobip transport cannot process"
-                                           " outbound message that is not a"
-                                           " reply."))
+        self.assertTrue(last_line.endswith(expected_error))
 
     @inlineCallbacks
     def test_ack(self):
@@ -297,6 +304,11 @@ class TestInfobipUssdTransport(TestCase):
                                                 1)
         self.assertEqual(msg['failure_code'], "permanent")
         last_line = msg['reason'].splitlines()[-1].strip()
-        self.assertTrue(last_line.endswith("Infobip transport could not find"
-                                           " original request when attempting"
-                                           " to reply."))
+        expected_error = ("Infobip transport could not find original request"
+                          " when attempting to reply.")
+        self.assertTrue(last_line.endswith(expected_error))
+
+        [error] = self.flushLoggedErrors(PermanentFailure)
+        failure = error.value
+        self.assertEqual(failure.failure_code, FailureMessage.FC_PERMANENT)
+        self.assertEqual(str(failure), expected_error)

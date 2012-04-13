@@ -3,7 +3,11 @@
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.utils import load_class_by_string
-from vumi.errors import ConfigError
+from vumi.errors import ConfigError, VumiError
+
+
+class MiddlewareError(VumiError):
+    pass
 
 
 class BaseMiddleware(object):
@@ -106,6 +110,9 @@ class MiddlewareStack(object):
         for middleware in middlewares:
             handler = getattr(middleware, method_name)
             message = yield handler(message, endpoint)
+            if message is None:
+                raise MiddlewareError('Returned value of %s.%s should never ' \
+                                'be None' % (middleware, method_name,))
         returnValue(message)
 
     def apply_consume(self, handler_name, message, endpoint):

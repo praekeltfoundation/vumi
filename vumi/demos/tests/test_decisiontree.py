@@ -6,7 +6,6 @@ from pkg_resources import resource_string
 from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks, returnValue
 
-from vumi.application.base import SESSION_NEW, SESSION_CLOSE
 from vumi.demos.decisiontree import (DecisionTreeWorker, TemplatedDecisionTree,
                                      PopulatedDecisionTree,
                                      TraversedDecisionTree)

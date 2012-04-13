@@ -30,7 +30,6 @@ class TestMediafoneTransport(TransportTestCase):
             'transport_name': self.transport_name,
             'web_path': "foo",
             'web_port': 0,
-            'to_addr': '12345',
             'username': 'user',
             'password': 'pass',
             'outbound_url': self.mock_mediafone.url,
@@ -49,6 +48,7 @@ class TestMediafoneTransport(TransportTestCase):
 
     def mkurl(self, content, from_addr="2371234567", **kw):
         params = {
+            'to': '12345',
             'from': from_addr,
             'sms': content,
             }
@@ -115,7 +115,7 @@ class TestMediafoneTransport(TransportTestCase):
 
     @inlineCallbacks
     def test_missing_parameters(self):
-        url = self.mkurl_raw(sms='hello')
+        url = self.mkurl_raw(to='12345', sms='hello')
         response = yield http_request_full(url, '', method='GET')
         self.assertEqual(400, response.code)
         self.assertEqual(json.loads(response.delivered_body),

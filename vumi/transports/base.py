@@ -54,9 +54,9 @@ class Transport(Worker):
         yield self._setup_message_publisher()
         yield self._setup_event_publisher()
 
-        yield self.setup_transport()
-
         yield self.setup_middleware()
+
+        yield self.setup_transport()
 
         self.message_consumer = None
         if self.start_message_consumer:
@@ -220,6 +220,7 @@ class Transport(Worker):
     def _process_message(self, message):
         def _send_failure(f):
             self.send_failure(message, f.value, f.getTraceback())
+            log.err(f)
             if self.SUPPRESS_FAILURE_EXCEPTIONS:
                 return None
             return f

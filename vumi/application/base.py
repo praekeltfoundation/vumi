@@ -80,9 +80,9 @@ class ApplicationWorker(Worker):
 
         yield self._setup_transport_publisher()
 
-        yield self.setup_application()
-
         yield self.setup_middleware()
+
+        yield self.setup_application()
 
         if self.start_message_consumer:
             yield self._setup_transport_consumer()
