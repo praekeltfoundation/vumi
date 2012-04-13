@@ -42,10 +42,13 @@ class StoringMiddleware(BaseMiddleware):
     def handle_inbound(self, message, endpoint):
         tag = TaggingMiddleware.map_msg_to_tag(message)
         self.store.add_inbound_message(message, tag=tag)
+        return message
 
     def handle_outbound(self, message, endpoint):
         tag = TaggingMiddleware.map_msg_to_tag(message)
         self.store.add_outbound_message(message, tag=tag)
+        return message
 
     def handle_event(self, event, endpoint):
         self.store.add_event(event)
+        return event
