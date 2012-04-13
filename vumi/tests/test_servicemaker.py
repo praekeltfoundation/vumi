@@ -1,6 +1,7 @@
 from twisted.trial.unittest import TestCase
 
-from vumi.servicemaker import VumiOptions, StartWorkerOptions
+from vumi.servicemaker import (
+    VumiOptions, StartWorkerOptions, VumiWorkerServiceMaker)
 
 
 class OptionsTestCase(TestCase):
@@ -57,6 +58,20 @@ class VumiOptionsTestCase(OptionsTestCase):
 
 
 class StartWorkerOptionsTestCase(OptionsTestCase):
+    def test_override(self):
+        options = StartWorkerOptions()
+        options.parseOptions(['--worker-class', 'foo.FooWorker',
+                              '--set-option', 'blah:bleh',
+                              '--set-option', 'hungry:supper',
+                              ])
+        self.assertEqual(VumiOptions.default_vumi_options,
+                         options.vumi_options)
+        self.assertEqual({}, options.opts)
+        self.assertEqual({
+                'blah': 'bleh',
+                'hungry': 'supper',
+                }, options.worker_config)
+
     def test_config_file(self):
         self.mk_config_file('worker',
                             ["transport_name: sphex", "blah: thingy"])
@@ -72,7 +87,7 @@ class StartWorkerOptionsTestCase(OptionsTestCase):
                 'blah': 'thingy',
                 }, options.worker_config)
 
-    def test_config_overrides(self):
+    def test_config_file_override(self):
         self.mk_config_file('worker',
                             ["transport_name: sphex", "blah: thingy"])
         options = StartWorkerOptions()
@@ -107,5 +122,13 @@ class StartWorkerOptionsTestCase(OptionsTestCase):
         self.assertEqual({}, options.opts)
 
 
-# No VumiService tests, because we'd have to stub out a whole bunch of stuff.
-# I deliberately made it very small, though.
+class VumiWorkerServiceMakerTestCase(OptionsTestCase):
+    def test_make_worker(self):
+        self.mk_config_file('worker', ["transport_name: sphex"])
+        options = StartWorkerOptions()
+        options.parseOptions(['--worker-class', 'vumi.demos.words.EchoWorker',
+                              '--config', self.config_file['worker'],
+                              ])
+        maker = VumiWorkerServiceMaker()
+        worker = maker.makeService(options)
+        self.assertEqual({'transport_name': 'sphex'}, worker.config)
