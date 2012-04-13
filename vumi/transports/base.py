@@ -220,6 +220,7 @@ class Transport(Worker):
     def _process_message(self, message):
         def _send_failure(f):
             self.send_failure(message, f.value, f.getTraceback())
+            log.err(f)
             if self.SUPPRESS_FAILURE_EXCEPTIONS:
                 return None
             return f

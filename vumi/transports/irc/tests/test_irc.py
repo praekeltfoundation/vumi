@@ -8,6 +8,7 @@ from twisted.internet.defer import (inlineCallbacks, returnValue,
 from twisted.internet.protocol import FileWrapper
 
 from vumi.tests.utils import LogCatcher
+from vumi.transports.failures import FailureMessage, TemporaryFailure
 from vumi.transports.irc.irc import IrcMessage, VumiBotProtocol
 from vumi.transports.irc import IrcTransport
 from vumi.transports.tests.test_base import TransportTestCase
@@ -351,12 +352,17 @@ class TestIrcTransport(TransportTestCase):
         yield self.irc_connector.stopListening()
         self.transport.client.disconnect()
 
+        expected_error = "IrcTransport not connected (state: 'disconnected')."
+
         msg = self.mkmsg_out_irc()
         yield self.dispatch(msg)
         [error] = self.get_dispatched_failures()
-        self.assertTrue(error['reason'].strip().endswith(
-            "TemporaryFailure: IrcTransport not connected"
-            " (state: 'disconnected')."))
+        self.assertTrue(error['reason'].strip().endswith(expected_error))
+
+        [error] = self.flushLoggedErrors(TemporaryFailure)
+        failure = error.value
+        self.assertEqual(failure.failure_code, FailureMessage.FC_TEMPORARY)
+        self.assertEqual(str(failure), expected_error)
 
     @inlineCallbacks
     def test_handle_outbound_to_channel_old(self):
