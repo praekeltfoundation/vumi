@@ -371,7 +371,7 @@ class OperaTransportTestCase(TransportTestCase):
         content = u'üïéßø'
 
         def _cb(method_called, xmlrpc_payload):
-            self.assertEqual(xmlrpc_payload['content'],
+            self.assertEqual(xmlrpc_payload['SMSText'],
                 xmlrpc.Binary(content.encode('utf-8')))
             return {'Identifier': '1'}
 
