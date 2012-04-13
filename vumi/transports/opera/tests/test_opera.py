@@ -9,6 +9,7 @@ from twisted.web import xmlrpc
 from vumi.message import TransportUserMessage
 from vumi.tests.utils import FakeRedis
 from vumi.utils import http_request
+from vumi.transports.failures import PermanentFailure, TemporaryFailure
 from vumi.transports.opera.tests.test_opera_stubs import FakeXMLRPCService
 from vumi.transports.opera import OperaTransport
 from vumi.transports.tests.test_base import TransportTestCase
@@ -318,6 +319,10 @@ class OperaTransportTestCase(TransportTestCase):
         yield self.dispatch(self.mk_msg(),
             rkey='%s.outbound' % self.transport_name)
 
+        [twisted_failure] = self.flushLoggedErrors(TemporaryFailure)
+        logged_failure = twisted_failure.value
+        self.assertEqual(logged_failure.failure_code, 'temporary')
+
         self.assertEqual(self.get_dispatched_events(), [])
         self.assertEqual(self.get_dispatched_messages(), [])
         [failure] = self.get_dispatched_failures()
@@ -348,6 +353,10 @@ class OperaTransportTestCase(TransportTestCase):
         # and as a result raise an error
         yield self.dispatch(self.mk_msg(),
             rkey='%s.outbound' % self.transport_name)
+
+        [twisted_failure] = self.flushLoggedErrors(PermanentFailure)
+        logged_failure = twisted_failure.value
+        self.assertEqual(logged_failure.failure_code, 'permanent')
 
         [failure] = self.get_dispatched_failures()
         self.assertEqual(failure['failure_code'], 'permanent')
