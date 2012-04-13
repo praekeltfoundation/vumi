@@ -12,10 +12,11 @@ from vumi.utils import http_request_full
 from vumi.transports.tests.test_base import TransportTestCase
 from vumi.tests.utils import get_stubbed_worker, TestResourceWorker
 from vumi.message import TransportMessage
+from vumi.transports.failures import TemporaryFailure, PermanentFailure
 from vumi.transports.base import FailureMessage
 from vumi.transports.vas2nets.vas2nets import (
-    Vas2NetsTransport, validate_characters, Vas2NetsEncodingError,
-    normalize_outbound_msisdn)
+    Vas2NetsTransport, validate_characters, Vas2NetsTransportError,
+    Vas2NetsEncodingError, normalize_outbound_msisdn)
 
 
 class TestResource(Resource):
@@ -270,6 +271,11 @@ class Vas2NetsTransportTestCase(TransportTestCase):
         msg = self.mkmsg_out()
         d = self.dispatch(msg)
         yield d
+
+        [twisted_failure] = self.flushLoggedErrors(Vas2NetsTransportError)
+        failure = twisted_failure.value
+        self.assertTrue("No SmsId Header" in str(failure))
+
         [fmsg] = self.get_dispatched('vas2nets.failures')
         fmsg = TransportMessage.from_json(fmsg.body)
         self.assertEqual(msg.payload, fmsg['message'])
@@ -281,6 +287,11 @@ class Vas2NetsTransportTestCase(TransportTestCase):
         msg = self.mkmsg_out()
         d = self.dispatch(msg)
         yield d
+
+        [twisted_failure] = self.flushLoggedErrors(TemporaryFailure)
+        failure = twisted_failure.value
+        self.assertTrue("connection refused" in str(failure))
+
         [fmsg] = self.get_dispatched('vas2nets.failures')
         fmsg = TransportMessage.from_json(fmsg.body)
         self.assertEqual(msg.payload, fmsg['message'])
@@ -296,6 +307,11 @@ class Vas2NetsTransportTestCase(TransportTestCase):
         msg = self.mkmsg_out()
         deferred = self.dispatch(msg)
         yield deferred
+
+        [twisted_failure] = self.flushLoggedErrors(PermanentFailure)
+        failure = twisted_failure.value
+        self.assertTrue("server error: HTTP 404:" in str(failure))
+
         [fmsg] = self.get_dispatched('vas2nets.failures')
         fmsg = TransportMessage.from_json(fmsg.body)
         self.assertEqual(msg.payload, fmsg['message'])
