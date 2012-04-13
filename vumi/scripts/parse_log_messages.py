@@ -8,18 +8,28 @@ import datetime
 from vumi.message import to_json
 
 
+DATE_PATTERN = re.compile(
+    r'(?P<year>\d{4})-(?P<month>\d{2})-(?P<day>\d{2}) '
+    r'(?P<hour>\d{2}):(?P<minute>\d{2}):(?P<second>\d{2})')
+LOG_PATTERN = {
+    'vumi': re.compile(
+        r'(?P<date>[\d\-\:\s]+)\+0000 .* '
+        r'Inbound: <Message payload="(?P<message>.*)">'),
+    'smpp': re.compile(
+        r'(?P<date>[\d\-\:\s]+)\+0000 .* '
+        r'PUBLISHING INBOUND: (?P<message>.*)'),
+    }
+
+
 class Options(usage.Options):
     optParameters = [
         ["from", "f", None,
-            "Parse log lines starting from timestamp [YYYY-MM-DD HH:MM:SS]"],
+         "Ignore any log lines prior to timestamp [YYYY-MM-DD HH:MM:SS]"],
         ["until", "u", None,
-            "Parse log lines starting from timestamp [YYYY-MM-DD HH:MM:SS]"],
+         "Ignore any log lines after timestamp [YYYY-MM-DD HH:MM:SS]"],
+        ["format", None, "vumi",
+         "Message format, one of: [vumi, smpp] (default vumi)"],
     ]
-
-DATE_PATTERN = re.compile(r'(?P<year>\d{4})-(?P<month>\d{2})-(?P<day>\d{2}) ' +
-                        r'(?P<hour>\d{2}):(?P<minute>\d{2}):(?P<second>\d{2})')
-LOG_PATTERN = re.compile(r'(?P<date>[\d\-\:\s]+)\+0000 .* ' +
-                            'Inbound: <Message payload="(?P<message>.*)">')
 
 
 def parse_date(string, pattern):
@@ -42,7 +52,7 @@ class LogParser(object):
 
     def __init__(self, options, date_pattern=None, log_pattern=None):
         self.date_pattern = date_pattern or DATE_PATTERN
-        self.log_pattern = log_pattern or LOG_PATTERN
+        self.log_pattern = log_pattern or LOG_PATTERN.get(options['format'])
         self.start = options['from']
         if self.start:
             self.start = datetime.datetime(**parse_date(self.start,
