@@ -5,8 +5,8 @@ import warnings
 
 import yaml
 from zope.interface import implements
-from twisted.python import log, usage
-from twisted.application.service import Service, IServiceMaker
+from twisted.python import usage
+from twisted.application.service import IServiceMaker
 from twisted.plugin import IPlugin
 
 from vumi.service import WorkerCreator
