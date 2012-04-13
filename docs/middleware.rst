@@ -10,14 +10,14 @@ Attaching middleware to your transport or application worker is fairly
 straight forward. Just extend your YAML configuration file with lines like::
 
     middleware:
-        - mw1: vumi.middleware.DebuggingMiddleware
+        - mw1: vumi.middleware.LoggingMiddleware
 
     mw1:
-        debug_level: info
+        log_level: info
 
 The `middleware` section contains a list of middleware items. Each
 item consists of a `name` (e.g. `mw1`) for that middleware instance
-and a `class` (e.g. :class:`vumi.middleware.DebuggingMiddleware`)
+and a `class` (e.g. :class:`vumi.middleware.LoggingMiddleware`)
 which is the full Python path to the class implementing the
 middleware. A `name` can be any string that doesn't clash with another
 top-level configuration option -- it's just used to look up the

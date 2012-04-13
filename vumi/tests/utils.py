@@ -372,6 +372,10 @@ class FakeRedis(object):
             union.update(self._data.get(rkey, set()))
         return union
 
+    def sismember(self, key, value):
+        sval = self._data.get(key, set())
+        return value in sval
+
     # Sorted set operations
 
     def zadd(self, key, **valscores):
@@ -427,6 +431,10 @@ class FakeRedis(object):
         else:
             end = None
         return lval[start:end]
+
+    def lrem(self, key, value):
+        lval = self._data.get(key, [])
+        self._data[key] = [v for v in lval if v is not value]
 
     # Expiry operations
 

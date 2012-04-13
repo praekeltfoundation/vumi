@@ -36,13 +36,13 @@ class TaggingMiddlewareTestCase(TestCase):
                                    transport_name="dummy_endpoint",
                                    transport_type="dummy_transport_type")
         if tag is not None:
-            self.mw.add_tag_to_msg(msg, tag)
+            TaggingMiddleware.add_tag_to_msg(msg, tag)
         return msg
 
     def get_tag(self, to_addr):
         msg = self.mk_msg(to_addr)
         msg = self.mw.handle_inbound(msg, "dummy_endpoint")
-        return self.mw.map_msg_to_tag(msg)
+        return TaggingMiddleware.map_msg_to_tag(msg)
 
     def get_from_addr(self, to_addr, tag):
         msg = self.mk_msg(to_addr, tag, from_addr=None)
@@ -57,6 +57,14 @@ class TaggingMiddlewareTestCase(TestCase):
     def test_inbound_nonmatching_to_addr(self):
         self.mk_tagger()
         self.assertEqual(self.get_tag("a1234"), None)
+
+    def test_inbound_nonmatching_to_addr_leaves_msg_unmodified(self):
+        self.mk_tagger()
+        tag = ("dont", "modify")
+        orig_msg = self.mk_msg("a1234", tag=tag)
+        msg = orig_msg.from_json(orig_msg.to_json())
+        msg = self.mw.handle_inbound(msg, "dummy_endpoint")
+        self.assertEqual(msg, orig_msg)
 
     def test_inbound_none_to_addr(self):
         self.mk_tagger()
@@ -73,6 +81,15 @@ class TaggingMiddlewareTestCase(TestCase):
         self.mk_tagger()
         self.assertEqual(self.get_from_addr("111", ("pool1", "othertag-456")),
                          None)
+
+    def test_outbound_nonmatching_tag_leaves_msg_unmodified(self):
+        self.mk_tagger()
+        orig_msg = self.mk_msg("a1234", tag=("pool1", "othertag-456"))
+        msg = orig_msg.from_json(orig_msg.to_json())
+        msg = self.mw.handle_outbound(msg, "dummy_endpoint")
+        for key in msg.payload.keys():
+            self.assertEqual(msg[key], orig_msg[key], "Key %r not equal" % key)
+        self.assertEqual(msg, orig_msg)
 
     def test_outbound_no_tag(self):
         self.mk_tagger()
@@ -105,5 +122,5 @@ class TaggingMiddlewareTestCase(TestCase):
         msg = self.mk_msg("123456")
         TaggingMiddleware.add_tag_to_msg(msg, ('pool', 'mytag'))
         self.assertEqual(msg['helper_metadata']['tag'], {
-            'tag': ('pool', 'mytag'),
+            'tag': ['pool', 'mytag'],
             })
