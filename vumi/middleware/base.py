@@ -5,7 +5,10 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from vumi.utils import load_class_by_string
 from vumi.errors import ConfigError, VumiError
 
-class MiddlewareError(VumiError): pass
+
+class MiddlewareError(VumiError):
+    pass
+
 
 class BaseMiddleware(object):
     """Common middleware base class.
