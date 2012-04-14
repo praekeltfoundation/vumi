@@ -41,13 +41,21 @@ def parse_date(string, pattern):
 
 class LogParser(object):
     """
-    Parses lines from the SMPP log in the following format:
+    Parses Vumi TransportUserMessages from a log file and writes
+    simple JSON serialized Vumi TransportUserMessages to stdout.
 
-    YYYY-MM-DD HH:MM:SS+0000 <bits of text> PUBLISHING INBOUND: <json message>
+    Regular expression may be passed in to specify log and date
+    format.
 
-    And publishes the TransportUserMessage bits to stdout for reprocessing
-    or re-injecting into queues.
+    Two common formats output are SMPP:
 
+    `YYYY-MM-DD HH:MM:SS+0000 <bits of text> PUBLISHING INBOUND: <json
+    message>`
+
+    and Vumi:
+
+    `YYYY-MM-DD HH:MM:SS+0000 <bits of text> Inbound: <Message
+    payload="<json message>">`
     """
 
     def __init__(self, options, date_pattern=None, log_pattern=None):
