@@ -30,19 +30,7 @@ package { "git-core": ensure => "1:1.7.0.4-1ubuntu0.2" }
 package { "openjdk-6-jre-headless": ensure => "6b20-1.9.10-0ubuntu1~10.04.3" }
 package { "libcurl3": ensure => "7.19.7-1ubuntu1.1" }
 package { "libcurl4-openssl-dev": ensure => "7.19.7-1ubuntu1.1" }
-package { "redis-server": ensure => "2:2.4.10-ubuntu1~lucid",
-                          require => Class["redis_ppa"] }
-
-# Redis PPA
-class redis_ppa {
-  pparepo::install {
-    "rwky/redis":
-        apt_key => "6BEA97CEAC3CA381594EFA2CDBB0271C5862E31D",
-        dist => "lucid",
-  }
-}
-
-include "redis_ppa"
+package { "redis-server": ensure => "2:1.2.0-1" }
 
 file {
     "/var/praekelt":
