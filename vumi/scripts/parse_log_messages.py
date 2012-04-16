@@ -31,6 +31,14 @@ class Options(usage.Options):
          "Message format, one of: [vumi, smpp] (default vumi)"],
     ]
 
+    longdesc = """Parses inbound messages logged by a Vumi worker from stdin
+    and outputs them as JSON encoded Vumi messages to stdout. Useful
+    along with the `inject_messages.py` script to replay failed inbound
+    messages. The two formats supported currently are 'vumi' (which is a
+    simple custom format used by some third-party workers) and 'smpp' (which is
+    used for logging inbound messages by the SMPP transport).
+    """
+
 
 def parse_date(string, pattern):
     match = pattern.match(string)
@@ -47,12 +55,12 @@ class LogParser(object):
     Regular expression may be passed in to specify log and date
     format.
 
-    Two common formats output are SMPP:
+    Two common output formats are the one used by SMPP for logging:
 
     `YYYY-MM-DD HH:MM:SS+0000 <bits of text> PUBLISHING INBOUND: <json
     message>`
 
-    and Vumi:
+    and the one used by some Vumi campaign workers:
 
     `YYYY-MM-DD HH:MM:SS+0000 <bits of text> Inbound: <Message
     payload="<json message>">`
