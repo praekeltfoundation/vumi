@@ -6,24 +6,6 @@ Vumi. Information on older releases can be found in
 :doc:`release-notes`.
 
 
-Version 0.4
------------
-
-:Projected date: end of February 2012
-
-* once-off scheduling of messages. *(done)*
-* addition of MultiWorker. *(done)*
-* addition of support for grouped messages. *(done)*
-* remove UglyModel. *(done)*
-* remove Django-based vumi.webapp. *(done)*
-* add support for tag pools. *(done)*
-* add middleware for transports and applicatons. *(done)*
-* clean-up of SMPP transport.
-* add HBase support with ability to use Redis for small
-  deployments. See :doc:`roadmap/datastore-access`.
-* add storing of all transport messages.
-
-
 Version 0.5
 -----------
 
@@ -37,6 +19,7 @@ Version 0.5
   :doc:`roadmap/custom-app-logic`.
 * support dynamic addition and removal of workers. See
   :doc:`roadmap/dynamic-workers`.
+* add Riak storage support. See :doc:`roadmap/datastore-access`.
 
 
 Future

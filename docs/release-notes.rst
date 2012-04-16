@@ -1,6 +1,39 @@
 Release Notes
 =============
 
+Version 0.4
+-----------
+
+:Version: 0.4.0
+:Date released: 16 Apr 2012
+
+* added support for once-off scheduling of messages.
+* added MultiWorker.
+* added support for grouped messages.
+* added support for middleware for transports and applicatons.
+* added middleware for storing of all transport messages.
+* added support for tag pools.
+* added Mediafone transport.
+* added support for setting global vumi worker options via a YAML
+  configuration file.
+* added a keyword-based message dispatcher.
+* added a grouping dispatcher that assists with A/B testing.
+* added support for sending outbound messages that aren't replies to
+  application workers.
+* extended set of message parameters supported by the http_relay worker.
+* fixed twittytwister installation error.
+* fixed bug in Integrat transport that caused it to send two new
+  session messages.
+* ported the TruTeq transport to the new message format.
+* added support for longer messages to the Opera transport.
+* wrote a tutorial.
+* documented middleware and dispatchers.
+* cleaned up of SMPP transport.
+* removed UglyModel.
+* removed Django-based vumi.webapp.
+* added support for running vumi tests using tox.
+
+
 Version 0.3
 -----------
 
