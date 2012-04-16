@@ -3,7 +3,7 @@
 import json
 from copy import deepcopy
 
-from twisted.python import log, usage
+from twisted.python import log
 from twisted.application.service import MultiService
 from twisted.application.internet import TCPClient
 from twisted.internet.defer import inlineCallbacks, returnValue
@@ -35,29 +35,6 @@ def get_spec(specfile):
     if specfile not in SPECS:
         SPECS[specfile] = txamqp.spec.load(specfile)
     return SPECS[specfile]
-
-
-class Options(usage.Options):
-    """
-    Default options for all workers created
-    """
-    optParameters = [
-        ["hostname", None, "127.0.0.1", "AMQP broker"],
-        ["port", None, 5672, "AMQP port", int],
-        ["username", None, "vumi", "AMQP username"],
-        ["password", None, "vumi", "AMQP password"],
-        ["vhost", None, "/develop", "AMQP virtual host"],
-        ["specfile", None, "amqp-spec-0-8.xml", "AMQP spec file"],
-    ]
-
-    def __init__(self):
-        usage.Options.__init__(self)
-        self.set_options = {}
-
-    def opt_set_option(self, keyvalue):
-        """Set a VUMI option (overrides config file values)."""
-        key, _sep, value = keyvalue.partition(':')
-        self.set_options[key] = value
 
 
 class AmqpFactory(protocol.ReconnectingClientFactory):
@@ -217,8 +194,9 @@ class Worker(MultiService, object):
 
     @inlineCallbacks
     def stopService(self):
-        yield self.stopWorker()
-        super(Worker, self).stopService()
+        if self.running:
+            yield self.stopWorker()
+        yield super(Worker, self).stopService()
 
     def routing_key_to_class_name(self, routing_key):
         return ''.join(map(lambda s: s.capitalize(), routing_key.split('.')))
@@ -470,7 +448,9 @@ class Publisher(object):
                                          routing_key=routing_key)
 
     def publish_message(self, message, **kwargs):
-        return self.publish_raw(message.to_json(), **kwargs)
+        d = self.publish_raw(message.to_json(), **kwargs)
+        d.addCallback(lambda r: message)
+        return d
 
     def publish_json(self, data, **kw):
         """helper method"""

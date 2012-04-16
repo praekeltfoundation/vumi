@@ -6,16 +6,11 @@ Vumi. Information on older releases can be found in
 :doc:`release-notes`.
 
 
-Version 0.4
+Version 0.5
 -----------
 
-:Projected date: end of February 2012
+:Projected date: end of April 2012
 
-* add HBase support. See :doc:`roadmap/datastore-access`.
-* add storing of all transport messages.
-* once-off scheduling of messages.
-* remove UglyModel.
-* remove Django-based vumi.webapp.
 * add ability to identify a single user across multiple transports as
   per :doc:`roadmap/identity-datastore`.
 * associate messages with billing accounts. See
@@ -24,6 +19,7 @@ Version 0.4
   :doc:`roadmap/custom-app-logic`.
 * support dynamic addition and removal of workers. See
   :doc:`roadmap/dynamic-workers`.
+* add Riak storage support. See :doc:`roadmap/datastore-access`.
 
 
 Future

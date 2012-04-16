@@ -1,4 +1,5 @@
 from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.task import Clock
 from twisted.words.xish import domish
 
 from vumi.transports.tests.test_base import TransportTestCase
@@ -25,6 +26,7 @@ class XMPPTransportTestCase(TransportTestCase):
 
         transport._xmpp_protocol = test_xmpp_stubs.TestXMPPTransportProtocol
         transport._xmpp_client = test_xmpp_stubs.TestXMPPClient
+        transport.ping_call.clock = Clock()
         yield transport.startWorker()
         yield transport.xmpp_protocol.connectionMade()
         self.jid = transport.jid
@@ -64,5 +66,54 @@ class XMPPTransportTestCase(TransportTestCase):
         self.assertEqual(msg['to_addr'], self.jid.userhost())
         self.assertEqual(msg['from_addr'], 'test@case.com')
         self.assertEqual(msg['transport_name'], 'test_xmpp')
-        self.assertEqual(msg['message_id'], message['id'])
+        self.assertNotEqual(msg['message_id'], message['id'])
+        self.assertEqual(msg['transport_metadata']['xmpp_id'], message['id'])
         self.assertEqual(msg['content'], 'hello world')
+
+    @inlineCallbacks
+    def test_message_without_id(self):
+        transport = yield self.mk_transport()
+
+        message = domish.Element((None, "message"))
+        message['to'] = self.jid.userhost()
+        message['from'] = 'test@case.com'
+        message.addElement((None, 'body'), content='hello world')
+        self.assertFalse(message.hasAttribute('id'))
+
+        protocol = transport.xmpp_protocol
+        protocol.onMessage(message)
+
+        [msg] = self.get_dispatched_messages()
+        self.assertTrue(msg['message_id'])
+        self.assertEqual(msg['transport_metadata']['xmpp_id'], None)
+
+    @inlineCallbacks
+    def test_pinger(self):
+        """
+        The transport's pinger should send a ping after the ping_interval.
+        """
+        transport = yield self.mk_transport()
+        self.assertEqual(transport.ping_interval, 60)
+        # The LoopingCall should be configured and started.
+        self.assertEqual(transport.ping_call.f, transport.send_ping)
+        self.assertEqual(transport.ping_call.a, ())
+        self.assertEqual(transport.ping_call.kw, {})
+        self.assertEqual(transport.ping_call.interval, 60)
+        self.assertTrue(transport.ping_call.running)
+
+        # Stub output stream
+        xmlstream = test_xmpp_stubs.TestXMLStream()
+        transport.xmpp_client.xmlstream = xmlstream
+        transport.pinger.xmlstream = xmlstream
+
+        # Ping
+        transport.ping_call.clock.advance(59)
+        self.assertEqual(xmlstream.outbox, [])
+        transport.ping_call.clock.advance(2)
+        self.assertEqual(len(xmlstream.outbox), 1, repr(xmlstream.outbox))
+
+        [message] = xmlstream.outbox
+        self.assertEqual(message['to'], u'user@xmpp.domain.com')
+        self.assertEqual(message['type'], u'get')
+        [child] = message.children
+        self.assertEqual(child.toXml(), u"<ping xmlns='urn:xmpp:ping'/>")

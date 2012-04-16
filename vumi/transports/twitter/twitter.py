@@ -7,7 +7,6 @@ from twittytwister import twitter
 from oauth import oauth
 from vumi.transports.base import Transport
 from vumi.message import TransportUserMessage
-from vumi.utils import get_deploy_int
 
 
 class TwitterTransport(Transport):
@@ -27,9 +26,7 @@ class TwitterTransport(Transport):
 
     @inlineCallbacks
     def setup_transport(self):
-        # TODO: get_deploy_int must die
-        dbindex = get_deploy_int(self._amqp_client.vhost)
-        self.r_server = yield redis.Redis(db=dbindex, **self.r_config)
+        self.r_server = redis.Redis(**self.r_config)
         consumer = oauth.OAuthConsumer(self.consumer_key, self.consumer_secret)
         token = oauth.OAuthToken(self.access_token, self.access_token_secret)
         self.twitter = twitter.TwitterFeed(consumer=consumer, token=token)

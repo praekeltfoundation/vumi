@@ -174,4 +174,4 @@ above you can start Carbon cache using::
 
   carbon-cache.py --config <config file> --debug start
 
-.. _Graphite: http://http://graphite.wikidot.com/
+.. _Graphite: http://graphite.wikidot.com/

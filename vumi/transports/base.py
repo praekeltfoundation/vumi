@@ -6,13 +6,14 @@ Common infrastructure for transport workers.
 This is likely to get used heavily fast, so try get your changes in early.
 """
 
-from twisted.internet.defer import inlineCallbacks, maybeDeferred
+from twisted.internet.defer import inlineCallbacks
 from twisted.python import log
 
 from vumi.errors import ConfigError
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.service import Worker
 from vumi.transports.failures import FailureMessage
+from vumi.middleware import MiddlewareStack, setup_middlewares_from_config
 
 
 class Transport(Worker):
@@ -52,6 +53,8 @@ class Transport(Worker):
         yield self._setup_failure_publisher()
         yield self._setup_message_publisher()
         yield self._setup_event_publisher()
+
+        yield self.setup_middleware()
 
         yield self.setup_transport()
 
@@ -100,6 +103,17 @@ class Transport(Worker):
         pass
 
     @inlineCallbacks
+    def setup_middleware(self):
+        """
+        Middleware setup happens here.
+
+        Subclasses should not override this unless they need to do nonstandard
+        middleware setup.
+        """
+        middlewares = yield setup_middlewares_from_config(self, self.config)
+        self._middlewares = MiddlewareStack(middlewares)
+
+    @inlineCallbacks
     def _setup_message_publisher(self):
         self.message_publisher = yield self.publish_rkey('inbound')
 
@@ -123,7 +137,8 @@ class Transport(Worker):
         if self.message_consumer is None:
             log.msg("Consumer does not exist, not stopping.")
             return
-        self._consumers.remove(self.message_consumer)
+        if self.message_consumer in self._consumers:
+            self._consumers.remove(self.message_consumer)
         consumer, self.message_consumer = self.message_consumer, None
         return consumer.stop()
 
@@ -140,14 +155,18 @@ class Transport(Worker):
         try:
             failure_code = getattr(exception, "failure_code",
                                    FailureMessage.FC_UNSPECIFIED)
-            self.failure_publisher.publish_message(FailureMessage(
+            failure_msg = FailureMessage(
                     message=message.payload, failure_code=failure_code,
-                    reason=traceback))
-            self.failure_published()
+                    reason=traceback)
+            d = self._middlewares.apply_publish("failure", failure_msg,
+                                                self.transport_name)
+            d.addCallback(self.failure_publisher.publish_message)
+            d.addCallback(lambda _f: self.failure_published())
         except:
             log.err("Error publishing failure: %s, %s, %s"
                     % (message, exception, traceback))
             raise
+        return d
 
     def failure_published(self):
         pass
@@ -161,8 +180,11 @@ class Transport(Worker):
         """
         kw.setdefault('transport_name', self.transport_name)
         kw.setdefault('transport_metadata', {})
-        return self.message_publisher.publish_message(
-            TransportUserMessage(**kw))
+        msg = TransportUserMessage(**kw)
+        d = self._middlewares.apply_publish("inbound", msg,
+                                            self.transport_name)
+        d.addCallback(self.message_publisher.publish_message)
+        return d
 
     def publish_event(self, **kw):
         """
@@ -173,7 +195,11 @@ class Transport(Worker):
         """
         kw.setdefault('transport_name', self.transport_name)
         kw.setdefault('transport_metadata', {})
-        return self.event_publisher.publish_message(TransportEvent(**kw))
+        event = TransportEvent(**kw)
+        d = self._middlewares.apply_publish("event", event,
+                                            self.transport_name)
+        d.addCallback(self.event_publisher.publish_message)
+        return d
 
     def publish_ack(self, user_message_id, sent_message_id, **kw):
         """
@@ -194,10 +220,14 @@ class Transport(Worker):
     def _process_message(self, message):
         def _send_failure(f):
             self.send_failure(message, f.value, f.getTraceback())
+            log.err(f)
             if self.SUPPRESS_FAILURE_EXCEPTIONS:
                 return None
             return f
-        d = maybeDeferred(self.handle_outbound_message, message)
+
+        d = self._middlewares.apply_consume("outbound", message,
+                                            self.transport_name)
+        d.addCallback(self.handle_outbound_message)
         d.addErrback(_send_failure)
         return d
 

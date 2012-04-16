@@ -15,6 +15,9 @@ class TransportTestCase(unittest.TestCase):
     Not to be confused with BaseTransportTestCase below.
     """
 
+    # have transport tests timeout after 5s by default
+    timeout = 5
+
     transport_name = "sphex"
     transport_type = None
     transport_class = None
@@ -96,8 +99,10 @@ class TransportTestCase(unittest.TestCase):
             transport_metadata=transport_metadata,
             )
 
-    def mkmsg_in(self, content='hello world', message_id='abc',
-                 transport_type=None, transport_metadata=None):
+    def mkmsg_in(self, content='hello world',
+                 session_event=TransportUserMessage.SESSION_NONE,
+                 message_id='abc', transport_type=None,
+                 transport_metadata=None):
         if transport_type is None:
             transport_type = self.transport_type
         if transport_metadata is None:
@@ -105,34 +110,40 @@ class TransportTestCase(unittest.TestCase):
         return TransportUserMessage(
             from_addr='+41791234567',
             to_addr='9292',
+            group=None,
             message_id=message_id,
             transport_name=self.transport_name,
             transport_type=transport_type,
             transport_metadata=transport_metadata,
             content=content,
+            session_event=session_event,
             timestamp=UTCNearNow(),
             )
 
-    def mkmsg_out(self, content='hello world', message_id='1',
-                  to_addr='+41791234567', from_addr='9292',
-                  in_reply_to=None, transport_type=None,
-                  transport_metadata=None, stubs=False):
+    def mkmsg_out(self, content='hello world',
+                  session_event=TransportUserMessage.SESSION_NONE,
+                  message_id='1', to_addr='+41791234567', from_addr='9292',
+                  group=None, in_reply_to=None, transport_type=None,
+                  transport_metadata=None, helper_metadata=None):
         if transport_type is None:
             transport_type = self.transport_type
         if transport_metadata is None:
             transport_metadata = {}
+        if helper_metadata is None:
+            helper_metadata = {}
         params = dict(
             to_addr=to_addr,
             from_addr=from_addr,
+            group=group,
             message_id=message_id,
             transport_name=self.transport_name,
             transport_type=transport_type,
             transport_metadata=transport_metadata,
             content=content,
+            session_event=session_event,
             in_reply_to=in_reply_to,
+            helper_metadata=helper_metadata,
             )
-        if stubs:
-            params['timestamp'] = UTCNearNow()
         return TransportUserMessage(**params)
 
     def mkmsg_fail(self, message, reason,
@@ -156,6 +167,9 @@ class TransportTestCase(unittest.TestCase):
     def wait_for_dispatched_messages(self, amount):
         return self._amqp.wait_messages('vumi', self.rkey('inbound'), amount)
 
+    def clear_dispatched_messages(self):
+        self._amqp.clear_messages('vumi', self.rkey('inbound'))
+
     def dispatch(self, message, rkey=None, exchange='vumi'):
         if rkey is None:
             rkey = self.rkey('outbound')
@@ -173,6 +187,13 @@ class BaseTransportTestCase(TransportTestCase):
     transport_name = 'carrier_pigeon'
     transport_class = Transport
 
+    TEST_MIDDLEWARE_CONFIG = {
+       "middleware": [
+            {"mw1": "vumi.middleware.tests.utils.RecordingMiddleware"},
+            {"mw2": "vumi.middleware.tests.utils.RecordingMiddleware"},
+            ],
+        }
+
     @inlineCallbacks
     def test_start_transport(self):
         tr = yield self.get_transport({})
@@ -185,3 +206,54 @@ class BaseTransportTestCase(TransportTestCase):
         self.assertEqual(len(tr._consumers), 1)
         yield tr.stopWorker()
         self.assertEqual(len(tr._consumers), 0)
+
+    @inlineCallbacks
+    def test_middleware_for_inbound_messages(self):
+        transport = yield self.get_transport(self.TEST_MIDDLEWARE_CONFIG)
+        orig_msg = self.mkmsg_in()
+        orig_msg['timestamp'] = 0
+        yield transport.publish_message(**orig_msg.payload)
+        [msg] = self.get_dispatched_messages()
+        self.assertEqual(msg['record'], [
+            ['mw2', 'inbound', self.transport_name],
+            ['mw1', 'inbound', self.transport_name],
+            ])
+
+    @inlineCallbacks
+    def test_middleware_for_events(self):
+        transport = yield self.get_transport(self.TEST_MIDDLEWARE_CONFIG)
+        orig_msg = self.mkmsg_ack()
+        orig_msg['event_id'] = 1234
+        orig_msg['timestamp'] = 0
+        yield transport.publish_event(**orig_msg.payload)
+        [msg] = self.get_dispatched_events()
+        self.assertEqual(msg['record'], [
+            ['mw2', 'event', self.transport_name],
+            ['mw1', 'event', self.transport_name],
+            ])
+
+    @inlineCallbacks
+    def test_middleware_for_failures(self):
+        transport = yield self.get_transport(self.TEST_MIDDLEWARE_CONFIG)
+        orig_msg = self.mkmsg_out()
+        orig_msg['timestamp'] = 0
+        yield transport.send_failure(orig_msg, ValueError(), "dummy_traceback")
+        [msg] = self.get_dispatched_failures()
+        self.assertEqual(msg['record'], [
+            ['mw2', 'failure', self.transport_name],
+            ['mw1', 'failure', self.transport_name],
+            ])
+
+    @inlineCallbacks
+    def test_middleware_for_outbound_messages(self):
+        transport = yield self.get_transport(self.TEST_MIDDLEWARE_CONFIG)
+        msgs = []
+        transport.handle_outbound_message = msgs.append
+        orig_msg = self.mkmsg_out()
+        orig_msg['timestamp'] = 0
+        yield self.dispatch(orig_msg)
+        [msg] = msgs
+        self.assertEqual(msg['record'], [
+            ('mw1', 'outbound', self.transport_name),
+            ('mw2', 'outbound', self.transport_name),
+            ])

@@ -3,22 +3,18 @@
 """Session management utilities for ApplicationWorkers."""
 
 import time
-import redis
 from twisted.internet import task
 
 
 class SessionManager(object):
     """A manager for sessions.
 
-    :type db: int
-    :param db:
-        Redis db number.
+    :type r_server: redis.Redis
+    :param r_server:
+        Redis db connection.
     :type prefix: str
     :param prefix:
         Prefix to use for Redis keys.
-    :type redis_config: dict
-    :param redis_config:
-        Configuration options for redis.Redis. Default is None (no options).
     :type max_session_length: float
     :param max_session_length:
         Time before a session expires. Default is None (never expire).
@@ -27,18 +23,18 @@ class SessionManager(object):
         Time in seconds between checking for session expiry.
     """
 
-    def __init__(self, db, prefix, redis_config=None, max_session_length=None,
+    def __init__(self, r_server, prefix, max_session_length=None,
                  gc_period=1.0):
         self.max_session_length = max_session_length
-        redis_config = redis_config if redis_config is not None else {}
-        self.r_server = redis.Redis(db=db, **redis_config)
+        self.r_server = r_server
         self.r_prefix = prefix
 
         self.gc = task.LoopingCall(lambda: self.active_sessions())
         self.gc.start(gc_period)
 
     def stop(self):
-        return self.gc.stop()
+        if self.gc.running:
+            return self.gc.stop()
 
     def active_sessions(self):
         """
@@ -48,12 +44,17 @@ class SessionManager(object):
         the user's session still exists, if not it is removed from the set.
         """
         skey = self.r_key('active_sessions')
+        sessions_to_expire = []
         for user_id in self.r_server.smembers(skey):
             ukey = self.r_key('session', user_id)
             if self.r_server.exists(ukey):
                 yield user_id, self.load_session(user_id)
             else:
-                self.r_server.srem(skey, user_id)
+                sessions_to_expire.append(user_id)
+
+        # clear empty ones
+        for user_ids in sessions_to_expire:
+            self.r_server.srem(skey, user_id)
 
     def r_key(self, *args):
         """
@@ -84,16 +85,18 @@ class SessionManager(object):
         ukey = self.r_key('session', user_id)
         self.r_server.expire(ukey, timeout)
 
-    def create_session(self, user_id):
+    def create_session(self, user_id, **kwargs):
         """
         Create a new session using the given user_id
         """
-        session = self.save_session(user_id, {
+        defaults = {
             'created_at': time.time()
-        })
+        }
+        defaults.update(kwargs)
+        self.save_session(user_id, defaults)
         if self.max_session_length:
             self.schedule_session_expiry(user_id, self.max_session_length)
-        return session
+        return self.load_session(user_id)
 
     def clear_session(self, user_id):
         ukey = self.r_key('session', user_id)

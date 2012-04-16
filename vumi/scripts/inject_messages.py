@@ -6,17 +6,19 @@ from twisted.internet import reactor, threads
 from twisted.internet.defer import (maybeDeferred, DeferredQueue,
                                     inlineCallbacks)
 from vumi.message import TransportUserMessage
-from vumi.service import Options, Worker, WorkerCreator
+from vumi.service import Worker, WorkerCreator
+from vumi.servicemaker import VumiOptions
 
 
-class InjectorOptions(Options):
-    optParameters = Options.optParameters + [
+class InjectorOptions(VumiOptions):
+    optParameters = [
         ["transport-name", None, None,
             "Name of the transport to inject messages from"],
         ["verbose", "v", False, "Output the JSON being injected"],
     ]
 
     def postOptions(self):
+        VumiOptions.postOptions(self)
         if not self['transport-name']:
             raise usage.UsageError("Please provide the "
                                     "transport-name parameter.")
@@ -60,12 +62,9 @@ class MessageInjector(Worker):
 
 @inlineCallbacks
 def main(options):
-    vumi_options = {}
     verbose = options['verbose']
-    for opt in [i[0] for i in Options.optParameters]:
-        vumi_options[opt] = options.pop(opt)
 
-    worker_creator = WorkerCreator(vumi_options)
+    worker_creator = WorkerCreator(options.vumi_options)
     worker_creator.create_worker_by_class(
         MessageInjector, options)
 

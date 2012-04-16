@@ -12,14 +12,19 @@ Contents:
    :maxdepth: 1
 
    overview.rst
-   installation.rst
-   getting-started.rst
    first-smpp-bind.rst
-   client.rst
    transports.rst
+   dispatchers.rst
+   middleware.rst
    metrics.rst
    roadmap.rst
    release-notes.rst
+
+Getting Started:
+
+* :doc:`installation`
+* :doc:`getting-started`
+* :doc:`Writing your first Vumi app - Part 1</intro/tutorial01>` | :doc:`Part 2</intro/tutorial02>`
 
 For developers:
 

@@ -108,7 +108,8 @@ class FakeAMQPBroker(object):
         return Message(mkMethod("open-ok", 11))
 
     def channel_close(self, channel):
-        self.channels.remove(channel)
+        if channel in self.channels:
+            self.channels.remove(channel)
         return Message(mkMethod("close-ok", 41))
 
     def exchange_declare(self, exchange, exchange_type):

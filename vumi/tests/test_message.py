@@ -13,6 +13,10 @@ class MessageTest(TestCase):
         self.assertNotEqual(Message(a=5), Message(a=6))
         self.assertNotEqual(Message(a=5), {'a': 5})
 
+    def test_message_contains(self):
+        self.assertTrue('a' in Message(a=5))
+        self.assertFalse('a' in Message(b=5))
+
     def test_transport_message(self):
         msg = TransportMessage(
             message_type='foo',
@@ -60,6 +64,147 @@ class MessageTest(TestCase):
         self.assertEqual(UTCNearNow(), msg['timestamp'])
         self.assertEqual('+27831234567', msg['to_addr'])
         self.assertEqual('12345', msg['from_addr'])
+
+    def test_transport_user_message_reply_no_group(self):
+        msg = TransportUserMessage(
+            to_addr='123',
+            from_addr='456',
+            transport_name='sphex',
+            transport_type='sms',
+            transport_metadata={'foo': 'bar'},
+            helper_metadata={'otherfoo': 'otherbar'},
+            )
+        reply = msg.reply(content='Hi!')
+        self.assertEqual(reply['from_addr'], '123')
+        self.assertEqual(reply['to_addr'], '456')
+        self.assertEqual(reply['group'], None)
+        self.assertEqual(reply['session_event'], reply.SESSION_NONE)
+        self.assertEqual(reply['in_reply_to'], msg['message_id'])
+        self.assertEqual(reply['transport_name'], msg['transport_name'])
+        self.assertEqual(reply['transport_type'], msg['transport_type'])
+        self.assertEqual(reply['transport_metadata'],
+                         msg['transport_metadata'])
+        self.assertEqual(reply['helper_metadata'], msg['helper_metadata'])
+
+    def test_transport_user_message_reply_undirected_group(self):
+        msg = TransportUserMessage(
+            to_addr=None,
+            from_addr='456',
+            group='#channel',
+            transport_name='sphex',
+            transport_type='irc',
+            transport_metadata={'foo': 'bar'},
+            helper_metadata={'otherfoo': 'otherbar'},
+            )
+        reply = msg.reply(content='Hi!')
+        self.assertEqual(reply['from_addr'], None)
+        self.assertEqual(reply['to_addr'], '456')
+        self.assertEqual(reply['group'], '#channel')
+        self.assertEqual(reply['session_event'], reply.SESSION_NONE)
+        self.assertEqual(reply['in_reply_to'], msg['message_id'])
+        self.assertEqual(reply['transport_name'], msg['transport_name'])
+        self.assertEqual(reply['transport_type'], msg['transport_type'])
+        self.assertEqual(reply['transport_metadata'],
+                         msg['transport_metadata'])
+        self.assertEqual(reply['helper_metadata'], msg['helper_metadata'])
+
+    def test_transport_user_message_reply_directed_group(self):
+        msg = TransportUserMessage(
+            to_addr='123',
+            from_addr='456',
+            group='#channel',
+            transport_name='sphex',
+            transport_type='sms',
+            transport_metadata={'foo': 'bar'},
+            helper_metadata={'otherfoo': 'otherbar'},
+            )
+        reply = msg.reply(content='Hi!')
+        self.assertEqual(reply['from_addr'], '123')
+        self.assertEqual(reply['to_addr'], '456')
+        self.assertEqual(reply['group'], '#channel')
+        self.assertEqual(reply['session_event'], reply.SESSION_NONE)
+        self.assertEqual(reply['in_reply_to'], msg['message_id'])
+        self.assertEqual(reply['transport_name'], msg['transport_name'])
+        self.assertEqual(reply['transport_type'], msg['transport_type'])
+        self.assertEqual(reply['transport_metadata'],
+                         msg['transport_metadata'])
+        self.assertEqual(reply['helper_metadata'], msg['helper_metadata'])
+
+    def test_transport_user_message_reply_group_no_group(self):
+        msg = TransportUserMessage(
+            to_addr='123',
+            from_addr='456',
+            transport_name='sphex',
+            transport_type='sms',
+            transport_metadata={'foo': 'bar'},
+            helper_metadata={'otherfoo': 'otherbar'},
+            )
+        reply = msg.reply_group(content='Hi!')
+        self.assertEqual(reply['from_addr'], '123')
+        self.assertEqual(reply['to_addr'], '456')
+        self.assertEqual(reply['group'], None)
+        self.assertEqual(reply['session_event'], reply.SESSION_NONE)
+        self.assertEqual(reply['in_reply_to'], msg['message_id'])
+        self.assertEqual(reply['transport_name'], msg['transport_name'])
+        self.assertEqual(reply['transport_type'], msg['transport_type'])
+        self.assertEqual(reply['transport_metadata'],
+                         msg['transport_metadata'])
+        self.assertEqual(reply['helper_metadata'], msg['helper_metadata'])
+
+    def test_transport_user_message_reply_group_undirected_group(self):
+        msg = TransportUserMessage(
+            to_addr=None,
+            from_addr='456',
+            group='#channel',
+            transport_name='sphex',
+            transport_type='irc',
+            transport_metadata={'foo': 'bar'},
+            helper_metadata={'otherfoo': 'otherbar'},
+            )
+        reply = msg.reply_group(content='Hi!')
+        self.assertEqual(reply['from_addr'], None)
+        self.assertEqual(reply['to_addr'], None)
+        self.assertEqual(reply['group'], '#channel')
+        self.assertEqual(reply['session_event'], reply.SESSION_NONE)
+        self.assertEqual(reply['in_reply_to'], msg['message_id'])
+        self.assertEqual(reply['transport_name'], msg['transport_name'])
+        self.assertEqual(reply['transport_type'], msg['transport_type'])
+        self.assertEqual(reply['transport_metadata'],
+                         msg['transport_metadata'])
+        self.assertEqual(reply['helper_metadata'], msg['helper_metadata'])
+
+    def test_transport_user_message_reply_group_directed_group(self):
+        msg = TransportUserMessage(
+            to_addr='123',
+            from_addr='456',
+            group='#channel',
+            transport_name='sphex',
+            transport_type='sms',
+            transport_metadata={'foo': 'bar'},
+            helper_metadata={'otherfoo': 'otherbar'},
+            )
+        reply = msg.reply_group(content='Hi!')
+        self.assertEqual(reply['from_addr'], '123')
+        self.assertEqual(reply['to_addr'], None)
+        self.assertEqual(reply['group'], '#channel')
+        self.assertEqual(reply['session_event'], reply.SESSION_NONE)
+        self.assertEqual(reply['in_reply_to'], msg['message_id'])
+        self.assertEqual(reply['transport_name'], msg['transport_name'])
+        self.assertEqual(reply['transport_type'], msg['transport_type'])
+        self.assertEqual(reply['transport_metadata'],
+                         msg['transport_metadata'])
+        self.assertEqual(reply['helper_metadata'], msg['helper_metadata'])
+
+    def test_transport_user_message_send(self):
+        msg = TransportUserMessage.send('123', 'Hi!')
+        self.assertEqual(msg['to_addr'], '123')
+        self.assertEqual(msg['from_addr'], None)
+        self.assertEqual(msg['session_event'], msg.SESSION_NONE)
+        self.assertEqual(msg['in_reply_to'], None)
+        self.assertEqual(msg['transport_name'], None)
+        self.assertEqual(msg['transport_type'], None)
+        self.assertEqual(msg['transport_metadata'], {})
+        self.assertEqual(msg['helper_metadata'], {})
 
     def test_transport_event_ack(self):
         msg = TransportEvent(

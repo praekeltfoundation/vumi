@@ -3,5 +3,3 @@ system_id: smppclient1  # username
 password: password      # password
 host: localhost         # the host to connect to
 port: 2775              # the port to connect to
-smpp_offset: 1
-smpp_increment: 1

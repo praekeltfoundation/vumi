@@ -1,13 +1,15 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime, timedelta
+from urlparse import parse_qs
 
 from twisted.internet import defer
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.web import xmlrpc
 
 from vumi.message import TransportUserMessage
 from vumi.tests.utils import FakeRedis
 from vumi.utils import http_request
+from vumi.transports.failures import PermanentFailure, TemporaryFailure
 from vumi.transports.opera.tests.test_opera_stubs import FakeXMLRPCService
 from vumi.transports.opera import OperaTransport
 from vumi.transports.tests.test_base import TransportTestCase
@@ -23,6 +25,14 @@ class OperaTransportTestCase(TransportTestCase):
         self.url = 'http://%s:%s' % (self.host, self.port)
         self.transport = yield self.mk_transport()
 
+    @inlineCallbacks
+    def tearDown(self):
+        # teardown fake redis, prevents DelayedCall's from leaving the reactor
+        # in a dirty state.
+        yield self.r_server.teardown()
+        yield super(OperaTransportTestCase, self).tearDown()
+
+    @inlineCallbacks
     def mk_transport(self, cls=OperaTransport, **config):
         default_config = {
             'url': 'http://testing.domain',
@@ -34,7 +44,10 @@ class OperaTransportTestCase(TransportTestCase):
             'web_port': self.port
         }
         default_config.update(config)
-        return self.get_transport(default_config, cls)
+        self.r_server = FakeRedis()
+        worker = yield self.get_transport(default_config, cls)
+        worker.r_server = self.r_server
+        returnValue(worker)
 
     def mk_msg(self, **kwargs):
         defaults = {
@@ -54,7 +67,6 @@ class OperaTransportTestCase(TransportTestCase):
 
         identifier = '001efc31'
         message_id = '123456'
-        self.transport.r_server = FakeRedis()
         # prime redis to match the incoming identifier to an
         # internal message id
         self.transport.set_message_id_for_identifier(identifier, message_id)
@@ -82,9 +94,72 @@ class OperaTransportTestCase(TransportTestCase):
         self.assertEqual(event['event_type'], 'delivery_report')
         self.assertEqual(event['user_message_id'], message_id)
 
-        # teardown fake redis, prevents DelayedCall's from leaving the reactor
-        # in a dirty state.
-        self.transport.r_server.teardown()
+    @inlineCallbacks
+    def test_incoming_sms_processing_urlencoded(self):
+        """
+        it should be able to process in incoming sms as XML delivered via HTTP
+        """
+
+        xml_data = (
+            'XmlMsg=%3C%3Fxml%20version%3D%221.0%22%3F%3E%0A%3C!DOCTYPE%20bspo'
+            'stevent%3E%0A%3Cbspostevent%3E%0A%20%20%3Cfield%20name%3D%22MORef'
+            'erence%22%20type%20%3D%20%22string%22%3E478535078%3C/field%3E%0A%'
+            '20%20%3Cfield%20name%3D%22RemoteNetwork%22%20type%20%3D%20%22stri'
+            'ng%22%3Emtn-za%3C/field%3E%0A%20%20%3Cfield%20name%3D%22BSDate-to'
+            'morrow%22%20type%20%3D%20%22string%22%3E20120317%3C/field%3E%0A%2'
+            '0%20%3Cfield%20name%3D%22BSDate-today%22%20type%20%3D%20%22string'
+            '%22%3E20120316%3C/field%3E%0A%20%20%3Cfield%20name%3D%22ReceiveDa'
+            'te%22%20type%20%3D%20%22date%22%3E2012-03-16%2011:50:04%20%2B0000'
+            '%3C/field%3E%0A%20%20%3Cfield%20name%3D%22Local%22%20type%20%3D%2'
+            '0%22string%22%3E*32323%3C/field%3E%0A%20%20%3Cfield%20name%3D%22C'
+            'lientID%22%20type%20%3D%20%22string%22%3E4%3C/field%3E%0A%20%20%3'
+            'Cfield%20name%3D%22ChannelID%22%20type%20%3D%20%22string%22%3E176'
+            '%3C/field%3E%0A%20%20%3Cfield%20name%3D%22MessageID%22%20type%20%'
+            '3D%20%22string%22%3E1487577162%3C/field%3E%0A%20%20%3Cfield%20nam'
+            'e%3D%22Prefix%22%20type%20%3D%20%22string%22%3E%3C/field%3E%0A%20'
+            '%20%3Cfield%20name%3D%22ClientName%22%20type%20%3D%20%22string%22'
+            '%3EPraekelt%3C/field%3E%0A%20%20%3Cfield%20name%3D%22MobileDevice'
+            '%22%20type%20%3D%20%22string%22%3E%3C/field%3E%0A%20%20%3Cfield%2'
+            '0name%3D%22BSDate-yesterday%22%20type%20%3D%20%22string%22%3E2012'
+            '0315%3C/field%3E%0A%20%20%3Cfield%20name%3D%22Remote%22%20type%20'
+            '%3D%20%22string%22%3E%2B27831234567%3C/field%3E%0A%20%20%3Cfield%'
+            '20name%3D%22MobileNetwork%22%20type%20%3D%20%22string%22%3Emtn-za'
+            '%3C/field%3E%0A%20%20%3Cfield%20name%3D%22State%22%20type%20%3D%2'
+            '0%22string%22%3E9%3C/field%3E%0A%20%20%3Cfield%20name%3D%22Mobile'
+            'Number%22%20type%20%3D%20%22string%22%3E%2B27831234567%3C/field%3'
+            'E%0A%20%20%3Cfield%20name%3D%22Text%22%20type%20%3D%20%22string%2'
+            '2%3EHerb01%20spice01%3C/field%3E%0A%20%20%3Cfield%20name%3D%22Ser'
+            'viceID%22%20type%20%3D%20%22string%22%3E30756%3C/field%3E%0A%20%2'
+            '0%3Cfield%20name%3D%22RegType%22%20type%20%3D%20%22string%22%3ESM'
+            'S%3C/field%3E%0A%20%20%3Cfield%20name%3D%22NewSubscriber%22%20typ'
+            'e%20%3D%20%22string%22%3ENO%3C/field%3E%0A%20%20%3Cfield%20name%3'
+            'D%22Subscriber%22%20type%20%3D%20%22string%22%3E%2B27831234567%3C'
+            '/field%3E%0A%20%20%3Cfield%20name%3D%22id%22%20type%20%3D%20%22st'
+            'ring%22%3E3361920%3C/field%3E%0A%20%20%3Cfield%20name%3D%22Parsed'
+            '%22%20type%20%3D%20%22string%22%3E%3C/field%3E%0A%20%20%3Cfield%2'
+            '0name%3D%22ServiceName%22%20type%20%3D%20%22string%22%3ERobertson'
+            '%26%238217%3Bs%20Herb%20%26amp%3B%20Spices%20Promo%3C/field%3E%0A'
+            '%20%20%3Cfield%20name%3D%22BSDate-thisweek%22%20type%20%3D%20%22s'
+            'tring%22%3E20120312%3C/field%3E%0A%20%20%3Cfield%20name%3D%22Serv'
+            'iceEndDate%22%20type%20%3D%20%22string%22%3E2012-12-31%2003:06:00'
+            '%20%2B0200%3C/field%3E%0A%20%20%3Cfield%20name%3D%22Now%22%20type'
+            '%20%3D%20%22date%22%3E2012-03-16%2011:50:05%20%2B0000%3C/field%3E'
+            '%0A%3C/bspostevent%3E%0A')
+
+        resp = yield http_request('%s/receive.xml' % self.url, xml_data)
+
+        self.assertEqual([], self.get_dispatched_failures())
+        self.assertEqual([], self.get_dispatched_events())
+        [msg] = self.get_dispatched_messages()
+        self.assertEqual(msg['message_id'], '1487577162')
+        self.assertEqual(msg['to_addr'], '32323')
+        self.assertEqual(msg['from_addr'], '+27831234567')
+        self.assertEqual(msg['content'], 'Herb01 spice01')
+        self.assertEqual(msg['transport_metadata'], {
+            'provider': 'mtn-za'
+        })
+
+        self.assertEqual(resp, parse_qs(xml_data)['XmlMsg'][0])
 
     @inlineCallbacks
     def test_incoming_sms_processing(self):
@@ -158,6 +233,7 @@ class OperaTransportTestCase(TransportTestCase):
             self.assertEqual(xmlrpc_payload['SMSText'], 'hello world')
             self.assertEqual(xmlrpc_payload['Service'], 'service')
             self.assertEqual(xmlrpc_payload['Receipt'], 'Y')
+            self.assertEqual(xmlrpc_payload['MaxSegments'], 9)
             self.assertEqual(xmlrpc_payload['Numbers'], '27761234567')
             self.assertEqual(xmlrpc_payload['Password'], 'password')
             self.assertEqual(xmlrpc_payload['Channel'], 'channel')
@@ -243,6 +319,10 @@ class OperaTransportTestCase(TransportTestCase):
         yield self.dispatch(self.mk_msg(),
             rkey='%s.outbound' % self.transport_name)
 
+        [twisted_failure] = self.flushLoggedErrors(TemporaryFailure)
+        logged_failure = twisted_failure.value
+        self.assertEqual(logged_failure.failure_code, 'temporary')
+
         self.assertEqual(self.get_dispatched_events(), [])
         self.assertEqual(self.get_dispatched_messages(), [])
         [failure] = self.get_dispatched_failures()
@@ -274,6 +354,10 @@ class OperaTransportTestCase(TransportTestCase):
         yield self.dispatch(self.mk_msg(),
             rkey='%s.outbound' % self.transport_name)
 
+        [twisted_failure] = self.flushLoggedErrors(PermanentFailure)
+        logged_failure = twisted_failure.value
+        self.assertEqual(logged_failure.failure_code, 'permanent')
+
         [failure] = self.get_dispatched_failures()
         self.assertEqual(failure['failure_code'], 'permanent')
 
@@ -287,7 +371,7 @@ class OperaTransportTestCase(TransportTestCase):
         content = u'üïéßø'
 
         def _cb(method_called, xmlrpc_payload):
-            self.assertEqual(xmlrpc_payload['content'],
+            self.assertEqual(xmlrpc_payload['SMSText'],
                 xmlrpc.Binary(content.encode('utf-8')))
             return {'Identifier': '1'}
 

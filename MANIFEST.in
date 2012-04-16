@@ -1,20 +1,25 @@
-include environments/README
-exclude environments/*.py
-include environments/template.py
-include logs/README
-include fab/README
-include tmp/pids/README
-include config/deploying.pip
-include config/smpp.yaml
-include config/smpp_sim.yaml
-include config/smppsim.develop.props
-include config/requirements.pip
-include config/haproxy.cfg
+# Source distribution files.
+include .coveragerc
+include LICENSE
+include README.rst
+include Vagrantfile
+include logs/README tmp/pids/README
+include requirements.pip requirements-dev.pip requirements-webapp.pip
+include setup.py
+include tox.ini
+
+recursive-include config *
+recursive-include docs *
+prune docs/_build
+recursive-include etc *
+recursive-include puppet *
+recursive-include utils *.sh
+
+# Python package data files.
 include twisted/plugins/*.py
-include utils/*.sh
-include utils/*.py
-include puppet/*
-include *.rst
-exclude *.egg-info/*
-recursive-include vumi *.xml
-global-exclude _notes/*.xml
+include vumi/demos/tests/wikipedia_sample.xml
+include vumi/scripts/tests/sample-smpp-output.log
+recursive-include vumi/resources *
+
+# Prune stray bytecode files.
+global-exclude *.pyc

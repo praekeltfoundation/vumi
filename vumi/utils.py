@@ -13,6 +13,7 @@ from twisted.internet.defer import succeed
 from twisted.web.client import Agent, ResponseDone
 from twisted.web.http_headers import Headers
 from twisted.web.iweb import IBodyProducer
+from twisted.web.http import PotentialDataLoss
 
 
 def import_module(name):
@@ -43,6 +44,15 @@ class SimplishReceiver(protocol.Protocol):
     def connectionLost(self, reason):
         if reason.check(ResponseDone):
             self.deferred.callback(self.response)
+        elif reason.check(PotentialDataLoss):
+            # This is only (and always!) raised if we have an HTTP 1.0 request
+            # with no Content-Length.
+            # See http://twistedmatrix.com/trac/ticket/4840 for sadness.
+            #
+            # We ignore this and treat the call as success. If we care about
+            # checking for potential data loss, we should do that in all cases
+            # rather than trying to figure out if we might need to.
+            self.deferred.callback(self.response)
         else:
             self.deferred.errback(reason)
 
@@ -51,7 +61,7 @@ def http_request_full(url, data=None, headers={}, method='POST'):
     agent = Agent(reactor)
     d = agent.request(method,
                       url,
-                      Headers(headers),
+                      mkheaders(headers),
                       StringProducer(data) if data else None)
 
     def handle_response(response):
@@ -59,6 +69,21 @@ def http_request_full(url, data=None, headers={}, method='POST'):
 
     d.addCallback(handle_response)
     return d
+
+
+def mkheaders(headers):
+    """
+    Turn a dict of HTTP headers into an instance of Headers.
+
+    Twisted expects a list of values, not a single value. We should
+    support both.
+    """
+    raw_headers = {}
+    for k, v in headers.iteritems():
+        if isinstance(v, basestring):
+            v = [v]
+        raw_headers[k] = v
+    return Headers(raw_headers)
 
 
 def http_request(url, data, headers={}, method='POST'):
@@ -171,6 +196,29 @@ def filter_options_on_prefix(options, prefix, delimiter='-'):
                 if key.startswith(prefix))
 
 
+def get_first_word(content, delimiter=' '):
+    """
+    Returns the first word from a string.
+
+    Example::
+
+      >>> get_first_word('KEYWORD rest of message')
+      'KEYWORD'
+
+    :type content: str or None
+    :param content:
+        Content from which the first word will be retrieved. If the
+        content is None it is treated as an empty string (this is a
+        convenience for dealing with content-less messages).
+    :param str delimiter:
+        Delimiter to split the string on. Default is ' '.
+        Passed to :func:`string.partition`.
+    :returns:
+        A string containing the first word.
+    """
+    return (content or '').partition(delimiter)[0]
+
+
 def cleanup_msisdn(number, country_code):
     number = re.sub('\+', '', number)
     number = re.sub('^0', country_code, number)
@@ -257,19 +305,3 @@ OPERATOR_PREFIX:
     2784: CELLC
 
 """
-
-
-def get_deploy_int(deployment):
-    lookup = {
-        "develop": 7,
-        "/develop": 7,
-        "development": 7,
-        "/development": 7,
-        "production": 8,
-        "/production": 8,
-        "staging": 9,
-        "/staging": 9,
-        "qa": 9,
-        "/qa": 9,
-        }
-    return lookup.get(deployment.lower(), 7)

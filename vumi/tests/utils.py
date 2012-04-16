@@ -15,7 +15,7 @@ from twisted.internet.defer import DeferredQueue, inlineCallbacks
 from twisted.python import log
 
 from vumi.utils import vumi_resource_path, import_module
-from vumi.service import get_spec, Worker
+from vumi.service import get_spec, Worker, WorkerCreator
 from vumi.tests.fake_amqp import FakeAMQClient
 
 
@@ -198,6 +198,16 @@ def get_stubbed_worker(worker_class, config=None, broker=None):
     return worker
 
 
+class StubbedWorkerCreator(WorkerCreator):
+    broker = None
+
+    def _connect(self, worker, timeout, bindAddress):
+        spec = get_spec(vumi_resource_path("amqp-spec-0-8.xml"))
+        amq_client = FakeAMQClient(spec, self.options, self.broker)
+        self.broker = amq_client.broker  # So we use the same broker for all.
+        reactor.callLater(0, worker._amqp_connected, amq_client)
+
+
 def get_stubbed_channel(broker=None, id=0):
     spec = get_spec(vumi_resource_path("amqp-spec-0-8.xml"))
     amq_client = FakeAMQClient(spec, {}, broker)
@@ -222,6 +232,17 @@ class TestResourceWorker(Worker):
 
 
 class FakeRedis(object):
+    """In process and memory implementation of redis-like data store.
+
+    It's intended to match the Python redis module API closely so that
+    it can be used in place of the redis module when testing.
+
+    Known limitations:
+
+    * Exceptions raised are not guaranteed to match the exception
+      types raised by the real Python redis module.
+    """
+
     def __init__(self):
         self._data = {}
         self._expiries = {}
@@ -256,25 +277,27 @@ class FakeRedis(object):
         self._data[key] = value
 
     def delete(self, key):
+        existed = self.exists(key)
         self._data.pop(key, None)
+        return existed
 
     # Integer operations
 
-    def incrby(self, key, increment):
+    # The python redis lib combines incr & incrby into incr(key, increment=1)
+    def incr(self, key, increment=1):
         old_value = self._data.get(key)
-        new_value = str(int(old_value) + increment)
-        self._data[key] = new_value
+        if old_value is None:
+            old_value = 0
+        new_value = int(old_value) + increment
+        self.set(key, new_value)
         return new_value
-
-    def incr(self, key):
-        return self.incrby(key, 1)
 
     # Hash operations
 
     def hset(self, key, field, value):
         mapping = self._data.setdefault(key, {})
         new_field = field not in mapping
-        mapping[field] = value
+        mapping[field] = unicode(value)
         return int(new_field)
 
     def hget(self, key, field):
@@ -293,10 +316,11 @@ class FakeRedis(object):
 
     def hmset(self, key, mapping):
         hval = self._data.setdefault(key, {})
-        hval.update(mapping)
+        hval.update(dict([(key, unicode(value))
+            for key, value in mapping.items()]))
 
     def hgetall(self, key):
-        return self._data.get(key, {})
+        return self._data.get(key, {}).copy()
 
     def hlen(self, key):
         return len(self._data.get(key, {}))
@@ -304,11 +328,18 @@ class FakeRedis(object):
     def hvals(self, key):
         return self._data.get(key, {}).values()
 
+    def hincrby(self, key, field, amount=1):
+        value = self._data.get(key, {}).get(field, "0")
+        # the int(str(..)) coerces amount to an int but rejects floats
+        value = int(value) + int(str(amount))
+        self._data.setdefault(key, {})[field] = str(value)
+        return value
+
     # Set operations
 
-    def sadd(self, key, value):
+    def sadd(self, key, *values):
         sval = self._data.setdefault(key, set())
-        sval.add(value)
+        sval.update(map(unicode, values))
 
     def smembers(self, key):
         return self._data.get(key, set())
@@ -329,6 +360,22 @@ class FakeRedis(object):
     def scard(self, key):
         return len(self._data.get(key, set()))
 
+    def smove(self, src, dst, value):
+        result = self.srem(src, value)
+        if result:
+            self.sadd(dst, value)
+        return result
+
+    def sunion(self, key, *args):
+        union = set()
+        for rkey in (key,) + args:
+            union.update(self._data.get(rkey, set()))
+        return union
+
+    def sismember(self, key, value):
+        sval = self._data.get(key, set())
+        return value in sval
+
     # Sorted set operations
 
     def zadd(self, key, **valscores):
@@ -347,12 +394,20 @@ class FakeRedis(object):
     def zcard(self, key):
         return len(self._data.get(key, []))
 
-    def zrange(self, key, start, stop):
+    def zrange(self, key, start, stop, desc=False, withscores=False,
+                score_cast_func=float):
         zval = self._data.get(key, [])
         stop += 1  # redis start/stop are element indexes
         if stop == 0:
             stop = None
-        return [val[1] for val in zval[start:stop]]
+        results = sorted(zval[start:stop],
+                    key=lambda (score, _): score_cast_func(score))
+        if desc:
+            results.reverse()
+        if withscores:
+            return results
+        else:
+            return [v for k, v in results]
 
     # List operations
     def llen(self, key):
@@ -371,7 +426,15 @@ class FakeRedis(object):
 
     def lrange(self, key, start, end):
         lval = self._data.get(key, [])
+        if end >= 0 or end < -1:
+            end += 1
+        else:
+            end = None
         return lval[start:end]
+
+    def lrem(self, key, value):
+        lval = self._data.get(key, [])
+        self._data[key] = [v for v in lval if v is not value]
 
     # Expiry operations
 

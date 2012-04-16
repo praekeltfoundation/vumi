@@ -9,8 +9,10 @@ from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
 from vumi.message import TransportUserMessage, from_json
 from vumi.tests.utils import get_stubbed_worker, FakeRedis, TestResourceWorker
 from vumi.tests.fake_amqp import FakeAMQPBroker
-from vumi.transports.failures import FailureMessage, FailureWorker
-from vumi.transports.vas2nets.vas2nets import Vas2NetsTransport
+from vumi.transports.failures import (FailureMessage, FailureWorker,
+                                      TemporaryFailure)
+from vumi.transports.vas2nets.vas2nets import (Vas2NetsTransport,
+                                               Vas2NetsTransportError)
 
 
 class BadVas2NetsResource(Resource):
@@ -88,9 +90,9 @@ class Vas2NetsFailureWorkerTestCase(unittest.TestCase):
     def mk_failure_worker(self, config, broker, redis):
         w = get_stubbed_worker(FailureWorker, config, broker)
         self.workers.append(w)
-        yield w.startWorker()
         w.retry_publisher = yield self.worker.publish_to("foo")
         w.r_server = redis
+        yield w.startWorker()
         returnValue(w)
 
     @inlineCallbacks
@@ -152,6 +154,11 @@ class Vas2NetsFailureWorkerTestCase(unittest.TestCase):
         yield self.broker.kick_delivery()
         self.assert_dispatched_count(0, 'vas2nets.event')
         self.assert_dispatched_count(1, 'vas2nets.failures')
+
+        [twisted_failure] = self.flushLoggedErrors(Vas2NetsTransportError)
+        failure = twisted_failure.value
+        self.assertTrue("No SmsId Header" in str(failure))
+
         [fmsg] = self.get_dispatched('vas2nets.failures')
         fmsg = from_json(fmsg.body)
         self.assertTrue(
@@ -172,6 +179,11 @@ class Vas2NetsFailureWorkerTestCase(unittest.TestCase):
         yield self.worker.failure_published.deferred
         self.assert_dispatched_count(0, 'vas2nets.event')
         self.assert_dispatched_count(1, 'vas2nets.failures')
+
+        [twisted_failure] = self.flushLoggedErrors(TemporaryFailure)
+        failure = twisted_failure.value
+        self.assertTrue("connection refused" in str(failure))
+
         [fmsg] = self.get_dispatched('vas2nets.failures')
         fmsg = from_json(fmsg.body)
         self.assertEqual(msg.payload, fmsg['message'])
