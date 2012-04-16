@@ -30,7 +30,7 @@ install_requires, dependency_links = parse_requirements("requirements.pip")
 
 setup(
     name="vumi",
-    version="0.4.0a",
+    version="0.5.0a",
     url='http://github.com/praekelt/vumi',
     license='BSD',
     description="Super-scalable messaging engine for the delivery of SMS, "
