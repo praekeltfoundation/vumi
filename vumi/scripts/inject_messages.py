@@ -18,6 +18,7 @@ class InjectorOptions(VumiOptions):
     ]
 
     def postOptions(self):
+        VumiOptions.postOptions(self)
         if not self['transport-name']:
             raise usage.UsageError("Please provide the "
                                     "transport-name parameter.")
@@ -61,12 +62,9 @@ class MessageInjector(Worker):
 
 @inlineCallbacks
 def main(options):
-    vumi_options = {}
     verbose = options['verbose']
-    for opt in [i[0] for i in Options.optParameters]:
-        vumi_options[opt] = options.pop(opt)
 
-    worker_creator = WorkerCreator(vumi_options)
+    worker_creator = WorkerCreator(options.vumi_options)
     worker_creator.create_worker_by_class(
         MessageInjector, options)
 
