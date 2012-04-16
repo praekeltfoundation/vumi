@@ -39,3 +39,7 @@ UserGroupingRouter
 .. autoclass:: UserGroupingRouter
 
 
+ContentKeywordRouter
+^^^^^^^^^^^^^^^^^^^^
+
+.. autoclass:: ContentKeywordRouter

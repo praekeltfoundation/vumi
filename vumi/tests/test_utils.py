@@ -10,7 +10,8 @@ from twisted.internet.protocol import Protocol, Factory
 
 
 from vumi.utils import (normalize_msisdn, vumi_resource_path, cleanup_msisdn,
-                        get_operator_name, http_request, http_request_full)
+                        get_operator_name, http_request, http_request_full,
+                        get_first_word)
 
 
 class UtilsTestCase(TestCase):
@@ -50,6 +51,12 @@ class UtilsTestCase(TestCase):
         self.assertEqual('MTN', get_operator_name('27831234567', mapping))
         self.assertEqual('VODACOM', get_operator_name('27821234567', mapping))
         self.assertEqual('UNKNOWN', get_operator_name('27801234567', mapping))
+
+    def test_get_first_word(self):
+        self.assertEqual('KEYWORD',
+                         get_first_word('KEYWORD rest of the message'))
+        self.assertEqual('', get_first_word(''))
+        self.assertEqual('', get_first_word(None))
 
 
 class FakeHTTP10(Protocol):

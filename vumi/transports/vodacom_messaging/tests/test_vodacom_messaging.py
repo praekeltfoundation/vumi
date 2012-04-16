@@ -101,7 +101,6 @@ class TestVodacomMessagingTransport(TransportTestCase):
 
     @inlineCallbacks
     def test_inbound_resume_close(self):
-        args = "/?ussdSessionId=123&msisdn=555&provider=web&request=1"
         url = "%s%s?%s" % (
             self.transport_url,
             self.config['web_path'],

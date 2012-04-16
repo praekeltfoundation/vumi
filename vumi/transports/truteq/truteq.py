@@ -45,8 +45,6 @@ class TruteqTransport(Transport):
         Default is 300.
     """
 
-    SUPPRESS_FAILURE_EXCEPTIONS = False
-
     SSMI_TO_VUMI_EVENT = {
         client.SSMI_USSD_TYPE_NEW: TransportUserMessage.SESSION_NEW,
         client.SSMI_USSD_TYPE_EXISTING: TransportUserMessage.SESSION_RESUME,

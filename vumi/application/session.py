@@ -3,7 +3,6 @@
 """Session management utilities for ApplicationWorkers."""
 
 import time
-import redis
 from twisted.internet import task
 
 
@@ -94,7 +93,7 @@ class SessionManager(object):
             'created_at': time.time()
         }
         defaults.update(kwargs)
-        session = self.save_session(user_id, defaults)
+        self.save_session(user_id, defaults)
         if self.max_session_length:
             self.schedule_session_expiry(user_id, self.max_session_length)
         return self.load_session(user_id)
