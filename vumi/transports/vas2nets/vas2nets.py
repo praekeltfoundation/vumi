@@ -9,13 +9,13 @@ from StringIO import StringIO
 
 from twisted.web import http
 from twisted.web.resource import Resource
-from twisted.web.server import Site, NOT_DONE_YET
+from twisted.web.server import NOT_DONE_YET
 from twisted.python import log
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet.protocol import Protocol
 from twisted.internet.error import ConnectionRefusedError
 
-from vumi.utils import http_request_full, normalize_msisdn
+from vumi.utils import http_request_full, normalize_msisdn, LogFilterSite
 from vumi.transports.base import Transport
 from vumi.transports.failures import TemporaryFailure, PermanentFailure
 from vumi.errors import VumiError
@@ -197,13 +197,6 @@ class HttpResponseHandler(Protocol):
 
     def connectionLost(self, reason):
         self.deferred.callback(self.stringio.getvalue())
-
-
-class LogFilterSite(Site):
-    def log(self, request):
-        if getattr(request, 'do_not_log', None):
-            return
-        return Site.log(self, request)
 
 
 class Vas2NetsTransport(Transport):

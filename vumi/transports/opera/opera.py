@@ -28,6 +28,7 @@ class OperaHealthResource(Resource):
 
     def render_GET(self, request):
         request.setResponseCode(http.OK)
+        request.do_not_log = True
         return "OK"
 
 

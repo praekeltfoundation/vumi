@@ -11,6 +11,7 @@ from twisted.internet import defer
 from twisted.internet import reactor, protocol
 from twisted.internet.defer import succeed
 from twisted.web.client import Agent, ResponseDone
+from twisted.web.server import Site
 from twisted.web.http_headers import Headers
 from twisted.web.iweb import IBodyProducer
 from twisted.web.http import PotentialDataLoss
@@ -138,6 +139,13 @@ class StringProducer(object):
 
     def stopProducing(self):
         pass
+
+
+class LogFilterSite(Site):
+    def log(self, request):
+        if getattr(request, 'do_not_log', None):
+            return
+        return Site.log(self, request)
 
 
 def vumi_resource_path(path):

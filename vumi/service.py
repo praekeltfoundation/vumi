@@ -8,7 +8,6 @@ from twisted.application.service import MultiService
 from twisted.application.internet import TCPClient
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet import protocol, reactor
-from twisted.web.server import Site
 from twisted.web.resource import Resource
 import txamqp
 from txamqp.client import TwistedDelegate
@@ -18,7 +17,7 @@ from txamqp.protocol import AMQClient
 from vumi.errors import VumiError
 from vumi.message import Message
 from vumi.utils import (load_class_by_string, vumi_resource_path, http_request,
-                        basic_auth_string)
+                        basic_auth_string, LogFilterSite)
 
 
 SPECS = {}
@@ -265,7 +264,7 @@ class Worker(MultiService, object):
             parent.putChild(leaf, resource)
 
         if site_class is None:
-            site_class = Site
+            site_class = LogFilterSite
         site_factory = site_class(root)
         return reactor.listenTCP(port, site_factory)
 

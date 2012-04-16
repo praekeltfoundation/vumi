@@ -82,6 +82,7 @@ class HealthResource(Resource):
 
     def render(self, request):
         request.setResponseCode(http.OK)
+        request.do_not_log = True
         return 'OK'
 
 
