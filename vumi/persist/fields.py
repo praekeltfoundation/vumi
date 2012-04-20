@@ -20,23 +20,25 @@ class FieldDescriptor(object):
     def validate(self, value):
         self.field.validate(value)
 
-    def store(self, modelobj, value):
+    def set_value(self, modelobj, value):
+        """Set the value associated with this descriptor."""
         modelobj._riak_object._data[self.key] = value
 
-    def retrieve(self, modelobj):
+    def get_value(self, modelobj):
+        """Get the value associated with this descriptor."""
         return modelobj._riak_object._data[self.key]
 
     def __get__(self, instance, owner):
         if instance is None:
             return self.field
-        return self.retrieve(instance)
+        return self.get_value(instance)
 
     def __set__(self, instance, value):
         if instance is None:
             raise AttributeError("Attribute %r of %r is not writable" %
                                  (self.key, self.cls))
         self.validate(value)
-        self.store(instance, value)
+        self.set_value(instance, value)
 
 
 class Field(object):
@@ -95,20 +97,20 @@ class DynamicDescriptor(FieldDescriptor):
         else:
             self.prefix = self.field.prefix
 
-    def retrieve(self, modelobj):
+    def get_value(self, modelobj):
         return DynamicProxy(self, modelobj)
 
-    def store(self, modelobj, value):
+    def get_dynamic_value(self, modelobj, dynamic_key):
+        key = self.prefix + dynamic_key
+        return modelobj._riak_object._data[key]
+
+    def set_value(self, modelobj, value):
         raise RuntimeError("DynamicDescriptors should never be assigned to.")
 
-    def store_dynamic(self, modelobj, dynamic_key, value):
+    def set_dynamic_value(self, modelobj, dynamic_key, value):
         self.field.field_type.validate(value)
         key = self.prefix + dynamic_key
         modelobj._riak_object._data[key] = value
-
-    def retrieve_dynamic(self, modelobj, dynamic_key):
-        key = self.prefix + dynamic_key
-        return modelobj._riak_object._data[key]
 
 
 class DynamicProxy(object):
@@ -117,11 +119,11 @@ class DynamicProxy(object):
 
     def __getattr__(self, key):
         descriptor, modelobj = self._descriptor_modelobj_
-        return descriptor.retrieve_dynamic(modelobj, key)
+        return descriptor.get_dynamic_value(modelobj, key)
 
     def __setattr__(self, key, value):
         descriptor, modelobj = self._descriptor_modelobj_
-        descriptor.store_dynamic(modelobj, key, value)
+        descriptor.set_dynamic_value(modelobj, key, value)
 
 
 class Dynamic(Field):
@@ -162,32 +164,29 @@ class ForeignKeyDescriptor(FieldDescriptor):
             raise ValidationError("Field %r of %r requires a %r" %
                                   (self.key, self.cls, self.othercls))
 
-    def _foreign_key(self, modelobj):
+    def get_value(self, modelobj):
+        return ForeignKeyProxy(self, modelobj)
+
+    def get_foreign_key(self, modelobj):
         indexes = modelobj._riak_object.get_indexes(self.index_name)
         if not indexes:
             return None
         key = indexes[0]
         return key
 
-    def retrieve(self, modelobj):
-        return ForeignKeyProxy(self, modelobj)
-
-    def store(self, modelobj, value):
-        raise RuntimeError("ForeignKeyDescriptors should never be assigned"
-                           " to.")
-
-    def retrieve_foreign(self, modelobj):
-        key = self._foreign_key(modelobj)
+    def get_foreign_object(self, modelobj):
+        key = self.get_foreign_key(modelobj)
         if key is None:
             return None
         return self.othercls.load(modelobj.manager, key)
 
-    def store_foreign(self, modelobj, otherobj):
+    def set_value(self, modelobj, value):
+        raise RuntimeError("ForeignKeyDescriptors should never be assigned"
+                           " to.")
+
+    def set_foreign_object(self, modelobj, otherobj):
         modelobj._riak_object.remove_index(self.index_name)
         modelobj._riak_object.add_index(self.index_name, otherobj.key)
-
-    def key_foreign(self, modelobj):
-        return self._foreign_key(modelobj)
 
 
 class ForeignKeyProxy(object):
@@ -197,13 +196,13 @@ class ForeignKeyProxy(object):
 
     @property
     def key(self):
-        return self._descriptor.key_foreign(self._modelobj)
+        return self._descriptor.get_foreign_key(self._modelobj)
 
     def get(self):
-        return self._descriptor.retrieve_foreign(self._modelobj)
+        return self._descriptor.get_foreign_object(self._modelobj)
 
     def set(self, otherobj):
-        self._descriptor.store_foreign(self._modelobj, otherobj)
+        self._descriptor.set_foreign_object(self._modelobj, otherobj)
 
 
 class ForeignKey(Field):
