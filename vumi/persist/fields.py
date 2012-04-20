@@ -162,16 +162,48 @@ class ForeignKeyDescriptor(FieldDescriptor):
             raise ValidationError("Field %r of %r requires a %r" %
                                   (self.key, self.cls, self.othercls))
 
-    def store(self, modelobj, otherobj):
-        modelobj._riak_object.remove_index(self.index_name)
-        modelobj._riak_object.add_index(self.index_name, otherobj.key)
-
-    def retrieve(self, modelobj):
+    def _foreign_key(self, modelobj):
         indexes = modelobj._riak_object.get_indexes(self.index_name)
         if not indexes:
             return None
         key = indexes[0]
+        return key
+
+    def retrieve(self, modelobj):
+        return ForeignKeyProxy(self, modelobj)
+
+    def store(self, modelobj, value):
+        raise RuntimeError("ForeignKeyDescriptors should never be assigned"
+                           " to.")
+
+    def retrieve_foreign(self, modelobj):
+        key = self._foreign_key(modelobj)
+        if key is None:
+            return None
         return self.othercls.load(modelobj.manager, key)
+
+    def store_foreign(self, modelobj, otherobj):
+        modelobj._riak_object.remove_index(self.index_name)
+        modelobj._riak_object.add_index(self.index_name, otherobj.key)
+
+    def key_foreign(self, modelobj):
+        return self._foreign_key(modelobj)
+
+
+class ForeignKeyProxy(object):
+    def __init__(self, descriptor, modelobj):
+        self._descriptor = descriptor
+        self._modelobj = modelobj
+
+    @property
+    def key(self):
+        return self._descriptor.key_foreign(self._modelobj)
+
+    def get(self):
+        return self._descriptor.retrieve_foreign(self._modelobj)
+
+    def set(self, otherobj):
+        self._descriptor.store_foreign(self._modelobj, otherobj)
 
 
 class ForeignKey(Field):
