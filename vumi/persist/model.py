@@ -120,7 +120,3 @@ class ModelProxy(object):
 
     def load(self, key):
         return self._modelcls.load(self._manager, key)
-
-
-# TODO: Write an XML RPC server that takes a manager and a list of model
-#       classes and provides access to those over XML RPC.
