@@ -44,7 +44,7 @@ class Model(object):
 
     def __init__(self, manager, key, **field_values):
         self.key = key
-        self._manager = manager
+        self.manager = manager
         self._riak_object = manager.riak_object(self)
         for field_name, field_value in field_values.iteritems():
             setattr(self, field_name, field_value)

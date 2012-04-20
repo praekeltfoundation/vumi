@@ -4,7 +4,7 @@ from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.persist.model import Manager, Model
-from vumi.persist.fields import Integer, Unicode, Dynamic
+from vumi.persist.fields import Integer, Unicode, Dynamic, ForeignKey
 
 
 class SimpleModel(Model):
@@ -15,6 +15,10 @@ class SimpleModel(Model):
 class DynamicModel(Model):
     a = Unicode()
     contact_info = Dynamic()
+
+
+class ForeignKeyModel(Model):
+    link = ForeignKey(SimpleModel)
 
 
 class TestModel(TestCase):
@@ -57,6 +61,18 @@ class TestModel(TestCase):
         self.assertEqual(d2.contact_info.telephone, u"+2755")
         self.assertEqual(d2.contact_info.honorific, u"BDFL")
 
-    def test_link(self):
-        # TODO: implement links
-        pass
+    @inlineCallbacks
+    def test_foreignkey_fields(self):
+        fk_model = self.manager.proxy(ForeignKeyModel)
+        simple_model = self.manager.proxy(SimpleModel)
+        s1 = simple_model("foo", a=5, b=u'3')
+        f1 = fk_model("bar")
+        f1.link = s1
+        yield s1.save()
+        yield f1.save()
+
+        f2 = yield fk_model.load("bar")
+        s2 = yield f2.link
+
+        self.assertEqual(s2.a, 5)
+        self.assertEqual(s2.b, u"3")

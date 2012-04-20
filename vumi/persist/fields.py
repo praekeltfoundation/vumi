@@ -152,24 +152,39 @@ class ForeignKeyDescriptor(FieldDescriptor):
     def setup(self, cls):
         super(ForeignKeyDescriptor, self).setup(cls)
         self.othercls = self.field.othercls
+        if self.field.index is None:
+            self.index_name = "%s_bin" % self.key
+        else:
+            self.index_name = self.field.index
 
     def validate(self, value):
         if not isinstance(value, self.othercls):
             raise ValidationError("Field %r of %r requires a %r" %
                                   (self.key, self.cls, self.othercls))
 
-    def store(self, modelobj, value):
-        # TODO: write this value to a secondary index or something
-        pass
+    def store(self, modelobj, otherobj):
+        modelobj._riak_object.remove_index(self.index_name)
+        modelobj._riak_object.add_index(self.index_name, otherobj.key)
 
     def retrieve(self, modelobj):
-        # TODO: get this value from somewhere
-        return None
+        indexes = modelobj._riak_object.get_indexes(self.index_name)
+        if not indexes:
+            return None
+        key = indexes[0]
+        return self.othercls.load(modelobj.manager, key)
 
 
 class ForeignKey(Field):
+    """A field that links to another class.
+
+    :param Model othercls:
+        The type of model linked to.
+    :param string index:
+        The name to use for the index. The default is the field name
+        followed by _bin.
+    """
     descriptor_class = ForeignKeyDescriptor
 
     def __init__(self, othercls, index=None):
-        self._othercls = othercls
-        self._index = index
+        self.othercls = othercls
+        self.index = index
