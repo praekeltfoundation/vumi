@@ -86,6 +86,58 @@ class Unicode(Field):
                                   % (value,))
 
 
+class DynamicDescriptor(FieldDescriptor):
+    """A field descriptor for dynamic fields."""
+    def setup(self, cls):
+        super(DynamicDescriptor, self).setup(cls)
+
+    def retrieve(self, modelobj):
+        return DynamicProxy(self, modelobj)
+
+    def store(self, modelobj, value):
+        raise RuntimeError("DynamicDescriptors should never be assigned to.")
+
+    def store_dynamic(self, modelobj, dynamic_key, value):
+        self.field.field_type.validate(value)
+        key = self.field.prefix + dynamic_key
+        modelobj._riak_object._data[key] = value
+
+    def retrieve_dynamic(self, modelobj, dynamic_key):
+        key = self.field.prefix + dynamic_key
+        return modelobj._riak_object._data[key]
+
+
+class DynamicProxy(object):
+    def __init__(self, descriptor, modelobj):
+        self.__dict__['_descriptor_modelobj_'] = (descriptor, modelobj)
+
+    def __getattr__(self, key):
+        descriptor, modelobj = self._descriptor_modelobj_
+        return descriptor.retrieve_dynamic(modelobj, key)
+
+    def __setattr__(self, key, value):
+        descriptor, modelobj = self._descriptor_modelobj_
+        descriptor.store_dynamic(modelobj, key, value)
+
+
+class Dynamic(Field):
+    """A field that allows sub-fields to be added dynamically."""
+
+    descriptor_class = DynamicDescriptor
+
+    def __init__(self, field_type=None, prefix="dynamic."):
+        if field_type is None:
+            field_type = Unicode()
+        if field_type.descriptor_class is not FieldDescriptor:
+            raise RuntimeError("Dynamic fields only supports fields that"
+                               " that use the basic FieldDescriptor class")
+        self.field_type = field_type
+        self.prefix = prefix
+
+    def validate(self, value):
+        self.field_type.validate(value)
+
+
 class ForeignKeyDescriptor(FieldDescriptor):
     def setup(self, cls):
         super(ForeignKeyDescriptor, self).setup(cls)

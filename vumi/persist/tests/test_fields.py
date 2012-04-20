@@ -5,8 +5,7 @@
 from twisted.trial.unittest import TestCase
 
 from vumi.persist.fields import (
-    ValidationError, Field, FieldDescriptor, Integer, Unicode, ForeignKey,
-    ForeignKeyDescriptor)
+    ValidationError, Field, Integer, Unicode, ForeignKey, Dynamic)
 
 
 class TestBaseField(TestCase):

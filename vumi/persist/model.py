@@ -18,6 +18,8 @@ class ModelMetaClass(type):
         # locate Field instances
         fields, descriptors = {}, {}
         for key, possible_field in dict.items():
+            if key == "dynamic_fields":
+                continue
             if isinstance(possible_field, Field):
                 descriptors[key] = possible_field.get_descriptor(key)
                 dict[key] = descriptors[key]
@@ -39,7 +41,6 @@ class Model(object):
     __metaclass__ = ModelMetaClass
 
     bucket = None
-    dynamic_fields = None
 
     def __init__(self, manager, key, **field_values):
         self.key = key
@@ -47,21 +48,6 @@ class Model(object):
         self._riak_object = manager.riak_object(self)
         for field_name, field_value in field_values.iteritems():
             setattr(self, field_name, field_value)
-
-    def __getattr__(self, key):
-        if self.dynamic_fields is None:
-            raise AttributeError("%r has not attribute %r" % (self, key))
-        return self._riak_object._data[key]
-
-    # TODO: having __setattr__ requires all sorts of weirdness elsewhere
-    ## def __setattr__(self, key, value):
-    ##     if key in self.fields:
-    ##         return object.__setattr__(self, key, value)
-    ##     if self.dynamic_fields is None:
-    ##         raise AttributeError("%r does not allow setting of %r"
-    ##                              % (self, key))
-    ##     self.dynamic_fields.validate(value)
-    ##     self._data[key] = value
 
     def save(self):
         """Save the object to Riak.
