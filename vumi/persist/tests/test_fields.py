@@ -4,7 +4,22 @@
 
 from twisted.trial.unittest import TestCase
 
-from vumi.persist.fields import Field, ValidationError, Integer, Unicode
+from vumi.persist.fields import (
+    ValidationError, Field, FieldDescriptor, Integer, Unicode, ForeignKey,
+    ForeignKeyDescriptor)
+
+
+class TestBaseField(TestCase):
+    def test_validate(self):
+        f = Field()
+        f.validate("foo")
+        f.validate(object())
+
+    def test_get_descriptor(self):
+        f = Field()
+        descriptor = f.get_descriptor("foo")
+        self.assertEqual(descriptor.key, "foo")
+        self.assertEqual(descriptor.field, f)
 
 
 class TestInteger(TestCase):
