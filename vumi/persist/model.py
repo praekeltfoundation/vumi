@@ -10,36 +10,26 @@ from txriak.client import RiakClient
 
 class ModelMetaClass(type):
     def __new__(mcs, name, bases, dict):
-        fields = {}
-        for key, possible_field in dict.items():
-            if isinstance(possible_field, Field):
-                dict[key] = FieldDescriptor(key, possible_field)
-                fields[key] = possible_field
-        dict["fields"] = fields
+        # set default bucket suffix
         if "bucket" not in dict:
             dict["bucket"] = name.lower()
-        return type.__new__(mcs, name, bases, dict)
 
+        # locate Field instances
+        fields, descriptors = {}, {}
+        for key, possible_field in dict.items():
+            if isinstance(possible_field, Field):
+                descriptors[key] = possible_field.get_descriptor(key)
+                dict[key] = descriptors[key]
+                fields[key] = possible_field
+        dict["fields"] = fields
 
-class Field(object):
-    """Base class for model attributes / fields."""
+        cls = type.__new__(mcs, name, bases, dict)
 
-    def validate(self, value):
-        """Check whether a value is valid for this field.
+        # inform field instances which classes they belong to
+        for field_descriptor in descriptors.itervalues():
+            field_descriptor.setup(cls)
 
-        Raise an exception if it isn't.
-        """
-        pass
-
-    def to_python(self, value):
-        """Convert a value from something that can be stored in JSON
-        to a proper Pythonic object."""
-        return value
-
-    def from_python(self, value):
-        """Convert a proper Pythonic object into something that can
-        be stored in JSON."""
-        return value
+        return cls
 
 
 class FieldDescriptor(object):
@@ -49,6 +39,9 @@ class FieldDescriptor(object):
         self._key = key
         self._field = field
 
+    def setup(self, cls):
+        pass
+
     def __get__(self, instance, owner):
         if instance is None:
             return self._field
@@ -57,6 +50,22 @@ class FieldDescriptor(object):
     def __set__(self, instance, value):
         self._field.validate(value)
         instance._data[self._key] = value
+
+
+class Field(object):
+    """Base class for model attributes / fields."""
+
+    descriptor_class = FieldDescriptor
+
+    def get_descriptor(self, key):
+        return self.descriptor_class(key, self)
+
+    def validate(self, value):
+        """Check whether a value is valid for this field.
+
+        Raise an exception if it isn't.
+        """
+        pass
 
 
 class Model(object):
