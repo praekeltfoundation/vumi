@@ -4,8 +4,7 @@
 
 from twisted.internet.defer import inlineCallbacks
 
-from txriak.riak_object import RiakObject
-from txriak.client import RiakClient
+from txriak.riak import RiakObject, RiakClient
 
 from vumi.persist.fields import Field
 
