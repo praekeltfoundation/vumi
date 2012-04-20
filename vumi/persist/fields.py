@@ -56,11 +56,34 @@ class Field(object):
 
 
 class Integer(Field):
-    pass
+    """Field that accepts integers.
+
+    :param integer min:
+        Minimum allowed value (default is `None` which indicates no minimum).
+    :param integer max:
+        Maximum allowed value (default is `None` which indicates no maximum).
+    """
+    def __init__(self, min=None, max=None):
+        self.min = min
+        self.max = max
+
+    def validate(self, value):
+        if not isinstance(value, (int, long)):
+            raise ValidationError("Value %r is not an integer." % (value,))
+        if self.min is not None and value < self.min:
+            raise ValidationError("Value %r too low (minimum value is %d)."
+                                  % (value, self.min))
+        if self.max is not None and value > self.max:
+            raise ValidationError("Value %r too high (maximum value is %d)."
+                                  % (value, self.max))
 
 
 class Unicode(Field):
-    pass
+    """Field that accepts unicode strings."""
+    def validate(self, value):
+        if not isinstance(value, unicode):
+            raise ValidationError("Value %r is not a unicode string."
+                                  % (value,))
 
 
 class ForeignKeyDescriptor(FieldDescriptor):
