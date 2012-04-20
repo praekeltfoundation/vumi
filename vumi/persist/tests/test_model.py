@@ -3,7 +3,8 @@
 from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
 
-from vumi.persist.model import Manager, Model, Integer, Unicode
+from vumi.persist.model import Manager, Model
+from vumi.persist.fields import Integer, Unicode
 
 
 class SimpleModel(Model):
