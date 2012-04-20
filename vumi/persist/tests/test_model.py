@@ -3,7 +3,7 @@
 from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
 
-from vumi.persist.model import Manager, Model
+from vumi.persist.model import TxRiakManager, RiakManager, Model
 from vumi.persist.fields import Integer, Unicode, Dynamic, ForeignKey
 
 
@@ -21,10 +21,10 @@ class ForeignKeyModel(Model):
     link = ForeignKey(SimpleModel)
 
 
-class TestModel(TestCase):
+class TestModelOnTxRiak(TestCase):
     @inlineCallbacks
     def setUp(self):
-        self.manager = Manager.from_config({'bucket_prefix': 'test.'})
+        self.manager = TxRiakManager.from_config({'bucket_prefix': 'test.'})
         yield self.manager.purge_all()
 
     @inlineCallbacks
@@ -76,3 +76,10 @@ class TestModel(TestCase):
 
         self.assertEqual(s2.a, 5)
         self.assertEqual(s2.b, u"3")
+
+
+class TestModelOnRiak(TestModelOnTxRiak):
+    @inlineCallbacks
+    def setUp(self):
+        self.manager = RiakManager.from_config({'bucket_prefix': 'test.'})
+        yield self.manager.purge_all()
