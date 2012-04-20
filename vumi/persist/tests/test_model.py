@@ -27,6 +27,7 @@ class TestModel(TestCase):
         self.assertTrue(isinstance(SimpleModel.a, Integer))
         self.assertTrue(isinstance(SimpleModel.b, Unicode))
 
+    @inlineCallbacks
     def test_simple_instance(self):
         simple_model = self.manager.proxy(SimpleModel)
         s1 = simple_model("foo", a=5, b=u'3')
