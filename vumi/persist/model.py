@@ -27,6 +27,9 @@ class ModelMetaClass(type):
                     fields[key] = possible_field
         dict["fields"] = fields
 
+        # add backlinks object
+        dict["backlinks"] = BackLinks()
+
         cls = type.__new__(mcs, name, bases, dict)
 
         # inform field instances which classes they belong to
@@ -34,6 +37,40 @@ class ModelMetaClass(type):
             field_descriptor.setup(cls)
 
         return cls
+
+
+class BackLinks(object):
+    """Object for holding reverse-key look-up functions for a Model class."""
+
+    def __init__(self):
+        self.functions = {}
+
+    def declare_backlink(self, name, function):
+        if 'name' in self.functions:
+            raise RuntimeError("Backlink %r already registered" % (name,))
+        self.functions[name] = function
+
+    def __get__(self, instance, owner):
+        if instance is None:
+            return self
+        return BackLinkProxy(self, instance)
+
+
+class BackLinkProxy(object):
+    def __init__(self, backlinks, modelobj):
+        self._backlinks = backlinks
+        self._modelobj = modelobj
+
+    def __getattr__(self, key):
+        if key not in self._backlinks.functions:
+            raise AttributeError("Not backlink function registered for %r"
+                                 % (key,))
+
+        def wrapped_backlink(*args, **kwargs):
+            return self._backlinks.functions[key](self._modelobj, *args,
+                                                  **kwargs)
+
+        return wrapped_backlink
 
 
 class Model(object):

@@ -159,6 +159,13 @@ class ForeignKeyDescriptor(FieldDescriptor):
         else:
             self.index_name = self.field.index
 
+        reverse_lookup_name = cls.__name__.lower() + "s"
+        self.othercls.backlinks.declare_backlink(reverse_lookup_name,
+                                                 self.reverse_lookup)
+
+    def reverse_lookup(self, modelobj):
+        raise NotImplementedError("How to look this up with Riak?")
+
     def validate(self, value):
         if not isinstance(value, self.othercls):
             raise ValidationError("Field %r of %r requires a %r" %

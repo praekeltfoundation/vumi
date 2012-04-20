@@ -20,7 +20,7 @@ class DynamicModel(Model):
 
 
 class ForeignKeyModel(Model):
-    link = ForeignKey(SimpleModel)
+    simple = ForeignKey(SimpleModel)
 
 
 class InheritedModel(SimpleModel):
@@ -73,16 +73,32 @@ class TestModelOnTxRiak(TestCase):
         simple_model = self.manager.proxy(SimpleModel)
         s1 = simple_model("foo", a=5, b=u'3')
         f1 = fk_model("bar")
-        f1.link.set(s1)
+        f1.simple.set(s1)
         yield s1.save()
         yield f1.save()
 
         f2 = yield fk_model.load("bar")
-        s2 = yield f2.link.get()
+        s2 = yield f2.simple.get()
 
-        self.assertEqual(f2.link.key, "foo")
+        self.assertEqual(f2.simple.key, "foo")
         self.assertEqual(s2.a, 5)
         self.assertEqual(s2.b, u"3")
+
+    @inlineCallbacks
+    def test_reverse_foreingkey_fields(self):
+        fk_model = self.manager.proxy(ForeignKeyModel)
+        simple_model = self.manager.proxy(SimpleModel)
+        s1 = simple_model("foo", a=5, b=u'3')
+        f1 = fk_model("bar1")
+        f1.simple.set(s1)
+        f2 = fk_model("bar2")
+        f2.simple.set(s1)
+        yield s1.save()
+        yield f1.save()
+        yield f2.save()
+
+        s2 = yield simple_model.load("foo")
+        print s2.backlinks.foreignkeymodels()
 
     @inlineCallbacks
     def test_inherited_model(self):
