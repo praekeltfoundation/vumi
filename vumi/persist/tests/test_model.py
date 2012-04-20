@@ -23,6 +23,10 @@ class ForeignKeyModel(Model):
     link = ForeignKey(SimpleModel)
 
 
+class InheritedModel(SimpleModel):
+    c = Integer()
+
+
 class TestModelOnTxRiak(TestCase):
     @inlineCallbacks
     def setUp(self):
@@ -79,6 +83,21 @@ class TestModelOnTxRiak(TestCase):
         self.assertEqual(f2.link.key, "foo")
         self.assertEqual(s2.a, 5)
         self.assertEqual(s2.b, u"3")
+
+    @inlineCallbacks
+    def test_inherited_model(self):
+        self.assertEqual(sorted(InheritedModel.fields.keys()),
+                         ["a", "b", "c"])
+
+        inherited_model = self.manager.proxy(InheritedModel)
+
+        im1 = inherited_model("foo", a=1, b=u"2", c=3)
+        yield im1.save()
+
+        im2 = yield inherited_model.load("foo")
+        self.assertEqual(im2.a, 1)
+        self.assertEqual(im2.b, u'2')
+        self.assertEqual(im2.c, 3)
 
 
 class TestModelOnRiak(TestModelOnTxRiak):

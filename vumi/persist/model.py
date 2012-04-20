@@ -3,7 +3,7 @@
 """Base classes for Vumi persistence models."""
 
 
-from vumi.persist.fields import Field
+from vumi.persist.fields import Field, FieldDescriptor
 
 
 class ModelMetaClass(type):
@@ -14,13 +14,17 @@ class ModelMetaClass(type):
 
         # locate Field instances
         fields, descriptors = {}, {}
-        for key, possible_field in dict.items():
-            if key == "dynamic_fields":
-                continue
-            if isinstance(possible_field, Field):
-                descriptors[key] = possible_field.get_descriptor(key)
-                dict[key] = descriptors[key]
-                fields[key] = possible_field
+        class_dicts = [dict] + [base.__dict__ for base in reversed(bases)]
+        for cls_dict in class_dicts:
+            for key, possible_field in cls_dict.items():
+                if key == "dynamic_fields" or key in fields:
+                    continue
+                if isinstance(possible_field, FieldDescriptor):
+                    possible_field = possible_field.field  # copy descriptors
+                if isinstance(possible_field, Field):
+                    descriptors[key] = possible_field.get_descriptor(key)
+                    dict[key] = descriptors[key]
+                    fields[key] = possible_field
         dict["fields"] = fields
 
         cls = type.__new__(mcs, name, bases, dict)
