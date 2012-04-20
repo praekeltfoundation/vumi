@@ -90,6 +90,10 @@ class DynamicDescriptor(FieldDescriptor):
     """A field descriptor for dynamic fields."""
     def setup(self, cls):
         super(DynamicDescriptor, self).setup(cls)
+        if self.field.prefix is None:
+            self.prefix = "%s." % self.key
+        else:
+            self.prefix = self.field.prefix
 
     def retrieve(self, modelobj):
         return DynamicProxy(self, modelobj)
@@ -99,11 +103,11 @@ class DynamicDescriptor(FieldDescriptor):
 
     def store_dynamic(self, modelobj, dynamic_key, value):
         self.field.field_type.validate(value)
-        key = self.field.prefix + dynamic_key
+        key = self.prefix + dynamic_key
         modelobj._riak_object._data[key] = value
 
     def retrieve_dynamic(self, modelobj, dynamic_key):
-        key = self.field.prefix + dynamic_key
+        key = self.prefix + dynamic_key
         return modelobj._riak_object._data[key]
 
 
@@ -121,11 +125,17 @@ class DynamicProxy(object):
 
 
 class Dynamic(Field):
-    """A field that allows sub-fields to be added dynamically."""
+    """A field that allows sub-fields to be added dynamically.
 
+    :param Field field_type:
+        The field specification for the dynamic values. Default is Unicode().
+    :param string prefix:
+        The prefix to use when storing these values in Riak. Default is
+        the name of the field followed by a dot ('.').
+    """
     descriptor_class = DynamicDescriptor
 
-    def __init__(self, field_type=None, prefix="dynamic."):
+    def __init__(self, field_type=None, prefix=None):
         if field_type is None:
             field_type = Unicode()
         if field_type.descriptor_class is not FieldDescriptor:
