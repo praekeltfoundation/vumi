@@ -1,8 +1,7 @@
 # -*- test-case-name: vumi.persist.tests.test_model -*-
 
-"""Base class for Vumi persistence models."""
+"""Base classes for Vumi persistence models."""
 
-from twisted.internet.defer import inlineCallbacks
 
 from vumi.persist.fields import Field
 
@@ -73,6 +72,9 @@ class Manager(object):
         self.client = client
         self.bucket_prefix = bucket_prefix
 
+    def proxy(self, modelcls):
+        return ModelProxy(self, modelcls)
+
     @classmethod
     def from_config(cls, config):
         """Construct a manager from a dictionary of options.
@@ -106,90 +108,6 @@ class Manager(object):
         """
         raise NotImplementedError("Sub-classes of Manger should implement"
                                   " .purge_all()")
-
-    def proxy(self, modelcls):
-        return ModelProxy(self, modelcls)
-
-
-class TxRiakManager(Manager):
-    """A wrapper around a txriak client."""
-
-    @classmethod
-    def from_config(cls, config):
-        from txriak.riak import RiakClient
-        bucket_prefix = config.pop('bucket_prefix')
-        client = RiakClient(**config)
-        return cls(client, bucket_prefix)
-
-    def riak_object(self, modelobj):
-        from txriak.riak import RiakObject
-        bucket_name = self.bucket_prefix + modelobj.bucket
-        bucket = self.client.bucket(bucket_name)
-        riak_object = RiakObject(self.client, bucket, modelobj.key)
-        riak_object.set_data({})
-        riak_object.set_content_type("application/json")
-        return riak_object
-
-    def store(self, modelobj):
-        d = modelobj._riak_object.store()
-        d.addCallback(lambda result: modelobj)
-        return d
-
-    def load(self, modelobj):
-        d = modelobj._riak_object.reload()
-        d.addCallback(lambda result: modelobj)
-        return d
-
-    @inlineCallbacks
-    def purge_all(self):
-        buckets = yield self.client.list_buckets()
-        for bucket_name in buckets:
-            if bucket_name.startswith(self.bucket_prefix):
-                bucket = self.client.bucket(bucket_name)
-                yield bucket.purge_keys()
-
-    def proxy(self, modelcls):
-        return ModelProxy(self, modelcls)
-
-
-class RiakManager(Manager):
-    """A wrapper around a txriak client."""
-
-    @classmethod
-    def from_config(cls, config):
-        from riak import RiakClient
-        bucket_prefix = config.pop('bucket_prefix')
-        client = RiakClient(**config)
-        return cls(client, bucket_prefix)
-
-    def riak_object(self, modelobj):
-        from riak import RiakObject
-        bucket_name = self.bucket_prefix + modelobj.bucket
-        bucket = self.client.bucket(bucket_name)
-        riak_object = RiakObject(self.client, bucket, modelobj.key)
-        riak_object.set_data({})
-        riak_object.set_content_type("application/json")
-        return riak_object
-
-    def store(self, modelobj):
-        modelobj._riak_object.store()
-        return modelobj
-
-    def load(self, modelobj):
-        modelobj._riak_object.reload()
-        return modelobj
-
-    def purge_all(self):
-        buckets = self.client.get_buckets()
-        for bucket_name in buckets:
-            if bucket_name.startswith(self.bucket_prefix):
-                bucket = self.client.bucket(bucket_name)
-                for key in bucket.get_keys():
-                    obj = bucket.get(key)
-                    obj.delete()
-
-    def proxy(self, modelcls):
-        return ModelProxy(self, modelcls)
 
 
 class ModelProxy(object):

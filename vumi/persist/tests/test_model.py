@@ -3,8 +3,10 @@
 from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
 
-from vumi.persist.model import TxRiakManager, RiakManager, Model
+from vumi.persist.model import Model
 from vumi.persist.fields import Integer, Unicode, Dynamic, ForeignKey
+from vumi.persist.riak_manager import RiakManager
+from vumi.persist.txriak_manager import TxRiakManager
 
 
 class SimpleModel(Model):
