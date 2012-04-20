@@ -15,19 +15,28 @@ class FieldDescriptor(object):
         self.field = field
 
     def setup(self, cls):
-        pass
+        self.cls = cls
 
     def validate(self, value):
         self.field.validate(value)
 
+    def store(self, modelobj, value):
+        modelobj._data[self.key] = value
+
+    def retrieve(self, modelobj):
+        return modelobj._data[self.key]
+
     def __get__(self, instance, owner):
         if instance is None:
             return self.field
-        return instance._data[self.key]
+        return self.retrieve(instance)
 
     def __set__(self, instance, value):
+        if instance is None:
+            raise AttributeError("Attribute %r of %r is not writable" %
+                                 (self.key, self.cls))
         self.validate(value)
-        instance._data[self.key] = value
+        self.store(instance, value)
 
 
 class Field(object):
@@ -54,9 +63,9 @@ class Unicode(Field):
     pass
 
 
-class ForeignKeyDescriptor(object):
+class ForeignKeyDescriptor(FieldDescriptor):
     def setup(self, cls):
-        self.cls = cls
+        super(ForeignKeyDescriptor, self).setup(cls)
         self.othercls = self.field.othercls
 
     def validate(self, value):
@@ -64,15 +73,13 @@ class ForeignKeyDescriptor(object):
             raise ValidationError("Field %r of %r requires a %r" %
                                   (self.key, self.cls, self.othercls))
 
-    def __get__(self, instance, owner):
-        if instance is None:
-            return self._field
-        return None  # TODO: get this value from somewhere
-        # return instance._data[self._key]
-
-    def __set__(self, instance, value):
-        self._field.validate(value)
+    def store(self, modelobj, value):
         # TODO: write this value to a secondary index or something
+        pass
+
+    def retrieve(self, modelobj):
+        # TODO: get this value from somewhere
+        return None
 
 
 class ForeignKey(Field):
