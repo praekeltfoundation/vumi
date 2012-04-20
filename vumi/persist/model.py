@@ -42,15 +42,17 @@ class Model(object):
     bucket = None
     dynamic_fields = None
 
-    def __init__(self, manager, key, **data):
-        self._manager = manager
+    def __init__(self, manager, key, **field_values):
         self.key = key
-        self._data = data
+        self._manager = manager
+        self._riak_object = manager.riak_object(self)
+        for field_name, field_value in field_values.iteritems():
+            setattr(self, field_name, field_value)
 
     def __getattr__(self, key):
         if self.dynamic_fields is None:
             raise AttributeError("%r has not attribute %r" % (self, key))
-        return self._data[key]
+        return self._riak_object._data[key]
 
     # TODO: having __setattr__ requires all sorts of weirdness elsewhere
     ## def __setattr__(self, key, value):
@@ -62,26 +64,25 @@ class Model(object):
     ##     self.dynamic_fields.validate(value)
     ##     self._data[key] = value
 
-    def to_riak(self, riak_object):
-        """Populate a Riak object with the data from this model."""
-        riak_object.set_data(self._data)
-
-    def from_riak(self, riak_object):
-        """Populate this object from a riak object."""
-        self._data = riak_object.get_data()
-        return self
-
     def save(self):
-        """Save the object to the Riak data store.
+        """Save the object to Riak.
 
         :returns:
             A deferred that fires once the data is saved.
         """
-        return self._manager.save(self)
+        return self._riak_object.store()
 
     @classmethod
     def load(cls, manager, key):
-        return manager.load(cls, key)
+        """Load an object from Riak.
+
+        :returns:
+            A deferred that fires with the new model object.
+        """
+        modelobj = cls(manager, key)
+        d = modelobj._riak_object.reload()
+        d.addCallback(lambda _riak_object: modelobj)
+        return d
 
 
 class Manager(object):
@@ -97,29 +98,13 @@ class Manager(object):
         client = RiakClient(**config)
         return cls(client, bucket_prefix)
 
-    def save(self, modelobj):
-        """Save an object in Riak.
-
-        :returns:
-            A deferred that fires once the data is saved.
-        """
-        bucket = self.bucket_prefix + modelobj.bucket
+    def riak_object(self, modelobj):
+        bucket_name = self.bucket_prefix + modelobj.bucket
+        bucket = self.client.bucket(bucket_name)
         riak_object = RiakObject(self.client, bucket, modelobj.key)
-        modelobj.to_riak(riak_object)
-        return riak_object.store()
-
-    def load(self, modelcls, key):
-        """Load an object from Riak.
-
-        :returns:
-            A deferred that fires with the new model object.
-        """
-        modelobj = modelcls(self, key)
-        bucket = self.bucket_prefix + modelobj.bucket
-        riak_object = RiakObject(self.client, bucket, modelobj.key)
-        d = riak_object.reload()
-        d.addCallback(modelobj.from_riak)
-        return d
+        riak_object.set_data({})
+        riak_object.set_content_type("application/json")
+        return riak_object
 
     @inlineCallbacks
     def purge_all(self):

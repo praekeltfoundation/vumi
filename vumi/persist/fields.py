@@ -21,10 +21,10 @@ class FieldDescriptor(object):
         self.field.validate(value)
 
     def store(self, modelobj, value):
-        modelobj._data[self.key] = value
+        modelobj._riak_object._data[self.key] = value
 
     def retrieve(self, modelobj):
-        return modelobj._data[self.key]
+        return modelobj._riak_object._data[self.key]
 
     def __get__(self, instance, owner):
         if instance is None:
