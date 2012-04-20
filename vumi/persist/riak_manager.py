@@ -2,7 +2,7 @@
 
 """A manager implementation on top of the riak Python package."""
 
-from riak import RiakClient, RiakObject
+from riak import RiakClient, RiakObject, RiakMapReduce
 
 from vumi.persist.model import Manager
 
@@ -31,6 +31,14 @@ class RiakManager(Manager):
     def load(self, modelobj):
         modelobj._riak_object.reload()
         return modelobj
+
+    def riak_map_reduce(self):
+        return RiakMapReduce(self.client)
+
+    def run_map_reduce(self, mapreduce, mapper_func):
+        raw_results = mapreduce.run()
+        results = [mapper_func(self, row) for row in raw_results]
+        return results
 
     def purge_all(self):
         buckets = self.client.get_buckets()

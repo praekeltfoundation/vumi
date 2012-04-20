@@ -2,8 +2,8 @@
 
 """A manager implementation on top of txriak."""
 
-from txriak.riak import RiakClient, RiakObject
-from twisted.internet.defer import inlineCallbacks
+from txriak.riak import RiakClient, RiakObject, RiakMapReduce, RiakLink
+from twisted.internet.defer import inlineCallbacks, DeferredList
 
 from vumi.persist.model import Manager
 
@@ -34,6 +34,27 @@ class TxRiakManager(Manager):
         d = modelobj._riak_object.reload()
         d.addCallback(lambda result: modelobj)
         return d
+
+    def riak_map_reduce(self):
+        return RiakMapReduce(self.client)
+
+    def run_map_reduce(self, mapreduce, mapper_func):
+        mapreduce_done = mapreduce.run()
+
+        def map_results(raw_results):
+            deferreds = []
+            for row in raw_results:
+                link = RiakLink(row[0], row[1])
+                deferreds.append(mapper_func(self, link))
+            return DeferredList(deferreds)
+
+        def strip_results(mapped_results):
+            return [t[1] for t in mapped_results]
+
+        mapreduce_done.addCallback(map_results)
+        mapreduce_done.addCallback(strip_results)
+
+        return mapreduce_done
 
     @inlineCallbacks
     def purge_all(self):

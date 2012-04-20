@@ -164,7 +164,14 @@ class ForeignKeyDescriptor(FieldDescriptor):
                                                  self.reverse_lookup)
 
     def reverse_lookup(self, modelobj):
-        raise NotImplementedError("How to look this up with Riak?")
+        manager = modelobj.manager
+        mr = manager.riak_map_reduce()
+        bucket = manager.bucket_prefix + self.cls.bucket
+        mr.index(bucket, self.index_name, modelobj.key)
+        return manager.run_map_reduce(mr, self.map_lookup_result)
+
+    def map_lookup_result(self, manager, result):
+        return self.cls.load(manager, result.get_key())
 
     def validate(self, value):
         if not isinstance(value, self.othercls):

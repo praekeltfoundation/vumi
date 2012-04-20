@@ -123,23 +123,34 @@ class Manager(object):
         :param dict config:
             Dictionary of options for the manager.
         """
-        raise NotImplementedError("Sub-classes of Manger should implement"
+        raise NotImplementedError("Sub-classes of Manager should implement"
                                   " .from_config(...)")
 
     def riak_object(self, modelobj):
         """Construct an empty RiakObject for the given model instance."""
-        raise NotImplementedError("Sub-classes of Manger should implement"
+        raise NotImplementedError("Sub-classes of Manager should implement"
                                   " .riak_object(...)")
 
     def store(self, modelobj):
         """Store the modelobj in Riak."""
-        raise NotImplementedError("Sub-classes of Manger should implement"
+        raise NotImplementedError("Sub-classes of Manager should implement"
                                   " .store(...)")
 
     def load(self, modelobj):
         """Load the data for the modelobj from Riak."""
-        raise NotImplementedError("Sub-classes of Manger should implement"
+        raise NotImplementedError("Sub-classes of Manager should implement"
                                   " .store(...)")
+
+    def riak_map_reduce(self):
+        """Construct a RiakMapReduce object for this client."""
+        raise NotImplementedError("Sub-classes of Manager should implement"
+                                  " .riak_map_reduce(...)")
+
+    def run_map_reduce(self, mapreduce, mapper_function):
+        """Run a map reduce instance and return the results mapped to
+        objects by the map_function."""
+        raise NotImplementedError("Sub-classes of Manager should implement"
+                                  " .riak_map_reduce(...)")
 
     def purge_all(self):
         """Delete *ALL* keys in buckets whose names start buckets with
@@ -147,7 +158,7 @@ class Manager(object):
 
         Use only in tests.
         """
-        raise NotImplementedError("Sub-classes of Manger should implement"
+        raise NotImplementedError("Sub-classes of Manager should implement"
                                   " .purge_all()")
 
 

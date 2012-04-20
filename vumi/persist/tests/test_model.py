@@ -28,6 +28,7 @@ class InheritedModel(SimpleModel):
 
 
 class TestModelOnTxRiak(TestCase):
+
     @inlineCallbacks
     def setUp(self):
         self.manager = TxRiakManager.from_config({'bucket_prefix': 'test.'})
@@ -98,7 +99,10 @@ class TestModelOnTxRiak(TestCase):
         yield f2.save()
 
         s2 = yield simple_model.load("foo")
-        print s2.backlinks.foreignkeymodels()
+        results = yield s2.backlinks.foreignkeymodels()
+        self.assertEqual(sorted(s.key for s in results), ["bar1", "bar2"])
+        self.assertEqual([s.__class__ for s in results],
+                         [ForeignKeyModel] * 2)
 
     @inlineCallbacks
     def test_inherited_model(self):
