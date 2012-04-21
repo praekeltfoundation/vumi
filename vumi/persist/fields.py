@@ -2,6 +2,10 @@
 
 """Field types for Vumi's persistence models."""
 
+from datetime import datetime
+
+from vumi.message import VUMI_DATE_FORMAT
+
 
 class ValidationError(Exception):
     """Raised when a value assigned to a field is invalid."""
@@ -108,6 +112,71 @@ class Tag(Field):
 
     def from_riak(self, value):
         return tuple(value)
+
+
+class VumiMessageDescriptor(FieldDescriptor):
+    """Property for getting and setting fields."""
+
+    def setup(self, cls):
+        super(VumiMessageDescriptor, self).setup(cls)
+        if self.field.prefix is None:
+            self.prefix = "%s." % self.key
+        else:
+            self.prefix = self.field.prefix
+
+    def _clear_keys(self, modelobj):
+        for key in modelobj._riak_object._data.keys():
+            if key.startswith(self.prefix):
+                del modelobj._riak_object._data[key]
+
+    def _timestamp_to_json(self, dt):
+        return dt.strftime(VUMI_DATE_FORMAT)
+
+    def _timestamp_from_json(self, value):
+        return datetime.strptime(value, VUMI_DATE_FORMAT)
+
+    def set_value(self, modelobj, msg):
+        """Set the value associated with this descriptor."""
+        self._clear_keys(modelobj)
+        for key, value in msg.payload.iteritems():
+            # TODO: timestamp as datetime in payload must die.
+            if key == "timestamp":
+                value = self._timestamp_to_json(value)
+            full_key = "%s%s" % (self.prefix, key)
+            modelobj._riak_object._data[full_key] = value
+
+    def get_value(self, modelobj):
+        """Get the value associated with this descriptor."""
+        payload = {}
+        for key, value in modelobj._riak_object._data.iteritems():
+            if key.startswith(self.prefix):
+                # TODO: timestamp as datetime in payload must die.
+                if key == "timestamp":
+                    value = self._timestamp_from_json(value)
+                payload[key[len(self.prefix):]] = value
+        return self.field.message_class(**payload)
+
+
+class VumiMessage(Field):
+    """Field that represent a Vumi message.
+
+    :param class message_class:
+        The class of the message objects being stored.
+        Usually one of Message, TransportUserMessage or TransportEvent.
+    :param string prefix:
+        The prefix to use when storing message payload keys in Riak. Default is
+        the name of the field followed by a dot ('.').
+    """
+    descriptor_class = VumiMessageDescriptor
+
+    def __init__(self, message_class, prefix=None):
+        self.message_class = message_class
+        self.prefix = prefix
+
+    def validate(self, value):
+        if not isinstance(value, self.message_class):
+            raise ValidationError("Message %r should be an instance of %r"
+                                  % (value, self.message_class))
 
 
 class FieldWithSubtype(Field):

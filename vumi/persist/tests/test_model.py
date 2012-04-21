@@ -4,14 +4,20 @@ from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.persist.model import Model
-from vumi.persist.fields import Integer, Unicode, Dynamic, ListOf, ForeignKey
+from vumi.persist.fields import (
+    Integer, Unicode, VumiMessage, Dynamic, ListOf, ForeignKey)
 from vumi.persist.riak_manager import RiakManager
 from vumi.persist.txriak_manager import TxRiakManager
+from vumi.message import TransportUserMessage
 
 
 class SimpleModel(Model):
     a = Integer()
     b = Unicode()
+
+
+class VumiMessageModel(Model):
+    msg = VumiMessage(TransportUserMessage)
 
 
 class DynamicModel(Model):
@@ -32,6 +38,14 @@ class InheritedModel(SimpleModel):
 
 
 class TestModelOnTxRiak(TestCase):
+
+    # TODO: all copies of mkmsg must be unified! 
+    def mkmsg(self, **kw):
+        kw.setdefault("transport_name", "sphex")
+        kw.setdefault("transport_type", "sphex_type")
+        kw.setdefault("to_addr", "1234")
+        kw.setdefault("from_addr", "5678")
+        return TransportUserMessage(**kw)
 
     @inlineCallbacks
     def setUp(self):
@@ -56,6 +70,16 @@ class TestModelOnTxRiak(TestCase):
         s2 = yield simple_model.load("foo")
         self.assertEqual(s2.a, 5)
         self.assertEqual(s2.b, u'3')
+
+    @inlineCallbacks
+    def test_vumimessage_field(self):
+        msg_model = self.manager.proxy(VumiMessageModel)
+        msg = self.mkmsg()
+        m1 = msg_model("foo", msg=msg)
+        yield m1.save()
+
+        m2 = yield msg_model.load("foo")
+        self.assertEqual(m1.msg, m2.msg)
 
     @inlineCallbacks
     def test_dynamic_fields(self):
