@@ -188,7 +188,7 @@ class MessageStore(object):
 
         if batch_id is not None:
             batch = yield self.batches.load(batch_id)
-            msg_record.batch = batch
+            msg_record.batch.set(batch)
             yield msg_record.save()
 
     @inlineCallbacks

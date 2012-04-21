@@ -114,29 +114,41 @@ class TestMessageStore(ApplicationTestCase):
         self.assertEqual(stored_ack, ack)
         self.assertEqual(message_events, [ack])
 
+    @inlineCallbacks
     def test_add_inbound_message(self):
         msg = self.mkmsg_in(content="infoo")
         msg_id = msg['message_id']
-        self.store.add_inbound_message(msg)
+        yield self.store.add_inbound_message(msg)
 
-        self.assertEqual(self.store.get_inbound_message(msg_id), msg)
+        stored_msg = yield self.store.get_inbound_message(msg_id)
 
+        self.assertEqual(stored_msg, msg)
+
+    @inlineCallbacks
     def test_add_inbound_message_with_batch_id(self):
-        batch_id = self.store.batch_start([("pool1", "default10001")])
+        batch_id = yield self.store.batch_start([("pool1", "default10001")])
         msg = self.mkmsg_in(content="infoo", to_addr="+1234567810001",
                             transport_type="sms")
         msg_id = msg['message_id']
-        self.store.add_inbound_message(msg, batch_id=batch_id)
+        yield self.store.add_inbound_message(msg, batch_id=batch_id)
 
-        self.assertEqual(self.store.get_inbound_message(msg_id), msg)
-        self.assertEqual(self.store.batch_replies(batch_id), [msg_id])
+        stored_msg = yield self.store.get_inbound_message(msg_id)
+        batch_replies = yield self.store.batch_replies(batch_id)
 
+        self.assertEqual(stored_msg, msg)
+        self.assertEqual(batch_replies, [msg])
+
+    @inlineCallbacks
     def test_add_inbound_message_with_tag(self):
-        batch_id = self.store.batch_start([("pool1", "default10001")])
+        batch_id = yield self.store.batch_start([("pool1", "default10001")])
         msg = self.mkmsg_in(content="infoo", to_addr="+1234567810001",
                             transport_type="sms")
         msg_id = msg['message_id']
-        self.store.add_inbound_message(msg, tag=("pool1", "default10001"))
+        yield self.store.add_inbound_message(msg,
+                                             tag=("pool1", "default10001"))
 
-        self.assertEqual(self.store.get_inbound_message(msg_id), msg)
-        self.assertEqual(self.store.batch_replies(batch_id), [msg_id])
+        stored_msg = yield self.store.get_inbound_message(msg_id)
+        batch_replies = yield self.store.batch_replies(batch_id)
+
+        self.assertEqual(stored_msg, msg)
+        self.assertEqual(batch_replies, [msg])
