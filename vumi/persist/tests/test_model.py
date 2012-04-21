@@ -4,7 +4,7 @@ from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.persist.model import Model
-from vumi.persist.fields import Integer, Unicode, Dynamic, ForeignKey
+from vumi.persist.fields import Integer, Unicode, Dynamic, ListOf, ForeignKey
 from vumi.persist.riak_manager import RiakManager
 from vumi.persist.txriak_manager import TxRiakManager
 
@@ -17,6 +17,10 @@ class SimpleModel(Model):
 class DynamicModel(Model):
     a = Unicode()
     contact_info = Dynamic()
+
+
+class ListOfModel(Model):
+    items = ListOf(Integer())
 
 
 class ForeignKeyModel(Model):
@@ -67,6 +71,25 @@ class TestModelOnTxRiak(TestCase):
         self.assertEqual(d2.contact_info.cellphone, u"+27123")
         self.assertEqual(d2.contact_info.telephone, u"+2755")
         self.assertEqual(d2.contact_info.honorific, u"BDFL")
+
+    @inlineCallbacks
+    def test_listof_fields(self):
+        list_model = self.manager.proxy(ListOfModel)
+        l1 = list_model("foo")
+        l1.items.append(1)
+        l1.items.append(2)
+        yield l1.save()
+
+        l2 = yield list_model.load("foo")
+        self.assertEqual(l2.items[0], 1)
+        self.assertEqual(l2.items[1], 2)
+        self.assertEqual(list(l2.items), [1, 2])
+
+        del l2.items[0]
+        self.assertEqual(list(l2.items), [2])
+
+        l2.items.extend([3, 4, 5])
+        self.assertEqual(list(l2.items), [2, 3, 4, 5])
 
     @inlineCallbacks
     def test_foreignkey_fields(self):

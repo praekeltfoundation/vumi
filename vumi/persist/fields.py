@@ -110,6 +110,31 @@ class Tag(Field):
         return tuple(value)
 
 
+class FieldWithSubtype(Field):
+    """Base class for a field that is a collection of other fields of a
+    single type.
+
+    :param Field field_type:
+        The field specification for the dynamic values. Default is Unicode().
+    """
+    def __init__(self, field_type=None):
+        if field_type is None:
+            field_type = Unicode()
+        if field_type.descriptor_class is not FieldDescriptor:
+            raise RuntimeError("Dynamic fields only supports fields that"
+                               " that use the basic FieldDescriptor class")
+        self.field_type = field_type
+
+    def validate(self, value):
+        self.field_type.validate(value)
+
+    def to_riak(self, value):
+        return self.field_type.to_riak(value)
+
+    def from_riak(self, value):
+        return self.field_type.from_riak(value)
+
+
 class DynamicDescriptor(FieldDescriptor):
     """A field descriptor for dynamic fields."""
     def setup(self, cls):
@@ -130,7 +155,7 @@ class DynamicDescriptor(FieldDescriptor):
         raise RuntimeError("DynamicDescriptors should never be assigned to.")
 
     def set_dynamic_value(self, modelobj, dynamic_key, value):
-        self.field.field_type.validate(value)
+        self.field.validate(value)
         key = self.prefix + dynamic_key
         modelobj._riak_object._data[key] = self.field.to_riak(value)
 
@@ -148,7 +173,7 @@ class DynamicProxy(object):
         descriptor.set_dynamic_value(modelobj, key, value)
 
 
-class Dynamic(Field):
+class Dynamic(FieldWithSubtype):
     """A field that allows sub-fields to be added dynamically.
 
     :param Field field_type:
@@ -160,22 +185,85 @@ class Dynamic(Field):
     descriptor_class = DynamicDescriptor
 
     def __init__(self, field_type=None, prefix=None):
-        if field_type is None:
-            field_type = Unicode()
-        if field_type.descriptor_class is not FieldDescriptor:
-            raise RuntimeError("Dynamic fields only supports fields that"
-                               " that use the basic FieldDescriptor class")
-        self.field_type = field_type
+        super(Dynamic, self).__init__(field_type=field_type)
         self.prefix = prefix
 
-    def validate(self, value):
-        self.field_type.validate(value)
 
-    def to_riak(self, value):
-        return self.field_type.to_riak(value)
+class ListOfDescriptor(FieldDescriptor):
+    """A field descriptor for ListOf fields."""
 
-    def from_riak(self, value):
-        return self.field_type.from_riak(value)
+    def get_value(self, modelobj):
+        return ListProxy(self, modelobj)
+
+    def set_value(self, modelobj, value):
+        raise RuntimeError("ListOfDescriptors should never be assigned to.")
+
+    def _ensure_list(self, modelobj):
+        if self.key not in modelobj._riak_object._data:
+            modelobj._riak_object._data[self.key] = []
+
+    def get_list_item(self, modelobj, list_idx):
+        raw_item = modelobj._riak_object._data[self.key][list_idx]
+        return self.field.from_riak(raw_item)
+
+    def set_list_item(self, modelobj, list_idx, value):
+        self.field.validate(value)
+        raw_value = self.field.to_riak(value)
+        self._ensure_list(modelobj)
+        modelobj._riak_object._data[self.key][list_idx] = raw_value
+
+    def del_list_item(self, modelobj, list_idx):
+        del modelobj._riak_object._data[self.key][list_idx]
+
+    def append_list_item(self, modelobj, value):
+        self.field.validate(value)
+        raw_value = self.field.to_riak(value)
+        self._ensure_list(modelobj)
+        modelobj._riak_object._data[self.key].append(raw_value)
+
+    def extend_list(self, modelobj, values):
+        for value in values:
+            self.field.validate(value)
+        raw_values = [self.field.to_riak(value) for value in values]
+        self._ensure_list(modelobj)
+        modelobj._riak_object._data[self.key].extend(raw_values)
+
+    def iter_list(self, modelobj):
+        for raw_value in modelobj._riak_object._data[self.key]:
+            yield self.field.from_riak(raw_value)
+
+
+class ListProxy(object):
+    def __init__(self, descriptor, modelobj):
+        self._descriptor = descriptor
+        self._modelobj = modelobj
+
+    def __getitem__(self, idx):
+        return self._descriptor.get_list_item(self._modelobj, idx)
+
+    def __setitem__(self, idx, value):
+        self._descriptor.set_list_item(self._modelobj, idx, value)
+
+    def __delitem__(self, idx):
+        self._descriptor.del_list_item(self._modelobj, idx)
+
+    def append(self, idx):
+        self._descriptor.append_list_item(self._modelobj, idx)
+
+    def extend(self, values):
+        self._descriptor.extend_list(self._modelobj, values)
+
+    def __iter__(self):
+        return self._descriptor.iter_list(self._modelobj)
+
+
+class ListOf(FieldWithSubtype):
+    """A field that contains a list of values of some other type.
+
+    :param Field field_type:
+    The field specification for the dynamic values. Default is Unicode().
+    """
+    descriptor_class = ListOfDescriptor
 
 
 class ForeignKeyDescriptor(FieldDescriptor):
