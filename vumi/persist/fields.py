@@ -374,6 +374,11 @@ class ForeignKeyDescriptor(FieldDescriptor):
         key = indexes[0]
         return key
 
+    def set_foreign_key(self, modelobj, foreign_key):
+        modelobj._riak_object.remove_index(self.index_name)
+        if foreign_key is not None:
+            modelobj._riak_object.add_index(self.index_name, foreign_key)
+
     def get_foreign_object(self, modelobj):
         key = self.get_foreign_key(modelobj)
         if key is None:
@@ -395,9 +400,13 @@ class ForeignKeyProxy(object):
         self._descriptor = descriptor
         self._modelobj = modelobj
 
-    @property
-    def key(self):
+    def _get_key(self):
         return self._descriptor.get_foreign_key(self._modelobj)
+
+    def _set_key(self, foreign_key):
+        return self._descriptor.set_foreign_key(self._modelobj, foreign_key)
+
+    key = property(fget=_get_key, fset=_set_key)
 
     def get(self):
         return self._descriptor.get_foreign_object(self._modelobj)

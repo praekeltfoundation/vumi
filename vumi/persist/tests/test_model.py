@@ -143,6 +143,14 @@ class TestModelOnTxRiak(TestCase):
         s3 = yield f2.simple.get()
         self.assertEqual(s3, None)
 
+        f2.simple.key = "foo"
+        s4 = yield f2.simple.get()
+        self.assertEqual(s4.key, "foo")
+
+        f2.simple.key = None
+        s5 = yield f2.simple.get()
+        self.assertEqual(s5, None)
+
     @inlineCallbacks
     def test_reverse_foreingkey_fields(self):
         fk_model = self.manager.proxy(ForeignKeyModel)
