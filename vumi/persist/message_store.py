@@ -4,34 +4,57 @@
 """Message store."""
 
 from uuid import uuid4
-from datetime import datetime
 
-from vumi.message import (TransportEvent, TransportUserMessage,
-                          from_json, to_json, VUMI_DATE_FORMAT)
+from twisted.internet.defer import inlineCallbacks, returnValue
+
+from vumi.message import TransportEvent, TransportUserMessage
 from vumi.persist.model import Model
-from vumi.persist.fields import Tag, Dynamic, ForeignKey
+from vumi.persist.fields import VumiMessage, ForeignKey, ListOf, Tag
 
 
 class Batch(Model):
     # key is batch_id
+    tags = ListOf(Tag())
+
+
+class CurrentTag(Model):
+    # key is flattened tag
+    current_batch = ForeignKey(Batch)
     tag = Tag()
+
+    @staticmethod
+    def _flatten_tag(tag):
+        return "%s:%s" % tag
+
+    @staticmethod
+    def _split_key(key):
+        return tuple(key.split(':', 1))
+
+    def __init__(self, manager, key, **field_values):
+        if isinstance(key, tuple):
+            # key looks like a tag
+            tag, key = key, self._flatten_tag(key)
+        else:
+            tag, key = self._split_key(key), key
+        super(CurrentTag, self).__init__(manager, key, tag=tag,
+                                         **field_values)
 
 
 class OutboundMessage(Model):
     # key is message_id
-    body = Dynamic()
+    msg = VumiMessage(TransportUserMessage)
     batch = ForeignKey(Batch)
 
 
 class Event(Model):
     # key is message_id
-    body = Dynamic()
+    event = VumiMessage(TransportEvent)
     message = ForeignKey(OutboundMessage)
 
 
 class InboundMessage(Model):
     # key is message_id
-    body = Dynamic()
+    msg = VumiMessage(TransportUserMessage)
     batch = ForeignKey(Batch)
 
 
@@ -75,102 +98,130 @@ class MessageStore(object):
        might be better to have "timestamp:current_message_id").
     """
 
-    def __init__(self, r_server, r_prefix):
+    def __init__(self, manager, r_server, r_prefix):
+        self.batches = manager.proxy(Batch)
+        self.outbound_messages = manager.proxy(OutboundMessage)
+        self.events = manager.proxy(Event)
+        self.inbound_messages = manager.proxy(InboundMessage)
+        self.current_tags = manager.proxy(CurrentTag)
+        # for batch status cache
         self.r_server = r_server
         self.r_prefix = r_prefix
 
+    @inlineCallbacks
     def batch_start(self, tags):
         batch_id = uuid4().get_hex()
-        batch_common = {u'tags': tags}
-        tag_common = {u'current_batch_id': batch_id}
-        self._init_status(batch_id)
-        self._put_common('batches', batch_id, 'common', batch_common)
-        self._put_row('batches', batch_id, 'messages', {})
+        batch = self.batches(batch_id)
+        batch.tags.extend(tags)
+        yield batch.save()
+
         for tag in tags:
-            self._put_common('tags', self._tag_key(tag), 'common', tag_common)
-        return batch_id
+            tag_record = yield self.current_tags.load(tag)
+            if tag_record is None:
+                tag_record = self.current_tags(tag)
+            tag_record.current_batch.set(batch)
+            yield tag_record.save()
 
+        self._init_status(batch_id)
+        returnValue(batch_id)
+
+    @inlineCallbacks
     def batch_done(self, batch_id):
-        tags = self.batch_common(batch_id)['tags']
-        tag_common = {u'current_batch_id': None}
-        if tags is not None:
-            for tag in tags:
-                self._put_common('tags', self._tag_key(tag), 'common',
-                                 tag_common)
+        batch = yield self.batches.load(batch_id)
+        tags = yield batch.backlinks.currenttags()
+        for tag in tags:
+            tag.current_batch.set(None)
+            yield tag.save()
 
+    @inlineCallbacks
     def add_outbound_message(self, msg, tag=None, batch_id=None):
         msg_id = msg['message_id']
-        self._put_msg('messages', msg_id, 'body', msg)
-        self._put_row('messages', msg_id, 'events', {})
+        msg_record = self.outbound_messages(msg_id)
+        msg_record.msg = msg
+        yield msg_record.save()
 
         if batch_id is None and tag is not None:
-            batch_id = self.tag_common(tag)['current_batch_id']
+            tag_record = yield self.current_tags.load(tag)
+            batch_id = tag_record.current_batch.key
 
         if batch_id is not None:
-            self._put_row('messages', msg_id, 'batches', {batch_id: '1'})
-            self._put_row('batches', batch_id, 'messages', {msg_id: '1'})
+            batch = yield self.batches.load(batch_id)
+            msg_record.batch = batch
+            yield msg_record.save()
 
             self._inc_status(batch_id, 'message')
             self._inc_status(batch_id, 'sent')
 
+    @inlineCallbacks
     def get_outbound_message(self, msg_id):
-        return self._get_msg('messages', msg_id, 'body', TransportUserMessage)
+        msg = yield self.outbound_messages.load(msg_id)
+        returnValue(msg.msg)
 
+    @inlineCallbacks
     def add_event(self, event):
         event_id = event['event_id']
-        self._put_msg('events', event_id, 'body', event)
+        event_record = self.events(event_id)
+        event_record.event = event
         msg_id = event['user_message_id']
-        self._put_row('messages', msg_id, 'events', {event_id: '1'})
+        msg_record = yield self.outbound_messages.load(msg_id)
+        event_record.message.set(msg_record)
+        yield event_record.save()
 
-        event_type = event['event_type']
-        for batch_id in self._get_row('messages', msg_id, 'batches'):
-            self._inc_status(batch_id, event_type)
+        batch_record = yield msg_record.batch.get()
+        self._inc_status(batch_record.key, event['event_type'])
 
+    @inlineCallbacks
     def get_event(self, event_id):
-        return self._get_msg('events', event_id, 'body',
-                             TransportEvent)
+        event = yield self.events.load(event_id)
+        returnValue(event.event)
 
+    @inlineCallbacks
     def add_inbound_message(self, msg, tag=None, batch_id=None):
         msg_id = msg['message_id']
-        self._put_msg('inbound_messages', msg_id, 'body', msg)
+        msg_record = self.inbound_messages(msg_id)
+        msg_record.msg = msg
+        yield msg_record.save()
 
         if batch_id is None and tag is not None:
-            batch_id = self.tag_common(tag)['current_batch_id']
+            tag_record = yield self.current_tags.load(tag)
+            batch_id = tag_record.current_batch.key
 
         if batch_id is not None:
-            self._put_row('batches', batch_id, 'replies', {msg_id: '1'})
+            batch = yield self.batches.load(batch_id)
+            msg_record.batch = batch
+            yield msg_record.save()
 
+    @inlineCallbacks
     def get_inbound_message(self, msg_id):
-        return self._get_msg('inbound_messages', msg_id, 'body',
-                             TransportUserMessage)
+        msg = yield self.inbound_messages.load(msg_id)
+        returnValue(msg.msg)
 
-    def batch_common(self, batch_id):
-        common = self._get_common('batches', batch_id, 'common')
-        tags = common['tags']
-        if tags is not None:
-            common['tags'] = [tuple(x) for x in tags]
-        return common
+    def get_batch(self, batch_id):
+        return self.batches.load(batch_id)
+
+    def get_tag_info(self, tag):
+        return self.current_tags.load(tag)
 
     def batch_status(self, batch_id):
         return self._get_status(batch_id)
 
-    def tag_common(self, tag):
-        common = self._get_common('tags', self._tag_key(tag), 'common')
-        if not common:
-            common = {u'current_batch_id': None}
-        return common
-
+    @inlineCallbacks
     def batch_messages(self, batch_id):
-        return self._get_row('batches', batch_id, 'messages').keys()
+        batch = yield self.batches.load(batch_id)
+        messages = yield batch.backlinks.outboundmessages()
+        returnValue([m.msg for m in messages])
 
+    @inlineCallbacks
     def batch_replies(self, batch_id):
-        return self._get_row('batches', batch_id, 'replies').keys()
+        batch = yield self.batches.load(batch_id)
+        messages = yield batch.backlinks.inboundmessages()
+        returnValue([m.msg for m in messages])
 
-    def message_batches(self, msg_id):
-        return self._get_row('messages', msg_id, 'batches').keys()
-
+    @inlineCallbacks
     def message_events(self, msg_id):
-        return self._get_row('messages', msg_id, 'events').keys()
+        message = yield self.outbound_messages.load(msg_id)
+        events = yield message.backlinks.events()
+        returnValue([e.event for e in events])
 
     # batch status is stored in Redis as a cache of batch progress
 
@@ -192,51 +243,3 @@ class MessageStore(object):
         raw_statuses = self.r_server.hgetall(batch_key)
         statuses = dict((k, int(v)) for k, v in raw_statuses.items())
         return statuses
-
-    # tag <-> batch mappings are stored in Redis
-
-    def _tag_key(self, tag):
-        return "%s:%s" % tag
-
-    # interface to redis -- intentionally made to look
-    # like a limited subset of HBase.
-
-    def _get_msg(self, table, row_id, family, cls):
-        payload = self._get_common(table, row_id, family)
-        # TODO: this is a hack needed because from_json(to_json(x)) != x
-        #       if x is a datetime. Remove this once from_json and to_json
-        #       are fixed.
-        payload['timestamp'] = datetime.strptime(payload['timestamp'],
-                                                 VUMI_DATE_FORMAT)
-        return cls(**payload)
-
-    def _put_msg(self, table, row_id, family, msg):
-        return self._put_common(table, row_id, family, msg.payload)
-
-    def _get_common(self, table, row_id, family):
-        """Retrieve and decode a set of JSON-encoded values."""
-        data = self._get_row(table, row_id, family)
-        pydata = dict((k.decode('utf-8'), from_json(v))
-                      for k, v in data.items())
-        return pydata
-
-    def _put_common(self, table, row_id, family, pydata):
-        """JSON-encode and update a set of values."""
-        data = dict((k.encode('utf-8'), to_json(v)) for k, v
-                    in pydata.items())
-        return self._put_row(table, row_id, family, data)
-
-    def _get_row(self, table, row_id, family):
-        """Retreive a set of column values from storage."""
-        r_key = self._row_key(table, row_id, family)
-        return self.r_server.hgetall(r_key)
-
-    def _put_row(self, table, row_id, family, data):
-        """Update a set of column values in storage."""
-        r_key = self._row_key(table, row_id, family)
-        if data:
-            self.r_server.hmset(r_key, data)
-
-    def _row_key(self, table, row_id, family):
-        """Internal method for use by _get_row and _put_row."""
-        return ":".join([self.r_prefix, table, family, row_id])
