@@ -1,4 +1,4 @@
-# -*- test-case-name: vumi.application.tests.test_message_store -*-
+# -*- test-case-name: vumi.persist.tests.test_message_store -*-
 # -*- coding: utf-8 -*-
 
 """Message store."""
@@ -8,6 +8,31 @@ from datetime import datetime
 
 from vumi.message import (TransportEvent, TransportUserMessage,
                           from_json, to_json, VUMI_DATE_FORMAT)
+from vumi.persist.model import Model
+from vumi.persist.fields import Tag, Dynamic, ForeignKey
+
+
+class Batch(Model):
+    # key is batch_id
+    tag = Tag()
+
+
+class OutboundMessage(Model):
+    # key is message_id
+    body = Dynamic()
+    batch = ForeignKey(Batch)
+
+
+class Event(Model):
+    # key is message_id
+    body = Dynamic()
+    message = ForeignKey(OutboundMessage)
+
+
+class InboundMessage(Model):
+    # key is message_id
+    body = Dynamic()
+    batch = ForeignKey(Batch)
 
 
 class MessageStore(object):

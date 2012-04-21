@@ -4,6 +4,7 @@ import redis
 
 from vumi.middleware.base import BaseMiddleware
 from vumi.middleware.tagger import TaggingMiddleware
+from vumi.persist.message_store import MessageStore
 
 
 class StoringMiddleware(BaseMiddleware):
@@ -35,8 +36,6 @@ class StoringMiddleware(BaseMiddleware):
         store_prefix = self.config.get('store_prefix', 'message_store')
         r_config = self.config.get('redis', {})
         r_server = redis.Redis(**r_config)
-        # import delayed to avoid circular import
-        from vumi.application import MessageStore
         self.store = MessageStore(r_server, store_prefix)
 
     def handle_inbound(self, message, endpoint):
