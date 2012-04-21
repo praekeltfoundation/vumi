@@ -124,7 +124,7 @@ class DynamicDescriptor(FieldDescriptor):
 
     def get_dynamic_value(self, modelobj, dynamic_key):
         key = self.prefix + dynamic_key
-        return modelobj._riak_object._data[key]
+        return self.field.from_riak(modelobj._riak_object._data[key])
 
     def set_value(self, modelobj, value):
         raise RuntimeError("DynamicDescriptors should never be assigned to.")
@@ -132,7 +132,7 @@ class DynamicDescriptor(FieldDescriptor):
     def set_dynamic_value(self, modelobj, dynamic_key, value):
         self.field.field_type.validate(value)
         key = self.prefix + dynamic_key
-        modelobj._riak_object._data[key] = value
+        modelobj._riak_object._data[key] = self.field.to_riak(value)
 
 
 class DynamicProxy(object):
@@ -170,6 +170,12 @@ class Dynamic(Field):
 
     def validate(self, value):
         self.field_type.validate(value)
+
+    def to_riak(self, value):
+        return self.field_type.to_riak(value)
+
+    def from_riak(self, value):
+        return self.field_type.from_riak(value)
 
 
 class ForeignKeyDescriptor(FieldDescriptor):
