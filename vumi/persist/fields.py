@@ -22,11 +22,11 @@ class FieldDescriptor(object):
 
     def set_value(self, modelobj, value):
         """Set the value associated with this descriptor."""
-        modelobj._riak_object._data[self.key] = value
+        modelobj._riak_object._data[self.key] = self.field.to_riak(value)
 
     def get_value(self, modelobj):
         """Get the value associated with this descriptor."""
-        return modelobj._riak_object._data[self.key]
+        return self.field.from_riak(modelobj._riak_object._data[self.key])
 
     def __get__(self, instance, owner):
         if instance is None:
@@ -55,6 +55,14 @@ class Field(object):
         Raise an exception if it isn't.
         """
         pass
+
+    def to_riak(self, value):
+        """Convert a value to something storable by Riak."""
+        return value
+
+    def from_riak(self, value):
+        """Convert a value from something stored by Riak to Python."""
+        return value
 
 
 class Integer(Field):
@@ -86,6 +94,20 @@ class Unicode(Field):
         if not isinstance(value, unicode):
             raise ValidationError("Value %r is not a unicode string."
                                   % (value,))
+
+
+class Tag(Field):
+    """Field that represents a Vumi tag."""
+    def validate(self, value):
+        if not isinstance(value, tuple) or len(value) != 2:
+            raise ValidationError("Tags %r should be a (pool, tag_name)"
+                                  " tuple" % (value,))
+
+    def to_riak(self, value):
+        return list(value)
+
+    def from_riak(self, value):
+        return tuple(value)
 
 
 class DynamicDescriptor(FieldDescriptor):
