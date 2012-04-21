@@ -99,6 +99,7 @@ class MessageStore(object):
     """
 
     def __init__(self, manager, r_server, r_prefix):
+        self.manager = manager
         self.batches = manager.proxy(Batch)
         self.outbound_messages = manager.proxy(OutboundMessage)
         self.events = manager.proxy(Event)
@@ -154,7 +155,7 @@ class MessageStore(object):
     @inlineCallbacks
     def get_outbound_message(self, msg_id):
         msg = yield self.outbound_messages.load(msg_id)
-        returnValue(msg.msg)
+        returnValue(msg.msg if msg is not None else None)
 
     @inlineCallbacks
     def add_event(self, event):
@@ -166,13 +167,15 @@ class MessageStore(object):
         yield event_record.save()
 
         msg_record = yield self.outbound_messages.load(msg_id)
-        batch_record = yield msg_record.batch.get()
-        self._inc_status(batch_record.key, event['event_type'])
+        if msg_record is not None:
+            batch_record = yield msg_record.batch.get()
+            if batch_record is not None:
+                self._inc_status(batch_record.key, event['event_type'])
 
     @inlineCallbacks
     def get_event(self, event_id):
         event = yield self.events.load(event_id)
-        returnValue(event.event)
+        returnValue(event.event if event is not None else None)
 
     @inlineCallbacks
     def add_inbound_message(self, msg, tag=None, batch_id=None):
@@ -193,7 +196,7 @@ class MessageStore(object):
     @inlineCallbacks
     def get_inbound_message(self, msg_id):
         msg = yield self.inbound_messages.load(msg_id)
-        returnValue(msg.msg)
+        returnValue(msg.msg if msg is not None else None)
 
     def get_batch(self, batch_id):
         return self.batches.load(batch_id)
