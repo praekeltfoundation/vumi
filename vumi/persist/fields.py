@@ -385,7 +385,8 @@ class ForeignKeyDescriptor(FieldDescriptor):
 
     def set_foreign_object(self, modelobj, otherobj):
         modelobj._riak_object.remove_index(self.index_name)
-        modelobj._riak_object.add_index(self.index_name, otherobj.key)
+        if otherobj is not None:
+            modelobj._riak_object.add_index(self.index_name, otherobj.key)
 
 
 class ForeignKeyProxy(object):
