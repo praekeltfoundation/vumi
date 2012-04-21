@@ -72,6 +72,12 @@ class TestModelOnTxRiak(TestCase):
         self.assertEqual(s2.b, u'3')
 
     @inlineCallbacks
+    def test_nonexist_keys_return_none(self):
+        simple_model = self.manager.proxy(SimpleModel)
+        s = yield simple_model.load("foo")
+        self.assertEqual(s, None)
+
+    @inlineCallbacks
     def test_vumimessage_field(self):
         msg_model = self.manager.proxy(VumiMessageModel)
         msg = self.mkmsg()

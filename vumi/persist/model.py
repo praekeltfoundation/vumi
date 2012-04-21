@@ -137,7 +137,11 @@ class Manager(object):
                                   " .store(...)")
 
     def load(self, modelobj):
-        """Load the data for the modelobj from Riak."""
+        """Load the data for the modelobj from Riak.
+
+        If the key of the modelobj doesn't exist, this method should return
+        None instead of the modelobj.
+        """
         raise NotImplementedError("Sub-classes of Manager should implement"
                                   " .store(...)")
 

@@ -32,7 +32,8 @@ class TxRiakManager(Manager):
 
     def load(self, modelobj):
         d = modelobj._riak_object.reload()
-        d.addCallback(lambda result: modelobj)
+        d.addCallback(lambda result: modelobj
+                      if result.get_data() is not None else None)
         return d
 
     def riak_map_reduce(self):

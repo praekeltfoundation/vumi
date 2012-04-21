@@ -29,8 +29,8 @@ class RiakManager(Manager):
         return modelobj
 
     def load(self, modelobj):
-        modelobj._riak_object.reload()
-        return modelobj
+        result = modelobj._riak_object.reload()
+        return modelobj if result.get_data() is not None else None
 
     def riak_map_reduce(self):
         return RiakMapReduce(self.client)
