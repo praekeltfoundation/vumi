@@ -97,18 +97,22 @@ class TestMessageStore(ApplicationTestCase):
             'ack': 0, 'delivery_report': 0, 'message': 1, 'sent': 1,
             })
 
+    @inlineCallbacks
     def test_add_ack_event(self):
-        batch_id = self.store.batch_start([("pool", "tag")])
+        batch_id = yield self.store.batch_start([("pool", "tag")])
         msg = self.mkmsg_out(content="outfoo")
         msg_id = msg['message_id']
         ack = TransportEvent(user_message_id=msg_id, event_type='ack',
                              sent_message_id='xyz')
         ack_id = ack['event_id']
-        self.store.add_outbound_message(msg, batch_id=batch_id)
-        self.store.add_event(ack)
+        yield self.store.add_outbound_message(msg, batch_id=batch_id)
+        yield self.store.add_event(ack)
 
-        self.assertEqual(self.store.get_event(ack_id), ack)
-        self.assertEqual(self.store.message_events(msg_id), [ack_id])
+        stored_ack = yield self.store.get_event(ack_id)
+        message_events = yield self.store.message_events(msg_id)
+
+        self.assertEqual(stored_ack, ack)
+        self.assertEqual(message_events, [ack])
 
     def test_add_inbound_message(self):
         msg = self.mkmsg_in(content="infoo")
