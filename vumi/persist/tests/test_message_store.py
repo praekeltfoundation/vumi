@@ -61,16 +61,20 @@ class TestMessageStore(ApplicationTestCase):
         events = yield self.store.message_events(msg_id)
         self.assertEqual(events, [])
 
+    @inlineCallbacks
     def test_add_outbound_message_with_batch_id(self):
-        batch_id = self.store.batch_start([("pool", "tag")])
+        batch_id = yield self.store.batch_start([("pool", "tag")])
         msg = self.mkmsg_out(content="outfoo")
         msg_id = msg['message_id']
-        self.store.add_outbound_message(msg, batch_id=batch_id)
+        yield self.store.add_outbound_message(msg, batch_id=batch_id)
 
-        self.assertEqual(self.store.get_outbound_message(msg_id), msg)
-        self.assertEqual(self.store.message_batches(msg_id), [batch_id])
-        self.assertEqual(self.store.batch_messages(batch_id), [msg_id])
-        self.assertEqual(self.store.message_events(msg_id), [])
+        stored_msg = yield self.store.get_outbound_message(msg_id)
+        batch_messages = yield self.store.batch_messages(batch_id)
+        message_events = yield self.store.message_events(msg_id)
+
+        self.assertEqual(stored_msg, msg)
+        self.assertEqual(batch_messages, [msg])
+        self.assertEqual(message_events, [])
         self.assertEqual(self.store.batch_status(batch_id), {
             'ack': 0, 'delivery_report': 0, 'message': 1, 'sent': 1,
             })
