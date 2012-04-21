@@ -150,10 +150,11 @@ class VumiMessageDescriptor(FieldDescriptor):
         payload = {}
         for key, value in modelobj._riak_object._data.iteritems():
             if key.startswith(self.prefix):
+                key = key[len(self.prefix):]
                 # TODO: timestamp as datetime in payload must die.
                 if key == "timestamp":
                     value = self._timestamp_from_json(value)
-                payload[key[len(self.prefix):]] = value
+                payload[key] = value
         return self.field.message_class(**payload)
 
 

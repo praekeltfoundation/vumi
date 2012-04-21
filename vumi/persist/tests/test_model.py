@@ -86,6 +86,7 @@ class TestModelOnTxRiak(TestCase):
 
         m2 = yield msg_model.load("foo")
         self.assertEqual(m1.msg, m2.msg)
+        self.assertEqual(m2.msg, msg)
 
     @inlineCallbacks
     def test_dynamic_fields(self):
