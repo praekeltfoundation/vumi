@@ -1,10 +1,12 @@
 # -*- test-case-name: vumi.middleware.tests.test_message_storing -*-
 
 import redis
+from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.middleware.base import BaseMiddleware
 from vumi.middleware.tagger import TaggingMiddleware
 from vumi.persist.message_store import MessageStore
+from vumi.persist.txriak_manager import TxRiakManager
 
 
 class StoringMiddleware(BaseMiddleware):
@@ -30,24 +32,31 @@ class StoringMiddleware(BaseMiddleware):
         Default is 'message_store'.
     :param dict redis:
         Redis configuration parameters.
+    :param dict riak:
+        Riak configuration parameters. Must contain at least
+        a bucket_prefix key.
     """
 
     def setup_middleware(self):
         store_prefix = self.config.get('store_prefix', 'message_store')
         r_config = self.config.get('redis', {})
         r_server = redis.Redis(**r_config)
-        self.store = MessageStore(r_server, store_prefix)
+        manager = TxRiakManager.from_config(self.config.get('riak'))
+        self.store = MessageStore(manager, r_server, store_prefix)
 
+    @inlineCallbacks
     def handle_inbound(self, message, endpoint):
         tag = TaggingMiddleware.map_msg_to_tag(message)
-        self.store.add_inbound_message(message, tag=tag)
-        return message
+        yield self.store.add_inbound_message(message, tag=tag)
+        returnValue(message)
 
+    @inlineCallbacks
     def handle_outbound(self, message, endpoint):
         tag = TaggingMiddleware.map_msg_to_tag(message)
-        self.store.add_outbound_message(message, tag=tag)
-        return message
+        yield self.store.add_outbound_message(message, tag=tag)
+        returnValue(message)
 
+    @inlineCallbacks
     def handle_event(self, event, endpoint):
-        self.store.add_event(event)
-        return event
+        yield self.store.add_event(event)
+        returnValue(event)
