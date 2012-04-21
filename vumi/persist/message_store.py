@@ -138,19 +138,18 @@ class MessageStore(object):
         msg_id = msg['message_id']
         msg_record = self.outbound_messages(msg_id)
         msg_record.msg = msg
-        yield msg_record.save()
 
         if batch_id is None and tag is not None:
             tag_record = yield self.current_tags.load(tag)
-            batch_id = tag_record.current_batch.key
+            if tag_record is not None:
+                batch_id = tag_record.current_batch.key
 
         if batch_id is not None:
-            batch = yield self.batches.load(batch_id)
-            msg_record.batch.set(batch)
-            yield msg_record.save()
-
+            msg_record.batch.key = batch_id
             self._inc_status(batch_id, 'message')
             self._inc_status(batch_id, 'sent')
+
+        yield msg_record.save()
 
     @inlineCallbacks
     def get_outbound_message(self, msg_id):
@@ -160,13 +159,13 @@ class MessageStore(object):
     @inlineCallbacks
     def add_event(self, event):
         event_id = event['event_id']
+        msg_id = event['user_message_id']
         event_record = self.events(event_id)
         event_record.event = event
-        msg_id = event['user_message_id']
-        msg_record = yield self.outbound_messages.load(msg_id)
-        event_record.message.set(msg_record)
+        event_record.message.key = msg_id
         yield event_record.save()
 
+        msg_record = yield self.outbound_messages.load(msg_id)
         batch_record = yield msg_record.batch.get()
         self._inc_status(batch_record.key, event['event_type'])
 
@@ -180,16 +179,16 @@ class MessageStore(object):
         msg_id = msg['message_id']
         msg_record = self.inbound_messages(msg_id)
         msg_record.msg = msg
-        yield msg_record.save()
 
         if batch_id is None and tag is not None:
             tag_record = yield self.current_tags.load(tag)
-            batch_id = tag_record.current_batch.key
+            if tag_record is not None:
+                batch_id = tag_record.current_batch.key
 
         if batch_id is not None:
-            batch = yield self.batches.load(batch_id)
-            msg_record.batch.set(batch)
-            yield msg_record.save()
+            msg_record.batch.key = batch_id
+
+        yield msg_record.save()
 
     @inlineCallbacks
     def get_inbound_message(self, msg_id):
