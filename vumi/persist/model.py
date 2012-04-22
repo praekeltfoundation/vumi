@@ -80,6 +80,12 @@ class Model(object):
 
     bucket = None
 
+    # TODO: implement default values
+    # TODO: do a full check that all required values have
+    #       a value at creation
+    # TODO: maybe replace .backlinks with a class-level .query
+    #       or .by_<index-name> method
+
     def __init__(self, manager, key, **field_values):
         self.key = key
         self.manager = manager
