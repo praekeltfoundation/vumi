@@ -152,6 +152,15 @@ class Manager(object):
         raise NotImplementedError("Sub-classes of Manager should implement"
                                   " .store(...)")
 
+    def load_list(self, modelobjs):
+        """Load the data for a list of modelobjs from Riak.
+
+        If the key of a model instance doesn't exist, that instance should
+        be replaced by a None in the list returned.
+        """
+        raise NotImplementedError("Sub-classes of Manager should implement"
+                                  " .store(...)")
+
     def riak_map_reduce(self):
         """Construct a RiakMapReduce object for this client."""
         raise NotImplementedError("Sub-classes of Manager should implement"

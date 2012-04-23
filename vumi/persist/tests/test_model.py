@@ -6,7 +6,7 @@ from twisted.internet.defer import inlineCallbacks
 from vumi.persist.model import Model
 from vumi.persist.fields import (
     ValidationError, Integer, Unicode, VumiMessage, Dynamic, ListOf,
-    ForeignKey)
+    ForeignKey, ManyToMany)
 from vumi.persist.riak_manager import RiakManager
 from vumi.persist.txriak_manager import TxRiakManager
 from vumi.message import TransportUserMessage
@@ -32,6 +32,10 @@ class ListOfModel(Model):
 
 class ForeignKeyModel(Model):
     simple = ForeignKey(SimpleModel)
+
+
+class ManyToManyModel(Model):
+    simples = ManyToMany(SimpleModel)
 
 
 class InheritedModel(SimpleModel):
@@ -152,7 +156,7 @@ class TestModelOnTxRiak(TestCase):
         s5 = yield f2.simple.get()
         self.assertEqual(s5, None)
 
-        self.assertRaises(ValidationError, f2.simple.set, object)
+        self.assertRaises(ValidationError, f2.simple.set, object())
 
     @inlineCallbacks
     def test_reverse_foreingkey_fields(self):
@@ -172,6 +176,39 @@ class TestModelOnTxRiak(TestCase):
         self.assertEqual(sorted(s.key for s in results), ["bar1", "bar2"])
         self.assertEqual([s.__class__ for s in results],
                          [ForeignKeyModel] * 2)
+
+    @inlineCallbacks
+    def test_manytomany_field(self):
+        mm_model = self.manager.proxy(ManyToManyModel)
+        simple_model = self.manager.proxy(SimpleModel)
+
+        s1 = simple_model("foo", a=5, b=u'3')
+        m1 = mm_model("bar")
+        m1.simples.add(s1)
+        yield s1.save()
+        yield m1.save()
+
+        m2 = yield mm_model.load("bar")
+        [s2] = yield m2.simples.get_all()
+
+        self.assertEqual(m2.simples.keys(), ["foo"])
+        self.assertEqual(s2.a, 5)
+        self.assertEqual(s2.b, u"3")
+
+        m2.simples.remove(s2)
+        simples = yield m2.simples.get_all()
+        self.assertEqual(simples, [])
+
+        m2.simples.add_key("foo")
+        [s4] = yield m2.simples.get_all()
+        self.assertEqual(s4.key, "foo")
+
+        m2.simples.remove_key("foo")
+        simples = yield m2.simples.get_all()
+        self.assertEqual(simples, [])
+
+        self.assertRaises(ValidationError, m2.simples.add, object())
+        self.assertRaises(ValidationError, m2.simples.remove, object())
 
     @inlineCallbacks
     def test_inherited_model(self):

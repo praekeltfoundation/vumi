@@ -390,6 +390,7 @@ class ForeignKeyDescriptor(FieldDescriptor):
                            " to.")
 
     def set_foreign_object(self, modelobj, otherobj):
+        self.validate(otherobj)
         modelobj._riak_object.remove_index(self.index_name)
         if otherobj is not None:
             modelobj._riak_object.add_index(self.index_name, otherobj.key)
@@ -412,7 +413,6 @@ class ForeignKeyProxy(object):
         return self._descriptor.get_foreign_object(self._modelobj)
 
     def set(self, otherobj):
-        self._descriptor.validate(otherobj)
         self._descriptor.set_foreign_object(self._modelobj, otherobj)
 
 
@@ -426,6 +426,84 @@ class ForeignKey(Field):
         followed by _bin.
     """
     descriptor_class = ForeignKeyDescriptor
+
+    def __init__(self, othercls, index=None):
+        self.othercls = othercls
+        self.index = index
+
+
+class ManyToManyDescriptor(ForeignKeyDescriptor):
+
+    def validate(self, value):
+        if not (value is None or isinstance(value, self.othercls)):
+            raise ValidationError("Field %r of %r requires a %r (or None)" %
+                                  (self.key, self.cls, self.othercls))
+
+    def get_value(self, modelobj):
+        return ManyToManyProxy(self, modelobj)
+
+    def set_value(self, modelobj, value):
+        raise RuntimeError("ManyToManyDescriptors should never be assigned"
+                           " to.")
+
+    def get_foreign_keys(self, modelobj):
+        indexes = modelobj._riak_object.get_indexes(self.index_name)
+        return indexes
+
+    def add_foreign_key(self, modelobj, foreign_key):
+        modelobj._riak_object.add_index(self.index_name, foreign_key)
+
+    def remove_foreign_key(self, modelobj, foreign_key):
+        modelobj._riak_object.remove_index(self.index_name, foreign_key)
+
+    def get_foreign_objects(self, modelobj):
+        keys = self.get_foreign_keys(modelobj)
+        otherobjs = [self.othercls(modelobj.manager, key) for key in keys]
+        return modelobj.manager.load_list(otherobjs)
+
+    def add_foreign_object(self, modelobj, otherobj):
+        self.validate(otherobj)
+        self.add_foreign_key(modelobj, otherobj.key)
+
+    def remove_foreign_object(self, modelobj, otherobj):
+        self.validate(otherobj)
+        self.remove_foreign_key(modelobj, otherobj.key)
+
+
+class ManyToManyProxy(object):
+    def __init__(self, descriptor, modelobj):
+        self._descriptor = descriptor
+        self._modelobj = modelobj
+
+    def keys(self):
+        return self._descriptor.get_foreign_keys(self._modelobj)
+
+    def add_key(self, foreign_key):
+        self._descriptor.add_foreign_key(self._modelobj, foreign_key)
+
+    def remove_key(self, foreign_key):
+        self._descriptor.remove_foreign_key(self._modelobj, foreign_key)
+
+    def get_all(self):
+        return self._descriptor.get_foreign_objects(self._modelobj)
+
+    def add(self, otherobj):
+        self._descriptor.add_foreign_object(self._modelobj, otherobj)
+
+    def remove(self, otherobj):
+        self._descriptor.remove_foreign_object(self._modelobj, otherobj)
+
+
+class ManyToMany(Field):
+    """A field that links to multiple instances of another class.
+
+    :param Model othercls:
+        The type of model linked to.
+    :param string index:
+        The name to use for the index. The default is the field name
+        followed by _bin.
+    """
+    descriptor_class = ManyToManyDescriptor
 
     def __init__(self, othercls, index=None):
         self.othercls = othercls

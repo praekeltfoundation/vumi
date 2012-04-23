@@ -36,6 +36,18 @@ class TxRiakManager(Manager):
                       if result.get_data() is not None else None)
         return d
 
+    def load_list(self, modelobjs):
+        deferreds = []
+        for modelobj in modelobjs:
+            deferreds.append(self.load(modelobj))
+        d = DeferredList(deferreds)
+
+        def strip_results(mapped_results):
+            return [t[1] for t in mapped_results]
+
+        d.addCallback(strip_results)
+        return d
+
     def riak_map_reduce(self):
         return RiakMapReduce(self.client)
 
