@@ -360,8 +360,8 @@ class ForeignKeyDescriptor(FieldDescriptor):
         return self.cls.load(manager, result.get_key())
 
     def validate(self, value):
-        if not isinstance(value, self.othercls):
-            raise ValidationError("Field %r of %r requires a %r" %
+        if not (value is None or isinstance(value, self.othercls)):
+            raise ValidationError("Field %r of %r requires a %r (or None)" %
                                   (self.key, self.cls, self.othercls))
 
     def get_value(self, modelobj):
@@ -412,6 +412,7 @@ class ForeignKeyProxy(object):
         return self._descriptor.get_foreign_object(self._modelobj)
 
     def set(self, otherobj):
+        self._descriptor.validate(otherobj)
         self._descriptor.set_foreign_object(self._modelobj, otherobj)
 
 

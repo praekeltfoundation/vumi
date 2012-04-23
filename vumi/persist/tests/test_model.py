@@ -5,7 +5,8 @@ from twisted.internet.defer import inlineCallbacks
 
 from vumi.persist.model import Model
 from vumi.persist.fields import (
-    Integer, Unicode, VumiMessage, Dynamic, ListOf, ForeignKey)
+    ValidationError, Integer, Unicode, VumiMessage, Dynamic, ListOf,
+    ForeignKey)
 from vumi.persist.riak_manager import RiakManager
 from vumi.persist.txriak_manager import TxRiakManager
 from vumi.message import TransportUserMessage
@@ -150,6 +151,8 @@ class TestModelOnTxRiak(TestCase):
         f2.simple.key = None
         s5 = yield f2.simple.get()
         self.assertEqual(s5, None)
+
+        self.assertRaises(ValidationError, f2.simple.set, object)
 
     @inlineCallbacks
     def test_reverse_foreingkey_fields(self):
