@@ -469,6 +469,9 @@ class ManyToManyDescriptor(ForeignKeyDescriptor):
         self.validate(otherobj)
         self.remove_foreign_key(modelobj, otherobj.key)
 
+    def clear_keys(self, modelobj):
+        modelobj._riak_object.remove_index(self.index_name)
+
 
 class ManyToManyProxy(object):
     def __init__(self, descriptor, modelobj):
@@ -492,6 +495,9 @@ class ManyToManyProxy(object):
 
     def remove(self, otherobj):
         self._descriptor.remove_foreign_object(self._modelobj, otherobj)
+
+    def clear(self):
+        self._descriptor.clear_keys(self._modelobj)
 
 
 class ManyToMany(Field):

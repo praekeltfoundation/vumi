@@ -210,6 +210,49 @@ class TestModelOnTxRiak(TestCase):
         self.assertRaises(ValidationError, m2.simples.add, object())
         self.assertRaises(ValidationError, m2.simples.remove, object())
 
+        t1 = simple_model("bar1", a=3, b=u'4')
+        t2 = simple_model("bar2", a=4, b=u'4')
+        m2.simples.add(t1)
+        m2.simples.add(t2)
+        yield t1.save()
+        yield t2.save()
+        simples = yield m2.simples.get_all()
+        simples.sort(key=lambda s: s.key)
+        self.assertEqual([s.key for s in simples], ["bar1", "bar2"])
+        self.assertEqual(simples[0].a, 3)
+        self.assertEqual(simples[1].a, 4)
+
+        m2.simples.clear()
+        m2.simples.add_key("unknown")
+        [s5] = yield m2.simples.get_all()
+        self.assertEqual(s5, None)
+
+    @inlineCallbacks
+    def test_reverse_manytomany_fields(self):
+        mm_model = self.manager.proxy(ManyToManyModel)
+        simple_model = self.manager.proxy(SimpleModel)
+        s1 = simple_model("foo1", a=5, b=u'3')
+        s2 = simple_model("foo2", a=4, b=u'4')
+        m1 = mm_model("bar1")
+        m1.simples.add(s1)
+        m1.simples.add(s2)
+        m2 = mm_model("bar2")
+        m2.simples.add(s1)
+        yield s1.save()
+        yield s2.save()
+        yield m1.save()
+        yield m2.save()
+
+        s1 = yield simple_model.load("foo1")
+        results = yield s1.backlinks.manytomanymodels()
+        self.assertEqual(sorted(s.key for s in results), ["bar1", "bar2"])
+        self.assertEqual([s.__class__ for s in results],
+                         [ManyToManyModel] * 2)
+
+        s2 = yield simple_model.load("foo2")
+        results = yield s2.backlinks.manytomanymodels()
+        self.assertEqual(sorted(s.key for s in results), ["bar1"])
+
     @inlineCallbacks
     def test_inherited_model(self):
         self.assertEqual(sorted(InheritedModel.fields.keys()),
