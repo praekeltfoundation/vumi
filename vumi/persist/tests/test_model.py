@@ -44,7 +44,7 @@ class InheritedModel(SimpleModel):
 
 class TestModelOnTxRiak(TestCase):
 
-    # TODO: all copies of mkmsg must be unified! 
+    # TODO: all copies of mkmsg must be unified!
     def mkmsg(self, **kw):
         kw.setdefault("transport_name", "sphex")
         kw.setdefault("transport_type", "sphex_type")
