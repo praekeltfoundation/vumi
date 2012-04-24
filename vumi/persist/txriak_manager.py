@@ -63,7 +63,9 @@ class TxRiakManager(Manager):
     @inlineCallbacks
     def purge_all(self):
         buckets = yield self.client.list_buckets()
+        deferreds = []
         for bucket_name in buckets:
             if bucket_name.startswith(self.bucket_prefix):
                 bucket = self.client.bucket(bucket_name)
-                yield bucket.purge_keys()
+                deferreds.append(bucket.purge_keys())
+        yield gatherResults(deferreds)
