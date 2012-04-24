@@ -8,7 +8,7 @@ from twisted.trial.unittest import TestCase
 
 from vumi.persist.fields import (
     ValidationError, Field, Integer, Unicode, Tag, Timestamp, ForeignKey,
-    Dynamic)
+    Dynamic, FieldWithSubtype)
 
 
 class TestBaseField(TestCase):
@@ -104,3 +104,8 @@ class TestTimestamp(TestCase):
         t = Timestamp()
         dt = datetime(2100, 10, 5, 11, 10, 9)
         self.assertEqual(t.from_riak("2100-10-05 11:10:09.000000"), dt)
+
+
+class TestFieldWithSubtype(TestCase):
+    def test_fails_on_fancy_subtype(self):
+        self.assertRaises(RuntimeError, FieldWithSubtype, Dynamic())
