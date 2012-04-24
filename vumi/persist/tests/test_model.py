@@ -101,13 +101,20 @@ class TestModelOnTxRiak(TestCase):
     @Manager.calls_manager
     def test_vumimessage_field(self):
         msg_model = self.manager.proxy(VumiMessageModel)
-        msg = self.mkmsg()
+        msg = self.mkmsg(extra="bar")
         m1 = msg_model("foo", msg=msg)
         yield m1.save()
 
         m2 = yield msg_model.load("foo")
         self.assertEqual(m1.msg, m2.msg)
         self.assertEqual(m2.msg, msg)
+
+        self.assertRaises(ValidationError, setattr, m1, "msg", "foo")
+
+        # test extra keys are removed
+        msg2 = self.mkmsg()
+        m1.msg = msg2
+        self.assertTrue("extra" not in m1.msg)
 
     @Manager.calls_manager
     def test_dynamic_fields(self):
