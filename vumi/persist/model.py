@@ -18,7 +18,7 @@ class ModelMetaClass(type):
         class_dicts = [dict] + [base.__dict__ for base in reversed(bases)]
         for cls_dict in class_dicts:
             for key, possible_field in cls_dict.items():
-                if key == "dynamic_fields" or key in fields:
+                if key in fields:
                     continue
                 if isinstance(possible_field, FieldDescriptor):
                     possible_field = possible_field.field  # copy descriptors
