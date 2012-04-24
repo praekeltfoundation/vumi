@@ -59,43 +59,15 @@ class InboundMessage(Model):
 
 
 class MessageStore(object):
-    """Vumi Go message store.
+    """Vumi message store.
 
-    HBase-like data schema:
+    Message batches, inbound messages, outbound messages, events and
+    information about which batch a tag is currently associated with is
+    stored in Riak.
 
-      # [row_id] -> [family] -> [columns]
-
-      batches:
-        batch_id -> common -> ['tag']
-                 -> messages -> column names are message ids
-                 -> replies -> column names are inbound_message ids
-
-      tags:
-        tag -> common -> ['current_batch_id']
-
-      messages:
-        message_id -> body -> column names are message fields,
-                              values are JSON encoded
-                   -> events -> column names are event ids
-                   -> batches -> column names are batch ids
-
-      inbound_messages:
-        message_id -> body -> column names are message fields,
-                              values are JSON encoded
-
-      events:
-        event_id -> body -> column names are message fields,
-                            values are JSON encoded
-
-
-    Possible future schema tweaks for later:
-
-    * third_party_ids table that maps third party message ids
-      to vumi message ids (third_pary:third_party_id -> data
-      -> message_id)
-    * Consider making message_id "batch_id:current_message_id"
-      (this makes retrieving batches of messages fast, it
-       might be better to have "timestamp:current_message_id").
+    A small amount of information about the state of a batch (i.e. number
+    of messages in the batch, messages sent, acknowledgements and delivery
+    reports received) is stored in Redis.
     """
 
     def __init__(self, manager, r_server, r_prefix):
