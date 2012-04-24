@@ -3,7 +3,7 @@
 from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
 
-from vumi.persist.model import Model
+from vumi.persist.model import Model, Manager
 from vumi.persist.fields import (
     ValidationError, Integer, Unicode, VumiMessage, Dynamic, ListOf,
     ForeignKey, ManyToMany)
@@ -57,7 +57,7 @@ class TestModelOnTxRiak(TestCase):
         self.manager = TxRiakManager.from_config({'bucket_prefix': 'test.'})
         yield self.manager.purge_all()
 
-    @inlineCallbacks
+    @Manager.calls_manager
     def tearDown(self):
         yield self.manager.purge_all()
 
@@ -66,7 +66,7 @@ class TestModelOnTxRiak(TestCase):
         self.assertTrue(isinstance(SimpleModel.a, Integer))
         self.assertTrue(isinstance(SimpleModel.b, Unicode))
 
-    @inlineCallbacks
+    @Manager.calls_manager
     def test_simple_instance(self):
         simple_model = self.manager.proxy(SimpleModel)
         s1 = simple_model("foo", a=5, b=u'3')
@@ -76,13 +76,13 @@ class TestModelOnTxRiak(TestCase):
         self.assertEqual(s2.a, 5)
         self.assertEqual(s2.b, u'3')
 
-    @inlineCallbacks
+    @Manager.calls_manager
     def test_nonexist_keys_return_none(self):
         simple_model = self.manager.proxy(SimpleModel)
         s = yield simple_model.load("foo")
         self.assertEqual(s, None)
 
-    @inlineCallbacks
+    @Manager.calls_manager
     def test_vumimessage_field(self):
         msg_model = self.manager.proxy(VumiMessageModel)
         msg = self.mkmsg()
@@ -93,7 +93,7 @@ class TestModelOnTxRiak(TestCase):
         self.assertEqual(m1.msg, m2.msg)
         self.assertEqual(m2.msg, msg)
 
-    @inlineCallbacks
+    @Manager.calls_manager
     def test_dynamic_fields(self):
         dynamic_model = self.manager.proxy(DynamicModel)
         d1 = dynamic_model("foo", a=u"ab")
@@ -108,7 +108,7 @@ class TestModelOnTxRiak(TestCase):
         self.assertEqual(d2.contact_info.telephone, u"+2755")
         self.assertEqual(d2.contact_info.honorific, u"BDFL")
 
-    @inlineCallbacks
+    @Manager.calls_manager
     def test_listof_fields(self):
         list_model = self.manager.proxy(ListOfModel)
         l1 = list_model("foo")
@@ -127,7 +127,7 @@ class TestModelOnTxRiak(TestCase):
         l2.items.extend([3, 4, 5])
         self.assertEqual(list(l2.items), [2, 3, 4, 5])
 
-    @inlineCallbacks
+    @Manager.calls_manager
     def test_foreignkey_fields(self):
         fk_model = self.manager.proxy(ForeignKeyModel)
         simple_model = self.manager.proxy(SimpleModel)
@@ -158,7 +158,7 @@ class TestModelOnTxRiak(TestCase):
 
         self.assertRaises(ValidationError, f2.simple.set, object())
 
-    @inlineCallbacks
+    @Manager.calls_manager
     def test_reverse_foreingkey_fields(self):
         fk_model = self.manager.proxy(ForeignKeyModel)
         simple_model = self.manager.proxy(SimpleModel)
@@ -177,7 +177,7 @@ class TestModelOnTxRiak(TestCase):
         self.assertEqual([s.__class__ for s in results],
                          [ForeignKeyModel] * 2)
 
-    @inlineCallbacks
+    @Manager.calls_manager
     def test_manytomany_field(self):
         mm_model = self.manager.proxy(ManyToManyModel)
         simple_model = self.manager.proxy(SimpleModel)
@@ -227,7 +227,7 @@ class TestModelOnTxRiak(TestCase):
         [s5] = yield m2.simples.get_all()
         self.assertEqual(s5, None)
 
-    @inlineCallbacks
+    @Manager.calls_manager
     def test_reverse_manytomany_fields(self):
         mm_model = self.manager.proxy(ManyToManyModel)
         simple_model = self.manager.proxy(SimpleModel)
@@ -253,7 +253,7 @@ class TestModelOnTxRiak(TestCase):
         results = yield s2.backlinks.manytomanymodels()
         self.assertEqual(sorted(s.key for s in results), ["bar1"])
 
-    @inlineCallbacks
+    @Manager.calls_manager
     def test_inherited_model(self):
         self.assertEqual(sorted(InheritedModel.fields.keys()),
                          ["a", "b", "c"])
@@ -270,7 +270,7 @@ class TestModelOnTxRiak(TestCase):
 
 
 class TestModelOnRiak(TestModelOnTxRiak):
-    @inlineCallbacks
+
     def setUp(self):
         self.manager = RiakManager.from_config({'bucket_prefix': 'test.'})
-        yield self.manager.purge_all()
+        self.manager.purge_all()
