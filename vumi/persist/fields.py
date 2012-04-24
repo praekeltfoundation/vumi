@@ -93,11 +93,21 @@ class Integer(Field):
 
 
 class Unicode(Field):
-    """Field that accepts unicode strings."""
+    """Field that accepts unicode strings.
+
+    :param integer max_length:
+        Maximum allowed length (default is `None` which indicates no maximum).
+    """
+    def __init__(self, max_length=None):
+        self.max_length = max_length
+
     def validate(self, value):
         if not isinstance(value, unicode):
             raise ValidationError("Value %r is not a unicode string."
                                   % (value,))
+        if self.max_length is not None and len(value) > self.max_length:
+            raise ValidationError("Value %r too long (maximum length is %d)."
+                                  % (value, self.max_length))
 
 
 class Tag(Field):

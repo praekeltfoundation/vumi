@@ -66,6 +66,12 @@ class TestUnicode(TestCase):
         self.assertRaises(ValidationError, u.validate, "foo")
         self.assertRaises(ValidationError, u.validate, 3)
 
+    def test_validate_max_length(self):
+        u = Unicode(max_length=5)
+        u.validate(u"12345")
+        u.validate(u"1234")
+        self.assertRaises(ValidationError, u.validate, u"123456")
+
 
 class TestTag(TestCase):
     def test_validate(self):
