@@ -114,6 +114,19 @@ class Tag(Field):
         return tuple(value)
 
 
+class Timestamp(Field):
+    """Field that stores a datetime."""
+    def validate(self, value):
+        if not isinstance(value, datetime):
+            raise ValidationError("Timestamp field expects a datetime.")
+
+    def to_riak(self, value):
+        return value.strftime(VUMI_DATE_FORMAT)
+
+    def from_riak(self, value):
+        return datetime.strptime(value, VUMI_DATE_FORMAT)
+
+
 class VumiMessageDescriptor(FieldDescriptor):
     """Property for getting and setting fields."""
 

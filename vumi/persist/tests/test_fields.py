@@ -2,10 +2,13 @@
 
 """Tests for vumi.persist.fields."""
 
+from datetime import datetime
+
 from twisted.trial.unittest import TestCase
 
 from vumi.persist.fields import (
-    ValidationError, Field, Integer, Unicode, Tag, ForeignKey, Dynamic)
+    ValidationError, Field, Integer, Unicode, Tag, Timestamp, ForeignKey,
+    Dynamic)
 
 
 class TestBaseField(TestCase):
@@ -78,3 +81,20 @@ class TestTag(TestCase):
     def test_from_riak(self):
         t = Tag()
         self.assertEqual(t.from_riak(["pool", "tagname"]), ("pool", "tagname"))
+
+
+class TestTimestamp(TestCase):
+    def test_validate(self):
+        t = Timestamp()
+        t.validate(datetime.now())
+        self.assertRaises(ValidationError, t.validate, "foo")
+
+    def test_to_riak(self):
+        t = Timestamp()
+        dt = datetime(2100, 10, 5, 11, 10, 9)
+        self.assertEqual(t.to_riak(dt), "2100-10-05 11:10:09.000000")
+
+    def test_from_riak(self):
+        t = Timestamp()
+        dt = datetime(2100, 10, 5, 11, 10, 9)
+        self.assertEqual(t.from_riak("2100-10-05 11:10:09.000000"), dt)
