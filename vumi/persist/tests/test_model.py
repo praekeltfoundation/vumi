@@ -42,6 +42,10 @@ class InheritedModel(SimpleModel):
     c = Integer()
 
 
+class OverriddenModel(InheritedModel):
+    c = Integer(min=0, max=5)
+
+
 class TestModelOnTxRiak(TestCase):
 
     # TODO: all copies of mkmsg must be unified!
@@ -279,6 +283,17 @@ class TestModelOnTxRiak(TestCase):
         self.assertEqual(im2.a, 1)
         self.assertEqual(im2.b, u'2')
         self.assertEqual(im2.c, 3)
+
+    def test_overriden_model(self):
+        int_field = OverriddenModel.fields['c']
+        self.assertEqual(int_field.max, 5)
+        self.assertEqual(int_field.min, 0)
+
+        overridden_model = self.manager.proxy(OverriddenModel)
+
+        overridden_model("foo", a=1, b=u"2", c=3)
+        self.assertRaises(ValidationError, overridden_model, "foo",
+                          a=1, b=u"2", c=-1)
 
 
 class TestModelOnRiak(TestModelOnTxRiak):
