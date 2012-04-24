@@ -38,9 +38,7 @@ class FieldDescriptor(object):
         return self.get_value(instance)
 
     def __set__(self, instance, value):
-        if instance is None:
-            raise AttributeError("Attribute %r of %r is not writable" %
-                                 (self.key, self.cls))
+        # instance can never be None here
         self.validate(value)
         self.set_value(instance, value)
 
