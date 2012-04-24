@@ -34,6 +34,8 @@ def flatten_generator(generator_func):
                 # returnValue() called.
                 return e.value
 
+    return wrapped
+
 
 class ModelMetaClass(type):
     def __new__(mcs, name, bases, dict):
