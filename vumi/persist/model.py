@@ -2,39 +2,9 @@
 
 """Base classes for Vumi persistence models."""
 
-
 from functools import wraps
 
-from twisted.internet.defer import _DefGen_Return
-
 from vumi.persist.fields import Field, FieldDescriptor
-
-
-# This stuff maybe belongs somewhere else. But meh.
-
-def flatten_generator(generator_func):
-    """
-    This is a synchronous version of @inlineCallbacks.
-
-    NOTE: It doesn't correctly handle returnValue() being called in a
-    non-decorated function called from the function we're decorating. I could
-    copy the Twisted code to do that, but it's messy.
-    """
-    @wraps(generator_func)
-    def wrapped(*args, **kw):
-        gen = generator_func(*args, **kw)
-        result = None
-        while True:
-            try:
-                result = gen.send(result)
-            except StopIteration:
-                # Fell off the end, or "return" statement.
-                return None
-            except _DefGen_Return, e:
-                # returnValue() called.
-                return e.value
-
-    return wrapped
 
 
 class ModelMetaClass(type):

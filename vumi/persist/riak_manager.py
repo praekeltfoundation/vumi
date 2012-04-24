@@ -2,9 +2,37 @@
 
 """A manager implementation on top of the riak Python package."""
 
-from riak import RiakClient, RiakObject, RiakMapReduce
+from functools import wraps
 
-from vumi.persist.model import Manager, flatten_generator
+from riak import RiakClient, RiakObject, RiakMapReduce
+from twisted.internet.defer import _DefGen_Return
+
+from vumi.persist.model import Manager
+
+
+def flatten_generator(generator_func):
+    """
+    This is a synchronous version of @inlineCallbacks.
+
+    NOTE: It doesn't correctly handle returnValue() being called in a
+    non-decorated function called from the function we're decorating. We could
+    copy the Twisted code to do that, but it's messy.
+    """
+    @wraps(generator_func)
+    def wrapped(*args, **kw):
+        gen = generator_func(*args, **kw)
+        result = None
+        while True:
+            try:
+                result = gen.send(result)
+            except StopIteration:
+                # Fell off the end, or "return" statement.
+                return None
+            except _DefGen_Return, e:
+                # returnValue() called.
+                return e.value
+
+    return wrapped
 
 
 class RiakManager(Manager):
