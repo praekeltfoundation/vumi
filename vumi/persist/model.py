@@ -47,7 +47,6 @@ class BackLinks(object):
         self.functions = {}
 
     def declare_backlink(self, name, function):
-        # TODO: add test for collision case
         if name in self.functions:
             raise RuntimeError("Backlink %r already registered" % (name,))
         self.functions[name] = function
