@@ -66,6 +66,18 @@ class TestModelOnTxRiak(TestCase):
         self.assertTrue(isinstance(SimpleModel.a, Integer))
         self.assertTrue(isinstance(SimpleModel.b, Unicode))
 
+    def test_declare_backlinks(self):
+        class TestModel(Model):
+            pass
+
+        TestModel.backlinks.declare_backlink("foo", lambda m, o: None)
+        self.assertRaises(RuntimeError, TestModel.backlinks.declare_backlink,
+                          "foo", lambda m, o: None)
+
+        t = TestModel(self.manager, "key")
+        self.assertTrue(callable(t.backlinks.foo))
+        self.assertRaises(AttributeError, getattr, t.backlinks, 'bar')
+
     @Manager.calls_manager
     def test_simple_instance(self):
         simple_model = self.manager.proxy(SimpleModel)
