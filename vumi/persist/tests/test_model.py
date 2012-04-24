@@ -144,6 +144,9 @@ class TestModelOnTxRiak(TestCase):
         self.assertEqual(l2.items[1], 2)
         self.assertEqual(list(l2.items), [1, 2])
 
+        l2.items[0] = 5
+        self.assertEqual(l2.items[0], 5)
+
         del l2.items[0]
         self.assertEqual(list(l2.items), [2])
 
