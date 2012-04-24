@@ -11,6 +11,8 @@ from vumi.persist.model import Manager
 class TxRiakManager(Manager):
     """A persistence manager for txriak."""
 
+    call_decorator = staticmethod(inlineCallbacks)
+
     @classmethod
     def from_config(cls, config):
         bucket_prefix = config.pop('bucket_prefix')

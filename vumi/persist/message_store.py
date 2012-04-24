@@ -5,10 +5,10 @@
 
 from uuid import uuid4
 
-from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.defer import returnValue
 
 from vumi.message import TransportEvent, TransportUserMessage
-from vumi.persist.model import Model
+from vumi.persist.model import Model, Manager
 from vumi.persist.fields import VumiMessage, ForeignKey, ListOf, Tag
 
 
@@ -109,7 +109,7 @@ class MessageStore(object):
         self.r_server = r_server
         self.r_prefix = r_prefix
 
-    @inlineCallbacks
+    @Manager.calls_manager
     def batch_start(self, tags):
         batch_id = uuid4().get_hex()
         batch = self.batches(batch_id)
@@ -126,7 +126,7 @@ class MessageStore(object):
         self._init_status(batch_id)
         returnValue(batch_id)
 
-    @inlineCallbacks
+    @Manager.calls_manager
     def batch_done(self, batch_id):
         batch = yield self.batches.load(batch_id)
         tags = yield batch.backlinks.currenttags()
@@ -134,7 +134,7 @@ class MessageStore(object):
             tag.current_batch.set(None)
             yield tag.save()
 
-    @inlineCallbacks
+    @Manager.calls_manager
     def add_outbound_message(self, msg, tag=None, batch_id=None):
         msg_id = msg['message_id']
         msg_record = self.outbound_messages(msg_id)
@@ -152,12 +152,12 @@ class MessageStore(object):
 
         yield msg_record.save()
 
-    @inlineCallbacks
+    @Manager.calls_manager
     def get_outbound_message(self, msg_id):
         msg = yield self.outbound_messages.load(msg_id)
         returnValue(msg.msg if msg is not None else None)
 
-    @inlineCallbacks
+    @Manager.calls_manager
     def add_event(self, event):
         event_id = event['event_id']
         msg_id = event['user_message_id']
@@ -172,12 +172,12 @@ class MessageStore(object):
             if batch_record is not None:
                 self._inc_status(batch_record.key, event['event_type'])
 
-    @inlineCallbacks
+    @Manager.calls_manager
     def get_event(self, event_id):
         event = yield self.events.load(event_id)
         returnValue(event.event if event is not None else None)
 
-    @inlineCallbacks
+    @Manager.calls_manager
     def add_inbound_message(self, msg, tag=None, batch_id=None):
         msg_id = msg['message_id']
         msg_record = self.inbound_messages(msg_id)
@@ -193,7 +193,7 @@ class MessageStore(object):
 
         yield msg_record.save()
 
-    @inlineCallbacks
+    @Manager.calls_manager
     def get_inbound_message(self, msg_id):
         msg = yield self.inbound_messages.load(msg_id)
         returnValue(msg.msg if msg is not None else None)
@@ -202,24 +202,27 @@ class MessageStore(object):
         return self.batches.load(batch_id)
 
     def get_tag_info(self, tag):
-        return self.current_tags.load(tag)
+        tagmdl = self.current_tags.load(tag)
+        if tagmdl is None:
+            tagmdl = self.current_tags(tag)
+        return tagmdl
 
     def batch_status(self, batch_id):
         return self._get_status(batch_id)
 
-    @inlineCallbacks
+    @Manager.calls_manager
     def batch_messages(self, batch_id):
         batch = yield self.batches.load(batch_id)
         messages = yield batch.backlinks.outboundmessages()
         returnValue([m.msg for m in messages])
 
-    @inlineCallbacks
+    @Manager.calls_manager
     def batch_replies(self, batch_id):
         batch = yield self.batches.load(batch_id)
         messages = yield batch.backlinks.inboundmessages()
         returnValue([m.msg for m in messages])
 
-    @inlineCallbacks
+    @Manager.calls_manager
     def message_events(self, msg_id):
         message = yield self.outbound_messages.load(msg_id)
         events = yield message.backlinks.events()

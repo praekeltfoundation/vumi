@@ -4,11 +4,13 @@
 
 from riak import RiakClient, RiakObject, RiakMapReduce
 
-from vumi.persist.model import Manager
+from vumi.persist.model import Manager, flatten_generator
 
 
 class RiakManager(Manager):
     """A persistence manager for the riak Python package."""
+
+    call_decorator = staticmethod(flatten_generator)
 
     @classmethod
     def from_config(cls, config):
