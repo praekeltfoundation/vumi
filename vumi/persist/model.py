@@ -26,8 +26,7 @@ class ModelMetaClass(type):
                     descriptors[key] = possible_field.get_descriptor(key)
                     dict[key] = descriptors[key]
                     fields[key] = possible_field
-        dict["fields"] = fields
-        dict["_descriptors"] = descriptors
+        dict["field_descriptors"] = descriptors
 
         # add backlinks object
         dict["backlinks"] = BackLinks()
@@ -92,13 +91,14 @@ class Model(object):
             self._riak_object = _riak_object
         else:
             self._riak_object = manager.riak_object(self, key)
-            for field_name, field in self.fields.iteritems():
+            for field_name, descriptor in self.field_descriptors.iteritems():
+                field = descriptor.field
                 if not field.initializable:
                     continue
                 field_value = field_values.pop(field_name, field.default)
                 if callable(field_value):
                     field_value = field_value()
-                self._descriptors[field_name].initialize(self, field_value)
+                descriptor.initialize(self, field_value)
         if field_values:
             raise ValidationError("Unexpected extra initial fields %r passed"
                                   " to model %s" % (field_values.keys(),

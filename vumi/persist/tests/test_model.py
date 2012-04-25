@@ -66,7 +66,8 @@ class TestModelOnTxRiak(TestCase):
         yield self.manager.purge_all()
 
     def test_simple_class(self):
-        self.assertEqual(sorted(SimpleModel.fields.keys()), ['a', 'b'])
+        field_names = SimpleModel.field_descriptors.keys()
+        self.assertEqual(sorted(field_names), ['a', 'b'])
         self.assertTrue(isinstance(SimpleModel.a, Integer))
         self.assertTrue(isinstance(SimpleModel.b, Unicode))
 
@@ -284,8 +285,8 @@ class TestModelOnTxRiak(TestCase):
 
     @Manager.calls_manager
     def test_inherited_model(self):
-        self.assertEqual(sorted(InheritedModel.fields.keys()),
-                         ["a", "b", "c"])
+        field_names = InheritedModel.field_descriptors.keys()
+        self.assertEqual(sorted(field_names), ["a", "b", "c"])
 
         inherited_model = self.manager.proxy(InheritedModel)
 
@@ -298,7 +299,7 @@ class TestModelOnTxRiak(TestCase):
         self.assertEqual(im2.c, 3)
 
     def test_overriden_model(self):
-        int_field = OverriddenModel.fields['c']
+        int_field = OverriddenModel.field_descriptors['c'].field
         self.assertEqual(int_field.max, 5)
         self.assertEqual(int_field.min, 0)
 
