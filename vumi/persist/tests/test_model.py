@@ -31,7 +31,7 @@ class ListOfModel(Model):
 
 
 class ForeignKeyModel(Model):
-    simple = ForeignKey(SimpleModel)
+    simple = ForeignKey(SimpleModel, null=True)
 
 
 class ManyToManyModel(Model):
@@ -153,6 +153,9 @@ class TestModelOnTxRiak(TestCase):
         l2.items.extend([3, 4, 5])
         self.assertEqual(list(l2.items), [2, 3, 4, 5])
 
+        l2.items = [1]
+        self.assertEqual(list(l2.items), [1])
+
     @Manager.calls_manager
     def test_foreignkey_fields(self):
         fk_model = self.manager.proxy(ForeignKeyModel)
@@ -185,7 +188,7 @@ class TestModelOnTxRiak(TestCase):
         self.assertRaises(ValidationError, f2.simple.set, object())
 
     @Manager.calls_manager
-    def test_reverse_foreingkey_fields(self):
+    def test_reverse_foreignkey_fields(self):
         fk_model = self.manager.proxy(ForeignKeyModel)
         simple_model = self.manager.proxy(SimpleModel)
         s1 = simple_model("foo", a=5, b=u'3')

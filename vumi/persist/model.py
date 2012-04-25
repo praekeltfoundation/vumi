@@ -4,7 +4,7 @@
 
 from functools import wraps
 
-from vumi.persist.fields import Field, FieldDescriptor
+from vumi.persist.fields import Field, FieldDescriptor, ValidationError
 
 
 class ModelMetaClass(type):
@@ -27,6 +27,7 @@ class ModelMetaClass(type):
                     dict[key] = descriptors[key]
                     fields[key] = possible_field
         dict["fields"] = fields
+        dict["_descriptors"] = descriptors
 
         # add backlinks object
         dict["backlinks"] = BackLinks()
@@ -81,18 +82,27 @@ class Model(object):
 
     bucket = None
 
-    # TODO: implement default values
-    # TODO: do a full check that all required values have
-    #       a value at creation
     # TODO: maybe replace .backlinks with a class-level .query
     #       or .by_<index-name> method
 
-    def __init__(self, manager, key, **field_values):
-        self.key = key
+    def __init__(self, manager, key, _riak_object=None, **field_values):
         self.manager = manager
-        self._riak_object = manager.riak_object(self)
-        for field_name, field_value in field_values.iteritems():
-            setattr(self, field_name, field_value)
+        self.key = key
+        if _riak_object is not None:
+            self._riak_object = _riak_object
+        else:
+            self._riak_object = manager.riak_object(self, key)
+            for field_name, field in self.fields.iteritems():
+                if not field.initializable:
+                    continue
+                field_value = field_values.pop(field_name, field.default)
+                if callable(field_value):
+                    field_value = field_value()
+                self._descriptors[field_name].initialize(self, field_value)
+        if field_values:
+            raise ValidationError("Unexpected extra initial fields %r passed"
+                                  " to model %s" % (field_values.keys(),
+                                                    self.__class__))
 
     def save(self):
         """Save the object to Riak.
@@ -109,8 +119,7 @@ class Model(object):
         :returns:
             A deferred that fires with the new model object.
         """
-        modelobj = cls(manager, key)
-        return manager.load(modelobj)
+        return manager.load(cls, key)
 
 
 class Manager(object):
@@ -154,8 +163,8 @@ class Manager(object):
         raise NotImplementedError("Sub-classes of Manager should implement"
                                   " .from_config(...)")
 
-    def riak_object(self, modelobj):
-        """Construct an empty RiakObject for the given model instance."""
+    def riak_object(self, cls, key):
+        """Construct an empty RiakObject for the given model class and key."""
         raise NotImplementedError("Sub-classes of Manager should implement"
                                   " .riak_object(...)")
 
@@ -164,20 +173,20 @@ class Manager(object):
         raise NotImplementedError("Sub-classes of Manager should implement"
                                   " .store(...)")
 
-    def load(self, modelobj):
-        """Load the data for the modelobj from Riak.
+    def load(self, cls, key):
+        """Load a model instance for the key from Riak.
 
-        If the key of the modelobj doesn't exist, this method should return
-        None instead of the modelobj.
+        If the key doesn't exist, this method should return None
+        instead of an instance of cls.
         """
         raise NotImplementedError("Sub-classes of Manager should implement"
                                   " .store(...)")
 
-    def load_list(self, modelobjs):
-        """Load the data for a list of modelobjs from Riak.
+    def load_list(self, cls, keys):
+        """Load the model instances for a list of keys from Riak.
 
-        If the key of a model instance doesn't exist, that instance should
-        be replaced by a None in the list returned.
+        If a key doesn't exist, that key should be replaced by a None
+        (instead of an instance of cls) in the list returned.
         """
         raise NotImplementedError("Sub-classes of Manager should implement"
                                   " .store(...)")

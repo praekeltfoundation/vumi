@@ -7,7 +7,7 @@ from datetime import datetime
 from twisted.trial.unittest import TestCase
 
 from vumi.persist.fields import (
-    ValidationError, Field, Integer, Unicode, Tag, Timestamp, ForeignKey,
+    ValidationError, Field, Integer, Unicode, Tag, Timestamp,
     Dynamic, FieldWithSubtype)
 
 
@@ -16,6 +16,12 @@ class TestBaseField(TestCase):
         f = Field()
         f.validate("foo")
         f.validate(object())
+        self.assertRaises(ValidationError, f.validate, None)
+
+    def test_validate_null(self):
+        f = Field(null=True)
+        f.validate("foo")
+        f.validate(None)
 
     def test_to_riak(self):
         f = Field()

@@ -11,9 +11,10 @@ class DummyModel(object):
 
     bucket = "dummy_model"
 
-    def __init__(self, key):
+    def __init__(self, manager, key, _riak_object=None):
+        self.manager = manager
         self.key = key
-        self._riak_object = None
+        self._riak_object = _riak_object
 
     def set_riak(self, riak_object):
         self._riak_object = riak_object
@@ -36,8 +37,8 @@ class CommonRiakManagerTests(object):
     """
 
     def mkdummy(self, key, data=None):
-        dummy = DummyModel(key)
-        dummy.set_riak(self.manager.riak_object(dummy))
+        dummy = DummyModel(self.manager, key)
+        dummy.set_riak(self.manager.riak_object(dummy, key))
         if data is not None:
             dummy.set_data(data)
         return dummy
@@ -48,8 +49,8 @@ class CommonRiakManagerTests(object):
         self.assertEqual(manager.__class__, manager_cls)
 
     def test_riak_object(self):
-        dummy = DummyModel("foo")
-        riak_object = self.manager.riak_object(dummy)
+        dummy = DummyModel(self.manager, "foo")
+        riak_object = self.manager.riak_object(dummy, "foo")
         self.assertEqual(riak_object.get_data(), {})
         self.assertEqual(riak_object.get_content_type(), "application/json")
         self.assertEqual(riak_object.get_bucket().get_name(),
@@ -62,15 +63,13 @@ class CommonRiakManagerTests(object):
         result1 = yield self.manager.store(dummy1)
         self.assertEqual(dummy1, result1)
 
-        dummy2 = self.mkdummy("foo")
-        result2 = yield self.manager.load(dummy2)
-        self.assertEqual(dummy2, result2)
+        dummy2 = yield self.manager.load(DummyModel, "foo")
         self.assertEqual(dummy2.get_data(), {"a": 1})
 
     @Manager.calls_manager
     def test_load_missing(self):
         dummy = self.mkdummy("unknown")
-        result = yield self.manager.load(dummy)
+        result = yield self.manager.load(DummyModel, dummy.key)
         self.assertEqual(result, None)
 
     @Manager.calls_manager
@@ -78,10 +77,9 @@ class CommonRiakManagerTests(object):
         yield self.manager.store(self.mkdummy("foo", {"a": 0}))
         yield self.manager.store(self.mkdummy("bar", {"a": 1}))
 
-        modelobjs = [self.mkdummy(s, {"a": i}) for i, s in
-                     enumerate(["foo", "bar", "unknown"])]
+        keys = ["foo", "bar", "unknown"]
 
-        result = yield self.manager.load_list(modelobjs)
+        result = yield self.manager.load_list(DummyModel, keys)
         result_data = [r.get_data() if r is not None else None for r in result]
         result_data.sort(key=lambda d: d["a"] if d is not None else -1)
         self.assertEqual(result_data, [None, {"a": 0}, {"a": 1}])
@@ -102,7 +100,7 @@ class CommonRiakManagerTests(object):
             self.assertEqual(manager, self.manager)
             mr_results.append(link)
             dummy = self.mkdummy(link.get_key())
-            return manager.load(dummy)
+            return manager.load(DummyModel, dummy.key)
 
         results = yield self.manager.run_map_reduce(mr, mapper)
         results.sort(key=lambda d: d.key)
@@ -116,7 +114,7 @@ class CommonRiakManagerTests(object):
         dummy = self.mkdummy("foo", {"baz": 0})
         yield self.manager.store(dummy)
         yield self.manager.purge_all()
-        result = yield self.manager.load(dummy)
+        result = yield self.manager.load(DummyModel, dummy.key)
         self.assertEqual(result, None)
 
 

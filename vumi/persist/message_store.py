@@ -19,7 +19,7 @@ class Batch(Model):
 
 class CurrentTag(Model):
     # key is flattened tag
-    current_batch = ForeignKey(Batch)
+    current_batch = ForeignKey(Batch, null=True)
     tag = Tag()
 
     @staticmethod
@@ -30,20 +30,32 @@ class CurrentTag(Model):
     def _split_key(key):
         return tuple(key.split(':', 1))
 
-    def __init__(self, manager, key, **field_values):
-        if isinstance(key, tuple):
+    @classmethod
+    def _tag_and_key(cls, tag_or_key):
+        if isinstance(tag_or_key, tuple):
             # key looks like a tag
-            tag, key = key, self._flatten_tag(key)
+            tag, key = tag_or_key, cls._flatten_tag(tag_or_key)
         else:
-            tag, key = self._split_key(key), key
-        super(CurrentTag, self).__init__(manager, key, tag=tag,
-                                         **field_values)
+            tag, key = cls._split_key(tag_or_key), tag_or_key
+        return tag, key
+
+    def __init__(self, manager, key, _riak_object=None, **kw):
+        tag, key = self._tag_and_key(key)
+        if _riak_object is None:
+            kw['tag'] = tag
+        super(CurrentTag, self).__init__(manager, key,
+                                         _riak_object=_riak_object, **kw)
+
+    @classmethod
+    def load(cls, manager, key):
+        _tag, key = cls._tag_and_key(key)
+        return super(CurrentTag, cls).load(manager, key)
 
 
 class OutboundMessage(Model):
     # key is message_id
     msg = VumiMessage(TransportUserMessage)
-    batch = ForeignKey(Batch)
+    batch = ForeignKey(Batch, null=True)
 
 
 class Event(Model):
@@ -55,7 +67,7 @@ class Event(Model):
 class InboundMessage(Model):
     # key is message_id
     msg = VumiMessage(TransportUserMessage)
-    batch = ForeignKey(Batch)
+    batch = ForeignKey(Batch, null=True)
 
 
 class MessageStore(object):
@@ -109,8 +121,7 @@ class MessageStore(object):
     @Manager.calls_manager
     def add_outbound_message(self, msg, tag=None, batch_id=None):
         msg_id = msg['message_id']
-        msg_record = self.outbound_messages(msg_id)
-        msg_record.msg = msg
+        msg_record = self.outbound_messages(msg_id, msg=msg)
 
         if batch_id is None and tag is not None:
             tag_record = yield self.current_tags.load(tag)
@@ -133,9 +144,7 @@ class MessageStore(object):
     def add_event(self, event):
         event_id = event['event_id']
         msg_id = event['user_message_id']
-        event_record = self.events(event_id)
-        event_record.event = event
-        event_record.message.key = msg_id
+        event_record = self.events(event_id, event=event, message=msg_id)
         yield event_record.save()
 
         msg_record = yield self.outbound_messages.load(msg_id)
@@ -152,8 +161,7 @@ class MessageStore(object):
     @Manager.calls_manager
     def add_inbound_message(self, msg, tag=None, batch_id=None):
         msg_id = msg['message_id']
-        msg_record = self.inbound_messages(msg_id)
-        msg_record.msg = msg
+        msg_record = self.inbound_messages(msg_id, msg=msg)
 
         if batch_id is None and tag is not None:
             tag_record = yield self.current_tags.load(tag)

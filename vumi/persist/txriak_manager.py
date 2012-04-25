@@ -19,10 +19,10 @@ class TxRiakManager(Manager):
         client = RiakClient(**config)
         return cls(client, bucket_prefix)
 
-    def riak_object(self, modelobj):
-        bucket_name = self.bucket_prefix + modelobj.bucket
+    def riak_object(self, cls, key):
+        bucket_name = self.bucket_prefix + cls.bucket
         bucket = self.client.bucket(bucket_name)
-        riak_object = RiakObject(self.client, bucket, modelobj.key)
+        riak_object = RiakObject(self.client, bucket, key)
         riak_object.set_data({})
         riak_object.set_content_type("application/json")
         return riak_object
@@ -32,16 +32,17 @@ class TxRiakManager(Manager):
         d.addCallback(lambda result: modelobj)
         return d
 
-    def load(self, modelobj):
-        d = modelobj._riak_object.reload()
-        d.addCallback(lambda result: modelobj
+    def load(self, cls, key):
+        riak_object = self.riak_object(cls, key)
+        d = riak_object.reload()
+        d.addCallback(lambda result: cls(self, key, _riak_object=result)
                       if result.get_data() is not None else None)
         return d
 
-    def load_list(self, modelobjs):
+    def load_list(self, cls, keys):
         deferreds = []
-        for modelobj in modelobjs:
-            deferreds.append(self.load(modelobj))
+        for key in keys:
+            deferreds.append(self.load(cls, key))
         return gatherResults(deferreds)
 
     def riak_map_reduce(self):

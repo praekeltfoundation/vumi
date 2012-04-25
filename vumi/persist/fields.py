@@ -24,13 +24,17 @@ class FieldDescriptor(object):
     def validate(self, value):
         self.field.validate(value)
 
+    def initialize(self, modelobj, value):
+        self.__set__(modelobj, value)
+
     def set_value(self, modelobj, value):
         """Set the value associated with this descriptor."""
         modelobj._riak_object._data[self.key] = self.field.to_riak(value)
 
     def get_value(self, modelobj):
         """Get the value associated with this descriptor."""
-        return self.field.from_riak(modelobj._riak_object._data[self.key])
+        raw_value = modelobj._riak_object._data.get(self.key)
+        return self.field.from_riak(raw_value)
 
     def __get__(self, instance, owner):
         if instance is None:
@@ -44,42 +48,76 @@ class FieldDescriptor(object):
 
 
 class Field(object):
-    """Base class for model attributes / fields."""
+    """Base class for model attributes / fields.
+
+    :param object default:
+        Default value for the field. The default default is None.
+    :param boolean null:
+        Whether None is allowed as a value. Default is False (which
+        means the field must either be specified explicitly or by
+        a non-None default).
+    """
 
     descriptor_class = FieldDescriptor
+    # whether an attempt should be made to initialize the field on
+    # model instance creation
+    initializable = True
+
+    def __init__(self, default=None, null=False):
+        self.default = default
+        self.null = null
 
     def get_descriptor(self, key):
         return self.descriptor_class(key, self)
 
     def validate(self, value):
-        """Check whether a value is valid for this field.
+        """Validate a value.
 
-        Raise an exception if it isn't.
+        Checks null values and calls .validate() for non-null
+        values. Raises ValidationError if a value is invalid.
         """
+        if not self.null and value is None:
+            raise ValidationError("None is not allowed as a value for non-null"
+                                  " fields.")
+        if value is not None:
+            self.custom_validate(value)
+
+    def custom_validate(self, value):
+        """Check whether a non-null value is valid for this field."""
         pass
 
     def to_riak(self, value):
-        """Convert a value to something storable by Riak."""
+        return self.custom_to_riak(value) if value is not None else None
+
+    def custom_to_riak(self, value):
+        """Convert a non-None value to something storable by Riak."""
         return value
 
-    def from_riak(self, value):
-        """Convert a value from something stored by Riak to Python."""
-        return value
+    def from_riak(self, raw_value):
+        return (self.custom_from_riak(raw_value)
+                if raw_value is not None else None)
+
+    def custom_from_riak(self, raw_value):
+        """Convert a non-None value stored by Riak to Python."""
+        return raw_value
 
 
 class Integer(Field):
     """Field that accepts integers.
+
+    Additional parameters:
 
     :param integer min:
         Minimum allowed value (default is `None` which indicates no minimum).
     :param integer max:
         Maximum allowed value (default is `None` which indicates no maximum).
     """
-    def __init__(self, min=None, max=None):
+    def __init__(self, min=None, max=None, **kw):
+        super(Integer, self).__init__(**kw)
         self.min = min
         self.max = max
 
-    def validate(self, value):
+    def custom_validate(self, value):
         if not isinstance(value, (int, long)):
             raise ValidationError("Value %r is not an integer." % (value,))
         if self.min is not None and value < self.min:
@@ -93,13 +131,16 @@ class Integer(Field):
 class Unicode(Field):
     """Field that accepts unicode strings.
 
+    Additional parameters:
+
     :param integer max_length:
         Maximum allowed length (default is `None` which indicates no maximum).
     """
-    def __init__(self, max_length=None):
+    def __init__(self, max_length=None, **kw):
+        super(Unicode, self).__init__(**kw)
         self.max_length = max_length
 
-    def validate(self, value):
+    def custom_validate(self, value):
         if not isinstance(value, unicode):
             raise ValidationError("Value %r is not a unicode string."
                                   % (value,))
@@ -110,28 +151,28 @@ class Unicode(Field):
 
 class Tag(Field):
     """Field that represents a Vumi tag."""
-    def validate(self, value):
+    def custom_validate(self, value):
         if not isinstance(value, tuple) or len(value) != 2:
             raise ValidationError("Tags %r should be a (pool, tag_name)"
                                   " tuple" % (value,))
 
-    def to_riak(self, value):
+    def custom_to_riak(self, value):
         return list(value)
 
-    def from_riak(self, value):
+    def custom_from_riak(self, value):
         return tuple(value)
 
 
 class Timestamp(Field):
     """Field that stores a datetime."""
-    def validate(self, value):
+    def custom_validate(self, value):
         if not isinstance(value, datetime):
             raise ValidationError("Timestamp field expects a datetime.")
 
-    def to_riak(self, value):
+    def custom_to_riak(self, value):
         return value.strftime(VUMI_DATE_FORMAT)
 
-    def from_riak(self, value):
+    def custom_from_riak(self, value):
         return datetime.strptime(value, VUMI_DATE_FORMAT)
 
 
@@ -159,6 +200,8 @@ class VumiMessageDescriptor(FieldDescriptor):
     def set_value(self, modelobj, msg):
         """Set the value associated with this descriptor."""
         self._clear_keys(modelobj)
+        if msg is None:
+            return
         for key, value in msg.payload.iteritems():
             # TODO: timestamp as datetime in payload must die.
             if key == "timestamp":
@@ -176,11 +219,13 @@ class VumiMessageDescriptor(FieldDescriptor):
                 if key == "timestamp":
                     value = self._timestamp_from_json(value)
                 payload[key] = value
-        return self.field.message_class(**payload)
+        return self.field.message_class(**payload) if payload else None
 
 
 class VumiMessage(Field):
-    """Field that represent a Vumi message.
+    """Field that represents a Vumi message.
+
+    Additional parameters:
 
     :param class message_class:
         The class of the message objects being stored.
@@ -191,11 +236,12 @@ class VumiMessage(Field):
     """
     descriptor_class = VumiMessageDescriptor
 
-    def __init__(self, message_class, prefix=None):
+    def __init__(self, message_class, prefix=None, **kw):
+        super(VumiMessage, self).__init__(**kw)
         self.message_class = message_class
         self.prefix = prefix
 
-    def validate(self, value):
+    def custom_validate(self, value):
         if not isinstance(value, self.message_class):
             raise ValidationError("Message %r should be an instance of %r"
                                   % (value, self.message_class))
@@ -208,7 +254,8 @@ class FieldWithSubtype(Field):
     :param Field field_type:
         The field specification for the dynamic values. Default is Unicode().
     """
-    def __init__(self, field_type=None):
+    def __init__(self, field_type=None, **kw):
+        super(FieldWithSubtype, self).__init__(**kw)
         if field_type is None:
             field_type = Unicode()
         if field_type.descriptor_class is not FieldDescriptor:
@@ -243,7 +290,7 @@ class DynamicDescriptor(FieldDescriptor):
 
     def get_dynamic_value(self, modelobj, dynamic_key):
         key = self.prefix + dynamic_key
-        return self.field.from_riak(modelobj._riak_object._data[key])
+        return self.field.from_riak(modelobj._riak_object._data.get(key))
 
     def set_dynamic_value(self, modelobj, dynamic_key, value):
         self.field.validate(value)
@@ -274,6 +321,7 @@ class Dynamic(FieldWithSubtype):
         the name of the field followed by a dot ('.').
     """
     descriptor_class = DynamicDescriptor
+    initializable = False
 
     def __init__(self, field_type=None, prefix=None):
         super(Dynamic, self).__init__(field_type=field_type)
@@ -286,15 +334,20 @@ class ListOfDescriptor(FieldDescriptor):
     def get_value(self, modelobj):
         return ListProxy(self, modelobj)
 
-    def set_value(self, modelobj, value):
-        raise RuntimeError("ListOfDescriptors should never be assigned to.")
+    def __set__(self, modelobj, values):
+        # override __set__ to do custom validation
+        for value in values:
+            self.field.validate(value)
+        raw_values = [self.field.to_riak(value) for value in values]
+        modelobj._riak_object._data[self.key] = raw_values
 
     def _ensure_list(self, modelobj):
         if self.key not in modelobj._riak_object._data:
             modelobj._riak_object._data[self.key] = []
 
     def get_list_item(self, modelobj, list_idx):
-        raw_item = modelobj._riak_object._data[self.key][list_idx]
+        raw_list = modelobj._riak_object._data.get(self.key, [])
+        raw_item = raw_list[list_idx]
         return self.field.from_riak(raw_item)
 
     def set_list_item(self, modelobj, list_idx, value):
@@ -304,7 +357,8 @@ class ListOfDescriptor(FieldDescriptor):
         modelobj._riak_object._data[self.key][list_idx] = raw_value
 
     def del_list_item(self, modelobj, list_idx):
-        del modelobj._riak_object._data[self.key][list_idx]
+        raw_list = modelobj._riak_object._data.get(self.key, [])
+        del raw_list[list_idx]
 
     def append_list_item(self, modelobj, value):
         self.field.validate(value)
@@ -320,7 +374,8 @@ class ListOfDescriptor(FieldDescriptor):
         modelobj._riak_object._data[self.key].extend(raw_values)
 
     def iter_list(self, modelobj):
-        for raw_value in modelobj._riak_object._data[self.key]:
+        raw_list = modelobj._riak_object._data.get(self.key, [])
+        for raw_value in raw_list:
             yield self.field.from_riak(raw_value)
 
 
@@ -356,6 +411,9 @@ class ListOf(FieldWithSubtype):
     """
     descriptor_class = ListOfDescriptor
 
+    def __init__(self, field_type=None):
+        super(ListOf, self).__init__(field_type=field_type, default=list)
+
 
 class ForeignKeyDescriptor(FieldDescriptor):
     def setup(self, cls):
@@ -380,11 +438,6 @@ class ForeignKeyDescriptor(FieldDescriptor):
     def map_lookup_result(self, manager, result):
         return self.cls.load(manager, result.get_key())
 
-    def validate(self, value):
-        if not (value is None or isinstance(value, self.othercls)):
-            raise ValidationError("Field %r of %r requires a %r (or None)" %
-                                  (self.key, self.cls, self.othercls))
-
     def get_value(self, modelobj):
         return ForeignKeyProxy(self, modelobj)
 
@@ -405,6 +458,12 @@ class ForeignKeyDescriptor(FieldDescriptor):
         if key is None:
             return None
         return self.othercls.load(modelobj.manager, key)
+
+    def initialize(self, modelobj, value):
+        if isinstance(value, basestring):
+            self.set_foreign_key(modelobj, value)
+        else:
+            self.set_foreign_object(modelobj, value)
 
     def set_value(self, modelobj, value):
         raise RuntimeError("ForeignKeyDescriptors should never be assigned"
@@ -440,6 +499,8 @@ class ForeignKeyProxy(object):
 class ForeignKey(Field):
     """A field that links to another class.
 
+    Additional parameters:
+
     :param Model othercls:
         The type of model linked to.
     :param string index:
@@ -448,17 +509,18 @@ class ForeignKey(Field):
     """
     descriptor_class = ForeignKeyDescriptor
 
-    def __init__(self, othercls, index=None):
+    def __init__(self, othercls, index=None, **kw):
+        super(ForeignKey, self).__init__(**kw)
         self.othercls = othercls
         self.index = index
 
+    def custom_validate(self, value):
+        if not isinstance(value, self.othercls):
+            raise ValidationError("ForeignKey requires a %r instance" %
+                                  (self.othercls,))
+
 
 class ManyToManyDescriptor(ForeignKeyDescriptor):
-
-    def validate(self, value):
-        if not (value is None or isinstance(value, self.othercls)):
-            raise ValidationError("Field %r of %r requires a %r (or None)" %
-                                  (self.key, self.cls, self.othercls))
 
     def get_value(self, modelobj):
         return ManyToManyProxy(self, modelobj)
@@ -479,8 +541,7 @@ class ManyToManyDescriptor(ForeignKeyDescriptor):
 
     def get_foreign_objects(self, modelobj):
         keys = self.get_foreign_keys(modelobj)
-        otherobjs = [self.othercls(modelobj.manager, key) for key in keys]
-        return modelobj.manager.load_list(otherobjs)
+        return modelobj.manager.load_list(self.othercls, keys)
 
     def add_foreign_object(self, modelobj, otherobj):
         self.validate(otherobj)
@@ -521,7 +582,7 @@ class ManyToManyProxy(object):
         self._descriptor.clear_keys(self._modelobj)
 
 
-class ManyToMany(Field):
+class ManyToMany(ForeignKey):
     """A field that links to multiple instances of another class.
 
     :param Model othercls:
@@ -531,7 +592,7 @@ class ManyToMany(Field):
         followed by _bin.
     """
     descriptor_class = ManyToManyDescriptor
+    initializable = False
 
     def __init__(self, othercls, index=None):
-        self.othercls = othercls
-        self.index = index
+        super(ManyToMany, self).__init__(othercls, index)
