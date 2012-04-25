@@ -48,6 +48,11 @@ class CommonRiakManagerTests(object):
         manager = manager_cls.from_config({'bucket_prefix': 'test.'})
         self.assertEqual(manager.__class__, manager_cls)
 
+    def test_sub_manager(self):
+        sub_manager = self.manager.sub_manager("foo.")
+        self.assertEqual(sub_manager.client, self.manager.client)
+        self.assertEqual(sub_manager.bucket_prefix, 'test.foo.')
+
     def test_riak_object(self):
         dummy = DummyModel(self.manager, "foo")
         riak_object = self.manager.riak_object(dummy, "foo")

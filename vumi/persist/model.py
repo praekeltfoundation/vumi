@@ -132,6 +132,9 @@ class Manager(object):
     def proxy(self, modelcls):
         return ModelProxy(self, modelcls)
 
+    def sub_manager(self, sub_prefix):
+        return self.__class__(self.client, self.bucket_prefix + sub_prefix)
+
     @staticmethod
     def calls_manager(manager_attr):
         """Decorate a method that calls a manager.
