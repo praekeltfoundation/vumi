@@ -12,4 +12,6 @@ wokkel
 redis
 python-smpp
 pytz
+https://github.com/basho/riak-python-client#egg=riak
+https://bitbucket.org/calston/txriak/get/tip.zip#egg=txriak-0.3.3
 https://github.com/dustin/twitty-twister/tarball/master#egg=twittytwister-0.1.1
