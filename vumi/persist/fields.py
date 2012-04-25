@@ -36,6 +36,10 @@ class FieldDescriptor(object):
         raw_value = modelobj._riak_object._data.get(self.key)
         return self.field.from_riak(raw_value)
 
+    def __repr__(self):
+        return "<%s key=%s field=%r>" % (self.__class__.__name__, self.key,
+                                         self.field)
+
     def __get__(self, instance, owner):
         if instance is None:
             return self.field
