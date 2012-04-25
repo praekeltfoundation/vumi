@@ -38,6 +38,7 @@ class TestBaseField(TestCase):
         descriptor = f.get_descriptor("foo")
         self.assertEqual(descriptor.key, "foo")
         self.assertEqual(descriptor.field, f)
+        self.assertTrue("Field object" in repr(descriptor))
 
 
 class TestInteger(TestCase):

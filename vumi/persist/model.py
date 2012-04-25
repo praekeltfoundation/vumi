@@ -104,6 +104,13 @@ class Model(object):
                                   " to model %s" % (field_values.keys(),
                                                     self.__class__))
 
+    def __repr__(self):
+        fields = self.field_descriptors.keys()
+        fields.sort()
+        items = ["%s=%r" % (field, getattr(self, field)) for field in fields]
+        return "<%s key=%s %s>" % (self.__class__.__name__, self.key,
+                                   " ".join(items))
+
     def save(self):
         """Save the object to Riak.
 

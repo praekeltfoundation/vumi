@@ -71,6 +71,11 @@ class TestModelOnTxRiak(TestCase):
         self.assertTrue(isinstance(SimpleModel.a, Integer))
         self.assertTrue(isinstance(SimpleModel.b, Unicode))
 
+    def test_repr(self):
+        simple_model = self.manager.proxy(SimpleModel)
+        s = simple_model("foo", a=1, b=u"bar")
+        self.assertEqual(repr(s), "<SimpleModel key=foo a=1 b=u'bar'>")
+
     def test_declare_backlinks(self):
         class TestModel(Model):
             pass
