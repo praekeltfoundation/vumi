@@ -15,6 +15,7 @@ class TxRiakManager(Manager):
 
     @classmethod
     def from_config(cls, config):
+        config = config.copy()
         bucket_prefix = config.pop('bucket_prefix')
         client = RiakClient(**config)
         return cls(client, bucket_prefix)
