@@ -427,9 +427,11 @@ class ForeignKeyDescriptor(FieldDescriptor):
             self.index_name = "%s_bin" % self.key
         else:
             self.index_name = self.field.index
-
-        reverse_lookup_name = cls.__name__.lower() + "s"
-        self.othercls.backlinks.declare_backlink(reverse_lookup_name,
+        if self.field.backlink is None:
+            self.backlink_name = cls.__name__.lower() + "s"
+        else:
+            self.backlink_name = self.field.backlink
+        self.othercls.backlinks.declare_backlink(self.backlink_name,
                                                  self.reverse_lookup)
 
     def reverse_lookup(self, modelobj, manager=None):
@@ -513,13 +515,19 @@ class ForeignKey(Field):
     :param string index:
         The name to use for the index. The default is the field name
         followed by _bin.
+    :param string backlink:
+        The name to use for the backlink on :attr:`othercls.backlinks`.
+        The default is the name of the class the field is on converted
+        to lowercase and with 's' appended (e.g. 'FooModel' would result
+        in :attr:`othercls.backlinks.foomodels`).
     """
     descriptor_class = ForeignKeyDescriptor
 
-    def __init__(self, othercls, index=None, **kw):
+    def __init__(self, othercls, index=None, backlink=None, **kw):
         super(ForeignKey, self).__init__(**kw)
         self.othercls = othercls
         self.index = index
+        self.backlink = backlink
 
     def custom_validate(self, value):
         if not isinstance(value, self.othercls):
@@ -599,9 +607,14 @@ class ManyToMany(ForeignKey):
     :param string index:
         The name to use for the index. The default is the field name
         followed by _bin.
+    :param string backlink:
+        The name to use for the backlink on :attr:`othercls.backlinks`.
+        The default is the name of the class the field is on converted
+        to lowercase and with 's' appended (e.g. 'FooModel' would result
+        in :attr:`othercls.backlinks.foomodels`).
     """
     descriptor_class = ManyToManyDescriptor
     initializable = False
 
-    def __init__(self, othercls, index=None):
-        super(ManyToMany, self).__init__(othercls, index)
+    def __init__(self, othercls, index=None, backlink=None):
+        super(ManyToMany, self).__init__(othercls, index, backlink)
