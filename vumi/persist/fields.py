@@ -432,8 +432,9 @@ class ForeignKeyDescriptor(FieldDescriptor):
         self.othercls.backlinks.declare_backlink(reverse_lookup_name,
                                                  self.reverse_lookup)
 
-    def reverse_lookup(self, modelobj):
-        manager = modelobj.manager
+    def reverse_lookup(self, modelobj, manager=None):
+        if manager is None:
+            manager = modelobj.manager
         mr = manager.riak_map_reduce()
         bucket = manager.bucket_prefix + self.cls.bucket
         mr.index(bucket, self.index_name, modelobj.key)
@@ -457,11 +458,13 @@ class ForeignKeyDescriptor(FieldDescriptor):
         if foreign_key is not None:
             modelobj._riak_object.add_index(self.index_name, foreign_key)
 
-    def get_foreign_object(self, modelobj):
+    def get_foreign_object(self, modelobj, manager=None):
         key = self.get_foreign_key(modelobj)
         if key is None:
             return None
-        return self.othercls.load(modelobj.manager, key)
+        if manager is None:
+            manager = modelobj.manager
+        return self.othercls.load(manager, key)
 
     def initialize(self, modelobj, value):
         if isinstance(value, basestring):
@@ -493,8 +496,8 @@ class ForeignKeyProxy(object):
 
     key = property(fget=_get_key, fset=_set_key)
 
-    def get(self):
-        return self._descriptor.get_foreign_object(self._modelobj)
+    def get(self, manager=None):
+        return self._descriptor.get_foreign_object(self._modelobj, manager)
 
     def set(self, otherobj):
         self._descriptor.set_foreign_object(self._modelobj, otherobj)
@@ -543,9 +546,11 @@ class ManyToManyDescriptor(ForeignKeyDescriptor):
     def remove_foreign_key(self, modelobj, foreign_key):
         modelobj._riak_object.remove_index(self.index_name, foreign_key)
 
-    def get_foreign_objects(self, modelobj):
+    def get_foreign_objects(self, modelobj, manager=None):
         keys = self.get_foreign_keys(modelobj)
-        return modelobj.manager.load_list(self.othercls, keys)
+        if manager is None:
+            manager = modelobj.manager
+        return manager.load_list(self.othercls, keys)
 
     def add_foreign_object(self, modelobj, otherobj):
         self.validate(otherobj)
@@ -573,8 +578,8 @@ class ManyToManyProxy(object):
     def remove_key(self, foreign_key):
         self._descriptor.remove_foreign_key(self._modelobj, foreign_key)
 
-    def get_all(self):
-        return self._descriptor.get_foreign_objects(self._modelobj)
+    def get_all(self, manager=None):
+        return self._descriptor.get_foreign_objects(self._modelobj, manager)
 
     def add(self, otherobj):
         self._descriptor.add_foreign_object(self._modelobj, otherobj)
