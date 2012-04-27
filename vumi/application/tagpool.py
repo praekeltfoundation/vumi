@@ -3,6 +3,8 @@
 
 """Tag pool manager."""
 
+import json
+
 from vumi.errors import VumiError
 
 
@@ -31,8 +33,21 @@ class TagpoolManager(object):
         for pool, local_tags in pools.items():
             self._declare_tags(pool, local_tags)
 
+    def get_metadata(self, pool):
+        metadata_key = self._tag_pool_metadata_key(pool)
+        metadata = self.r_server.hgetall(metadata_key)
+        metadata = dict((k, json.loads(v)) for k, v in metadata.iteritems())
+        return metadata
+
+    def set_metadata(self, pool, metadata):
+        metadata_key = self._tag_pool_metadata_key(pool)
+        metadata = dict((k, json.dumps(v)) for k, v in metadata.iteritems())
+        self.r_server.delete(metadata_key)
+        self.r_server.hmset(metadata_key, metadata)
+
     def purge_pool(self, pool):
         free_list_key, free_set_key, inuse_set_key = self._tag_pool_keys(pool)
+        metadata_key = self._tag_pool_metadata_key(pool)
         in_use_count = self.r_server.scard(inuse_set_key)
         if in_use_count:
             raise TagpoolError('%s tags of pool %s still in use.' % (
@@ -41,10 +56,14 @@ class TagpoolManager(object):
             self.r_server.delete(free_set_key)
             self.r_server.delete(free_list_key)
             self.r_server.delete(inuse_set_key)
+            self.r_server.delete(metadata_key)
 
     def _tag_pool_keys(self, pool):
         return tuple(":".join([self.r_prefix, "tagpools", pool, state])
                      for state in ("free:list", "free:set", "inuse:set"))
+
+    def _tag_pool_metadata_key(self, pool):
+        return ":".join([self.r_prefix, "tagpools", pool, "metadata"])
 
     def _acquire_tag(self, pool):
         free_list_key, free_set_key, inuse_set_key = self._tag_pool_keys(pool)

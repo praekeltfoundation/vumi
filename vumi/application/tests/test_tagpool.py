@@ -2,6 +2,8 @@
 
 """Tests for vumi.application.tagpool."""
 
+import json
+
 from twisted.trial.unittest import TestCase
 
 from vumi.tests.utils import FakeRedis
@@ -70,3 +72,24 @@ class TestTagpoolManager(TestCase):
                          set(["tag1", "tag3"]))
         self.assertEqual(self.tagpool.r_server.smembers(tkey("inuse:set")),
                          set(["tag2"]))
+
+    def test_metadata(self):
+        mkey = self.pool_key_generator("poolA")("metadata")
+        mget = lambda field: json.loads(self.tagpool.r_server.hget(mkey,
+                                                                   field))
+        metadata = {
+            "transport_type": "sms",
+            "default_msg_fields": {
+                "transport_name": "sphex",
+                "helper_metadata": {
+                    "even_more_nested": "foo",
+                    },
+                },
+            }
+        self.tagpool.set_metadata("poolA", metadata)
+        self.assertEqual(self.tagpool.get_metadata("poolA"), metadata)
+        self.assertEqual(mget("transport_type"), "sms")
+
+        short_metadata = {"foo": "bar"}
+        self.tagpool.set_metadata("poolA", short_metadata)
+        self.assertEqual(self.tagpool.get_metadata("poolA"), short_metadata)
