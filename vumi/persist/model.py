@@ -137,7 +137,12 @@ class Model(object):
             return_keys is set to True).
         """
         # TODO: build the queries more intelligently
-        query = " AND ".join("%s:%s" % (k, v) for k, v in kw.iteritems())
+        for k, value in kw.iteritems():
+            value = unicode(value)
+            value = value.replace('\\', '\\\\')
+            value = value.replace("'", "\\'")
+            kw[k] = value
+        query = " AND ".join("%s:'%s'" % (k, v) for k, v in kw.iteritems())
         return manager.riak_search(cls, query, return_keys=return_keys)
 
     @classmethod

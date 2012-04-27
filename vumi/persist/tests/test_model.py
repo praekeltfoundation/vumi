@@ -108,6 +108,18 @@ class TestModelOnTxRiak(TestCase):
         self.assertEqual(sorted(keys), ["three", "two"])
 
     @Manager.calls_manager
+    def test_simple_search_escaping(self):
+        simple_model = self.manager.proxy(SimpleModel)
+        search = simple_model.search
+        yield simple_model.enable_search()
+        yield simple_model("one", a=1, b=u'a\'bc').save()
+
+        search = lambda **q: simple_model.search(return_keys=True, **q)
+        self.assertEqual((yield search(b=" OR a:1")), [])
+        self.assertEqual((yield search(b="b' OR a:1 '")), [])
+        self.assertEqual((yield search(b="a\'bc")), ["one"])
+
+    @Manager.calls_manager
     def test_simple_instance(self):
         simple_model = self.manager.proxy(SimpleModel)
         s1 = simple_model("foo", a=5, b=u'3')
