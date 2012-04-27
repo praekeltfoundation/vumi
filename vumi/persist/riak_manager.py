@@ -76,6 +76,20 @@ class RiakManager(Manager):
         results = [mapper_func(self, row) for row in raw_results]
         return results
 
+    def riak_search(self, cls, query, return_keys=False):
+        bucket_name = self.bucket_prefix + cls.bucket
+        result = self.client.solr().search(bucket_name, query)
+        docs = result['response']['docs']
+        keys = [doc['id'] for doc in docs]
+        if return_keys:
+            return keys
+        return self.load_list(cls, keys)
+
+    def riak_enable_search(self, cls):
+        bucket_name = self.bucket_prefix + cls.bucket
+        bucket = self.client.bucket(bucket_name)
+        return bucket.enable_search()
+
     def purge_all(self):
         buckets = self.client.get_buckets()
         for bucket_name in buckets:

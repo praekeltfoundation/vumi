@@ -49,6 +49,25 @@ class TxRiakManager(Manager):
     def riak_map_reduce(self):
         return RiakMapReduce(self.client)
 
+    def riak_search(self, cls, query, return_keys=False):
+        bucket_name = self.bucket_prefix + cls.bucket
+
+        def map_result_to_objects(result):
+            docs = result['response']['docs']
+            keys = [doc['id'] for doc in docs]
+            if return_keys:
+                return keys
+            return self.load_list(cls, keys)
+
+        d = self.client.solr().search(bucket_name, query)
+        d.addCallback(map_result_to_objects)
+        return d
+
+    def riak_enable_search(self, cls):
+        bucket_name = self.bucket_prefix + cls.bucket
+        bucket = self.client.bucket(bucket_name)
+        return bucket.enable_search()
+
     def run_map_reduce(self, mapreduce, mapper_func):
         mapreduce_done = mapreduce.run()
 

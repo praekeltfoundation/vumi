@@ -128,6 +128,23 @@ class Model(object):
         """
         return manager.load(cls, key)
 
+    @classmethod
+    def search(cls, manager, return_keys=False, **kw):
+        """Perform a solr search over this model.
+
+        :returns:
+            A list of model instances (or a list of keys if
+            return_keys is set to True).
+        """
+        # TODO: build the queries more intelligently
+        query = " AND ".join("%s:%s" % (k, v) for k, v in kw.iteritems())
+        return manager.riak_search(cls, query, return_keys=return_keys)
+
+    @classmethod
+    def enable_search(cls, manager):
+        """Enable solr indexing over for this model and manager."""
+        return manager.riak_enable_search(cls)
+
 
 class Manager(object):
     """A wrapper around a Riak client."""
@@ -212,6 +229,19 @@ class Manager(object):
         raise NotImplementedError("Sub-classes of Manager should implement"
                                   " .riak_map_reduce(...)")
 
+    def riak_search(self, cls, query, return_keys=False):
+        """Run a solr search over the bucket associated with cls and
+        return the results as instances of cls (or as keys if return_keys is
+        set to True)."""
+        raise NotImplementedError("Sub-classes of Manager should implement"
+                                  " .riak_search(...)")
+
+    def riak_enable_search(self, cls):
+        """Enable solr searching indexing for the bucket associated with
+        cls."""
+        raise NotImplementedError("Sub-classes of Manager should implement"
+                                  " .riak_enable_search(...)")
+
     def purge_all(self):
         """Delete *ALL* keys in buckets whose names start buckets with
         this manager's bucket prefix.
@@ -232,3 +262,9 @@ class ModelProxy(object):
 
     def load(self, key):
         return self._modelcls.load(self._manager, key)
+
+    def search(self, **kw):
+        return self._modelcls.search(self._manager, **kw)
+
+    def enable_search(self):
+        return self._modelcls.enable_search(self._manager)
