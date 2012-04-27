@@ -58,6 +58,10 @@ class TagpoolManager(object):
             self.r_server.delete(inuse_set_key)
             self.r_server.delete(metadata_key)
 
+    def list_pools(self):
+        keys = self.r_server.keys("%s:tagpools:*:free:set" % (self.r_prefix,))
+        return [key.split(":")[2] for key in keys]
+
     def _tag_pool_keys(self, pool):
         return tuple(":".join([self.r_prefix, "tagpools", pool, state])
                      for state in ("free:list", "free:set", "inuse:set"))

@@ -44,6 +44,12 @@ class TestTagpoolManager(TestCase):
         self.assertEqual(self.tagpool.acquire_tag('poolA'), tag1)
         self.assertRaises(TagpoolError, self.tagpool.purge_pool, 'poolA')
 
+    def test_list_pools(self):
+        tag1, tag2 = ("poolA", "tag1"), ("poolB", "tag2")
+        self.tagpool.declare_tags([tag1, tag2])
+        self.assertEqual(self.tagpool.list_pools(),
+                            ['poolA', 'poolB'])
+
     def test_acquire_tag(self):
         tkey = self.pool_key_generator("poolA")
         tag1, tag2 = ("poolA", "tag1"), ("poolA", "tag2")

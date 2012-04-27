@@ -39,10 +39,16 @@ class PurgePoolCmd(PoolSubCmd):
 
 class ListPoolsCmd(usage.Options):
     def run(self, cfg):
+        pools_in_tagpool = set(cfg.tagpool.list_pools())
+        pools_in_cfg = set(cfg.pools.keys())
         print "Pools defined in cfg and tagpool ..."
-        print "Pools only in cfg ..."
-        print "Pools only in tagpools ..."
-        # TODO: implement
+        print "  ", ', '.join(pools_in_tagpool.union(pools_in_cfg))
+        print "Pools in cfg ..."
+        print "  ", ', '.join(pools_in_cfg)
+        print "Pools in tagpool ..."
+        print "  ", ', '.join(pools_in_tagpool)
+        print "New pools ..."
+        print "  ", ', '.join(pools_in_cfg.difference(pools_in_tagpool))
 
 
 class Options(usage.Options):
