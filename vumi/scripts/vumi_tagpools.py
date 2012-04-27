@@ -24,9 +24,9 @@ class CreatePoolCmd(PoolSubCmd):
 
         print "Creating pool %s ..." % self.pool
         print "  Setting metadata ..."
-        print cfg.tagpool.set_metadata(self.pool, metadata)
+        cfg.tagpool.set_metadata(self.pool, metadata)
         print "  Declaring tags %d tags ..." % len(tags)
-        print cfg.tagpool.declare_tags(tags)
+        cfg.tagpool.declare_tags(tags)
         print "  Done."
 
 
@@ -41,14 +41,15 @@ class ListPoolsCmd(usage.Options):
     def run(self, cfg):
         pools_in_tagpool = set(cfg.tagpool.list_pools())
         pools_in_cfg = set(cfg.pools.keys())
-        print "Pools defined in cfg and tagpool ..."
-        print "  ", ', '.join(pools_in_tagpool.union(pools_in_cfg))
-        print "Pools in cfg ..."
-        print "  ", ', '.join(pools_in_cfg)
-        print "Pools in tagpool ..."
-        print "  ", ', '.join(pools_in_tagpool)
-        print "New pools ..."
-        print "  ", ', '.join(pools_in_cfg.difference(pools_in_tagpool))
+        print "Pools defined in cfg and tagpool:"
+        print "  ", ', '.join(pools_in_tagpool.intersection(pools_in_cfg)
+                              or ['-- None --'])
+        print "Pools only in cfg:"
+        print "  ", ', '.join(pools_in_cfg.difference(pools_in_tagpool)
+                              or ['-- None --'])
+        print "Pools only in tagpool:"
+        print "  ", ', '.join(pools_in_tagpool.difference(pools_in_cfg)
+                              or ['-- None --'])
 
 
 class Options(usage.Options):
