@@ -62,6 +62,16 @@ class TagpoolManager(object):
         keys = self.r_server.keys("%s:tagpools:*:free:set" % (self.r_prefix,))
         return [key.split(":")[2] for key in keys]
 
+    def free_tags(self, pool):
+        _free_list, free_set_key, _inuse_set = self._tag_pool_keys(pool)
+        return [(pool, local_tag) for local_tag in
+                self.r_server.smembers(free_set_key)]
+
+    def inuse_tags(self, pool):
+        _free_list, _free_set, inuse_set_key = self._tag_pool_keys(pool)
+        return [(pool, local_tag) for local_tag in
+                self.r_server.smembers(inuse_set_key)]
+
     def _tag_pool_keys(self, pool):
         return tuple(":".join([self.r_prefix, "tagpools", pool, state])
                      for state in ("free:list", "free:set", "inuse:set"))

@@ -1,5 +1,7 @@
 # -*- test-case-name: vumi.scripts.tests.test_vumi_tagpools -*-
 import sys
+import re
+import itertools
 
 import yaml
 import redis
@@ -37,6 +39,57 @@ class PurgePoolCmd(PoolSubCmd):
         print "  Done."
 
 
+def key_ranges(keys):
+    """Take a list of keys and convert them to a compact
+    output string.
+
+    E.g. foo100, foo101, ..., foo200, foo300
+         becomes
+         foo[100..200], foo300
+    """
+    keys.sort()
+    last_digits_re = re.compile("^(?P<pre>()|(.*[^\d]))(?P<digits>\d+)"
+                                "(?P<post>.*)$")
+
+    def group(x):
+        i, key = x
+        match = last_digits_re.match(key)
+        if not match:
+            return None
+        pre, post = match.group('pre'), match.group('post')
+        digits = match.group('digits')
+        dlen, value = len(digits), int(digits)
+        return pre, post, dlen, value - i
+
+    key_ranges = []
+    for grp_key, grp_list in itertools.groupby(enumerate(keys), group):
+        grp_list = list(grp_list)
+        if len(grp_list) == 1 or grp_key is None:
+            key_ranges.extend(g[1] for g in grp_list)
+        else:
+            pre, post, dlen, _cnt = grp_key
+            start = last_digits_re.match(grp_list[0][1]).group('digits')
+            end = last_digits_re.match(grp_list[-1][1]).group('digits')
+            #key_range = "{0}[{1:0{dlen}}-{2:0{dlen}}]{3}".fromat(pre, start,
+            #                                                     end, post,
+            #                                                     dlen=dlen)
+            key_range = "%s[%s-%s]%s" % (pre, start, end, post)
+            key_ranges.append(key_range)
+
+    return ", ".join(key_ranges)
+
+
+class ListKeysCmd(PoolSubCmd):
+    def run(self, cfg):
+        free_tags = cfg.tagpool.free_tags(self.pool)
+        inuse_tags = cfg.tagpool.inuse_tags(self.pool)
+        print "Listing tags for pool %s ..." % self.pool
+        print "Free tags:"
+        print "  ", key_ranges([tag[1] for tag in free_tags])
+        print "Tags in use:"
+        print "  ", key_ranges([tag[1] for tag in inuse_tags])
+
+
 class ListPoolsCmd(usage.Options):
     def run(self, cfg):
         pools_in_tagpool = set(cfg.tagpool.list_pools())
@@ -58,6 +111,8 @@ class Options(usage.Options):
          "Declare tags for a tag pool."],
         ["purge-pool", None, PurgePoolCmd,
          "Purge all tags from a tag pool."],
+        ["list-keys", None, ListKeysCmd,
+         "List the free and inuse keys associated with a tag pool."],
         ["list-pools", None, ListPoolsCmd,
          "List all pools defined in config and in the tag store."],
         ]
