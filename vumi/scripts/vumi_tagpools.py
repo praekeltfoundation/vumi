@@ -4,10 +4,10 @@ import re
 import itertools
 
 import yaml
-import redis
 from twisted.python import usage
 
 from vumi.application import TagpoolManager
+from vumi.utils import redis_from_config
 
 
 class PoolSubCmd(usage.Options):
@@ -24,19 +24,19 @@ class CreatePoolCmd(PoolSubCmd):
         tags = [(self.pool, local_tag) for local_tag in local_tags]
         metadata = cfg.metadata(self.pool)
 
-        print "Creating pool %s ..." % self.pool
-        print "  Setting metadata ..."
+        cfg.emit("Creating pool %s ..." % self.pool)
+        cfg.emit("  Setting metadata ...")
         cfg.tagpool.set_metadata(self.pool, metadata)
-        print "  Declaring tags %d tags ..." % len(tags)
+        cfg.emit("  Declaring %d tag(s) ..." % len(tags))
         cfg.tagpool.declare_tags(tags)
-        print "  Done."
+        cfg.emit("  Done.")
 
 
 class PurgePoolCmd(PoolSubCmd):
     def run(self, cfg):
-        print "Purging pool %s ..." % self.pool
-        print cfg.tagpool.purge_pool(self.pool)
-        print "  Done."
+        cfg.emit("Purging pool %s ..." % self.pool)
+        cfg.emit(cfg.tagpool.purge_pool(self.pool))
+        cfg.emit("  Done.")
 
 
 def key_ranges(keys):
@@ -80,26 +80,26 @@ class ListKeysCmd(PoolSubCmd):
     def run(self, cfg):
         free_tags = cfg.tagpool.free_tags(self.pool)
         inuse_tags = cfg.tagpool.inuse_tags(self.pool)
-        print "Listing tags for pool %s ..." % self.pool
-        print "Free tags:"
-        print "  ", key_ranges([tag[1] for tag in free_tags])
-        print "Tags in use:"
-        print "  ", key_ranges([tag[1] for tag in inuse_tags])
+        cfg.emit("Listing tags for pool %s ..." % self.pool)
+        cfg.emit("Free tags:")
+        cfg.emit("  ", key_ranges([tag[1] for tag in free_tags]))
+        cfg.emit("Tags in use:")
+        cfg.emit("  ", key_ranges([tag[1] for tag in inuse_tags]))
 
 
 class ListPoolsCmd(usage.Options):
     def run(self, cfg):
         pools_in_tagpool = set(cfg.tagpool.list_pools())
         pools_in_cfg = set(cfg.pools.keys())
-        print "Pools defined in cfg and tagpool:"
-        print "  ", ', '.join(pools_in_tagpool.intersection(pools_in_cfg)
-                              or ['-- None --'])
-        print "Pools only in cfg:"
-        print "  ", ', '.join(pools_in_cfg.difference(pools_in_tagpool)
-                              or ['-- None --'])
-        print "Pools only in tagpool:"
-        print "  ", ', '.join(pools_in_tagpool.difference(pools_in_cfg)
-                              or ['-- None --'])
+        cfg.emit("Pools defined in cfg and tagpool:")
+        cfg.emit("  ", ', '.join(pools_in_tagpool.intersection(pools_in_cfg)
+                              or ['-- None --']))
+        cfg.emit("Pools only in cfg:")
+        cfg.emit("  ", ', '.join(pools_in_cfg.difference(pools_in_tagpool)
+                              or ['-- None --']))
+        cfg.emit("Pools only in tagpool:")
+        cfg.emit("  ", ', '.join(pools_in_tagpool.difference(pools_in_cfg)
+                              or ['-- None --']))
 
 
 class Options(usage.Options):
@@ -132,9 +132,12 @@ class ConfigHolder(object):
         self.options = options
         self.config = yaml.safe_load(open(options['config'], "rb"))
         self.pools = self.config.get('pools', {})
-        r_server = redis.Redis(**self.config.get('redis', {}))
+        r_server = redis_from_config(self.config.get('redis', {}))
         r_prefix = self.config.get('r_prefix', 'vumi')
         self.tagpool = TagpoolManager(r_server, r_prefix)
+
+    def emit(self, s):
+        print s
 
     def tags(self, pool):
         tags = self.pools[pool]['tags']
