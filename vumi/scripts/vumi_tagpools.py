@@ -70,9 +70,6 @@ def key_ranges(keys):
             pre, post, dlen, _cnt = grp_key
             start = last_digits_re.match(grp_list[0][1]).group('digits')
             end = last_digits_re.match(grp_list[-1][1]).group('digits')
-            #key_range = "{0}[{1:0{dlen}}-{2:0{dlen}}]{3}".fromat(pre, start,
-            #                                                     end, post,
-            #                                                     dlen=dlen)
             key_range = "%s[%s-%s]%s" % (pre, start, end, post)
             key_ranges.append(key_range)
 
