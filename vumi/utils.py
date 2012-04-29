@@ -15,6 +15,7 @@ from twisted.web.server import Site
 from twisted.web.http_headers import Headers
 from twisted.web.iweb import IBodyProducer
 from twisted.web.http import PotentialDataLoss
+import redis
 
 
 def import_module(name):
@@ -188,6 +189,20 @@ def load_class_by_string(class_path):
     module_name = '.'.join(parts[:-1])
     class_name = parts[-1]
     return load_class(module_name, class_name)
+
+
+def redis_from_config(redis_config):
+    """
+    Return a redis client instance from a config.
+
+    If redis_config equals 'FAKE_REDIS', a vumi.tests.utils.FakeRedis
+    instance is returned instead of a real redis client (useful for
+    testing).
+    """
+    if redis_config == "FAKE_REDIS":
+        from vumi.tests.utils import FakeRedis
+        return FakeRedis()
+    return redis.Redis(**redis_config)
 
 
 def filter_options_on_prefix(options, prefix, delimiter='-'):
