@@ -44,6 +44,12 @@ class TestTagpoolManager(TestCase):
         self.assertEqual(self.tagpool.acquire_tag('poolA'), tag1)
         self.assertRaises(TagpoolError, self.tagpool.purge_pool, 'poolA')
 
+    def test_list_pools(self):
+        tag1, tag2 = ("poolA", "tag1"), ("poolB", "tag2")
+        self.tagpool.declare_tags([tag1, tag2])
+        self.assertEqual(self.tagpool.list_pools(),
+                         set(['poolA', 'poolB']))
+
     def test_acquire_tag(self):
         tkey = self.pool_key_generator("poolA")
         tag1, tag2 = ("poolA", "tag1"), ("poolA", "tag2")
@@ -57,6 +63,23 @@ class TestTagpoolManager(TestCase):
                          set(["tag2"]))
         self.assertEqual(self.tagpool.r_server.smembers(tkey("inuse:set")),
                          set(["tag1"]))
+
+    def test_acquire_specific_tag(self):
+        tkey = self.pool_key_generator("poolA")
+        tags = [("poolA", "tag%d" % i) for i in range(10)]
+        tag5 = tags[5]
+        self.tagpool.declare_tags(tags)
+        self.assertEqual(self.tagpool.acquire_specific_tag(tag5), tag5)
+        self.assertEqual(self.tagpool.acquire_specific_tag(tag5), None)
+        free_local_tags = [t[1] for t in tags]
+        free_local_tags.remove("tag5")
+        self.assertEqual(self.tagpool.r_server.lrange(tkey("free:list"),
+                                                    0, -1),
+                         free_local_tags)
+        self.assertEqual(self.tagpool.r_server.smembers(tkey("free:set")),
+                         set(free_local_tags))
+        self.assertEqual(self.tagpool.r_server.smembers(tkey("inuse:set")),
+                         set(["tag5"]))
 
     def test_release_tag(self):
         tkey = self.pool_key_generator("poolA")

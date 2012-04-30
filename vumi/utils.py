@@ -4,8 +4,9 @@ import os.path
 import re
 import sys
 import base64
-
 import pkg_resources
+
+import redis
 from zope.interface import implements
 from twisted.internet import defer
 from twisted.internet import reactor, protocol
@@ -15,6 +16,8 @@ from twisted.web.server import Site
 from twisted.web.http_headers import Headers
 from twisted.web.iweb import IBodyProducer
 from twisted.web.http import PotentialDataLoss
+
+import redis
 
 
 def import_module(name):
@@ -188,6 +191,25 @@ def load_class_by_string(class_path):
     module_name = '.'.join(parts[:-1])
     class_name = parts[-1]
     return load_class(module_name, class_name)
+
+
+def redis_from_config(redis_config):
+    """
+    Return a redis client instance from a config.
+
+    If redis_config:
+
+    * equals 'FAKE_REDIS', a new instance of :class:`FakeRedis` is returned.
+    * is an instance of :class:`FakeRedis` that instance is returned
+
+    Otherwise a new real redis client is returned.
+    """
+    from vumi.tests.utils import FakeRedis
+    if redis_config == "FAKE_REDIS":
+        return FakeRedis()
+    if isinstance(redis_config, FakeRedis):
+        return redis_config
+    return redis.Redis(**redis_config)
 
 
 def filter_options_on_prefix(options, prefix, delimiter='-'):

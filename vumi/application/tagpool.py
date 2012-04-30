@@ -22,6 +22,12 @@ class TagpoolManager(object):
         local_tag = self._acquire_tag(pool)
         return (pool, local_tag) if local_tag is not None else None
 
+    def acquire_specific_tag(self, tag):
+        pool, local_tag = tag
+        if self._acquire_specific_tag(pool, local_tag):
+            return tag
+        return None
+
     def release_tag(self, tag):
         pool, local_tag = tag
         self._release_tag(pool, local_tag)
@@ -31,6 +37,7 @@ class TagpoolManager(object):
         for pool, local_tag in tags:
             pools.setdefault(pool, []).append(local_tag)
         for pool, local_tags in pools.items():
+            self._register_pool(pool)
             self._declare_tags(pool, local_tags)
 
     def get_metadata(self, pool):
@@ -42,6 +49,7 @@ class TagpoolManager(object):
     def set_metadata(self, pool, metadata):
         metadata_key = self._tag_pool_metadata_key(pool)
         metadata = dict((k, json.dumps(v)) for k, v in metadata.iteritems())
+        self._register_pool(pool)
         self.r_server.delete(metadata_key)
         self.r_server.hmset(metadata_key, metadata)
 
@@ -57,6 +65,34 @@ class TagpoolManager(object):
             self.r_server.delete(free_list_key)
             self.r_server.delete(inuse_set_key)
             self.r_server.delete(metadata_key)
+            self._unregister_pool(pool)
+
+    def list_pools(self):
+        pool_list_key = self._pool_list_key()
+        return self.r_server.smembers(pool_list_key)
+
+    def free_tags(self, pool):
+        _free_list, free_set_key, _inuse_set = self._tag_pool_keys(pool)
+        return [(pool, local_tag) for local_tag in
+                self.r_server.smembers(free_set_key)]
+
+    def _pool_list_key(self):
+        return ":".join([self.r_prefix, "tagpools", "list"])
+
+    def _register_pool(self, pool):
+        """Add a pool to list of pools."""
+        pool_list_key = self._pool_list_key()
+        self.r_server.sadd(pool_list_key, pool)
+
+    def _unregister_pool(self, pool):
+        """Remove a pool to list of pools."""
+        pool_list_key = self._pool_list_key()
+        self.r_server.srem(pool_list_key, pool)
+
+    def inuse_tags(self, pool):
+        _free_list, _free_set, inuse_set_key = self._tag_pool_keys(pool)
+        return [(pool, local_tag) for local_tag in
+                self.r_server.smembers(inuse_set_key)]
 
     def _tag_pool_keys(self, pool):
         return tuple(":".join([self.r_prefix, "tagpools", pool, state])
@@ -71,6 +107,13 @@ class TagpoolManager(object):
         if tag is not None:
             self.r_server.smove(free_set_key, inuse_set_key, tag)
         return tag
+
+    def _acquire_specific_tag(self, pool, local_tag):
+        free_list_key, free_set_key, inuse_set_key = self._tag_pool_keys(pool)
+        moved = self.r_server.smove(free_set_key, inuse_set_key, local_tag)
+        if moved:
+            self.r_server.lrem(free_list_key, local_tag, num=1)
+        return moved
 
     def _release_tag(self, pool, local_tag):
         free_list_key, free_set_key, inuse_set_key = self._tag_pool_keys(pool)
