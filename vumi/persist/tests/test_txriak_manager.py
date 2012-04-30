@@ -72,6 +72,17 @@ class CommonRiakManagerTests(object):
         self.assertEqual(dummy2.get_data(), {"a": 1})
 
     @Manager.calls_manager
+    def test_delete(self):
+        dummy1 = self.mkdummy("foo", {"a": 1})
+        yield self.manager.store(dummy1)
+
+        dummy2 = yield self.manager.load(DummyModel, "foo")
+        yield self.manager.delete(dummy2)
+
+        dummy3 = yield self.manager.load(DummyModel, "foo")
+        self.assertEqual(dummy3, None)
+
+    @Manager.calls_manager
     def test_load_missing(self):
         dummy = self.mkdummy("unknown")
         result = yield self.manager.load(DummyModel, dummy.key)

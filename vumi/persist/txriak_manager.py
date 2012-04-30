@@ -33,6 +33,9 @@ class TxRiakManager(Manager):
         d.addCallback(lambda result: modelobj)
         return d
 
+    def delete(self, modelobj):
+        return modelobj._riak_object.delete()
+
     def load(self, cls, key):
         riak_object = self.riak_object(cls, key)
         d = riak_object.reload()

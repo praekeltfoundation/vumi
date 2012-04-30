@@ -115,9 +115,19 @@ class Model(object):
         """Save the object to Riak.
 
         :returns:
-            A deferred that fires once the data is saved.
+            A deferred that fires once the data is saved (or None if
+            using a synchronous manager).
         """
         return self.manager.store(self)
+
+    def delete(self):
+        """Delete the object from Riak.
+
+        :returns:
+            A deferred that fires once the data is deleted (or None if
+            using a synchronous manager).
+        """
+        return self.manager.delete(self)
 
     @classmethod
     def load(cls, manager, key):
@@ -204,6 +214,11 @@ class Manager(object):
         """Store the modelobj in Riak."""
         raise NotImplementedError("Sub-classes of Manager should implement"
                                   " .store(...)")
+
+    def delete(self, modelobj):
+        """Delete the modelobj from Riak."""
+        raise NotImplementedError("Sub-classes of Manager should implement"
+                                  " .delete(...)")
 
     def load(self, cls, key):
         """Load a model instance for the key from Riak.

@@ -59,6 +59,9 @@ class RiakManager(Manager):
         modelobj._riak_object.store()
         return modelobj
 
+    def delete(self, modelobj):
+        modelobj._riak_object.delete()
+
     def load(self, cls, key):
         riak_object = self.riak_object(cls, key)
         riak_object.reload()

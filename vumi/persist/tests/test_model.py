@@ -130,6 +130,18 @@ class TestModelOnTxRiak(TestCase):
         self.assertEqual(s2.b, u'3')
 
     @Manager.calls_manager
+    def test_simple_instance_delete(self):
+        simple_model = self.manager.proxy(SimpleModel)
+        s1 = simple_model("foo", a=5, b=u'3')
+        yield s1.save()
+
+        s2 = yield simple_model.load("foo")
+        yield s2.delete()
+
+        s3 = yield simple_model.load("foo")
+        self.assertEqual(s3, None)
+
+    @Manager.calls_manager
     def test_nonexist_keys_return_none(self):
         simple_model = self.manager.proxy(SimpleModel)
         s = yield simple_model.load("foo")
