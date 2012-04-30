@@ -91,7 +91,7 @@ class ListKeysCmd(PoolSubCmd):
 
 class ListPoolsCmd(usage.Options):
     def run(self, cfg):
-        pools_in_tagpool = set(cfg.tagpool.list_pools())
+        pools_in_tagpool = cfg.tagpool.list_pools()
         pools_in_cfg = set(cfg.pools.keys())
         cfg.emit("Pools defined in cfg and tagpool:")
         cfg.emit("   " +
