@@ -76,5 +76,41 @@ class ListKeysCmdTestCase(TestCase):
 
 
 class ListPoolsCmdTestCase(TestCase):
-    # TODO: finish
-    pass
+    def test_list_pools_with_only_pools_in_config(self):
+        cfg = make_cfg(["list-pools"])
+        cfg.run()
+        self.assertEqual(cfg.output, [
+            'Pools defined in cfg and tagpool:',
+            '   -- None --',
+            'Pools only in cfg:',
+            '   longcode, shortcode, xmpp',
+            'Pools only in tagpool:',
+            '   -- None --'
+            ])
+
+    def test_list_pools_with_all_pools_in_tagpool(self):
+        cfg = make_cfg(["list-pools"])
+        cfg.tagpool.declare_tags([("xmpp", "tag"), ("longcode", "tag"),
+                                  ("shortcode", "tag")])
+        cfg.run()
+        self.assertEqual(cfg.output, [
+            'Pools defined in cfg and tagpool:',
+            '   longcode, shortcode, xmpp',
+            'Pools only in cfg:',
+            '   -- None --',
+            'Pools only in tagpool:',
+            '   -- None --'
+            ])
+
+    def test_list_pools_with_all_sorts_of_pools(self):
+        cfg = make_cfg(["list-pools"])
+        cfg.tagpool.declare_tags([("xmpp", "tag"), ("other", "tag")])
+        cfg.run()
+        self.assertEqual(cfg.output, [
+            'Pools defined in cfg and tagpool:',
+            '   xmpp',
+            'Pools only in cfg:',
+            '   longcode, shortcode',
+            'Pools only in tagpool:',
+            '   other'
+            ])

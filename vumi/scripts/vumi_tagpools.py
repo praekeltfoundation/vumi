@@ -92,14 +92,17 @@ class ListPoolsCmd(usage.Options):
         pools_in_tagpool = set(cfg.tagpool.list_pools())
         pools_in_cfg = set(cfg.pools.keys())
         cfg.emit("Pools defined in cfg and tagpool:")
-        cfg.emit("  ", ', '.join(pools_in_tagpool.intersection(pools_in_cfg)
-                              or ['-- None --']))
+        cfg.emit("   " +
+                 ', '.join(sorted(pools_in_tagpool.intersection(pools_in_cfg))
+                           or ['-- None --']))
         cfg.emit("Pools only in cfg:")
-        cfg.emit("  ", ', '.join(pools_in_cfg.difference(pools_in_tagpool)
-                              or ['-- None --']))
+        cfg.emit("   " +
+                 ', '.join(sorted(pools_in_cfg.difference(pools_in_tagpool))
+                           or ['-- None --']))
         cfg.emit("Pools only in tagpool:")
-        cfg.emit("  ", ', '.join(pools_in_tagpool.difference(pools_in_cfg)
-                              or ['-- None --']))
+        cfg.emit("   " +
+                 ', '.join(sorted(pools_in_tagpool.difference(pools_in_cfg))
+                           or ['-- None --']))
 
 
 class Options(usage.Options):
