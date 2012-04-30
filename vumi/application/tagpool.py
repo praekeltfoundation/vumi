@@ -66,7 +66,8 @@ class TagpoolManager(object):
 
     def list_pools(self):
         keys = self.r_server.keys("%s:tagpools:*:free:set" % (self.r_prefix,))
-        return [key.split(":")[2] for key in keys]
+        # split from the right because r_prefix might contain a colon.
+        return [key.rsplit(":", 3)[-3] for key in keys]
 
     def free_tags(self, pool):
         _free_list, free_set_key, _inuse_set = self._tag_pool_keys(pool)
