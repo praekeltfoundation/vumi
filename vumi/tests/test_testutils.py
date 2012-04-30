@@ -119,3 +119,30 @@ class FakeRedisTestCase(TestCase):
         self.assertEqual(self.r_server.sunion('set1'), set(['1']))
         self.assertEqual(self.r_server.sunion('set1', 'set2'), set(['1', '2']))
         self.assertEqual(self.r_server.sunion('other'), set())
+
+    def test_lrem(self):
+        self.r_server = FakeRedis()
+        for i in range(5):
+            self.r_server.rpush('list', 'v%d' % i)
+            self.r_server.rpush('list', 1)
+        self.assertEqual(self.r_server.lrem('list', 1), 5)
+        self.assertEqual(self.r_server.lrange('list', 0, -1),
+                         ['v0', 'v1', 'v2', 'v3', 'v4'])
+
+    def test_lrem_positive_num(self):
+        self.r_server = FakeRedis()
+        for i in range(5):
+            self.r_server.rpush('list', 'v%d' % i)
+            self.r_server.rpush('list', 1)
+        self.assertEqual(self.r_server.lrem('list', 1, 2), 2)
+        self.assertEqual(self.r_server.lrange('list', 0, -1),
+                         ['v0', 'v1', 'v2', 1, 'v3', 1, 'v4', 1])
+
+    def test_lrem_negative_num(self):
+        self.r_server = FakeRedis()
+        for i in range(5):
+            self.r_server.rpush('list', 'v%d' % i)
+            self.r_server.rpush('list', 1)
+        self.assertEqual(self.r_server.lrem('list', 1, -2), 2)
+        self.assertEqual(self.r_server.lrange('list', 0, -1),
+                         ['v0', 1, 'v1', 1, 'v2', 1, 'v3', 'v4'])
