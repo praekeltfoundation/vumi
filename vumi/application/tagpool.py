@@ -22,6 +22,12 @@ class TagpoolManager(object):
         local_tag = self._acquire_tag(pool)
         return (pool, local_tag) if local_tag is not None else None
 
+    def acquire_specific_tag(self, tag):
+        pool, local_tag = tag
+        if self._acquire_specific_tag(pool, local_tag):
+            return tag
+        return None
+
     def release_tag(self, tag):
         pool, local_tag = tag
         self._release_tag(pool, local_tag)
@@ -85,6 +91,13 @@ class TagpoolManager(object):
         if tag is not None:
             self.r_server.smove(free_set_key, inuse_set_key, tag)
         return tag
+
+    def _acquire_specific_tag(self, pool, local_tag):
+        free_list_key, free_set_key, inuse_set_key = self._tag_pool_keys(pool)
+        moved = self.r_server.smove(free_set_key, inuse_set_key, local_tag)
+        if moved:
+            self.r_server.lrem(free_list_key, local_tag, num=1)
+        return moved
 
     def _release_tag(self, pool, local_tag):
         free_list_key, free_set_key, inuse_set_key = self._tag_pool_keys(pool)
