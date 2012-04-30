@@ -432,9 +432,24 @@ class FakeRedis(object):
             end = None
         return lval[start:end]
 
-    def lrem(self, key, value):
+    def lrem(self, key, value, num=0):
+        seen = [0]
+
+        def cnt(v):
+            if v == value:
+                seen[0] += 1
+            return seen[0]
+
         lval = self._data.get(key, [])
-        self._data[key] = [v for v in lval if v is not value]
+        if num == 0:
+            lval = [v for v in lval if v != value]
+        elif num > 0:
+            lval = [v for v in lval if v != value or cnt(v) > num]
+        else:
+            lval.reverse()
+            lval = [v for v in lval if v != value or cnt(v) > -num]
+            lval.reverse()
+        self._data[key] = lval
 
     # Expiry operations
 
