@@ -82,9 +82,11 @@ class ListKeysCmd(PoolSubCmd):
         inuse_tags = cfg.tagpool.inuse_tags(self.pool)
         cfg.emit("Listing tags for pool %s ..." % self.pool)
         cfg.emit("Free tags:")
-        cfg.emit("  ", key_ranges([tag[1] for tag in free_tags]))
+        cfg.emit("   " + (key_ranges([tag[1] for tag in free_tags])
+                          or "-- None --"))
         cfg.emit("Tags in use:")
-        cfg.emit("  ", key_ranges([tag[1] for tag in inuse_tags]))
+        cfg.emit("   " + (key_ranges([tag[1] for tag in inuse_tags])
+                          or "-- None --"))
 
 
 class ListPoolsCmd(usage.Options):

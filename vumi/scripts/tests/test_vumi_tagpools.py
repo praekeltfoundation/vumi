@@ -71,8 +71,35 @@ class PurgePoolCmdTestCase(TestCase):
 
 
 class ListKeysCmdTestCase(TestCase):
-    # TODO: finish
-    pass
+    def setUp(self):
+        self.test_tags = [("foo", "tag%d" % i) for
+                          i in [1, 2, 3, 5, 6, 7, 9]]
+
+    def test_list_keys_all_free(self):
+        cfg = make_cfg(["list-keys", "foo"])
+        cfg.tagpool.declare_tags(self.test_tags)
+        cfg.run()
+        self.assertEqual(cfg.output, [
+            'Listing tags for pool foo ...',
+            'Free tags:',
+            '   tag[1-3], tag[5-7], tag9',
+            'Tags in use:',
+            '   -- None --',
+            ])
+
+    def test_list_keys_all_in_use(self):
+        cfg = make_cfg(["list-keys", "foo"])
+        cfg.tagpool.declare_tags(self.test_tags)
+        for tag in self.test_tags:
+            cfg.tagpool.acquire_tag("foo")
+        cfg.run()
+        self.assertEqual(cfg.output, [
+            'Listing tags for pool foo ...',
+            'Free tags:',
+            '   -- None --',
+            'Tags in use:',
+            '   tag[1-3], tag[5-7], tag9',
+            ])
 
 
 class ListPoolsCmdTestCase(TestCase):
@@ -85,7 +112,7 @@ class ListPoolsCmdTestCase(TestCase):
             'Pools only in cfg:',
             '   longcode, shortcode, xmpp',
             'Pools only in tagpool:',
-            '   -- None --'
+            '   -- None --',
             ])
 
     def test_list_pools_with_all_pools_in_tagpool(self):
@@ -99,7 +126,7 @@ class ListPoolsCmdTestCase(TestCase):
             'Pools only in cfg:',
             '   -- None --',
             'Pools only in tagpool:',
-            '   -- None --'
+            '   -- None --',
             ])
 
     def test_list_pools_with_all_sorts_of_pools(self):
@@ -112,5 +139,5 @@ class ListPoolsCmdTestCase(TestCase):
             'Pools only in cfg:',
             '   longcode, shortcode',
             'Pools only in tagpool:',
-            '   other'
+            '   other',
             ])
