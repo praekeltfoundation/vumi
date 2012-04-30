@@ -16,19 +16,18 @@ class TestConfigHolder(ConfigHolder):
         self.output.append(s)
 
 
-def run_cfg(args):
+def make_cfg(args):
     args = ["--config",
             resource_filename(__name__, "sample-tagpool-cfg.yaml")] + args
     options = Options()
     options.parseOptions(args)
-    cfg = TestConfigHolder(options)
-    cfg.run()
-    return cfg
+    return TestConfigHolder(options)
 
 
 class CreatePoolCmdTestCase(TestCase):
     def test_create_pool_range_tags(self):
-        cfg = run_cfg(["create-pool", "shortcode"])
+        cfg = make_cfg(["create-pool", "shortcode"])
+        cfg.run()
         self.assertEqual(cfg.output, [
             'Creating pool shortcode ...',
             '  Setting metadata ...',
@@ -42,7 +41,8 @@ class CreatePoolCmdTestCase(TestCase):
         self.assertEqual(cfg.tagpool.inuse_tags("shortcode"), [])
 
     def test_create_pool_explicit_tags(self):
-        cfg = run_cfg(["create-pool", "xmpp"])
+        cfg = make_cfg(["create-pool", "xmpp"])
+        cfg.run()
         self.assertEqual(cfg.output, [
             'Creating pool xmpp ...',
             '  Setting metadata ...',
@@ -57,8 +57,17 @@ class CreatePoolCmdTestCase(TestCase):
 
 
 class PurgePoolCmdTestCase(TestCase):
-    # TODO: finish
-    pass
+    def test_purge_pool(self):
+        cfg = make_cfg(["purge-pool", "foo"])
+        cfg.tagpool.declare_tags([("foo", "tag1"), ("foo", "tag2")])
+        cfg.run()
+        self.assertEqual(cfg.output, [
+            'Purging pool foo ...',
+            '  Done.',
+            ])
+        self.assertEqual(cfg.tagpool.free_tags("foo"), [])
+        self.assertEqual(cfg.tagpool.inuse_tags("foo"), [])
+        self.assertEqual(cfg.tagpool.get_metadata("foo"), {})
 
 
 class ListKeysCmdTestCase(TestCase):

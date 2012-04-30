@@ -35,7 +35,7 @@ class CreatePoolCmd(PoolSubCmd):
 class PurgePoolCmd(PoolSubCmd):
     def run(self, cfg):
         cfg.emit("Purging pool %s ..." % self.pool)
-        cfg.emit(cfg.tagpool.purge_pool(self.pool))
+        cfg.tagpool.purge_pool(self.pool)
         cfg.emit("  Done.")
 
 
