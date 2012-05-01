@@ -174,6 +174,9 @@ class Manager(object):
     def sub_manager(self, sub_prefix):
         return self.__class__(self.client, self.bucket_prefix + sub_prefix)
 
+    def bucket_name(self, modelcls_or_obj):
+        return self.bucket_prefix + modelcls_or_obj.bucket
+
     @staticmethod
     def calls_manager(manager_attr):
         """Decorate a method that calls a manager.
