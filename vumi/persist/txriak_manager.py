@@ -3,7 +3,7 @@
 """A manager implementation on top of txriak."""
 
 from txriak.riak import RiakClient, RiakObject, RiakMapReduce, RiakLink
-from twisted.internet.defer import inlineCallbacks, gatherResults
+from twisted.internet.defer import inlineCallbacks, gatherResults, maybeDeferred
 
 from vumi.persist.model import Manager
 
@@ -21,7 +21,7 @@ class TxRiakManager(Manager):
         return cls(client, bucket_prefix)
 
     def riak_object(self, cls, key):
-        bucket_name = self.bucket_prefix + cls.bucket
+        bucket_name = self.bucket_name(cls)
         bucket = self.client.bucket(bucket_name)
         riak_object = RiakObject(self.client, bucket, key)
         riak_object.set_data({})
@@ -53,7 +53,7 @@ class TxRiakManager(Manager):
         return RiakMapReduce(self.client)
 
     def riak_search(self, cls, query, return_keys=False):
-        bucket_name = self.bucket_prefix + cls.bucket
+        bucket_name = self.bucket_name(cls)
 
         def map_result_to_objects(result):
             docs = result['response']['docs']
@@ -67,7 +67,7 @@ class TxRiakManager(Manager):
         return d
 
     def riak_enable_search(self, cls):
-        bucket_name = self.bucket_prefix + cls.bucket
+        bucket_name = self.bucket_name(cls)
         bucket = self.client.bucket(bucket_name)
         return bucket.enable_search()
 
@@ -78,7 +78,7 @@ class TxRiakManager(Manager):
             deferreds = []
             for row in raw_results:
                 link = RiakLink(row[0], row[1])
-                deferreds.append(mapper_func(self, link))
+                deferreds.append(maybeDeferred(mapper_func, self, link))
             return gatherResults(deferreds)
 
         mapreduce_done.addCallback(map_results)

@@ -17,6 +17,11 @@ class SimpleModel(Model):
     b = Unicode()
 
 
+class IndexedModel(Model):
+    a = Integer(index=True)
+    b = Unicode(index=True, null=True)
+
+
 class VumiMessageModel(Model):
     msg = VumiMessage(TransportUserMessage)
 
@@ -146,6 +151,28 @@ class TestModelOnTxRiak(TestCase):
         simple_model = self.manager.proxy(SimpleModel)
         s = yield simple_model.load("foo")
         self.assertEqual(s, None)
+
+    @Manager.calls_manager
+    def test_by_index(self):
+        indexed_model = self.manager.proxy(IndexedModel)
+        yield indexed_model("foo1", a=1, b=u"one").save()
+        yield indexed_model("foo2", a=2, b=u"two").save()
+
+        [key] = yield indexed_model.by_index(a=1, return_keys=True)
+        self.assertEqual(key, "foo1")
+
+        [obj] = yield indexed_model.by_index(b="two")
+        self.assertEqual(obj.key, "foo2")
+        self.assertEqual(obj.b, "two")
+
+    @Manager.calls_manager
+    def test_by_index_null(self):
+        indexed_model = self.manager.proxy(IndexedModel)
+        yield indexed_model("foo1", a=1, b=u"one").save()
+        yield indexed_model("foo2", a=2, b=None).save()
+
+        [key] = yield indexed_model.by_index(b=None, return_keys=True)
+        self.assertEqual(key, "foo2")
 
     @Manager.calls_manager
     def test_vumimessage_field(self):
