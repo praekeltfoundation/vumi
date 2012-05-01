@@ -124,3 +124,14 @@ class TaggingMiddlewareTestCase(TestCase):
         self.assertEqual(msg['helper_metadata']['tag'], {
             'tag': ['pool', 'mytag'],
             })
+
+    def test_add_tag_to_payload(self):
+        payload = {}
+        TaggingMiddleware.add_tag_to_payload(payload, ('pool', 'mytag'))
+        self.assertEqual(payload, {
+            'helper_metadata': {
+                'tag': {
+                    'tag': ['pool', 'mytag'],
+                    },
+                },
+            })

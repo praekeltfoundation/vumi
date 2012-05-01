@@ -106,6 +106,13 @@ class TaggingMiddleware(TransportMiddleware):
         tag_metadata['tag'] = list(tag)
 
     @staticmethod
+    def add_tag_to_payload(payload, tag):
+        """Convenience method for adding a tag to a message payload."""
+        helper_metadata = payload.setdefault('helper_metadata', {})
+        tag_metadata = helper_metadata.setdefault('tag', {})
+        tag_metadata['tag'] = list(tag)
+
+    @staticmethod
     def map_msg_to_tag(msg):
         """Convenience method for retrieving a tag that was added
         to a message by this middleware.
