@@ -29,7 +29,11 @@ class FieldDescriptor(object):
 
     def set_value(self, modelobj, value):
         """Set the value associated with this descriptor."""
-        modelobj._riak_object._data[self.key] = self.field.to_riak(value)
+        raw_value = self.field.to_riak(value)
+        modelobj._riak_object._data[self.key] = raw_value
+        if self.field.index:
+            modelobj._riak_object.remove_index(self.key)
+            modelobj._riak_object.add_index(self.key, raw_value)
 
     def get_value(self, modelobj):
         """Get the value associated with this descriptor."""
@@ -60,6 +64,8 @@ class Field(object):
         Whether None is allowed as a value. Default is False (which
         means the field must either be specified explicitly or by
         a non-None default).
+    :param boolen index:
+        Whether the field should also be indexed. Default is False.
     """
 
     descriptor_class = FieldDescriptor
@@ -67,9 +73,10 @@ class Field(object):
     # model instance creation
     initializable = True
 
-    def __init__(self, default=None, null=False):
+    def __init__(self, default=None, null=False, index=False):
         self.default = default
         self.null = null
+        self.index = index
 
     def get_descriptor(self, key):
         return self.descriptor_class(key, self)
