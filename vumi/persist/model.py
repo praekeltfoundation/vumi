@@ -139,6 +139,34 @@ class Model(object):
         return manager.load(cls, key)
 
     @classmethod
+    def by_index(cls, manager, return_keys=False, **kw):
+        """Find objects by index.
+
+        :returns:
+            A list of model instances (or a list of keys if
+            return_keys is set to True).
+        """
+        kw_items = kw.items()
+        if len(kw_items) != 1:
+            raise ValueError("%s.by_index expects a key to search on." %
+                             cls.__name__)
+        key, value = kw_items[0]
+        descriptor = cls.field_descriptors[key]
+        if descriptor.index_name is None:
+            raise ValueError("%s.%s is not indexed" % (cls.__name__, key))
+        raw_value = descriptor.field.to_riak(value)
+
+        mr = manager.riak_map_reduce()
+        bucket = manager.bucket_name(cls)
+        mr.index(bucket, descriptor.index_name, unicode(raw_value))
+        if return_keys:
+            mapper = lambda manager, result: result.get_key()
+        else:
+            mapper = lambda manager, result: cls.load(manager,
+                                                      result.get_key())
+        return manager.run_map_reduce(mr, mapper)
+
+    @classmethod
     def search(cls, manager, return_keys=False, **kw):
         """Perform a solr search over this model.
 
@@ -285,6 +313,9 @@ class ModelProxy(object):
 
     def load(self, key):
         return self._modelcls.load(self._manager, key)
+
+    def by_index(self, **kw):
+        return self._modelcls.by_index(self._manager, **kw)
 
     def search(self, **kw):
         return self._modelcls.search(self._manager, **kw)
