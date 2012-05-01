@@ -17,6 +17,13 @@ class FieldDescriptor(object):
     def __init__(self, key, field):
         self.key = key
         self.field = field
+        if self.field.index:
+            if self.field.index_name is None:
+                self.index_name = "%s_bin" % self.key
+            else:
+                self.index_name = field.index_name
+        else:
+            self.index_name = None
 
     def setup(self, cls):
         self.cls = cls
@@ -31,9 +38,9 @@ class FieldDescriptor(object):
         """Set the value associated with this descriptor."""
         raw_value = self.field.to_riak(value)
         modelobj._riak_object._data[self.key] = raw_value
-        if self.field.index:
-            modelobj._riak_object.remove_index(self.key)
-            modelobj._riak_object.add_index(self.key, raw_value)
+        if self.index_name is not None:
+            modelobj._riak_object.remove_index(self.index_name)
+            modelobj._riak_object.add_index(self.index_name, raw_value)
 
     def get_value(self, modelobj):
         """Get the value associated with this descriptor."""
@@ -66,6 +73,9 @@ class Field(object):
         a non-None default).
     :param boolen index:
         Whether the field should also be indexed. Default is False.
+    :param string index_name:
+        The name to use for the index. The default is the field name
+        followed by _bin.
     """
 
     descriptor_class = FieldDescriptor
@@ -73,10 +83,11 @@ class Field(object):
     # model instance creation
     initializable = True
 
-    def __init__(self, default=None, null=False, index=False):
+    def __init__(self, default=None, null=False, index=False, index_name=None):
         self.default = default
         self.null = null
         self.index = index
+        self.index_name = index_name
 
     def get_descriptor(self, key):
         return self.descriptor_class(key, self)
