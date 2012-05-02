@@ -9,12 +9,14 @@ from twisted.internet.defer import returnValue
 
 from vumi.message import TransportEvent, TransportUserMessage
 from vumi.persist.model import Model, Manager
-from vumi.persist.fields import VumiMessage, ForeignKey, ListOf, Tag
+from vumi.persist.fields import (VumiMessage, ForeignKey, ListOf, Tag, Dynamic,
+                                 Unicode)
 
 
 class Batch(Model):
     # key is batch_id
     tags = ListOf(Tag())
+    metadata = Dynamic(Unicode())
 
 
 class CurrentTag(Model):
@@ -94,10 +96,12 @@ class MessageStore(object):
         self.r_prefix = r_prefix
 
     @Manager.calls_manager
-    def batch_start(self, tags):
+    def batch_start(self, tags, **metadata):
         batch_id = uuid4().get_hex()
         batch = self.batches(batch_id)
         batch.tags.extend(tags)
+        for key, value in metadata.iteritems():
+            setattr(batch.metadata, key, value)
         yield batch.save()
 
         for tag in tags:

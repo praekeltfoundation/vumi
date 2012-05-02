@@ -41,6 +41,13 @@ class TestMessageStore(ApplicationTestCase):
             })
 
     @inlineCallbacks
+    def test_batch_start_with_metadata(self):
+        batch_id = yield self.store.batch_start([], key1=u"foo", key2=u"bar")
+        batch = yield self.store.get_batch(batch_id)
+        self.assertEqual(batch.metadata.key1, "foo")
+        self.assertEqual(batch.metadata.key2, "bar")
+
+    @inlineCallbacks
     def test_batch_done(self):
         tag1 = ("poolA", "tag1")
         batch_id = yield self.store.batch_start([tag1])
