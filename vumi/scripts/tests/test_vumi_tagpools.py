@@ -56,6 +56,18 @@ class CreatePoolCmdTestCase(TestCase):
         self.assertEqual(cfg.tagpool.inuse_tags("xmpp"), [])
 
 
+class UpdatePoolMetadataCmdTestCase(TestCase):
+    def test_create_pool_range_tags(self):
+        cfg = make_cfg(["update-pool-metadata", "shortcode"])
+        cfg.run()
+        self.assertEqual(cfg.output, [
+            'Updating metadata for pool shortcode ...',
+            '  Done.',
+            ])
+        self.assertEqual(cfg.tagpool.get_metadata("shortcode"),
+                         {'transport_type': 'sms'})
+
+
 class PurgePoolCmdTestCase(TestCase):
     def test_purge_pool(self):
         cfg = make_cfg(["purge-pool", "foo"])

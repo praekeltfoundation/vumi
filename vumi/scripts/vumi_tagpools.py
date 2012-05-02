@@ -32,6 +32,15 @@ class CreatePoolCmd(PoolSubCmd):
         cfg.emit("  Done.")
 
 
+class UpdatePoolMetadataCmd(PoolSubCmd):
+    def run(self, cfg):
+        metadata = cfg.metadata(self.pool)
+
+        cfg.emit("Updating metadata for pool %s ..." % self.pool)
+        cfg.tagpool.set_metadata(self.pool, metadata)
+        cfg.emit("  Done.")
+
+
 class PurgePoolCmd(PoolSubCmd):
     def run(self, cfg):
         cfg.emit("Purging pool %s ..." % self.pool)
@@ -111,6 +120,8 @@ class Options(usage.Options):
     subCommands = [
         ["create-pool", None, CreatePoolCmd,
          "Declare tags for a tag pool."],
+        ["update-pool-metadata", None, UpdatePoolMetadataCmd,
+         "Update a pool's metadata from config."],
         ["purge-pool", None, PurgePoolCmd,
          "Purge all tags from a tag pool."],
         ["list-keys", None, ListKeysCmd,
