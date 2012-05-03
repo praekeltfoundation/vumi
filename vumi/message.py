@@ -75,7 +75,9 @@ class Message(object):
 
     @classmethod
     def from_json(cls, json_string):
-        return cls(_process_fields=False, **from_json(json_string))
+        msg_dict = dict((k.encode('utf8'), v)
+                        for k, v in from_json(json_string).iteritems())
+        return cls(_process_fields=False, **msg_dict)
 
     def __str__(self):
         return u"<Message payload=\"%s\">" % repr(self.payload)
