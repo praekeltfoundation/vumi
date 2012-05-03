@@ -128,7 +128,7 @@ class TestMessageStore(ApplicationTestCase):
 
     @inlineCallbacks
     def test_add_ack_event(self):
-        msg_id, msg, batch_id = yield self._create_outbound(by_batch=True)
+        msg_id, msg, batch_id = yield self._create_outbound()
         ack = TransportEvent(user_message_id=msg_id, event_type='ack',
                              sent_message_id='xyz')
         ack_id = ack['event_id']
@@ -144,7 +144,7 @@ class TestMessageStore(ApplicationTestCase):
 
     @inlineCallbacks
     def test_add_ack_event_without_batch(self):
-        msg_id, msg, batch_id = yield self._create_outbound(by_batch=True)
+        msg_id, msg, _batch_id = yield self._create_outbound(tag=None)
         ack = TransportEvent(user_message_id=msg_id, event_type='ack',
                              sent_message_id='xyz')
         ack_id = ack['event_id']
@@ -157,20 +157,27 @@ class TestMessageStore(ApplicationTestCase):
         self.assertEqual(message_events, [ack])
 
     @inlineCallbacks
-    def test_add_delivery_report_event(self):
-        msg_id, msg, batch_id = yield self._create_outbound(by_batch=True)
-        ack = TransportEvent(user_message_id=msg_id, event_type='ack',
-                             sent_message_id='xyz')
-        ack_id = ack['event_id']
-        yield self.store.add_event(ack)
+    def test_add_delivery_report_events(self):
+        msg_id, msg, batch_id = yield self._create_outbound()
 
-        stored_ack = yield self.store.get_event(ack_id)
+        drs = []
+        for status in TransportEvent.DELIVERY_STATUSES:
+            dr = TransportEvent(user_message_id=msg_id,
+                                event_type='delivery_report',
+                                delivery_status=status,
+                                sent_message_id='xyz')
+            dr_id = dr['event_id']
+            drs.append(dr)
+            yield self.store.add_event(dr)
+            stored_dr = yield self.store.get_event(dr_id)
+            self.assertEqual(stored_dr, dr)
+
         message_events = yield self.store.message_events(msg_id)
-
-        self.assertEqual(stored_ack, ack)
-        self.assertEqual(message_events, [ack])
+        message_events.sort(key=lambda msg: msg['event_id'])
+        drs.sort(key=lambda msg: msg['event_id'])
+        self.assertEqual(message_events, drs)
         self.assertEqual(self.store.batch_status(batch_id), {
-            'ack': 1, 'delivery_report': 0, 'message': 1, 'sent': 1})
+            'ack': 0, 'delivery_report': len(drs), 'message': 1, 'sent': 1})
 
     @inlineCallbacks
     def test_add_inbound_message(self):
