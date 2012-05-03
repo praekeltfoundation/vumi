@@ -153,9 +153,9 @@ class MessageStore(object):
 
         msg_record = yield self.outbound_messages.load(msg_id)
         if msg_record is not None:
-            batch_record = yield msg_record.batch.get()
-            if batch_record is not None:
-                self._inc_status(batch_record.key, event['event_type'])
+            batch_id = msg_record.batch.key
+            if batch_id is not None:
+                self._inc_status(batch_id, event['event_type'])
 
     @Manager.calls_manager
     def get_event(self, event_id):
