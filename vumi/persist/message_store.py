@@ -155,7 +155,12 @@ class MessageStore(object):
         if msg_record is not None:
             batch_id = msg_record.batch.key
             if batch_id is not None:
-                self._inc_status(batch_id, event['event_type'])
+                event_type = event['event_type']
+                self._inc_status(batch_id, event_type)
+                if event_type == 'delivery_report':
+                    self._inc_status(batch_id,
+                                     '%s.%s' % (event_type,
+                                                event['delivery_status']))
 
     @Manager.calls_manager
     def get_event(self, event_id):
@@ -219,7 +224,10 @@ class MessageStore(object):
 
     def _init_status(self, batch_id):
         batch_key = self._batch_key(batch_id)
-        events = TransportEvent.EVENT_TYPES.keys() + ['message', 'sent']
+        events = (TransportEvent.EVENT_TYPES.keys() +
+                  ['delivery_report.%s' % status
+                   for status in TransportEvent.DELIVERY_STATUSES] +
+                  ['message', 'sent'])
         initial_status = dict((event, '0') for event in events)
         self.r_server.hmset(batch_key, initial_status)
 
