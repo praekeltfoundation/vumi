@@ -8,6 +8,7 @@ from twisted.internet.defer import (maybeDeferred, DeferredQueue,
 from vumi.message import TransportUserMessage
 from vumi.service import Worker, WorkerCreator
 from vumi.servicemaker import VumiOptions
+from vumi.utils import to_kwargs
 
 
 class InjectorOptions(VumiOptions):
@@ -57,7 +58,7 @@ class MessageInjector(Worker):
         }
         data.update(json.loads(line))
         self.publisher.publish_message(
-            TransportUserMessage(**data))
+            TransportUserMessage(**to_kwargs(data)))
 
 
 @inlineCallbacks

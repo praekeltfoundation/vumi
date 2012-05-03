@@ -6,6 +6,9 @@ from datetime import datetime
 
 from errors import MissingMessageField, InvalidMessageField
 
+from vumi.utils import to_kwargs
+
+
 # This is the date format we work with internally
 VUMI_DATE_FORMAT = "%Y-%m-%d %H:%M:%S.%f"
 
@@ -75,9 +78,7 @@ class Message(object):
 
     @classmethod
     def from_json(cls, json_string):
-        msg_dict = dict((k.encode('utf8'), v)
-                        for k, v in from_json(json_string).iteritems())
-        return cls(_process_fields=False, **msg_dict)
+        return cls(_process_fields=False, **to_kwargs(from_json(json_string)))
 
     def __str__(self):
         return u"<Message payload=\"%s\">" % repr(self.payload)

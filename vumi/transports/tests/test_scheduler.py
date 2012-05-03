@@ -7,6 +7,7 @@ from twisted.trial.unittest import TestCase
 from vumi.tests.utils import FakeRedis
 from vumi.transports.scheduler import Scheduler
 from vumi.message import TransportUserMessage
+from vumi.utils import to_kwargs
 
 
 class SchedulerTestCase(TestCase):
@@ -25,7 +26,7 @@ class SchedulerTestCase(TestCase):
         return (scheduled_at, message)
 
     def assertDelivered(self, message):
-        delivered_messages = [TransportUserMessage(**payload)
+        delivered_messages = [TransportUserMessage(**to_kwargs(payload))
                                 for _, payload in self._delivery_history]
         self.assertIn(message['message_id'],
             [message['message_id'] for message in delivered_messages])
