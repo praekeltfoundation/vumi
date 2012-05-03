@@ -2,7 +2,7 @@
 
 """Tests for vumi.persist.message_store."""
 
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.message import TransportEvent
 from vumi.tests.utils import FakeRedis
@@ -27,6 +27,45 @@ class TestMessageStore(ApplicationTestCase):
         self.r_server.teardown()
 
     @inlineCallbacks
+    def _maybe_batch(self, tag, by_batch):
+        add_kw, batch_id = {}, None
+        if tag is not None:
+            batch_id = yield self.store.batch_start([tag])
+            if by_batch:
+                add_kw['batch_id'] = batch_id
+            else:
+                add_kw['tag'] = tag
+        returnValue((add_kw, batch_id))
+
+    @inlineCallbacks
+    def _create_outbound(self, tag=("pool", "tag"), by_batch=False):
+        """Create and store an outbound message."""
+        add_kw, batch_id = yield self._maybe_batch(tag, by_batch)
+        msg = self.mkmsg_out(content="outfoo")
+        msg_id = msg['message_id']
+        yield self.store.add_outbound_message(msg, **add_kw)
+        returnValue((msg_id, msg, batch_id))
+
+    @inlineCallbacks
+    def _create_inbound(self, tag=("pool", "tag"), by_batch=False):
+        """Create and store an inbound message."""
+        add_kw, batch_id = yield self._maybe_batch(tag, by_batch)
+        msg = self.mkmsg_in(content="infoo", to_addr="+1234567810001",
+                            transport_type="sms")
+        msg_id = msg['message_id']
+        yield self.store.add_inbound_message(msg, **add_kw)
+        returnValue((msg_id, msg, batch_id))
+
+    def _batch_status(self, ack=0, delivered=0, failed=0, pending=0, sent=0):
+        return {
+            'ack': ack, 'sent': sent,
+            'delivery_report': sum([delivered, failed, pending]),
+            'delivery_report.delivered': delivered,
+            'delivery_report.failed': failed,
+            'delivery_report.pending': pending,
+            }
+
+    @inlineCallbacks
     def test_batch_start(self):
         tag1 = ("poolA", "tag1")
         batch_id = yield self.store.batch_start([tag1])
@@ -36,9 +75,8 @@ class TestMessageStore(ApplicationTestCase):
         self.assertEqual(batch_messages, [])
         self.assertEqual(list(batch.tags), [tag1])
         self.assertEqual(tag_info.current_batch.key, batch_id)
-        self.assertEqual(self.store.batch_status(batch_id), {
-            'ack': 0, 'delivery_report': 0, 'message': 0, 'sent': 0,
-            })
+        self.assertEqual(self.store.batch_status(batch_id),
+                         self._batch_status())
 
     @inlineCallbacks
     def test_batch_start_with_metadata(self):
@@ -59,9 +97,7 @@ class TestMessageStore(ApplicationTestCase):
 
     @inlineCallbacks
     def test_add_outbound_message(self):
-        msg = self.mkmsg_out(content="outfoo")
-        msg_id = msg['message_id']
-        yield self.store.add_outbound_message(msg)
+        msg_id, msg, _batch_id = yield self._create_outbound(tag=None)
 
         stored_msg = yield self.store.get_outbound_message(msg_id)
         self.assertEqual(stored_msg, msg)
@@ -70,10 +106,7 @@ class TestMessageStore(ApplicationTestCase):
 
     @inlineCallbacks
     def test_add_outbound_message_with_batch_id(self):
-        batch_id = yield self.store.batch_start([("pool", "tag")])
-        msg = self.mkmsg_out(content="outfoo")
-        msg_id = msg['message_id']
-        yield self.store.add_outbound_message(msg, batch_id=batch_id)
+        msg_id, msg, batch_id = yield self._create_outbound(by_batch=True)
 
         stored_msg = yield self.store.get_outbound_message(msg_id)
         batch_messages = yield self.store.batch_messages(batch_id)
@@ -82,16 +115,12 @@ class TestMessageStore(ApplicationTestCase):
         self.assertEqual(stored_msg, msg)
         self.assertEqual(batch_messages, [msg])
         self.assertEqual(message_events, [])
-        self.assertEqual(self.store.batch_status(batch_id), {
-            'ack': 0, 'delivery_report': 0, 'message': 1, 'sent': 1,
-            })
+        self.assertEqual(self.store.batch_status(batch_id),
+                         self._batch_status(sent=1))
 
     @inlineCallbacks
     def test_add_outbound_message_with_tag(self):
-        batch_id = yield self.store.batch_start([("pool", "tag")])
-        msg = self.mkmsg_out(content="outfoo")
-        msg_id = msg['message_id']
-        yield self.store.add_outbound_message(msg, tag=("pool", "tag"))
+        msg_id, msg, batch_id = yield self._create_outbound()
 
         stored_msg = yield self.store.get_outbound_message(msg_id)
         batch_messages = yield self.store.batch_messages(batch_id)
@@ -100,19 +129,31 @@ class TestMessageStore(ApplicationTestCase):
         self.assertEqual(stored_msg, msg)
         self.assertEqual(batch_messages, [msg])
         self.assertEqual(message_events, [])
-        self.assertEqual(self.store.batch_status(batch_id), {
-            'ack': 0, 'delivery_report': 0, 'message': 1, 'sent': 1,
-            })
+        self.assertEqual(self.store.batch_status(batch_id),
+                         self._batch_status(sent=1))
 
     @inlineCallbacks
     def test_add_ack_event(self):
-        batch_id = yield self.store.batch_start([("pool", "tag")])
-        msg = self.mkmsg_out(content="outfoo")
-        msg_id = msg['message_id']
+        msg_id, msg, batch_id = yield self._create_outbound()
         ack = TransportEvent(user_message_id=msg_id, event_type='ack',
                              sent_message_id='xyz')
         ack_id = ack['event_id']
-        yield self.store.add_outbound_message(msg, batch_id=batch_id)
+        yield self.store.add_event(ack)
+
+        stored_ack = yield self.store.get_event(ack_id)
+        message_events = yield self.store.message_events(msg_id)
+
+        self.assertEqual(stored_ack, ack)
+        self.assertEqual(message_events, [ack])
+        self.assertEqual(self.store.batch_status(batch_id),
+                         self._batch_status(sent=1, ack=1))
+
+    @inlineCallbacks
+    def test_add_ack_event_without_batch(self):
+        msg_id, msg, _batch_id = yield self._create_outbound(tag=None)
+        ack = TransportEvent(user_message_id=msg_id, event_type='ack',
+                             sent_message_id='xyz')
+        ack_id = ack['event_id']
         yield self.store.add_event(ack)
 
         stored_ack = yield self.store.get_event(ack_id)
@@ -122,22 +163,39 @@ class TestMessageStore(ApplicationTestCase):
         self.assertEqual(message_events, [ack])
 
     @inlineCallbacks
+    def test_add_delivery_report_events(self):
+        msg_id, msg, batch_id = yield self._create_outbound()
+
+        drs = []
+        for status in TransportEvent.DELIVERY_STATUSES:
+            dr = TransportEvent(user_message_id=msg_id,
+                                event_type='delivery_report',
+                                delivery_status=status,
+                                sent_message_id='xyz')
+            dr_id = dr['event_id']
+            drs.append(dr)
+            yield self.store.add_event(dr)
+            stored_dr = yield self.store.get_event(dr_id)
+            self.assertEqual(stored_dr, dr)
+
+        message_events = yield self.store.message_events(msg_id)
+        message_events.sort(key=lambda msg: msg['event_id'])
+        drs.sort(key=lambda msg: msg['event_id'])
+        self.assertEqual(message_events, drs)
+        dr_counts = dict((status, 1)
+                         for status in TransportEvent.DELIVERY_STATUSES)
+        self.assertEqual(self.store.batch_status(batch_id),
+                         self._batch_status(sent=1, **dr_counts))
+
+    @inlineCallbacks
     def test_add_inbound_message(self):
-        msg = self.mkmsg_in(content="infoo")
-        msg_id = msg['message_id']
-        yield self.store.add_inbound_message(msg)
-
+        msg_id, msg, _batch_id = yield self._create_inbound(tag=None)
         stored_msg = yield self.store.get_inbound_message(msg_id)
-
         self.assertEqual(stored_msg, msg)
 
     @inlineCallbacks
     def test_add_inbound_message_with_batch_id(self):
-        batch_id = yield self.store.batch_start([("pool1", "default10001")])
-        msg = self.mkmsg_in(content="infoo", to_addr="+1234567810001",
-                            transport_type="sms")
-        msg_id = msg['message_id']
-        yield self.store.add_inbound_message(msg, batch_id=batch_id)
+        msg_id, msg, batch_id = yield self._create_inbound(by_batch=True)
 
         stored_msg = yield self.store.get_inbound_message(msg_id)
         batch_replies = yield self.store.batch_replies(batch_id)
@@ -147,12 +205,7 @@ class TestMessageStore(ApplicationTestCase):
 
     @inlineCallbacks
     def test_add_inbound_message_with_tag(self):
-        batch_id = yield self.store.batch_start([("pool1", "default10001")])
-        msg = self.mkmsg_in(content="infoo", to_addr="+1234567810001",
-                            transport_type="sms")
-        msg_id = msg['message_id']
-        yield self.store.add_inbound_message(msg,
-                                             tag=("pool1", "default10001"))
+        msg_id, msg, batch_id = yield self._create_inbound()
 
         stored_msg = yield self.store.get_inbound_message(msg_id)
         batch_replies = yield self.store.batch_replies(batch_id)
