@@ -196,16 +196,16 @@ class TestModelOnTxRiak(TestCase):
     def test_dynamic_fields(self):
         dynamic_model = self.manager.proxy(DynamicModel)
         d1 = dynamic_model("foo", a=u"ab")
-        d1.contact_info.cellphone = u"+27123"
-        d1.contact_info.telephone = u"+2755"
-        d1.contact_info.honorific = u"BDFL"
+        d1.contact_info['cellphone'] = u"+27123"
+        d1.contact_info['telephone'] = u"+2755"
+        d1.contact_info['honorific'] = u"BDFL"
         yield d1.save()
 
         d2 = yield dynamic_model.load("foo")
         self.assertEqual(d2.a, u"ab")
-        self.assertEqual(d2.contact_info.cellphone, u"+27123")
-        self.assertEqual(d2.contact_info.telephone, u"+2755")
-        self.assertEqual(d2.contact_info.honorific, u"BDFL")
+        self.assertEqual(d2.contact_info['cellphone'], u"+27123")
+        self.assertEqual(d2.contact_info['telephone'], u"+2755")
+        self.assertEqual(d2.contact_info['honorific'], u"BDFL")
 
     @Manager.calls_manager
     def test_listof_fields(self):

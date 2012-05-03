@@ -325,15 +325,14 @@ class DynamicDescriptor(FieldDescriptor):
 
 class DynamicProxy(object):
     def __init__(self, descriptor, modelobj):
-        self.__dict__['_descriptor_modelobj_'] = (descriptor, modelobj)
+        self._descriptor = descriptor
+        self._modelobj = modelobj
 
-    def __getattr__(self, key):
-        descriptor, modelobj = self._descriptor_modelobj_
-        return descriptor.get_dynamic_value(modelobj, key)
+    def __getitem__(self, key):
+        return self._descriptor.get_dynamic_value(self._modelobj, key)
 
-    def __setattr__(self, key, value):
-        descriptor, modelobj = self._descriptor_modelobj_
-        descriptor.set_dynamic_value(modelobj, key, value)
+    def __setitem__(self, key, value):
+        self._descriptor.set_dynamic_value(self._modelobj, key, value)
 
 
 class Dynamic(FieldWithSubtype):
