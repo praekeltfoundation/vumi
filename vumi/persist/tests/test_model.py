@@ -240,6 +240,29 @@ class TestModelOnTxRiak(TestCase):
                                          ('telephone', "+2755")])
         self.assertEqual(sorted(iteritems), sorted(items))
 
+    def test_dynamic_field_clear(self):
+        d1 = self._create_dynamic_instance(self.manager.proxy(DynamicModel))
+        d1.contact_info.clear()
+        self.assertEqual(d1.contact_info.keys(), [])
+
+    def test_dynamic_field_update(self):
+        d1 = self._create_dynamic_instance(self.manager.proxy(DynamicModel))
+        d1.contact_info.update({"cellphone": "123", "name": "foo"})
+        self.assertEqual(sorted(d1.contact_info.items()), [
+            ('cellphone', "123"), ('honorific', "BDFL"), ('name', "foo"),
+            ('telephone', "+2755")])
+
+    def test_dynamic_field_contains(self):
+        d1 = self._create_dynamic_instance(self.manager.proxy(DynamicModel))
+        self.assertTrue("cellphone" in d1.contact_info)
+        self.assertFalse("landline" in d1.contact_info)
+
+    def test_dynamic_field_del(self):
+        d1 = self._create_dynamic_instance(self.manager.proxy(DynamicModel))
+        del d1.contact_info["telephone"]
+        self.assertEqual(sorted(d1.contact_info.keys()),
+                         ['cellphone', 'honorific'])
+
     @Manager.calls_manager
     def test_listof_fields(self):
         list_model = self.manager.proxy(ListOfModel)

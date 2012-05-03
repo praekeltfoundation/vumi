@@ -326,6 +326,15 @@ class DynamicDescriptor(FieldDescriptor):
                 for key, value in modelobj._riak_object._data.iteritems()
                 if key.startswith(self.prefix))
 
+    def update(self, modelobj, otherdict):
+        # this is a separate method so it can succeed or fail
+        # somewhat atomically in the case where otherdict contains
+        # bad keys or values
+        items = [(self.prefix + key, self.field.from_riak(value))
+                  for key, value in otherdict.iteritems()]
+        for key, value in items:
+            modelobj._riak_object._data[key] = value
+
     def get_dynamic_value(self, modelobj, dynamic_key):
         key = self.prefix + dynamic_key
         return self.field.from_riak(modelobj._riak_object._data.get(key))
@@ -334,6 +343,14 @@ class DynamicDescriptor(FieldDescriptor):
         self.field.validate(value)
         key = self.prefix + dynamic_key
         modelobj._riak_object._data[key] = self.field.to_riak(value)
+
+    def delete_dynamic_value(self, modelobj, dynamic_key):
+        key = self.prefix + dynamic_key
+        del modelobj._riak_object._data[key]
+
+    def has_dynamic_key(self, modelobj, dynamic_key):
+        key = self.prefix + dynamic_key
+        return key in modelobj._riak_object._data
 
 
 class DynamicProxy(object):
@@ -359,11 +376,27 @@ class DynamicProxy(object):
     def values(self):
         return list(self.itervalues())
 
+    def update(self, otherdict):
+        return self._descriptor.update(self._modelobj, otherdict)
+
+    def clear(self):
+        for key in self.keys():
+            del self[key]
+
+    def copy(self):
+        return dict(self.iteritems())
+
     def __getitem__(self, key):
         return self._descriptor.get_dynamic_value(self._modelobj, key)
 
     def __setitem__(self, key, value):
         self._descriptor.set_dynamic_value(self._modelobj, key, value)
+
+    def __delitem__(self, key):
+        self._descriptor.delete_dynamic_value(self._modelobj, key)
+
+    def __contains__(self, key):
+        return self._descriptor.has_dynamic_key(self._modelobj, key)
 
 
 class Dynamic(FieldWithSubtype):
