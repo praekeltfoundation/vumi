@@ -192,13 +192,17 @@ class TestModelOnTxRiak(TestCase):
         m1.msg = msg2
         self.assertTrue("extra" not in m1.msg)
 
-    @Manager.calls_manager
-    def test_dynamic_fields(self):
-        dynamic_model = self.manager.proxy(DynamicModel)
+    def _create_dynamic_instance(self, dynamic_model):
         d1 = dynamic_model("foo", a=u"ab")
         d1.contact_info['cellphone'] = u"+27123"
         d1.contact_info['telephone'] = u"+2755"
         d1.contact_info['honorific'] = u"BDFL"
+        return d1
+
+    @Manager.calls_manager
+    def test_dynamic_fields(self):
+        dynamic_model = self.manager.proxy(DynamicModel)
+        d1 = self._create_dynamic_instance(dynamic_model)
         yield d1.save()
 
         d2 = yield dynamic_model.load("foo")
@@ -206,6 +210,35 @@ class TestModelOnTxRiak(TestCase):
         self.assertEqual(d2.contact_info['cellphone'], u"+27123")
         self.assertEqual(d2.contact_info['telephone'], u"+2755")
         self.assertEqual(d2.contact_info['honorific'], u"BDFL")
+
+    def test_dynamic_field_keys(self):
+        d1 = self._create_dynamic_instance(self.manager.proxy(DynamicModel))
+        keys = d1.contact_info.keys()
+        iterkeys = d1.contact_info.iterkeys()
+        self.assertTrue(keys, list)
+        self.assertTrue(hasattr(iterkeys, 'next'))
+        self.assertEqual(sorted(keys), ['cellphone', 'honorific', 'telephone'])
+        self.assertEqual(sorted(iterkeys), sorted(keys))
+
+    def test_dynamic_field_values(self):
+        d1 = self._create_dynamic_instance(self.manager.proxy(DynamicModel))
+        values = d1.contact_info.values()
+        itervalues = d1.contact_info.itervalues()
+        self.assertTrue(isinstance(values, list))
+        self.assertTrue(hasattr(itervalues, 'next'))
+        self.assertEqual(sorted(values), ["+27123", "+2755", "BDFL"])
+        self.assertEqual(sorted(itervalues), sorted(values))
+
+    def test_dynamic_field_items(self):
+        d1 = self._create_dynamic_instance(self.manager.proxy(DynamicModel))
+        items = d1.contact_info.items()
+        iteritems = d1.contact_info.iteritems()
+        self.assertTrue(isinstance(items, list))
+        self.assertTrue(hasattr(iteritems, 'next'))
+        self.assertEqual(sorted(items), [('cellphone', "+27123"),
+                                         ('honorific', "BDFL"),
+                                         ('telephone', "+2755")])
+        self.assertEqual(sorted(iteritems), sorted(items))
 
     @Manager.calls_manager
     def test_listof_fields(self):

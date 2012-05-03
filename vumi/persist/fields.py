@@ -313,6 +313,19 @@ class DynamicDescriptor(FieldDescriptor):
     def set_value(self, modelobj, value):
         raise RuntimeError("DynamicDescriptors should never be assigned to.")
 
+    def iterkeys(self, modelobj):
+        prefix_len = len(self.prefix)
+        return (key[prefix_len:]
+                for key in modelobj._riak_object._data.iterkeys()
+                if key.startswith(self.prefix))
+
+    def iteritems(self, modelobj):
+        prefix_len = len(self.prefix)
+        from_riak = self.field.from_riak
+        return ((key[prefix_len:], from_riak(value))
+                for key, value in modelobj._riak_object._data.iteritems()
+                if key.startswith(self.prefix))
+
     def get_dynamic_value(self, modelobj, dynamic_key):
         key = self.prefix + dynamic_key
         return self.field.from_riak(modelobj._riak_object._data.get(key))
@@ -327,6 +340,24 @@ class DynamicProxy(object):
     def __init__(self, descriptor, modelobj):
         self._descriptor = descriptor
         self._modelobj = modelobj
+
+    def iterkeys(self):
+        return self._descriptor.iterkeys(self._modelobj)
+
+    def keys(self):
+        return list(self.iterkeys())
+
+    def iteritems(self):
+        return self._descriptor.iteritems(self._modelobj)
+
+    def items(self):
+        return list(self.iteritems())
+
+    def itervalues(self):
+        return (value for _key, value in self.iteritems())
+
+    def values(self):
+        return list(self.itervalues())
 
     def __getitem__(self, key):
         return self._descriptor.get_dynamic_value(self._modelobj, key)
