@@ -32,6 +32,15 @@ def import_module(name):
     return sys.modules[name]
 
 
+def to_kwargs(kwargs):
+    """
+    Convert top-level keys from unicode to string for older Python versions.
+
+    See http://bugs.python.org/issue2646 for details.
+    """
+    return dict((k.encode('utf8'), v) for k, v in kwargs.iteritems())
+
+
 class SimplishReceiver(protocol.Protocol):
     def __init__(self, response):
         self.deferred = defer.Deferred()

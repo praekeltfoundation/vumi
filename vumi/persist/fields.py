@@ -5,6 +5,7 @@
 from datetime import datetime
 
 from vumi.message import VUMI_DATE_FORMAT
+from vumi.utils import to_kwargs
 
 
 class ValidationError(Exception):
@@ -241,7 +242,9 @@ class VumiMessageDescriptor(FieldDescriptor):
                 if key == "timestamp":
                     value = self._timestamp_from_json(value)
                 payload[key] = value
-        return self.field.message_class(**payload) if payload else None
+        if not payload:
+            return None
+        return self.field.message_class(**to_kwargs(payload))
 
 
 class VumiMessage(Field):
