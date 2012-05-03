@@ -134,7 +134,6 @@ class MessageStore(object):
 
         if batch_id is not None:
             msg_record.batch.key = batch_id
-            self._inc_status(batch_id, 'message')
             self._inc_status(batch_id, 'sent')
 
         yield msg_record.save()
@@ -227,7 +226,7 @@ class MessageStore(object):
         events = (TransportEvent.EVENT_TYPES.keys() +
                   ['delivery_report.%s' % status
                    for status in TransportEvent.DELIVERY_STATUSES] +
-                  ['message', 'sent'])
+                  ['sent'])
         initial_status = dict((event, '0') for event in events)
         self.r_server.hmset(batch_key, initial_status)
 

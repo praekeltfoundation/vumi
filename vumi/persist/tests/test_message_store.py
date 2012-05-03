@@ -56,10 +56,9 @@ class TestMessageStore(ApplicationTestCase):
         yield self.store.add_inbound_message(msg, **add_kw)
         returnValue((msg_id, msg, batch_id))
 
-    def _batch_status(self, ack=0, delivered=0, failed=0, pending=0,
-                      message=0, sent=0):
+    def _batch_status(self, ack=0, delivered=0, failed=0, pending=0, sent=0):
         return {
-            'ack': ack, 'message': message, 'sent': sent,
+            'ack': ack, 'sent': sent,
             'delivery_report': sum([delivered, failed, pending]),
             'delivery_report.delivered': delivered,
             'delivery_report.failed': failed,
@@ -117,7 +116,7 @@ class TestMessageStore(ApplicationTestCase):
         self.assertEqual(batch_messages, [msg])
         self.assertEqual(message_events, [])
         self.assertEqual(self.store.batch_status(batch_id),
-                         self._batch_status(message=1, sent=1))
+                         self._batch_status(sent=1))
 
     @inlineCallbacks
     def test_add_outbound_message_with_tag(self):
@@ -131,7 +130,7 @@ class TestMessageStore(ApplicationTestCase):
         self.assertEqual(batch_messages, [msg])
         self.assertEqual(message_events, [])
         self.assertEqual(self.store.batch_status(batch_id),
-                         self._batch_status(message=1, sent=1))
+                         self._batch_status(sent=1))
 
     @inlineCallbacks
     def test_add_ack_event(self):
@@ -147,7 +146,7 @@ class TestMessageStore(ApplicationTestCase):
         self.assertEqual(stored_ack, ack)
         self.assertEqual(message_events, [ack])
         self.assertEqual(self.store.batch_status(batch_id),
-                         self._batch_status(message=1, sent=1, ack=1))
+                         self._batch_status(sent=1, ack=1))
 
     @inlineCallbacks
     def test_add_ack_event_without_batch(self):
@@ -186,7 +185,7 @@ class TestMessageStore(ApplicationTestCase):
         dr_counts = dict((status, 1)
                          for status in TransportEvent.DELIVERY_STATUSES)
         self.assertEqual(self.store.batch_status(batch_id),
-                         self._batch_status(message=1, sent=1, **dr_counts))
+                         self._batch_status(sent=1, **dr_counts))
 
     @inlineCallbacks
     def test_add_inbound_message(self):
