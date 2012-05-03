@@ -120,6 +120,8 @@ class TestMessageStore(ApplicationTestCase):
 
         self.assertEqual(stored_ack, ack)
         self.assertEqual(message_events, [ack])
+        self.assertEqual(self.store.batch_status(batch_id), {
+            'ack': 1, 'delivery_report': 0, 'message': 1, 'sent': 1})
 
     @inlineCallbacks
     def test_add_inbound_message(self):
