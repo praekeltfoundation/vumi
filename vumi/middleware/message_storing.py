@@ -58,5 +58,12 @@ class StoringMiddleware(BaseMiddleware):
 
     @inlineCallbacks
     def handle_event(self, event, endpoint):
+        transport_metadata = event['transport_metadata']
+        # FIXME: The SMPP transport writes a 'datetime' object
+        #        in the 'date' of the transport_metadata.
+        #        json.dumps() that RiakObject uses is unhappy with that.
+        if 'date' in transport_metadata:
+            date = transport_metadata['date']
+            transport_metadata['date'] = date.isoformat()
         yield self.store.add_event(event)
         returnValue(event)
