@@ -143,6 +143,14 @@ class FakeRedisRespTestCase(TransportTestCase):
         self.assertEqual(self.transport.r_get_message(
             message1.payload['message_id']), None)
 
+    def test_redis_third_party_id_persistence(self):
+        # Testing: set -> get -> delete, for redis third party id mapping
+        our_id = "blergh34534545433454354"
+        their_id = "omghesvomitingnumbers"
+        self.transport.r_set_id_for_third_party_id(their_id, our_id)
+        retrieved_our_id = self.transport.r_get_id_for_third_party_id(their_id)
+        self.assertEqual(our_id, retrieved_our_id)
+
     @inlineCallbacks
     def test_match_resp(self):
         message1 = self.mkmsg_out(
