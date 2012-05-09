@@ -88,7 +88,7 @@ class SmppTransport(Transport):
 
     # We only want to start this after we finish connecting to SMPP.
     start_message_consumer = False
-    third_party_id_expiry = 60*60*24*7  # 1 week
+    third_party_id_expiry = 60 * 60 * 24 * 7  # 1 week
 
     def validate_config(self):
         self.client_config = ClientConfig.from_config(self.config)
