@@ -75,34 +75,48 @@ class MtechUssdTransport(HttpRpcTransport):
 class MtechUssdResponse(object):
     def __init__(self, session_id):
         self.session_id = session_id
+        self.title = None
         self.text = []
         self.nav = []
 
     def add_title(self, title):
-        self.text.insert(0, '<title>%s</title>' % (title,))
+        self.title = title
 
     def add_text(self, text):
-        self.text.append('<div>%s</div>' % (text,))
+        self.text.append(text)
 
     def add_menu_item(self, text, option):
-        self.nav.append((
-                '<link accesskey="%(option)s" pageId="index%(option)s">'
-                '%(text)s</link>') % {'text': text, 'option': option})
+        self.nav.append({
+                'text': text,
+                'pageId': 'index%s' % (option,),
+                'accesskey': option,
+                })
 
     def add_freetext_option(self):
-        self.nav.append('<link accesskey="*" pageId="indexX" />')
+        self.nav.append({'text': None, 'pageId': 'indexX', 'accesskey': '*'})
+
+    def to_xml(self):
+        page = ET.fromstring('<page version="2.0" />')
+        ET.SubElement(page, "session_id").text = self.session_id
+
+        if self.title is not None:
+            ET.SubElement(page, "title").text = self.title
+
+        for text in self.text:
+            lines = text.split('\n')
+            div = ET.SubElement(page, "div")
+            div.text = lines.pop(0)
+            for line in lines:
+                ET.SubElement(div, "br").tail = line
+
+        if self.nav:
+            nav = ET.SubElement(page, "navigation")
+            for link in self.nav:
+                ET.SubElement(
+                    nav, "link", pageId=link['pageId'],
+                    accesskey=link['accesskey']).text = link['text']
+
+        return ET.tostring(page, encoding="UTF-8")
 
     def __str__(self):
-        lines = [
-            '<?xml version="1.0" encoding="UTF-8"?>',
-            '<page version="2.0">',
-            '  <session_id>%s</session_id>' % (self.session_id,),
-            ]
-        lines.extend('  %s' % (line,) for line in self.text)
-        if self.nav:
-            lines.append('  <navigation>')
-            lines.extend('    %s' % (line,) for line in self.nav)
-            lines.append('  </navigation>')
-        lines.append('</page>')
-
-        return '\n'.join(lines)
+        return self.to_xml()

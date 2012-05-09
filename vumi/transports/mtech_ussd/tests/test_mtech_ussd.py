@@ -65,7 +65,7 @@ class TestMtechUssdTransport(TransportTestCase):
             sid, mobile_number='2348085832481', page_id='0',
             data='testmenu', gate='gateid')
 
-        msg = yield self.reply_to_message("OK")
+        msg = yield self.reply_to_message("OK\n1 < 2")
 
         self.assertEqual(msg['transport_name'], self.transport_name)
         self.assertEqual(msg['transport_type'], "ussd")
@@ -77,14 +77,14 @@ class TestMtechUssdTransport(TransportTestCase):
         self.assertEqual(msg['content'], 'testmenu')
 
         response = yield response_d
-        correct_response = '\n'.join([
-                '<?xml version="1.0" encoding="UTF-8"?>',
+        correct_response = ''.join([
+                "<?xml version='1.0' encoding='UTF-8'?>\n",
                 '<page version="2.0">',
-                '  <session_id>a41739890287485d968ea66e8b44bfd3</session_id>',
-                '  <div>OK</div>',
-                '  <navigation>',
-                '    <link accesskey="*" pageId="indexX" />',
-                '  </navigation>',
+                '<session_id>a41739890287485d968ea66e8b44bfd3</session_id>',
+                '<div>OK<br />1 &lt; 2</div>',
+                '<navigation>',
+                '<link accesskey="*" pageId="indexX" />',
+                '</navigation>',
                 '</page>',
                 ])
         self.assertEqual(response, correct_response)
@@ -107,14 +107,14 @@ class TestMtechUssdTransport(TransportTestCase):
         self.assertEqual(msg['content'], 'foo')
 
         response = yield response_d
-        correct_response = '\n'.join([
-                '<?xml version="1.0" encoding="UTF-8"?>',
+        correct_response = ''.join([
+                "<?xml version='1.0' encoding='UTF-8'?>\n",
                 '<page version="2.0">',
-                '  <session_id>a41739890287485d968ea66e8b44bfd3</session_id>',
-                '  <div>OK</div>',
-                '  <navigation>',
-                '    <link accesskey="*" pageId="indexX" />',
-                '  </navigation>',
+                '<session_id>a41739890287485d968ea66e8b44bfd3</session_id>',
+                '<div>OK</div>',
+                '<navigation>',
+                '<link accesskey="*" pageId="indexX" />',
+                '</navigation>',
                 '</page>',
                 ])
         self.assertEqual(response, correct_response)
@@ -137,11 +137,11 @@ class TestMtechUssdTransport(TransportTestCase):
         self.assertEqual(msg['content'], 'foo')
 
         response = yield response_d
-        correct_response = '\n'.join([
-                '<?xml version="1.0" encoding="UTF-8"?>',
+        correct_response = ''.join([
+                "<?xml version='1.0' encoding='UTF-8'?>\n",
                 '<page version="2.0">',
-                '  <session_id>a41739890287485d968ea66e8b44bfd3</session_id>',
-                '  <div>OK</div>',
+                '<session_id>a41739890287485d968ea66e8b44bfd3</session_id>',
+                '<div>OK</div>',
                 '</page>',
                 ])
         self.assertEqual(response, correct_response)
