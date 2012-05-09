@@ -203,6 +203,7 @@ class SmppTransport(Transport):
             log.err("Sequence number lookup failed for:%s" % (
                 kwargs['sequence_number']))
         else:
+            self.r_set_id_for_third_party_id(transport_msg_id, sent_sms_id)
             self.r_delete_for_sequence(kwargs['sequence_number'])
             if kwargs['command_status'] == 'ESME_ROK':
                 # The sms was submitted ok
@@ -253,7 +254,8 @@ class SmppTransport(Transport):
                 }
         delivery_status = self.delivery_status(
             kwargs['delivery_report']['stat'])
-        message_id = kwargs['delivery_report']['id']
+        message_id = self.r_get_id_for_third_party_id(
+                                        kwargs['delivery_report']['id'])
         log.msg("PUBLISHING DELIV REPORT: %s %s" % (message_id,
                                                     delivery_status))
         return self.publish_delivery_report(

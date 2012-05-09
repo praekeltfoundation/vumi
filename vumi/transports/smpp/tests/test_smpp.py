@@ -373,7 +373,7 @@ class EsmeToSmscTestCase(TransportTestCase):
         self.assertEqual(delv['message_type'], 'event')
         self.assertEqual(delv['event_type'], 'delivery_report')
         self.assertEqual(delv['transport_name'], self.transport_name)
-        self.assertEqual(delv['user_message_id'], sent_message_id)
+        self.assertEqual(delv['user_message_id'], user_message_id)
         self.assertEqual(delv['delivery_status'],
                          self.expected_delivery_status)
 
@@ -478,7 +478,7 @@ class EsmeToSmscTestCase(TransportTestCase):
         self.assertEqual(delv['message_type'], 'event')
         self.assertEqual(delv['event_type'], 'delivery_report')
         self.assertEqual(delv['transport_name'], self.transport_name)
-        self.assertEqual(delv['user_message_id'], sent_message_id)
+        self.assertEqual(delv['user_message_id'], user_message_id)
         self.assertEqual(delv['delivery_status'],
                          self.expected_delivery_status)
 
