@@ -150,6 +150,9 @@ class FakeRedisRespTestCase(TransportTestCase):
         self.transport.r_set_id_for_third_party_id(their_id, our_id)
         retrieved_our_id = self.transport.r_get_id_for_third_party_id(their_id)
         self.assertEqual(our_id, retrieved_our_id)
+        self.assertTrue(self.transport.r_delete_for_third_party_id(their_id))
+        self.assertEqual(self.transport.r_get_id_for_third_party_id(their_id),
+                                                                        None)
 
     @inlineCallbacks
     def test_match_resp(self):
