@@ -88,6 +88,7 @@ class SmppTransport(Transport):
 
     # We only want to start this after we finish connecting to SMPP.
     start_message_consumer = False
+    third_party_id_expiry = 60*60*24*7  # 1 week
 
     def validate_config(self):
         self.client_config = ClientConfig.from_config(self.config)
@@ -194,7 +195,9 @@ class SmppTransport(Transport):
                 self.r_third_party_id_key(third_party_id))
 
     def r_set_id_for_third_party_id(self, third_party_id, id):
-        self.r_server.set(self.r_third_party_id_key(third_party_id), id)
+        rkey = self.r_third_party_id_key(third_party_id)
+        self.r_server.set(rkey, id)
+        self.r_server.expire(rkey, self.third_party_id_expiry)
 
     def submit_sm_resp(self, *args, **kwargs):
         transport_msg_id = kwargs['message_id']

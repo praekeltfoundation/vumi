@@ -122,6 +122,11 @@ class FakeRedisRespTestCase(TransportTestCase):
         yield self.transport.startWorker()
         self.transport.esme_connected(self.esme)
 
+    @inlineCallbacks
+    def tearDown(self):
+        yield super(FakeRedisRespTestCase, self).tearDown()
+        self.transport.r_server.teardown()
+
     def test_redis_message_persistence(self):
         # A simple test of set -> get -> delete for redis message persistence
         message1 = self.mkmsg_out(
@@ -287,8 +292,8 @@ class EsmeToSmscTestCase(TransportTestCase):
 
     @inlineCallbacks
     def tearDown(self):
-        from twisted.internet.base import DelayedCall
-        DelayedCall.debug = True
+        #from twisted.internet.base import DelayedCall
+        #DelayedCall.debug = True
 
         yield super(EsmeToSmscTestCase, self).tearDown()
         self.transport.r_server.teardown()
