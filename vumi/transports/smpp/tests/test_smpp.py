@@ -88,11 +88,12 @@ class FakeRedisRespTestCase(TransportTestCase):
     def setUp(self):
         super(FakeRedisRespTestCase, self).setUp()
         self.config = {
-                "TRANSPORT_NAME": "redis_testing_transport",
+                "transport_name": "redis_testing_transport",
                 "system_id": "vumitest-vumitest-vumitest",
                 "host": "host",
                 "port": "port",
                 "password": "password",
+                "third_party_id_expiry" : 3600,  # just 1 hour
                 }
         self.vumi_options = {
                 "vhost": "develop",
@@ -122,6 +123,11 @@ class FakeRedisRespTestCase(TransportTestCase):
         yield self.transport.startWorker()
         self.transport.esme_connected(self.esme)
 
+    @inlineCallbacks
+    def tearDown(self):
+        yield super(FakeRedisRespTestCase, self).tearDown()
+        self.transport.r_server.teardown()
+
     def test_redis_message_persistence(self):
         # A simple test of set -> get -> delete for redis message persistence
         message1 = self.mkmsg_out(
@@ -142,6 +148,18 @@ class FakeRedisRespTestCase(TransportTestCase):
             message1.payload['message_id']), None)
         self.assertEqual(self.transport.r_get_message(
             message1.payload['message_id']), None)
+
+    def test_redis_third_party_id_persistence(self):
+        # Testing: set -> get -> delete, for redis third party id mapping
+        self.assertEqual(self.transport.third_party_id_expiry, 3600)
+        our_id = "blergh34534545433454354"
+        their_id = "omghesvomitingnumbers"
+        self.transport.r_set_id_for_third_party_id(their_id, our_id)
+        retrieved_our_id = self.transport.r_get_id_for_third_party_id(their_id)
+        self.assertEqual(our_id, retrieved_our_id)
+        self.assertTrue(self.transport.r_delete_for_third_party_id(their_id))
+        self.assertEqual(self.transport.r_get_id_for_third_party_id(their_id),
+                                                                        None)
 
     @inlineCallbacks
     def test_match_resp(self):
@@ -276,8 +294,8 @@ class EsmeToSmscTestCase(TransportTestCase):
 
     @inlineCallbacks
     def tearDown(self):
-        from twisted.internet.base import DelayedCall
-        DelayedCall.debug = True
+        #from twisted.internet.base import DelayedCall
+        #DelayedCall.debug = True
 
         yield super(EsmeToSmscTestCase, self).tearDown()
         self.transport.r_server.teardown()
@@ -362,7 +380,7 @@ class EsmeToSmscTestCase(TransportTestCase):
         self.assertEqual(delv['message_type'], 'event')
         self.assertEqual(delv['event_type'], 'delivery_report')
         self.assertEqual(delv['transport_name'], self.transport_name)
-        self.assertEqual(delv['user_message_id'], sent_message_id)
+        self.assertEqual(delv['user_message_id'], user_message_id)
         self.assertEqual(delv['delivery_status'],
                          self.expected_delivery_status)
 
@@ -467,7 +485,7 @@ class EsmeToSmscTestCase(TransportTestCase):
         self.assertEqual(delv['message_type'], 'event')
         self.assertEqual(delv['event_type'], 'delivery_report')
         self.assertEqual(delv['transport_name'], self.transport_name)
-        self.assertEqual(delv['user_message_id'], sent_message_id)
+        self.assertEqual(delv['user_message_id'], user_message_id)
         self.assertEqual(delv['delivery_status'],
                          self.expected_delivery_status)
 
@@ -507,6 +525,65 @@ class EsmeToSmscTestCase(TransportTestCase):
 
         dispatched_failures = self.get_dispatched_failures()
         self.assertEqual(dispatched_failures, [])
+
+    @inlineCallbacks
+    def test_submit_and_deliver_with_missing_id_lookup(self):
+
+        def r_failing_get(third_party_id):
+            return None
+        self.transport.r_get_id_for_third_party_id = r_failing_get
+
+        self._block_till_bind = defer.Deferred()
+
+        # Startup
+        yield self.startTransport()
+        yield self.transport._block_till_bind
+
+        # Next the Client submits a SMS to the Server
+        # and recieves an ack and a delivery_report
+
+        msg = TransportUserMessage(
+                to_addr="2772222222",
+                from_addr="2772000000",
+                content='hello world',
+                transport_name=self.transport_name,
+                transport_type='smpp',
+                transport_metadata={},
+                rkey='%s.outbound' % self.transport_name,
+                timestamp='0',
+                )
+        yield self.dispatch(msg)
+
+        # We need the user_message_id to check the ack
+        user_message_id = msg.payload["message_id"]
+
+        wait_for_events = self._amqp.wait_messages(
+                "vumi",
+                "%s.event" % self.transport_name,
+                2,
+                )
+        yield wait_for_events
+
+        dispatched_events = self.get_dispatched_events()
+        ack = dispatched_events[0].payload
+        delv = dispatched_events[1].payload
+
+        self.assertEqual(ack['message_type'], 'event')
+        self.assertEqual(ack['event_type'], 'ack')
+        self.assertEqual(ack['transport_name'], self.transport_name)
+        self.assertEqual(ack['user_message_id'], user_message_id)
+
+        # We need the sent_message_id to check the delivery_report
+        sent_message_id = ack['sent_message_id']
+
+        self.assertEqual(delv['message_type'], 'event')
+        self.assertEqual(delv['event_type'], 'delivery_report')
+        self.assertEqual(delv['transport_name'], self.transport_name)
+        self.assertEqual(delv['user_message_id'], None)
+        self.assertEqual(delv['transport_metadata']['message']['id'],
+                                                    sent_message_id)
+        self.assertEqual(delv['delivery_status'],
+                         self.expected_delivery_status)
 
 
 class EsmeToSmscTestCaseDeliveryYo(EsmeToSmscTestCase):

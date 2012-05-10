@@ -95,6 +95,11 @@ class SmppTransport(Transport):
     def setup_transport(self):
         log.msg("Starting the SmppTransport with %s" % self.config)
 
+        self.third_party_id_expiry = self.config.get(
+                "third_party_id_expiry",
+                60 * 60 * 24 * 7  # 1 week
+                )
+
         # Connect to Redis
         if not hasattr(self, 'r_server'):
             # Only set up redis if we don't have a test stub already
@@ -181,6 +186,23 @@ class SmppTransport(Transport):
     def r_set_id_for_sequence(self, sequence_number, id):
         self.r_server.set(self.r_sequence_number_key(sequence_number), id)
 
+    # Redis 3rd party id to vumi id mapping
+
+    def r_third_party_id_key(self, third_party_id):
+        return "%s#3rd_party_id#%s" % (self.r_prefix, third_party_id)
+
+    def r_get_id_for_third_party_id(self, third_party_id):
+        return self.r_server.get(self.r_third_party_id_key(third_party_id))
+
+    def r_delete_for_third_party_id(self, third_party_id):
+        return self.r_server.delete(
+                self.r_third_party_id_key(third_party_id))
+
+    def r_set_id_for_third_party_id(self, third_party_id, id):
+        rkey = self.r_third_party_id_key(third_party_id)
+        self.r_server.set(rkey, id)
+        self.r_server.expire(rkey, self.third_party_id_expiry)
+
     def submit_sm_resp(self, *args, **kwargs):
         transport_msg_id = kwargs['message_id']
         sent_sms_id = self.r_get_id_for_sequence(kwargs['sequence_number'])
@@ -188,6 +210,7 @@ class SmppTransport(Transport):
             log.err("Sequence number lookup failed for:%s" % (
                 kwargs['sequence_number']))
         else:
+            self.r_set_id_for_third_party_id(transport_msg_id, sent_sms_id)
             self.r_delete_for_sequence(kwargs['sequence_number'])
             if kwargs['command_status'] == 'ESME_ROK':
                 # The sms was submitted ok
@@ -238,7 +261,8 @@ class SmppTransport(Transport):
                 }
         delivery_status = self.delivery_status(
             kwargs['delivery_report']['stat'])
-        message_id = kwargs['delivery_report']['id']
+        message_id = self.r_get_id_for_third_party_id(
+                                        kwargs['delivery_report']['id'])
         log.msg("PUBLISHING DELIV REPORT: %s %s" % (message_id,
                                                     delivery_status))
         return self.publish_delivery_report(
