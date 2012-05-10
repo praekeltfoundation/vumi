@@ -524,6 +524,65 @@ class EsmeToSmscTestCase(TransportTestCase):
         dispatched_failures = self.get_dispatched_failures()
         self.assertEqual(dispatched_failures, [])
 
+    @inlineCallbacks
+    def test_submit_and_deliver_with_missing_id_lookup(self):
+
+        def r_failing_get(third_party_id):
+            return None
+        self.transport.r_get_id_for_third_party_id = r_failing_get
+
+        self._block_till_bind = defer.Deferred()
+
+        # Startup
+        yield self.startTransport()
+        yield self.transport._block_till_bind
+
+        # Next the Client submits a SMS to the Server
+        # and recieves an ack and a delivery_report
+
+        msg = TransportUserMessage(
+                to_addr="2772222222",
+                from_addr="2772000000",
+                content='hello world',
+                transport_name=self.transport_name,
+                transport_type='smpp',
+                transport_metadata={},
+                rkey='%s.outbound' % self.transport_name,
+                timestamp='0',
+                )
+        yield self.dispatch(msg)
+
+        # We need the user_message_id to check the ack
+        user_message_id = msg.payload["message_id"]
+
+        wait_for_events = self._amqp.wait_messages(
+                "vumi",
+                "%s.event" % self.transport_name,
+                2,
+                )
+        yield wait_for_events
+
+        dispatched_events = self.get_dispatched_events()
+        ack = dispatched_events[0].payload
+        delv = dispatched_events[1].payload
+
+        self.assertEqual(ack['message_type'], 'event')
+        self.assertEqual(ack['event_type'], 'ack')
+        self.assertEqual(ack['transport_name'], self.transport_name)
+        self.assertEqual(ack['user_message_id'], user_message_id)
+
+        # We need the sent_message_id to check the delivery_report
+        sent_message_id = ack['sent_message_id']
+
+        self.assertEqual(delv['message_type'], 'event')
+        self.assertEqual(delv['event_type'], 'delivery_report')
+        self.assertEqual(delv['transport_name'], self.transport_name)
+        self.assertEqual(delv['user_message_id'], None)
+        self.assertEqual(delv['transport_metadata']['message']['id'],
+                                                    sent_message_id)
+        self.assertEqual(delv['delivery_status'],
+                         self.expected_delivery_status)
+
 
 class EsmeToSmscTestCaseDeliveryYo(EsmeToSmscTestCase):
     # This tests a slightly non-standard delivery report format for Yo!
