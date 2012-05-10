@@ -335,6 +335,9 @@ class FakeRedis(object):
         self._data.setdefault(key, {})[field] = str(value)
         return value
 
+    def hexists(self, key, field):
+        return int(field in self._data.get(key, {}))
+
     # Set operations
 
     def sadd(self, key, *values):

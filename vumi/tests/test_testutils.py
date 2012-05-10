@@ -91,6 +91,13 @@ class FakeRedisTestCase(TestCase):
         self.r_server.set("key", "string")
         self.assertRaises(Exception, self.r_server.hincrby, "key", "field1")
 
+    def test_hexists(self):
+        self.r_server = FakeRedis()
+        self.r_server.hset('key', 'field', 1)
+        self.assertTrue(self.r_server.hexists('key', 'field'))
+        self.r_server.hdel('key', 'field')
+        self.assertFalse(self.r_server.hexists('key', 'field'))
+
     def test_sadd(self):
         self.r_server = FakeRedis()
         self.r_server.sadd('set', 1)
