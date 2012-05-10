@@ -88,13 +88,17 @@ class SmppTransport(Transport):
 
     # We only want to start this after we finish connecting to SMPP.
     start_message_consumer = False
-    third_party_id_expiry = 60 * 60 * 24 * 7  # 1 week
 
     def validate_config(self):
         self.client_config = ClientConfig.from_config(self.config)
 
     def setup_transport(self):
         log.msg("Starting the SmppTransport with %s" % self.config)
+
+        self.third_party_id_expiry = self.config.get(
+                "third_party_id_expiry",
+                60 * 60 * 24 * 7  # 1 week
+                )
 
         # Connect to Redis
         if not hasattr(self, 'r_server'):

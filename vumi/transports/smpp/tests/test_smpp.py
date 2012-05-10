@@ -88,11 +88,12 @@ class FakeRedisRespTestCase(TransportTestCase):
     def setUp(self):
         super(FakeRedisRespTestCase, self).setUp()
         self.config = {
-                "TRANSPORT_NAME": "redis_testing_transport",
+                "transport_name": "redis_testing_transport",
                 "system_id": "vumitest-vumitest-vumitest",
                 "host": "host",
                 "port": "port",
                 "password": "password",
+                "third_party_id_expiry" : 3600,  # just 1 hour
                 }
         self.vumi_options = {
                 "vhost": "develop",
@@ -150,6 +151,7 @@ class FakeRedisRespTestCase(TransportTestCase):
 
     def test_redis_third_party_id_persistence(self):
         # Testing: set -> get -> delete, for redis third party id mapping
+        self.assertEqual(self.transport.third_party_id_expiry, 3600)
         our_id = "blergh34534545433454354"
         their_id = "omghesvomitingnumbers"
         self.transport.r_set_id_for_third_party_id(their_id, our_id)
