@@ -11,6 +11,24 @@ from vumi.application.session import SessionManager
 
 
 class MtechUssdTransport(HttpRpcTransport):
+    """MTECH USSD transport.
+
+    Configuration parameters:
+
+    :param str transport_name:
+        The name this transport instance will use to create its queues
+    :param int ussd_session_timeout:
+        Number of seconds before USSD session information stored in
+        Redis expires. Default is 600s.
+    :param str web_path:
+        The HTTP path to listen on.
+    :param int web_port:
+        The HTTP port to listen on.
+
+    NOTE: We currently only support free-text USSD, not menus.
+          At the time of writing, vumi has no suitable message format for
+          specifying USSD menus. This may change in the future.
+    """
 
     def setup_transport(self):
         super(MtechUssdTransport, self).setup_transport()
