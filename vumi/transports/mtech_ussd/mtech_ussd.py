@@ -3,6 +3,7 @@
 from xml.etree import ElementTree as ET
 
 import redis
+from twisted.python import log
 
 from vumi.message import TransportUserMessage
 from vumi.transports.httprpc import HttpRpcTransport
@@ -32,7 +33,13 @@ class MtechUssdTransport(HttpRpcTransport):
             session_id, from_addr=from_addr, to_addr=to_addr)
 
     def handle_raw_inbound_message(self, msgid, request):
-        body = ET.fromstring(request.content.read())
+        request_body = request.content.read()
+        log.msg("Inbound message: %r" % (request_body,))
+        try:
+            body = ET.fromstring(request_body)
+        except:
+            self.finish_request(msgid, "", code=400)
+            return
 
         # We always get these.
         session_id = body.find('session_id').text

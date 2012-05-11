@@ -1,7 +1,7 @@
 from twisted.internet.defer import inlineCallbacks
 from vumi.transports.tests.test_base import TransportTestCase
 from vumi.tests.utils import FakeRedis
-from vumi.utils import http_request
+from vumi.utils import http_request, http_request_full
 from vumi.transports.mtech_ussd import MtechUssdTransport
 from vumi.message import TransportUserMessage
 
@@ -57,6 +57,11 @@ class TestMtechUssdTransport(TransportTestCase):
             return msg
 
         return d.addCallback(reply)
+
+    @inlineCallbacks
+    def test_empty_request(self):
+        response = yield http_request_full(self.url, "", method='POST')
+        self.assertEqual(response.code, 400)
 
     @inlineCallbacks
     def test_inbound_new_continue(self):
