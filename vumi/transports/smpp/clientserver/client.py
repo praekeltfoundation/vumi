@@ -422,8 +422,8 @@ class EsmeTransmitter(EsmeTransceiver):
             self.handle_submit_sm_resp(pdu)
         if pdu['header']['command_id'] == 'submit_multi_resp':
             self.handle_submit_multi_resp(pdu)
-        if pdu['header']['command_id'] == 'deliver_sm':
-            self.handle_deliver_sm(pdu)
+        #if pdu['header']['command_id'] == 'deliver_sm':
+            #self.handle_deliver_sm(pdu)
         if pdu['header']['command_id'] == 'enquire_link':
             self.handle_enquire_link(pdu)
         if pdu['header']['command_id'] == 'enquire_link_resp':
@@ -461,10 +461,10 @@ class EsmeReceiver(EsmeTransceiver):
         # TODO: convert this to a dispatch map
         if pdu['header']['command_id'] == 'bind_reciever_resp':
             self.handle_bind_reciever_resp(pdu)
-        if pdu['header']['command_id'] == 'submit_sm_resp':
-            self.handle_submit_sm_resp(pdu)
-        if pdu['header']['command_id'] == 'submit_multi_resp':
-            self.handle_submit_multi_resp(pdu)
+        #if pdu['header']['command_id'] == 'submit_sm_resp':
+            #self.handle_submit_sm_resp(pdu)
+        #if pdu['header']['command_id'] == 'submit_multi_resp':
+            #self.handle_submit_multi_resp(pdu)
         if pdu['header']['command_id'] == 'deliver_sm':
             self.handle_deliver_sm(pdu)
         if pdu['header']['command_id'] == 'enquire_link':
