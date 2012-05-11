@@ -12,6 +12,8 @@ from twisted.internet.task import LoopingCall
 import binascii
 from smpp.pdu import unpack_pdu
 from smpp.pdu_builder import (BindTransceiver,
+                                BindTransmitter,
+                                BindReceiver,
                                 DeliverSMResp,
                                 SubmitSM,
                                 SubmitMulti,
@@ -407,6 +409,92 @@ class EsmeTransceiver(Protocol):
         return 0
 
 
+class EsmeTransmitter(EsmeTransceiver):
+
+    def handle_data(self, data):
+        pdu = unpack_pdu(data)
+        log.msg('INCOMING <<<< %s' % binascii.b2a_hex(data))
+        log.msg('INCOMING <<<< %s' % pdu)
+        # TODO: convert this to a dispatch map
+        if pdu['header']['command_id'] == 'bind_transmitter_resp':
+            self.handle_bind_transmitter_resp(pdu)
+        if pdu['header']['command_id'] == 'submit_sm_resp':
+            self.handle_submit_sm_resp(pdu)
+        if pdu['header']['command_id'] == 'submit_multi_resp':
+            self.handle_submit_multi_resp(pdu)
+        if pdu['header']['command_id'] == 'deliver_sm':
+            self.handle_deliver_sm(pdu)
+        if pdu['header']['command_id'] == 'enquire_link':
+            self.handle_enquire_link(pdu)
+        if pdu['header']['command_id'] == 'enquire_link_resp':
+            self.handle_enquire_link_resp(pdu)
+        log.msg('STATE: %s' % (self.state))
+
+    def connectionMade(self):
+        self.state = 'OPEN'
+        log.msg('STATE: %s' % (self.state))
+        pdu = BindTransmitter(self.get_seq(), **self.defaults)
+        log.msg(pdu.get_obj())
+        self.get_next_seq()
+        self.send_pdu(pdu)
+        self._lose_conn = self.callLater(
+            self.smpp_bind_timeout, self.lose_unbound_connection, 'BOUND_TX')
+
+    def handle_bind_transmitter_resp(self, pdu):
+        if pdu['header']['command_status'] == 'ESME_ROK':
+            self.state = 'BOUND_TX'
+            self.lc_enquire = LoopingCall(self.enquire_link)
+            self.lc_enquire.start(55.0)
+            if self._lose_conn is not None:
+                self._lose_conn.cancel()
+                self._lose_conn = None
+            self.esme_callbacks.connect(self)
+        log.msg('STATE: %s' % (self.state))
+
+
+class EsmeReceiver(EsmeTransceiver):
+
+    def handle_data(self, data):
+        pdu = unpack_pdu(data)
+        log.msg('INCOMING <<<< %s' % binascii.b2a_hex(data))
+        log.msg('INCOMING <<<< %s' % pdu)
+        # TODO: convert this to a dispatch map
+        if pdu['header']['command_id'] == 'bind_reciever_resp':
+            self.handle_bind_reciever_resp(pdu)
+        if pdu['header']['command_id'] == 'submit_sm_resp':
+            self.handle_submit_sm_resp(pdu)
+        if pdu['header']['command_id'] == 'submit_multi_resp':
+            self.handle_submit_multi_resp(pdu)
+        if pdu['header']['command_id'] == 'deliver_sm':
+            self.handle_deliver_sm(pdu)
+        if pdu['header']['command_id'] == 'enquire_link':
+            self.handle_enquire_link(pdu)
+        if pdu['header']['command_id'] == 'enquire_link_resp':
+            self.handle_enquire_link_resp(pdu)
+        log.msg('STATE: %s' % (self.state))
+
+    def connectionMade(self):
+        self.state = 'OPEN'
+        log.msg('STATE: %s' % (self.state))
+        pdu = BindTransmitter(self.get_seq(), **self.defaults)
+        log.msg(pdu.get_obj())
+        self.get_next_seq()
+        self.send_pdu(pdu)
+        self._lose_conn = self.callLater(
+            self.smpp_bind_timeout, self.lose_unbound_connection, 'BOUND_RX')
+
+    def handle_bind_reciever_resp(self, pdu):
+        if pdu['header']['command_status'] == 'ESME_ROK':
+            self.state = 'BOUND_RX'
+            self.lc_enquire = LoopingCall(self.enquire_link)
+            self.lc_enquire.start(55.0)
+            if self._lose_conn is not None:
+                self._lose_conn.cancel()
+                self._lose_conn = None
+            self.esme_callbacks.connect(self)
+        log.msg('STATE: %s' % (self.state))
+
+
 class EsmeTransceiverFactory(ReconnectingClientFactory):
 
     def __init__(self, config, kvs, esme_callbacks):
@@ -438,6 +526,24 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
                 self, connector, reason)
 
 
+class EsmeTransmitterFactory(EsmeTransceiverFactory):
+
+    def buildProtocol(self, addr):
+        log.msg('Connected')
+        self.esme = EsmeTransmitter(self.config, self.kvs, self.esme_callbacks)
+        self.resetDelay()
+        return self.esme
+
+
+class EsmeReceiverFactory(EsmeTransceiverFactory):
+
+    def buildProtocol(self, addr):
+        log.msg('Connected')
+        self.esme = EsmeReceiver(self.config, self.kvs, self.esme_callbacks)
+        self.resetDelay()
+        return self.esme
+
+
 class EsmeCallbacks(object):
     """Callbacks for ESME factory and protocol."""
 
@@ -451,7 +557,6 @@ class EsmeCallbacks(object):
 
     def fallback(self, *args, **kwargs):
         pass
-
 
 class ESME(object):
     """
