@@ -558,6 +558,7 @@ class EsmeCallbacks(object):
     def fallback(self, *args, **kwargs):
         pass
 
+
 class ESME(object):
     """
     The top 'Client' object
