@@ -89,7 +89,7 @@ class SafaricomTransport(HttpRpcTransport):
         session_id = values['SESSION_ID']
         content = values['USSD_PARAMS']
 
-        if self.session_exists(to_addr, session_id):
+        if self.session_exists(from_addr, session_id):
             session_event = TransportUserMessage.SESSION_RESUME
         else:
             session_event = TransportUserMessage.SESSION_NEW

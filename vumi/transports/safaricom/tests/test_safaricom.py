@@ -26,6 +26,11 @@ class TestSafaricomTransportTestCase(TransportTestCase):
         self.transport_url = self.transport.get_transport_url(
             self.config['web_path'])
 
+    @inlineCallbacks
+    def tearDown(self):
+        yield super(TestSafaricomTransportTestCase, self).tearDown()
+        self.transport.r_server.teardown()
+
     def mk_request(self, **params):
         defaults = {
             'ORIG': '27761234567',
@@ -62,27 +67,29 @@ class TestSafaricomTransportTestCase(TransportTestCase):
     def test_inbound_resume_and_reply_with_end(self):
         # first pre-populate the redis datastore to simulate prior BEG message
         self.transport.set_ussd_for_msisdn_session(
-                '27761234567',
-                '1',
-                '*120*VERY_FAKE_CODE#',
+                '27761234567',  # msisdn
+                'session-id',   # the session id
+                '*120*123#',    # the DEST parameter
                 )
-        deferred = self.mk_request(INPUT='hi', opCode='')
+        deferred = self.mk_request(USSD_PARAMS='hi')
 
         [msg] = yield self.wait_for_dispatched_messages(1)
         self.assertEqual(msg['content'], 'hi')
-        self.assertEqual(msg['to_addr'], '*120*VERY_FAKE_CODE#')
+        self.assertEqual(msg['to_addr'], '*120*123#')
         self.assertEqual(msg['from_addr'], '27761234567')
         self.assertEqual(msg['session_event'],
                          TransportUserMessage.SESSION_RESUME)
         self.assertEqual(msg['transport_metadata'], {
-            'session_id': '1',
+            'safaricom': {
+                'session_id': 'session-id',
+            },
         })
 
         reply = TransportUserMessage(**msg.payload).reply("hello world",
             continue_session=False)
         self.dispatch(reply)
         response = yield deferred
-        self.assertEqual(response, '1|hello world|null|null|end|null')
+        self.assertEqual(response, 'END hello world')
 
     @inlineCallbacks
     def test_inbound_resume_with_failed_to_addr_lookup(self):
