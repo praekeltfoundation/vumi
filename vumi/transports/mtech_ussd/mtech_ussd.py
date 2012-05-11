@@ -32,6 +32,12 @@ class MtechUssdTransport(HttpRpcTransport):
         return self.session_manager.create_session(
             session_id, from_addr=from_addr, to_addr=to_addr)
 
+    def handle_status_message(self, msgid, session_id):
+        mur = MtechUssdResponse(session_id)
+        response_body = unicode(mur).encode('utf-8')
+        log.msg("Outbound message: %r" % (response_body,))
+        return self.finish_request(msgid, response_body)
+
     def handle_raw_inbound_message(self, msgid, request):
         request_body = request.content.read()
         log.msg("Inbound message: %r" % (request_body,))
@@ -41,10 +47,15 @@ class MtechUssdTransport(HttpRpcTransport):
             self.finish_request(msgid, "", code=400)
             return
 
-        # We always get these.
+        # We always get this.
         session_id = body.find('session_id').text
+
+        status_elem = body.find('status')
+        if status_elem is not None:
+            # We have a status message. These are all variations on "cancel".
+            return self.handle_status_message(msgid, session_id)
+
         page_id = body.find('page_id').text
-        content = body.find('data').text
 
         if page_id == '0':
             # This is a new session.
@@ -53,10 +64,12 @@ class MtechUssdTransport(HttpRpcTransport):
                 from_addr=body.find('mobile_number').text,
                 to_addr=body.find('gate').text)  # ???
             session_event = TransportUserMessage.SESSION_NEW
+            content = body.find('data').text
         else:
             # This is an existing session.
             session = self.session_manager.load_session(session_id)
             session_event = TransportUserMessage.SESSION_RESUME
+            content = body.find('data').text
 
         transport_metadata = {'session_id': session_id}
         self.publish_message(

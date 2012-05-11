@@ -150,3 +150,17 @@ class TestMtechUssdTransport(TransportTestCase):
                 '</page>',
                 ])
         self.assertEqual(response, correct_response)
+
+    @inlineCallbacks
+    def test_inbound_cancel(self):
+        sid = 'a41739890287485d968ea66e8b44bfd3'
+        self.transport.save_session(sid, '2348085832481', '*120*666#')
+        response = yield self.make_ussd_request(sid, status="1")
+
+        correct_response = ''.join([
+                "<?xml version='1.0' encoding='UTF-8'?>\n",
+                '<page version="2.0">',
+                '<session_id>a41739890287485d968ea66e8b44bfd3</session_id>',
+                '</page>',
+                ])
+        self.assertEqual(response, correct_response)
