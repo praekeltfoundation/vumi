@@ -22,8 +22,10 @@ class TestSafaricomTransportTestCase(TransportTestCase):
             'web_path': '/api/v1/safaricom/ussd/',
             'redis': {},
         }
+        self.patch(SafaricomTransport, 'connect_to_redis',
+            lambda s: FakeRedis(**s.redis_config))
         self.transport = yield self.get_transport(self.config)
-        self.transport.r_server = FakeRedis()
+        self.session_manager = self.transport.session_manager
         self.transport_url = self.transport.get_transport_url(
             self.config['web_path'])
 
@@ -70,11 +72,8 @@ class TestSafaricomTransportTestCase(TransportTestCase):
     @inlineCallbacks
     def test_inbound_resume_and_reply_with_end(self):
         # first pre-populate the redis datastore to simulate prior BEG message
-        self.transport.set_ussd_for_msisdn_session(
-                '27761234567',  # msisdn
-                'session-id',   # the session id
-                '*120*123#',    # the DEST parameter
-                )
+        self.session_manager.create_session('session-id',
+                to_addr='120*123#', from_addr='27761234567')
         deferred = self.mk_request(USSD_PARAMS='hi')
 
         [msg] = yield self.wait_for_dispatched_messages(1)
@@ -103,12 +102,3 @@ class TestSafaricomTransportTestCase(TransportTestCase):
         self.assertEqual(json.loads(response), {
             'missing_parameter': ['DEST'],
         })
-
-    @inlineCallbacks
-    def test_inbound_abort_field(self):
-        # should also return immediately
-        resp = yield self.mk_request(ABORT=1)
-        self.assertEqual(resp, '')
-        [msg] = yield self.get_dispatched_messages()
-        self.assertEqual(msg['session_event'],
-                         TransportUserMessage.SESSION_CLOSE)

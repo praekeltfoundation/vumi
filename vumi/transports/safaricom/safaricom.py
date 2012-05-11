@@ -8,6 +8,7 @@ from twisted.internet.defer import inlineCallbacks
 
 from vumi.transports.httprpc import HttpRpcTransport
 from vumi.message import TransportUserMessage
+from vumi.application import SessionManager
 
 
 class SafaricomTransport(HttpRpcTransport):
@@ -34,32 +35,29 @@ class SafaricomTransport(HttpRpcTransport):
     def validate_config(self):
         super(SafaricomTransport, self).validate_config()
         self.transport_type = self.config.get('transport_type', 'ussd')
-
-    def setup_transport(self):
-        super(SafaricomTransport, self).setup_transport()
         self.redis_config = self.config.get('redis', {})
         self.r_prefix = "vumi.transports.safaricom:%s" % self.transport_name
         self.r_session_timeout = int(self.config.get("ussd_session_timeout",
                                                                         600))
-        self.connect_to_redis()
+
+    def setup_transport(self):
+        super(SafaricomTransport, self).setup_transport()
+        self.r_server = self.connect_to_redis()
+        self.session_manager = SessionManager(
+            self.r_server, self.r_prefix,
+            max_session_length=self.r_session_timeout)
+
+    def teardown_transport(self):
+        self.session_manager.stop()
+        super(SafaricomTransport, self).teardown_transport()
 
     # the connection to redis is a seperate method to allow overriding in tests
     def connect_to_redis(self):
-        self.r_server = redis.Redis(**self.redis_config)
+        return redis.Redis(**self.redis_config)
 
-    def r_key(self, msisdn, session):
-        return "%s:%s:%s" % (self.r_prefix, msisdn, session)
-
-    def set_ussd_for_msisdn_session(self, msisdn, session, ussd):
-        self.r_server.set(self.r_key(msisdn, session), ussd)
-        self.r_server.expire(self.r_key(msisdn, session),
-                self.r_session_timeout)
-
-    def get_ussd_for_msisdn_session(self, msisdn, session):
-        return self.r_server.get(self.r_key(msisdn, session))
-
-    def session_exists(self, msisdn, session):
-        return self.r_server.exists(self.r_key(msisdn, session))
+    def save_session(self, session_id, **kwargs):
+        return self.session_manager.create_session(
+            session_id, **kwargs)
 
     def get_field_values(self, request):
         values = {}
@@ -89,10 +87,13 @@ class SafaricomTransport(HttpRpcTransport):
         session_id = values['SESSION_ID']
         content = values['USSD_PARAMS']
 
-        if self.session_exists(from_addr, session_id):
+        session = self.session_manager.load_session(session_id)
+        if session:
             session_event = TransportUserMessage.SESSION_RESUME
         else:
             session_event = TransportUserMessage.SESSION_NEW
+            session = self.save_session(session_id, from_addr=from_addr,
+                to_addr=to_addr)
 
         yield self.publish_message(
             message_id=message_id,
