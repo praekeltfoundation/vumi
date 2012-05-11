@@ -105,23 +105,6 @@ class TestSafaricomTransportTestCase(TransportTestCase):
         })
 
     @inlineCallbacks
-    def test_inbound_abort_opcode(self):
-        # first pre-populate the redis datastore to simulate prior BEG message
-        self.transport.set_ussd_for_msisdn_session(
-                '27761234567',
-                '1',
-                '*120*VERY_FAKE_CODE#',
-                )
-        # this one should return immediately with a blank
-        # as there isn't going to be a sensible response
-        resp = yield self.mk_request(opCode='ABO')
-        self.assertEqual(resp, '')
-
-        [msg] = yield self.get_dispatched_messages()
-        self.assertEqual(msg['session_event'],
-                         TransportUserMessage.SESSION_CLOSE)
-
-    @inlineCallbacks
     def test_inbound_abort_field(self):
         # should also return immediately
         resp = yield self.mk_request(ABORT=1)
