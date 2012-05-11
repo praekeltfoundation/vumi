@@ -75,8 +75,9 @@ class MtechUssdTransport(HttpRpcTransport):
         mur.add_text(message['content'])
         if message['session_event'] != TransportUserMessage.SESSION_CLOSE:
             mur.add_freetext_option()
-        self.finish_request(message['in_reply_to'],
-                            unicode(mur).encode('utf-8'))
+        response_body = unicode(mur).encode('utf-8')
+        log.msg("Outbound message: %r" % (response_body,))
+        self.finish_request(message['in_reply_to'], response_body)
 
 
 class MtechUssdResponse(object):
