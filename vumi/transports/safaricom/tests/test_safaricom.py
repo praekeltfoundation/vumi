@@ -1,3 +1,4 @@
+import json
 from urllib import urlencode
 
 from twisted.internet.defer import inlineCallbacks
@@ -31,6 +32,10 @@ class TestSafaricomTransportTestCase(TransportTestCase):
         yield super(TestSafaricomTransportTestCase, self).tearDown()
         self.transport.r_server.teardown()
 
+    def mk_full_request(self, **params):
+        return http_request('%s?%s' % (self.transport_url,
+            urlencode(params)), data='', method='GET')
+
     def mk_request(self, **params):
         defaults = {
             'ORIG': '27761234567',
@@ -39,8 +44,7 @@ class TestSafaricomTransportTestCase(TransportTestCase):
             'USSD_PARAMS': '',
         }
         defaults.update(params)
-        return http_request('%s?%s' % (self.transport_url,
-            urlencode(defaults)), data='', method='GET')
+        return self.mk_full_request(**defaults)
 
     @inlineCallbacks
     def test_inbound_begin(self):
@@ -93,9 +97,12 @@ class TestSafaricomTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_inbound_resume_with_failed_to_addr_lookup(self):
-        deferred = self.mk_request(MSISDN='123456', INPUT='hi', opCode='')
+        deferred = self.mk_full_request(ORIG='123456',
+            USSD_PARAMS='hi', SESSION_ID='session-id')
         response = yield deferred
-        self.assertEqual(response, '')
+        self.assertEqual(json.loads(response), {
+            'missing_parameter': ['DEST'],
+        })
 
     @inlineCallbacks
     def test_inbound_abort_opcode(self):
