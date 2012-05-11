@@ -459,7 +459,7 @@ class EsmeReceiver(EsmeTransceiver):
         log.msg('INCOMING <<<< %s' % binascii.b2a_hex(data))
         log.msg('INCOMING <<<< %s' % pdu)
         # TODO: convert this to a dispatch map
-        if pdu['header']['command_id'] == 'bind_reciever_resp':
+        if pdu['header']['command_id'] == 'bind_receiver_resp':
             self.handle_bind_reciever_resp(pdu)
         #if pdu['header']['command_id'] == 'submit_sm_resp':
             #self.handle_submit_sm_resp(pdu)
@@ -476,7 +476,7 @@ class EsmeReceiver(EsmeTransceiver):
     def connectionMade(self):
         self.state = 'OPEN'
         log.msg('STATE: %s' % (self.state))
-        pdu = BindTransmitter(self.get_seq(), **self.defaults)
+        pdu = BindReceiver(self.get_seq(), **self.defaults)
         log.msg(pdu.get_obj())
         self.get_next_seq()
         self.send_pdu(pdu)

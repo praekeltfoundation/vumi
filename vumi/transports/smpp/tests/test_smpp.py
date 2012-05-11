@@ -95,7 +95,7 @@ class FakeRedisRespTestCase(TransportTestCase):
                 "host": "host",
                 "port": "port",
                 "password": "password",
-                "third_party_id_expiry" : 3600,  # just 1 hour
+                "third_party_id_expiry": 3600,  # just 1 hour
                 }
         self.vumi_options = {
                 "vhost": "develop",
@@ -732,6 +732,91 @@ class TxEsmeToSmscTestCase(TransportTestCase):
         self.assertEqual(ack['event_type'], 'ack')
         self.assertEqual(ack['transport_name'], self.transport_name)
         self.assertEqual(ack['user_message_id'], user_message_id)
+
+        dispatched_failures = self.get_dispatched_failures()
+        self.assertEqual(dispatched_failures, [])
+
+
+class RxEsmeToSmscTestCase(TransportTestCase):
+
+    transport_name = "esme_testing_transport"
+    transport_class = MockSmppRxTransport
+
+    def assert_pdu_header(self, expected, actual, field):
+        self.assertEqual(expected['pdu']['header'][field],
+                         actual['pdu']['header'][field])
+
+    def assert_server_pdu(self, expected, actual):
+        self.assertEqual(expected['direction'], actual['direction'])
+        self.assert_pdu_header(expected, actual, 'sequence_number')
+        self.assert_pdu_header(expected, actual, 'command_status')
+        self.assert_pdu_header(expected, actual, 'command_id')
+
+    @inlineCallbacks
+    def setUp(self):
+        yield super(RxEsmeToSmscTestCase, self).setUp()
+        self.config = {
+            "system_id": "VumiTestSMSC",
+            "password": "password",
+            "host": "localhost",
+            "port": 0,
+            "redis": {},
+            "transport_name": self.transport_name,
+            "transport_type": "smpp",
+        }
+        self.service = SmppService(None, config=self.config)
+        yield self.service.startWorker()
+        self.service.factory.protocol = SmscTestServer
+        self.config['port'] = self.service.listening.getHost().port
+        self.transport = yield self.get_transport(self.config, start=False)
+        self.transport.r_server = FakeRedis()
+        self.expected_delivery_status = 'delivered'
+
+    @inlineCallbacks
+    def startTransport(self):
+        self.transport._block_till_bind = defer.Deferred()
+        yield self.transport.startWorker()
+
+    @inlineCallbacks
+    def tearDown(self):
+        yield super(RxEsmeToSmscTestCase, self).tearDown()
+        self.transport.r_server.teardown()
+        self.transport.factory.stopTrying()
+        self.transport.factory.esme.transport.loseConnection()
+        yield self.service.listening.stopListening()
+        yield self.service.listening.loseConnection()
+
+    @inlineCallbacks
+    def test_deliver(self):
+
+        self._block_till_bind = defer.Deferred()
+
+        # Startup
+        yield self.startTransport()
+        yield self.transport._block_till_bind
+
+        # The Server delivers a SMS to the Client
+
+        pdu = DeliverSM(555,
+                short_message="SMS from server",
+                destination_addr="2772222222",
+                source_addr="2772000000",
+                )
+        self.service.factory.smsc.send_pdu(pdu)
+
+        wait_for_inbound = self._amqp.wait_messages(
+                "vumi",
+                "%s.inbound" % self.transport_name,
+                1,
+                )
+        yield wait_for_inbound
+
+        dispatched_messages = self.get_dispatched_messages()
+        mess = dispatched_messages[0].payload
+
+        self.assertEqual(mess['message_type'], 'user_message')
+        self.assertEqual(mess['transport_name'], self.transport_name)
+        self.assertEqual(mess['content'], "SMS from server")
 
         dispatched_failures = self.get_dispatched_failures()
         self.assertEqual(dispatched_failures, [])

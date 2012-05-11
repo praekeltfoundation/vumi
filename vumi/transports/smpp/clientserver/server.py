@@ -44,8 +44,8 @@ class SmscServer(Protocol):
             self.handle_bind_transceiver(pdu)
         if pdu['header']['command_id'] == 'bind_transmitter':
             self.handle_bind_transmitter(pdu)
-        if pdu['header']['command_id'] == 'bind_reciever':
-            self.handle_bind_reciever(pdu)
+        if pdu['header']['command_id'] == 'bind_receiver':
+            self.handle_bind_receiver(pdu)
         if pdu['header']['command_id'] == 'submit_sm':
             self.handle_submit_sm(pdu)
         if pdu['header']['command_id'] == 'enquire_link':
@@ -69,7 +69,7 @@ class SmscServer(Protocol):
                     )
             self.send_pdu(pdu_resp)
 
-    def handle_bind_reciever(self, pdu):
+    def handle_bind_receiver(self, pdu):
         if pdu['header']['command_status'] == 'ESME_ROK':
             sequence_number = pdu['header']['sequence_number']
             system_id = pdu['body']['mandatory_parameters']['system_id']
