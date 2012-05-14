@@ -185,6 +185,8 @@ class EsmeTransceiver(Protocol):
                 self.state, required_state))
             self._lose_conn = None
             self.transport.loseConnection()
+        else:
+            log.msg('Successful bind: %s, cancelling bind timeout' % self.state)
 
     def connectionLost(self, *args, **kwargs):
         self.state = 'CLOSED'
