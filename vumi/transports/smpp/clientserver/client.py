@@ -111,6 +111,8 @@ class EsmeTransceiver(Protocol):
         self.state = 'CLOSED'
         log.msg('STATE: %s' % (self.state))
         self.smpp_bind_timeout = self.config.smpp_bind_timeout
+        self.smpp_enquire_link_interval = \
+                self.config.smpp_enquire_link_interval
         self.datastream = ''
         self.r_server = kvs
         self.r_prefix = "%s@%s:%s" % (
@@ -214,7 +216,7 @@ class EsmeTransceiver(Protocol):
         if pdu['header']['command_status'] == 'ESME_ROK':
             self.state = 'BOUND_TRX'
             self.lc_enquire = LoopingCall(self.enquire_link)
-            self.lc_enquire.start(55.0)
+            self.lc_enquire.start(self.smpp_enquire_link_interval)
             if self._lose_conn is not None:
                 self._lose_conn.cancel()
                 self._lose_conn = None
@@ -390,7 +392,7 @@ class EsmeTransceiver(Protocol):
         return 0
 
     def enquire_link(self, **kwargs):
-        if self.state in ['BOUND_TX', 'BOUND_TRX']:
+        if self.state in ['BOUND_TX', 'BOUND_RX', 'BOUND_TRX']:
             sequence_number = self.get_seq()
             pdu = EnquireLink(sequence_number, **dict(self.defaults, **kwargs))
             self.get_next_seq()
@@ -446,7 +448,7 @@ class EsmeTransmitter(EsmeTransceiver):
         if pdu['header']['command_status'] == 'ESME_ROK':
             self.state = 'BOUND_TX'
             self.lc_enquire = LoopingCall(self.enquire_link)
-            self.lc_enquire.start(55.0)
+            self.lc_enquire.start(self.smpp_enquire_link_interval)
             if self._lose_conn is not None:
                 self._lose_conn.cancel()
                 self._lose_conn = None
@@ -489,7 +491,7 @@ class EsmeReceiver(EsmeTransceiver):
         if pdu['header']['command_status'] == 'ESME_ROK':
             self.state = 'BOUND_RX'
             self.lc_enquire = LoopingCall(self.enquire_link)
-            self.lc_enquire.start(55.0)
+            self.lc_enquire.start(self.smpp_enquire_link_interval)
             if self._lose_conn is not None:
                 self._lose_conn.cancel()
                 self._lose_conn = None

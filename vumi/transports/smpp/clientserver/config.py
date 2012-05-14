@@ -21,6 +21,7 @@ class ClientConfig(object):
                  system_type="", interface_version="34",
                  dest_addr_ton=0, dest_addr_npi=0,
                  registered_delivery=0, smpp_bind_timeout=30,
+                 smpp_enquire_link_interval=55.0,
                  initial_reconnect_delay=5.0,
                  delivery_report_regex=None):
         # in SMPP system_id is the username
@@ -34,6 +35,7 @@ class ClientConfig(object):
         self.dest_addr_npi = int(dest_addr_npi)
         self.registered_delivery = int(registered_delivery)
         self.smpp_bind_timeout = int(smpp_bind_timeout)
+        self.smpp_enquire_link_interval = float(smpp_enquire_link_interval)
         self.initial_reconnect_delay = float(initial_reconnect_delay)
         if delivery_report_regex is None:
             delivery_report_regex = self.DELIVERY_REPORT_REGEX

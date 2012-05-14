@@ -95,17 +95,13 @@ class FakeRedisRespTestCase(TransportTestCase):
                 "host": "host",
                 "port": "port",
                 "password": "password",
+                "smpp_enquire_link_interval": 123,
                 "third_party_id_expiry": 3600,  # just 1 hour
                 }
         self.vumi_options = {
                 "vhost": "develop",
                 }
-        self.clientConfig = ClientConfig(
-                system_id=self.config['system_id'],
-                host=self.config['host'],
-                port=self.config['port'],
-                password=self.config['password'],
-                )
+        self.clientConfig = ClientConfig.from_config(self.config)
 
         # hack a lot of transport setup
         self.transport = yield self.get_transport(self.config, start=False)
