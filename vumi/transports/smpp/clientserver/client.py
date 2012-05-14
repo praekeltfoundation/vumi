@@ -443,8 +443,7 @@ class EsmeTransmitter(EsmeTransceiver):
             self.smpp_bind_timeout, self.lose_unbound_connection, 'BOUND_TX')
 
     def handle_bind_transmitter_resp(self, pdu):
-        if pdu['header']['command_status'] == 'ESME_ROK' \
-        or pdu['header']['command_status'] == None:
+        if pdu['header']['command_status'] == 'ESME_ROK':
             self.state = 'BOUND_TX'
             self.lc_enquire = LoopingCall(self.enquire_link)
             self.lc_enquire.start(55.0)
@@ -487,8 +486,7 @@ class EsmeReceiver(EsmeTransceiver):
             self.smpp_bind_timeout, self.lose_unbound_connection, 'BOUND_RX')
 
     def handle_bind_reciever_resp(self, pdu):
-        if pdu['header']['command_status'] == 'ESME_ROK' \
-        or pdu['header']['command_status'] == None:
+        if pdu['header']['command_status'] == 'ESME_ROK':
             self.state = 'BOUND_RX'
             self.lc_enquire = LoopingCall(self.enquire_link)
             self.lc_enquire.start(55.0)
