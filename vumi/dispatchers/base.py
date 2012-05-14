@@ -489,6 +489,12 @@ class ContentKeywordRouter(SimpleDispatchRouter):
 
 
 class RedirectOutboundRouter(BaseDispatchRouter):
+    """Router that dispatches outbound messages to a different transport.
+
+    :param dict redirect_outbound:
+        A dictionary where the key is the name of an exposed_name and
+        the value is the name of a transport_name.
+    """
 
     def setup_routing(self):
         self.mappings = self.config.get('redirect_outbound', {})
