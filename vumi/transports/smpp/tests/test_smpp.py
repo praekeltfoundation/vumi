@@ -95,6 +95,7 @@ class FakeRedisRespTestCase(TransportTestCase):
                 "host": "host",
                 "port": "port",
                 "password": "password",
+                "smpp_bind_timeout": 12,
                 "smpp_enquire_link_interval": 123,
                 "third_party_id_expiry": 3600,  # just 1 hour
                 }
@@ -125,6 +126,13 @@ class FakeRedisRespTestCase(TransportTestCase):
     def tearDown(self):
         yield super(FakeRedisRespTestCase, self).tearDown()
         self.transport.r_server.teardown()
+
+    def test_bind_and_enquire_config(self):
+        self.assertEqual(12, self.transport.client_config.smpp_bind_timeout)
+        self.assertEqual(123,
+                self.transport.client_config.smpp_enquire_link_interval)
+        self.assertEqual(repr(123.0),
+                repr(self.transport.client_config.smpp_enquire_link_interval))
 
     def test_redis_message_persistence(self):
         # A simple test of set -> get -> delete for redis message persistence
