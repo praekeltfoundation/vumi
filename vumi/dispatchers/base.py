@@ -486,3 +486,25 @@ class ContentKeywordRouter(SimpleDispatchRouter):
                                        self.expire_routing_timeout)
         else:
             log.error("No transport for %s" % (msg['from_addr'],))
+
+
+class RedirectOutboundRouter(BaseDispatchRouter):
+    """Router that dispatches outbound messages to a different transport.
+
+    :param dict redirect_outbound:
+        A dictionary where the key is the name of an exposed_name and
+        the value is the name of a transport_name.
+    """
+
+    def setup_routing(self):
+        self.mappings = self.config.get('redirect_outbound', {})
+
+    def dispatch_outbound_message(self, msg):
+        transport_name = msg['transport_name']
+        redirect_to = self.mappings.get(transport_name)
+        if redirect_to:
+            publisher = self.dispatcher.transport_publisher[redirect_to]
+            publisher.publish_message(msg)
+        else:
+            log.error('No redirect_outbound specified for %s' % (
+                transport_name,))

@@ -4,9 +4,10 @@ from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.message import TransportUserMessage, TransportEvent
+from vumi.errors import ConfigError
 from vumi.dispatchers.base import (BaseDispatchWorker, ToAddrRouter,
                                    FromAddrMultiplexRouter)
-from vumi.tests.utils import get_stubbed_worker, FakeRedis
+from vumi.tests.utils import get_stubbed_worker, FakeRedis, LogCatcher
 from vumi.tests.fake_amqp import FakeAMQPBroker
 
 
@@ -753,3 +754,51 @@ class TestContentKeywordRouter(DispatcherTestCase):
 
         app2_route = self.fake_redis.get('keyword_dispatcher:message:1')
         self.assertEqual(app2_route, 'app2')
+
+
+class TestRedirectOutboundRouter(DispatcherTestCase):
+
+    dispatcher_class = BaseDispatchWorker
+    transport_name = 'test_transport'
+
+    @inlineCallbacks
+    def setUp(self):
+        yield super(TestRedirectOutboundRouter, self).setUp()
+        self.config = {
+            'dispatcher_name': 'redirect_outbound_dispatcher',
+            'router_class': 'vumi.dispatchers.base.RedirectOutboundRouter',
+            'transport_names': ['transport1', 'transport2'],
+            'exposed_names': ['app1', 'app2'],
+            'redirect_outbound': {
+                'app1': 'transport1',
+                'app2': 'transport2',
+            },
+        }
+        self.dispatcher = yield self.get_dispatcher(self.config)
+        self.router = self.dispatcher._router
+
+    @inlineCallbacks
+    def test_outbound_redirect(self):
+        msgt1 = self.mkmsg_out(transport_name='app1')
+        msgt2 = self.mkmsg_out(transport_name='app2')
+        yield self.dispatch(msgt1, transport_name='app1',
+            direction='outbound')
+        yield self.dispatch(msgt2, transport_name='app2',
+            direction='outbound')
+        [outbound1] = self.get_dispatched_messages('transport1',
+            direction='outbound')
+        [outbound2] = self.get_dispatched_messages('transport2',
+            direction='outbound')
+
+        self.assertEqual(outbound1, msgt1)
+        self.assertEqual(outbound2, msgt2)
+
+    @inlineCallbacks
+    def test_error_logging_for_bad_app(self):
+        msgt1 = self.mkmsg_out(transport_name='app3')  # Does not exist
+        with LogCatcher() as log:
+            yield self.dispatch(msgt1, transport_name='app2',
+                direction='outbound')
+            [err] = log.errors
+            self.assertTrue('No redirect_outbound specified for app3' in
+                                err['message'][0])
