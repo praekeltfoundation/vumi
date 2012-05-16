@@ -330,7 +330,7 @@ class DynamicDescriptor(FieldDescriptor):
         # this is a separate method so it can succeed or fail
         # somewhat atomically in the case where otherdict contains
         # bad keys or values
-        items = [(self.prefix + key, self.field.from_riak(value))
+        items = [(self.prefix + key, self.field.to_riak(value))
                   for key, value in otherdict.iteritems()]
         for key, value in items:
             modelobj._riak_object._data[key] = value
