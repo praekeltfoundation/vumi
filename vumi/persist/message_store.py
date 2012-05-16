@@ -101,7 +101,7 @@ class MessageStore(object):
         batch = self.batches(batch_id)
         batch.tags.extend(tags)
         for key, value in metadata.iteritems():
-            setattr(batch.metadata, key, value)
+            batch.metadata[key] = value
         yield batch.save()
 
         for tag in tags:
