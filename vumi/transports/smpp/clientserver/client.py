@@ -341,16 +341,16 @@ class EsmeTransceiver(Protocol):
             pass
 
     def get_unacked_count(self):
-            return int(self.r_server.llen("%s#unacked" % self.r_prefix))
+        return int(self.r_server.llen("%s#unacked" % self.r_prefix))
 
     def push_unacked(self, sequence_number=-1):
-            self.r_server.lpush("%s#unacked" % self.r_prefix, sequence_number)
-            log.msg("%s#unacked pushed to: %s" % (
+        self.r_server.lpush("%s#unacked" % self.r_prefix, sequence_number)
+        log.msg("%s#unacked pushed to: %s" % (
                 self.r_prefix, self.get_unacked_count()))
 
     def pop_unacked(self):
-            self.r_server.lpop("%s#unacked" % self.r_prefix)
-            log.msg("%s#unacked popped to: %s" % (
+        self.r_server.lpop("%s#unacked" % self.r_prefix)
+        log.msg("%s#unacked popped to: %s" % (
                 self.r_prefix, self.get_unacked_count()))
 
     def submit_sm(self, **kwargs):
