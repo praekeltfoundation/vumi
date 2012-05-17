@@ -22,6 +22,8 @@ class HTTPRelayApplication(ApplicationWorker):
             'basic': self.generate_basic_auth_headers,
         }
         self.url = urlparse.urlparse(self.config['url'])
+        self.event_url = urlparse.urlparse(self.config.get('event_url',
+                                            self.url.geturl()))
         self.username = self.config.get('username', '')
         self.password = self.config.get('password', '')
         self.http_method = self.config.get('http_method', 'POST')
@@ -38,14 +40,15 @@ class HTTPRelayApplication(ApplicationWorker):
             'Authorization': ['Basic %s' % (auth_string,)]
         }
 
-    @inlineCallbacks
-    def consume_user_message(self, message):
+    def get_auth_headers(self):
         if self.username:
             handler = self.supported_auth_methods.get(self.auth_method)
-            headers = handler(self.username, self.password)
-        else:
-            headers = {}
+            return handler(self.username, self.password)
+        return {}
 
+    @inlineCallbacks
+    def consume_user_message(self, message):
+        headers = self.get_auth_headers()
         response = yield http_request_full(self.url.geturl(),
                             message.to_json(), headers, self.http_method)
         headers = response.headers
@@ -58,3 +61,17 @@ class HTTPRelayApplication(ApplicationWorker):
         else:
             log.err('%s responded with %s' % (self.url.geturl(),
                                                 response.code))
+
+    @inlineCallbacks
+    def relay_event(self, event):
+        headers = self.get_auth_headers()
+        yield http_request_full(self.event_url.geturl(),
+            event.to_json(), headers, self.http_method)
+
+    @inlineCallbacks
+    def consume_ack(self, event):
+        yield self.relay_event(event)
+
+    @inlineCallbacks
+    def consume_delivery_report(self, event):
+        yield self.relay_event(event)

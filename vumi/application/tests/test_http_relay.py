@@ -4,12 +4,14 @@ from vumi.application.tests.test_base import ApplicationTestCase
 from vumi.tests.utils import TestResourceWorker, get_stubbed_worker
 from vumi.application.tests.test_http_relay_stubs import TestResource
 from vumi.application.http_relay import HTTPRelayApplication
+from vumi.message import TransportEvent
 from base64 import b64decode
 
 
 class HTTPRelayTestCase(ApplicationTestCase):
 
     application_class = HTTPRelayApplication
+    timeout = 1
 
     @inlineCallbacks
     def setUp(self):
@@ -113,3 +115,17 @@ class HTTPRelayTestCase(ApplicationTestCase):
         yield self.setup_resource_with_callback(cb)
         yield self.dispatch(self.mkmsg_in())
         self.assertEqual([], self.get_dispatched_messages())
+
+    @inlineCallbacks
+    def test_http_relay_of_events(self):
+        events = []
+
+        def cb(request):
+            events.append(TransportEvent.from_json(request.content.getvalue()))
+            return ''
+
+        yield self.setup_resource_with_callback(cb)
+        delivery_report = self.mkmsg_delivery()
+        yield self.dispatch(delivery_report, rkey=self.rkey('event'))
+        self.assertEqual([], self.get_dispatched_messages())
+        self.assertEqual([delivery_report], events)
