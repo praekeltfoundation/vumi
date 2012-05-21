@@ -11,6 +11,7 @@ from vumi.service import Worker
 from vumi.errors import ConfigError
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.utils import load_class_by_string, get_first_word
+from vumi.middleware import MiddlewareStack, setup_middlewares_from_config
 from vumi import log
 
 
@@ -25,6 +26,7 @@ class BaseDispatchWorker(Worker):
                 % (self.__class__.__name__, self.config))
 
         yield self.setup_endpoints()
+        yield self.setup_middleware()
         yield self.setup_router()
         yield self.setup_transport_publishers()
         yield self.setup_exposed_publishers()
@@ -34,6 +36,11 @@ class BaseDispatchWorker(Worker):
     def setup_endpoints(self):
         self._transport_names = self.config.get('transport_names', [])
         self._exposed_names = self.config.get('exposed_names', [])
+
+    @inlineCallbacks
+    def setup_middleware(self):
+        middlewares = yield setup_middlewares_from_config(self, self.config)
+        self._middlewares = MiddlewareStack(middlewares)
 
     def setup_router(self):
         router_cls = load_class_by_string(self.config['router_class'])
