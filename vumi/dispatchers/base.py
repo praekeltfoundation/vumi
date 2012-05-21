@@ -90,6 +90,15 @@ class BaseDispatchWorker(Worker):
     def dispatch_outbound_message(self, msg):
         return self._router.dispatch_outbound_message(msg)
 
+    def publish_inbound_message(self, endpoint, msg):
+        return self.exposed_publisher[endpoint].publish_message(msg)
+
+    def publish_inbound_event(self, endpoint, msg):
+        return self.exposed_event_publisher[endpoint].publish_message(msg)
+
+    def publish_outbound_message(self, endpoint, msg):
+        return self.transport_publisher[endpoint].publish_message(msg)
+
 
 class BaseDispatchRouter(object):
     """Base class for dispatch routing logic.
@@ -169,17 +178,17 @@ class SimpleDispatchRouter(BaseDispatchRouter):
     def dispatch_inbound_message(self, msg):
         names = self.config['route_mappings'][msg['transport_name']]
         for name in names:
-            self.dispatcher.exposed_publisher[name].publish_message(msg)
+            self.dispatcher.publish_inbound_message(name, msg)
 
     def dispatch_inbound_event(self, msg):
         names = self.config['route_mappings'][msg['transport_name']]
         for name in names:
-            self.dispatcher.exposed_event_publisher[name].publish_message(msg)
+            self.dispatcher.publish_inbound_event(name, msg)
 
     def dispatch_outbound_message(self, msg):
         name = msg['transport_name']
         name = self.config.get('transport_mappings', {}).get(name, name)
-        self.dispatcher.transport_publisher[name].publish_message(msg)
+        self.dispatcher.publish_outbound_message(name, msg)
 
 
 class TransportToTransportRouter(BaseDispatchRouter):
@@ -243,7 +252,7 @@ class ToAddrRouter(SimpleDispatchRouter):
         toaddr = msg['to_addr']
         for name, regex in self.mappings:
             if regex.match(toaddr):
-                self.dispatcher.exposed_publisher[name].publish_message(msg)
+                self.dispatcher.publish_inbound_message(name, msg)
 
     def dispatch_inbound_event(self, msg):
         pass
@@ -280,22 +289,18 @@ class FromAddrMultiplexRouter(BaseDispatchRouter):
                     type(self).__name__,))
         [self.exposed_name] = self.config['exposed_names']
 
-    def _handle_inbound(self, msg, publisher):
-        msg['transport_name'] = self.exposed_name
-        publisher.publish_message(msg)
-
     def dispatch_inbound_message(self, msg):
-        self._handle_inbound(
-            msg, self.dispatcher.exposed_publisher[self.exposed_name])
+        msg['transport_name'] = self.exposed_name
+        self.dispatcher.publish_inbound_message(self.exposed_name, msg)
 
     def dispatch_inbound_event(self, msg):
-        self._handle_inbound(
-            msg, self.dispatcher.exposed_event_publisher[self.exposed_name])
+        msg['transport_name'] = self.exposed_name
+        self.dispatcher.publish_inbound_event(self.exposed_name, msg)
 
     def dispatch_outbound_message(self, msg):
         name = self.config['fromaddr_mappings'][msg['from_addr']]
         msg['transport_name'] = name
-        self.dispatcher.transport_publisher[name].publish_message(msg)
+        self.dispatcher.publish_outbound_message(name, msg)
 
 
 class UserGroupingRouter(SimpleDispatchRouter):
@@ -361,7 +366,7 @@ class UserGroupingRouter(SimpleDispatchRouter):
     def dispatch_inbound_message(self, msg):
         group = self.get_group_for_user(msg.user().encode('utf8'))
         app = self.groups[group]
-        self.dispatcher.exposed_publisher[app].publish_message(msg)
+        self.dispatcher.publish_inbound_message(app, msg)
 
 
 class ContentKeywordRouter(SimpleDispatchRouter):
@@ -435,13 +440,13 @@ class ContentKeywordRouter(SimpleDispatchRouter):
         return ':'.join([self.r_prefix] + map(str, parts))
 
     def publish_transport(self, name, msg):
-        self.dispatcher.transport_publisher[name].publish_message(msg)
+        self.dispatcher.publish_outbound_message(name, msg)
 
     def publish_exposed_inbound(self, name, msg):
-        self.dispatcher.exposed_publisher[name].publish_message(msg)
+        self.dispatcher.publish_inbound_message(name, msg)
 
     def publish_exposed_event(self, name, msg):
-        self.dispatcher.exposed_event_publisher[name].publish_message(msg)
+        self.dispatcher.publish_inbound_event(name, msg)
 
     def is_msg_matching_routing_rules(self, keyword, msg, rule):
         return all([keyword == rule['keyword'],
@@ -503,8 +508,7 @@ class RedirectOutboundRouter(BaseDispatchRouter):
         transport_name = msg['transport_name']
         redirect_to = self.mappings.get(transport_name)
         if redirect_to:
-            publisher = self.dispatcher.transport_publisher[redirect_to]
-            publisher.publish_message(msg)
+            self.dispatcher.publish_outbound_message(redirect_to, msg)
         else:
             log.error('No redirect_outbound specified for %s' % (
                 transport_name,))

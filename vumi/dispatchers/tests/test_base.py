@@ -317,7 +317,7 @@ class TestBaseDispatchWorker(TestCase, MessageMakerMixIn):
         self.assert_no_messages('transport1.outbound', 'transport3.outbound')
 
 
-class DummyDispatcher(object):
+class DummyDispatcher(BaseDispatchWorker):
 
     class DummyPublisher(object):
         def __init__(self):
