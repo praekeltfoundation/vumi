@@ -67,9 +67,10 @@ class XMPPTransportProtocol(MessageProtocol, object):
         if not isinstance(message.body, DomishElement):
             return None
         text = unicode(message.body).encode('utf-8').strip()
+        from_addr, _, _ = message['from'].partition('/')
         self.message_callback(
             to_addr=self.jid.userhost(),
-            from_addr=message['from'],
+            from_addr=from_addr,
             content=text,
             transport_type='xmpp',
             transport_metadata={

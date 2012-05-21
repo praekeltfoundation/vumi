@@ -117,3 +117,21 @@ class XMPPTransportTestCase(TransportTestCase):
         self.assertEqual(message['type'], u'get')
         [child] = message.children
         self.assertEqual(child.toXml(), u"<ping xmlns='urn:xmpp:ping'/>")
+
+    @inlineCallbacks
+    def test_normalizing_from_addr(self):
+        transport = yield self.mk_transport()
+
+        message = domish.Element((None, "message"))
+        message['to'] = self.jid.userhost()
+        message['from'] = 'test@case.com/some_xmpp_id'
+        message.addUniqueId()
+        message.addElement((None, 'body'), content='hello world')
+        protocol = transport.xmpp_protocol
+        protocol.onMessage(message)
+        dispatched_messages = self._amqp.get_dispatched('vumi',
+            'test_xmpp.inbound')
+        self.assertEqual(1, len(dispatched_messages))
+        msg = from_json(dispatched_messages[0].body)
+        self.assertEqual(msg['from_addr'], 'test@case.com')
+        self.assertEqual(msg['transport_metadata']['xmpp_id'], message['id'])
