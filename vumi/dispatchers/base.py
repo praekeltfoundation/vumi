@@ -3,6 +3,7 @@
 """Basic tools for building dispatchers."""
 
 import re
+import functools
 import redis
 
 from twisted.internet.defer import inlineCallbacks
@@ -60,12 +61,13 @@ class BaseDispatchWorker(Worker):
         for transport_name in self._transport_names:
             self.transport_consumer[transport_name] = yield self.consume(
                 '%s.inbound' % (transport_name,),
-                self.dispatch_inbound_message,
+                functools.partial(self.dispatch_inbound_message,
+                                  transport_name),
                 message_class=TransportUserMessage)
         for transport_name in self._transport_names:
             self.transport_event_consumer[transport_name] = yield self.consume(
                 '%s.event' % (transport_name,),
-                self.dispatch_inbound_event,
+                functools.partial(self.dispatch_inbound_event, transport_name),
                 message_class=TransportEvent)
 
     @inlineCallbacks
@@ -85,26 +87,39 @@ class BaseDispatchWorker(Worker):
         for exposed_name in self._exposed_names:
             self.exposed_consumer[exposed_name] = yield self.consume(
                 '%s.outbound' % (exposed_name,),
-                self.dispatch_outbound_message,
+                functools.partial(self.dispatch_outbound_message,
+                                  exposed_name),
                 message_class=TransportUserMessage)
 
-    def dispatch_inbound_message(self, msg):
-        return self._router.dispatch_inbound_message(msg)
+    def dispatch_inbound_message(self, endpoint, msg):
+        d = self._middlewares.apply_consume("inbound", msg, endpoint)
+        d.addCallback(self._router.dispatch_inbound_message)
+        return d
 
-    def dispatch_inbound_event(self, msg):
-        return self._router.dispatch_inbound_event(msg)
+    def dispatch_inbound_event(self, endpoint, msg):
+        d = self._middlewares.apply_consume("event", msg, endpoint)
+        d.addCallback(self._router.dispatch_inbound_event)
+        return d
 
-    def dispatch_outbound_message(self, msg):
-        return self._router.dispatch_outbound_message(msg)
+    def dispatch_outbound_message(self, endpoint, msg):
+        d = self._middlewares.apply_consume("outbound", msg, endpoint)
+        d.addCallback(self._router.dispatch_outbound_message)
+        return d
 
     def publish_inbound_message(self, endpoint, msg):
-        return self.exposed_publisher[endpoint].publish_message(msg)
+        d = self._middlewares.apply_publish("inbound", msg, endpoint)
+        d.addCallback(self.exposed_publisher[endpoint].publish_message)
+        return d
 
     def publish_inbound_event(self, endpoint, msg):
-        return self.exposed_event_publisher[endpoint].publish_message(msg)
+        d = self._middlewares.apply_publish("event", msg, endpoint)
+        d.addCallback(self.exposed_event_publisher[endpoint].publish_message)
+        return d
 
     def publish_outbound_message(self, endpoint, msg):
-        return self.transport_publisher[endpoint].publish_message(msg)
+        d = self._middlewares.apply_publish("outbound", msg, endpoint)
+        d.addCallback(self.transport_publisher[endpoint].publish_message)
+        return d
 
 
 class BaseDispatchRouter(object):

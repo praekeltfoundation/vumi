@@ -7,6 +7,7 @@ from vumi.message import TransportUserMessage, TransportEvent
 from vumi.errors import ConfigError
 from vumi.dispatchers.base import (BaseDispatchWorker, ToAddrRouter,
                                    FromAddrMultiplexRouter)
+from vumi.middleware import MiddlewareStack
 from vumi.tests.utils import get_stubbed_worker, FakeRedis, LogCatcher
 from vumi.tests.fake_amqp import FakeAMQPBroker
 
@@ -338,6 +339,7 @@ class DummyDispatcher(BaseDispatchWorker):
         for exposed in config['exposed_names']:
             self.exposed_publisher[exposed] = self.DummyPublisher()
             self.exposed_event_publisher[exposed] = self.DummyPublisher()
+        self._middlewares = MiddlewareStack([])
 
 
 class TestToAddrRouter(TestCase, MessageMakerMixIn):
