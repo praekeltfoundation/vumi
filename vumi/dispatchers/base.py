@@ -235,10 +235,7 @@ class TransportToTransportRouter(BaseDispatchRouter):
     def dispatch_inbound_message(self, msg):
         names = self.config['route_mappings'][msg['transport_name']]
         for name in names:
-            # TODO: this by-passes middleware
-            rkey = '%s.outbound' % (name,)
-            self.dispatcher.transport_publisher[name].publish_message(
-                msg, routing_key=rkey)
+            self.dispatcher.publish_outbound_message(name, msg.copy())
 
     def dispatch_inbound_event(self, msg):
         """
