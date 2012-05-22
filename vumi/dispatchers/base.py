@@ -235,6 +235,7 @@ class TransportToTransportRouter(BaseDispatchRouter):
     def dispatch_inbound_message(self, msg):
         names = self.config['route_mappings'][msg['transport_name']]
         for name in names:
+            # TODO: this by-passes middleware
             rkey = '%s.outbound' % (name,)
             self.dispatcher.transport_publisher[name].publish_message(
                 msg, routing_key=rkey)
@@ -274,7 +275,7 @@ class ToAddrRouter(SimpleDispatchRouter):
         toaddr = msg['to_addr']
         for name, regex in self.mappings:
             if regex.match(toaddr):
-                self.dispatcher.publish_inbound_message(name, msg)
+                self.dispatcher.publish_inbound_message(name, msg.copy())
 
     def dispatch_inbound_event(self, msg):
         pass
@@ -483,7 +484,7 @@ class ContentKeywordRouter(SimpleDispatchRouter):
         for rule in self.rules:
             if self.is_msg_matching_routing_rules(keyword, msg, rule):
                 matched = True
-                self.publish_exposed_inbound(rule['app'], msg)
+                self.publish_exposed_inbound(rule['app'], msg.copy())
         if not matched:
             if self.fallback_application is not None:
                 self.publish_exposed_inbound(self.fallback_application, msg)
