@@ -200,12 +200,12 @@ class SimpleDispatchRouter(BaseDispatchRouter):
     def dispatch_inbound_message(self, msg):
         names = self.config['route_mappings'][msg['transport_name']]
         for name in names:
-            self.dispatcher.publish_inbound_message(name, msg)
+            self.dispatcher.publish_inbound_message(name, msg.copy())
 
     def dispatch_inbound_event(self, msg):
         names = self.config['route_mappings'][msg['transport_name']]
         for name in names:
-            self.dispatcher.publish_inbound_event(name, msg)
+            self.dispatcher.publish_inbound_event(name, msg.copy())
 
     def dispatch_outbound_message(self, msg):
         name = msg['transport_name']
