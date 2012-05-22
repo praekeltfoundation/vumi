@@ -106,6 +106,9 @@ class Message(object):
     def items(self):
         return self.payload.items()
 
+    def copy(self):
+        return self.from_json(self.to_json())
+
 
 class TransportMessage(Message):
     """Common base class for messages sent to or from a transport."""
