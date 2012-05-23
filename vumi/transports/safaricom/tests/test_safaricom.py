@@ -50,7 +50,10 @@ class TestSafaricomTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_inbound_begin(self):
-        deferred = self.mk_request()
+        # If we get a menu like *167*7# the USSD_PARAMS is '7'
+        # if we get a * in it, it is a follow up request, so '7*a' means
+        # the user submitted 'a'
+        deferred = self.mk_request(USSD_PARAMS='7')
 
         [msg] = yield self.wait_for_dispatched_messages(1)
         self.assertEqual(msg['content'], '')

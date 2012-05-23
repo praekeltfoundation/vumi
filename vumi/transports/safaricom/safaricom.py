@@ -85,8 +85,12 @@ class SafaricomTransport(HttpRpcTransport):
         from_addr = values['ORIG']
         to_addr = values['DEST']
         session_id = values['SESSION_ID']
-        history = values['USSD_PARAMS'].split('*')
-        content = history[-1]
+        ussd_params = values['USSD_PARAMS']
+        if '*' in ussd_params:
+            history = values['USSD_PARAMS'].split('*')
+            content = history[-1]
+        else:
+            content = ''
 
         session = self.session_manager.load_session(session_id)
         if session:
