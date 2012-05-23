@@ -1,4 +1,4 @@
-# -*- test-case-name: vumi.transports.smpp.test_smpp -*-
+# -*- test-case-name: vumi.transports.smpp.tests.test_smpp -*-
 
 from datetime import datetime
 
