@@ -156,20 +156,14 @@ class EsmeTransceiver(Protocol):
         pdu = unpack_pdu(data)
         log.msg('INCOMING <<<< %s' % binascii.b2a_hex(data))
         log.msg('INCOMING <<<< %s' % pdu)
-        # TODO: convert this to a dispatch map
-        if pdu['header']['command_id'] == 'bind_transceiver_resp':
-            self.handle_bind_transceiver_resp(pdu)
-        if pdu['header']['command_id'] == 'submit_sm_resp':
-            self.handle_submit_sm_resp(pdu)
-        if pdu['header']['command_id'] == 'submit_multi_resp':
-            self.handle_submit_multi_resp(pdu)
-        if pdu['header']['command_id'] == 'deliver_sm':
-            self.handle_deliver_sm(pdu)
-        if pdu['header']['command_id'] == 'enquire_link':
-            self.handle_enquire_link(pdu)
-        if pdu['header']['command_id'] == 'enquire_link_resp':
-            self.handle_enquire_link_resp(pdu)
-        log.msg('STATE: %s' % (self.state))
+        command_id = pdu['header']['command_id']
+        handler = getattr(self, 'handle_%s' % (command_id,),
+            self._command_handler_not_found)
+        handler(pdu)
+        log.msg('STATE: %s' % (self.state,))
+
+    def _command_handler_not_found(self, pdu):
+        log.err('No command handler available for %s' % (pdu,))
 
     def connectionMade(self):
         self.state = 'OPEN'
@@ -423,25 +417,6 @@ class EsmeTransceiver(Protocol):
 
 class EsmeTransmitter(EsmeTransceiver):
 
-    def handle_data(self, data):
-        pdu = unpack_pdu(data)
-        log.msg('INCOMING <<<< %s' % binascii.b2a_hex(data))
-        log.msg('INCOMING <<<< %s' % pdu)
-        # TODO: convert this to a dispatch map
-        if pdu['header']['command_id'] == 'bind_transmitter_resp':
-            self.handle_bind_transmitter_resp(pdu)
-        if pdu['header']['command_id'] == 'submit_sm_resp':
-            self.handle_submit_sm_resp(pdu)
-        if pdu['header']['command_id'] == 'submit_multi_resp':
-            self.handle_submit_multi_resp(pdu)
-        #if pdu['header']['command_id'] == 'deliver_sm':
-            #self.handle_deliver_sm(pdu)
-        if pdu['header']['command_id'] == 'enquire_link':
-            self.handle_enquire_link(pdu)
-        if pdu['header']['command_id'] == 'enquire_link_resp':
-            self.handle_enquire_link_resp(pdu)
-        log.msg('STATE: %s' % (self.state))
-
     def connectionMade(self):
         self.state = 'OPEN'
         log.msg('STATE: %s' % (self.state))
@@ -465,25 +440,6 @@ class EsmeTransmitter(EsmeTransceiver):
 
 
 class EsmeReceiver(EsmeTransceiver):
-
-    def handle_data(self, data):
-        pdu = unpack_pdu(data)
-        log.msg('INCOMING <<<< %s' % binascii.b2a_hex(data))
-        log.msg('INCOMING <<<< %s' % pdu)
-        # TODO: convert this to a dispatch map
-        if pdu['header']['command_id'] == 'bind_receiver_resp':
-            self.handle_bind_reciever_resp(pdu)
-        #if pdu['header']['command_id'] == 'submit_sm_resp':
-            #self.handle_submit_sm_resp(pdu)
-        #if pdu['header']['command_id'] == 'submit_multi_resp':
-            #self.handle_submit_multi_resp(pdu)
-        if pdu['header']['command_id'] == 'deliver_sm':
-            self.handle_deliver_sm(pdu)
-        if pdu['header']['command_id'] == 'enquire_link':
-            self.handle_enquire_link(pdu)
-        if pdu['header']['command_id'] == 'enquire_link_resp':
-            self.handle_enquire_link_resp(pdu)
-        log.msg('STATE: %s' % (self.state))
 
     def connectionMade(self):
         self.state = 'OPEN'
