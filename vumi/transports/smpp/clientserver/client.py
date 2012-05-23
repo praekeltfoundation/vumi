@@ -188,7 +188,8 @@ class EsmeTransceiver(Protocol):
             self._lose_conn = None
             self.transport.loseConnection()
         else:
-            log.msg('Successful bind: %s, cancelling bind timeout' % self.state)
+            log.msg('Successful bind: %s, cancelling bind timeout' % (
+                self.state))
 
     def connectionLost(self, *args, **kwargs):
         self.state = 'CLOSED'
@@ -283,6 +284,10 @@ class EsmeTransceiver(Protocol):
         return message
 
     def handle_deliver_sm(self, pdu):
+        if self.state not in ['BOUND_RX', 'BOUND_TRX']:
+            log.err('WARNING: Received deliver_sm in wrong state: %s' % (
+                self.state))
+
         if pdu['header']['command_status'] == 'ESME_ROK':
             sequence_number = pdu['header']['sequence_number']
             message_id = str(uuid.uuid4())
@@ -354,14 +359,17 @@ class EsmeTransceiver(Protocol):
                 self.r_prefix, self.get_unacked_count()))
 
     def submit_sm(self, **kwargs):
-        if self.state in ['BOUND_TX', 'BOUND_TRX']:
+        if self.state not in ['BOUND_TX', 'BOUND_TRX']:
+            log.err(('WARNING: submit_sm in wrong state: %s, '
+                            'dropping message: %s' % (self.state, kwargs)))
+            return 0
+        else:
             sequence_number = self.get_seq()
             pdu = SubmitSM(sequence_number, **dict(self.defaults, **kwargs))
             self.get_next_seq()
             self.send_pdu(pdu)
             self.push_unacked(sequence_number)
             return sequence_number
-        return 0
 
     def submit_multi(self, dest_address=[], **kwargs):
         if self.state in ['BOUND_TX', 'BOUND_TRX']:

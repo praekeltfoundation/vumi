@@ -5,9 +5,11 @@ from twisted.internet.task import Clock
 from smpp.pdu_builder import DeliverSM, BindTransceiverResp
 from smpp.pdu import unpack_pdu
 
-from vumi.tests.utils import FakeRedis
+from vumi.tests.utils import FakeRedis, LogCatcher
 from vumi.transports.smpp.clientserver.client import (
         EsmeTransceiver,
+        EsmeReceiver,
+        EsmeTransmitter,
         EsmeCallbacks,
         KeyValueBase,
         KeyValueStore,
@@ -100,6 +102,30 @@ class FakeEsmeTransceiver(EsmeTransceiver):
         pass
 
 
+class FakeEsmeReceiver(EsmeReceiver):
+
+    def __init__(self, *args, **kwargs):
+        EsmeReceiver.__init__(self, *args, **kwargs)
+        self.transport = FakeTransport()
+        self.clock = Clock()
+        self.callLater = self.clock.callLater
+
+    def send_pdu(self, *args):
+        pass
+
+
+class FakeEsmeTransmitter(EsmeTransmitter):
+
+    def __init__(self, *args, **kwargs):
+        EsmeTransmitter.__init__(self, *args, **kwargs)
+        self.transport = FakeTransport()
+        self.clock = Clock()
+        self.callLater = self.clock.callLater
+
+    def send_pdu(self, *args):
+        pass
+
+
 class EsmeSequenceNumberTestCase(unittest.TestCase):
 
     def test_sequence_rollover(self):
@@ -178,6 +204,56 @@ class EsmeTransceiverTestCase(unittest.TestCase):
         self.assertEqual(True, esme.transport.connected)
         self.assertEqual(None, esme._lose_conn)
         esme.lc_enquire.stop()
+
+
+class EsmeTransmitterTestCase(unittest.TestCase):
+    def get_esme(self, **callbacks):
+        config = ClientConfig(host="127.0.0.1", port="0",
+                              system_id="1234", password="password")
+        esme_callbacks = EsmeCallbacks(**callbacks)
+        esme = FakeEsmeTransmitter(config, FakeRedis(), esme_callbacks)
+        return esme
+
+    def get_sm(self, msg, data_coding=3):
+        sm = DeliverSM(1, short_message=msg, data_coding=data_coding)
+        return unpack_pdu(sm.get_bin())
+
+    def test_deliver_sm_simple(self):
+        """A message delivery should log an error since we're supposed
+        to be a transmitter only."""
+        def cb(**kw):
+            self.assertEqual(u'hello', kw['short_message'])
+
+        with LogCatcher() as log:
+            esme = self.get_esme(deliver_sm=cb)
+            esme.state = 'BOUND_TX'  # Assume we've bound correctly as a TX
+            esme.handle_deliver_sm(self.get_sm('hello'))
+            [error] = log.errors
+            self.assertTrue('deliver_sm in wrong state' in error['message'][0])
+
+
+class EsmeReceiverTestCase(unittest.TestCase):
+    def get_esme(self, **callbacks):
+        config = ClientConfig(host="127.0.0.1", port="0",
+                              system_id="1234", password="password")
+        esme_callbacks = EsmeCallbacks(**callbacks)
+        esme = FakeEsmeReceiver(config, FakeRedis(), esme_callbacks)
+        return esme
+
+    def get_sm(self, msg, data_coding=3):
+        sm = DeliverSM(1, short_message=msg, data_coding=data_coding)
+        return unpack_pdu(sm.get_bin())
+
+    def test_submit_sm_simple(self):
+        """A simple message log an error when trying to send over
+        a receiver."""
+        with LogCatcher() as log:
+            esme = self.get_esme()
+            esme.state = 'BOUND_RX'  # Fake RX bind
+            esme.submit_sm(short_message='hello')
+            [error] = log.errors
+            self.assertTrue(('submit_sm in wrong state' in
+                                            error['message'][0]))
 
 
 class ESMETestCase(unittest.TestCase):
