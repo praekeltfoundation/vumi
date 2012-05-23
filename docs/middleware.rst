@@ -2,12 +2,12 @@ Middleware
 ==========
 
 Middleware provides additional functionality that can be attached to
-any existing transport or application worker. For example, middleware
-could log inbound and outbound messages, store delivery reports in a
-database or modify a message.
+any existing transport, application or dispatcher worker. For
+example, middleware could log inbound and outbound messages, store
+delivery reports in a database or modify a message.
 
-Attaching middleware to your transport or application worker is fairly
-straight forward. Just extend your YAML configuration file with lines like::
+Attaching middleware to your worker is fairly straight forward. Just
+extend your YAML configuration file with lines like::
 
     middleware:
         - mw1: vumi.middleware.LoggingMiddleware
