@@ -123,6 +123,7 @@ class EsmeTransceiver(Protocol):
                 self.r_prefix)
         log.msg("r_prefix = %s" % self.r_prefix)
         self.get_next_seq()
+        self._lose_conn = None
 
     def set_seq(self, seq):
         self.r_server.set(self.sequence_number_prefix, int(seq))
@@ -172,8 +173,11 @@ class EsmeTransceiver(Protocol):
         log.msg(pdu.get_obj())
         self.get_next_seq()
         self.send_pdu(pdu)
-        self._lose_conn = self.callLater(
-            self.smpp_bind_timeout, self.lose_unbound_connection, 'BOUND_TRX')
+        self.schedule_lose_connection('BOUND_TRX')
+
+    def schedule_lose_connection(self, expected_status):
+        self._lose_conn = self.callLater(self.smpp_bind_timeout,
+            self.lose_unbound_connection, expected_status)
 
     def lose_unbound_connection(self, required_state):
         if self.state != required_state:
@@ -188,6 +192,7 @@ class EsmeTransceiver(Protocol):
     def connectionLost(self, *args, **kwargs):
         self.state = 'CLOSED'
         self.stop_enquire_link()
+        self.cancel_drop_connection_call()
         log.msg('STATE: %s' % (self.state))
 
     def dataReceived(self, data):
@@ -205,9 +210,7 @@ class EsmeTransceiver(Protocol):
     def start_enquire_link(self):
         self.lc_enquire = LoopingCall(self.enquire_link)
         self.lc_enquire.start(self.smpp_enquire_link_interval)
-        if self._lose_conn is not None:
-            self._lose_conn.cancel()
-            self._lose_conn = None
+        self.cancel_drop_connection_call()
         self.esme_callbacks.connect(self)
 
     def stop_enquire_link(self):
@@ -215,6 +218,11 @@ class EsmeTransceiver(Protocol):
         if lc_enquire and lc_enquire.running:
             lc_enquire.stop()
             log.msg('Stopped enquire link looping call')
+
+    def cancel_drop_connection_call(self):
+        if self._lose_conn is not None:
+            self._lose_conn.cancel()
+            self._lose_conn = None
 
     def handle_bind_transceiver_resp(self, pdu):
         if pdu['header']['command_status'] == 'ESME_ROK':
@@ -428,8 +436,7 @@ class EsmeTransmitter(EsmeTransceiver):
         log.msg(pdu.get_obj())
         self.get_next_seq()
         self.send_pdu(pdu)
-        self._lose_conn = self.callLater(
-            self.smpp_bind_timeout, self.lose_unbound_connection, 'BOUND_TX')
+        self.schedule_lose_connection('BOUND_TX')
 
     def handle_bind_transmitter_resp(self, pdu):
         if pdu['header']['command_status'] == 'ESME_ROK':
@@ -447,10 +454,9 @@ class EsmeReceiver(EsmeTransceiver):
         log.msg(pdu.get_obj())
         self.get_next_seq()
         self.send_pdu(pdu)
-        self._lose_conn = self.callLater(
-            self.smpp_bind_timeout, self.lose_unbound_connection, 'BOUND_RX')
+        self.schedule_lose_connection('BOUND_RX')
 
-    def handle_bind_reciever_resp(self, pdu):
+    def handle_bind_receiver_resp(self, pdu):
         if pdu['header']['command_status'] == 'ESME_ROK':
             self.state = 'BOUND_RX'
             self.start_enquire_link()

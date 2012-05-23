@@ -312,9 +312,6 @@ class EsmeToSmscTestCase(TransportTestCase):
 
     @inlineCallbacks
     def tearDown(self):
-        #from twisted.internet.base import DelayedCall
-        #DelayedCall.debug = True
-
         yield super(EsmeToSmscTestCase, self).tearDown()
         self.transport.r_server.teardown()
         self.transport.factory.stopTrying()
@@ -745,6 +742,7 @@ class RxEsmeToSmscTestCase(TransportTestCase):
 
     transport_name = "esme_testing_transport"
     transport_class = MockSmppRxTransport
+    timeout = 1
 
     def assert_pdu_header(self, expected, actual, field):
         self.assertEqual(expected['pdu']['header'][field],
@@ -758,6 +756,9 @@ class RxEsmeToSmscTestCase(TransportTestCase):
 
     @inlineCallbacks
     def setUp(self):
+        from twisted.internet.base import DelayedCall
+        DelayedCall.debug = True
+
         yield super(RxEsmeToSmscTestCase, self).setUp()
         self.config = {
             "system_id": "VumiTestSMSC",
@@ -798,7 +799,6 @@ class RxEsmeToSmscTestCase(TransportTestCase):
         # Startup
         yield self.startTransport()
         yield self.transport._block_till_bind
-
         # The Server delivers a SMS to the Client
 
         pdu = DeliverSM(555,
