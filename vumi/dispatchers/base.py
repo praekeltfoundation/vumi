@@ -3,6 +3,7 @@
 """Basic tools for building dispatchers."""
 
 import re
+import functools
 import redis
 
 from twisted.internet.defer import inlineCallbacks
@@ -11,6 +12,7 @@ from vumi.service import Worker
 from vumi.errors import ConfigError
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.utils import load_class_by_string, get_first_word
+from vumi.middleware import MiddlewareStack, setup_middlewares_from_config
 from vumi import log
 
 
@@ -25,6 +27,7 @@ class BaseDispatchWorker(Worker):
                 % (self.__class__.__name__, self.config))
 
         yield self.setup_endpoints()
+        yield self.setup_middleware()
         yield self.setup_router()
         yield self.setup_transport_publishers()
         yield self.setup_exposed_publishers()
@@ -34,6 +37,11 @@ class BaseDispatchWorker(Worker):
     def setup_endpoints(self):
         self._transport_names = self.config.get('transport_names', [])
         self._exposed_names = self.config.get('exposed_names', [])
+
+    @inlineCallbacks
+    def setup_middleware(self):
+        middlewares = yield setup_middlewares_from_config(self, self.config)
+        self._middlewares = MiddlewareStack(middlewares)
 
     def setup_router(self):
         router_cls = load_class_by_string(self.config['router_class'])
@@ -53,12 +61,13 @@ class BaseDispatchWorker(Worker):
         for transport_name in self._transport_names:
             self.transport_consumer[transport_name] = yield self.consume(
                 '%s.inbound' % (transport_name,),
-                self.dispatch_inbound_message,
+                functools.partial(self.dispatch_inbound_message,
+                                  transport_name),
                 message_class=TransportUserMessage)
         for transport_name in self._transport_names:
             self.transport_event_consumer[transport_name] = yield self.consume(
                 '%s.event' % (transport_name,),
-                self.dispatch_inbound_event,
+                functools.partial(self.dispatch_inbound_event, transport_name),
                 message_class=TransportEvent)
 
     @inlineCallbacks
@@ -78,17 +87,39 @@ class BaseDispatchWorker(Worker):
         for exposed_name in self._exposed_names:
             self.exposed_consumer[exposed_name] = yield self.consume(
                 '%s.outbound' % (exposed_name,),
-                self.dispatch_outbound_message,
+                functools.partial(self.dispatch_outbound_message,
+                                  exposed_name),
                 message_class=TransportUserMessage)
 
-    def dispatch_inbound_message(self, msg):
-        return self._router.dispatch_inbound_message(msg)
+    def dispatch_inbound_message(self, endpoint, msg):
+        d = self._middlewares.apply_consume("inbound", msg, endpoint)
+        d.addCallback(self._router.dispatch_inbound_message)
+        return d
 
-    def dispatch_inbound_event(self, msg):
-        return self._router.dispatch_inbound_event(msg)
+    def dispatch_inbound_event(self, endpoint, msg):
+        d = self._middlewares.apply_consume("event", msg, endpoint)
+        d.addCallback(self._router.dispatch_inbound_event)
+        return d
 
-    def dispatch_outbound_message(self, msg):
-        return self._router.dispatch_outbound_message(msg)
+    def dispatch_outbound_message(self, endpoint, msg):
+        d = self._middlewares.apply_consume("outbound", msg, endpoint)
+        d.addCallback(self._router.dispatch_outbound_message)
+        return d
+
+    def publish_inbound_message(self, endpoint, msg):
+        d = self._middlewares.apply_publish("inbound", msg, endpoint)
+        d.addCallback(self.exposed_publisher[endpoint].publish_message)
+        return d
+
+    def publish_inbound_event(self, endpoint, msg):
+        d = self._middlewares.apply_publish("event", msg, endpoint)
+        d.addCallback(self.exposed_event_publisher[endpoint].publish_message)
+        return d
+
+    def publish_outbound_message(self, endpoint, msg):
+        d = self._middlewares.apply_publish("outbound", msg, endpoint)
+        d.addCallback(self.transport_publisher[endpoint].publish_message)
+        return d
 
 
 class BaseDispatchRouter(object):
@@ -169,17 +200,21 @@ class SimpleDispatchRouter(BaseDispatchRouter):
     def dispatch_inbound_message(self, msg):
         names = self.config['route_mappings'][msg['transport_name']]
         for name in names:
-            self.dispatcher.exposed_publisher[name].publish_message(msg)
+            # copy message so that the middleware doesn't see a particular
+            # message instance multiple times
+            self.dispatcher.publish_inbound_message(name, msg.copy())
 
     def dispatch_inbound_event(self, msg):
         names = self.config['route_mappings'][msg['transport_name']]
         for name in names:
-            self.dispatcher.exposed_event_publisher[name].publish_message(msg)
+            # copy message so that the middleware doesn't see a particular
+            # message instance multiple times
+            self.dispatcher.publish_inbound_event(name, msg.copy())
 
     def dispatch_outbound_message(self, msg):
         name = msg['transport_name']
         name = self.config.get('transport_mappings', {}).get(name, name)
-        self.dispatcher.transport_publisher[name].publish_message(msg)
+        self.dispatcher.publish_outbound_message(name, msg)
 
 
 class TransportToTransportRouter(BaseDispatchRouter):
@@ -204,9 +239,7 @@ class TransportToTransportRouter(BaseDispatchRouter):
     def dispatch_inbound_message(self, msg):
         names = self.config['route_mappings'][msg['transport_name']]
         for name in names:
-            rkey = '%s.outbound' % (name,)
-            self.dispatcher.transport_publisher[name].publish_message(
-                msg, routing_key=rkey)
+            self.dispatcher.publish_outbound_message(name, msg.copy())
 
     def dispatch_inbound_event(self, msg):
         """
@@ -243,7 +276,9 @@ class ToAddrRouter(SimpleDispatchRouter):
         toaddr = msg['to_addr']
         for name, regex in self.mappings:
             if regex.match(toaddr):
-                self.dispatcher.exposed_publisher[name].publish_message(msg)
+                # copy message so that the middleware doesn't see a particular
+                # message instance multiple times
+                self.dispatcher.publish_inbound_message(name, msg.copy())
 
     def dispatch_inbound_event(self, msg):
         pass
@@ -280,22 +315,18 @@ class FromAddrMultiplexRouter(BaseDispatchRouter):
                     type(self).__name__,))
         [self.exposed_name] = self.config['exposed_names']
 
-    def _handle_inbound(self, msg, publisher):
-        msg['transport_name'] = self.exposed_name
-        publisher.publish_message(msg)
-
     def dispatch_inbound_message(self, msg):
-        self._handle_inbound(
-            msg, self.dispatcher.exposed_publisher[self.exposed_name])
+        msg['transport_name'] = self.exposed_name
+        self.dispatcher.publish_inbound_message(self.exposed_name, msg)
 
     def dispatch_inbound_event(self, msg):
-        self._handle_inbound(
-            msg, self.dispatcher.exposed_event_publisher[self.exposed_name])
+        msg['transport_name'] = self.exposed_name
+        self.dispatcher.publish_inbound_event(self.exposed_name, msg)
 
     def dispatch_outbound_message(self, msg):
         name = self.config['fromaddr_mappings'][msg['from_addr']]
         msg['transport_name'] = name
-        self.dispatcher.transport_publisher[name].publish_message(msg)
+        self.dispatcher.publish_outbound_message(name, msg)
 
 
 class UserGroupingRouter(SimpleDispatchRouter):
@@ -361,7 +392,7 @@ class UserGroupingRouter(SimpleDispatchRouter):
     def dispatch_inbound_message(self, msg):
         group = self.get_group_for_user(msg.user().encode('utf8'))
         app = self.groups[group]
-        self.dispatcher.exposed_publisher[app].publish_message(msg)
+        self.dispatcher.publish_inbound_message(app, msg)
 
 
 class ContentKeywordRouter(SimpleDispatchRouter):
@@ -435,13 +466,13 @@ class ContentKeywordRouter(SimpleDispatchRouter):
         return ':'.join([self.r_prefix] + map(str, parts))
 
     def publish_transport(self, name, msg):
-        self.dispatcher.transport_publisher[name].publish_message(msg)
+        self.dispatcher.publish_outbound_message(name, msg)
 
     def publish_exposed_inbound(self, name, msg):
-        self.dispatcher.exposed_publisher[name].publish_message(msg)
+        self.dispatcher.publish_inbound_message(name, msg)
 
     def publish_exposed_event(self, name, msg):
-        self.dispatcher.exposed_event_publisher[name].publish_message(msg)
+        self.dispatcher.publish_inbound_event(name, msg)
 
     def is_msg_matching_routing_rules(self, keyword, msg, rule):
         return all([keyword == rule['keyword'],
@@ -456,7 +487,9 @@ class ContentKeywordRouter(SimpleDispatchRouter):
         for rule in self.rules:
             if self.is_msg_matching_routing_rules(keyword, msg, rule):
                 matched = True
-                self.publish_exposed_inbound(rule['app'], msg)
+                # copy message so that the middleware doesn't see a particular
+                # message instance multiple times
+                self.publish_exposed_inbound(rule['app'], msg.copy())
         if not matched:
             if self.fallback_application is not None:
                 self.publish_exposed_inbound(self.fallback_application, msg)
@@ -503,8 +536,7 @@ class RedirectOutboundRouter(BaseDispatchRouter):
         transport_name = msg['transport_name']
         redirect_to = self.mappings.get(transport_name)
         if redirect_to:
-            publisher = self.dispatcher.transport_publisher[redirect_to]
-            publisher.publish_message(msg)
+            self.dispatcher.publish_outbound_message(redirect_to, msg)
         else:
             log.error('No redirect_outbound specified for %s' % (
                 transport_name,))

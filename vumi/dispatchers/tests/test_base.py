@@ -7,6 +7,7 @@ from vumi.message import TransportUserMessage, TransportEvent
 from vumi.errors import ConfigError
 from vumi.dispatchers.base import (BaseDispatchWorker, ToAddrRouter,
                                    FromAddrMultiplexRouter)
+from vumi.middleware import MiddlewareStack
 from vumi.tests.utils import get_stubbed_worker, FakeRedis, LogCatcher
 from vumi.tests.fake_amqp import FakeAMQPBroker
 
@@ -196,6 +197,10 @@ class TestBaseDispatchWorker(TestCase, MessageMakerMixIn):
                 "transport2": ["app2"],
                 "transport3": ["app1", "app3"]
                 },
+            "middleware": [
+                {"mw1": "vumi.middleware.tests.utils.RecordingMiddleware"},
+                {"mw2": "vumi.middleware.tests.utils.RecordingMiddleware"},
+                ],
             }
         config.update(config_extras)
         self.worker = get_stubbed_worker(BaseDispatchWorker, config)
@@ -212,8 +217,23 @@ class TestBaseDispatchWorker(TestCase, MessageMakerMixIn):
         self._amqp.publish_message(exchange, rkey, message)
         return self._amqp.kick_delivery()
 
-    def assert_messages(self, rkey, msgs):
-        self.assertEqual(msgs, self._amqp.get_messages('vumi', rkey))
+    def mk_middleware_records(self, rkey_in, rkey_out):
+        records = []
+        for rkey, direction in [(rkey_in, False), (rkey_out, True)]:
+            endpoint, method = rkey.split('.', 1)
+            mw = [[name, method, endpoint] for name in ("mw1", "mw2")]
+            if direction:
+                mw.reverse()
+            records.extend(mw)
+        return records
+
+    def assert_messages(self, rkeys_in, rkey_out, msgs):
+        received_msgs = self._amqp.get_messages('vumi', rkey_out)
+        for rmsg, rkey_in in zip(received_msgs, rkeys_in):
+            middleware_records = self.mk_middleware_records(rkey_in, rkey_out)
+            self.assertEqual(rmsg.payload.pop('record'),
+                             middleware_records)
+        self.assertEqual(msgs, received_msgs)
 
     def assert_no_messages(self, *rkeys):
         for rkey in rkeys:
@@ -226,22 +246,22 @@ class TestBaseDispatchWorker(TestCase, MessageMakerMixIn):
     def test_inbound_message_routing(self):
         msg = self.mkmsg_in('transport1')
         yield self.dispatch(msg, 'transport1.inbound')
-        self.assert_messages('app1.inbound', [msg])
+        self.assert_messages(['transport1.inbound'], 'app1.inbound', [msg])
         self.assert_no_messages('app1.event', 'app2.inbound', 'app2.event',
                                 'app3.inbound', 'app3.event')
 
         self.clear_dispatched()
         msg = self.mkmsg_in('transport2')
         yield self.dispatch(msg, 'transport2.inbound')
-        self.assert_messages('app2.inbound', [msg])
+        self.assert_messages(['transport2.inbound'], 'app2.inbound', [msg])
         self.assert_no_messages('app1.inbound', 'app1.event', 'app2.event',
                                 'app3.inbound', 'app3.event')
 
         self.clear_dispatched()
         msg = self.mkmsg_in('transport3')
         yield self.dispatch(msg, 'transport3.inbound')
-        self.assert_messages('app1.inbound', [msg])
-        self.assert_messages('app3.inbound', [msg])
+        self.assert_messages(['transport3.inbound'], 'app1.inbound', [msg])
+        self.assert_messages(['transport3.inbound'], 'app3.inbound', [msg])
         self.assert_no_messages('app1.event', 'app2.inbound', 'app2.event',
                                 'app3.event')
 
@@ -249,48 +269,46 @@ class TestBaseDispatchWorker(TestCase, MessageMakerMixIn):
     def test_inbound_event_routing(self):
         msg = self.mkmsg_ack('transport1')
         yield self.dispatch(msg, 'transport1.event')
-        self.assert_messages('app1.event', [msg])
+        self.assert_messages(['transport1.event'], 'app1.event', [msg])
         self.assert_no_messages('app1.inbound', 'app2.event', 'app2.inbound',
                                 'app3.event', 'app3.inbound')
 
         self.clear_dispatched()
         msg = self.mkmsg_ack('transport2')
         yield self.dispatch(msg, 'transport2.event')
-        self.assert_messages('app2.event', [msg])
+        self.assert_messages(['transport2.event'], 'app2.event', [msg])
         self.assert_no_messages('app1.event', 'app1.inbound', 'app2.inbound',
                                 'app3.event', 'app3.inbound')
 
         self.clear_dispatched()
         msg = self.mkmsg_ack('transport3')
         yield self.dispatch(msg, 'transport3.event')
-        self.assert_messages('app1.event', [msg])
-        self.assert_messages('app3.event', [msg])
+        self.assert_messages(['transport3.event'], 'app1.event', [msg])
+        self.assert_messages(['transport3.event'], 'app3.event', [msg])
         self.assert_no_messages('app1.inbound', 'app2.event', 'app2.inbound',
                                 'app3.inbound')
 
     @inlineCallbacks
     def test_outbound_message_routing(self):
+        apps = ['app1.outbound', 'app2.outbound', 'app3.outbound']
         msgs = [self.mkmsg_out('transport1') for _ in range(3)]
-        yield self.dispatch(msgs[0], 'app1.outbound')
-        yield self.dispatch(msgs[1], 'app2.outbound')
-        yield self.dispatch(msgs[2], 'app3.outbound')
-        self.assert_messages('transport1.outbound', msgs)
+        for app, msg in zip(apps, msgs):
+            yield self.dispatch(msg, app)
+        self.assert_messages(apps, 'transport1.outbound', msgs)
         self.assert_no_messages('transport2.outbound', 'transport3.outbound')
 
         self.clear_dispatched()
         msgs = [self.mkmsg_out('transport2') for _ in range(3)]
-        yield self.dispatch(msgs[0], 'app1.outbound')
-        yield self.dispatch(msgs[1], 'app2.outbound')
-        yield self.dispatch(msgs[2], 'app3.outbound')
-        self.assert_messages('transport2.outbound', msgs)
+        for app, msg in zip(apps, msgs):
+            yield self.dispatch(msg, app)
+        self.assert_messages(apps, 'transport2.outbound', msgs)
         self.assert_no_messages('transport1.outbound', 'transport3.outbound')
 
         self.clear_dispatched()
         msgs = [self.mkmsg_out('transport3') for _ in range(3)]
-        yield self.dispatch(msgs[0], 'app1.outbound')
-        yield self.dispatch(msgs[1], 'app2.outbound')
-        yield self.dispatch(msgs[2], 'app3.outbound')
-        self.assert_messages('transport3.outbound', msgs)
+        for app, msg in zip(apps, msgs):
+            yield self.dispatch(msg, app)
+        self.assert_messages(apps, 'transport3.outbound', msgs)
         self.assert_no_messages('transport1.outbound', 'transport2.outbound')
 
     @inlineCallbacks
@@ -299,25 +317,24 @@ class TestBaseDispatchWorker(TestCase, MessageMakerMixIn):
         Test that transport mappings are applied for outbound messages.
         """
         yield self.get_worker(transport_mappings={'upstream1': 'transport1'})
+        apps = ['app1.outbound', 'app2.outbound', 'app3.outbound']
 
         msgs = [self.mkmsg_out('upstream1') for _ in range(3)]
-        yield self.dispatch(msgs[0], 'app1.outbound')
-        yield self.dispatch(msgs[1], 'app2.outbound')
-        yield self.dispatch(msgs[2], 'app3.outbound')
-        self.assert_messages('transport1.outbound', msgs)
+        for app, msg in zip(apps, msgs):
+            yield self.dispatch(msg, app)
+        self.assert_messages(apps, 'transport1.outbound', msgs)
         self.assert_no_messages('transport2.outbound', 'transport3.outbound',
                                 'upstream1.outbound')
 
         self.clear_dispatched()
         msgs = [self.mkmsg_out('transport2') for _ in range(3)]
-        yield self.dispatch(msgs[0], 'app1.outbound')
-        yield self.dispatch(msgs[1], 'app2.outbound')
-        yield self.dispatch(msgs[2], 'app3.outbound')
-        self.assert_messages('transport2.outbound', msgs)
+        for app, msg in zip(apps, msgs):
+            yield self.dispatch(msg, app)
+        self.assert_messages(apps, 'transport2.outbound', msgs)
         self.assert_no_messages('transport1.outbound', 'transport3.outbound')
 
 
-class DummyDispatcher(object):
+class DummyDispatcher(BaseDispatchWorker):
 
     class DummyPublisher(object):
         def __init__(self):
@@ -338,6 +355,7 @@ class DummyDispatcher(object):
         for exposed in config['exposed_names']:
             self.exposed_publisher[exposed] = self.DummyPublisher()
             self.exposed_event_publisher[exposed] = self.DummyPublisher()
+        self._middlewares = MiddlewareStack([])
 
 
 class TestToAddrRouter(TestCase, MessageMakerMixIn):
