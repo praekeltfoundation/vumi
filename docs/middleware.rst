@@ -2,9 +2,9 @@ Middleware
 ==========
 
 Middleware provides additional functionality that can be attached to
-any existing transport or application worker. For example, middleware
-could log inbound and outbound messages, store delivery reports in a
-database or modify a message.
+any existing transport or application worker or dispatcher. For
+example, middleware could log inbound and outbound messages, store
+delivery reports in a database or modify a message.
 
 Attaching middleware to your transport or application worker is fairly
 straight forward. Just extend your YAML configuration file with lines like::
