@@ -211,7 +211,7 @@ class EsmeTransceiver(Protocol):
         self.esme_callbacks.connect(self)
 
     def stop_enquire_link(self):
-        lc_enquire = getattr(self, 'lc_enquire')
+        lc_enquire = getattr(self, 'lc_enquire', None)
         if lc_enquire and lc_enquire.running:
             lc_enquire.stop()
             log.msg('Stopped enquire link looping call')
