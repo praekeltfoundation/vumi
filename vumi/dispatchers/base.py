@@ -200,11 +200,15 @@ class SimpleDispatchRouter(BaseDispatchRouter):
     def dispatch_inbound_message(self, msg):
         names = self.config['route_mappings'][msg['transport_name']]
         for name in names:
+            # copy message so that the middleware doesn't see a particular
+            # message instance multiple times
             self.dispatcher.publish_inbound_message(name, msg.copy())
 
     def dispatch_inbound_event(self, msg):
         names = self.config['route_mappings'][msg['transport_name']]
         for name in names:
+            # copy message so that the middleware doesn't see a particular
+            # message instance multiple times
             self.dispatcher.publish_inbound_event(name, msg.copy())
 
     def dispatch_outbound_message(self, msg):
@@ -272,6 +276,8 @@ class ToAddrRouter(SimpleDispatchRouter):
         toaddr = msg['to_addr']
         for name, regex in self.mappings:
             if regex.match(toaddr):
+                # copy message so that the middleware doesn't see a particular
+                # message instance multiple times
                 self.dispatcher.publish_inbound_message(name, msg.copy())
 
     def dispatch_inbound_event(self, msg):
@@ -481,6 +487,8 @@ class ContentKeywordRouter(SimpleDispatchRouter):
         for rule in self.rules:
             if self.is_msg_matching_routing_rules(keyword, msg, rule):
                 matched = True
+                # copy message so that the middleware doesn't see a particular
+                # message instance multiple times
                 self.publish_exposed_inbound(rule['app'], msg.copy())
         if not matched:
             if self.fallback_application is not None:
