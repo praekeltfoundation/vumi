@@ -74,10 +74,12 @@ class TestSafaricomTransportTestCase(TransportTestCase):
         # first pre-populate the redis datastore to simulate prior BEG message
         self.session_manager.create_session('session-id',
                 to_addr='120*123#', from_addr='27761234567')
-        deferred = self.mk_request(USSD_PARAMS='hi')
+        # Safaricom gives us the history of the full session in the USSD_PARAMS
+        # The last submitted bit of content is the last value delimited by '*'
+        deferred = self.mk_request(USSD_PARAMS='*7*a*b*c')
 
         [msg] = yield self.wait_for_dispatched_messages(1)
-        self.assertEqual(msg['content'], 'hi')
+        self.assertEqual(msg['content'], 'c')
         self.assertEqual(msg['to_addr'], '*120*123#')
         self.assertEqual(msg['from_addr'], '27761234567')
         self.assertEqual(msg['session_event'],
@@ -97,7 +99,7 @@ class TestSafaricomTransportTestCase(TransportTestCase):
     @inlineCallbacks
     def test_inbound_resume_with_failed_to_addr_lookup(self):
         deferred = self.mk_full_request(ORIG='123456',
-            USSD_PARAMS='hi', SESSION_ID='session-id')
+            USSD_PARAMS='7*a', SESSION_ID='session-id')
         response = yield deferred
         self.assertEqual(json.loads(response), {
             'missing_parameter': ['DEST'],
