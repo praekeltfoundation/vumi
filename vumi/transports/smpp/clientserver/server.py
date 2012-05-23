@@ -7,8 +7,12 @@ from twisted.python import log
 from twisted.internet import reactor
 from twisted.internet.protocol import Protocol, ServerFactory
 
-from smpp.pdu_builder import (BindTransceiverResp, EnquireLinkResp,
-        SubmitSMResp, DeliverSM)
+from smpp.pdu_builder import (BindTransceiverResp,
+                                BindTransmitterResp,
+                                BindReceiverResp,
+                                EnquireLinkResp,
+                                SubmitSMResp,
+                                DeliverSM)
 from smpp.pdu_inspector import binascii, unpack_pdu
 
 
@@ -38,6 +42,10 @@ class SmscServer(Protocol):
         log.msg('INCOMING <<<<', pdu)
         if pdu['header']['command_id'] == 'bind_transceiver':
             self.handle_bind_transceiver(pdu)
+        if pdu['header']['command_id'] == 'bind_transmitter':
+            self.handle_bind_transmitter(pdu)
+        if pdu['header']['command_id'] == 'bind_receiver':
+            self.handle_bind_receiver(pdu)
         if pdu['header']['command_id'] == 'submit_sm':
             self.handle_submit_sm(pdu)
         if pdu['header']['command_id'] == 'enquire_link':
@@ -48,6 +56,24 @@ class SmscServer(Protocol):
             sequence_number = pdu['header']['sequence_number']
             system_id = pdu['body']['mandatory_parameters']['system_id']
             pdu_resp = BindTransceiverResp(sequence_number,
+                    system_id=system_id
+                    )
+            self.send_pdu(pdu_resp)
+
+    def handle_bind_transmitter(self, pdu):
+        if pdu['header']['command_status'] == 'ESME_ROK':
+            sequence_number = pdu['header']['sequence_number']
+            system_id = pdu['body']['mandatory_parameters']['system_id']
+            pdu_resp = BindTransmitterResp(sequence_number,
+                    system_id=system_id
+                    )
+            self.send_pdu(pdu_resp)
+
+    def handle_bind_receiver(self, pdu):
+        if pdu['header']['command_status'] == 'ESME_ROK':
+            sequence_number = pdu['header']['sequence_number']
+            system_id = pdu['body']['mandatory_parameters']['system_id']
+            pdu_resp = BindReceiverResp(sequence_number,
                     system_id=system_id
                     )
             self.send_pdu(pdu_resp)

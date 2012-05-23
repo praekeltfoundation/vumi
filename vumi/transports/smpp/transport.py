@@ -1,4 +1,4 @@
-# -*- test-case-name: vumi.transports.smpp.test_smpp -*-
+# -*- test-case-name: vumi.transports.smpp.tests.test_smpp -*-
 
 from datetime import datetime
 
@@ -9,6 +9,8 @@ from twisted.internet import reactor
 from vumi.utils import get_operator_number
 from vumi.transports.base import Transport
 from vumi.transports.smpp.clientserver.client import (EsmeTransceiverFactory,
+                                                      EsmeTransmitterFactory,
+                                                      EsmeReceiverFactory,
                                                       EsmeCallbacks)
 from vumi.transports.smpp.clientserver.config import ClientConfig
 from vumi.transports.failures import FailureMessage
@@ -122,13 +124,16 @@ class SmppTransport(Transport):
 
         if not hasattr(self, 'esme_client'):
             # start the Smpp transport (if we don't have one)
-            self.factory = EsmeTransceiverFactory(self.client_config,
-                                                  self.r_server,
-                                                  self.esme_callbacks)
+            self.factory = self.make_factory()
             reactor.connectTCP(
                 self.client_config.host,
                 self.client_config.port,
                 self.factory)
+
+    def make_factory(self):
+        return EsmeTransceiverFactory(self.client_config,
+                                        self.r_server,
+                                        self.esme_callbacks)
 
     def esme_connected(self, client):
         log.msg("ESME Connected, adding handlers")
@@ -316,3 +321,17 @@ class SmppTransport(Transport):
         log.msg("Failed to send: %s reason: %s" % (message, reason))
         return super(SmppTransport, self).send_failure(message,
                                                        exception, reason)
+
+
+class SmppTxTransport(SmppTransport):
+    def make_factory(self):
+        return EsmeTransmitterFactory(self.client_config,
+                                      self.r_server,
+                                      self.esme_callbacks)
+
+
+class SmppRxTransport(SmppTransport):
+    def make_factory(self):
+        return EsmeReceiverFactory(self.client_config,
+                                   self.r_server,
+                                   self.esme_callbacks)
