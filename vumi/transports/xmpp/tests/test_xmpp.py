@@ -17,7 +17,8 @@ class XMPPTransportTestCase(TransportTestCase):
         transport = yield self.get_transport({
             'username': 'user@xmpp.domain.com',
             'password': 'testing password',
-            'status': 'XMPP status',
+            'status': 'chat',
+            'status_message': 'XMPP Transport',
             'host': 'xmpp.domain.com',
             'port': 5222,
             'transport_name': 'test_xmpp',
@@ -27,6 +28,7 @@ class XMPPTransportTestCase(TransportTestCase):
         transport._xmpp_protocol = test_xmpp_stubs.TestXMPPTransportProtocol
         transport._xmpp_client = test_xmpp_stubs.TestXMPPClient
         transport.ping_call.clock = Clock()
+        transport.presence_call.clock = Clock()
         yield transport.startWorker()
         yield transport.xmpp_protocol.connectionMade()
         self.jid = transport.jid
@@ -117,3 +119,51 @@ class XMPPTransportTestCase(TransportTestCase):
         self.assertEqual(message['type'], u'get')
         [child] = message.children
         self.assertEqual(child.toXml(), u"<ping xmlns='urn:xmpp:ping'/>")
+
+    @inlineCallbacks
+    def test_presence(self):
+        """
+        The transport's presence should be announced regularly.
+        """
+        transport = yield self.mk_transport()
+        self.assertEqual(transport.presence_interval, 60)
+        # The LoopingCall should be configured and started.
+        self.assertEqual(transport.presence_call.f, transport.send_presence)
+        self.assertEqual(transport.presence_call.a, ())
+        self.assertEqual(transport.presence_call.kw, {})
+        self.assertEqual(transport.presence_call.interval, 60)
+        self.assertTrue(transport.presence_call.running)
+
+        # Stub output stream
+        xmlstream = test_xmpp_stubs.TestXMLStream()
+        transport.xmpp_client.xmlstream = xmlstream
+        transport.xmpp_client._initialized = True
+        transport.presence.xmlstream = xmlstream
+
+        # Send presence
+        transport.presence_call.clock.advance(59)
+        self.assertEqual(xmlstream.outbox, [])
+        transport.presence_call.clock.advance(2)
+        self.assertEqual(len(xmlstream.outbox), 1, repr(xmlstream.outbox))
+
+        [presence] = xmlstream.outbox
+        self.assertEqual(presence.toXml(),
+            u"<presence><status>chat</status></presence>")
+
+    @inlineCallbacks
+    def test_normalizing_from_addr(self):
+        transport = yield self.mk_transport()
+
+        message = domish.Element((None, "message"))
+        message['to'] = self.jid.userhost()
+        message['from'] = 'test@case.com/some_xmpp_id'
+        message.addUniqueId()
+        message.addElement((None, 'body'), content='hello world')
+        protocol = transport.xmpp_protocol
+        protocol.onMessage(message)
+        dispatched_messages = self._amqp.get_dispatched('vumi',
+            'test_xmpp.inbound')
+        self.assertEqual(1, len(dispatched_messages))
+        msg = from_json(dispatched_messages[0].body)
+        self.assertEqual(msg['from_addr'], 'test@case.com')
+        self.assertEqual(msg['transport_metadata']['xmpp_id'], message['id'])

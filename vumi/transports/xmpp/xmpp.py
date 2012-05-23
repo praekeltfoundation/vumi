@@ -67,9 +67,10 @@ class XMPPTransportProtocol(MessageProtocol, object):
         if not isinstance(message.body, DomishElement):
             return None
         text = unicode(message.body).encode('utf-8').strip()
+        from_addr, _, _ = message['from'].partition('/')
         self.message_callback(
             to_addr=self.jid.userhost(),
-            from_addr=message['from'],
+            from_addr=from_addr,
             content=text,
             transport_type='xmpp',
             transport_metadata={
@@ -109,7 +110,13 @@ class XMPPTransport(Transport):
         The XMPP account password
     :type status: str
     :param status:
-        The XMPP status to display
+        The XMPP status 'away', 'xa', 'chat' or 'dnd'
+    :type status_message: str
+    :param status_message:
+        The natural language status message for this XMPP transport.
+    :type presence_interval: int
+    :param presence_interval:
+        How often (in seconds) to send a presence update to the roster.
     :type ping_interval: int
     :param ping_interval:
         How often (in seconds) to send a keep-alive ping to the XMPP server
@@ -124,6 +131,7 @@ class XMPPTransport(Transport):
     def __init__(self, options, config=None):
         super(XMPPTransport, self).__init__(options, config=config)
         self.ping_call = LoopingCall(self.send_ping)
+        self.presence_call = LoopingCall(self.send_presence)
 
     def validate_config(self):
         self.host = self.config['host']
@@ -132,12 +140,12 @@ class XMPPTransport(Transport):
         self.username = self.config['username']
         self.password = self.config['password']
         self.status = self.config['status']
+        self.status_message = self.config.get('status_message', '')
         self.ping_interval = self.config.get('ping_interval', 60)
+        self.presence_interval = self.config.get('presence_interval', 60)
 
     def setup_transport(self):
         log.msg("Starting XMPPTransport: %s" % self.transport_name)
-
-        statuses = {None: self.status}
 
         self.jid = JID(self.username)
         self.xmpp_client = self._xmpp_client(self.jid, self.password,
@@ -145,9 +153,9 @@ class XMPPTransport(Transport):
         self.xmpp_client.logTraffic = self.debug
         self.xmpp_client.setServiceParent(self)
 
-        presence = TransportPresenceClientProtocol()
-        presence.setHandlerParent(self.xmpp_client)
-        presence.available(statuses=statuses)
+        self.presence = TransportPresenceClientProtocol()
+        self.presence.setHandlerParent(self.xmpp_client)
+        self.presence_call.start(self.presence_interval)
 
         self.pinger = PingClientProtocol()
         self.pinger.setHandlerParent(self.xmpp_client)
@@ -167,11 +175,19 @@ class XMPPTransport(Transport):
         if self.xmpp_client.xmlstream:
             yield self.pinger.ping(self.jid)
 
+    def send_presence(self):
+        if self.xmpp_client.xmlstream:
+            self.presence.available(statuses={
+                None: self.status})
+
     def teardown_transport(self):
         log.msg("XMPPTransport %s stopped." % self.transport_name)
         ping_call = getattr(self, 'ping_call', None)
         if ping_call and ping_call.running:
             ping_call.stop()
+        presence_call = getattr(self, 'presence_call', None)
+        if presence_call and presence_call.running:
+            presence_call.stop()
 
     def handle_outbound_message(self, message):
         recipient = message['to_addr']
