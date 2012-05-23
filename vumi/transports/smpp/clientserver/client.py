@@ -187,13 +187,8 @@ class EsmeTransceiver(Protocol):
 
     def connectionLost(self, *args, **kwargs):
         self.state = 'CLOSED'
+        self.stop_enquire_link()
         log.msg('STATE: %s' % (self.state))
-        try:
-            self.lc_enquire.stop()
-            del self.lc_enquire
-            log.msg('stop & del enquire link looping call')
-        except:
-            pass
 
     def dataReceived(self, data):
         self.datastream += data
@@ -207,15 +202,24 @@ class EsmeTransceiver(Protocol):
         log.msg('OUTGOING >>>> %s' % unpack_pdu(data))
         self.transport.write(data)
 
+    def start_enquire_link(self):
+        self.lc_enquire = LoopingCall(self.enquire_link)
+        self.lc_enquire.start(self.smpp_enquire_link_interval)
+        if self._lose_conn is not None:
+            self._lose_conn.cancel()
+            self._lose_conn = None
+        self.esme_callbacks.connect(self)
+
+    def stop_enquire_link(self):
+        lc_enquire = getattr(self, 'lc_enquire')
+        if lc_enquire and lc_enquire.running:
+            lc_enquire.stop()
+            log.msg('Stopped enquire link looping call')
+
     def handle_bind_transceiver_resp(self, pdu):
         if pdu['header']['command_status'] == 'ESME_ROK':
             self.state = 'BOUND_TRX'
-            self.lc_enquire = LoopingCall(self.enquire_link)
-            self.lc_enquire.start(self.smpp_enquire_link_interval)
-            if self._lose_conn is not None:
-                self._lose_conn.cancel()
-                self._lose_conn = None
-            self.esme_callbacks.connect(self)
+            self.start_enquire_link()
         log.msg('STATE: %s' % (self.state))
 
     def handle_submit_sm_resp(self, pdu):
@@ -430,12 +434,7 @@ class EsmeTransmitter(EsmeTransceiver):
     def handle_bind_transmitter_resp(self, pdu):
         if pdu['header']['command_status'] == 'ESME_ROK':
             self.state = 'BOUND_TX'
-            self.lc_enquire = LoopingCall(self.enquire_link)
-            self.lc_enquire.start(self.smpp_enquire_link_interval)
-            if self._lose_conn is not None:
-                self._lose_conn.cancel()
-                self._lose_conn = None
-            self.esme_callbacks.connect(self)
+            self.start_enquire_link()
         log.msg('STATE: %s' % (self.state))
 
 
@@ -454,12 +453,7 @@ class EsmeReceiver(EsmeTransceiver):
     def handle_bind_reciever_resp(self, pdu):
         if pdu['header']['command_status'] == 'ESME_ROK':
             self.state = 'BOUND_RX'
-            self.lc_enquire = LoopingCall(self.enquire_link)
-            self.lc_enquire.start(self.smpp_enquire_link_interval)
-            if self._lose_conn is not None:
-                self._lose_conn.cancel()
-                self._lose_conn = None
-            self.esme_callbacks.connect(self)
+            self.start_enquire_link()
         log.msg('STATE: %s' % (self.state))
 
 
