@@ -199,6 +199,11 @@ class Timestamp(Field):
         return datetime.strptime(value, VUMI_DATE_FORMAT)
 
 
+class Json(Field):
+    """Field that stores an object that can be serialized to/from JSON."""
+    pass
+
+
 class VumiMessageDescriptor(FieldDescriptor):
     """Property for getting and setting fields."""
 
