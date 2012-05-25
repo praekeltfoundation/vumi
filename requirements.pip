@@ -10,6 +10,7 @@ pyOpenSSL==0.11
 python-ssmi
 wokkel
 redis
+txredis
 python-smpp
 pytz
 https://github.com/basho/riak-python-client/tarball/master#egg=riak
