@@ -153,6 +153,28 @@ class TestTruteqTransport(TransportTestCase):
                                         client.SSMI_USSD_TYPE_EXISTING,
                                         content=u"föóbær")
 
+    def _test_content_wrangling(self, submitted, expected):
+        msg = self.mkmsg_out(content=submitted,
+            to_addr=u"+1234", session_event=TransportUserMessage.SESSION_NONE)
+        yield self.dispatch(msg)
+        # Grab what was sent to Truteq
+        ussd_call = yield self.dummy_connect.ussd_calls.get()
+        # We're expecting \r\n to have been replaced with \n
+        data = expected.encode("utf-8")
+        self.assertFalse(
+            # This stuff all needs to be bytestrings by here.
+            any(isinstance(field, unicode) for field in ussd_call))
+        self.assertEqual(ussd_call, ("1234", data,
+                                        client.SSMI_USSD_TYPE_EXISTING))
+
+    def test_handle_outbound_ussd_with_crln_in_content(self):
+        self._test_content_wrangling('hello\r\nwindows\r\nworld',
+                                        'hello\nwindows\nworld')
+
+    def test_handle_outbound_ussd_with_cr_in_content(self):
+        self._test_content_wrangling('hello\rold mac os\rworld',
+                                        'hello\rold mac os\rworld')
+
     def test_handle_inbound_sms(self):
         with LogCatcher() as logger:
             self.transport.sms_callback("foo", baz="bar")
