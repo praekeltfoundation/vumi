@@ -81,24 +81,22 @@ class SafaricomTransport(HttpRpcTransport):
             return
         log.msg(('SafaricomTransport sending from %(ORIG)s to %(DEST)s '
                  'for %(SESSION_ID)s message "%(USSD_PARAMS)s"') % values)
-
-        from_addr = values['ORIG']
-        to_addr = values['DEST']
         session_id = values['SESSION_ID']
+        from_addr = values['ORIG']
+        dest = values['DEST']
         ussd_params = values['USSD_PARAMS']
-        if '*' in ussd_params:
-            history = values['USSD_PARAMS'].split('*')
-            content = history[-1]
-        else:
-            content = ''
 
         session = self.session_manager.load_session(session_id)
         if session:
             session_event = TransportUserMessage.SESSION_RESUME
+            to_addr = session['to_addr']
+            content = ussd_params.split('*')[-1]
         else:
             session_event = TransportUserMessage.SESSION_NEW
+            to_addr = '*%s*%s#' % (dest, ussd_params)
             session = self.save_session(session_id, from_addr=from_addr,
                 to_addr=to_addr)
+            content = ''
 
         yield self.publish_message(
             message_id=message_id,
