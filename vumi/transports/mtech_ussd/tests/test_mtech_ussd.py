@@ -125,6 +125,65 @@ class TestMtechUssdTransport(TransportTestCase):
         self.assertEqual(response, correct_response)
 
     @inlineCallbacks
+    def test_inbound_new_and_resume(self):
+        sid = 'a41739890287485d968ea66e8b44bfd3'
+        response_d = self.make_ussd_request(
+            sid, mobile_number='2348085832481', page_id='0',
+            data='testmenu', gate='gateid')
+
+        msg = yield self.reply_to_message("OK\n1 < 2")
+
+        self.assertEqual(msg['transport_name'], self.transport_name)
+        self.assertEqual(msg['transport_type'], "ussd")
+        self.assertEqual(msg['transport_metadata'], {"session_id": sid})
+        self.assertEqual(msg['session_event'],
+                         TransportUserMessage.SESSION_NEW)
+        self.assertEqual(msg['from_addr'], '2348085832481')
+        # self.assertEqual(msg['to_addr'], '*120*666#')
+        self.assertEqual(msg['content'], 'testmenu')
+
+        response = yield response_d
+        correct_response = ''.join([
+                "<?xml version='1.0' encoding='UTF-8'?>\n",
+                '<page version="2.0">',
+                '<session_id>a41739890287485d968ea66e8b44bfd3</session_id>',
+                '<div>OK<br />1 &lt; 2</div>',
+                '<navigation>',
+                '<link accesskey="*" pageId="indexX" />',
+                '</navigation>',
+                '</page>',
+                ])
+        self.assertEqual(response, correct_response)
+
+        self._amqp.dispatched.clear()
+
+        response_d = self.make_ussd_request(sid, page_id="indexX", data="foo")
+
+        msg = yield self.reply_to_message("OK")
+
+        self.assertEqual(msg['transport_name'], self.transport_name)
+        self.assertEqual(msg['transport_type'], "ussd")
+        self.assertEqual(msg['transport_metadata'], {"session_id": sid})
+        self.assertEqual(msg['session_event'],
+                         TransportUserMessage.SESSION_RESUME)
+        self.assertEqual(msg['from_addr'], '2348085832481')
+        self.assertEqual(msg['to_addr'], 'gateid')
+        self.assertEqual(msg['content'], 'foo')
+
+        response = yield response_d
+        correct_response = ''.join([
+                "<?xml version='1.0' encoding='UTF-8'?>\n",
+                '<page version="2.0">',
+                '<session_id>a41739890287485d968ea66e8b44bfd3</session_id>',
+                '<div>OK</div>',
+                '<navigation>',
+                '<link accesskey="*" pageId="indexX" />',
+                '</navigation>',
+                '</page>',
+                ])
+        self.assertEqual(response, correct_response)
+
+    @inlineCallbacks
     def test_inbound_resume_close(self):
         sid = 'a41739890287485d968ea66e8b44bfd3'
         self.transport.save_session(sid, '2348085832481', '*120*666#')
