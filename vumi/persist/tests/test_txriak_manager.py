@@ -1,7 +1,8 @@
 """Tests for vumi.persist.txriak_manager."""
 
-from twisted.trial.unittest import TestCase
+from twisted.trial.unittest import TestCase, SkipTest
 from twisted.internet.defer import inlineCallbacks
+from twisted.internet.error import ConnectionRefusedError
 
 from vumi.persist.txriak_manager import TxRiakManager
 from vumi.persist.model import Manager
@@ -138,7 +139,10 @@ class TestTxRiakManager(CommonRiakManagerTests, TestCase):
     @inlineCallbacks
     def setUp(self):
         self.manager = TxRiakManager.from_config({'bucket_prefix': 'test.'})
-        yield self.manager.purge_all()
+        try:
+            yield self.manager.purge_all()
+        except ConnectionRefusedError, e:
+            raise SkipTest(e)
 
     @inlineCallbacks
     def tearDown(self):

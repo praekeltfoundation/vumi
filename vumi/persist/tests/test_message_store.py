@@ -2,7 +2,9 @@
 
 """Tests for vumi.persist.message_store."""
 
+from twisted.trial.unittest import SkipTest
 from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.error import ConnectionRefusedError
 
 from vumi.message import TransportEvent
 from vumi.tests.utils import FakeRedis
@@ -18,7 +20,10 @@ class TestMessageStore(ApplicationTestCase):
     def setUp(self):
         self.r_server = FakeRedis()
         self.manager = TxRiakManager.from_config({'bucket_prefix': 'test.'})
-        yield self.manager.purge_all()
+        try:
+            yield self.manager.purge_all()
+        except ConnectionRefusedError, e:
+            raise SkipTest(e)
         self.store = MessageStore(self.manager, self.r_server, 'teststore')
 
     @inlineCallbacks
