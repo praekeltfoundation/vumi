@@ -119,6 +119,7 @@ class SandboxProtocol(ProcessProtocol):
         self.recv_limit = recv_limit
         self.recv_bytes = 0
         self.chunk = ''
+        self.error_chunk = ''
 
     @staticmethod
     def rlimiter(args, env):
@@ -174,15 +175,25 @@ class SandboxProtocol(ProcessProtocol):
             self.api.dispatch_request(self, command)
 
     def outConnectionLost(self):
-        command = SandboxCommand.from_json(self.chunk)
-        self.chunk = ""
-        self.api.dispatch_request(self, command)
+        if self.chunk:
+            command = SandboxCommand.from_json(self.chunk)
+            self.chunk = ""
+            self.api.dispatch_request(self, command)
 
     def errReceived(self, data):
         if not self.check_recv(len(data)):
             return
-        # TODO: this needs to be a Failure instance and have some context
-        log.error(data)
+        pos = data.find("\n")
+        if pos == -1:
+            self.error_chunk += data
+        else:
+            log.error(Failure(SandboxError(self.error_chunk + data[:pos])))
+            self.error_chunk = data[pos + 1:]
+
+    def errConnectionLost(self):
+        if self.error_chunk:
+            log.error(Failure(SandboxError(self.error_chunk)))
+            self.error_chunk = ""
 
     def processEnded(self, reason):
         if self.timeout_task.active():

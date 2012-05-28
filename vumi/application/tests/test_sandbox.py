@@ -38,3 +38,5 @@ class SandboxTestCase(ApplicationTestCase):
             self.assertTrue('process ended by signal' in str(kill_err.value))
         else:
             self.assertEqual(status, 0)
+
+    # TODO: test error logging
