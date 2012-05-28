@@ -170,8 +170,13 @@ class SandboxProtocol(ProcessProtocol):
         else:
             # TODO: check for errors when parsing JSON
             command = SandboxCommand.from_json(self.chunk + data[:pos])
-            self.api.dispatch_request(command)
             self.chunk = data[pos + 1:]
+            self.api.dispatch_request(self, command)
+
+    def outConnectionLost(self):
+        command = SandboxCommand.from_json(self.chunk)
+        self.chunk = ""
+        self.api.dispatch_request(self, command)
 
     def errReceived(self, data):
         if not self.check_recv(len(data)):
@@ -231,13 +236,13 @@ class SandboxApi(object):
     # TODO: add commands
 
     def unknown_command(self, sandbox, command):
-        # TODO: log.error expects a Failure instance
-        log.error("Sandbox %r sent unknown command %r" % (sandbox, command))
+        log.error(Failure(SandboxError("Sandbox %r sent unknown command %r"
+                                       % (sandbox, command))))
         sandbox.kill()
 
 
 class SandboxCommand(Message):
-    def __init__(self, cmd, **kw):
+    def __init__(self, cmd='unknown', **kw):
         # TODO: add IDs for replies
         super(SandboxCommand, self).__init__(cmd=cmd, **kw)
 
@@ -310,10 +315,12 @@ class Sandbox(ApplicationWorker):
         def on_start(_result):
             api.sandbox_init(sandbox_protocol)
             api.sandbox_vumi_message(sandbox_protocol, msg)
-            return sandbox_protocol.done()
+            d = sandbox_protocol.done()
+            d.addErrback(log.error)
+            return d
 
         d = sandbox_protocol.started()
-        d.addCallback(on_start)
+        d.addCallbacks(on_start, log.error)
         return d
 
     def consume_user_message(self, msg):
