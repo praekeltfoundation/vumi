@@ -235,7 +235,7 @@ class Sandbox(ApplicationWorker):
         resource.RLIMIT_RSS: 10 * MB,
         resource.RLIMIT_NPROC: 1,
         resource.RLIMIT_NOFILE: 10,
-        resource.RLIMIT_MEMLOCK: 10 * MB,
+        #resource.RLIMIT_MEMLOCK: 10 * MB,  # this is higher than the default
         #resource.RLIMIT_VMEM: 10 * MB,
         resource.RLIMIT_AS: 10 * MB,
         }
