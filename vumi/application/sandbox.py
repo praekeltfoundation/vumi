@@ -270,10 +270,10 @@ class RedisResource(SandboxResource):
         self.keys_per_user = self.config.get('keys_per_user', 100)
 
     def _count_key(self, sandbox_id):
-        return ":".join(self.r_prefix, "count", sandbox_id)
+        return ":".join([self.r_prefix, "count", sandbox_id])
 
     def _sandboxed_key(self, sandbox_id, key):
-        return ":".join(self.r_prefix, "sandboxes", sandbox_id, key)
+        return ":".join([self.r_prefix, "sandboxes", sandbox_id, key])
 
     def check_keys(self, sandbox_id, key):
         if self.r_server.exists(key):
@@ -286,7 +286,7 @@ class RedisResource(SandboxResource):
 
     def handle_set(self, api, sandbox, command):
         key = self._sandboxed_key(api.sandbox_id, command.get('key'))
-        if not self.check_key(api.sandbox_id, key):
+        if not self.check_keys(api.sandbox_id, key):
             return command.reply("Too many keys")
         value = command.get('value')
         self.r_server.set(key, json.dumps(value))
