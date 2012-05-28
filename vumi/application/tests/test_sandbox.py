@@ -5,7 +5,7 @@ import json
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet.error import ProcessTerminated
 
-from vumi.message import TransportEvent
+from vumi.message import TransportUserMessage, TransportEvent
 from vumi.application.tests.test_base import ApplicationTestCase
 from vumi.application.sandbox import Sandbox, SandboxCommand, SandboxError
 from vumi.tests.utils import FakeRedis
@@ -70,5 +70,27 @@ class SandboxTestCase(ApplicationTestCase):
         self.assertEqual(r_server.get('test:count:sandbox1'), '1')
         self.assertEqual(r_server.get('test:sandboxes:sandbox1:foo'),
                          json.dumps({'a': 1, 'b': 2}))
+
+    @inlineCallbacks
+    def test_reply_to(self):
+        msg = TransportUserMessage(to_addr="1", from_addr="2",
+                                   transport_name="test",
+                                   transport_type="sphex",
+                                   sandbox_id='sandbox1')
+        json_data = SandboxCommand(cmd='outbound.reply_to',
+                                   content='Hooray!',
+                                   in_reply_to=msg['message_id']).to_json()
+        app = yield self.setup_app('/bin/echo', [json_data], {
+            'sandbox': {
+                'outbound': {
+                    'cls': 'vumi.application.sandbox.OutboundResource',
+                    }
+                }
+            })
+        status = yield app.process_message_in_sandbox(msg)
+        self.assertEqual(status, 0)
+        [reply] = self.get_dispatched_messages()
+        self.assertEqual(reply['content'], "Hooray!")
+        self.assertEqual(reply['session_event'], None)
 
     # TODO: test error logging

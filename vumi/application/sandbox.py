@@ -214,14 +214,15 @@ class SandboxProtocol(ProcessProtocol):
 class SandboxResources(object):
     """Class for holding resources common to a set of sandboxes."""
 
-    def __init__(self, config):
+    def __init__(self, app_worker, config):
+        self.app_worker = app_worker
         self.config = config
         self.resources = {}
 
     def validate_config(self):
         for name, config in self.config.iteritems():
             cls = load_class_by_string(config.pop('cls'))
-            self.resources[name] = cls(name, config)
+            self.resources[name] = cls(name, self.app_worker, config)
 
     def setup_resources(self):
         for resource in self.resources.itervalues():
@@ -233,9 +234,11 @@ class SandboxResources(object):
 
 
 class SandboxResource(object):
-    """Base clas for sandbox resources."""
-    def __init__(self, name, config):
+    """Base class for sandbox resources."""
+
+    def __init__(self, name, app_worker, config):
         self.name = name
+        self.app_worker = app_worker
         self.config = config
 
     def setup(self):
@@ -307,18 +310,43 @@ class RedisResource(SandboxResource):
                           existed=existed)
 
 
+class OutboundResource(SandboxResource):
+
+    def handle_reply_to(self, api, sandbox, command):
+        content = command['content']
+        continue_session = command.get('continue_session', True)
+        orig_msg = api.get_inbound_message(command['in_reply_to'])
+        self.app_worker.reply_to(orig_msg, content,
+                                 continue_session=continue_session)
+
+    def handle_reply_to_group(self, api, sandbox, command):
+        content = command['content']
+        continue_session = command.get('continue_session', True)
+        orig_msg = api.get_inbound_message(command['in_reply_to'])
+        self.app_worker.reply_to_group(orig_msg, content,
+                                       continue_session=continue_session)
+
+    def handle_send_to(self, api, sandbox, command):
+        content = command['content']
+        to_addr = command['to_addr']
+        tag = command.get('tag', 'default')
+        self.app_worker.send_to(to_addr, content, tag=tag)
+
+
 class SandboxApi(object):
     """A sandbox API instance for a particular sandbox run."""
 
     def __init__(self, sandbox_id, resources):
         self.sandbox_id = sandbox_id
         self.resources = resources
-        self.fallback_resource = SandboxResource("fallback", {})
+        self.fallback_resource = SandboxResource("fallback", None, {})
+        self._inbound_messages = {}
 
     def sandbox_init(self, sandbox):
         sandbox.send(SandboxCommand("initialize"))
 
     def sandbox_inbound_message(self, sandbox, msg):
+        self._inbound_messages[msg['message_id']] = msg
         sandbox.send(SandboxCommand("inbound-message", msg=msg.payload))
 
     def sandbox_inbound_event(self, sandbox, event):
@@ -326,6 +354,9 @@ class SandboxApi(object):
 
     def sandbox_reply(self, sandbox, reply):
         sandbox.send(reply)
+
+    def get_inbound_message(self, message_id):
+        return self._inbound_messages.get(message_id)
 
     def dispatch_request(self, sandbox, command):
         resource_name, sep, rest = command['cmd'].partition('.')
@@ -410,7 +441,7 @@ class Sandbox(ApplicationWorker):
         return self.resources.teardown_resources()
 
     def create_sandbox_resources(self, config):
-        return SandboxResources(config)
+        return SandboxResources(self, config)
 
     def create_sandbox_api(self, sandbox_id):
         return SandboxApi(sandbox_id, self.resources)
