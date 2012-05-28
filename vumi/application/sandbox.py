@@ -69,9 +69,8 @@ class SandboxRlimiter(object):
     def _apply_rlimits(self):
         data = sys.stdin.readline()
         rlimits = json.loads(data) if data.strip() else {}
-        for rlimit, value in rlimits.iteritems():
-            # TODO: allow soft and hard limits to be different
-            resource.setrlimit(int(rlimit), (value, value))
+        for rlimit, (soft, hard) in rlimits.iteritems():
+            resource.setrlimit(int(rlimit), (soft, hard))
 
     def execute(self):
         self._restore_python_path(os.environ)
@@ -269,19 +268,18 @@ class Sandbox(ApplicationWorker):
         a message.
     """
 
-    MB = 1024 * 1024
+    KB, MB = 1024, 1024 * 1024
     DEFAULT_RLIMITS = {
-        resource.RLIMIT_CORE: 1 * MB,
-        resource.RLIMIT_CPU: 60,
-        resource.RLIMIT_FSIZE: 1 * MB,
-        resource.RLIMIT_DATA: 10 * MB,
-        resource.RLIMIT_STACK: 1 * MB,
-        resource.RLIMIT_RSS: 10 * MB,
-        resource.RLIMIT_NPROC: 1,
-        resource.RLIMIT_NOFILE: 10,
-        #resource.RLIMIT_MEMLOCK: 10 * MB,  # this is higher than the default
-        #resource.RLIMIT_VMEM: 10 * MB,
-        resource.RLIMIT_AS: 10 * MB,
+        resource.RLIMIT_CORE: (1 * MB, 1 * MB),
+        resource.RLIMIT_CPU: (60, 60),
+        resource.RLIMIT_FSIZE: (1 * MB, 1 * MB),
+        resource.RLIMIT_DATA: (10 * MB, 10 * MB),
+        resource.RLIMIT_STACK: (1 * MB, 1 * MB),
+        resource.RLIMIT_RSS: (10 * MB, 10 * MB),
+        resource.RLIMIT_NPROC: (1, 1),
+        resource.RLIMIT_NOFILE: (10, 10),
+        resource.RLIMIT_MEMLOCK: (64 * KB, 64 * KB),
+        resource.RLIMIT_AS: (10 * MB, 10 * MB),
         }
 
     def validate_config(self):
