@@ -2,7 +2,10 @@
 
 """An application for sandboxing message processing."""
 
+import sys
 import resource
+import os
+import json
 
 from twisted.internet import reactor
 from twisted.internet.protocol import ProcessProtocol
@@ -48,6 +51,33 @@ class SandboxError(Exception):
     """An error occurred inside the sandbox."""
 
 
+class SandboxRlimiter(object):
+    """This reads rlimits in from stdin, applies them and then execs a
+    new executable.
+
+    It's necessary because Twisted's spawnProcess has no equivalent of
+    the `preexec_fn` argument to :class:`subprocess.POpen`.
+
+    See http://twistedmatrix.com/trac/ticket/4159.
+    """
+    def __init__(self, argv, env):
+        start = argv.index('--') + 1
+        self._executable = argv[start]
+        self._args = [self._executable] + argv[start + 1:]
+        self._env = env
+
+    def _apply_rlimits(self):
+        data = sys.stdin.readline()
+        rlimits = json.loads(data) if data.strip() else {}
+        for rlimit, value in rlimits.iteritems():
+            # TODO: allow soft and hard limits to be different
+            resource.setrlimit(int(rlimit), (value, value))
+
+    def execute(self):
+        self._apply_rlimits()
+        os.execvpe(self._executable, self._args, self._env)
+
+
 class SandboxProtocol(ProcessProtocol):
 
     def __init__(self, api, rlimits, timeout, recv_limit=1024 * 1024):
@@ -61,10 +91,15 @@ class SandboxProtocol(ProcessProtocol):
         self.recv_bytes = 0
         self.chunk = ''
 
-    def spawn(self, *args, **kwargs):
-        # TODO: spawn process which sets resource limits and then calls
-        #       executable instead
-        reactor.spawnProcess(self, *args, **kwargs)
+    @staticmethod
+    def rlimiter(args, env):
+        return SandboxRlimiter(args, env)
+
+    def spawn(self, executable, **kwargs):
+        # spawns a SandboxRlimiter, connectionMade then passes the rlimits
+        # through to stdin and the SandboxRlimiter applies them
+        kwargs['args'] = ['-m', __name__, '--'] + kwargs.get('args', [])
+        reactor.spawnProcess(self, sys.executable, **kwargs)
 
     def done(self):
         """Returns a deferred that will be called when the process ends."""
@@ -92,7 +127,12 @@ class SandboxProtocol(ProcessProtocol):
             self.kill()
             return False
 
+    def _send_rlimits(self):
+        self.transport.write(json.dumps(self.rlimits))
+        self.transport.write("\n")
+
     def connectionMade(self):
+        self._send_rlimits()
         self._started.callback(self)
 
     def outReceived(self, data):
@@ -261,3 +301,8 @@ class Sandbox(ApplicationWorker):
 
     def consume_delivery_report(self, event):
         return self.process_in_sandbox(event)
+
+
+if __name__ == "__main__":
+    rlimiter = SandboxProtocol.rlimiter(sys.argv, os.environ)
+    rlimiter.execute()
