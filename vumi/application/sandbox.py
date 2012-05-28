@@ -2,6 +2,8 @@
 
 """An application for sandboxing message processing."""
 
+import resource
+
 from twisted.internet import reactor
 from twisted.internet.protocol import ProcessProtocol
 from twisted.internet.defer import Deferred
@@ -10,6 +12,7 @@ from twisted.python.failure import Failure
 
 from vumi.application.base import ApplicationWorker
 from vumi.message import Message
+from vumi.errors import ConfigError
 from vumi import log
 
 
@@ -47,8 +50,9 @@ class SandboxError(Exception):
 
 class SandboxProtocol(ProcessProtocol):
 
-    def __init__(self, api, timeout, recv_limit=1024 * 1024):
+    def __init__(self, api, rlimits, timeout, recv_limit=1024 * 1024):
         self.api = api
+        self.rlimits = rlimits
         self._started = MultiDeferred()
         self._done = MultiDeferred()
         self.exit_reason = None
@@ -181,6 +185,21 @@ class Sandbox(ApplicationWorker):
         a message.
     """
 
+    MB = 1024 * 1024
+    DEFAULT_RLIMITS = {
+        resource.RLIMIT_CORE: 1 * MB,
+        resource.RLIMIT_CPU: 60,
+        resource.RLIMIT_FSIZE: 1 * MB,
+        resource.RLIMIT_DATA: 10 * MB,
+        resource.RLIMIT_STACK: 1 * MB,
+        resource.RLIMIT_RSS: 10 * MB,
+        resource.RLIMIT_NPROC: 1,
+        resource.RLIMIT_NOFILE: 10,
+        resource.RLIMIT_MEMLOCK: 10 * MB,
+        #resource.RLIMIT_VMEM: 10 * MB,
+        resource.RLIMIT_AS: 10 * MB,
+        }
+
     def validate_config(self):
         self.executable = self.config.get("executable")
         self.args = [self.executable] + self.config.get("args", [])
@@ -189,6 +208,17 @@ class Sandbox(ApplicationWorker):
         self.resources = self.create_sandbox_resources(
             self.config.get('sandbox', {}))
         self.resources.validate_config()
+        self.rlimits = self.DEFAULT_RLIMITS.copy()
+        self.rlimits.update(self._convert_rlimits(
+            self.config.get('rlimits', {})))
+
+    def _convert_rlimits(self, rlimits_config):
+        rlimits = dict((getattr(resource, key, key), value) for key, value in
+                       rlimits_config.iteritems())
+        for key in rlimits.iterkeys():
+            if not isinstance(key, (int, long)):
+                raise ConfigError("Unknown resource limit key %r" % (key,))
+        return rlimits
 
     def setup_application(self):
         return self.resources.setup_resources()
@@ -203,7 +233,7 @@ class Sandbox(ApplicationWorker):
         return SandboxApi(self.resources)
 
     def create_sandbox_protocol(self, api):
-        return SandboxProtocol(api, self.timeout)
+        return SandboxProtocol(api, self.rlimits, self.timeout)
 
     def process_in_sandbox(self, msg):
         api = self.create_sandbox_api(msg)
