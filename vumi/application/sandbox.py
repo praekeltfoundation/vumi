@@ -162,17 +162,20 @@ class SandboxProtocol(ProcessProtocol):
         self._send_rlimits()
         self._started.callback(self)
 
-    def outReceived(self, data):
+    def _process_data(self, chunk, data):
         if not self.check_recv(len(data)):
-            return
-        pos = data.find("\n")
-        if pos == -1:
-            self.chunk += data
-        else:
+            return [chunk]  # skip the data if it's too big
+        line_parts = data.split("\n")
+        line_parts[0] = chunk + line_parts[0]
+        return line_parts
+
+    def outReceived(self, data):
+        lines = self._process_data(self.chunk, data)
+        for i in range(len(lines) - 1):
             # TODO: check for errors when parsing JSON
-            command = SandboxCommand.from_json(self.chunk + data[:pos])
-            self.chunk = data[pos + 1:]
+            command = SandboxCommand.from_json(lines[i])
             self.api.dispatch_request(self, command)
+        self.chunk = lines[-1]
 
     def outConnectionLost(self):
         if self.chunk:
@@ -181,14 +184,10 @@ class SandboxProtocol(ProcessProtocol):
             self.api.dispatch_request(self, command)
 
     def errReceived(self, data):
-        if not self.check_recv(len(data)):
-            return
-        pos = data.find("\n")
-        if pos == -1:
-            self.error_chunk += data
-        else:
-            log.error(Failure(SandboxError(self.error_chunk + data[:pos])))
-            self.error_chunk = data[pos + 1:]
+        lines = self._process_data(self.error_chunk, data)
+        for i in range(len(lines) - 1):
+            log.error(Failure(SandboxError(lines[i])))
+        self.error_chunk = lines[-1]
 
     def errConnectionLost(self):
         if self.error_chunk:
