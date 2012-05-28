@@ -6,6 +6,7 @@ import sys
 import resource
 import os
 import json
+from uuid import uuid4
 
 from twisted.internet import reactor
 from twisted.internet.protocol import ProcessProtocol
@@ -16,7 +17,7 @@ from twisted.python.failure import Failure
 from vumi.application.base import ApplicationWorker
 from vumi.message import Message
 from vumi.errors import ConfigError
-from vumi.utils import load_class_by_string
+from vumi.utils import load_class_by_string, redis_from_config
 from vumi import log
 
 
@@ -243,6 +244,10 @@ class SandboxResource(object):
     def teardown(self):
         pass
 
+    def reply(self, command, **kwargs):
+        return SandboxCommand(cmd=command['cmd'], reply=True,
+                              cmd_id=command['cmd_id'])
+
     def log_error(self, error_msg):
         log.error(Failure(SandboxError(error_msg)))
 
@@ -256,6 +261,50 @@ class SandboxResource(object):
                        " sandbox %r [%r]" % (self.name, command['cmd'],
                                              api.sandbox_id, command))
         sandbox.kill()  # it's a harsh world
+
+
+class RedisResource(SandboxResource):
+    def setup(self):
+        self.r_prefix = self.config.get('r_prefix')
+        self.r_server = redis_from_config(self.config.get('redis', {}))
+        self.keys_per_user = self.config.get('keys_per_user', 100)
+
+    def _count_key(self, sandbox_id):
+        return ":".join(self.r_prefix, "count", sandbox_id)
+
+    def _sandboxed_key(self, sandbox_id, key):
+        return ":".join(self.r_prefix, "sandboxes", sandbox_id, key)
+
+    def check_keys(self, sandbox_id, key):
+        if self.r_server.exists(key):
+            return True
+        count_key = self._count_key(sandbox_id)
+        if self.r_server.incr(count_key, 1) > self.keys_per_user:
+            self.r_server.incr(count_key, -1)
+            return False
+        return True
+
+    def handle_set(self, api, sandbox, command):
+        key = self._sandboxed_key(api.sandbox_id, command.get('key'))
+        if not self.check_key(api.sandbox_id, key):
+            return command.reply("Too many keys")
+        value = command.get('value')
+        self.r_server.set(key, json.dumps(value))
+        return self.reply(command, success=True)
+
+    def handle_get(self, api, sandbox, command):
+        key = self._sandboxed_key(api.sandbox_id, command.get('key'))
+        return self.reply(command, success=True,
+                          value=json.loads(self.r_server.get(key)))
+
+    def handle_delete(self, api, sandbox, command):
+        key = self._sandboxed_key(api.sandbox_id, command.get('key'))
+        existed = bool(self.r_server.delete(key))
+        if existed:
+            count_key = self._count_key(api.sandbox_id)
+            self.r_server.incr(count_key, -1)
+        return self.reply(command, success=True,
+                          existed=existed)
 
 
 class SandboxApi(object):
@@ -275,6 +324,9 @@ class SandboxApi(object):
     def sandbox_inbound_event(self, sandbox, event):
         sandbox.send(SandboxCommand("inbound-event", msg=event.payload))
 
+    def sandbox_reply(self, sandbox, reply):
+        sandbox.send(reply)
+
     def dispatch_request(self, sandbox, command):
         resource_name, sep, rest = command['cmd'].partition('.')
         if not sep:
@@ -282,13 +334,30 @@ class SandboxApi(object):
         command['cmd'] = rest
         resource = self.resources.resources.get(resource_name,
                                                 self.fallback_resource)
-        resource.dispatch_request(self, sandbox, command)
+        reply = resource.dispatch_request(self, sandbox, command)
+        if reply is not None:
+            self.sandbox_reply(sandbox, reply)
 
 
 class SandboxCommand(Message):
-    def __init__(self, cmd='unknown', **kw):
-        # TODO: add IDs for replies
-        super(SandboxCommand, self).__init__(cmd=cmd, **kw)
+    @staticmethod
+    def generate_id():
+        return uuid4().get_hex()
+
+    def process_fields(self, fields):
+        fields = super(SandboxCommand, self).process_fields(fields)
+        fields.setdefault('cmd', 'unknown')
+        fields.setdefault('cmd_id', self.generate_id())
+        fields.setdefault('reply', False)
+        return fields
+
+    def validate_fields(self):
+        super(SandboxCommand, self).validate_fields()
+        self.assert_field_present(
+            'cmd',
+            'cmd_id',
+            'reply',
+            )
 
 
 class Sandbox(ApplicationWorker):
