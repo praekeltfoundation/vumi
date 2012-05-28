@@ -169,19 +169,22 @@ class SandboxProtocol(ProcessProtocol):
         line_parts[0] = chunk + line_parts[0]
         return line_parts
 
+    def _parse_command(self, line):
+        try:
+            return SandboxCommand.from_json(line)
+        except Exception:
+            return SandboxCommand(cmd="unknown", line=line)
+
     def outReceived(self, data):
         lines = self._process_data(self.chunk, data)
         for i in range(len(lines) - 1):
-            # TODO: check for errors when parsing JSON
-            command = SandboxCommand.from_json(lines[i])
-            self.api.dispatch_request(self, command)
+            self.api.dispatch_request(self, self._parse_command(lines[i]))
         self.chunk = lines[-1]
 
     def outConnectionLost(self):
         if self.chunk:
-            command = SandboxCommand.from_json(self.chunk)
-            self.chunk = ""
-            self.api.dispatch_request(self, command)
+            line, self.chunk = self.chunk, ""
+            self.api.dispatch_request(self, self._parse_command(line))
 
     def errReceived(self, data):
         lines = self._process_data(self.error_chunk, data)
