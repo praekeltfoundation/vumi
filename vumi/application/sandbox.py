@@ -6,31 +6,69 @@ from twisted.internet import reactor
 from twisted.internet.protocol import ProcessProtocol
 from twisted.internet.defer import Deferred
 from twisted.internet.error import ProcessDone
+from twisted.python.failure import Failure
 
 from vumi.application.base import ApplicationWorker
 from vumi.message import Message
 from vumi import log
 
 
+class MultiDeferred(object):
+    """A callable that returns new deferreds each time and
+    then fires them all together."""
+
+    NOT_FIRED = object()
+
+    def __init__(self):
+        self._result = self.NOT_FIRED
+        self._deferreds = []
+
+    def callback(self, result):
+        self._result = result
+        for d in self._deferreds:
+            d.callback(result)
+        self._deferreds = []
+
+    def get(self):
+        d = Deferred()
+        if self.fired():
+            d.callback(self._result)
+        else:
+            self._deferreds.append(d)
+        return d
+
+    def fired(self):
+        return self._result is not self.NOT_FIRED
+
+
+class SandboxError(Exception):
+    """An error occurred inside the sandbox."""
+
+
 class SandboxProtocol(ProcessProtocol):
 
     def __init__(self, api, timeout, recv_limit=1024 * 1024):
         self.api = api
-        self.done_deferreds = []
+        self._started = MultiDeferred()
+        self._done = MultiDeferred()
         self.exit_reason = None
         self.timeout_task = reactor.callLater(timeout, self.kill)
         self.recv_limit = recv_limit
         self.recv_bytes = 0
         self.chunk = ''
 
+    def spawn(self, *args, **kwargs):
+        # TODO: spawn process which sets resource limits and then calls
+        #       executable instead
+        reactor.spawnProcess(self, *args, **kwargs)
+
     def done(self):
         """Returns a deferred that will be called when the process ends."""
-        d = Deferred()
-        if self.exit_reason is not None:
-            d.callback(self.exit_reason)
-        else:
-            self.done_deferreds.append(d)
-        return d
+        return self._done.get()
+
+    def started(self):
+        """Returns a deferred that will be called once the process starts."""
+        return self._started.get()
 
     def kill(self):
         """Kills the underlying process."""
@@ -51,7 +89,7 @@ class SandboxProtocol(ProcessProtocol):
             return False
 
     def connectionMade(self):
-        self.api.initialize_sandbox(self)
+        self._started.callback(self)
 
     def outReceived(self, data):
         if not self.check_recv(len(data)):
@@ -74,14 +112,14 @@ class SandboxProtocol(ProcessProtocol):
     def processEnded(self, reason):
         if self.timeout_task.active():
             self.timeout_task.cancel()
-        self.exit_reason = reason
-        self.done_deferreds, deferreds = [], self.done_deferreds
         if isinstance(reason.value, ProcessDone):
             result = reason.value.status
         else:
             result = reason
-        for d in deferreds:
-            d.callback(result)
+        if not self._started.fired():
+            self._started.callback(Failure(
+                SandboxError("Process failed to start.")))
+        self._done.callback(result)
 
 
 class SandboxResources(object):
@@ -104,15 +142,16 @@ class SandboxResources(object):
 
 
 class SandboxApi(object):
-    """A sandbox API instance for a particular message."""
+    """A sandbox API instance for a particular sandbox run."""
 
-    def __init__(self, resources, msg):
+    def __init__(self, resources):
         self.resources = resources
-        self.msg = msg
 
-    def initialize_sandbox(self, sandbox):
+    def sandbox_init(self, sandbox):
         sandbox.send(SandboxCommand("initialize"))
-        sandbox.send(SandboxCommand("vumi-message", msg=self.msg.payload))
+
+    def sandbox_vumi_message(self, sandbox, msg):
+        sandbox.send(SandboxCommand("vumi-message", msg=msg.payload))
 
     def dispatch_request(self, sandbox, command):
         handler_name = 'handle_%s' % (command['cmd'],)
@@ -161,7 +200,7 @@ class Sandbox(ApplicationWorker):
         return SandboxResources(config)
 
     def create_sandbox_api(self, msg):
-        return SandboxApi(self.resources, msg)
+        return SandboxApi(self.resources)
 
     def create_sandbox_protocol(self, api):
         return SandboxProtocol(api, self.timeout)
@@ -169,14 +208,17 @@ class Sandbox(ApplicationWorker):
     def process_in_sandbox(self, msg):
         api = self.create_sandbox_api(msg)
         sandbox_protocol = self.create_sandbox_protocol(api)
-        self.spawn_sandbox(sandbox_protocol)
-        return sandbox_protocol.done()
+        sandbox_protocol.spawn(self.executable, args=self.args,
+                               env={}, path=self.path)
 
-    def spawn_sandbox(self, protocol):
-        # TODO: spawn process which sets resource limits and then calls
-        #       executable instead
-        reactor.spawnProcess(protocol, self.executable,
-                             args=self.args, env={}, path=self.path)
+        def on_start(_result):
+            api.sandbox_init(sandbox_protocol)
+            api.sandbox_vumi_message(sandbox_protocol, msg)
+            return sandbox_protocol.done()
+
+        d = sandbox_protocol.started()
+        d.addCallback(on_start)
+        return d
 
     def consume_user_message(self, msg):
         return self.process_in_sandbox(msg)
