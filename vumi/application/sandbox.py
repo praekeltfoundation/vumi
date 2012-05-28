@@ -16,6 +16,7 @@ from twisted.python.failure import Failure
 from vumi.application.base import ApplicationWorker
 from vumi.message import Message
 from vumi.errors import ConfigError
+from vumi.utils import load_class_by_string
 from vumi import log
 
 
@@ -212,45 +213,76 @@ class SandboxProtocol(ProcessProtocol):
 class SandboxResources(object):
     """Class for holding resources common to a set of sandboxes."""
 
-    # TODO: maybe add some simple resource options?
-
     def __init__(self, config):
-        # for use by sub-classes that want more advanced config
         self.config = config
+        self.resources = {}
 
     def validate_config(self):
-        pass
+        for name, config in self.config.iteritems():
+            cls = load_class_by_string(config.pop('cls'))
+            self.resources[name] = cls(name, config)
 
     def setup_resources(self):
-        pass
+        for resource in self.resources.itervalues():
+            resource.setup()
 
     def teardown_resources(self):
+        for resource in self.resources.itervalues():
+            resource.teardown()
+
+
+class SandboxResource(object):
+    """Base clas for sandbox resources."""
+    def __init__(self, name, config):
+        self.name = name
+        self.config = config
+
+    def setup(self):
         pass
+
+    def teardown(self):
+        pass
+
+    def log_error(self, error_msg):
+        log.error(Failure(SandboxError(error_msg)))
+
+    def dispatch_request(self, api, sandbox, command):
+        handler_name = 'handle_%s' % (command['cmd'],)
+        handler = getattr(self, handler_name, self.unknown_request)
+        return handler(api, sandbox, command)
+
+    def unknown_request(self, api, sandbox, command):
+        self.log_error("Resource %s: unknown command %r received from"
+                       " sandbox %r [%r]" % (self.name, command['cmd'],
+                                             api.sandbox_id, command))
+        sandbox.kill()  # it's a harsh world
 
 
 class SandboxApi(object):
     """A sandbox API instance for a particular sandbox run."""
 
-    def __init__(self, resources):
+    def __init__(self, sandbox_id, resources):
+        self.sandbox_id = sandbox_id
         self.resources = resources
+        self.fallback_resource = SandboxResource("fallback", {})
 
     def sandbox_init(self, sandbox):
         sandbox.send(SandboxCommand("initialize"))
 
-    def sandbox_vumi_message(self, sandbox, msg):
-        sandbox.send(SandboxCommand("vumi-message", msg=msg.payload))
+    def sandbox_inbound_message(self, sandbox, msg):
+        sandbox.send(SandboxCommand("inbound-message", msg=msg.payload))
+
+    def sandbox_inbound_event(self, sandbox, event):
+        sandbox.send(SandboxCommand("inbound-event", msg=event.payload))
 
     def dispatch_request(self, sandbox, command):
-        handler_name = 'handle_%s' % (command['cmd'],)
-        handler = getattr(self, handler_name, self.unknown_command)
-        return handler(sandbox, command)
-
-    # TODO: add commands
-
-    def unknown_command(self, sandbox, command):
-        log.error(Failure(SandboxError("Sandbox %r sent unknown command %r"
-                                       % (sandbox, command))))
-        sandbox.kill()
+        resource_name, sep, rest = command['cmd'].partition('.')
+        if not sep:
+            resource_name, rest = '', resource_name
+        command['cmd'] = rest
+        resource = self.resources.resources.get(resource_name,
+                                                self.fallback_resource)
+        resource.dispatch_request(self, sandbox, command)
 
 
 class SandboxCommand(Message):
@@ -311,21 +343,28 @@ class Sandbox(ApplicationWorker):
     def create_sandbox_resources(self, config):
         return SandboxResources(config)
 
-    def create_sandbox_api(self, msg):
-        return SandboxApi(self.resources)
+    def create_sandbox_api(self, sandbox_id):
+        return SandboxApi(sandbox_id, self.resources)
 
     def create_sandbox_protocol(self, api):
         return SandboxProtocol(api, self.rlimits, self.timeout)
 
-    def process_in_sandbox(self, msg):
-        api = self.create_sandbox_api(msg)
+    def sandbox_id_for_message(self, msg):
+        """Sub-classes should override this to retrieve an appropriate id."""
+        return msg['sandbox_id']
+
+    def sandbox_id_for_event(self, event):
+        """Sub-classes should override this to retrieve an appropriate id."""
+        return event['sandbox_id']
+
+    def _process_in_sandbox(self, api, api_callback):
         sandbox_protocol = self.create_sandbox_protocol(api)
         sandbox_protocol.spawn(self.executable, args=self.args,
                                env={}, path=self.path)
 
         def on_start(_result):
             api.sandbox_init(sandbox_protocol)
-            api.sandbox_vumi_message(sandbox_protocol, msg)
+            api_callback(sandbox_protocol)
             d = sandbox_protocol.done()
             d.addErrback(log.error)
             return d
@@ -334,17 +373,29 @@ class Sandbox(ApplicationWorker):
         d.addCallbacks(on_start, log.error)
         return d
 
+    def process_message_in_sandbox(self, msg):
+        sandbox_id = self.sandbox_id_for_message(msg)
+        api = self.create_sandbox_api(sandbox_id)
+        return self._process_in_sandbox(api,
+                lambda sandbox: api.sandbox_inbound_message(sandbox, msg))
+
+    def process_event_in_sandbox(self, event):
+        sandbox_id = self.sandbox_id_for_event(event)
+        api = self.create_sandbox_api(sandbox_id)
+        return self._process_in_sandbox(api,
+                lambda sandbox: api.sandbox_inbound_event(sandbox, event))
+
     def consume_user_message(self, msg):
-        return self.process_in_sandbox(msg)
+        return self.process_message_in_sandbox(msg)
 
     def close_session(self, msg):
-        return self.process_in_sandbox(msg)
+        return self.process_message_in_sandbox(msg)
 
     def consume_ack(self, event):
-        return self.process_in_sandbox(event)
+        return self.process_event_in_sandbox(event)
 
     def consume_delivery_report(self, event):
-        return self.process_in_sandbox(event)
+        return self.process_event_in_sandbox(event)
 
 
 if __name__ == "__main__":
