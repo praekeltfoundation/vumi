@@ -74,8 +74,37 @@ class SandboxRlimiter(object):
             resource.setrlimit(int(rlimit), (value, value))
 
     def execute(self):
+        self._restore_python_path(os.environ)
         self._apply_rlimits()
         os.execvpe(self._executable, self._args, self._env)
+
+    _SANDBOXED_PYTHONPATH_ = "_SANDBOXED_PYTHONPATH_"
+
+    @classmethod
+    def _override_python_path(cls, env):
+        """Override PYTHONPATH so that SandboxRlimiter can be found."""
+        if 'PYTHONPATH' in env:
+            env[cls._SANDBOXED_PYTHONPATH_] = env['PYTHONPATH']
+        env['PYTHONPATH'] = ':'.join(sys.path)
+
+    @classmethod
+    def _restore_python_path(cls, env):
+        """Remove PYTHONPATH override."""
+        if 'PYTHONPATH' in env:
+            del env['PYTHONPATH']
+        if cls._SANDBOXED_PYTHONPATH_ in env:
+            env['PYTHONPATH'] = env.pop(cls._SANDBOXED_PYTHONPATH_)
+
+    @classmethod
+    def spawn(cls, protocol, executable, **kwargs):
+        # spawns a SandboxRlimiter, connectionMade then passes the rlimits
+        # through to stdin and the SandboxRlimiter applies them
+        args = kwargs.pop('args', [])
+        args = [sys.executable, '-m', __name__, '--'] + args
+        env = kwargs.pop('env', {})
+        cls._override_python_path(env)
+        reactor.spawnProcess(protocol, sys.executable, args=args, env=env,
+                             **kwargs)
 
 
 class SandboxProtocol(ProcessProtocol):
@@ -96,10 +125,7 @@ class SandboxProtocol(ProcessProtocol):
         return SandboxRlimiter(args, env)
 
     def spawn(self, executable, **kwargs):
-        # spawns a SandboxRlimiter, connectionMade then passes the rlimits
-        # through to stdin and the SandboxRlimiter applies them
-        kwargs['args'] = ['-m', __name__, '--'] + kwargs.get('args', [])
-        reactor.spawnProcess(self, sys.executable, **kwargs)
+        SandboxRlimiter.spawn(self, executable, **kwargs)
 
     def done(self):
         """Returns a deferred that will be called when the process ends."""
