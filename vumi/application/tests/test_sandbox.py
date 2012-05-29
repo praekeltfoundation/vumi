@@ -36,7 +36,7 @@ class SandboxTestCase(ApplicationTestCase):
         self.assertEqual(str(sandbox_err.value).split(' [')[0],
                          "Resource fallback: unknown command 'unknown'"
                          " received from sandbox 'sandbox1'")
-        # There is are two possible conditions here:
+        # There are two possible conditions here:
         # 1) The process is killed and terminates with signal 9.
         # 2) The process exits normally before it can be killed and returns
         #    exit status 0.
