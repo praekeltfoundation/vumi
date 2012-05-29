@@ -5,6 +5,7 @@
 import sys
 import resource
 import os
+import signal
 import json
 from uuid import uuid4
 
@@ -74,9 +75,22 @@ class SandboxRlimiter(object):
         for rlimit, (soft, hard) in rlimits.iteritems():
             resource.setrlimit(int(rlimit), (soft, hard))
 
+    def _reset_signals(self):
+        # reset all signal handlers to their defaults
+        for i in range(1, signal.NSIG):
+            if signal.getsignal(i) == signal.SIG_IGN:
+                signal.signal(i, signal.SIG_DFL)
+
+    def _sanitize_fds(self):
+        # close everything except stdin, stdout and stderr
+        maxfds = resource.getrlimit(resource.RLIMIT_NOFILE)[1]
+        os.closerange(3, maxfds)
+
     def execute(self):
         self._restore_python_path(os.environ)
         self._apply_rlimits()
+        self._sanitize_fds()
+        self._reset_signals()
         os.execvpe(self._executable, self._args, self._env)
 
     _SANDBOXED_PYTHONPATH_ = "_SANDBOXED_PYTHONPATH_"
@@ -101,7 +115,10 @@ class SandboxRlimiter(object):
         # spawns a SandboxRlimiter, connectionMade then passes the rlimits
         # through to stdin and the SandboxRlimiter applies them
         args = kwargs.pop('args', [])
-        args = [sys.executable, '-m', __name__, '--'] + args
+        # the -u for unbuffered I/O is important (otherwise the process
+        # execed will be very confused about where its stdin data has
+        # gone)
+        args = [sys.executable, '-u', '-m', __name__, '--'] + args
         env = kwargs.pop('env', {})
         cls._override_python_path(env)
         reactor.spawnProcess(protocol, sys.executable, args=args, env=env,
