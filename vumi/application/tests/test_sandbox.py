@@ -20,7 +20,7 @@ class SandboxTestCase(ApplicationTestCase):
             'executable': executable,
             'args': args,
             'path': '/tmp',  # TODO: somewhere temporary for test
-            'timeout': '1',
+            'timeout': '10',
             }
         if extra_config is not None:
             config.update(extra_config)
