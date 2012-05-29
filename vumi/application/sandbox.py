@@ -333,6 +333,12 @@ class OutboundResource(SandboxResource):
         self.app_worker.send_to(to_addr, content, tag=tag)
 
 
+class LoggingResource(SandboxResource):
+
+    def handle_info(self, api, sandbox, command):
+        log.info(command['msg'])
+
+
 class SandboxApi(object):
     """A sandbox API instance for a particular sandbox run."""
 
