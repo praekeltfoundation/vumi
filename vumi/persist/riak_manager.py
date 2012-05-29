@@ -39,6 +39,10 @@ class RiakManager(Manager):
     """A persistence manager for the riak Python package."""
 
     call_decorator = staticmethod(flatten_generator)
+    # Since this is a synchronous manager we want to fetch objects
+    # as part of the mapreduce call. Async managers might prefer
+    # to request the objects in parallel as this could be more efficient.
+    fetch_objects = True
 
     @classmethod
     def from_config(cls, config):
@@ -47,12 +51,15 @@ class RiakManager(Manager):
         client = RiakClient(**config)
         return cls(client, bucket_prefix)
 
-    def riak_object(self, cls, key):
+    def riak_object(self, cls, key, result=None):
         bucket_name = self.bucket_name(cls)
         bucket = self.client.bucket(bucket_name)
         riak_object = RiakObject(self.client, bucket, key)
-        riak_object.set_data({})
-        riak_object.set_content_type("application/json")
+        if result:
+            riak_object.set_metadata(result['metadata'])
+            riak_object.set_encoded_data(result['data'])
+        else:
+            riak_object.set_data({})
         return riak_object
 
     def store(self, modelobj):
@@ -62,9 +69,10 @@ class RiakManager(Manager):
     def delete(self, modelobj):
         modelobj._riak_object.delete()
 
-    def load(self, cls, key):
-        riak_object = self.riak_object(cls, key)
-        riak_object.reload()
+    def load(self, cls, key, result=None):
+        riak_object = self.riak_object(cls, key, result)
+        if not result:
+            riak_object.reload()
         return (cls(self, key, _riak_object=riak_object)
                 if riak_object.get_data() is not None else None)
 
