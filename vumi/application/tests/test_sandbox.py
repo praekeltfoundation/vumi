@@ -1,6 +1,7 @@
 """Tests for vumi.application.sandbox."""
 
 import json
+import pkg_resources
 
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet.error import ProcessTerminated
@@ -8,7 +9,7 @@ from twisted.internet.error import ProcessTerminated
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.application.tests.test_base import ApplicationTestCase
 from vumi.application.sandbox import Sandbox, SandboxCommand, SandboxError
-from vumi.tests.utils import FakeRedis
+from vumi.tests.utils import FakeRedis, LogCatcher
 
 
 class SandboxTestCase(ApplicationTestCase):
@@ -92,5 +93,39 @@ class SandboxTestCase(ApplicationTestCase):
         [reply] = self.get_dispatched_messages()
         self.assertEqual(reply['content'], "Hooray!")
         self.assertEqual(reply['session_event'], None)
+
+    @inlineCallbacks
+    def test_js_sandboxer(self):
+        msg = TransportUserMessage(to_addr="1", from_addr="2",
+                                   transport_name="test",
+                                   transport_type="sphex",
+                                   sandbox_id='sandbox1')
+        sandboxer_js = pkg_resources.resource_filename('vumi.application',
+                                                       'sandboxer.js')
+        app_js = pkg_resources.resource_filename('vumi.application',
+                                                 'app.js')
+        app = yield self.setup_app('/usr/local/bin/node',
+                                   [sandboxer_js, app_js], {
+            'sandbox': {
+                'log': {
+                    'cls': 'vumi.application.sandbox.LoggingResource',
+                    }
+                }
+            })
+
+        with LogCatcher() as lc:
+            status = yield app.process_message_in_sandbox(msg)
+            msgs = [log['message'][0] for log in lc.logs]
+        self.assertEqual(status, 0)
+        self.assertEqual(msgs, [
+            'Loading sandboxed code ...',
+            'Creating sandbox ...',
+            'Starting sandbox ...',
+            'From init!',
+            'Sandbox running ...',
+            'From command: initialize',
+            'From command: inbound-message',
+            'Done.',
+            ])
 
     # TODO: test error logging
