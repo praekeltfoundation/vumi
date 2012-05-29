@@ -349,14 +349,14 @@ class SandboxApi(object):
         self._inbound_messages = {}
 
     def sandbox_init(self, sandbox):
-        sandbox.send(SandboxCommand("initialize"))
+        sandbox.send(SandboxCommand(cmd="initialize"))
 
     def sandbox_inbound_message(self, sandbox, msg):
         self._inbound_messages[msg['message_id']] = msg
-        sandbox.send(SandboxCommand("inbound-message", msg=msg.payload))
+        sandbox.send(SandboxCommand(cmd="inbound-message", msg=msg.payload))
 
     def sandbox_inbound_event(self, sandbox, event):
-        sandbox.send(SandboxCommand("inbound-event", msg=event.payload))
+        sandbox.send(SandboxCommand(cmd="inbound-event", msg=event.payload))
 
     def sandbox_reply(self, sandbox, reply):
         sandbox.send(reply)
