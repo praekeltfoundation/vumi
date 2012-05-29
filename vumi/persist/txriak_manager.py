@@ -3,7 +3,8 @@
 """A manager implementation on top of txriak."""
 
 from txriak.riak import RiakClient, RiakObject, RiakMapReduce, RiakLink
-from twisted.internet.defer import inlineCallbacks, gatherResults, maybeDeferred
+from twisted.internet.defer import (inlineCallbacks, gatherResults,
+                                        maybeDeferred, succeed)
 
 from vumi.persist.model import Manager
 
@@ -20,12 +21,19 @@ class TxRiakManager(Manager):
         client = RiakClient(**config)
         return cls(client, bucket_prefix)
 
-    def riak_object(self, cls, key):
+    def riak_object(self, cls, key, result=None):
         bucket_name = self.bucket_name(cls)
         bucket = self.client.bucket(bucket_name)
         riak_object = RiakObject(self.client, bucket, key)
-        riak_object.set_data({})
-        riak_object.set_content_type("application/json")
+        if result:
+            metadata = result['metadata']
+            data = result['data']
+            riak_object.set_content_type(metadata['content-type'])
+            riak_object.set_indexes(metadata['index'].items())
+            riak_object.set_encoded_data(data)
+        else:
+            riak_object.set_data({})
+            riak_object.set_content_type("application/json")
         return riak_object
 
     def store(self, modelobj):
@@ -36,12 +44,15 @@ class TxRiakManager(Manager):
     def delete(self, modelobj):
         return modelobj._riak_object.delete()
 
-    def load(self, cls, key):
-        riak_object = self.riak_object(cls, key)
-        d = riak_object.reload()
-        d.addCallback(lambda result: cls(self, key, _riak_object=result)
-                      if result.get_data() is not None else None)
-        return d
+    def load(self, cls, key, result=None):
+        riak_object = self.riak_object(cls, key, result)
+        if result:
+            return succeed(cls(self, key, _riak_object=riak_object))
+        else:
+            d = riak_object.reload()
+            d.addCallback(lambda result: cls(self, key, _riak_object=result)
+                            if result.get_data() is not None else None)
+            return d
 
     def load_list(self, cls, keys):
         deferreds = []

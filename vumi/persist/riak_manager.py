@@ -56,8 +56,11 @@ class RiakManager(Manager):
         bucket = self.client.bucket(bucket_name)
         riak_object = RiakObject(self.client, bucket, key)
         if result:
-            riak_object.set_metadata(result['metadata'])
-            riak_object.set_encoded_data(result['data'])
+            metadata = result['metadata']
+            data = result['data']
+            riak_object.set_content_type(metadata['content-type'])
+            riak_object.set_indexes(metadata['index'].items())
+            riak_object.set_encoded_data(data)
         else:
             riak_object.set_data({})
             riak_object.set_content_type("application/json")
