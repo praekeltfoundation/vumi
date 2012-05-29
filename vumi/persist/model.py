@@ -130,13 +130,13 @@ class Model(object):
         return self.manager.delete(self)
 
     @classmethod
-    def load(cls, manager, key, result=None):
+    def load(cls, manager, key):
         """Load an object from Riak.
 
         :returns:
             A deferred that fires with the new model object.
         """
-        return manager.load(cls, key, result=result)
+        return manager.load(cls, key)
 
     @classmethod
     def by_index(cls, manager, return_keys=False, **kw):
@@ -191,13 +191,6 @@ class Model(object):
 
 class Manager(object):
     """A wrapper around a Riak client."""
-
-    # By default we do not fetch the objects as part of a mapreduce call.
-    # This has the mapreduce return a list of keys which would require
-    # another set of calls to get the individual objects. For asynchronous
-    # managers this would be preferable, for synchronous managers one
-    # would likely want to fetch the objects as part of the mapreduce call.
-    fetch_objects = False
 
     def __init__(self, client, bucket_prefix):
         self.client = client
