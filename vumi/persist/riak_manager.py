@@ -90,12 +90,22 @@ class RiakManager(Manager):
 
     def riak_search(self, cls, query, return_keys=False):
         bucket_name = self.bucket_name(cls)
-        result = self.client.solr().search(bucket_name, query)
-        docs = result['response']['docs']
-        keys = [doc['id'] for doc in docs]
-        if return_keys:
-            return keys
-        return self.load_list(cls, keys)
+        mr = self.riak_map_reduce().search(bucket_name, query)
+        if not return_keys:
+            mr = mr.map(function="""
+                function (v) {
+                    return [[v.key, v.values[0]]]
+                }
+                """)
+
+        def map_handler(manager, key_and_result):
+            if return_keys:
+                key, result = key_and_result, None
+            else:
+                key, result = key_and_result
+            return cls.load(manager, key, result)
+
+        return self.run_map_reduce(mr, map_handler)
 
     def riak_enable_search(self, cls):
         bucket_name = self.bucket_name(cls)
