@@ -173,8 +173,8 @@ class SandboxProtocol(ProcessProtocol):
     def _parse_command(self, line):
         try:
             return SandboxCommand.from_json(line)
-        except Exception:
-            return SandboxCommand(cmd="unknown", line=line)
+        except Exception, e:
+            return SandboxCommand(cmd="unknown", line=line, exception=e)
 
     def outReceived(self, data):
         lines = self._process_data(self.chunk, data)
