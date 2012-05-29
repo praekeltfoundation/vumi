@@ -39,6 +39,10 @@ class RiakManager(Manager):
     """A persistence manager for the riak Python package."""
 
     call_decorator = staticmethod(flatten_generator)
+    # Since this is a synchronous manager we want to fetch objects
+    # as part of the mapreduce call. Async managers might prefer
+    # to request the objects in parallel as this could be more efficient.
+    fetch_objects = True
 
     @classmethod
     def from_config(cls, config):
@@ -47,12 +51,19 @@ class RiakManager(Manager):
         client = RiakClient(**config)
         return cls(client, bucket_prefix)
 
-    def riak_object(self, cls, key):
+    def riak_object(self, cls, key, result=None):
         bucket_name = self.bucket_name(cls)
         bucket = self.client.bucket(bucket_name)
         riak_object = RiakObject(self.client, bucket, key)
-        riak_object.set_data({})
-        riak_object.set_content_type("application/json")
+        if result:
+            metadata = result['metadata']
+            data = result['data']
+            riak_object.set_content_type(metadata['content-type'])
+            riak_object.set_indexes(metadata['index'].items())
+            riak_object.set_encoded_data(data)
+        else:
+            riak_object.set_data({})
+            riak_object.set_content_type("application/json")
         return riak_object
 
     def store(self, modelobj):
@@ -62,9 +73,10 @@ class RiakManager(Manager):
     def delete(self, modelobj):
         modelobj._riak_object.delete()
 
-    def load(self, cls, key):
-        riak_object = self.riak_object(cls, key)
-        riak_object.reload()
+    def load(self, cls, key, result=None):
+        riak_object = self.riak_object(cls, key, result)
+        if not result:
+            riak_object.reload()
         return (cls(self, key, _riak_object=riak_object)
                 if riak_object.get_data() is not None else None)
 
@@ -81,12 +93,22 @@ class RiakManager(Manager):
 
     def riak_search(self, cls, query, return_keys=False):
         bucket_name = self.bucket_name(cls)
-        result = self.client.solr().search(bucket_name, query)
-        docs = result['response']['docs']
-        keys = [doc['id'] for doc in docs]
-        if return_keys:
-            return keys
-        return self.load_list(cls, keys)
+        mr = self.riak_map_reduce().search(bucket_name, query)
+        if not return_keys:
+            mr = mr.map(function="""
+                function (v) {
+                    return [[v.key, v.values[0]]]
+                }
+                """)
+
+        def map_handler(manager, key_and_result):
+            if return_keys:
+                key, result = key_and_result, None
+            else:
+                key, result = key_and_result
+            return cls.load(manager, key, result)
+
+        return self.run_map_reduce(mr, map_handler)
 
     def riak_enable_search(self, cls):
         bucket_name = self.bucket_name(cls)
