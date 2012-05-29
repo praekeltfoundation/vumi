@@ -5,6 +5,7 @@ import re
 import sys
 import base64
 import pkg_resources
+import warnings
 
 import redis
 from zope.interface import implements
@@ -16,7 +17,6 @@ from twisted.web.server import Site
 from twisted.web.http_headers import Headers
 from twisted.web.iweb import IBodyProducer
 from twisted.web.http import PotentialDataLoss
-import txredis.protocol
 
 
 def import_module(name):
@@ -212,39 +212,15 @@ def redis_from_config(redis_config):
 
     Otherwise a new real redis client is returned.
     """
+    warnings.warn("Use of redis is deprecated. Use txredix instead.",
+                  category=DeprecationWarning)
+
     from vumi.tests.utils import FakeRedis
     if redis_config == "FAKE_REDIS":
         return FakeRedis()
     if isinstance(redis_config, FakeRedis):
         return redis_config
     return redis.Redis(**redis_config)
-
-
-def txredis_from_config(redis_config):
-    """
-    Return a (tx)redis client instance from a config.
-
-    If redis_config:
-
-    * equals 'FAKE_REDIS', a new instance of :class:`FakeRedis` is returned.
-    * is an instance of :class:`FakeRedis` that instance is returned
-
-    Otherwise a new real redis client is returned.
-    """
-    from vumi.tests.utils import FakeRedis
-    if redis_config == "FAKE_REDIS":
-        raise NotImplementedError()
-    if isinstance(redis_config, FakeRedis):
-        raise NotImplementedError()
-
-    redis_config = redis_config.copy()  # So we can mutate it safely.
-    host = redis_config.pop('host', 'localhost')
-    port = redis_config.pop('port', 6379)
-
-    factory = txredis.protocol.RedisClientFactory(**redis_config)
-    d = factory.deferred
-    reactor.connectTCP(host, port, factory)
-    return d
 
 
 def filter_options_on_prefix(options, prefix, delimiter='-'):

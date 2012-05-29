@@ -1,14 +1,11 @@
-# -*- test-case-name: vumi.application.tests.test_session -*-
+# -*- test-case-name: vumi.persist.tests.test_session -*-
 
-"""Session management utilities for ApplicationWorkers."""
+"""Session management utilities."""
 
-import warnings
 import time
 
 from twisted.internet import task
-
-warnings.warn("vumi.application.session is deprecated. Use vumi.session"
-              " instead.", category=DeprecationWarning)
+from twisted.internet.defer import inlineCallbacks, returnValue
 
 
 class SessionManager(object):
@@ -20,7 +17,7 @@ class SessionManager(object):
     :type prefix: str
     :param prefix:
         Prefix to use for Redis keys.
-    :type max_session_length: float
+    :type max_session_length: int
     :param max_session_length:
         Time before a session expires. Default is None (never expire).
     :type gc_period: float
@@ -28,13 +25,10 @@ class SessionManager(object):
         Time in seconds between checking for session expiry.
     """
 
-    def __init__(self, r_server, prefix, max_session_length=None,
+    def __init__(self, manager, max_session_length=None,
                  gc_period=1.0):
-        warnings.warn("vumi.application.SessionManager is deprecated. Use "
-                      "vumi.session instead.", category=DeprecationWarning)
         self.max_session_length = max_session_length
-        self.r_server = r_server
-        self.r_prefix = prefix
+        self.manager = manager
 
         self.gc = task.LoopingCall(lambda: self.active_sessions())
         self.gc.start(gc_period)
@@ -43,6 +37,7 @@ class SessionManager(object):
         if self.gc.running:
             return self.gc.stop()
 
+    @inlineCallbacks
     def active_sessions(self):
         """
         Return a list of active user_ids and associated sessions. Loops over
@@ -50,33 +45,28 @@ class SessionManager(object):
         Implements lazy garbage collection, for each entry it checks if
         the user's session still exists, if not it is removed from the set.
         """
-        skey = self.r_key('active_sessions')
+        skey = 'active_sessions'
+        sessions = []
         sessions_to_expire = []
-        for user_id in self.r_server.smembers(skey):
-            ukey = self.r_key('session', user_id)
-            if self.r_server.exists(ukey):
-                yield user_id, self.load_session(user_id)
+        for user_id in (yield self.manager.smembers(skey)):
+            ukey = "%s:%s" % ('session', user_id)
+            if (yield self.manager.exists(ukey)):
+                sessions.append((user_id, (yield self.load_session(user_id))))
             else:
                 sessions_to_expire.append(user_id)
 
         # clear empty ones
         for user_ids in sessions_to_expire:
-            self.r_server.srem(skey, user_id)
+            yield self.manager.srem(skey, user_id)
 
-    def r_key(self, *args):
-        """
-        Generate a keyname using this workers prefix
-        """
-        parts = [self.r_prefix]
-        parts.extend(args)
-        return ":".join(parts)
+        returnValue(sessions)
 
     def load_session(self, user_id):
         """
         Load session data from Redis
         """
-        ukey = self.r_key('session', user_id)
-        return self.r_server.hgetall(ukey)
+        ukey = "%s:%s" % ('session', user_id)
+        return self.manager.hgetall(ukey)
 
     def schedule_session_expiry(self, user_id, timeout):
         """
@@ -89,9 +79,10 @@ class SessionManager(object):
         timeout : int
             The number of seconds after which this session should expire
         """
-        ukey = self.r_key('session', user_id)
-        self.r_server.expire(ukey, timeout)
+        ukey = "%s:%s" % ('session', user_id)
+        return self.manager.expire(ukey, timeout)
 
+    @inlineCallbacks
     def create_session(self, user_id, **kwargs):
         """
         Create a new session using the given user_id
@@ -100,15 +91,17 @@ class SessionManager(object):
             'created_at': time.time()
         }
         defaults.update(kwargs)
-        self.save_session(user_id, defaults)
+        yield self.save_session(user_id, defaults)
         if self.max_session_length:
-            self.schedule_session_expiry(user_id, self.max_session_length)
-        return self.load_session(user_id)
+            yield self.schedule_session_expiry(user_id,
+                                               int(self.max_session_length))
+        returnValue((yield self.load_session(user_id)))
 
     def clear_session(self, user_id):
-        ukey = self.r_key('session', user_id)
-        self.r_server.delete(ukey)
+        ukey = "%s:%s" % ('session', user_id)
+        return self.manager.delete(ukey)
 
+    @inlineCallbacks
     def save_session(self, user_id, session):
         """
         Save a session
@@ -122,9 +115,9 @@ class SessionManager(object):
             values that are dictionaries are converted to strings by Redis.
 
         """
-        ukey = self.r_key('session', user_id)
+        ukey = "%s:%s" % ('session', user_id)
         for s_key, s_value in session.items():
-            self.r_server.hset(ukey, s_key, s_value)
-        skey = self.r_key('active_sessions')
-        self.r_server.sadd(skey, user_id)
-        return session
+            yield self.manager.hset(ukey, s_key, s_value)
+        skey = 'active_sessions'
+        yield self.manager.sadd(skey, user_id)
+        returnValue(session)
