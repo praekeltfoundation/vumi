@@ -60,6 +60,7 @@ class RiakManager(Manager):
             riak_object.set_encoded_data(result['data'])
         else:
             riak_object.set_data({})
+            riak_object.set_content_type("application/json")
         return riak_object
 
     def store(self, modelobj):
