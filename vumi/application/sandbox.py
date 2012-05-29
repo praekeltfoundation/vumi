@@ -417,7 +417,7 @@ class Sandbox(ApplicationWorker):
         resource.RLIMIT_NPROC: (1, 1),
         resource.RLIMIT_NOFILE: (10, 10),
         resource.RLIMIT_MEMLOCK: (64 * KB, 64 * KB),
-        resource.RLIMIT_AS: (10 * MB, 10 * MB),
+        resource.RLIMIT_AS: (50 * MB, 50 * MB),
         }
 
     def validate_config(self):
