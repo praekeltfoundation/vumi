@@ -109,6 +109,7 @@ class CommonRiakManagerTests(object):
 
         mr = self.manager.riak_map_reduce()
         mr.index('test.dummy_model', 'test_index_bin', 'test_key')
+
         mr_results = []
 
         def mapper(manager, link):
