@@ -24,7 +24,7 @@ var SandboxApi = function(stream) {
 
     this.done = function () {
         this.log_info("Done.");
-        this.stream.end();
+        process.exit(0);
     }
 }
 
@@ -63,7 +63,6 @@ var SandboxRunner = function(api, ctx) {
 };
 
 var api = new SandboxApi(process.stdout);
-process.stdout.on('close', function () { process.exit(0); })
 
 api.log_info("Loading sandboxed code ...");
 var data = fs.readFileSync(process.argv[2]);
