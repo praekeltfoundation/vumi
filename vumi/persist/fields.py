@@ -539,11 +539,11 @@ class ForeignKeyDescriptor(FieldDescriptor):
             }""")
         return manager.run_map_reduce(mr, self.map_lookup_result)
 
-    def map_lookup_result(self, manager, key_or_result_tuple):
+    def map_lookup_result(self, manager, link_or_result_tuple):
         try:
-            key, result = key_or_result_tuple
-        except ValueError:
-            key, result = key_or_result_tuple, None
+            key, result = link_or_result_tuple
+        except TypeError:
+            key, result = link_or_result_tuple.get_key(), None
         return self.cls.load(manager, key, result)
 
     def get_value(self, modelobj):
