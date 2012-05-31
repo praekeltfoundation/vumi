@@ -103,10 +103,10 @@ class RiakManager(Manager):
 
         def map_handler(manager, key_and_result):
             if return_keys:
-                key, result = key_and_result, None
+                return key_and_result.get_key()
             else:
                 key, result = key_and_result
-            return cls.load(manager, key, result)
+                return cls.load(manager, key, result)
 
         return self.run_map_reduce(mr, map_handler)
 
