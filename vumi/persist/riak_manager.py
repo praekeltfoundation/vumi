@@ -57,9 +57,16 @@ class RiakManager(Manager):
         riak_object = RiakObject(self.client, bucket, key)
         if result:
             metadata = result['metadata']
+            indexes = metadata['index']
+            if hasattr(indexes, 'items'):
+                # TODO: I think this is a Riak bug. In some cases
+                #       (maybe when there are no indexes?) the index
+                #       comes back as a list, in others (maybe when
+                #       there are indexes?) it comes back as a dict.
+                indexes = indexes.items()
             data = result['data']
             riak_object.set_content_type(metadata['content-type'])
-            riak_object.set_indexes(metadata['index'].items())
+            riak_object.set_indexes(indexes)
             riak_object.set_encoded_data(data)
         else:
             riak_object.set_data({})
