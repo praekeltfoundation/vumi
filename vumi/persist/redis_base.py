@@ -1,7 +1,61 @@
 from functools import wraps
 
+from vumi.persist.ast_magic import make_function
+
+
+def make_callfunc(name, args, vararg=None, kwarg=None, defaults=(),
+                  filter_func=None, key_args=('key',)):
+
+    def func(self, *a, **kw):
+
+        def _f(k, v):
+            if k in key_args:
+                return self._key(v)
+            return v
+
+        arg_names = list(args) + [vararg] * len(a)
+        aa = [_f(k, v) for k, v in zip(arg_names, a)]
+        kk = dict((k, _f(k, v)) for k, v in kw.items())
+
+        result = self._make_redis_call(name, *aa, **kk)
+        f_func = filter_func
+        if f_func:
+            if isinstance(filter_func, basestring):
+                f_func = getattr(self, f_func)
+            result = self._filter_redis_results(f_func, result)
+        return result
+
+    fargs = ['self'] + list(args)
+    return make_function(name, func, fargs, vararg, kwarg, defaults)
+
+
+class RedisCall(object):
+    def __init__(self, args, vararg=None, kwarg=None, defaults=(),
+                 filter_func=None, key_args=('key',)):
+        self.args = args
+        self.vararg = vararg
+        self.kwarg = kwarg
+        self.defaults = defaults
+        self.filter_func = filter_func
+        self.key_args = key_args
+
+        self.packaged = [args, vararg, kwarg, defaults, filter_func, key_args]
+
+
+class CallMakerMetaclass(type):
+    def __new__(meta, classname, bases, class_dict):
+        new_class_dict = {}
+        for name, attr in class_dict.items():
+            if isinstance(attr, RedisCall):
+                attr = make_callfunc(name, *attr.packaged)
+
+            new_class_dict[name] = attr
+        return type.__new__(meta, classname, bases, new_class_dict)
+
 
 class Manager(object):
+
+    __metaclass__ = CallMakerMetaclass
 
     def __init__(self, client, key_prefix):
         self._client = client
@@ -75,171 +129,67 @@ class Manager(object):
         """
         return key.split(self._key_prefix + ":", 1)[-1]
 
+    def _unkeys(self, keys):
+        return [self._unkey(k) for k in keys]
+
     # Global operations
 
-    def exists(self, key):
-        return self._make_redis_call('exists', self._key(key))
-
-    def keys(self, pattern='*'):
-        results = self._make_redis_call('keys', self._key(pattern))
-        return self._filter_redis_results(
-            lambda keys: [self._unkey(k) for k in keys], results)
+    exists = RedisCall(['key'])
+    keys = RedisCall(['pattern'], defaults=['*'], key_args=['pattern'],
+                     filter_func='_unkeys')
 
     # String operations
 
-    def get(self, key):
-        return self._make_redis_call('get', self._key(key))
-
-    def set(self, key, value):
-        return self._make_redis_call('set', self._key(key), value)
-
-    def delete(self, key):
-        return self._make_redis_call('delete', self._key(key))
+    get = RedisCall(['key'])
+    set = RedisCall(['key', 'value'])
+    delete = RedisCall(['key'])
 
     # Integer operations
 
-    def incr(self, key, increment=1):
-        return self._make_redis_call('incr', self._key(key), increment)
+    incr = RedisCall(['key', 'increment'], defaults=[1])
 
     # Hash operations
 
-    def hset(self, key, field, value):
-        return self._make_redis_call('hset', self._key(key), field, value)
-
-    def hget(self, key, field):
-        return self._make_redis_call('hget', self._key(key), field)
-
-    def hdel(self, key, *fields):
-        return self._make_redis_call('hdel', self._key(key), *fields)
-
-    def hmset(self, key, mapping):
-        return self._make_redis_call('hmset', self._key(key), mapping)
-
-    def hgetall(self, key):
-        return self._make_redis_call('hgetall', self._key(key))
-
-    # def hlen(self, key):
-    #     return len(self._data.get(key, {}))
-
-    # def hvals(self, key):
-    #     return self._data.get(key, {}).values()
-
-    # def hincrby(self, key, field, amount=1):
-    #     value = self._data.get(key, {}).get(field, "0")
-    #     # the int(str(..)) coerces amount to an int but rejects floats
-    #     value = int(value) + int(str(amount))
-    #     self._data.setdefault(key, {})[field] = str(value)
-    #     return value
-
-    # def hexists(self, key, field):
-    #     return int(field in self._data.get(key, {}))
+    hset = RedisCall(['key', 'field', 'value'])
+    hget = RedisCall(['key', 'field'])
+    hdel = RedisCall(['key'], vararg='fields')
+    hmset = RedisCall(['key', 'mapping'])
+    hgetall = RedisCall(['key'])
+    hlen = RedisCall(['key'])
+    hvals = RedisCall(['key'])
+    hincrby = RedisCall(['key', 'field', 'amount'], defaults=[1])
+    hexists = RedisCall(['key', 'field'])
 
     # Set operations
 
-    def sadd(self, key, *values):
-        return self._make_redis_call('sadd', self._key(key), *values)
+    sadd = RedisCall(['key'], vararg='values')
+    smembers = RedisCall(['key'])
+    spop = RedisCall(['key'])
+    srem = RedisCall(['key', 'value'])
+    scard = RedisCall(['key'])
+    smove = RedisCall(['src', 'dst', 'value'], key_args=['src', 'dst'])
+    sunion = RedisCall(['key'], vararg='args', key_args=['key', 'args'])
+    sismember = RedisCall(['key', 'value'])
 
-    def smembers(self, key):
-        return self._make_redis_call('smembers', self._key(key))
+    # Sorted set operations
 
-    def spop(self, key):
-        return self._make_redis_call('spop', self._key(key))
+    zadd = RedisCall(['key'], kwarg='valscores')
+    zrem = RedisCall(['key', 'value'])
+    zcard = RedisCall(['key'])
+    zrange = RedisCall(
+        ['key', 'start', 'stop', 'desc', 'withscores', 'score_cast_func'],
+        defaults=[False, False, float])
 
-    def srem(self, key, value):
-        return self._make_redis_call('srem', self._key(key), value)
+    # List operations
 
-    def scard(self, key):
-        return self._make_redis_call('scard', self._key(key))
-
-    def smove(self, src, dst, value):
-        return self._make_redis_call(
-            'smove', self._key(src), self._key(dst), value)
-
-    def sunion(self, key, *args):
-        return self._make_redis_call('sunion', self._key(key), *args)
-
-    def sismember(self, key, value):
-        return self._make_redis_call('sismember', self._key(key), value)
-
-    # # Sorted set operations
-
-    # def zadd(self, key, **valscores):
-    #     zval = self._data.setdefault(key, [])
-    #     new_zval = [val for val in zval if val[1] not in valscores]
-    #     for value, score in valscores.items():
-    #         new_zval.append((score, value))
-    #     new_zval.sort()
-    #     self._data[key] = new_zval
-
-    # def zrem(self, key, value):
-    #     zval = self._data.setdefault(key, [])
-    #     new_zval = [val for val in zval if val[1] != value]
-    #     self._data[key] = new_zval
-
-    # def zcard(self, key):
-    #     return len(self._data.get(key, []))
-
-    # def zrange(self, key, start, stop, desc=False, withscores=False,
-    #             score_cast_func=float):
-    #     zval = self._data.get(key, [])
-    #     stop += 1  # redis start/stop are element indexes
-    #     if stop == 0:
-    #         stop = None
-    #     results = sorted(zval[start:stop],
-    #                 key=lambda (score, _): score_cast_func(score))
-    #     if desc:
-    #         results.reverse()
-    #     if withscores:
-    #         return results
-    #     else:
-    #         return [v for k, v in results]
-
-    # # List operations
-    # def llen(self, key):
-    #     return len(self._data.get(key, []))
-
-    # def lpop(self, key):
-    #     if self.llen(key):
-    #         return self._data[key].pop(0)
-
-    # def lpush(self, key, obj):
-    #     self._data.setdefault(key, []).insert(0, obj)
-
-    # def rpush(self, key, obj):
-    #     self._data.setdefault(key, []).append(obj)
-    #     return self.llen(key) - 1
-
-    # def lrange(self, key, start, end):
-    #     lval = self._data.get(key, [])
-    #     if end >= 0 or end < -1:
-    #         end += 1
-    #     else:
-    #         end = None
-    #     return lval[start:end]
-
-    # def lrem(self, key, value, num=0):
-    #     removed = [0]
-
-    #     def keep(v):
-    #         if v == value and (num == 0 or removed[0] < abs(num)):
-    #             removed[0] += 1
-    #             return False
-    #         return True
-
-    #     lval = self._data.get(key, [])
-    #     if num >= 0:
-    #         lval = [v for v in lval if keep(v)]
-    #     else:
-    #         lval.reverse()
-    #         lval = [v for v in lval if keep(v)]
-    #         lval.reverse()
-    #     self._data[key] = lval
-    #     return removed[0]
+    llen = RedisCall(['key'])
+    lpop = RedisCall(['key'])
+    lpush = RedisCall(['key', 'obj'])
+    rpush = RedisCall(['key', 'obj'])
+    lrange = RedisCall(['key', 'start', 'end'])
+    lrem = RedisCall(['key', 'value', 'num'], defaults=[0])
 
     # Expiry operations
 
-    def expire(self, key, seconds):
-        return self._make_redis_call('expire', self._key(key), seconds)
-
-    def persist(self, key):
-        return self._make_redis_call('persist', self._key(key))
+    expire = RedisCall(['key', 'seconds'])
+    persist = RedisCall(['key'])
