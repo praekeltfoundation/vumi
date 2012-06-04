@@ -30,4 +30,4 @@ VirtualBox_ and Vagrant_:
 
 .. _Vagrant: http://www.vagrantup.com
 .. _VirtualBox: http://www.virtualbox.org
-.. _OS specific instructions: http://vagrantup.com/docs/getting-started/index.html
+.. _OS specific instructions: http://vagrantup.com/v1/docs/getting-started/index.html
