@@ -49,9 +49,9 @@ class CurrentTag(Model):
                                          _riak_object=_riak_object, **kw)
 
     @classmethod
-    def load(cls, manager, key):
+    def load(cls, manager, key, result=None):
         _tag, key = cls._tag_and_key(key)
-        return super(CurrentTag, cls).load(manager, key)
+        return super(CurrentTag, cls).load(manager, key, result)
 
 
 class OutboundMessage(Model):

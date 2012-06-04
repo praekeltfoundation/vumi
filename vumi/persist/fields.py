@@ -199,6 +199,11 @@ class Timestamp(Field):
         return datetime.strptime(value, VUMI_DATE_FORMAT)
 
 
+class Json(Field):
+    """Field that stores an object that can be serialized to/from JSON."""
+    pass
+
+
 class VumiMessageDescriptor(FieldDescriptor):
     """Property for getting and setting fields."""
 
@@ -524,10 +529,22 @@ class ForeignKeyDescriptor(FieldDescriptor):
         mr = manager.riak_map_reduce()
         bucket = manager.bucket_prefix + self.cls.bucket
         mr.index(bucket, self.index_name, modelobj.key)
+        if manager.fetch_objects:
+            # Return the key and the data for this object.
+            # Allows us to populate the objects coming back from a
+            # map reduce in one single call. This is especially important
+            # for synchronous calls.
+            mr = mr.map(function="""function(v) {
+                return [[v.key, v.values[0]]]
+            }""")
         return manager.run_map_reduce(mr, self.map_lookup_result)
 
-    def map_lookup_result(self, manager, result):
-        return self.cls.load(manager, result.get_key())
+    def map_lookup_result(self, manager, link_or_result_tuple):
+        try:
+            key, result = link_or_result_tuple
+        except TypeError:
+            key, result = link_or_result_tuple.get_key(), None
+        return self.cls.load(manager, key, result)
 
     def get_value(self, modelobj):
         return ForeignKeyProxy(self, modelobj)
