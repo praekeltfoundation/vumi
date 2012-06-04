@@ -68,7 +68,7 @@ class TestTransport(TestCase):
 
     @inlineCallbacks
     def test_inbound(self):
-        d = http_request(self.worker_url + "foo", '', method='GET')
+        d = http_request(self.worker_url + "foo", '{"id": 1}', method='POST')
         msg, = yield self.broker.wait_messages("vumi",
             "test_ok_transport.inbound", 1)
         payload = msg.payload
@@ -78,3 +78,69 @@ class TestTransport(TestCase):
                 rep)
         response = yield d
         self.assertEqual(response, 'OK')
+
+
+class JSONTransport(HttpRpcTransport):
+
+    def handle_raw_inbound_message(self, msgid, request):
+        request_content = json.loads(request.content.read())
+        self.publish_message(
+                message_id=msgid,
+                content=request_content['content'],
+                to_addr=request_content['to_addr'],
+                from_addr=request_content['from_addr'],
+                provider='',
+                session_event=TransportUserMessage.SESSION_NEW,
+                transport_name=self.transport_name,
+                transport_type=self.config.get('transport_type'),
+                transport_metadata={},
+                )
+
+
+class TestJSONTransport(TestTransport):
+
+    @inlineCallbacks
+    def setUp(self):
+        DelayedCall.debug = True
+        self.json_transport_calls = DeferredQueue()
+        self.mock_service = MockHttpServer(self.handle_request)
+        yield self.mock_service.start()
+        config = {
+            'transport_name': 'test_json_transport',
+            'transport_type': 'json',
+            'ussd_string_prefix': '',
+            'web_path': "foo",
+            'web_port': 0,
+            'url': self.mock_service.url,
+            'username': 'testuser',
+            'password': 'testpass',
+            }
+        self.worker = get_stubbed_worker(JSONTransport, config)
+        self.broker = self.worker._amqp_client.broker
+        yield self.worker.startWorker()
+        self.worker_url = self.worker.get_transport_url()
+
+    def handle_request(self, request):
+        self.json_transport_calls.put(request)
+        return ''
+
+    @inlineCallbacks
+    def test_inbound(self):
+        d = http_request(self.worker_url + "foo",
+                '{"content": "hello",'
+                ' "to_addr": "the_app",'
+                ' "from_addr": "some_msisdn"'
+                '}',
+                method='POST')
+        msg, = yield self.broker.wait_messages("vumi",
+            "test_json_transport.inbound", 1)
+        payload = msg.payload
+        self.assertEqual(payload['content'], 'hello')
+        self.assertEqual(payload['to_addr'], 'the_app')
+        self.assertEqual(payload['from_addr'], 'some_msisdn')
+        tum = TransportUserMessage(**payload)
+        rep = tum.reply('{"content": "bye"}')
+        self.broker.publish_message("vumi", "test_json_transport.outbound",
+                rep)
+        response = yield d
+        self.assertEqual(response, '{"content": "bye"}')
