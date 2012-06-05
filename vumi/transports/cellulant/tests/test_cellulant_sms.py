@@ -15,16 +15,16 @@ class TestCellulantSmsTransport(TransportTestCase):
 
     timeout = 5
 
-    transport_name = 'test_mediafone_transport'
+    transport_name = 'test_cellulant_sms_transport'
     transport_class = CellulantSmsTransport
 
     @inlineCallbacks
     def setUp(self):
         super(TestCellulantSmsTransport, self).setUp()
 
-        self.mediafone_calls = DeferredQueue()
-        self.mock_mediafone = MockHttpServer(self.handle_request)
-        yield self.mock_mediafone.start()
+        self.cellulant_sms_calls = DeferredQueue()
+        self.mock_cellulant_sms = MockHttpServer(self.handle_request)
+        yield self.mock_cellulant_sms.start()
 
         self.config = {
             'transport_name': self.transport_name,
@@ -32,18 +32,18 @@ class TestCellulantSmsTransport(TransportTestCase):
             'web_port': 0,
             'username': 'user',
             'password': 'pass',
-            'outbound_url': self.mock_mediafone.url,
+            'outbound_url': self.mock_cellulant_sms.url,
         }
         self.transport = yield self.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url()
 
     @inlineCallbacks
     def tearDown(self):
-        yield self.mock_mediafone.stop()
+        yield self.mock_cellulant_sms.stop()
         yield super(TestCellulantSmsTransport, self).tearDown()
 
     def handle_request(self, request):
-        self.mediafone_calls.put(request)
+        self.cellulant_sms_calls.put(request)
         return ''
 
     def mkurl(self, content, from_addr="2371234567", **kw):
@@ -83,7 +83,7 @@ class TestCellulantSmsTransport(TransportTestCase):
     @inlineCallbacks
     def test_outbound(self):
         yield self.dispatch(self.mkmsg_out(to_addr="2371234567"))
-        req = yield self.mediafone_calls.get()
+        req = yield self.cellulant_sms_calls.get()
         self.assertEqual(req.path, '/')
         self.assertEqual(req.method, 'GET')
         self.assertEqual({
