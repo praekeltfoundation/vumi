@@ -83,7 +83,7 @@ class TestMtechUssdTransport(TransportTestCase):
 
         response = yield response_d
         correct_response = ''.join([
-                "<?xml version='1.0' encoding='UTF-8'?>\n",
+                "<?xml version='1.0' encoding='UTF-8'?>",
                 '<page version="2.0">',
                 '<session_id>a41739890287485d968ea66e8b44bfd3</session_id>',
                 '<div>OK<br />1 &lt; 2</div>',
@@ -113,7 +113,7 @@ class TestMtechUssdTransport(TransportTestCase):
 
         response = yield response_d
         correct_response = ''.join([
-                "<?xml version='1.0' encoding='UTF-8'?>\n",
+                "<?xml version='1.0' encoding='UTF-8'?>",
                 '<page version="2.0">',
                 '<session_id>a41739890287485d968ea66e8b44bfd3</session_id>',
                 '<div>OK</div>',
@@ -144,7 +144,7 @@ class TestMtechUssdTransport(TransportTestCase):
 
         response = yield response_d
         correct_response = ''.join([
-                "<?xml version='1.0' encoding='UTF-8'?>\n",
+                "<?xml version='1.0' encoding='UTF-8'?>",
                 '<page version="2.0">',
                 '<session_id>a41739890287485d968ea66e8b44bfd3</session_id>',
                 '<div>OK<br />1 &lt; 2</div>',
@@ -172,7 +172,7 @@ class TestMtechUssdTransport(TransportTestCase):
 
         response = yield response_d
         correct_response = ''.join([
-                "<?xml version='1.0' encoding='UTF-8'?>\n",
+                "<?xml version='1.0' encoding='UTF-8'?>",
                 '<page version="2.0">',
                 '<session_id>a41739890287485d968ea66e8b44bfd3</session_id>',
                 '<div>OK</div>',
@@ -202,7 +202,7 @@ class TestMtechUssdTransport(TransportTestCase):
 
         response = yield response_d
         correct_response = ''.join([
-                "<?xml version='1.0' encoding='UTF-8'?>\n",
+                "<?xml version='1.0' encoding='UTF-8'?>",
                 '<page version="2.0">',
                 '<session_id>a41739890287485d968ea66e8b44bfd3</session_id>',
                 '<div>OK</div>',
@@ -217,7 +217,7 @@ class TestMtechUssdTransport(TransportTestCase):
         response = yield self.make_ussd_request(sid, status="1")
 
         correct_response = ''.join([
-                "<?xml version='1.0' encoding='UTF-8'?>\n",
+                "<?xml version='1.0' encoding='UTF-8'?>",
                 '<page version="2.0">',
                 '<session_id>a41739890287485d968ea66e8b44bfd3</session_id>',
                 '</page>',

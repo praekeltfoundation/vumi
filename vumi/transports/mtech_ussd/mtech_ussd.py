@@ -155,7 +155,8 @@ class MtechUssdResponse(object):
                     nav, "link", pageId=link['pageId'],
                     accesskey=link['accesskey']).text = link['text']
 
-        return ET.tostring(page, encoding="UTF-8")
+        # We can't have "\n" in the output at all, it seems.
+        return ET.tostring(page, encoding="UTF-8").replace("\n", "")
 
     def __str__(self):
         return self.to_xml()
