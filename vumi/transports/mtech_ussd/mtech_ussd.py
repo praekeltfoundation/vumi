@@ -75,19 +75,20 @@ class MtechUssdTransport(HttpRpcTransport):
 
         page_id = body.find('page_id').text
 
-        if page_id == '0':
+        # They sometimes send us page_id=0 in the middle of a session.
+        if page_id == '0' and body.find('mobile_number') is not None:
             # This is a new session.
             session = self.save_session(
                 session_id,
                 from_addr=body.find('mobile_number').text,
                 to_addr=body.find('gate').text)  # ???
             session_event = TransportUserMessage.SESSION_NEW
-            content = body.find('data').text
         else:
             # This is an existing session.
             session = self.session_manager.load_session(session_id)
             session_event = TransportUserMessage.SESSION_RESUME
-            content = body.find('data').text
+
+        content = body.find('data').text
 
         transport_metadata = {'session_id': session_id}
         self.publish_message(
