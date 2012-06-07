@@ -3,7 +3,7 @@
 from xml.etree import ElementTree as ET
 
 import redis
-from twisted.python import log
+from vumi import log
 
 from vumi.message import TransportUserMessage
 from vumi.transports.httprpc import HttpRpcTransport
@@ -62,8 +62,8 @@ class MtechUssdTransport(HttpRpcTransport):
         try:
             body = ET.fromstring(request_body)
         except:
-            self.finish_request(msgid, "", code=400)
-            return
+            log.warning("Error parsing request XML: %s" % (request_body))
+            return self.finish_request(msgid, "", code=400)
 
         # We always get this.
         session_id = body.find('session_id').text
@@ -86,6 +86,9 @@ class MtechUssdTransport(HttpRpcTransport):
         else:
             # This is an existing session.
             session = self.session_manager.load_session(session_id)
+            if 'from_addr' not in session:
+                # We have a missing or broken session.
+                return self.finish_request(msgid, "", code=400)
             session_event = TransportUserMessage.SESSION_RESUME
 
         content = body.find('data').text

@@ -35,7 +35,7 @@ class TestMtechUssdTransport(TransportTestCase):
         yield self.transport.r_server.teardown()
         yield super(TestMtechUssdTransport, self).tearDown()
 
-    def make_ussd_request(self, session_id, **kwargs):
+    def make_ussd_request_full(self, session_id, **kwargs):
         lines = [
             '<?xml version="1.0" encoding="UTF-8"?>',
             '<page version="2.0">',
@@ -46,7 +46,11 @@ class TestMtechUssdTransport(TransportTestCase):
         lines.append('</page>')
         data = '\n'.join(lines)
 
-        return http_request(self.url, data, method='POST')
+        return http_request_full(self.url, data, method='POST')
+
+    def make_ussd_request(self, session_id, **kwargs):
+        return self.make_ussd_request_full(session_id, **kwargs).addCallback(
+            lambda r: r.delivered_body)
 
     def reply_to_message(self, *args, **kw):
         d = self.wait_for_dispatched_messages(1)
@@ -61,6 +65,11 @@ class TestMtechUssdTransport(TransportTestCase):
     @inlineCallbacks
     def test_empty_request(self):
         response = yield http_request_full(self.url, "", method='POST')
+        self.assertEqual(response.code, 400)
+
+    @inlineCallbacks
+    def test_bad_request(self):
+        response = yield http_request_full(self.url, "blah", method='POST')
         self.assertEqual(response.code, 400)
 
     @inlineCallbacks
@@ -123,6 +132,14 @@ class TestMtechUssdTransport(TransportTestCase):
                 '</page>',
                 ])
         self.assertEqual(response, correct_response)
+
+    @inlineCallbacks
+    def test_inbound_missing_session(self):
+        sid = 'a41739890287485d968ea66e8b44bfd3'
+        response = yield self.make_ussd_request_full(
+            sid, page_id="indexX", data="foo")
+        self.assertEqual(400, response.code)
+        self.assertEqual('', response.delivered_body)
 
     @inlineCallbacks
     def test_inbound_new_and_resume(self):
