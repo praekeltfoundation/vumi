@@ -3,16 +3,16 @@
 
 """TruTeq USSD transport."""
 
-from twisted.internet.defer import Deferred
+from twisted.internet.defer import Deferred, inlineCallbacks
 from twisted.python import log
 from twisted.internet import reactor
-
 from ssmi import client
-import redis
 
 from vumi.utils import normalize_msisdn
 from vumi.message import TransportUserMessage
 from vumi.transports.base import Transport
+from vumi.persist.txredis_manager import TxRedisManager
+from vumi.persist.session import SessionManager
 
 
 # # Turn on debug logging in the SSMI library.
@@ -80,45 +80,38 @@ class TruteqTransport(Transport):
         self.r_config = self.config.get('redis', {})
         self.r_prefix = "%(transport_name)s:ussd_codes" % self.config
 
+    @inlineCallbacks
     def setup_transport(self):
-        self.r_server = redis.Redis(**self.r_config)
         self.ssmi_client = None
-        self._setup_d = Deferred()
+        ssmi_d = Deferred()
         # the strange wrapping of the funciton in a lambda is to get around
         # an odd type check in client.SSMIClient.__init__.
         factory = client.SSMIFactory(
-            lambda ssmi_client: self._setup_ssmi_client(ssmi_client))
+            lambda ssmi_client: self._setup_ssmi_client(ssmi_client, ssmi_d))
         self.ssmi_connector = reactor.connectTCP(self.host, self.port, factory)
-        return self._setup_d
 
-    def _setup_ssmi_client(self, ssmi_client):
+        self.redis = yield TxRedisManager.from_config(
+            self.r_config, self.r_prefix)
+        self.session_manager = SessionManager(
+            self.redis, max_session_length=self.ussd_session_lifetime)
+
+        yield ssmi_d
+
+    def _setup_ssmi_client(self, ssmi_client, ssmi_d):
         ssmi_client.app_setup(self.username, self.password,
                               ussd_callback=self.ussd_callback,
                               sms_callback=self.sms_callback,
                               errback=self.ssmi_errback)
         self.ssmi_client = ssmi_client
-        if self._setup_d is not None:
-            d, self._setup_d = self._setup_d, None
-            d.callback(None)
+        ssmi_d.callback(None)
 
+    @inlineCallbacks
     def teardown_transport(self):
-        self.ssmi_connector.disconnect()
+        yield self.ssmi_connector.disconnect()
+        yield self.session_manager.stop()
+        yield self.redis._close()
 
-    def msisdn_key(self, msisdn):
-        return "%s:%s" % (self.r_prefix, msisdn)
-
-    def get_ussd_code(self, msisdn, delete=False):
-        rkey = self.msisdn_key(msisdn)
-        ussd_code = self.r_server.get(rkey)
-        if ussd_code is not None and delete:
-            self.r_server.delete(rkey)
-        return ussd_code
-
-    def set_ussd_code(self, msisdn, ussd_code):
-        rkey = self.msisdn_key(msisdn)
-        ussd_code = self.r_server.set(rkey, ussd_code)
-        self.r_server.expire(rkey, self.ussd_session_lifetime)
-
+    @inlineCallbacks
     def ussd_callback(self, msisdn, ussd_type, phase, message):
         log.msg("Received USSD, from: %s, message: %s" % (msisdn, message))
         session_event = self.SSMI_TO_VUMI_EVENT[ussd_type]
@@ -127,19 +120,19 @@ class TruteqTransport(Transport):
 
         if session_event == TransportUserMessage.SESSION_NEW:
             # If it's a new session then store the message as the USSD code
-            ussd_code = message
-            self.set_ussd_code(msisdn, ussd_code)
+            session = yield self.session_manager.create_session(
+                msisdn, ussd_code=message)
             text = None
-        elif session_event == TransportUserMessage.SESSION_CLOSE:
-            ussd_code = self.get_ussd_code(msisdn, delete=True)
+        else:
+            session = yield self.session_manager.load_session(msisdn)
             text = message
-        elif session_event == TransportUserMessage.SESSION_RESUME:
-            ussd_code = self.get_ussd_code(msisdn)
-            text = message
+
+        if session_event == TransportUserMessage.SESSION_CLOSE:
+            self.session_manager.clear_session(msisdn)
 
         self.publish_message(
             from_addr=msisdn,
-            to_addr=ussd_code,
+            to_addr=session['ussd_code'],
             session_event=session_event,
             content=text,
             transport_name=self.transport_name,
