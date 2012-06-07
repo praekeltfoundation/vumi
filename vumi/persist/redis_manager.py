@@ -16,10 +16,10 @@ class RedisManager(Manager):
             Key prefix for namespacing.
         """
 
-        # FIXME: Handle fake redis better.
-        from vumi.tests.utils import FakeRedis
+        # Is there a cleaner way to do this?
+        from vumi.persist.tests.fake_redis import FakeRedis
         if config == "FAKE_REDIS":
-            return cls(FakeRedis(), key_prefix)
+            config = FakeRedis()
         if isinstance(config, FakeRedis):
             return cls(config, key_prefix)
 

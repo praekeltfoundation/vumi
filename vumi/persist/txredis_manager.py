@@ -1,7 +1,7 @@
 
 import txredis.protocol
 from twisted.internet import reactor
-from twisted.internet.defer import inlineCallbacks, DeferredList
+from twisted.internet.defer import inlineCallbacks, DeferredList, succeed
 
 from vumi.persist.redis_base import Manager
 
@@ -17,12 +17,15 @@ class TxRedisManager(Manager):
             Key prefix for namespacing.
         """
 
-        # FIXME: Handle fake redis better.
-        from vumi.tests.utils import FakeRedis
+        # Is there a cleaner way to do this?
+        from vumi.persist.tests.fake_redis import FakeRedis
         if config == "FAKE_REDIS":
-            raise NotImplementedError()
+            config = FakeRedis(async=True)
         if isinstance(config, FakeRedis):
-            raise NotImplementedError()
+            obj = cls(config, key_prefix)
+            # Because ._close() assumes a real connection.
+            obj._close = config.teardown
+            return succeed(obj)
 
         config = config.copy()  # So we can safely mutilate it.
 

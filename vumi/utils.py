@@ -212,13 +212,13 @@ def redis_from_config(redis_config):
 
     Otherwise a new real redis client is returned.
     """
-    warnings.warn("Use of redis is deprecated. Use txredix instead.",
+    warnings.warn("Use of redis is deprecated. Use txredis instead.",
                   category=DeprecationWarning)
 
-    from vumi.tests.utils import FakeRedis
+    from vumi.persist.tests import fake_redis
     if redis_config == "FAKE_REDIS":
-        return FakeRedis()
-    if isinstance(redis_config, FakeRedis):
+        return fake_redis.FakeRedis()
+    if isinstance(redis_config, fake_redis.FakeRedis):
         return redis_config
     return redis.Redis(**redis_config)
 

@@ -12,7 +12,7 @@ from twisted.internet.protocol import Protocol, Factory
 from vumi.utils import (normalize_msisdn, vumi_resource_path, cleanup_msisdn,
                         get_operator_name, http_request, http_request_full,
                         get_first_word, redis_from_config)
-from vumi.tests.utils import FakeRedis
+from vumi.persist.tests.fake_redis import FakeRedis
 
 
 class UtilsTestCase(TestCase):

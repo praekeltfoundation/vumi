@@ -10,9 +10,11 @@ from vumi.persist.txredis_manager import TxRedisManager
 
 
 class SessionManagerTestCase(TestCase):
+    timeout = 2
+
     @inlineCallbacks
     def setUp(self):
-        self.manager = yield TxRedisManager.from_config({}, "test")
+        self.manager = yield TxRedisManager.from_config("FAKE_REDIS", "test")
         yield self.manager._purge_all()
         self.sm = SessionManager(self.manager)
 
