@@ -1,9 +1,12 @@
 from twisted.internet.defer import inlineCallbacks
+from twisted.trial.unittest import TestCase
+
 from vumi.transports.tests.test_base import TransportTestCase
 from vumi.tests.utils import FakeRedis
-from vumi.utils import http_request, http_request_full
-from vumi.transports.mtech_ussd import MtechUssdTransport
+from vumi.utils import http_request_full
 from vumi.message import TransportUserMessage
+from vumi.transports.mtech_ussd import MtechUssdTransport
+from vumi.transports.mtech_ussd.mtech_ussd import MtechUssdResponse
 
 
 class TestMtechUssdTransport(TransportTestCase):
@@ -240,3 +243,59 @@ class TestMtechUssdTransport(TransportTestCase):
                 '</page>',
                 ])
         self.assertEqual(response, correct_response)
+
+
+class TestMtechUssdResponse(TestCase):
+    def setUp(self):
+        self.mur = MtechUssdResponse("sid123")
+
+    def assert_message_xml(self, *lines):
+        xml_str = ''.join(
+            ["<?xml version='1.0' encoding='UTF-8'?>"] + list(lines))
+        self.assertEqual(self.mur.to_xml(), xml_str)
+
+    def test_empty_response(self):
+        self.assert_message_xml(
+            '<page version="2.0">',
+            '<session_id>sid123</session_id>',
+            '</page>')
+
+    def test_free_text(self):
+        self.mur.add_text("Please enter your name")
+        self.mur.add_freetext_option()
+        self.assert_message_xml(
+            '<page version="2.0">',
+            '<session_id>sid123</session_id>',
+            '<div>Please enter your name</div>',
+            '<navigation><link accesskey="*" pageId="indexX" /></navigation>',
+            '</page>')
+
+    def test_menu_options(self):
+        self.mur.add_text("Please choose:")
+        self.mur.add_menu_item('chicken', '1')
+        self.mur.add_menu_item('beef', '2')
+        self.assert_message_xml(
+            '<page version="2.0">',
+            '<session_id>sid123</session_id>',
+            '<div>Please choose:</div>',
+            '<navigation>',
+            '<link accesskey="1" pageId="index1">chicken</link>',
+            '<link accesskey="2" pageId="index2">beef</link>',
+            '</navigation>',
+            '</page>')
+
+    def test_menu_options_title(self):
+        self.mur.add_title("LUNCH")
+        self.mur.add_text("Please choose:")
+        self.mur.add_menu_item('chicken', '1')
+        self.mur.add_menu_item('beef', '2')
+        self.assert_message_xml(
+            '<page version="2.0">',
+            '<session_id>sid123</session_id>',
+            '<title>LUNCH</title>',
+            '<div>Please choose:</div>',
+            '<navigation>',
+            '<link accesskey="1" pageId="index1">chicken</link>',
+            '<link accesskey="2" pageId="index2">beef</link>',
+            '</navigation>',
+            '</page>')
