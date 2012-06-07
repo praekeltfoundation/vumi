@@ -29,7 +29,7 @@ class RedisManager(Manager):
         if config_prefix is not None:
             key_prefix = "%s:%s" % (config_prefix, key_prefix)
 
-        return cls(redis.StrictRedis(**config), key_prefix)
+        return cls(redis.Redis(**config), key_prefix)
 
     def _close(self):
         """Close redis connection."""
