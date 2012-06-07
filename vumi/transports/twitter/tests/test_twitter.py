@@ -1,5 +1,5 @@
 from twisted.internet.defer import inlineCallbacks
-from vumi.tests.utils import FakeRedis
+
 from vumi.transports.twitter import TwitterTransport
 from vumi.transports.tests.test_base import TransportTestCase
 from vumi.message import TransportUserMessage
@@ -52,23 +52,13 @@ class TwitterTransportTestCase(TransportTestCase):
             'access_token': 'token1',
             'access_token_secret': 'tokensecret1',
             'terms': ['some', 'trending', 'topic'],
+            'redis': 'FAKE_REDIS',
         }
         self.transport = yield self.get_transport(self.config, start=False)
-        self.transport.validate_config()
-        self.transport.r_server = FakeRedis()
-        self.transport.transport_name = self.transport_name
-        self.transport.concurrent_sends = None
-        self.transport._consumers = []
-        self.transport.twitter = FakeTwitter()
-        yield self.transport.start_tracking_terms()
-        self.transport.start_checking_for_replies()
+        self.transport._twitter_class = FakeTwitter
+        yield self.transport.startWorker()
 
-        yield self.transport._setup_failure_publisher()
-        yield self.transport._setup_message_publisher()
-        yield self.transport._setup_event_publisher()
-
-        yield self.transport.setup_middleware()
-
+    @inlineCallbacks
     def test_handle_replies(self):
         reply = Thing(
             id=1,
@@ -82,17 +72,18 @@ class TwitterTransportTestCase(TransportTestCase):
             }
         )
         self.transport.twitter.send_fake_replies(reply)
-        [msg] = self.get_dispatched_messages()
+        [msg] = yield self.wait_for_dispatched_messages(1)
         self.assertEqual(msg['from_addr'], 'replier')
         self.assertEqual(msg['to_addr'], 'tweeter')
         self.assertEqual(msg['content'], '@tweeter hi there')
         self.assertEqual(msg['session_event'],
                          TransportUserMessage.SESSION_RESUME)
         self.assertEqual(msg['message_id'], 1)
-        last_reply_timestamp = self.transport.r_server.get(
-            '%s:last_reply_timestamp' % self.transport.r_prefix)
+        last_reply_timestamp = yield self.transport.redis.get(
+            'last_reply_timestamp')
         self.assertEqual(last_reply_timestamp, '1')
 
+    @inlineCallbacks
     def test_handle_track(self):
         status = Thing(
             id=1,
@@ -105,7 +96,7 @@ class TwitterTransportTestCase(TransportTestCase):
             }
         )
         self.transport.twitter.send_fake_track(status)
-        [msg] = self.get_dispatched_messages()
+        [msg] = yield self.wait_for_dispatched_messages(1)
         self.assertEqual(msg['from_addr'], '@screen_name')
         self.assertEqual(msg['to_addr'], '@reply_to')
         self.assertEqual(msg['content'], 'text')
