@@ -62,7 +62,7 @@ class MtechUssdTransport(HttpRpcTransport):
         try:
             body = ET.fromstring(request_body)
         except:
-            log.warning("Error parsing request XML: %s" % (request_body))
+            log.warning("Error parsing request XML: %s" % (request_body,))
             return self.finish_request(msgid, "", code=400)
 
         # We always get this.
