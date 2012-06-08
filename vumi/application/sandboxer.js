@@ -30,31 +30,48 @@ var SandboxApi = function(stream) {
 
 var SandboxRunner = function(api, ctx) {
     // Runner for a sandboxed app
+    var self = this;
 
-    this.api = api;
-    this.emitter = new events.EventEmitter();
-    this.chunk = "";
+    self.api = api;
+    self.ctx = ctx;
+    self.emitter = new events.EventEmitter();
+    self.chunk = "";
 
-    if (ctx.on_init) {
-        this.emitter.on('init', ctx.on_init);
-    }
+    self.emitter.on('init', function () {
+        self.ctx.on_init(self.api);
+    });
 
-    if (ctx.on_command) {
-        this.emitter.on('command', ctx.on_command);
-    }
-
-    this.data_from_stdin = function (data) {
-        parts = data.split("\n");
-        parts[0] = this.chunk + parts[0];
-        for (i = 0; i < parts.length - 1; i++) {
-            this.emitter.emit('command', this.api, JSON.parse(parts[i]));
+    self.emitter.on('command', function (command) {
+        handler_name = "on_" + command.cmd.replace('.', '_').replace('-', '_');
+        handler = ctx[handler_name];
+        if (handler === undefined) {
+            handler = ctx['on_unknown'];
         }
-        this.chunk = parts[-1];
+        if (handler !== undefined) {
+            handler.call(ctx, self.api, command);
+        }
+    });
+
+    self.emitter.on('reply', function (reply) {
+    });
+
+    self.data_from_stdin = function (data) {
+        parts = data.split("\n");
+        parts[0] = self.chunk + parts[0];
+        for (i = 0; i < parts.length - 1; i++) {
+            msg = JSON.parse(parts[i]);
+            if (!msg.reply) {
+                self.emitter.emit('command', msg);
+            }
+            else {
+                self.emitter.emit('reply', msg);
+            }
+        }
+        self.chunk = parts[-1];
     }
 
-    this.run = function () {
-        var self = this;
-        this.emitter.emit('init', this.api);
+    self.run = function () {
+        self.emitter.emit('init');
         process.stdin.resume();
         process.stdin.setEncoding('ascii');
         process.stdin.on('data', function(data) {
