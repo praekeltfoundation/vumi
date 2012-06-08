@@ -9,12 +9,15 @@ from twisted.web.server import Site
 from twisted.web.resource import Resource
 from twisted.web.static import Data
 
-from vumi.tests.utils import FakeRedis
 from vumi.application.tests.test_base import ApplicationTestCase
 from vumi.demos.hangman import HangmanGame, HangmanWorker
 from vumi.message import TransportUserMessage
 
 import string
+
+
+def mkstate(word, guesses, msg):
+    return {'word': word, 'guesses': guesses, 'msg': msg}
 
 
 class TestHangmanGame(unittest.TestCase):
@@ -23,21 +26,24 @@ class TestHangmanGame(unittest.TestCase):
         game.event('m')
         game.event('o')
         self.assertTrue(game.won())
-        self.assertTrue(game.state().startswith("moo:mo:Flawless"))
+        self.assertEqual(
+            game.state(), mkstate('moo', 'mo', 'Flawless victory!'))
 
     def test_incorrect_guesses(self):
         game = HangmanGame(word='moo')
         game.event('f')
         game.event('g')
         self.assertFalse(game.won())
-        self.assertTrue(game.state().startswith("moo:fg:Word contains no"))
+        self.assertEqual(
+            game.state(), mkstate('moo', 'fg', "Word contains no 'g'. :("))
 
     def test_repeated_guesses(self):
         game = HangmanGame(word='moo')
         game.event('f')
         game.event('f')
         self.assertFalse(game.won())
-        self.assertTrue(game.state().startswith("moo:f:You've already"))
+        self.assertEqual(
+            game.state(), mkstate('moo', 'f', "You've already guessed 'f'."))
 
     def test_button_mashing(self):
         game = HangmanGame(word='moo')
@@ -45,25 +51,27 @@ class TestHangmanGame(unittest.TestCase):
             game.event(event)
         game.event('o')
         self.assertTrue(game.won())
-        self.assertEqual(game.state(),
-                         "moo:%s:Button mashing!" % string.lowercase)
+        self.assertEqual(
+            game.state(), mkstate('moo', string.lowercase, "Button mashing!"))
 
     def test_new_game(self):
         game = HangmanGame(word='moo')
         for event in ('m', 'o', '-'):
             game.event(event)
-        self.assertEqual(game.state(), 'moo:mo:Flawless victory!')
+        self.assertEqual(
+            game.state(), mkstate('moo', 'mo', 'Flawless victory!'))
         self.assertEqual(game.exit_code, game.DONE_WANTS_NEW)
 
     def test_from_state(self):
-        game = HangmanGame.from_state("bar:xyz:Eep?")
+        game = HangmanGame.from_state(mkstate("bar", "xyz", "Eep?"))
         self.assertEqual(game.word, "bar")
         self.assertEqual(game.guesses, set("xyz"))
         self.assertEqual(game.msg, "Eep?")
         self.assertEqual(game.exit_code, game.NOT_DONE)
 
     def test_from_state_non_ascii(self):
-        game = HangmanGame.from_state("b\xc3\xa4r:xyz:Eep?")
+        game = HangmanGame.from_state(
+            mkstate("b\xc3\xa4r".decode("utf-8"), "xyz", "Eep?"))
         self.assertEqual(game.word, u"b\u00e4r")
         self.assertEqual(game.guesses, set("xyz"))
         self.assertEqual(game.msg, "Eep?")
@@ -134,6 +142,7 @@ class TestHangmanGame(unittest.TestCase):
 
 class TestHangmanWorker(ApplicationTestCase):
 
+    timeout = 2
     application_class = HangmanWorker
 
     @inlineCallbacks
@@ -151,8 +160,8 @@ class TestHangmanWorker(ApplicationTestCase):
         self.worker = yield self.get_application({
                 'worker_name': 'test_hangman',
                 'random_word_url': random_word_url,
+                'redis': 'FAKE_REDIS',
                 })
-        self.worker.r_server = FakeRedis()
 
     @inlineCallbacks
     def send(self, content, session_event=None):
@@ -172,6 +181,7 @@ class TestHangmanWorker(ApplicationTestCase):
 
     @inlineCallbacks
     def tearDown(self):
+        yield super(TestHangmanWorker, self).tearDown()
         yield self.webserver.loseConnection()
 
     @inlineCallbacks

@@ -3,7 +3,6 @@
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.application.tests.test_base import ApplicationTestCase
-from vumi.tests.utils import FakeRedis
 
 from vumi.demos.ircbot import MemoWorker
 from vumi.message import TransportUserMessage
@@ -18,11 +17,8 @@ class TestMemoWorker(ApplicationTestCase):
         super(TestMemoWorker, self).setUp()
         self.worker = yield self.get_application({
             'worker_name': 'testmemo',
+            'redis': 'FAKE_REDIS',
             })
-        self.worker.r_server = FakeRedis()
-
-    def tearDown(self):
-        self.worker.r_server.teardown()
 
     @inlineCallbacks
     def send(self, content, from_addr='testnick', channel=None):
@@ -60,8 +56,8 @@ class TestMemoWorker(ApplicationTestCase):
     @inlineCallbacks
     def test_leave_memo(self):
         yield self.send('bot: tell memoed hey there', channel='#test')
-        self.assertEquals(self.worker.retrieve_memos('#test', 'memoed'),
-                          [['testnick', 'hey there']])
+        memos = yield self.worker.retrieve_memos('#test', 'memoed')
+        self.assertEquals(memos, [['testnick', 'hey there']])
         replies = yield self.recv()
         self.assertEqual(replies, [
             ('reply', 'testnick: Sure thing, boss.'),
@@ -70,8 +66,8 @@ class TestMemoWorker(ApplicationTestCase):
     @inlineCallbacks
     def test_leave_memo_nick_canonicalization(self):
         yield self.send('bot: tell MeMoEd hey there', channel='#test')
-        self.assertEquals(self.worker.retrieve_memos('#test', 'memoed'),
-                          [['testnick', 'hey there']])
+        memos = yield self.worker.retrieve_memos('#test', 'memoed')
+        self.assertEquals(memos, [['testnick', 'hey there']])
 
     @inlineCallbacks
     def test_send_memos(self):
