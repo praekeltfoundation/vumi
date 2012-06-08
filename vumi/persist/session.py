@@ -33,9 +33,21 @@ class SessionManager(object):
         self.gc = task.LoopingCall(lambda: self.active_sessions())
         self.gc.start(gc_period)
 
-    def stop(self):
+    @inlineCallbacks
+    def stop(self, stop_manager=True):
         if self.gc.running:
-            return self.gc.stop()
+            yield self.gc.stop()
+        if stop_manager:
+            yield self.manager._close()
+
+    @classmethod
+    def from_redis_config(cls, config, key_prefix='', max_session_length=None,
+                          gc_period=1.0):
+        """Create a `SessionManager` instance using `TxRedisManager`.
+        """
+        from vumi.persist.txredis_manager import TxRedisManager
+        d = TxRedisManager.from_config(config, key_prefix)
+        return d.addCallback(lambda m: cls(m, max_session_length, gc_period))
 
     @inlineCallbacks
     def active_sessions(self):

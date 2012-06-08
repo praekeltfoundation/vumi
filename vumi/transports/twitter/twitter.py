@@ -50,6 +50,7 @@ class TwitterTransport(Transport):
     def teardown_transport(self):
         if self.check_replies.running:
             self.check_replies.stop()
+        return self.redis._close()
 
     def check_for_replies(self):
         return self.twitter.replies(self.handle_replies)

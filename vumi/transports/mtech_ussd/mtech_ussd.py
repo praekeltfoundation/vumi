@@ -8,7 +8,6 @@ from vumi import log
 from vumi.message import TransportUserMessage
 from vumi.transports.httprpc import HttpRpcTransport
 from vumi.persist import SessionManager
-from vumi.persist.txredis_manager import TxRedisManager
 
 
 class MtechUssdTransport(HttpRpcTransport):
@@ -37,14 +36,12 @@ class MtechUssdTransport(HttpRpcTransport):
         r_config = self.config.get('redis', {})
         r_prefix = "mtech_ussd:%s" % self.transport_name
         session_timeout = int(self.config.get("ussd_session_timeout", 600))
-        self.redis = yield TxRedisManager.from_config(r_config, r_prefix)
-        self.session_manager = SessionManager(
-            self.redis, max_session_length=session_timeout)
+        self.session_manager = yield SessionManager.from_redis_config(
+                r_config, r_prefix, max_session_length=session_timeout)
 
     @inlineCallbacks
     def teardown_transport(self):
         yield self.session_manager.stop()
-        yield self.redis._close()
         yield super(MtechUssdTransport, self).teardown_transport()
 
     def save_session(self, session_id, from_addr, to_addr):

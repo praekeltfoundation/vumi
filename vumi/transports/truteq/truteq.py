@@ -11,8 +11,7 @@ from ssmi import client
 from vumi.utils import normalize_msisdn
 from vumi.message import TransportUserMessage
 from vumi.transports.base import Transport
-from vumi.persist.txredis_manager import TxRedisManager
-from vumi.persist.session import SessionManager
+from vumi.persist import SessionManager
 
 
 # # Turn on debug logging in the SSMI library.
@@ -90,10 +89,8 @@ class TruteqTransport(Transport):
             lambda ssmi_client: self._setup_ssmi_client(ssmi_client, ssmi_d))
         self.ssmi_connector = reactor.connectTCP(self.host, self.port, factory)
 
-        self.redis = yield TxRedisManager.from_config(
-            self.r_config, self.r_prefix)
-        self.session_manager = SessionManager(
-            self.redis, max_session_length=self.ussd_session_lifetime)
+        self.session_manager = yield SessionManager.from_redis_config(
+            self.r_config, self.r_prefix, self.ussd_session_lifetime)
 
         yield ssmi_d
 
@@ -109,7 +106,6 @@ class TruteqTransport(Transport):
     def teardown_transport(self):
         yield self.ssmi_connector.disconnect()
         yield self.session_manager.stop()
-        yield self.redis._close()
 
     @inlineCallbacks
     def ussd_callback(self, msisdn, ussd_type, phase, message):

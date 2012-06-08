@@ -7,7 +7,6 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.web import xmlrpc
 
 from vumi.message import TransportUserMessage
-from vumi.tests.utils import FakeRedis
 from vumi.utils import http_request
 from vumi.transports.failures import PermanentFailure, TemporaryFailure
 from vumi.transports.opera.tests.test_opera_stubs import FakeXMLRPCService
@@ -26,13 +25,6 @@ class OperaTransportTestCase(TransportTestCase):
         self.transport = yield self.mk_transport()
 
     @inlineCallbacks
-    def tearDown(self):
-        # teardown fake redis, prevents DelayedCall's from leaving the reactor
-        # in a dirty state.
-        yield self.r_server.teardown()
-        yield super(OperaTransportTestCase, self).tearDown()
-
-    @inlineCallbacks
     def mk_transport(self, cls=OperaTransport, **config):
         default_config = {
             'url': 'http://testing.domain',
@@ -41,12 +33,12 @@ class OperaTransportTestCase(TransportTestCase):
             'password': 'password',
             'web_receipt_path': '/receipt.xml',
             'web_receive_path': '/receive.xml',
-            'web_port': self.port
+            'web_port': self.port,
+            'redis': 'FAKE_REDIS',
         }
         default_config.update(config)
-        self.r_server = FakeRedis()
         worker = yield self.get_transport(default_config, cls)
-        worker.r_server = self.r_server
+        self.redis = worker.redis
         returnValue(worker)
 
     def mk_msg(self, **kwargs):
@@ -266,7 +258,7 @@ class OperaTransportTestCase(TransportTestCase):
         # test that we've properly linked the identifier to our
         # internal id of the given message
         self.assertEqual(
-            self.transport.get_message_id_for_identifier('abc123'),
+            (yield self.transport.get_message_id_for_identifier('abc123')),
             msg['message_id'])
 
     @inlineCallbacks

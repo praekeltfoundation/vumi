@@ -8,7 +8,7 @@ from vumi.persist.redis_base import Manager
 
 class TxRedisManager(Manager):
     @classmethod
-    def from_config(cls, config, key_prefix=None):
+    def from_config(cls, config, key_prefix=''):
         """Construct a manager from a dictionary of options.
 
         :param dict config:
