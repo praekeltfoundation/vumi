@@ -1,3 +1,5 @@
+# -*- test-case-name: vumi.persist.tests.test_fake_redis -*-
+
 import fnmatch
 from functools import wraps
 
@@ -14,6 +16,7 @@ def maybe_async(func):
             reactor.callLater(0, d.callback, result)
             return d
         return result
+    wrapper.sync = func
     return wrapper
 
 
@@ -173,9 +176,9 @@ class FakeRedis(object):
 
     @maybe_async
     def smove(self, src, dst, value):
-        result = self.srem(src, value)
+        result = self.srem.sync(self, src, value)
         if result:
-            self.sadd(dst, value)
+            self.sadd.sync(self, dst, value)
         return result
 
     @maybe_async
@@ -234,7 +237,7 @@ class FakeRedis(object):
 
     @maybe_async
     def lpop(self, key):
-        if self.llen(key):
+        if self.llen.sync(self, key):
             return self._data[key].pop(0)
 
     @maybe_async
@@ -244,7 +247,7 @@ class FakeRedis(object):
     @maybe_async
     def rpush(self, key, obj):
         self._data.setdefault(key, []).append(obj)
-        return self.llen(key) - 1
+        return self.llen.sync(self, key) - 1
 
     @maybe_async
     def lrange(self, key, start, end):
