@@ -164,8 +164,17 @@ class TransportTestCase(unittest.TestCase):
     def get_dispatched_failures(self):
         return self._amqp.get_messages('vumi', self.rkey('failures'))
 
+    def wait_for_dispatched_events(self, amount):
+        return self._amqp.wait_messages('vumi', self.rkey('event'), amount)
+
     def wait_for_dispatched_messages(self, amount):
         return self._amqp.wait_messages('vumi', self.rkey('inbound'), amount)
+
+    def wait_for_dispatched_failures(self, amount):
+        return self._amqp.wait_messages('vumi', self.rkey('failures'), amount)
+
+    def wait_for_dispatched_outbound(self, amount):
+        return self._amqp.wait_messages('vumi', self.rkey('outbound'), amount)
 
     def clear_dispatched_messages(self):
         self._amqp.clear_messages('vumi', self.rkey('inbound'))
