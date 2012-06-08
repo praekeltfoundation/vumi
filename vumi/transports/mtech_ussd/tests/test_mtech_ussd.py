@@ -2,7 +2,6 @@ from twisted.internet.defer import inlineCallbacks
 from twisted.trial.unittest import TestCase
 
 from vumi.transports.tests.test_base import TransportTestCase
-from vumi.tests.utils import FakeRedis
 from vumi.utils import http_request_full
 from vumi.message import TransportUserMessage
 from vumi.transports.mtech_ussd import MtechUssdTransport
@@ -26,16 +25,14 @@ class TestMtechUssdTransport(TransportTestCase):
             'web_port': 0,
             'username': 'testuser',
             'password': 'testpass',
+            'redis': 'FAKE_REDIS',
         }
-        self.patch(MtechUssdTransport, 'connect_to_redis',
-                   lambda s: FakeRedis(**s.redis_config))
         self.transport = yield self.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url().rstrip('/')
         self.url = "%s%s" % (self.transport_url, self.config['web_path'])
 
     @inlineCallbacks
     def tearDown(self):
-        yield self.transport.r_server.teardown()
         yield super(TestMtechUssdTransport, self).tearDown()
 
     def make_ussd_request_full(self, session_id, **kwargs):

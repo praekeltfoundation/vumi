@@ -2,12 +2,13 @@
 
 from xml.etree import ElementTree as ET
 
-import redis
-from vumi import log
+from twisted.internet.defer import inlineCallbacks
 
+from vumi import log
 from vumi.message import TransportUserMessage
 from vumi.transports.httprpc import HttpRpcTransport
-from vumi.application.session import SessionManager
+from vumi.persist import SessionManager
+from vumi.persist.txredis_manager import TxRedisManager
 
 
 class MtechUssdTransport(HttpRpcTransport):
@@ -30,21 +31,21 @@ class MtechUssdTransport(HttpRpcTransport):
           specifying USSD menus. This may change in the future.
     """
 
+    @inlineCallbacks
     def setup_transport(self):
         super(MtechUssdTransport, self).setup_transport()
-        self.redis_config = self.config.get('redis', {})
-        self.r_prefix = "mtech_ussd:%s" % self.transport_name
+        r_config = self.config.get('redis', {})
+        r_prefix = "mtech_ussd:%s" % self.transport_name
         session_timeout = int(self.config.get("ussd_session_timeout", 600))
-        self.r_server = self.connect_to_redis()
+        self.redis = yield TxRedisManager.from_config(r_config, r_prefix)
         self.session_manager = SessionManager(
-            self.r_server, self.r_prefix, max_session_length=session_timeout)
+            self.redis, max_session_length=session_timeout)
 
+    @inlineCallbacks
     def teardown_transport(self):
-        self.session_manager.stop()
-        super(MtechUssdTransport, self).teardown_transport()
-
-    def connect_to_redis(self):
-        return redis.Redis(**self.redis_config)
+        yield self.session_manager.stop()
+        yield self.redis._close()
+        yield super(MtechUssdTransport, self).teardown_transport()
 
     def save_session(self, session_id, from_addr, to_addr):
         return self.session_manager.create_session(
@@ -56,6 +57,7 @@ class MtechUssdTransport(HttpRpcTransport):
         log.msg("Outbound message: %r" % (response_body,))
         return self.finish_request(msgid, response_body)
 
+    @inlineCallbacks
     def handle_raw_inbound_message(self, msgid, request):
         request_body = request.content.read()
         log.msg("Inbound message: %r" % (request_body,))
@@ -63,7 +65,8 @@ class MtechUssdTransport(HttpRpcTransport):
             body = ET.fromstring(request_body)
         except:
             log.warning("Error parsing request XML: %s" % (request_body,))
-            return self.finish_request(msgid, "", code=400)
+            yield self.finish_request(msgid, "", code=400)
+            return
 
         # We always get this.
         session_id = body.find('session_id').text
@@ -71,24 +74,26 @@ class MtechUssdTransport(HttpRpcTransport):
         status_elem = body.find('status')
         if status_elem is not None:
             # We have a status message. These are all variations on "cancel".
-            return self.handle_status_message(msgid, session_id)
+            yield self.handle_status_message(msgid, session_id)
+            return
 
         page_id = body.find('page_id').text
 
         # They sometimes send us page_id=0 in the middle of a session.
         if page_id == '0' and body.find('mobile_number') is not None:
             # This is a new session.
-            session = self.save_session(
+            session = yield self.save_session(
                 session_id,
                 from_addr=body.find('mobile_number').text,
                 to_addr=body.find('gate').text)  # ???
             session_event = TransportUserMessage.SESSION_NEW
         else:
             # This is an existing session.
-            session = self.session_manager.load_session(session_id)
+            session = yield self.session_manager.load_session(session_id)
             if 'from_addr' not in session:
                 # We have a missing or broken session.
-                return self.finish_request(msgid, "", code=400)
+                yield self.finish_request(msgid, "", code=400)
+                return
             session_event = TransportUserMessage.SESSION_RESUME
 
         content = body.find('data').text
@@ -112,7 +117,7 @@ class MtechUssdTransport(HttpRpcTransport):
             mur.add_freetext_option()
         response_body = unicode(mur).encode('utf-8')
         log.msg("Outbound message: %r" % (response_body,))
-        self.finish_request(message['in_reply_to'], response_body)
+        return self.finish_request(message['in_reply_to'], response_body)
 
 
 class MtechUssdResponse(object):
