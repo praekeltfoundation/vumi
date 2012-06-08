@@ -7,9 +7,6 @@ import time
 
 from twisted.internet import task
 
-warnings.warn("vumi.application.session is deprecated. Use vumi.session"
-              " instead.", category=DeprecationWarning)
-
 
 class SessionManager(object):
     """A manager for sessions.
