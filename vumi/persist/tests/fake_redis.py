@@ -86,7 +86,7 @@ class FakeRedis(object):
         if old_value is None:
             old_value = 0
         new_value = int(old_value) + increment
-        self.set(key, new_value)
+        self.set.sync(self, key, new_value)
         return new_value
 
     # Hash operations
@@ -282,8 +282,8 @@ class FakeRedis(object):
 
     @maybe_async
     def expire(self, key, seconds):
-        self.persist(key)
-        delayed = reactor.callLater(seconds, self.delete, key)
+        self.persist.sync(self, key)
+        delayed = reactor.callLater(seconds, self.delete.sync, self, key)
         self._expiries[key] = delayed
 
     @maybe_async
