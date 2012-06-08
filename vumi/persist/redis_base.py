@@ -60,6 +60,7 @@ class Manager(object):
     def __init__(self, client, key_prefix):
         self._client = client
         self._key_prefix = key_prefix
+        self._key_separator = ':'  # So we can override if necessary.
 
     @staticmethod
     def calls_manager(manager_attr):
@@ -83,7 +84,7 @@ class Manager(object):
         return redecorate
 
     @classmethod
-    def from_config(cls, config):
+    def from_config(cls, config, key_prefix=None):
         """Construct a manager from a dictionary of options.
 
         :param dict config:
@@ -121,13 +122,14 @@ class Manager(object):
         """
         Generate a key using this manager's key prefix
         """
-        return "%s:%s" % (self._key_prefix, key)
+        return "%s%s%s" % (self._key_prefix, self._key_separator, key)
 
     def _unkey(self, key):
         """
         Strip off manager's key prefix from a key
         """
-        return key.split(self._key_prefix + ":", 1)[-1]
+        return key.split(
+            "%s%s" % (self._key_prefix, self._key_separator), 1)[-1]
 
     def _unkeys(self, keys):
         return [self._unkey(k) for k in keys]
@@ -176,9 +178,8 @@ class Manager(object):
     zadd = RedisCall(['key'], kwarg='valscores')
     zrem = RedisCall(['key', 'value'])
     zcard = RedisCall(['key'])
-    zrange = RedisCall(
-        ['key', 'start', 'stop', 'desc', 'withscores', 'score_cast_func'],
-        defaults=[False, False, float])
+    zrange = RedisCall(['key', 'start', 'stop', 'desc', 'withscores'],
+                       defaults=[False, False])
 
     # List operations
 

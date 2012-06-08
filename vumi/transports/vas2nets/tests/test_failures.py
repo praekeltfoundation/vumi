@@ -7,7 +7,7 @@ from twisted.trial import unittest
 from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
 
 from vumi.message import TransportUserMessage, from_json
-from vumi.tests.utils import get_stubbed_worker, FakeRedis, TestResourceWorker
+from vumi.tests.utils import get_stubbed_worker, TestResourceWorker
 from vumi.tests.fake_amqp import FakeAMQPBroker
 from vumi.transports.failures import (FailureMessage, FailureWorker,
                                       TemporaryFailure)
@@ -46,6 +46,8 @@ class FailureCounter(object):
 
 class Vas2NetsFailureWorkerTestCase(unittest.TestCase):
 
+    timeout = 2
+
     @inlineCallbacks
     def setUp(self):
         self.today = datetime.utcnow().date()
@@ -67,13 +69,13 @@ class Vas2NetsFailureWorkerTestCase(unittest.TestCase):
             'transport_name': 'vas2nets',
             'retry_routing_key': '%(transport_name)s.outbound',
             'failures_routing_key': '%(transport_name)s.failures',
+            'redis': 'FAKE_REDIS',
             }
         self.workers = []
         self.broker = FakeAMQPBroker()
-        self.redis = FakeRedis()
         self.worker = yield self.mk_transport_worker(self.config, self.broker)
         self.fail_worker = yield self.mk_failure_worker(
-            self.fail_config, self.broker, self.redis)
+            self.fail_config, self.broker)
 
     def tearDown(self):
         for worker in self.workers:
@@ -87,12 +89,12 @@ class Vas2NetsFailureWorkerTestCase(unittest.TestCase):
         returnValue(worker)
 
     @inlineCallbacks
-    def mk_failure_worker(self, config, broker, redis):
+    def mk_failure_worker(self, config, broker):
         w = get_stubbed_worker(FailureWorker, config, broker)
         self.workers.append(w)
         w.retry_publisher = yield self.worker.publish_to("foo")
-        w.r_server = redis
         yield w.startWorker()
+        self.redis = w.redis
         returnValue(w)
 
     @inlineCallbacks
@@ -107,14 +109,14 @@ class Vas2NetsFailureWorkerTestCase(unittest.TestCase):
     def get_dispatched(self, rkey):
         return self.broker.get_dispatched('vumi', rkey)
 
+    @inlineCallbacks
     def get_retry_keys(self):
-        timestamps = self.redis.zrange(
-            self.fail_worker._retry_timestamps_key, 0, 0)
+        timestamps = yield self.redis.zrange('retry_timestamps', 0, 0)
         retry_keys = set()
         for timestamp in timestamps:
-            bucket_key = self.fail_worker.r_key("retry_keys." + timestamp)
-            retry_keys.update(self.redis.smembers(bucket_key))
-        return retry_keys
+            bucket_key = "retry_keys." + timestamp
+            retry_keys.update((yield self.redis.smembers(bucket_key)))
+        returnValue(retry_keys)
 
     def mkmsg_out(self, in_reply_to=None):
         return TransportUserMessage(
@@ -165,8 +167,8 @@ class Vas2NetsFailureWorkerTestCase(unittest.TestCase):
             "Vas2NetsTransportError: No SmsId Header" in fmsg['reason'])
 
         yield self.broker.kick_delivery()
-        [key] = self.fail_worker.get_failure_keys()
-        self.assertEqual(set(), self.get_retry_keys())
+        [key] = yield self.fail_worker.get_failure_keys()
+        self.assertEqual(set(), (yield self.get_retry_keys()))
 
     @inlineCallbacks
     def test_send_sms_noconn(self):
@@ -192,5 +194,5 @@ class Vas2NetsFailureWorkerTestCase(unittest.TestCase):
         self.assertTrue(fmsg['reason'].strip().endswith("connection refused"))
 
         yield self.broker.kick_delivery()
-        [key] = self.fail_worker.get_failure_keys()
-        self.assertEqual(set([key]), self.get_retry_keys())
+        [key] = yield self.fail_worker.get_failure_keys()
+        self.assertEqual(set([key]), (yield self.get_retry_keys()))
