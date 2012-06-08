@@ -4,7 +4,7 @@ include LICENSE
 include README.rst
 include Vagrantfile
 include logs/README tmp/pids/README
-include requirements.pip requirements-dev.pip requirements-webapp.pip
+include requirements.pip requirements-dev.pip
 include setup.py
 include tox.ini
 

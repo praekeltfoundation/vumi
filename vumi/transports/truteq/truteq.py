@@ -159,6 +159,12 @@ class TruteqTransport(Transport):
         text = message['content']
         if text is None:
             text = ''
+
+        # Truteq uses \r as a message delimiter in the protocol.
+        # Make sure we're only sending \n for new lines.
+        text = text.replace('\r\n', '\n')
+        text = text.replace('\r', '\n')
+
         ssmi_session_type = self.VUMI_TO_SSMI_EVENT[message['session_event']]
         # Everything we send to ssmi_client needs to be bytestrings.
         data = text.encode(self.SSMI_ENCODING)
