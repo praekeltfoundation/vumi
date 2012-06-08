@@ -7,7 +7,6 @@ from vumi.transports.tests.test_base import TransportTestCase
 from vumi.transports.safaricom import SafaricomTransport
 from vumi.message import TransportUserMessage
 from vumi.utils import http_request
-from vumi.tests.utils import FakeRedis
 
 
 class TestSafaricomTransportTestCase(TransportTestCase):
@@ -21,19 +20,12 @@ class TestSafaricomTransportTestCase(TransportTestCase):
         self.config = {
             'web_port': 0,
             'web_path': '/api/v1/safaricom/ussd/',
-            'redis': {},
+            'redis': 'FAKE_REDIS',
         }
-        self.patch(SafaricomTransport, 'connect_to_redis',
-            lambda s: FakeRedis(**s.redis_config))
         self.transport = yield self.get_transport(self.config)
         self.session_manager = self.transport.session_manager
         self.transport_url = self.transport.get_transport_url(
             self.config['web_path'])
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield super(TestSafaricomTransportTestCase, self).tearDown()
-        self.transport.r_server.teardown()
 
     def mk_full_request(self, **params):
         return http_request('%s?%s' % (self.transport_url,

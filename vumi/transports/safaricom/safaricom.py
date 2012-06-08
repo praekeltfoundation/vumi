@@ -8,7 +8,7 @@ from twisted.internet.defer import inlineCallbacks
 
 from vumi.transports.httprpc import HttpRpcTransport
 from vumi.message import TransportUserMessage
-from vumi.application import SessionManager
+from vumi.persist import SessionManager
 
 
 class SafaricomTransport(HttpRpcTransport):
@@ -40,20 +40,16 @@ class SafaricomTransport(HttpRpcTransport):
         self.r_session_timeout = int(self.config.get("ussd_session_timeout",
                                                                         600))
 
+    @inlineCallbacks
     def setup_transport(self):
         super(SafaricomTransport, self).setup_transport()
-        self.r_server = self.connect_to_redis()
-        self.session_manager = SessionManager(
-            self.r_server, self.r_prefix,
-            max_session_length=self.r_session_timeout)
+        self.session_manager = yield SessionManager.from_redis_config(
+            self.redis_config, self.r_prefix, self.r_session_timeout)
 
+    @inlineCallbacks
     def teardown_transport(self):
-        self.session_manager.stop()
-        super(SafaricomTransport, self).teardown_transport()
-
-    # the connection to redis is a seperate method to allow overriding in tests
-    def connect_to_redis(self):
-        return redis.Redis(**self.redis_config)
+        yield self.session_manager.stop()
+        yield super(SafaricomTransport, self).teardown_transport()
 
     def save_session(self, session_id, **kwargs):
         return self.session_manager.create_session(
@@ -86,7 +82,7 @@ class SafaricomTransport(HttpRpcTransport):
         dest = values['DEST']
         ussd_params = values['USSD_PARAMS']
 
-        session = self.session_manager.load_session(session_id)
+        session = yield self.session_manager.load_session(session_id)
         if session:
             session_event = TransportUserMessage.SESSION_RESUME
             to_addr = session['to_addr']
@@ -94,8 +90,8 @@ class SafaricomTransport(HttpRpcTransport):
         else:
             session_event = TransportUserMessage.SESSION_NEW
             to_addr = '*%s*%s#' % (dest, ussd_params)
-            session = self.save_session(session_id, from_addr=from_addr,
-                to_addr=to_addr)
+            session = yield self.save_session(
+                session_id, from_addr=from_addr, to_addr=to_addr)
             content = ''
 
         yield self.publish_message(
