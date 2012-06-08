@@ -1,12 +1,12 @@
 # -*- test-case-name: vumi.middleware.tests.test_message_storing -*-
 
-import redis
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.middleware.base import BaseMiddleware
 from vumi.middleware.tagger import TaggingMiddleware
 from vumi.persist.message_store import MessageStore
 from vumi.persist.txriak_manager import TxRiakManager
+from vumi.persist.txredis_manager import TxRedisManager
 
 
 class StoringMiddleware(BaseMiddleware):
@@ -37,12 +37,13 @@ class StoringMiddleware(BaseMiddleware):
         a bucket_prefix key.
     """
 
+    @inlineCallbacks
     def setup_middleware(self):
         store_prefix = self.config.get('store_prefix', 'message_store')
         r_config = self.config.get('redis', {})
-        r_server = redis.Redis(**r_config)
+        redis = yield TxRedisManager.from_config(r_config, store_prefix)
         manager = TxRiakManager.from_config(self.config.get('riak'))
-        self.store = MessageStore(manager, r_server, store_prefix)
+        self.store = MessageStore(manager, redis)
 
     @inlineCallbacks
     def handle_inbound(self, message, endpoint):

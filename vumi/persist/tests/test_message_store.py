@@ -7,10 +7,10 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet.error import ConnectionRefusedError
 
 from vumi.message import TransportEvent
-from vumi.tests.utils import FakeRedis
 from vumi.application.tests.test_base import ApplicationTestCase
 from vumi.persist.message_store import MessageStore
 from vumi.persist.txriak_manager import TxRiakManager
+from vumi.persist.txredis_manager import TxRedisManager
 
 
 class TestMessageStore(ApplicationTestCase):
@@ -18,18 +18,19 @@ class TestMessageStore(ApplicationTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self.r_server = FakeRedis()
+        self.redis = yield TxRedisManager.from_config(
+            'FAKE_REDIS', 'teststore')
         self.manager = TxRiakManager.from_config({'bucket_prefix': 'test.'})
         try:
             yield self.manager.purge_all()
         except ConnectionRefusedError, e:
             raise SkipTest(e)
-        self.store = MessageStore(self.manager, self.r_server, 'teststore')
+        self.store = MessageStore(self.manager, self.redis)
 
     @inlineCallbacks
     def tearDown(self):
         yield self.manager.purge_all()
-        self.r_server.teardown()
+        yield self.redis._close()
 
     @inlineCallbacks
     def _maybe_batch(self, tag, by_batch):
@@ -77,11 +78,11 @@ class TestMessageStore(ApplicationTestCase):
         batch = yield self.store.get_batch(batch_id)
         tag_info = yield self.store.get_tag_info(tag1)
         batch_messages = yield self.store.batch_messages(batch_id)
+        batch_status = yield self.store.batch_status(batch_id)
         self.assertEqual(batch_messages, [])
         self.assertEqual(list(batch.tags), [tag1])
         self.assertEqual(tag_info.current_batch.key, batch_id)
-        self.assertEqual(self.store.batch_status(batch_id),
-                         self._batch_status())
+        self.assertEqual(batch_status, self._batch_status())
 
     @inlineCallbacks
     def test_batch_start_with_metadata(self):
@@ -116,12 +117,12 @@ class TestMessageStore(ApplicationTestCase):
         stored_msg = yield self.store.get_outbound_message(msg_id)
         batch_messages = yield self.store.batch_messages(batch_id)
         message_events = yield self.store.message_events(msg_id)
+        batch_status = yield self.store.batch_status(batch_id)
 
         self.assertEqual(stored_msg, msg)
         self.assertEqual(batch_messages, [msg])
         self.assertEqual(message_events, [])
-        self.assertEqual(self.store.batch_status(batch_id),
-                         self._batch_status(sent=1))
+        self.assertEqual(batch_status, self._batch_status(sent=1))
 
     @inlineCallbacks
     def test_add_outbound_message_with_tag(self):
@@ -130,12 +131,12 @@ class TestMessageStore(ApplicationTestCase):
         stored_msg = yield self.store.get_outbound_message(msg_id)
         batch_messages = yield self.store.batch_messages(batch_id)
         message_events = yield self.store.message_events(msg_id)
+        batch_status = yield self.store.batch_status(batch_id)
 
         self.assertEqual(stored_msg, msg)
         self.assertEqual(batch_messages, [msg])
         self.assertEqual(message_events, [])
-        self.assertEqual(self.store.batch_status(batch_id),
-                         self._batch_status(sent=1))
+        self.assertEqual(batch_status, self._batch_status(sent=1))
 
     @inlineCallbacks
     def test_add_ack_event(self):
@@ -147,11 +148,11 @@ class TestMessageStore(ApplicationTestCase):
 
         stored_ack = yield self.store.get_event(ack_id)
         message_events = yield self.store.message_events(msg_id)
+        batch_status = yield self.store.batch_status(batch_id)
 
         self.assertEqual(stored_ack, ack)
         self.assertEqual(message_events, [ack])
-        self.assertEqual(self.store.batch_status(batch_id),
-                         self._batch_status(sent=1, ack=1))
+        self.assertEqual(batch_status, self._batch_status(sent=1, ack=1))
 
     @inlineCallbacks
     def test_add_ack_event_without_batch(self):
@@ -189,8 +190,8 @@ class TestMessageStore(ApplicationTestCase):
         self.assertEqual(message_events, drs)
         dr_counts = dict((status, 1)
                          for status in TransportEvent.DELIVERY_STATUSES)
-        self.assertEqual(self.store.batch_status(batch_id),
-                         self._batch_status(sent=1, **dr_counts))
+        batch_status = yield self.store.batch_status(batch_id)
+        self.assertEqual(batch_status, self._batch_status(sent=1, **dr_counts))
 
     @inlineCallbacks
     def test_add_inbound_message(self):

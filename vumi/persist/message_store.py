@@ -84,7 +84,7 @@ class MessageStore(object):
     reports received) is stored in Redis.
     """
 
-    def __init__(self, manager, r_server, r_prefix):
+    def __init__(self, manager, redis):
         self.manager = manager
         self.batches = manager.proxy(Batch)
         self.outbound_messages = manager.proxy(OutboundMessage)
@@ -92,8 +92,7 @@ class MessageStore(object):
         self.inbound_messages = manager.proxy(InboundMessage)
         self.current_tags = manager.proxy(CurrentTag)
         # for batch status cache
-        self.r_server = r_server
-        self.r_prefix = r_prefix
+        self.redis = redis
 
     @Manager.calls_manager
     def batch_start(self, tags, **metadata):
@@ -111,7 +110,7 @@ class MessageStore(object):
             tag_record.current_batch.set(batch)
             yield tag_record.save()
 
-        self._init_status(batch_id)
+        yield self._init_status(batch_id)
         returnValue(batch_id)
 
     @Manager.calls_manager
@@ -134,7 +133,7 @@ class MessageStore(object):
 
         if batch_id is not None:
             msg_record.batch.key = batch_id
-            self._inc_status(batch_id, 'sent')
+            yield self._inc_status(batch_id, 'sent')
 
         yield msg_record.save()
 
@@ -155,11 +154,11 @@ class MessageStore(object):
             batch_id = msg_record.batch.key
             if batch_id is not None:
                 event_type = event['event_type']
-                self._inc_status(batch_id, event_type)
+                yield self._inc_status(batch_id, event_type)
                 if event_type == 'delivery_report':
-                    self._inc_status(batch_id,
-                                     '%s.%s' % (event_type,
-                                                event['delivery_status']))
+                    yield self._inc_status(
+                        batch_id, '%s.%s' % (event_type,
+                                             event['delivery_status']))
 
     @Manager.calls_manager
     def get_event(self, event_id):
@@ -219,8 +218,9 @@ class MessageStore(object):
     # batch status is stored in Redis as a cache of batch progress
 
     def _batch_key(self, batch_id):
-        return ":".join([self.r_prefix, "batches", "status", batch_id])
+        return ":".join(["batches", "status", batch_id])
 
+    @Manager.calls_manager
     def _init_status(self, batch_id):
         batch_key = self._batch_key(batch_id)
         events = (TransportEvent.EVENT_TYPES.keys() +
@@ -228,14 +228,16 @@ class MessageStore(object):
                    for status in TransportEvent.DELIVERY_STATUSES] +
                   ['sent'])
         initial_status = dict((event, '0') for event in events)
-        self.r_server.hmset(batch_key, initial_status)
+        yield self.redis.hmset(batch_key, initial_status)
 
+    @Manager.calls_manager
     def _inc_status(self, batch_id, event):
         batch_key = self._batch_key(batch_id)
-        self.r_server.hincrby(batch_key, event, 1)
+        yield self.redis.hincrby(batch_key, event, 1)
 
+    @Manager.calls_manager
     def _get_status(self, batch_id):
         batch_key = self._batch_key(batch_id)
-        raw_statuses = self.r_server.hgetall(batch_key)
+        raw_statuses = yield self.redis.hgetall(batch_key)
         statuses = dict((k, int(v)) for k, v in raw_statuses.items())
-        return statuses
+        returnValue(statuses)

@@ -6,7 +6,6 @@ from twisted.internet.error import ConnectionRefusedError
 
 from vumi.middleware.message_storing import StoringMiddleware
 from vumi.middleware.tagger import TaggingMiddleware
-from vumi.tests.utils import FakeRedis
 from vumi.message import TransportUserMessage, TransportEvent
 
 
@@ -22,10 +21,10 @@ class StoringMiddlewareTestCase(TestCase):
             "riak": {
                 "bucket_prefix": "test.",
                 },
+            "redis": "FAKE_REDIS",
             }
         self.mw = StoringMiddleware("dummy_storer", config, dummy_worker)
         self.mw.setup_middleware()
-        self.mw.store.r_server = FakeRedis()
         self.store = self.mw.store
         try:
             yield self.store.manager.purge_all()
