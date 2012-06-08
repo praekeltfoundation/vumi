@@ -4,9 +4,8 @@
 
 import re
 import functools
-import redis
 
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.service import Worker
 from vumi.errors import ConfigError
@@ -14,6 +13,8 @@ from vumi.message import TransportUserMessage, TransportEvent
 from vumi.utils import load_class_by_string, get_first_word
 from vumi.middleware import MiddlewareStack, setup_middlewares_from_config
 from vumi import log
+from vumi.persist import SessionManager
+from vumi.persist.txredis_manager import TxRedisManager
 
 
 class BaseDispatchWorker(Worker):
@@ -351,46 +352,40 @@ class UserGroupingRouter(SimpleDispatchRouter):
         the prefix for Redis keys.
     """
 
-    def __init__(self, dispatcher, config):
-        self.r_config = config.get('redis_config', {})
-        self.r_prefix = config['dispatcher_name']
-        self.r_server = redis.Redis(**self.r_config)
-        self.groups = config['group_mappings']
-        super(UserGroupingRouter, self).__init__(dispatcher, config)
-
     def setup_routing(self):
+        r_config = self.config.get('redis_config', {})
+        r_prefix = self.config['dispatcher_name']
+        # FIXME: The following is a hack to deal with sync-only setup.
+        self._redis_d = TxRedisManager.from_config(
+            r_config, r_prefix).addCallback(self._setup_redis)
+
+        self.groups = self.config['group_mappings']
         self.nr_of_groups = len(self.groups)
 
-    def get_counter(self):
-        counter_key = self.r_key('round-robin')
-        return self.r_server.incr(counter_key) - 1
+    def _setup_redis(self, redis):
+        self.redis = redis
 
+    @inlineCallbacks
     def get_next_group(self):
-        counter = self.get_counter()
+        counter = (yield self.redis.incr('round-robin')) - 1
         current_group_id = counter % self.nr_of_groups
         sorted_groups = sorted(self.groups.items())
         group = sorted_groups[current_group_id]
-        return group
+        returnValue(group)
 
-    def get_group_key(self, group_name):
-        return self.r_key('group', group_name)
-
-    def get_user_key(self, user_id):
-        return self.r_key('user', user_id)
-
-    def r_key(self, *parts):
-        return ':'.join([self.r_prefix] + map(str, parts))
-
+    @inlineCallbacks
     def get_group_for_user(self, user_id):
-        user_key = self.get_user_key(user_id)
-        group = self.r_server.get(user_key)
+        user_key = "user:%s" % (user_id,)
+        group = yield self.redis.get(user_key)
         if not group:
-            group, transport_name = self.get_next_group()
-            self.r_server.set(user_key, group)
-        return group
+            group, transport_name = yield self.get_next_group()
+            yield self.redis.set(user_key, group)
+        returnValue(group)
 
+    @inlineCallbacks
     def dispatch_inbound_message(self, msg):
-        group = self.get_group_for_user(msg.user().encode('utf8'))
+        yield self._redis_d  # Horrible hack to ensure we have it setup.
+        group = yield self.get_group_for_user(msg.user().encode('utf8'))
         app = self.groups[group]
         self.dispatcher.publish_inbound_message(app, msg)
 
@@ -441,7 +436,7 @@ class ContentKeywordRouter(SimpleDispatchRouter):
     def setup_routing(self):
         self.r_config = self.config.get('redis_config', {})
         self.r_prefix = self.config['dispatcher_name']
-        self.r_server = redis.Redis(**self.r_config)
+
         self.rules = []
         for rule in self.config.get('rules', []):
             if 'keyword' not in rule or 'app' not in rule:
@@ -459,11 +454,17 @@ class ContentKeywordRouter(SimpleDispatchRouter):
         self.expire_routing_timeout = int(self.config.get(
             'expire_routing_memory', self.DEFAULT_ROUTING_TIMEOUT))
 
-    def get_message_key(self, message):
-        return self.r_key('message', message)
+        # FIXME: The following is a hack to deal with sync-only setup.
+        self._redis_d = TxRedisManager.from_config(
+            self.r_config, self.r_prefix).addCallback(self._setup_redis)
 
-    def r_key(self, *parts):
-        return ':'.join([self.r_prefix] + map(str, parts))
+    def _setup_redis(self, redis):
+        self.redis = redis
+        self.session_manager = SessionManager(
+            self.redis, self.expire_routing_timeout)
+
+    def get_message_key(self, message):
+        return 'message:%s' % (message,)
 
     def publish_transport(self, name, msg):
         self.dispatcher.publish_outbound_message(name, msg)
@@ -496,9 +497,12 @@ class ContentKeywordRouter(SimpleDispatchRouter):
             else:
                 log.error('Message could not be routed: %r' % (msg,))
 
+    @inlineCallbacks
     def dispatch_inbound_event(self, msg):
+        yield self._redis_d  # Horrible hack to ensure we have it setup.
         message_key = self.get_message_key(msg['user_message_id'])
-        name = self.r_server.get(message_key)
+        session = yield self.session_manager.load_session(message_key)
+        name = session.get('name')
         if not name:
             log.error("No transport_name for return route found in Redis"
                       " while dispatching transport event for message %s"
@@ -510,13 +514,13 @@ class ContentKeywordRouter(SimpleDispatchRouter):
 
     @inlineCallbacks
     def dispatch_outbound_message(self, msg):
+        yield self._redis_d  # Horrible hack to ensure we have it setup.
         transport_name = self.transport_mappings.get(msg['from_addr'])
         if transport_name is not None:
             self.publish_transport(transport_name, msg)
             message_key = self.get_message_key(msg['message_id'])
-            self.r_server.set(message_key, msg['transport_name'])
-            yield self.r_server.expire(message_key,
-                                       self.expire_routing_timeout)
+            yield self.session_manager.create_session(
+                message_key, name=msg['transport_name'])
         else:
             log.error("No transport for %s" % (msg['from_addr'],))
 

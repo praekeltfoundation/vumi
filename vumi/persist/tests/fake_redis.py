@@ -79,13 +79,13 @@ class FakeRedis(object):
 
     # Integer operations
 
-    # The python redis lib combines incr & incrby into incr(key, increment=1)
+    # The python redis lib combines incr & incrby into incr(key, amount=1)
     @maybe_async
-    def incr(self, key, increment=1):
+    def incr(self, key, amount=1):
         old_value = self._data.get(key)
         if old_value is None:
             old_value = 0
-        new_value = int(old_value) + increment
+        new_value = int(old_value) + amount
         self.set.sync(self, key, new_value)
         return new_value
 

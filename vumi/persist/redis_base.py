@@ -148,7 +148,7 @@ class Manager(object):
 
     # Integer operations
 
-    incr = RedisCall(['key', 'increment'], defaults=[1])
+    incr = RedisCall(['key', 'amount'], defaults=[1])
 
     # Hash operations
 
