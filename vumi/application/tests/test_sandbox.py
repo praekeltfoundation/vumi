@@ -11,7 +11,8 @@ from twisted.trial.unittest import TestCase
 
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.application.tests.test_base import ApplicationTestCase
-from vumi.application.sandbox import Sandbox, SandboxCommand, SandboxError
+from vumi.application.sandbox import (Sandbox, SandboxCommand, SandboxError,
+                                      RedisResource)
 from vumi.tests.utils import FakeRedis, LogCatcher
 
 
@@ -147,14 +148,112 @@ class SandboxTestCase(ApplicationTestCase):
             'Done.',
             ])
 
+    # TODO: test process killed if it writes too much.
 
-class TestRedisResource(TestCase):
-    pass
+    # TODO: def consume_user_message(self, msg):
+    # TODO: def close_session(self, msg):
+    # TODO: def consume_ack(self, event):
+    # TODO: def consume_delivery_report(self, event):
+
+
+class DummyAppWorker(object):
+
+    class DummyApi(object):
+        def __init__(self, sandbox_id):
+            self.sandbox_id = sandbox_id
+
+    class DummyProtocol(object):
+        def __init__(self, api):
+            self.api = api
+
+    sandbox_api_cls = DummyApi
+    sandbox_protocol_cls = DummyProtocol
+
+    def create_sandbox_api(self, sandbox_id):
+        return self.sandbox_api_cls(sandbox_id)
+
+    def create_sandbox_protocol(self, api):
+        return self.sandbox_protocol_cls(api)
+
+
+class ResourceTestCaseBase(TestCase):
+
+    app_worker_cls = DummyAppWorker
+    resource_cls = None
+    resource_name = 'test_resource'
+    sandbox_id = 'test_id'
+
+    def setUp(self):
+        self.app_worker = self.app_worker_cls()
+        self.resource = None
+
+    def tearDown(self):
+        if self.resource is not None:
+            self.resource.teardown()
+
+    def create_resource(self, config):
+        resource = self.resource_cls(self.resource_name,
+                                     self.app_worker,
+                                     config)
+        resource.setup()
+        self.resource = resource
+
+    def dispatch_command(self, cmd, **kwargs):
+        if self.resource is None:
+            raise ValueError("Create a resource before"
+                             " calling dispatch_command")
+        msg = SandboxCommand(cmd=cmd, **kwargs)
+        api = self.app_worker.create_sandbox_api(self.sandbox_id)
+        sandbox = self.app_worker.create_sandbox_protocol(api)
+        return self.resource.dispatch_request(api, sandbox, msg)
+
+
+class TestRedisResource(ResourceTestCaseBase):
+
+    resource_cls = RedisResource
+
+    def setUp(self):
+        super(TestRedisResource, self).setUp()
+        self.r_server = FakeRedis()
+        self.create_resource({
+            'r_prefix': 'test',
+            'redis': self.r_server,
+            })
+
+    def tearDown(self):
+        super(TestRedisResource, self).tearDown()
+        self.r_server.teardown()
+
+    def test_handle_set(self):
+        reply = self.dispatch_command('set', key='foo', value='bar')
+        self.assertEqual(reply['success'], True)
+        self.assertEqual(self.r_server.get('test:sandboxes:test_id:foo'),
+                         json.dumps('bar'))
+        self.assertEqual(self.r_server.get('test:count:test_id'), '1')
+
+    def test_handle_get(self):
+        self.r_server.set('test:sandboxes:test_id:foo', json.dumps('bar'))
+        reply = self.dispatch_command('get', key='foo')
+        self.assertEqual(reply['success'], True)
+        self.assertEqual(reply['value'], 'bar')
+
+    def test_handle_delete(self):
+        self.r_server.set('test:sandboxes:test_id:foo', json.dumps('bar'))
+        self.r_server.set('test:count:test_id', '1')
+        reply = self.dispatch_command('delete', key='foo')
+        self.assertEqual(reply['success'], True)
+        self.assertEqual(reply['existed'], True)
+        self.assertEqual(self.r_server.get('test:sandboxes:test_id:foo'), None)
+        self.assertEqual(self.r_server.get('test:count:test_id'), '0')
 
 
 class TestOutboundResource(TestCase):
     pass
 
+    # TODO: complete
+
 
 class TestLoggingResource(TestCase):
     pass
+
+    # TODO: complete
