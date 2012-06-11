@@ -132,13 +132,10 @@ class EsmeSequenceNumberTestCase(unittest.TestCase):
         config = ClientConfig(host="127.0.0.1", port="0",
                               system_id="1234", password="password")
         esme = FakeEsmeTransceiver(config, FakeRedis(), None)
-        self.assertEqual(1, esme.get_seq())
-        esme.get_next_seq()
-        self.assertEqual(2, esme.get_seq())
+        self.assertEqual(1, esme.get_next_seq())
+        self.assertEqual(2, esme.get_next_seq())
         esme.set_seq(4004004004)
-        self.assertEqual(4004004004, esme.get_seq())
-        esme.get_next_seq()
-        self.assertEqual(1, esme.get_seq())
+        self.assertEqual(1, esme.get_next_seq())
 
 
 class EsmeTransceiverTestCase(unittest.TestCase):

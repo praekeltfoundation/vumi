@@ -122,17 +122,15 @@ class EsmeTransceiver(Protocol):
         self.sequence_number_prefix = "vumi_smpp_last_sequence_number#%s" % (
                 self.r_prefix)
         log.msg("r_prefix = %s" % self.r_prefix)
-        self.get_next_seq()
+        # self.get_next_seq()
         self._lose_conn = None
 
     def set_seq(self, seq):
-        self.r_server.set(self.sequence_number_prefix, int(seq))
+        """Set the sequence number to a specific value.
 
-    def get_seq(self):
-        seq = self.r_server.get(self.sequence_number_prefix)
-        if seq is None:
-            return 0
-        return int(seq)
+        NOTE: This should not be used outside of tests.
+        """
+        self.r_server.set(self.sequence_number_prefix, int(seq))
 
     def get_next_seq(self):
         seq = self.r_server.incr(self.sequence_number_prefix)
@@ -169,9 +167,8 @@ class EsmeTransceiver(Protocol):
     def connectionMade(self):
         self.state = 'OPEN'
         log.msg('STATE: %s' % (self.state))
-        pdu = BindTransceiver(self.get_seq(), **self.defaults)
+        pdu = BindTransceiver(self.get_next_seq(), **self.defaults)
         log.msg(pdu.get_obj())
-        self.get_next_seq()
         self.send_pdu(pdu)
         self.schedule_lose_connection('BOUND_TRX')
 
@@ -370,16 +367,15 @@ class EsmeTransceiver(Protocol):
                             'dropping message: %s' % (self.state, kwargs)))
             return 0
         else:
-            sequence_number = self.get_seq()
+            sequence_number = self.get_next_seq()
             pdu = SubmitSM(sequence_number, **dict(self.defaults, **kwargs))
-            self.get_next_seq()
             self.send_pdu(pdu)
             self.push_unacked(sequence_number)
             return sequence_number
 
     def submit_multi(self, dest_address=[], **kwargs):
         if self.state in ['BOUND_TX', 'BOUND_TRX']:
-            sequence_number = self.get_seq()
+            sequence_number = self.get_next_seq()
             pdu = SubmitMulti(sequence_number, **dict(self.defaults, **kwargs))
             for item in dest_address:
                 if isinstance(item, str):
@@ -400,28 +396,25 @@ class EsmeTransceiver(Protocol):
                                 )
                     elif item.get('dest_flag') == 2:
                         pdu.addDistributionList(item.get('dl_name'))
-            self.get_next_seq()
             self.send_pdu(pdu)
             return sequence_number
         return 0
 
     def enquire_link(self, **kwargs):
         if self.state in ['BOUND_TX', 'BOUND_RX', 'BOUND_TRX']:
-            sequence_number = self.get_seq()
+            sequence_number = self.get_next_seq()
             pdu = EnquireLink(sequence_number, **dict(self.defaults, **kwargs))
-            self.get_next_seq()
             self.send_pdu(pdu)
             return sequence_number
         return 0
 
     def query_sm(self, message_id, source_addr, **kwargs):
         if self.state in ['BOUND_TX', 'BOUND_TRX']:
-            sequence_number = self.get_seq()
+            sequence_number = self.get_next_seq()
             pdu = QuerySM(sequence_number,
                     message_id=message_id,
                     source_addr=source_addr,
                     **dict(self.defaults, **kwargs))
-            self.get_next_seq()
             self.send_pdu(pdu)
             return sequence_number
         return 0
@@ -432,9 +425,8 @@ class EsmeTransmitter(EsmeTransceiver):
     def connectionMade(self):
         self.state = 'OPEN'
         log.msg('STATE: %s' % (self.state))
-        pdu = BindTransmitter(self.get_seq(), **self.defaults)
+        pdu = BindTransmitter(self.get_next_seq(), **self.defaults)
         log.msg(pdu.get_obj())
-        self.get_next_seq()
         self.send_pdu(pdu)
         self.schedule_lose_connection('BOUND_TX')
 
@@ -450,9 +442,8 @@ class EsmeReceiver(EsmeTransceiver):
     def connectionMade(self):
         self.state = 'OPEN'
         log.msg('STATE: %s' % (self.state))
-        pdu = BindReceiver(self.get_seq(), **self.defaults)
+        pdu = BindReceiver(self.get_next_seq(), **self.defaults)
         log.msg(pdu.get_obj())
-        self.get_next_seq()
         self.send_pdu(pdu)
         self.schedule_lose_connection('BOUND_RX')
 

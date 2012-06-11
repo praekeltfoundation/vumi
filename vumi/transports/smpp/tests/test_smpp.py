@@ -169,20 +169,19 @@ class FakeRedisRespTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_match_resp(self):
+        # Sequence numbers are hardcoded, assuming we start fresh from 0.
         message1 = self.mkmsg_out(
             message_id='444',
             content="hello world",
             to_addr="1111111111")
-        sequence_num1 = self.esme.get_seq()
-        response1 = SubmitSMResp(sequence_num1, "3rd_party_id_1")
+        response1 = SubmitSMResp(1, "3rd_party_id_1")
         yield self.transport._process_message(message1)
 
         message2 = self.mkmsg_out(
             message_id='445',
             content="hello world",
             to_addr="1111111111")
-        sequence_num2 = self.esme.get_seq()
-        response2 = SubmitSMResp(sequence_num2, "3rd_party_id_2")
+        response2 = SubmitSMResp(2, "3rd_party_id_2")
         yield self.transport._process_message(message2)
 
         # respond out of order - just to keep things interesting
@@ -198,8 +197,7 @@ class FakeRedisRespTestCase(TransportTestCase):
             message_id='446',
             content="hello world",
             to_addr="1111111111")
-        sequence_num3 = self.esme.get_seq()
-        response3 = SubmitSMResp(sequence_num3, "3rd_party_id_3",
+        response3 = SubmitSMResp(3, "3rd_party_id_3",
                 command_status="ESME_RSUBMITFAIL")
         self.transport._process_message(message3)
         self.esme.handle_data(response3.get_bin())
@@ -214,8 +212,7 @@ class FakeRedisRespTestCase(TransportTestCase):
             message_id=447,
             content="hello world",
             to_addr="1111111111")
-        sequence_num4 = self.esme.get_seq()
-        response4 = SubmitSMResp(sequence_num4, "3rd_party_id_4",
+        response4 = SubmitSMResp(4, "3rd_party_id_4",
                 command_status="ESME_RTHROTTLED")
         self.transport._process_message(message4)
         self.esme.handle_data(response4.get_bin())
