@@ -1,5 +1,6 @@
 """Tests for vumi.application.sandbox."""
 
+import os
 import sys
 import json
 import pkg_resources
@@ -19,10 +20,12 @@ class SandboxTestCase(ApplicationTestCase):
     application_class = Sandbox
 
     def setup_app(self, executable, args, extra_config=None):
+        tmp_path = self.mktemp()
+        os.mkdir(tmp_path)
         config = {
             'executable': executable,
             'args': args,
-            'path': '/tmp',  # TODO: somewhere temporary for test
+            'path': tmp_path,
             'timeout': '10',
             }
         if extra_config is not None:
