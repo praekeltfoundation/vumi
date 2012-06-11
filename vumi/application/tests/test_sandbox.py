@@ -1,10 +1,12 @@
 """Tests for vumi.application.sandbox."""
 
+import sys
 import json
 import pkg_resources
 
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet.error import ProcessTerminated
+from twisted.trial.unittest import TestCase
 
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.application.tests.test_base import ApplicationTestCase
@@ -28,7 +30,7 @@ class SandboxTestCase(ApplicationTestCase):
         return self.get_application(config)
 
     @inlineCallbacks
-    def test_echo_from_sandbox(self):
+    def test_bad_command_from_sandbox(self):
         app = yield self.setup_app('/bin/echo', ['-n', '{}'])
         event = TransportEvent(event_type='ack', user_message_id=1,
                                sent_message_id=1, sandbox_id='sandbox1')
@@ -46,6 +48,18 @@ class SandboxTestCase(ApplicationTestCase):
             self.assertTrue('process ended by signal' in str(kill_err.value))
         else:
             self.assertEqual(status, 0)
+
+    @inlineCallbacks
+    def test_stderr_from_sandbox(self):
+        app = yield self.setup_app(sys.executable,
+                                   ['-c',
+                                    "import sys; sys.stderr.write('err\\n')"])
+        event = TransportEvent(event_type='ack', user_message_id=1,
+                               sent_message_id=1, sandbox_id='sandbox1')
+        status = yield app.process_event_in_sandbox(event)
+        self.assertEqual(status, 0)
+        [sandbox_err] = self.flushLoggedErrors(SandboxError)
+        self.assertEqual(str(sandbox_err.value).split(' [')[0], "err")
 
     @inlineCallbacks
     def test_resource_setup(self):
@@ -73,7 +87,7 @@ class SandboxTestCase(ApplicationTestCase):
                          json.dumps({'a': 1, 'b': 2}))
 
     @inlineCallbacks
-    def test_reply_to(self):
+    def test_outbound_reply_from_sandbox(self):
         msg = TransportUserMessage(to_addr="1", from_addr="2",
                                    transport_name="test",
                                    transport_type="sphex",
@@ -130,4 +144,14 @@ class SandboxTestCase(ApplicationTestCase):
             'Done.',
             ])
 
-    # TODO: test error logging
+
+class TestRedisResource(TestCase):
+    pass
+
+
+class TestOutboundResource(TestCase):
+    pass
+
+
+class TestLoggingResource(TestCase):
+    pass
