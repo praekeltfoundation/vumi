@@ -532,6 +532,20 @@ class RedirectOutboundRouter(BaseDispatchRouter):
     def setup_routing(self):
         self.mappings = self.config.get('redirect_outbound', {})
 
+    def dispatch_inbound_event(self, event):
+        mappings_for_event = [(app_name, transport_name)
+                                for app_name, transport_name
+                                in self.mappings.items()
+                                if transport_name == event['transport_name']]
+        if mappings_for_event:
+            for app_name, transport_name in mappings_for_event:
+                event_clone = TransportEvent(**event.payload)
+                event_clone['transport_name'] = app_name
+                self.dispatcher.publish_inbound_event(app_name, event_clone)
+        else:
+            raise ConfigError('No exposed available for %s\'s event' % (
+                transport_name,))
+
     def dispatch_outbound_message(self, msg):
         transport_name = msg['transport_name']
         redirect_to = self.mappings.get(transport_name)

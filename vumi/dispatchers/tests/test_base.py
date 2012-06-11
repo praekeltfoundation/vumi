@@ -4,7 +4,6 @@ from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.message import TransportUserMessage, TransportEvent
-from vumi.errors import ConfigError
 from vumi.dispatchers.base import (BaseDispatchWorker, ToAddrRouter,
                                    FromAddrMultiplexRouter)
 from vumi.middleware import MiddlewareStack
@@ -778,6 +777,7 @@ class TestRedirectOutboundRouter(DispatcherTestCase):
 
     dispatcher_class = BaseDispatchWorker
     transport_name = 'test_transport'
+    timeout = 1
 
     @inlineCallbacks
     def setUp(self):
@@ -810,6 +810,15 @@ class TestRedirectOutboundRouter(DispatcherTestCase):
 
         self.assertEqual(outbound1, msgt1)
         self.assertEqual(outbound2, msgt2)
+
+    @inlineCallbacks
+    def test_inbound_event(self):
+        ack = self.mkmsg_ack(transport_name='transport1')
+        yield self.dispatch(ack, transport_name='transport1',
+                                    direction='event')
+        [event] = self.get_dispatched_messages('app1',
+            direction='event')
+        self.assertEqual(event['transport_name'], 'app1')
 
     @inlineCallbacks
     def test_error_logging_for_bad_app(self):
