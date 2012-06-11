@@ -5,6 +5,7 @@
 import re
 import functools
 import redis
+from collections import defaultdict
 
 from twisted.internet.defer import inlineCallbacks
 
@@ -531,35 +532,33 @@ class RedirectOutboundRouter(BaseDispatchRouter):
 
     def setup_routing(self):
         self.mappings = self.config.get('redirect_outbound', {})
-
-    def filter_mappings(self, filter_on_transport_name):
-        return [(app_name, transport_name)
-                    for app_name, transport_name
-                    in self.mappings.items()
-                    if transport_name == filter_on_transport_name]
+        self.inverse_mappings = defaultdict(list)
+        for app_name, transport_name in self.mappings.items():
+            self.inverse_mappings[transport_name].append(app_name)
 
     def dispatch_inbound_event(self, event):
-        mappings_for_event = self.filter_mappings(event['transport_name'])
-        if mappings_for_event:
-            for app_name, transport_name in mappings_for_event:
-                event_copy = event.copy()
-                event_copy['transport_name'] = app_name
-                self.dispatcher.publish_inbound_event(app_name, event_copy)
-        else:
+        transport_name = event['transport_name']
+        mappings_for_event = self.inverse_mappings[transport_name]
+        if not mappings_for_event:
             raise ConfigError("No exposed name available for %s's event" % (
                 transport_name,))
 
+        for app_name in mappings_for_event:
+            event_copy = event.copy()
+            event_copy['transport_name'] = app_name
+            self.dispatcher.publish_inbound_event(app_name, event_copy)
+
     def dispatch_inbound_message(self, msg):
-        mappings_for_message = self.filter_mappings(msg['transport_name'])
-        if mappings_for_message:
-            for app_name, transport_name in mappings_for_message:
-                msg_copy = msg.copy()
-                msg_copy['transport_name'] = app_name
-                self.dispatcher.publish_inbound_message(app_name, msg_copy)
-        else:
+        transport_name = msg['transport_name']
+        mappings_for_message = self.inverse_mappings[transport_name]
+        if not mappings_for_message:
             raise ConfigError("No exposed name available for %s's message" % (
                 transport_name,))
 
+        for app_name in mappings_for_message:
+            msg_copy = msg.copy()
+            msg_copy['transport_name'] = app_name
+            self.dispatcher.publish_inbound_message(app_name, msg_copy)
 
     def dispatch_outbound_message(self, msg):
         transport_name = msg['transport_name']
