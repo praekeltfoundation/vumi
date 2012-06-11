@@ -777,7 +777,6 @@ class TestRedirectOutboundRouter(DispatcherTestCase):
 
     dispatcher_class = BaseDispatchWorker
     transport_name = 'test_transport'
-    timeout = 1
 
     @inlineCallbacks
     def setUp(self):
