@@ -543,7 +543,7 @@ class RedirectOutboundRouter(BaseDispatchRouter):
                 event_clone['transport_name'] = app_name
                 self.dispatcher.publish_inbound_event(app_name, event_clone)
         else:
-            raise ConfigError('No exposed available for %s\'s event' % (
+            raise ConfigError("No exposed name available for %s's event" % (
                 transport_name,))
 
     def dispatch_outbound_message(self, msg):
