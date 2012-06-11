@@ -266,7 +266,7 @@ class SandboxResource(object):
 
     def reply(self, command, **kwargs):
         return SandboxCommand(cmd=command['cmd'], reply=True,
-                              cmd_id=command['cmd_id'])
+                              cmd_id=command['cmd_id'], **kwargs)
 
     def log_error(self, error_msg):
         log.error(Failure(SandboxError(error_msg)))
@@ -354,6 +354,7 @@ class LoggingResource(SandboxResource):
 
     def handle_info(self, api, sandbox, command):
         log.info(command['msg'])
+        return self.reply(command, success=True)
 
 
 class SandboxApi(object):
@@ -390,6 +391,7 @@ class SandboxApi(object):
                                                 self.fallback_resource)
         reply = resource.dispatch_request(self, sandbox, command)
         if reply is not None:
+            reply['cmd'] = '%s%s%s' % (resource_name, sep, rest)
             self.sandbox_reply(sandbox, reply)
 
 

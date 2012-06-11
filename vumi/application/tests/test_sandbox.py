@@ -115,7 +115,9 @@ class SandboxTestCase(ApplicationTestCase):
 
         with LogCatcher() as lc:
             status = yield app.process_message_in_sandbox(msg)
-            msgs = [log['message'][0] for log in lc.logs]
+            failures = [log['failure'].value for log in lc.errors]
+            msgs = [log['message'][0] for log in lc.logs if log['message']]
+        self.assertEqual(failures, [])
         self.assertEqual(status, 0)
         self.assertEqual(msgs, [
             'Loading sandboxed code ...',
@@ -124,6 +126,7 @@ class SandboxTestCase(ApplicationTestCase):
             'Sandbox running ...',
             'From command: initialize',
             'From command: inbound-message',
+            'Log successful: true',
             'Done.',
             ])
 

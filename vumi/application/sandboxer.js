@@ -28,7 +28,7 @@ var SandboxApi = function () {
         //   completes.
         // * callbacks can generate more requests.
         self.populate_command(command, msg);
-        if (callback !== undefined) {
+        if (callback) {
             msg._callback = callback;
         }
         self.waiting_requests.push(msg);
@@ -40,8 +40,8 @@ var SandboxApi = function () {
         return requests;
     }
 
-    self.log_info = function (msg) {
-        self.request('log.info', {'msg': msg});
+    self.log_info = function (msg, callback) {
+        self.request('log.info', {'msg': msg}, callback);
     }
 
     self.done = function () {
@@ -122,6 +122,9 @@ var SandboxRunner = function (api, ctx) {
         parts = data.split("\n");
         parts[0] = self.chunk + parts[0];
         for (i = 0; i < parts.length - 1; i++) {
+            if (!parts[i]) {
+                continue;
+            }
             msg = JSON.parse(parts[i]);
             if (!msg.reply) {
                 self.emitter.emit('command', msg);
@@ -130,7 +133,7 @@ var SandboxRunner = function (api, ctx) {
                 self.emitter.emit('reply', msg);
             }
         }
-        self.chunk = parts[-1];
+        self.chunk = parts[parts.length - 1];
     }
 
     self.run = function () {
@@ -144,7 +147,7 @@ var SandboxRunner = function (api, ctx) {
 
 
 var api = new SandboxApi();
-var ctx = {'console': require('console')};
+var ctx = {};
 var runner = new SandboxRunner(api, ctx);
 
 runner.log("Loading sandboxed code ...");

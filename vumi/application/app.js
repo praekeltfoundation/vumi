@@ -19,6 +19,8 @@ function on_initialize(api, command) {
 }
 
 function on_inbound_message(api, command) {
-    api.log_info("From command: inbound-message");
-    api.done();
+    api.log_info("From command: inbound-message", function (reply) {
+        api.log_info("Log successful: " + reply.success);
+        api.done();
+    });
 }
