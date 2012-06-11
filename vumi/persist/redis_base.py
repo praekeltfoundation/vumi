@@ -60,7 +60,7 @@ class Manager(object):
     def __init__(self, client, key_prefix):
         self._client = client
         self._key_prefix = key_prefix
-        self._key_separator = ':'  # So we can override if necessary.
+        self._key_separator = '#'  # So we can override if necessary.
 
     @staticmethod
     def calls_manager(manager_attr):
