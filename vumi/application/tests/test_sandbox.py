@@ -119,7 +119,6 @@ class SandboxTestCase(ApplicationTestCase):
         self.assertEqual(status, 0)
         self.assertEqual(msgs, [
             'Loading sandboxed code ...',
-            'Creating sandbox ...',
             'Starting sandbox ...',
             'From init!',
             'Sandbox running ...',
