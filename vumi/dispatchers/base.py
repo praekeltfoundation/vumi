@@ -536,29 +536,24 @@ class RedirectOutboundRouter(BaseDispatchRouter):
         for app_name, transport_name in self.mappings.items():
             self.inverse_mappings[transport_name].append(app_name)
 
-    def dispatch_inbound_event(self, event):
-        transport_name = event['transport_name']
-        mappings_for_event = self.inverse_mappings[transport_name]
-        if not mappings_for_event:
-            raise ConfigError("No exposed name available for %s's event" % (
-                transport_name,))
-
-        for app_name in mappings_for_event:
-            event_copy = event.copy()
-            event_copy['transport_name'] = app_name
-            self.dispatcher.publish_inbound_event(app_name, event_copy)
-
-    def dispatch_inbound_message(self, msg):
-        transport_name = msg['transport_name']
+    def _dispatch_inbound(self, publish_function, vumi_message):
+        transport_name = vumi_message['transport_name']
         mappings_for_message = self.inverse_mappings[transport_name]
         if not mappings_for_message:
-            raise ConfigError("No exposed name available for %s's message" % (
-                transport_name,))
+            raise ConfigError(
+                "No exposed name available for %s's inbound message: %s" % (
+                transport_name, vumi_message))
 
         for app_name in mappings_for_message:
-            msg_copy = msg.copy()
+            msg_copy = vumi_message.copy()
             msg_copy['transport_name'] = app_name
-            self.dispatcher.publish_inbound_message(app_name, msg_copy)
+            publish_function(app_name, msg_copy)
+
+    def dispatch_inbound_event(self, event):
+        self._dispatch_inbound(self.dispatcher.publish_inbound_event, event)
+
+    def dispatch_inbound_message(self, msg):
+        self._dispatch_inbound(self.dispatcher.publish_inbound_message, msg)
 
     def dispatch_outbound_message(self, msg):
         transport_name = msg['transport_name']
