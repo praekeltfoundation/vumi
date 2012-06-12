@@ -8,7 +8,7 @@ from collections import defaultdict
 
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet.error import ProcessTerminated
-from twisted.trial.unittest import TestCase
+from twisted.trial.unittest import TestCase, SkipTest
 
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.application.tests.test_base import ApplicationTestCase
@@ -18,7 +18,7 @@ from vumi.application.sandbox import (Sandbox, SandboxCommand, SandboxError,
 from vumi.tests.utils import FakeRedis, LogCatcher
 
 
-class SandboxTestCase(ApplicationTestCase):
+class SandboxTestCaseBase(ApplicationTestCase):
 
     application_class = Sandbox
 
@@ -35,15 +35,22 @@ class SandboxTestCase(ApplicationTestCase):
             config.update(extra_config)
         return self.get_application(config)
 
+
+class SandboxTestCase(SandboxTestCaseBase):
+
+    def setup_app(self, python_code, extra_config=None):
+        return super(SandboxTestCase, self).setup_app(
+            sys.executable, ['-c', python_code],
+            extra_config=extra_config)
+
     @inlineCallbacks
     def test_bad_command_from_sandbox(self):
-        app = yield self.setup_app(sys.executable,
-                                   ['-c',
-                                   "import sys, time\n"
-                                   "sys.stdout.write('{}\\n')\n"
-                                   "sys.stdout.flush()\n"
-                                   "time.sleep(5)\n"
-                                   ])
+        app = yield self.setup_app(
+            "import sys, time\n"
+            "sys.stdout.write('{}\\n')\n"
+            "sys.stdout.flush()\n"
+            "time.sleep(5)\n"
+            )
         event = TransportEvent(event_type='ack', user_message_id=1,
                                sent_message_id=1, sandbox_id='sandbox1')
         status = yield app.process_event_in_sandbox(event)
@@ -57,9 +64,10 @@ class SandboxTestCase(ApplicationTestCase):
 
     @inlineCallbacks
     def test_stderr_from_sandbox(self):
-        app = yield self.setup_app(sys.executable,
-                                   ['-c',
-                                    "import sys; sys.stderr.write('err\\n')"])
+        app = yield self.setup_app(
+            "import sys\n"
+            "sys.stderr.write('err\\n')\n"
+            )
         event = TransportEvent(event_type='ack', user_message_id=1,
                                sent_message_id=1, sandbox_id='sandbox1')
         status = yield app.process_event_in_sandbox(event)
@@ -72,15 +80,16 @@ class SandboxTestCase(ApplicationTestCase):
         r_server = FakeRedis()
         json_data = SandboxCommand(cmd='db.set', key='foo',
                                    value={'a': 1, 'b': 2}).to_json()
-        app = yield self.setup_app('/bin/echo', [json_data], {
-            'sandbox': {
+        app = yield self.setup_app(
+            "import sys\n"
+            "sys.stdout.write(%r)\n" % json_data,
+            {'sandbox': {
                 'db': {
                     'cls': 'vumi.application.sandbox.RedisResource',
                     'redis': r_server,
                     'r_prefix': 'test',
-                    }
-                }
-            })
+                },
+            }})
         event = TransportEvent(event_type='ack', user_message_id=1,
                                sent_message_id=1, sandbox_id='sandbox1')
         status = yield app.process_event_in_sandbox(event)
@@ -101,18 +110,61 @@ class SandboxTestCase(ApplicationTestCase):
         json_data = SandboxCommand(cmd='outbound.reply_to',
                                    content='Hooray!',
                                    in_reply_to=msg['message_id']).to_json()
-        app = yield self.setup_app('/bin/echo', [json_data], {
-            'sandbox': {
-                'outbound': {
-                    'cls': 'vumi.application.sandbox.OutboundResource',
-                    }
-                }
-            })
+        app = yield self.setup_app(
+            "import sys\n"
+            "sys.stdout.write(%r)\n" % json_data,
+            {'sandbox': {
+                    'outbound': {
+                        'cls': 'vumi.application.sandbox.OutboundResource',
+                    },
+             }})
         status = yield app.process_message_in_sandbox(msg)
         self.assertEqual(status, 0)
         [reply] = self.get_dispatched_messages()
         self.assertEqual(reply['content'], "Hooray!")
         self.assertEqual(reply['session_event'], None)
+
+    # TODO: test process killed if it writes too much.
+
+    # TODO: def consume_user_message(self, msg):
+    # TODO: def close_session(self, msg):
+    # TODO: def consume_ack(self, event):
+    # TODO: def consume_delivery_report(self, event):
+
+
+class NodeJsSandboxTestCase(SandboxTestCaseBase):
+
+    possible_nodejs_executables = [
+        '/usr/local/bin/node',
+        '/usr/bin/node',
+        ]
+
+    def setUp(self):
+        super(NodeJsSandboxTestCase, self).setUp()
+        for path in self.possible_nodejs_executables:
+            if os.path.isfile(path):
+                self.nodejs_executable = path
+                break
+        else:
+            raise SkipTest("No node.js executable found.")
+        self.sandboxer_js = pkg_resources.resource_filename('vumi.application',
+                                                            'sandboxer.js')
+
+    def setup_app(self, javascript_code, extra_config=None):
+        extra_config = extra_config or {}
+        sandbox_config = extra_config.setdefault('sandbox', {})
+        sandbox_config.update({
+                'log': {
+                    'cls': 'vumi.application.sandbox.LoggingResource',
+                    },
+                 'js': {
+                    'cls': 'vumi.application.sandbox.JsSandboxResource',
+                    'javascript': javascript_code,
+                    },
+            })
+        return super(NodeJsSandboxTestCase, self).setup_app(
+            self.nodejs_executable, [self.sandboxer_js],
+            extra_config=extra_config)
 
     @inlineCallbacks
     def test_js_sandboxer(self):
@@ -120,23 +172,10 @@ class SandboxTestCase(ApplicationTestCase):
                                    transport_name="test",
                                    transport_type="sphex",
                                    sandbox_id='sandbox1')
-        sandboxer_js = pkg_resources.resource_filename('vumi.application',
-                                                       'sandboxer.js')
         app_js = pkg_resources.resource_filename('vumi.application',
                                                  'app.js')
         javascript = file(app_js).read()
-        app = yield self.setup_app('/usr/local/bin/node',
-                                   [sandboxer_js, app_js], {
-            'sandbox': {
-                'log': {
-                    'cls': 'vumi.application.sandbox.LoggingResource',
-                    },
-                 'js': {
-                    'cls': 'vumi.application.sandbox.JsSandboxResource',
-                    'javascript': javascript,
-                    },
-                }
-            })
+        app = yield self.setup_app(javascript)
 
         with LogCatcher() as lc:
             status = yield app.process_message_in_sandbox(msg)
@@ -152,13 +191,6 @@ class SandboxTestCase(ApplicationTestCase):
             'Log successful: true',
             'Done.',
             ])
-
-    # TODO: test process killed if it writes too much.
-
-    # TODO: def consume_user_message(self, msg):
-    # TODO: def close_session(self, msg):
-    # TODO: def consume_ack(self, event):
-    # TODO: def consume_delivery_report(self, event):
 
 
 class DummyAppWorker(object):
