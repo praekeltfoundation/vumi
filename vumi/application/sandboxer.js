@@ -62,10 +62,10 @@ var SandboxRunner = function (api, ctx) {
     self.emitter.on('command', function (command) {
         var handler_name = "on_" + command.cmd.replace('.', '_').replace('-', '_');
         var handler = ctx[handler_name];
-        if (handler === undefined) {
+        if (!handler) {
             handler = ctx['on_unknown'];
         }
-        if (handler !== undefined) {
+        if (handler) {
             handler.call(self.ctx, self.api, command);
             self.process_requests(api.pop_requests());
         }
@@ -73,13 +73,9 @@ var SandboxRunner = function (api, ctx) {
 
     self.emitter.on('reply', function (reply) {
         var handler = self.pending_requests[reply.msg_id];
-        if (handler === undefined) {
-            return;
-        }
-        if (handler.callback) {
+        if (handler && handler.callback) {
             handler.callback.call(ctx, reply);
             self.process_requests(api.pop_requests());
-            return;
         }
     });
 
