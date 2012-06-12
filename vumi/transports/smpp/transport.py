@@ -60,6 +60,12 @@ class SmppTransport(Transport):
     :type dest_addr_npi:
     :param dest_addr_npi:
         Destination NPI (number plan identifier). Default 1 (ISDN/E.164/E.163).
+    :type source_addr_ton:
+    :param source_addr_ton:
+        Source TON (type of number). Default is 0 (Unknown)
+    :type source_addr_npi:
+    :param source_addr_npi:
+        Source NPI (number plan identifier). Default is 0 (Unknown)
     :type registered_delivery:
     :param registered_delivery:
         Whether to ask for delivery reports. Default 1 (request delivery
