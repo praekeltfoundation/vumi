@@ -217,6 +217,13 @@ class TestModelOnTxRiak(TestCase):
         self.assertEqual(d2.contact_info['telephone'], u"+2755")
         self.assertEqual(d2.contact_info['honorific'], u"BDFL")
 
+    def test_dynamic_field_init(self):
+        dynamic_model = self.manager.proxy(DynamicModel)
+        contact_info = {'cellphone': u'+27123',
+                        'telephone': u'+2755'}
+        d1 = dynamic_model("foo", a=u"ab", contact_info=contact_info)
+        self.assertEqual(d1.contact_info.copy(), contact_info)
+
     def test_dynamic_field_keys(self):
         d1 = self._create_dynamic_instance(self.manager.proxy(DynamicModel))
         keys = d1.contact_info.keys()

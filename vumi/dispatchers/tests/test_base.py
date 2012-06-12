@@ -819,6 +819,26 @@ class TestRedirectOutboundRouter(DispatcherTestCase):
         self.assertEqual(outbound2, msgt2)
 
     @inlineCallbacks
+    def test_inbound_event(self):
+        ack = self.mkmsg_ack(transport_name='transport1')
+        yield self.dispatch(ack, transport_name='transport1',
+                                    direction='event')
+        [event] = self.get_dispatched_messages('app1',
+            direction='event')
+        self.assertEqual(event['transport_name'], 'app1')
+        self.assertEqual(event['event_id'], ack['event_id'])
+
+    @inlineCallbacks
+    def test_inbound_message(self):
+        msg = self.mkmsg_in(transport_name='transport1')
+        yield self.dispatch(msg, transport_name='transport1',
+                                    direction='inbound')
+        [app_msg] = self.get_dispatched_messages('app1',
+            direction='inbound')
+        self.assertEqual(app_msg['transport_name'], 'app1')
+        self.assertEqual(app_msg['message_id'], msg['message_id'])
+
+    @inlineCallbacks
     def test_error_logging_for_bad_app(self):
         msgt1 = self.mkmsg_out(transport_name='app3')  # Does not exist
         with LogCatcher() as log:
