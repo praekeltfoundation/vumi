@@ -46,6 +46,11 @@ var SandboxApi = function () {
     self.done = function () {
         self.request('log.info', {'_last': true, 'msg': "Done."});
     }
+
+    // handlers:
+    // * on_unknown_command is the default message handler
+    // * other handlers are looked up based on the command name
+    self.on_unknown_command = function(command) {}
 }
 
 var SandboxRunner = function (api, ctx) {
@@ -54,6 +59,7 @@ var SandboxRunner = function (api, ctx) {
 
     self.api = api;
     self.ctx = ctx;
+    self.ctx.api = api;
     self.emitter = new events.EventEmitter();
     self.chunk = "";
     self.pending_requests = {};
@@ -61,12 +67,12 @@ var SandboxRunner = function (api, ctx) {
 
     self.emitter.on('command', function (command) {
         var handler_name = "on_" + command.cmd.replace('.', '_').replace('-', '_');
-        var handler = ctx[handler_name];
+        var handler = api[handler_name];
         if (!handler) {
-            handler = ctx['on_unknown'];
+            handler = api.on_unknown_command;
         }
         if (handler) {
-            handler.call(self.ctx, self.api, command);
+            handler.call(self.api, command);
             self.process_requests(api.pop_requests());
         }
     });
@@ -74,7 +80,7 @@ var SandboxRunner = function (api, ctx) {
     self.emitter.on('reply', function (reply) {
         var handler = self.pending_requests[reply.msg_id];
         if (handler && handler.callback) {
-            handler.callback.call(ctx, reply);
+            handler.callback.call(self.api, reply);
             self.process_requests(api.pop_requests());
         }
     });
@@ -88,7 +94,7 @@ var SandboxRunner = function (api, ctx) {
         var loaded_module = vm.createScript(command['javascript']);
         loaded_module.runInNewContext(self.ctx);
         self.loaded = true;
-        self.ctx.on_init.call(self.ctx, self.api);
+        // process any requests created when the app module was loaded.
         self.process_requests(api.pop_requests());
     }
 

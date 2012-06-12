@@ -1,22 +1,16 @@
 // Demonstration App
 
-function on_init(api) {
-    // Called when sandbox is initialized.
-    // Guaranteed to be called before any messages are received.
-    api.log_info("From init!");
-}
+api.log_info("From init!");
 
-function on_unknown(api, command) {
+api.on_unknown_command = function(command) {
     // Called for any command that doesn't have an explicit
     // command handler.
-    api.log_info("From unknown: " + command.cmd);
+    this.log_info("From unknown: " + command.cmd);
 }
 
-// Command handlers
-
-function on_inbound_message(api, command) {
-    api.log_info("From command: inbound-message", function (reply) {
-        api.log_info("Log successful: " + reply.success);
-        api.done();
+api.on_inbound_message = function(command) {
+    this.log_info("From command: inbound-message", function (reply) {
+        this.log_info("Log successful: " + reply.success);
+        this.done();
     });
 }
