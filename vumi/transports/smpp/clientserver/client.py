@@ -1,6 +1,5 @@
 # -*- test-case-name: vumi.transports.smpp.clientserver.tests.test_client -*-
 
-import abc
 import json
 import uuid
 
@@ -8,6 +7,7 @@ from twisted.python import log
 from twisted.internet import reactor
 from twisted.internet.protocol import Protocol, ReconnectingClientFactory
 from twisted.internet.task import LoopingCall
+from twisted.internet.defer import inlineCallbacks, returnValue
 
 import binascii
 from smpp.pdu import unpack_pdu
@@ -27,120 +27,69 @@ from smpp.pdu_inspector import (MultipartMessage,
                                 )
 
 
-class KeyValueBase(object):
-    """
-    This is an API sepecification to ensure that any Key Value store adheres
-    to the portion of the redis API used by the SMPP client
-    """
-
-    __metaclass__ = abc.ABCMeta
-
-    @abc.abstractmethod
-    def get(self, key):
-        """Retrieve data from the store by key and return a string."""
-        return
-
-    @abc.abstractmethod
-    def set(self, key, value):
-        """Save string value to datastore under key."""
-        return
-
-    @abc.abstractmethod
-    def delete(self, key):
-        """Delete record for data stored under key."""
-        return
-
-    @abc.abstractmethod
-    def incr(self, key):
-        """Increment value stored under key and return an integer."""
-        return
-
-
-class KeyValueStore(object):
-    """
-    A minimal implementation of KeyValueBase
-    It is specifically not a subclass of KeyValueBase
-    so that the ABC register() method can be used in testing
-    This can be used in testing, but should not be used in production
-    """
-
-    def __init__(self):
-        self._data = {}
-
-    def get(self, key):
-        try:
-            return str(self._data[key])
-        except:
-            return None
-
-    def set(self, key, value):
-        self._data[key] = str(value)
-
-    def delete(self, key):
-        value = self.get(key)
-        if value:
-            del self._data[key]
-            return True
-        else:
-            return False
-
-    def incr(self, key):
-        old = self.get(key)
-        if old is None:
-            old = 0
-        new = int(old) + 1
-        self.set(key, new)
-        return new
-
-    # This method is not required by the KeyValueBase ABC
-    def is_empty(self):
-        if len(self._data) == 0:
-            return True
-        else:
-            return False
-
-
 class EsmeTransceiver(Protocol):
 
     callLater = reactor.callLater
 
-    def __init__(self, config, kvs, esme_callbacks):
+    def __init__(self, config, redis, esme_callbacks):
         self.config = config
         self.esme_callbacks = esme_callbacks
         self.defaults = config.to_dict()
         self.state = 'CLOSED'
-        log.msg('STATE: %s' % (self.state))
+        log.msg('STATE: %s' % (self.state,))
         self.smpp_bind_timeout = self.config.smpp_bind_timeout
         self.smpp_enquire_link_interval = \
                 self.config.smpp_enquire_link_interval
         self.datastream = ''
-        self.r_server = kvs
-        self.r_prefix = "%s@%s:%s" % (
-                self.config.system_id,
-                self.config.host,
-                self.config.port)
-        self.sequence_number_prefix = "vumi_smpp_last_sequence_number#%s" % (
-                self.r_prefix)
-        log.msg("r_prefix = %s" % self.r_prefix)
-        # self.get_next_seq()
+        self.redis = redis
         self._lose_conn = None
 
-    def set_seq(self, seq):
-        """Set the sequence number to a specific value.
-
-        NOTE: This should not be used outside of tests.
-        """
-        self.r_server.set(self.sequence_number_prefix, int(seq))
-
+    @inlineCallbacks
     def get_next_seq(self):
-        seq = self.r_server.incr(self.sequence_number_prefix)
-        # SMPP supports a max sequence_number of: FFFFFFFF = 4,294,967,295
-        # so start recycling @ 4,000,000,000 just to keep the numbers round
-        if seq > 4000000000:
-            self.r_server.delete(self.sequence_number_prefix)
-            return self.get_next_seq()
-        else:
-            return seq
+        """Get the next available SMPP sequence number.
+
+        The valid range of sequence number is 0x00000001 to 0xFFFFFFFF.
+
+        We start trying to wrap at 0xFFFF0000 so we can keep returning values
+        (up to 0xFFFF of them) even while someone else is in the middle of
+        resetting the counter.
+        """
+        seq = yield self.redis.incr('smpp_last_sequence_number')
+
+        if seq >= 0xFFFF0000:
+            # We're close to the upper limit, so try to reset. It doesn't
+            # matter if we actually succeed or not, since we're going to return
+            # `seq` anyway.
+            yield self._reset_seq_counter()
+
+        returnValue(seq)
+
+    @inlineCallbacks
+    def _reset_seq_counter(self):
+        """Reset the sequence counter in a safe manner.
+        """
+        # SETNX can be used as a lock.
+        locked = yield self.redis.setnx('smpp_last_sequence_number_wrap', 1)
+
+        # If someone crashed in exactly the wrong place, the lock may be
+        # held by someone else but have no expire time. A race condition
+        # here may set the TTL multiple times, but that's fine.
+        if (yield self.redis.ttl('smpp_last_sequence_number_wrap')) < 0:
+            # The TTL only gets set if the lock exists and recently had no TTL.
+            yield self.redis.expire('smpp_last_sequence_number_wrap', 10)
+
+        if not locked:
+            # We didn't actually get the lock, so our job is done.
+            return
+
+        if (yield self.redis.get('smpp_last_sequence_number')) < 0xFFFF0000:
+            # Our stored sequence number is no longer outside the allowed
+            # range, so someone else must have reset it before we got the lock.
+            return
+
+        # We reset the counter by deleting the key. The next INCR will recreate
+        # it for us.
+        yield self.redis.delete('smpp_last_sequence_number')
 
     def pop_data(self):
         data = None
@@ -164,10 +113,12 @@ class EsmeTransceiver(Protocol):
     def _command_handler_not_found(self, pdu):
         log.err('No command handler available for %s' % (pdu,))
 
+    @inlineCallbacks
     def connectionMade(self):
         self.state = 'OPEN'
         log.msg('STATE: %s' % (self.state))
-        pdu = BindTransceiver(self.get_next_seq(), **self.defaults)
+        seq = yield self.get_next_seq()
+        pdu = BindTransceiver(seq, **self.defaults)
         log.msg(pdu.get_obj())
         self.send_pdu(pdu)
         self.schedule_lose_connection('BOUND_TRX')
@@ -286,6 +237,7 @@ class EsmeTransceiver(Protocol):
                 log.err(e)
         return message
 
+    @inlineCallbacks
     def handle_deliver_sm(self, pdu):
         if self.state not in ['BOUND_RX', 'BOUND_TRX']:
             log.err('WARNING: Received deliver_sm in wrong state: %s' % (
@@ -308,16 +260,17 @@ class EsmeTransceiver(Protocol):
                         delivery_report=delivery_report.groupdict(),
                         )
             elif detect_multipart(pdu):
-                redis_key = "%s#multi_%s" % (
-                        self.r_prefix, multipart_key(detect_multipart(pdu)))
+                redis_key = "multi_%s" % (
+                    multipart_key(detect_multipart(pdu)),)
                 log.msg("Redis multipart key: %s" % (redis_key))
-                value = json.loads(self.r_server.get(redis_key) or 'null')
+                value = yield self.redis.get(redis_key)
+                value = json.loads(value or 'null')
                 log.msg("Retrieved value: %s" % (repr(value)))
                 multi = MultipartMessage(value)
                 multi.add_pdu(pdu)
                 completed = multi.get_completed()
                 if completed:
-                    self.r_server.delete(redis_key)
+                    yield self.redis.delete(redis_key)
                     log.msg("Reassembled Message: %s" % (completed['message']))
                     # and we can finally pass the whole message on
                     self.esme_callbacks.deliver_sm(
@@ -327,7 +280,8 @@ class EsmeTransceiver(Protocol):
                             message_id=message_id,
                             )
                 else:
-                    self.r_server.set(redis_key, json.dumps(multi.get_array()))
+                    yield self.redis.set(
+                        redis_key, json.dumps(multi.get_array()))
             else:
                 decoded_msg = self._decode_message(pdu_params['short_message'],
                                                    pdu_params['data_coding'])
@@ -349,33 +303,35 @@ class EsmeTransceiver(Protocol):
             pass
 
     def get_unacked_count(self):
-        return int(self.r_server.llen("%s#unacked" % self.r_prefix))
+        return self.redis.llen("unacked").addCallback(int)
 
+    @inlineCallbacks
     def push_unacked(self, sequence_number=-1):
-        self.r_server.lpush("%s#unacked" % self.r_prefix, sequence_number)
-        log.msg("%s#unacked pushed to: %s" % (
-                self.r_prefix, self.get_unacked_count()))
+        yield self.redis.lpush("unacked", sequence_number)
+        log.msg("unacked pushed to: %s" % ((yield self.get_unacked_count())))
 
+    @inlineCallbacks
     def pop_unacked(self):
-        self.r_server.lpop("%s#unacked" % self.r_prefix)
-        log.msg("%s#unacked popped to: %s" % (
-                self.r_prefix, self.get_unacked_count()))
+        yield self.redis.lpop("unacked")
+        log.msg("unacked popped to: %s" % ((yield self.get_unacked_count())))
 
+    @inlineCallbacks
     def submit_sm(self, **kwargs):
         if self.state not in ['BOUND_TX', 'BOUND_TRX']:
             log.err(('WARNING: submit_sm in wrong state: %s, '
-                            'dropping message: %s' % (self.state, kwargs)))
-            return 0
+                     'dropping message: %s' % (self.state, kwargs)))
+            returnValue(0)
         else:
-            sequence_number = self.get_next_seq()
+            sequence_number = yield self.get_next_seq()
             pdu = SubmitSM(sequence_number, **dict(self.defaults, **kwargs))
             self.send_pdu(pdu)
             self.push_unacked(sequence_number)
-            return sequence_number
+            returnValue(sequence_number)
 
+    @inlineCallbacks
     def submit_multi(self, dest_address=[], **kwargs):
         if self.state in ['BOUND_TX', 'BOUND_TRX']:
-            sequence_number = self.get_next_seq()
+            sequence_number = yield self.get_next_seq()
             pdu = SubmitMulti(sequence_number, **dict(self.defaults, **kwargs))
             for item in dest_address:
                 if isinstance(item, str):
@@ -397,35 +353,39 @@ class EsmeTransceiver(Protocol):
                     elif item.get('dest_flag') == 2:
                         pdu.addDistributionList(item.get('dl_name'))
             self.send_pdu(pdu)
-            return sequence_number
-        return 0
+            returnValue(sequence_number)
+        returnValue(0)
 
+    @inlineCallbacks
     def enquire_link(self, **kwargs):
         if self.state in ['BOUND_TX', 'BOUND_RX', 'BOUND_TRX']:
-            sequence_number = self.get_next_seq()
+            sequence_number = yield self.get_next_seq()
             pdu = EnquireLink(sequence_number, **dict(self.defaults, **kwargs))
             self.send_pdu(pdu)
-            return sequence_number
-        return 0
+            returnValue(sequence_number)
+        returnValue(0)
 
+    @inlineCallbacks
     def query_sm(self, message_id, source_addr, **kwargs):
         if self.state in ['BOUND_TX', 'BOUND_TRX']:
-            sequence_number = self.get_next_seq()
+            sequence_number = yield self.get_next_seq()
             pdu = QuerySM(sequence_number,
                     message_id=message_id,
                     source_addr=source_addr,
                     **dict(self.defaults, **kwargs))
             self.send_pdu(pdu)
-            return sequence_number
-        return 0
+            returnValue(sequence_number)
+        returnValue(0)
 
 
 class EsmeTransmitter(EsmeTransceiver):
 
+    @inlineCallbacks
     def connectionMade(self):
         self.state = 'OPEN'
         log.msg('STATE: %s' % (self.state))
-        pdu = BindTransmitter(self.get_next_seq(), **self.defaults)
+        seq = yield self.get_next_seq()
+        pdu = BindTransmitter(seq, **self.defaults)
         log.msg(pdu.get_obj())
         self.send_pdu(pdu)
         self.schedule_lose_connection('BOUND_TX')
@@ -439,10 +399,12 @@ class EsmeTransmitter(EsmeTransceiver):
 
 class EsmeReceiver(EsmeTransceiver):
 
+    @inlineCallbacks
     def connectionMade(self):
         self.state = 'OPEN'
         log.msg('STATE: %s' % (self.state))
-        pdu = BindReceiver(self.get_next_seq(), **self.defaults)
+        seq = yield self.get_next_seq()
+        pdu = BindReceiver(seq, **self.defaults)
         log.msg(pdu.get_obj())
         self.send_pdu(pdu)
         self.schedule_lose_connection('BOUND_RX')
@@ -456,9 +418,9 @@ class EsmeReceiver(EsmeTransceiver):
 
 class EsmeTransceiverFactory(ReconnectingClientFactory):
 
-    def __init__(self, config, kvs, esme_callbacks):
+    def __init__(self, config, redis, esme_callbacks):
         self.config = config
-        self.kvs = kvs
+        self.redis = redis
         self.esme = None
         self.esme_callbacks = esme_callbacks
         self.initialDelay = self.config.initial_reconnect_delay
@@ -469,7 +431,8 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
 
     def buildProtocol(self, addr):
         log.msg('Connected')
-        self.esme = EsmeTransceiver(self.config, self.kvs, self.esme_callbacks)
+        self.esme = EsmeTransceiver(
+            self.config, self.redis, self.esme_callbacks)
         self.resetDelay()
         return self.esme
 
@@ -489,7 +452,8 @@ class EsmeTransmitterFactory(EsmeTransceiverFactory):
 
     def buildProtocol(self, addr):
         log.msg('Connected')
-        self.esme = EsmeTransmitter(self.config, self.kvs, self.esme_callbacks)
+        self.esme = EsmeTransmitter(
+            self.config, self.redis, self.esme_callbacks)
         self.resetDelay()
         return self.esme
 
@@ -498,7 +462,7 @@ class EsmeReceiverFactory(EsmeTransceiverFactory):
 
     def buildProtocol(self, addr):
         log.msg('Connected')
-        self.esme = EsmeReceiver(self.config, self.kvs, self.esme_callbacks)
+        self.esme = EsmeReceiver(self.config, self.redis, self.esme_callbacks)
         self.resetDelay()
         return self.esme
 
@@ -526,11 +490,11 @@ class ESME(object):
         * Transmitter and/or Receiver
     but currently only Transceiver is implemented
     """
-    def __init__(self, client_config, kvs, esme_callbacks):
+    def __init__(self, client_config, redis, esme_callbacks):
         self.config = client_config
-        self.kvs = kvs
+        self.redis = redis
         self.esme_callbacks = esme_callbacks
 
     def bindTransciever(self):
-        self.factory = EsmeTransceiverFactory(self.config, self.kvs,
+        self.factory = EsmeTransceiverFactory(self.config, self.redis,
                                               self.esme_callbacks)
