@@ -196,3 +196,4 @@ class Manager(object):
 
     expire = RedisCall(['key', 'seconds'])
     persist = RedisCall(['key'])
+    ttl = RedisCall(['key'])

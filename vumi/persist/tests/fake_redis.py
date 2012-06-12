@@ -3,8 +3,8 @@
 import fnmatch
 from functools import wraps
 
-from twisted.internet import reactor
 from twisted.internet.defer import Deferred
+from twisted.internet.task import Clock
 
 
 def maybe_async(func):
@@ -13,8 +13,12 @@ def maybe_async(func):
         result = func(self, *args, **kw)
         if self._is_async:
             d = Deferred()
-            reactor.callLater(0, d.callback, result)
+            # We fake a bit of a delay here.
+            self.clock.callLater(0.05, d.callback, result)
+            self.clock.advance(0.1)
             return d
+        # Same delay in the sync case.
+        self.clock.advance(0.1)
         return result
     wrapper.sync = func
     return wrapper
@@ -36,6 +40,7 @@ class FakeRedis(object):
         self._data = {}
         self._expiries = {}
         self._is_async = async
+        self.clock = Clock()
 
     def teardown(self):
         self._clean_up_expires()
@@ -290,12 +295,24 @@ class FakeRedis(object):
 
     @maybe_async
     def expire(self, key, seconds):
+        if key not in self._data:
+            return 0
         self.persist.sync(self, key)
-        delayed = reactor.callLater(seconds, self.delete.sync, self, key)
+        delayed = self.clock.callLater(seconds, self.delete.sync, self, key)
         self._expiries[key] = delayed
+        return 1
+
+    @maybe_async
+    def ttl(self, key):
+        delayed = self._expiries.get(key)
+        if delayed is not None and delayed.active():
+            return int(delayed.getTime() - self.clock.seconds())
+        return -1
 
     @maybe_async
     def persist(self, key):
         delayed = self._expiries.get(key)
-        if delayed is not None and not delayed.cancelled:
+        if delayed is not None and delayed.active():
             delayed.cancel()
+            return 1
+        return 0
