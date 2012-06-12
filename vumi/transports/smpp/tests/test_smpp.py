@@ -332,9 +332,6 @@ class EsmeToSmscTestCase(TransportTestCase):
         self.assertEqual(ack['transport_name'], self.transport_name)
         self.assertEqual(ack['user_message_id'], user_message_id)
 
-        # We need the sent_message_id to check the delivery_report
-        sent_message_id = ack['sent_message_id']
-
         self.assertEqual(delv['message_type'], 'event')
         self.assertEqual(delv['event_type'], 'delivery_report')
         self.assertEqual(delv['transport_name'], self.transport_name)
@@ -436,9 +433,6 @@ class EsmeToSmscTestCase(TransportTestCase):
         self.assertEqual(ack['event_type'], 'ack')
         self.assertEqual(ack['transport_name'], self.transport_name)
         self.assertEqual(ack['user_message_id'], user_message_id)
-
-        # We need the sent_message_id to check the delivery_report
-        sent_message_id = ack['sent_message_id']
 
         self.assertEqual(delv['message_type'], 'event')
         self.assertEqual(delv['event_type'], 'delivery_report')

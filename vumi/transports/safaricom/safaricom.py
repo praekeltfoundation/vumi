@@ -1,7 +1,6 @@
 # -*- test-case-name: vumi.transports.safaricom.tests.test_safaricom -*-
 
 import json
-import redis
 
 from twisted.python import log
 from twisted.internet.defer import inlineCallbacks
@@ -13,7 +12,7 @@ from vumi.persist import SessionManager
 
 class SafaricomTransport(HttpRpcTransport):
     """
-    HTTP transport for Mediafone Cameroun.
+    HTTP transport for Safaricom.
 
     :param str web_path:
         The HTTP path to listen on.
