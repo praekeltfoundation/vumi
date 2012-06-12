@@ -4,6 +4,7 @@ import os
 import sys
 import json
 import pkg_resources
+from collections import defaultdict
 
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet.error import ProcessTerminated
@@ -12,7 +13,8 @@ from twisted.trial.unittest import TestCase
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.application.tests.test_base import ApplicationTestCase
 from vumi.application.sandbox import (Sandbox, SandboxCommand, SandboxError,
-                                      RedisResource)
+                                      RedisResource, OutboundResource,
+                                      JsSandboxResource, LoggingResource)
 from vumi.tests.utils import FakeRedis, LogCatcher
 
 
@@ -172,11 +174,19 @@ class DummyAppWorker(object):
     sandbox_api_cls = DummyApi
     sandbox_protocol_cls = DummyProtocol
 
+    def __init__(self):
+        self.mock_calls = defaultdict(list)
+
     def create_sandbox_api(self, sandbox_id):
         return self.sandbox_api_cls(sandbox_id)
 
     def create_sandbox_protocol(self, api):
         return self.sandbox_protocol_cls(api)
+
+    def __getattr__(self, name):
+        def mock_method(*args, **kw):
+            self.mock_calls[name].append((args, kw))
+        return mock_method
 
 
 class ResourceTestCaseBase(TestCase):
@@ -189,6 +199,8 @@ class ResourceTestCaseBase(TestCase):
     def setUp(self):
         self.app_worker = self.app_worker_cls()
         self.resource = None
+        self.api = self.app_worker.create_sandbox_api(self.sandbox_id)
+        self.sandbox = self.app_worker.create_sandbox_protocol(self.api)
 
     def tearDown(self):
         if self.resource is not None:
@@ -206,9 +218,7 @@ class ResourceTestCaseBase(TestCase):
             raise ValueError("Create a resource before"
                              " calling dispatch_command")
         msg = SandboxCommand(cmd=cmd, **kwargs)
-        api = self.app_worker.create_sandbox_api(self.sandbox_id)
-        sandbox = self.app_worker.create_sandbox_protocol(api)
-        return self.resource.dispatch_request(api, sandbox, msg)
+        return self.resource.dispatch_request(self.api, self.sandbox, msg)
 
 
 class TestRedisResource(ResourceTestCaseBase):
@@ -250,13 +260,71 @@ class TestRedisResource(ResourceTestCaseBase):
         self.assertEqual(self.r_server.get('test:count:test_id'), '0')
 
 
-class TestOutboundResource(TestCase):
-    pass
+class TestOutboundResource(ResourceTestCaseBase):
 
-    # TODO: complete
+    resource_cls = OutboundResource
+
+    def setUp(self):
+        super(TestOutboundResource, self).setUp()
+        self.create_resource({})
+
+    def test_handle_reply_to(self):
+        self.api.get_inbound_message = lambda msg_id: msg_id
+        reply = self.dispatch_command('reply_to', content='hello',
+                                      continue_session=True,
+                                      in_reply_to='msg1')
+        self.assertEqual(reply, None)
+        self.assertEqual(self.app_worker.mock_calls['reply_to'],
+                         [(('msg1', 'hello'), {'continue_session': True})])
+
+    def test_handle_reply_to_group(self):
+        self.api.get_inbound_message = lambda msg_id: msg_id
+        reply = self.dispatch_command('reply_to_group', content='hello',
+                                      continue_session=True,
+                                      in_reply_to='msg1')
+        self.assertEqual(reply, None)
+        self.assertEqual(self.app_worker.mock_calls['reply_to_group'],
+                         [(('msg1', 'hello'), {'continue_session': True})])
+
+    def test_handle_send_to(self):
+        reply = self.dispatch_command('send_to', content='hello',
+                                      to_addr='1234',
+                                      tag='default')
+        self.assertEqual(reply, None)
+        self.assertEqual(self.app_worker.mock_calls['send_to'],
+                         [(('1234', 'hello'), {'tag': 'default'})])
 
 
-class TestLoggingResource(TestCase):
-    pass
+class TestJsSandboxResource(ResourceTestCaseBase):
 
-    # TODO: complete
+    resource_cls = JsSandboxResource
+
+    def setUp(self):
+        super(TestJsSandboxResource, self).setUp()
+        self.create_resource({
+            'javascript': 'testscript',
+            })
+
+    def test_sandbox_init(self):
+        msgs = []
+        self.sandbox.send = lambda msg: msgs.append(msg)
+        self.resource.sandbox_init(self.api, self.sandbox)
+        self.assertEqual(msgs, [SandboxCommand(cmd='initialize',
+                                               cmd_id=msgs[0]['cmd_id'],
+                                               javascript='testscript')])
+
+
+class TestLoggingResource(ResourceTestCaseBase):
+
+    resource_cls = LoggingResource
+
+    def setUp(self):
+        super(TestLoggingResource, self).setUp()
+        self.create_resource({})
+
+    def test_handle_info(self):
+        with LogCatcher() as lc:
+            reply = self.dispatch_command('info', msg='foo')
+            msgs = [log['message'][0] for log in lc.logs if log['message']]
+        self.assertEqual(reply['success'], True)
+        self.assertEqual(msgs, ['foo'])
