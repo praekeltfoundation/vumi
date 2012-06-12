@@ -144,7 +144,9 @@ class Manager(object):
 
     get = RedisCall(['key'])
     set = RedisCall(['key', 'value'])
+    setnx = RedisCall(['key', 'value'])
     delete = RedisCall(['key'])
+    setnx = RedisCall(['key', 'value'])
 
     # Integer operations
 

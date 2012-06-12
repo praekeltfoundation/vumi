@@ -72,6 +72,14 @@ class FakeRedis(object):
         self._data[key] = value
 
     @maybe_async
+    def setnx(self, key, value):
+        value = str(value)  # set() sets string value
+        if key not in self._data:
+            self._data[key] = value
+            return 1
+        return 0
+
+    @maybe_async
     def delete(self, key):
         existed = (key in self._data)
         self._data.pop(key, None)
