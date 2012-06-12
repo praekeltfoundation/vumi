@@ -264,6 +264,9 @@ class SandboxResource(object):
     def teardown(self):
         pass
 
+    def sandbox_init(self, api, sandbox):
+        pass
+
     def reply(self, command, **kwargs):
         return SandboxCommand(cmd=command['cmd'], reply=True,
                               cmd_id=command['cmd_id'], **kwargs)
@@ -350,6 +353,15 @@ class OutboundResource(SandboxResource):
         self.app_worker.send_to(to_addr, content, tag=tag)
 
 
+class JsSandboxResource(SandboxResource):
+    def setup(self):
+        self.javascript = self.config.get('javascript')
+
+    def sandbox_init(self, api, sandbox):
+        sandbox.send(SandboxCommand(cmd="initialize",
+                                    javascript=self.javascript))
+
+
 class LoggingResource(SandboxResource):
 
     def handle_info(self, api, sandbox, command):
@@ -366,8 +378,11 @@ class SandboxApi(object):
         self.fallback_resource = SandboxResource("fallback", None, {})
         self._inbound_messages = {}
 
+    # TODO: refactor this all to just include the sandbox in the API object?
+
     def sandbox_init(self, sandbox):
-        sandbox.send(SandboxCommand(cmd="initialize"))
+        for resource in self.resources.resources.values():
+            resource.sandbox_init(self, sandbox)
 
     def sandbox_inbound_message(self, sandbox, msg):
         self._inbound_messages[msg['message_id']] = msg

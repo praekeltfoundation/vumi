@@ -1,4 +1,3 @@
-var fs = require('fs');
 var vm = require('vm');
 var events = require('events');
 
@@ -58,11 +57,7 @@ var SandboxRunner = function (api, ctx) {
     self.emitter = new events.EventEmitter();
     self.chunk = "";
     self.pending_requests = {};
-
-    self.emitter.on('init', function () {
-        self.ctx.on_init.call(self.ctx, self.api);
-        self.process_requests(api.pop_requests());
-    });
+    self.loaded = false;
 
     self.emitter.on('command', function (command) {
         var handler_name = "on_" + command.cmd.replace('.', '_').replace('-', '_');
@@ -91,6 +86,15 @@ var SandboxRunner = function (api, ctx) {
     self.emitter.on('exit', function () {
         process.exit(0);
     });
+
+    self.load_code = function (command) {
+        self.log("Loading sandboxed code ...");
+        var loaded_module = vm.createScript(command['javascript']);
+        loaded_module.runInNewContext(self.ctx);
+        self.loaded = true;
+        self.ctx.on_init.call(self.ctx, self.api);
+        self.process_requests(api.pop_requests());
+    }
 
     self.process_requests = function (requests) {
         requests.forEach(function (msg) {
@@ -126,7 +130,12 @@ var SandboxRunner = function (api, ctx) {
                 continue;
             }
             msg = JSON.parse(parts[i]);
-            if (!msg.reply) {
+            if (!self.loaded) {
+                if (msg.cmd == 'initialize') {
+                    self.load_code(msg);
+                }
+            }
+            else if (!msg.reply) {
                 self.emitter.emit('command', msg);
             }
             else {
@@ -137,7 +146,6 @@ var SandboxRunner = function (api, ctx) {
     }
 
     self.run = function () {
-        self.emitter.emit('init');
         process.stdin.resume();
         process.stdin.setEncoding('ascii');
         process.stdin.on('data', function(data) {
@@ -150,12 +158,5 @@ var api = new SandboxApi();
 var ctx = {};
 var runner = new SandboxRunner(api, ctx);
 
-runner.log("Loading sandboxed code ...");
-var data = fs.readFileSync(process.argv[2]);
-var loaded_module = vm.createScript(data);
-loaded_module.runInNewContext(ctx);
-
-runner.log("Starting sandbox ...");
 runner.run();
-
-runner.log("Sandbox running ...");
+runner.log("Starting sandbox ...");

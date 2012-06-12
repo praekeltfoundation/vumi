@@ -122,12 +122,17 @@ class SandboxTestCase(ApplicationTestCase):
                                                        'sandboxer.js')
         app_js = pkg_resources.resource_filename('vumi.application',
                                                  'app.js')
+        javascript = file(app_js).read()
         app = yield self.setup_app('/usr/local/bin/node',
                                    [sandboxer_js, app_js], {
             'sandbox': {
                 'log': {
                     'cls': 'vumi.application.sandbox.LoggingResource',
-                    }
+                    },
+                 'js': {
+                    'cls': 'vumi.application.sandbox.JsSandboxResource',
+                    'javascript': javascript,
+                    },
                 }
             })
 
@@ -138,11 +143,9 @@ class SandboxTestCase(ApplicationTestCase):
         self.assertEqual(failures, [])
         self.assertEqual(status, 0)
         self.assertEqual(msgs, [
-            'Loading sandboxed code ...',
             'Starting sandbox ...',
+            'Loading sandboxed code ...',
             'From init!',
-            'Sandbox running ...',
-            'From command: initialize',
             'From command: inbound-message',
             'Log successful: true',
             'Done.',

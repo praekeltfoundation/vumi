@@ -14,10 +14,6 @@ function on_unknown(api, command) {
 
 // Command handlers
 
-function on_initialize(api, command) {
-    api.log_info("From command: initialize");
-}
-
 function on_inbound_message(api, command) {
     api.log_info("From command: inbound-message", function (reply) {
         api.log_info("Log successful: " + reply.success);
