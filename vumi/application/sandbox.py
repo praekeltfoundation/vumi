@@ -127,7 +127,7 @@ class SandboxRlimiter(object):
 
 class SandboxProtocol(ProcessProtocol):
 
-    def __init__(self, api, rlimits, timeout, recv_limit=1024 * 1024):
+    def __init__(self, api, rlimits, timeout, recv_limit):
         self.api = api
         self.rlimits = rlimits
         self._started = MultiDeferred()
@@ -435,9 +435,30 @@ class Sandbox(ApplicationWorker):
     """
     Configuration options:
 
+    :param str executable:
+        Full path to the executable to run in the sandbox.
+    :param list args:
+        List of arguments to pass to the executable (not including
+        the path of the executable itself).
+    :param str path:
+        Current working directory to run the executable in.
     :param int timeout:
         Length of time the subprocess is given to process
         a message.
+    :param int recv_limit:
+        Maximum number of bytes that will be read from a sandboxed
+        process' stdout and stderr combined.
+    :param dict sandbox:
+        Dictionary of resources to provide to the sandbox.
+        Keys are the names of resources (as seen inside the sandbox).
+        Values are dictionaries which must contain a `cls` key that
+        gives the full name of the class that provides the resource.
+        Other keys are additional configuration for that resource.
+    :param dict rlimits:
+        Dictionary of resource limits to be applied to sandboxed
+        processes. Defaults are fairly restricted. Keys maybe
+        names or values of the RLIMIT constants in
+        :module:`resource`. Values should be appropriate integers.
     """
 
     KB, MB = 1024, 1024 * 1024
@@ -459,6 +480,7 @@ class Sandbox(ApplicationWorker):
         self.args = [self.executable] + self.config.get("args", [])
         self.path = self.config.get("path", None)
         self.timeout = int(self.config.get("timeout", "60"))
+        self.recv_limit = int(self.config.get("recv_limit", 1024 * 1024))
         self.resources = self.create_sandbox_resources(
             self.config.get('sandbox', {}))
         self.resources.validate_config()
@@ -487,7 +509,8 @@ class Sandbox(ApplicationWorker):
         return SandboxApi(sandbox_id, self.resources)
 
     def create_sandbox_protocol(self, api):
-        return SandboxProtocol(api, self.rlimits, self.timeout)
+        return SandboxProtocol(api, self.rlimits, self.timeout,
+                               self.recv_limit)
 
     def sandbox_id_for_message(self, msg):
         """Sub-classes should override this to retrieve an appropriate id."""
