@@ -132,7 +132,20 @@ class SandboxTestCase(SandboxTestCaseBase):
         self.assertEqual(reply['content'], "Hooray!")
         self.assertEqual(reply['session_event'], None)
 
-    # TODO: test process killed if it writes too much.
+    @inlineCallbacks
+    def test_recv_limit(self):
+        recv_limit = 1000
+        app = yield self.setup_app(
+            "import sys, time\n"
+            "sys.stderr.write(%r)\n"
+            "sys.stdout.write('\\n')\n"
+            "time.sleep(5)\n"
+            % ("a" * (recv_limit - 1) + "\\n"),
+            {'recv_limit': str(recv_limit)})
+        status = yield app.process_message_in_sandbox(self.mk_msg())
+        self.assertEqual(status, None)
+        [kill_err] = self.flushLoggedErrors(ProcessTerminated)
+        self.assertTrue('process ended by signal' in str(kill_err.value))
 
     # TODO: def consume_user_message(self, msg):
     # TODO: def close_session(self, msg):
