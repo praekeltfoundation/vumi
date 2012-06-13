@@ -3,30 +3,30 @@ from functools import wraps
 from vumi.persist.ast_magic import make_function
 
 
-def make_callfunc(name, args, vararg=None, kwarg=None, defaults=(),
-                  filter_func=None, key_args=('key',)):
+def make_callfunc(name, redis_call):
 
     def func(self, *a, **kw):
 
         def _f(k, v):
-            if k in key_args:
+            if k in redis_call.key_args:
                 return self._key(v)
             return v
 
-        arg_names = list(args) + [vararg] * len(a)
+        arg_names = list(redis_call.args) + [redis_call.vararg] * len(a)
         aa = [_f(k, v) for k, v in zip(arg_names, a)]
         kk = dict((k, _f(k, v)) for k, v in kw.items())
 
         result = self._make_redis_call(name, *aa, **kk)
-        f_func = filter_func
+        f_func = redis_call.filter_func
         if f_func:
-            if isinstance(filter_func, basestring):
+            if isinstance(f_func, basestring):
                 f_func = getattr(self, f_func)
             result = self._filter_redis_results(f_func, result)
         return result
 
-    fargs = ['self'] + list(args)
-    return make_function(name, func, fargs, vararg, kwarg, defaults)
+    fargs = ['self'] + list(redis_call.args)
+    return make_function(name, func, fargs, redis_call.vararg,
+                         redis_call.kwarg, redis_call.defaults)
 
 
 class RedisCall(object):
@@ -39,15 +39,13 @@ class RedisCall(object):
         self.filter_func = filter_func
         self.key_args = key_args
 
-        self.packaged = [args, vararg, kwarg, defaults, filter_func, key_args]
-
 
 class CallMakerMetaclass(type):
     def __new__(meta, classname, bases, class_dict):
         new_class_dict = {}
         for name, attr in class_dict.items():
             if isinstance(attr, RedisCall):
-                attr = make_callfunc(name, *attr.packaged)
+                attr = make_callfunc(name, attr)
 
             new_class_dict[name] = attr
         return type.__new__(meta, classname, bases, new_class_dict)
