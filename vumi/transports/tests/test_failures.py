@@ -16,7 +16,7 @@ def mktimestamp(delta=0):
 
 class FailureWorkerTestCase(unittest.TestCase):
 
-    timeout = 2
+    timeout = 5
 
     def setUp(self):
         return self.make_worker()

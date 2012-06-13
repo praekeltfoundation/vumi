@@ -46,7 +46,7 @@ class FailureCounter(object):
 
 class Vas2NetsFailureWorkerTestCase(unittest.TestCase):
 
-    timeout = 2
+    timeout = 5
 
     @inlineCallbacks
     def setUp(self):

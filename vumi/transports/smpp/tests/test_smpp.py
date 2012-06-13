@@ -676,7 +676,6 @@ class RxEsmeToSmscTestCase(TransportTestCase):
 
     transport_name = "esme_testing_transport"
     transport_class = MockSmppRxTransport
-    timeout = 1
 
     def assert_pdu_header(self, expected, actual, field):
         self.assertEqual(expected['pdu']['header'][field],

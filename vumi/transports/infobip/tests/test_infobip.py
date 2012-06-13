@@ -14,7 +14,6 @@ from vumi.tests.utils import LogCatcher
 
 class TestInfobipUssdTransport(TransportTestCase):
 
-    timeout = 1
     transport_name = 'test_infobip'
     transport_class = InfobipTransport
 

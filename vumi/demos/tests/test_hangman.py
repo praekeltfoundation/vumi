@@ -142,7 +142,6 @@ class TestHangmanGame(unittest.TestCase):
 
 class TestHangmanWorker(ApplicationTestCase):
 
-    timeout = 2
     application_class = HangmanWorker
 
     @inlineCallbacks

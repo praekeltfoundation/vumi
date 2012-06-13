@@ -169,7 +169,7 @@ class MessageMakerMixIn(object):
 
 
 class TestBaseDispatchWorker(TestCase, MessageMakerMixIn):
-    timeout = 3
+    timeout = 5
 
     @inlineCallbacks
     def setUp(self):
@@ -602,7 +602,7 @@ class UserGroupingRouterTestCase(DispatcherTestCase):
 
 class TestContentKeywordRouter(DispatcherTestCase):
 
-    timeout = 2
+    timeout = 5
 
     dispatcher_class = BaseDispatchWorker
     transport_name = 'test_transport'

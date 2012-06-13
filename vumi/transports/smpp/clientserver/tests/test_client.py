@@ -81,7 +81,7 @@ class EsmeSequenceNumberTestCase(unittest.TestCase):
 
 
 class EsmeTestCaseBase(unittest.TestCase):
-    timeout = 3
+    timeout = 5
     ESME_CLASS = None
 
     def get_esme(self, **callbacks):
