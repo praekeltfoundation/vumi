@@ -89,9 +89,38 @@ class Manager(object):
 
         :param dict config:
             Dictionary of options for the manager.
+        :param str key_prefix:
+            Key prefix for namespacing.
+        """
+
+        # Is there a cleaner way to do this?
+        from vumi.persist.tests.fake_redis import FakeRedis
+        if config == "FAKE_REDIS":
+            # We want a new fake redis.
+            return cls._fake_manager(key_prefix)
+        if isinstance(config, FakeRedis):
+            # We want to wrap an existing fake_redis.
+            return cls._fake_manager(key_prefix, config)
+
+        # We pass a copy of the config so we can mutilate it.
+        return cls._manager_from_config(config.copy(), key_prefix)
+
+    @classmethod
+    def _fake_manager(cls, key_prefix, client=None):
+        raise NotImplementedError("Sub-classes of Manager should implement"
+                                  " ._fake_manager(...)")
+
+    @classmethod
+    def _manager_from_config(cls, config, key_prefix):
+        """Construct a client from a dictionary of options.
+
+        :param dict config:
+            Dictionary of options for the manager.
+        :param str key_prefix:
+            Key prefix for namespacing.
         """
         raise NotImplementedError("Sub-classes of Manager should implement"
-                                  " .from_config(...)")
+                                  " ._manager_from_config(...)")
 
     def _close(self):
         """Close redis connection."""

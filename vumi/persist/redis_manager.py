@@ -7,7 +7,17 @@ from vumi.persist.redis_base import Manager
 
 class RedisManager(Manager):
     @classmethod
-    def from_config(cls, config, key_prefix=''):
+    def _fake_manager(cls, key_prefix, client=None):
+        from vumi.persist.tests.fake_redis import FakeRedis
+        if client is None:
+            client = FakeRedis()
+        manager = cls(client, key_prefix)
+        # Because ._close() assumes a real connection.
+        manager._close = client.teardown
+        return manager
+
+    @classmethod
+    def _manager_from_config(cls, config, key_prefix):
         """Construct a manager from a dictionary of options.
 
         :param dict config:
@@ -15,19 +25,6 @@ class RedisManager(Manager):
         :param str key_prefix:
             Key prefix for namespacing.
         """
-
-        # Is there a cleaner way to do this?
-        from vumi.persist.tests.fake_redis import FakeRedis
-        if config == "FAKE_REDIS":
-            config = FakeRedis()
-        if isinstance(config, FakeRedis):
-            return cls(config, key_prefix)
-
-        config = config.copy()  # So we can safely mutilate it.
-
-        config_prefix = config.pop('key_prefix', None)
-        if config_prefix is not None:
-            key_prefix = "%s:%s" % (config_prefix, key_prefix)
 
         return cls(redis.Redis(**config), key_prefix)
 

@@ -1,3 +1,4 @@
+# -*- test-case-name: vumi.persist.tests.test_txredis_manager -*-
 
 import txredis.protocol
 from twisted.internet import reactor
@@ -8,7 +9,17 @@ from vumi.persist.redis_base import Manager
 
 class TxRedisManager(Manager):
     @classmethod
-    def from_config(cls, config, key_prefix=''):
+    def _fake_manager(cls, key_prefix, client=None):
+        from vumi.persist.tests.fake_redis import FakeRedis
+        if client is None:
+            client = FakeRedis(async=True)
+        manager = cls(client, key_prefix)
+        # Because ._close() assumes a real connection.
+        manager._close = client.teardown
+        return succeed(manager)
+
+    @classmethod
+    def _manager_from_config(cls, config, key_prefix):
         """Construct a manager from a dictionary of options.
 
         :param dict config:
@@ -16,22 +27,6 @@ class TxRedisManager(Manager):
         :param str key_prefix:
             Key prefix for namespacing.
         """
-
-        # Is there a cleaner way to do this?
-        from vumi.persist.tests.fake_redis import FakeRedis
-        if config == "FAKE_REDIS":
-            config = FakeRedis(async=True)
-        if isinstance(config, FakeRedis):
-            obj = cls(config, key_prefix)
-            # Because ._close() assumes a real connection.
-            obj._close = config.teardown
-            return succeed(obj)
-
-        config = config.copy()  # So we can safely mutilate it.
-
-        config_prefix = config.pop('key_prefix', None)
-        if config_prefix is not None:
-            key_prefix = "%s:%s" % (config_prefix, key_prefix)
 
         host = config.pop('host', 'localhost')
         port = config.pop('port', 6379)
