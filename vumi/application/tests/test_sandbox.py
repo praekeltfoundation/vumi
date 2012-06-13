@@ -35,6 +35,23 @@ class SandboxTestCaseBase(ApplicationTestCase):
             config.update(extra_config)
         return self.get_application(config)
 
+    def mk_event(self, **kw):
+        msg_kw = {
+            'event_type': 'ack', 'user_message_id': '1',
+            'sent_message_id': '1', 'sandbox_id': 'sandbox1',
+            }
+        msg_kw.update(kw)
+        return TransportEvent(**msg_kw)
+
+    def mk_msg(self, **kw):
+        msg_kw = {
+            'to_addr': "1", 'from_addr': "2",
+            'transport_name': "test", 'transport_type': "sphex",
+            'sandbox_id': 'sandbox1',
+            }
+        msg_kw.update(kw)
+        return TransportUserMessage(**msg_kw)
+
 
 class SandboxTestCase(SandboxTestCaseBase):
 
@@ -51,9 +68,7 @@ class SandboxTestCase(SandboxTestCaseBase):
             "sys.stdout.flush()\n"
             "time.sleep(5)\n"
             )
-        event = TransportEvent(event_type='ack', user_message_id=1,
-                               sent_message_id=1, sandbox_id='sandbox1')
-        status = yield app.process_event_in_sandbox(event)
+        status = yield app.process_event_in_sandbox(self.mk_event())
         [sandbox_err] = self.flushLoggedErrors(SandboxError)
         self.assertEqual(str(sandbox_err.value).split(' [')[0],
                          "Resource fallback: unknown command 'unknown'"
@@ -68,9 +83,7 @@ class SandboxTestCase(SandboxTestCaseBase):
             "import sys\n"
             "sys.stderr.write('err\\n')\n"
             )
-        event = TransportEvent(event_type='ack', user_message_id=1,
-                               sent_message_id=1, sandbox_id='sandbox1')
-        status = yield app.process_event_in_sandbox(event)
+        status = yield app.process_event_in_sandbox(self.mk_event())
         self.assertEqual(status, 0)
         [sandbox_err] = self.flushLoggedErrors(SandboxError)
         self.assertEqual(str(sandbox_err.value).split(' [')[0], "err")
@@ -90,9 +103,7 @@ class SandboxTestCase(SandboxTestCaseBase):
                     'r_prefix': 'test',
                 },
             }})
-        event = TransportEvent(event_type='ack', user_message_id=1,
-                               sent_message_id=1, sandbox_id='sandbox1')
-        status = yield app.process_event_in_sandbox(event)
+        status = yield app.process_event_in_sandbox(self.mk_event())
         self.assertEqual(status, 0)
         self.assertEqual(sorted(r_server.keys()),
                          ['test:count:sandbox1',
@@ -103,10 +114,7 @@ class SandboxTestCase(SandboxTestCaseBase):
 
     @inlineCallbacks
     def test_outbound_reply_from_sandbox(self):
-        msg = TransportUserMessage(to_addr="1", from_addr="2",
-                                   transport_name="test",
-                                   transport_type="sphex",
-                                   sandbox_id='sandbox1')
+        msg = self.mk_msg()
         json_data = SandboxCommand(cmd='outbound.reply_to',
                                    content='Hooray!',
                                    in_reply_to=msg['message_id']).to_json()
@@ -168,17 +176,13 @@ class NodeJsSandboxTestCase(SandboxTestCaseBase):
 
     @inlineCallbacks
     def test_js_sandboxer(self):
-        msg = TransportUserMessage(to_addr="1", from_addr="2",
-                                   transport_name="test",
-                                   transport_type="sphex",
-                                   sandbox_id='sandbox1')
         app_js = pkg_resources.resource_filename('vumi.application',
                                                  'app.js')
         javascript = file(app_js).read()
         app = yield self.setup_app(javascript)
 
         with LogCatcher() as lc:
-            status = yield app.process_message_in_sandbox(msg)
+            status = yield app.process_message_in_sandbox(self.mk_msg())
             failures = [log['failure'].value for log in lc.errors]
             msgs = [log['message'][0] for log in lc.logs if log['message']]
         self.assertEqual(failures, [])
