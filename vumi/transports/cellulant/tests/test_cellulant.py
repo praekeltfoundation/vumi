@@ -41,7 +41,7 @@ class TestCellulantTransportTestCase(TransportTestCase):
     @inlineCallbacks
     def test_redis_caching(self):
         # delete the key that shouldn't exist (in case of testing real redis)
-        yield self.transport.session_manager.manager.delete("msisdn:123")
+        yield self.transport.session_manager.redis.delete("msisdn:123")
 
         tx = self.transport
         val = yield tx.get_ussd_for_msisdn_session("msisdn", "123")

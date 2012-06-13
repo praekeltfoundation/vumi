@@ -192,7 +192,6 @@ class OperaTransport(Transport):
         r_prefix = "%(transport_name)s@%(url)s" % self.config
         self.session_manager = yield SessionManager.from_redis_config(
             self.r_config, r_prefix, self.message_id_lifetime)
-        self.redis = self.session_manager.manager
 
         self.proxy = xmlrpc.Proxy(self.opera_url)
         self.default_values = {

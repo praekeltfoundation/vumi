@@ -12,33 +12,28 @@ class SessionManager(object):
     """A manager for sessions.
 
     :type r_server: redis.Redis
-    :param r_server:
-        Redis db connection.
-    :type prefix: str
-    :param prefix:
-        Prefix to use for Redis keys.
-    :type max_session_length: int
-    :param max_session_length:
+    :param TxRedisManager redis:
+        Redis manager object.
+    :param int max_session_length:
         Time before a session expires. Default is None (never expire).
-    :type gc_period: float
-    :param gc_period:
+    :param float gc_period:
         Time in seconds between checking for session expiry.
     """
 
-    def __init__(self, manager, max_session_length=None,
+    def __init__(self, redis, max_session_length=None,
                  gc_period=1.0):
         self.max_session_length = max_session_length
-        self.manager = manager
+        self.redis = redis
 
         self.gc = task.LoopingCall(lambda: self.active_sessions())
         self.gc.start(gc_period)
 
     @inlineCallbacks
-    def stop(self, stop_manager=True):
+    def stop(self, stop_redis=True):
         if self.gc.running:
             yield self.gc.stop()
-        if stop_manager:
-            yield self.manager._close()
+        if stop_redis:
+            yield self.redis._close()
 
     @classmethod
     def from_redis_config(cls, config, key_prefix='', max_session_length=None,
@@ -60,16 +55,16 @@ class SessionManager(object):
         skey = 'active_sessions'
         sessions = []
         sessions_to_expire = []
-        for user_id in (yield self.manager.smembers(skey)):
+        for user_id in (yield self.redis.smembers(skey)):
             ukey = "%s:%s" % ('session', user_id)
-            if (yield self.manager.exists(ukey)):
+            if (yield self.redis.exists(ukey)):
                 sessions.append((user_id, (yield self.load_session(user_id))))
             else:
                 sessions_to_expire.append(user_id)
 
         # clear empty ones
         for user_ids in sessions_to_expire:
-            yield self.manager.srem(skey, user_id)
+            yield self.redis.srem(skey, user_id)
 
         returnValue(sessions)
 
@@ -78,7 +73,7 @@ class SessionManager(object):
         Load session data from Redis
         """
         ukey = "%s:%s" % ('session', user_id)
-        return self.manager.hgetall(ukey)
+        return self.redis.hgetall(ukey)
 
     def schedule_session_expiry(self, user_id, timeout):
         """
@@ -92,7 +87,7 @@ class SessionManager(object):
             The number of seconds after which this session should expire
         """
         ukey = "%s:%s" % ('session', user_id)
-        return self.manager.expire(ukey, timeout)
+        return self.redis.expire(ukey, timeout)
 
     @inlineCallbacks
     def create_session(self, user_id, **kwargs):
@@ -111,7 +106,7 @@ class SessionManager(object):
 
     def clear_session(self, user_id):
         ukey = "%s:%s" % ('session', user_id)
-        return self.manager.delete(ukey)
+        return self.redis.delete(ukey)
 
     @inlineCallbacks
     def save_session(self, user_id, session):
@@ -129,7 +124,7 @@ class SessionManager(object):
         """
         ukey = "%s:%s" % ('session', user_id)
         for s_key, s_value in session.items():
-            yield self.manager.hset(ukey, s_key, s_value)
+            yield self.redis.hset(ukey, s_key, s_value)
         skey = 'active_sessions'
-        yield self.manager.sadd(skey, user_id)
+        yield self.redis.sadd(skey, user_id)
         returnValue(session)

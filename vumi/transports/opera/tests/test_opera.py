@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from urlparse import parse_qs
 
 from twisted.internet import defer
-from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.defer import inlineCallbacks
 from twisted.web import xmlrpc
 
 from vumi.message import TransportUserMessage
@@ -24,7 +24,6 @@ class OperaTransportTestCase(TransportTestCase):
         self.url = 'http://%s:%s' % (self.host, self.port)
         self.transport = yield self.mk_transport()
 
-    @inlineCallbacks
     def mk_transport(self, cls=OperaTransport, **config):
         default_config = {
             'url': 'http://testing.domain',
@@ -37,9 +36,7 @@ class OperaTransportTestCase(TransportTestCase):
             'redis': 'FAKE_REDIS',
         }
         default_config.update(config)
-        worker = yield self.get_transport(default_config, cls)
-        self.redis = worker.redis
-        returnValue(worker)
+        return self.get_transport(default_config, cls)
 
     def mk_msg(self, **kwargs):
         defaults = {
