@@ -127,7 +127,8 @@ class SandboxRlimiter(object):
 
 class SandboxProtocol(ProcessProtocol):
 
-    def __init__(self, api, rlimits, timeout, recv_limit):
+    def __init__(self, sandbox_id, api, rlimits, timeout, recv_limit):
+        self.sandbox_id = sandbox_id
         self.api = api
         self.rlimits = rlimits
         self._started = MultiDeferred()
@@ -138,6 +139,7 @@ class SandboxProtocol(ProcessProtocol):
         self.recv_bytes = 0
         self.chunk = ''
         self.error_chunk = ''
+        api.set_sandbox(self)
 
     @staticmethod
     def rlimiter(args, env):
@@ -196,13 +198,13 @@ class SandboxProtocol(ProcessProtocol):
     def outReceived(self, data):
         lines = self._process_data(self.chunk, data)
         for i in range(len(lines) - 1):
-            self.api.dispatch_request(self, self._parse_command(lines[i]))
+            self.api.dispatch_request(self._parse_command(lines[i]))
         self.chunk = lines[-1]
 
     def outConnectionLost(self):
         if self.chunk:
             line, self.chunk = self.chunk, ""
-            self.api.dispatch_request(self, self._parse_command(line))
+            self.api.dispatch_request(self._parse_command(line))
 
     def errReceived(self, data):
         lines = self._process_data(self.error_chunk, data)
@@ -264,7 +266,7 @@ class SandboxResource(object):
     def teardown(self):
         pass
 
-    def sandbox_init(self, api, sandbox):
+    def sandbox_init(self, api):
         pass
 
     def reply(self, command, **kwargs):
@@ -274,16 +276,16 @@ class SandboxResource(object):
     def log_error(self, error_msg):
         log.error(Failure(SandboxError(error_msg)))
 
-    def dispatch_request(self, api, sandbox, command):
+    def dispatch_request(self, api, command):
         handler_name = 'handle_%s' % (command['cmd'],)
         handler = getattr(self, handler_name, self.unknown_request)
-        return handler(api, sandbox, command)
+        return handler(api, command)
 
-    def unknown_request(self, api, sandbox, command):
+    def unknown_request(self, api, command):
         self.log_error("Resource %s: unknown command %r received from"
                        " sandbox %r [%r]" % (self.name, command['cmd'],
                                              api.sandbox_id, command))
-        sandbox.kill()  # it's a harsh world
+        api.sandbox_kill()  # it's a harsh world
 
 
 class RedisResource(SandboxResource):
@@ -307,7 +309,7 @@ class RedisResource(SandboxResource):
             return False
         return True
 
-    def handle_set(self, api, sandbox, command):
+    def handle_set(self, api, command):
         key = self._sandboxed_key(api.sandbox_id, command.get('key'))
         if not self.check_keys(api.sandbox_id, key):
             return command.reply("Too many keys")
@@ -315,12 +317,12 @@ class RedisResource(SandboxResource):
         self.r_server.set(key, json.dumps(value))
         return self.reply(command, success=True)
 
-    def handle_get(self, api, sandbox, command):
+    def handle_get(self, api, command):
         key = self._sandboxed_key(api.sandbox_id, command.get('key'))
         return self.reply(command, success=True,
                           value=json.loads(self.r_server.get(key)))
 
-    def handle_delete(self, api, sandbox, command):
+    def handle_delete(self, api, command):
         key = self._sandboxed_key(api.sandbox_id, command.get('key'))
         existed = bool(self.r_server.delete(key))
         if existed:
@@ -332,21 +334,21 @@ class RedisResource(SandboxResource):
 
 class OutboundResource(SandboxResource):
 
-    def handle_reply_to(self, api, sandbox, command):
+    def handle_reply_to(self, api, command):
         content = command['content']
         continue_session = command.get('continue_session', True)
         orig_msg = api.get_inbound_message(command['in_reply_to'])
         self.app_worker.reply_to(orig_msg, content,
                                  continue_session=continue_session)
 
-    def handle_reply_to_group(self, api, sandbox, command):
+    def handle_reply_to_group(self, api, command):
         content = command['content']
         continue_session = command.get('continue_session', True)
         orig_msg = api.get_inbound_message(command['in_reply_to'])
         self.app_worker.reply_to_group(orig_msg, content,
                                        continue_session=continue_session)
 
-    def handle_send_to(self, api, sandbox, command):
+    def handle_send_to(self, api, command):
         content = command['content']
         to_addr = command['to_addr']
         tag = command.get('tag', 'default')
@@ -357,14 +359,14 @@ class JsSandboxResource(SandboxResource):
     def setup(self):
         self.javascript = self.config.get('javascript')
 
-    def sandbox_init(self, api, sandbox):
-        sandbox.send(SandboxCommand(cmd="initialize",
-                                    javascript=self.javascript))
+    def sandbox_init(self, api):
+        api.sandbox_send(SandboxCommand(cmd="initialize",
+                                        javascript=self.javascript))
 
 
 class LoggingResource(SandboxResource):
 
-    def handle_info(self, api, sandbox, command):
+    def handle_info(self, api, command):
         log.info(command['msg'])
         return self.reply(command, success=True)
 
@@ -372,42 +374,56 @@ class LoggingResource(SandboxResource):
 class SandboxApi(object):
     """A sandbox API instance for a particular sandbox run."""
 
-    def __init__(self, sandbox_id, resources):
-        self.sandbox_id = sandbox_id
+    def __init__(self, resources):
+        self._sandbox = None
+        self._inbound_messages = {}
         self.resources = resources
         self.fallback_resource = SandboxResource("fallback", None, {})
-        self._inbound_messages = {}
 
-    # TODO: refactor this all to just include the sandbox in the API object?
+    @property
+    def sandbox_id(self):
+        return self._sandbox.sandbox_id
 
-    def sandbox_init(self, sandbox):
+    def set_sandbox(self, sandbox):
+        if self._sandbox is not None:
+            raise SandboxError("Sandbox already set ("
+                               "existing id: %r, new id: %r)."
+                               % (self.sandbox_id, sandbox.sandbox_id))
+        self._sandbox = sandbox
+
+    def sandbox_init(self):
         for resource in self.resources.resources.values():
-            resource.sandbox_init(self, sandbox)
+            resource.sandbox_init(self)
 
-    def sandbox_inbound_message(self, sandbox, msg):
+    def sandbox_inbound_message(self, msg):
         self._inbound_messages[msg['message_id']] = msg
-        sandbox.send(SandboxCommand(cmd="inbound-message", msg=msg.payload))
+        self.sandbox_send(SandboxCommand(cmd="inbound-message",
+                                         msg=msg.payload))
 
-    def sandbox_inbound_event(self, sandbox, event):
-        sandbox.send(SandboxCommand(cmd="inbound-event", msg=event.payload))
+    def sandbox_inbound_event(self, event):
+        self.sandbox_send(SandboxCommand(cmd="inbound-event",
+                                         msg=event.payload))
 
-    def sandbox_reply(self, sandbox, reply):
-        sandbox.send(reply)
+    def sandbox_send(self, msg):
+        self._sandbox.send(msg)
+
+    def sandbox_kill(self):
+        self._sandbox.kill()
 
     def get_inbound_message(self, message_id):
         return self._inbound_messages.get(message_id)
 
-    def dispatch_request(self, sandbox, command):
+    def dispatch_request(self, command):
         resource_name, sep, rest = command['cmd'].partition('.')
         if not sep:
             resource_name, rest = '', resource_name
         command['cmd'] = rest
         resource = self.resources.resources.get(resource_name,
                                                 self.fallback_resource)
-        reply = resource.dispatch_request(self, sandbox, command)
+        reply = resource.dispatch_request(self, command)
         if reply is not None:
             reply['cmd'] = '%s%s%s' % (resource_name, sep, rest)
-            self.sandbox_reply(sandbox, reply)
+            self.sandbox_send(reply)
 
 
 class SandboxCommand(Message):
@@ -505,11 +521,11 @@ class Sandbox(ApplicationWorker):
     def create_sandbox_resources(self, config):
         return SandboxResources(self, config)
 
-    def create_sandbox_api(self, sandbox_id):
-        return SandboxApi(sandbox_id, self.resources)
+    def create_sandbox_api(self):
+        return SandboxApi(self.resources)
 
-    def create_sandbox_protocol(self, api):
-        return SandboxProtocol(api, self.rlimits, self.timeout,
+    def create_sandbox_protocol(self, sandbox_id, api):
+        return SandboxProtocol(sandbox_id, api, self.rlimits, self.timeout,
                                self.recv_limit)
 
     def sandbox_id_for_message(self, msg):
@@ -520,13 +536,13 @@ class Sandbox(ApplicationWorker):
         """Sub-classes should override this to retrieve an appropriate id."""
         return event['sandbox_id']
 
-    def _process_in_sandbox(self, api, api_callback):
-        sandbox_protocol = self.create_sandbox_protocol(api)
+    def _process_in_sandbox(self, sandbox_id, api, api_callback):
+        sandbox_protocol = self.create_sandbox_protocol(sandbox_id, api)
         sandbox_protocol.spawn(self.executable, args=self.args,
                                env={}, path=self.path)
 
         def on_start(_result):
-            api.sandbox_init(sandbox_protocol)
+            api.sandbox_init()
             api_callback(sandbox_protocol)
             d = sandbox_protocol.done()
             d.addErrback(log.error)
@@ -538,15 +554,15 @@ class Sandbox(ApplicationWorker):
 
     def process_message_in_sandbox(self, msg):
         sandbox_id = self.sandbox_id_for_message(msg)
-        api = self.create_sandbox_api(sandbox_id)
-        return self._process_in_sandbox(api,
-                lambda sandbox: api.sandbox_inbound_message(sandbox, msg))
+        api = self.create_sandbox_api()
+        return self._process_in_sandbox(sandbox_id, api,
+                lambda sandbox: api.sandbox_inbound_message(msg))
 
     def process_event_in_sandbox(self, event):
         sandbox_id = self.sandbox_id_for_event(event)
-        api = self.create_sandbox_api(sandbox_id)
-        return self._process_in_sandbox(api,
-                lambda sandbox: api.sandbox_inbound_event(sandbox, event))
+        api = self.create_sandbox_api()
+        return self._process_in_sandbox(sandbox_id, api,
+                lambda sandbox: api.sandbox_inbound_event(event))
 
     def consume_user_message(self, msg):
         return self.process_message_in_sandbox(msg)

@@ -246,12 +246,18 @@ class NodeJsSandboxTestCase(SandboxTestCaseBase):
 class DummyAppWorker(object):
 
     class DummyApi(object):
-        def __init__(self, sandbox_id):
-            self.sandbox_id = sandbox_id
+        def __init__(self):
+            pass
+
+        def set_sandbox(self, sandbox):
+            self.sandbox = sandbox
+            self.sandbox_id = sandbox.sandbox_id
 
     class DummyProtocol(object):
-        def __init__(self, api):
+        def __init__(self, sandbox_id, api):
+            self.sandbox_id = sandbox_id
             self.api = api
+            api.set_sandbox(self)
 
     sandbox_api_cls = DummyApi
     sandbox_protocol_cls = DummyProtocol
@@ -259,11 +265,11 @@ class DummyAppWorker(object):
     def __init__(self):
         self.mock_calls = defaultdict(list)
 
-    def create_sandbox_api(self, sandbox_id):
-        return self.sandbox_api_cls(sandbox_id)
+    def create_sandbox_api(self):
+        return self.sandbox_api_cls()
 
-    def create_sandbox_protocol(self, api):
-        return self.sandbox_protocol_cls(api)
+    def create_sandbox_protocol(self, sandbox_id, api):
+        return self.sandbox_protocol_cls(sandbox_id, api)
 
     def __getattr__(self, name):
         def mock_method(*args, **kw):
@@ -281,8 +287,9 @@ class ResourceTestCaseBase(TestCase):
     def setUp(self):
         self.app_worker = self.app_worker_cls()
         self.resource = None
-        self.api = self.app_worker.create_sandbox_api(self.sandbox_id)
-        self.sandbox = self.app_worker.create_sandbox_protocol(self.api)
+        self.api = self.app_worker.create_sandbox_api()
+        self.sandbox = self.app_worker.create_sandbox_protocol(self.sandbox_id,
+                                                               self.api)
 
     def tearDown(self):
         if self.resource is not None:
@@ -300,7 +307,7 @@ class ResourceTestCaseBase(TestCase):
             raise ValueError("Create a resource before"
                              " calling dispatch_command")
         msg = SandboxCommand(cmd=cmd, **kwargs)
-        return self.resource.dispatch_request(self.api, self.sandbox, msg)
+        return self.resource.dispatch_request(self.api, msg)
 
 
 class TestRedisResource(ResourceTestCaseBase):
@@ -389,8 +396,8 @@ class TestJsSandboxResource(ResourceTestCaseBase):
 
     def test_sandbox_init(self):
         msgs = []
-        self.sandbox.send = lambda msg: msgs.append(msg)
-        self.resource.sandbox_init(self.api, self.sandbox)
+        self.api.sandbox_send = lambda msg: msgs.append(msg)
+        self.resource.sandbox_init(self.api)
         self.assertEqual(msgs, [SandboxCommand(cmd='initialize',
                                                cmd_id=msgs[0]['cmd_id'],
                                                javascript='testscript')])
