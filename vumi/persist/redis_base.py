@@ -155,8 +155,10 @@ class Manager(object):
         """
         Strip off manager's key prefix from a key
         """
-        return key.split(
-            "%s%s" % (self._key_prefix, self._key_separator), 1)[-1]
+        prefix = "%s%s" % (self._key_prefix, self._key_separator)
+        if key.startswith(prefix):
+            return key[len(prefix):]
+        return key
 
     def _unkeys(self, keys):
         return [self._unkey(k) for k in keys]
