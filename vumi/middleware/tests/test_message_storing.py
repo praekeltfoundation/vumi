@@ -1,8 +1,7 @@
 """Tests for vumi.middleware.message_storing."""
 
-from twisted.trial.unittest import TestCase, SkipTest
+from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
-from twisted.internet.error import ConnectionRefusedError
 
 from vumi.middleware.message_storing import StoringMiddleware
 from vumi.middleware.tagger import TaggingMiddleware
@@ -26,10 +25,7 @@ class StoringMiddlewareTestCase(TestCase):
         self.mw = StoringMiddleware("dummy_storer", config, dummy_worker)
         self.mw.setup_middleware()
         self.store = self.mw.store
-        try:
-            yield self.store.manager.purge_all()
-        except ConnectionRefusedError, e:
-            raise SkipTest(e)
+        yield self.store.manager.purge_all()
 
     @inlineCallbacks
     def tearDown(self):

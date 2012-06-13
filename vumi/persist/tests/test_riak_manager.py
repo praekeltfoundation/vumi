@@ -1,9 +1,8 @@
 """Tests for vumi.persist.riak_manager."""
 
 from itertools import count
-import socket
 
-from twisted.trial.unittest import TestCase, SkipTest
+from twisted.trial.unittest import TestCase
 from twisted.internet.defer import returnValue
 
 from vumi.persist.riak_manager import RiakManager, flatten_generator
@@ -17,10 +16,7 @@ class TestRiakManager(CommonRiakManagerTests, TestCase):
 
     def setUp(self):
         self.manager = RiakManager.from_config({'bucket_prefix': 'test.'})
-        try:
-            self.manager.purge_all()
-        except socket.error, e:
-            raise SkipTest(e)
+        self.manager.purge_all()
 
     def tearDown(self):
         self.manager.purge_all()

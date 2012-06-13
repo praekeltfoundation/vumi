@@ -1,10 +1,7 @@
 """Tests for vumi.persist.model."""
 
-import socket
-
-from twisted.trial.unittest import TestCase, SkipTest
+from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
-from twisted.internet.error import ConnectionRefusedError
 
 from vumi.persist.model import Model, Manager
 from vumi.persist.fields import (
@@ -67,10 +64,7 @@ class TestModelOnTxRiak(TestCase):
     @inlineCallbacks
     def setUp(self):
         self.manager = TxRiakManager.from_config({'bucket_prefix': 'test.'})
-        try:
-            yield self.manager.purge_all()
-        except ConnectionRefusedError, e:
-            raise SkipTest(e)
+        yield self.manager.purge_all()
 
     @Manager.calls_manager
     def tearDown(self):
@@ -458,7 +452,4 @@ class TestModelOnRiak(TestModelOnTxRiak):
 
     def setUp(self):
         self.manager = RiakManager.from_config({'bucket_prefix': 'test.'})
-        try:
-            self.manager.purge_all()
-        except socket.error, e:
-            raise SkipTest(e)
+        self.manager.purge_all()
