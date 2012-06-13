@@ -147,10 +147,43 @@ class SandboxTestCase(SandboxTestCaseBase):
         [kill_err] = self.flushLoggedErrors(ProcessTerminated)
         self.assertTrue('process ended by signal' in str(kill_err.value))
 
-    # TODO: def consume_user_message(self, msg):
-    # TODO: def close_session(self, msg):
-    # TODO: def consume_ack(self, event):
-    # TODO: def consume_delivery_report(self, event):
+    @inlineCallbacks
+    def echo_check(self, handler_name, msg, expected_cmd):
+        app = yield self.setup_app(
+            "import sys, json\n"
+            "cmd = sys.stdin.readline()\n"
+            "log = {'cmd': 'log.info', 'cmd_id': '1',\n"
+            "       'reply': False, 'msg': cmd}\n"
+            "sys.stdout.write(json.dumps(log) + '\\n')\n",
+            {'sandbox': {
+                'log': {'cls': 'vumi.application.sandbox.LoggingResource'},
+            }},
+            )
+        with LogCatcher() as lc:
+            status = yield getattr(app, handler_name)(msg)
+            cmd_json = [log['message'][0] for log in lc.logs][0]
+
+        self.assertEqual(status, 0)
+        echoed_cmd = json.loads(cmd_json)
+        self.assertEqual(echoed_cmd['cmd'], expected_cmd)
+        echoed_cmd['msg']['timestamp'] = msg['timestamp']
+        self.assertEqual(echoed_cmd['msg'], msg.payload)
+
+    def test_consume_user_message(self):
+        return self.echo_check('consume_user_message', self.mk_msg(),
+                               'inbound-message')
+
+    def test_close_session(self):
+        return self.echo_check('close_session', self.mk_msg(),
+                               'inbound-message')
+
+    def test_consume_ack(self):
+        return self.echo_check('consume_ack', self.mk_event(),
+                               'inbound-event')
+
+    def test_consume_delivery_report(self):
+        return self.echo_check('consume_delivery_report', self.mk_event(),
+                               'inbound-event')
 
 
 class NodeJsSandboxTestCase(SandboxTestCaseBase):
