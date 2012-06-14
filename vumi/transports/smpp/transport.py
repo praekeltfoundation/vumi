@@ -49,6 +49,17 @@ class SmppTransport(Transport):
         being disconnected. Default is 5s. Some WASPs, e.g. Clickatell,
         require a 30s delay before reconnecting. In these cases a 45s
         initial_reconnect_delay is recommended.
+    :type split_bind_prefix: str, optional
+    :param split_bind_prefix:
+        This is the Redis prefix to use for storing things like sequence
+        numbers and message ids for delivery report handling.
+        It defaults to `<system_id>@<host>:<port>`.
+
+        *ONLY* if the connection is split into two separate binds for RX and TX
+        then make sure this is the same value for both binds.
+        This _only_ needs to be done for TX & RX since messages sent via the TX
+        bind are handled by the RX bind and they need to share the same prefix
+        for the lookup for message ids in delivery reports to work.
 
     SMPP protocol configuration options:
 
@@ -61,6 +72,12 @@ class SmppTransport(Transport):
     :type dest_addr_npi:
     :param dest_addr_npi:
         Destination NPI (number plan identifier). Default 1 (ISDN/E.164/E.163).
+    :type source_addr_ton:
+    :param source_addr_ton:
+        Source TON (type of number). Default is 0 (Unknown)
+    :type source_addr_npi:
+    :param source_addr_npi:
+        Source NPI (number plan identifier). Default is 0 (Unknown)
     :type registered_delivery:
     :param registered_delivery:
         Whether to ask for delivery reports. Default 1 (request delivery
@@ -105,13 +122,15 @@ class SmppTransport(Transport):
                 )
 
         r_config = self.config.get('redis', {})
-        r_prefix = "%s@%s:%s" % (
+        default_prefix = "%s@%s:%s" % (
                 self.client_config.system_id,
                 self.client_config.host,
                 self.client_config.port,
                 )
-        self.r_message_prefix = "message_json"
+        r_prefix = self.config.get('split_bind_prefix', default_prefix)
         self.redis = yield TxRedisManager.from_config(r_config, r_prefix)
+
+        self.r_message_prefix = "message_json"
 
         self.esme_callbacks = EsmeCallbacks(
             connect=self.esme_connected,
