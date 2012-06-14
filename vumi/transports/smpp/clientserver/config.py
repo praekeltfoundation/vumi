@@ -18,7 +18,7 @@ class ClientConfig(object):
                         + '.*'
 
     def __init__(self, host, port, system_id, password,
-                 system_type="", interface_version="34",
+                 system_type="", interface_version="34", service_type="",
                  dest_addr_ton=0, dest_addr_npi=0,
                  source_addr_ton=0, source_addr_npi=0,
                  registered_delivery=0, smpp_bind_timeout=30,
@@ -32,6 +32,7 @@ class ClientConfig(object):
         self.password = password
         self.system_type = system_type
         self.interface_version = interface_version
+        self.service_type = service_type
         self.dest_addr_ton = int(dest_addr_ton)
         self.dest_addr_npi = int(dest_addr_npi)
         self.source_addr_ton = int(source_addr_ton)
