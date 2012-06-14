@@ -48,6 +48,17 @@ class SmppTransport(Transport):
         being disconnected. Default is 5s. Some WASPs, e.g. Clickatell,
         require a 30s delay before reconnecting. In these cases a 45s
         initial_reconnect_delay is recommended.
+    :type split_bind_prefix: str, optional
+    :param split_bind_prefix:
+        This is the Redis prefix to use for storing things like sequence
+        numbers and message ids for delivery report handling.
+        It defaults to `<system_id>@<host>:<port>`.
+
+        *ONLY* if the connection is split into two separate binds for RX and TX
+        then make sure this is the same value for both binds.
+        This _only_ needs to be done for TX & RX since messages sent via the TX
+        bind are handled by the RX bind and they need to share the same prefix
+        for the lookup for message ids in delivery reports to work.
 
     SMPP protocol configuration options:
 
@@ -113,11 +124,14 @@ class SmppTransport(Transport):
             # Only set up redis if we don't have a test stub already
             self.r_server = redis.Redis(**self.config.get('redis', {}))
 
-        self.r_prefix = "%s@%s:%s" % (
+        default_prefix = "%s@%s:%s" % (
                 self.client_config.system_id,
                 self.client_config.host,
                 self.client_config.port,
                 )
+
+        self.r_prefix = self.config.get('split_bind_prefix', default_prefix)
+
         self.r_message_prefix = "%s#message_json" % self.r_prefix
         log.msg("Connected to Redis, prefix: %s" % self.r_prefix)
 
