@@ -92,7 +92,6 @@ class FailureWorker(Worker):
         self.r_prefix = "failures:%s" % (self.config['transport_name'],)
         r_config = self.config.get('redis', {})
         self.redis = yield TxRedisManager.from_config(r_config, self.r_prefix)
-        # self.redis._key_separator = '#'
 
     def start_retry_delivery(self):
         self.delivery_loop = None
