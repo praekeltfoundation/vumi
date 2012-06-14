@@ -67,6 +67,16 @@ class EsmeTransceiver(Protocol):
     @inlineCallbacks
     def _reset_seq_counter(self):
         """Reset the sequence counter in a safe manner.
+
+        NOTE: There is a potential race condition in this implementation. If we
+        acquire the lock and it expires while we still think we hold it, it's
+        possible for the sequence number to be reset by someone else between
+        the final vlue check and the reset call. This seems like a very
+        unlikely situation, so we'll leave it like that for now.
+
+        A better solution is to replace this whole method with a lua script
+        that we send to redis, but scripting support is still very new at the
+        time of writing.
         """
         # SETNX can be used as a lock.
         locked = yield self.redis.setnx('smpp_last_sequence_number_wrap', 1)
