@@ -222,7 +222,7 @@ class NodeJsSandboxTestCase(SandboxTestCaseBase):
 
     @inlineCallbacks
     def test_js_sandboxer(self):
-        app_js = pkg_resources.resource_filename('vumi.application',
+        app_js = pkg_resources.resource_filename('vumi.application.tests',
                                                  'app.js')
         javascript = file(app_js).read()
         app = yield self.setup_app(javascript)
