@@ -1,7 +1,7 @@
 from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
 
-from vumi.persist.tests.fake_redis import FakeRedis
+from vumi.persist.fake_redis import FakeRedis
 
 
 class FakeRedisTestCase(TestCase):

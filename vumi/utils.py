@@ -215,7 +215,7 @@ def redis_from_config(redis_config):
     warnings.warn("Use of redis is deprecated. Use txredis instead.",
                   category=DeprecationWarning)
 
-    from vumi.persist.tests import fake_redis
+    from vumi.persist import fake_redis
     if redis_config == "FAKE_REDIS":
         return fake_redis.FakeRedis()
     if isinstance(redis_config, fake_redis.FakeRedis):

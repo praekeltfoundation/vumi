@@ -235,7 +235,7 @@ def FakeRedis():
     warnings.warn("Use of FakeRedis is deprecated. "
                   "Use persist.tests.fake_redis instead.",
                   category=DeprecationWarning)
-    from vumi.persist.tests import fake_redis
+    from vumi.persist import fake_redis
     return fake_redis.FakeRedis()
 
 

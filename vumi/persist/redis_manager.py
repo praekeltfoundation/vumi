@@ -3,12 +3,12 @@
 import redis
 
 from vumi.persist.redis_base import Manager
+from vumi.persist.fake_redis import FakeRedis
 
 
 class RedisManager(Manager):
     @classmethod
     def _fake_manager(cls, key_prefix, client=None):
-        from vumi.persist.tests.fake_redis import FakeRedis
         if client is None:
             client = FakeRedis()
         manager = cls(client, key_prefix)

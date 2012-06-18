@@ -3,7 +3,7 @@
 import time
 
 from twisted.trial.unittest import TestCase
-from vumi.persist.tests.fake_redis import FakeRedis
+from vumi.persist.fake_redis import FakeRedis
 from vumi.application import SessionManager
 
 

@@ -1,6 +1,7 @@
 from functools import wraps
 
 from vumi.persist.ast_magic import make_function
+from vumi.persist.fake_redis import FakeRedis
 
 
 def make_callfunc(name, redis_call):
@@ -92,7 +93,6 @@ class Manager(object):
         """
 
         # Is there a cleaner way to do this?
-        from vumi.persist.tests.fake_redis import FakeRedis
         if config == "FAKE_REDIS":
             # We want a new fake redis.
             return cls._fake_manager(key_prefix)

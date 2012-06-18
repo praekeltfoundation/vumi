@@ -5,12 +5,12 @@ from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, DeferredList, succeed
 
 from vumi.persist.redis_base import Manager
+from vumi.persist.fake_redis import FakeRedis
 
 
 class TxRedisManager(Manager):
     @classmethod
     def _fake_manager(cls, key_prefix, client=None):
-        from vumi.persist.tests.fake_redis import FakeRedis
         if client is None:
             client = FakeRedis(async=True)
         manager = cls(client, key_prefix)

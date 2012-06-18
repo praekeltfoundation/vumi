@@ -4,7 +4,7 @@ from datetime import datetime
 from twisted.internet.defer import inlineCallbacks
 from twisted.trial.unittest import TestCase
 
-from vumi.persist.tests.fake_redis import FakeRedis
+from vumi.persist.fake_redis import FakeRedis
 from vumi.transports.scheduler import Scheduler
 from vumi.message import TransportUserMessage
 from vumi.utils import to_kwargs
