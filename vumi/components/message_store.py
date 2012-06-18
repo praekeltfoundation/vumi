@@ -1,4 +1,4 @@
-# -*- test-case-name: vumi.persist.tests.test_message_store -*-
+# -*- test-case-name: vumi.components.tests.test_message_store -*-
 # -*- coding: utf-8 -*-
 
 """Message store."""

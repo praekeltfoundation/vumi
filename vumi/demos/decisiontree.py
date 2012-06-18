@@ -14,7 +14,7 @@ from vumi import log
 from vumi.errors import ConfigError, VumiError
 from vumi.message import TransportUserMessage
 from vumi.application import ApplicationWorker
-from vumi.persist import SessionManager
+from vumi.components import SessionManager
 
 SESSION_NEW = TransportUserMessage.SESSION_NEW
 SESSION_CLOSE = TransportUserMessage.SESSION_CLOSE

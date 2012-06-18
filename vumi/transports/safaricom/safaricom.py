@@ -7,7 +7,7 @@ from twisted.internet.defer import inlineCallbacks
 
 from vumi.transports.httprpc import HttpRpcTransport
 from vumi.message import TransportUserMessage
-from vumi.persist import SessionManager
+from vumi.components import SessionManager
 
 
 class SafaricomTransport(HttpRpcTransport):

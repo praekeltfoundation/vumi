@@ -11,7 +11,7 @@ from ssmi import client
 from vumi.utils import normalize_msisdn
 from vumi.message import TransportUserMessage
 from vumi.transports.base import Transport
-from vumi.persist import SessionManager
+from vumi.components import SessionManager
 
 
 # # Turn on debug logging in the SSMI library.

@@ -1,4 +1,4 @@
-# -*- test-case-name: vumi.persist.tests.test_session -*-
+# -*- test-case-name: vumi.components.tests.test_session -*-
 
 """Session management utilities."""
 

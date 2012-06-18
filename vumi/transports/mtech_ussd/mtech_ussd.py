@@ -7,7 +7,7 @@ from twisted.internet.defer import inlineCallbacks
 from vumi import log
 from vumi.message import TransportUserMessage
 from vumi.transports.httprpc import HttpRpcTransport
-from vumi.persist import SessionManager
+from vumi.components import SessionManager
 
 
 class MtechUssdTransport(HttpRpcTransport):

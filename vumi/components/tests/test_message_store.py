@@ -6,7 +6,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.message import TransportEvent
 from vumi.application.tests.test_base import ApplicationTestCase
-from vumi.persist.message_store import MessageStore
+from vumi.components import MessageStore
 from vumi.persist.txriak_manager import TxRiakManager
 from vumi.persist.txredis_manager import TxRedisManager
 

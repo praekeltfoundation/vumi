@@ -5,7 +5,7 @@ import time
 from twisted.internet.defer import inlineCallbacks
 from twisted.trial.unittest import TestCase
 
-from vumi.persist import SessionManager
+from vumi.components import SessionManager
 from vumi.persist.txredis_manager import TxRedisManager
 
 

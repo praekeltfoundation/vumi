@@ -4,7 +4,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.middleware.base import BaseMiddleware
 from vumi.middleware.tagger import TaggingMiddleware
-from vumi.persist.message_store import MessageStore
+from vumi.components.message_store import MessageStore
 from vumi.persist.txriak_manager import TxRiakManager
 from vumi.persist.txredis_manager import TxRedisManager
 
