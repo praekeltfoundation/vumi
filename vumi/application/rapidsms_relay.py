@@ -62,14 +62,18 @@ class RapidSMSRelay(ApplicationWorker):
         Path to listen for outbound messages from RapidSMS on.
     :param str web_port:
         Port to listen for outbound messages from RapidSMS on.
-    :param str auth_method:
-        Authentication method to use with `rapidsms_url` (default: 'basic').
     :param str username:
         Username to use for the `rapidsms_url` (default: no authentication).
     :param str password:
         Password to use for the `rapidsms_url` (default: none).
+    :param str auth_method:
+        Authentication method to use with `rapidsms_url` (default: 'basic').
+        The 'basic' method is currently the only available method.
     :param str http_method:
         HTTP request method to use for the `rapidsms_url` (default: POST)
+
+    A RapidSMS relay requires a `send_to` configuration section for the
+    `default` send_to tag.
     """
 
     SEND_TO_TAGS = frozenset(['default'])
