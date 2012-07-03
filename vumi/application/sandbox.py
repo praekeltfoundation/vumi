@@ -127,9 +127,12 @@ class SandboxRlimiter(object):
 
 class SandboxProtocol(ProcessProtocol):
 
-    def __init__(self, sandbox_id, api, rlimits, timeout, recv_limit):
+    def __init__(self, sandbox_id, api, executable, spawn_kwargs,
+                 rlimits, timeout, recv_limit):
         self.sandbox_id = sandbox_id
         self.api = api
+        self.executable = executable
+        self.spawn_kwargs = spawn_kwargs
         self.rlimits = rlimits
         self._started = MultiDeferred()
         self._done = MultiDeferred()
@@ -145,8 +148,8 @@ class SandboxProtocol(ProcessProtocol):
     def rlimiter(args, env):
         return SandboxRlimiter(args, env)
 
-    def spawn(self, executable, **kwargs):
-        SandboxRlimiter.spawn(self, executable, **kwargs)
+    def spawn(self):
+        SandboxRlimiter.spawn(self, self.executable, **self.spawn_kwargs)
 
     def done(self):
         """Returns a deferred that will be called when the process ends."""
@@ -237,6 +240,11 @@ class SandboxResources(object):
         self.app_worker = app_worker
         self.config = config
         self.resources = {}
+
+    def add_resource(self, resource_name, resource):
+        """Add additional resources -- should only be called before
+           calling :meth:`setup_resources`."""
+        self.resources[resource_name] = resource
 
     def validate_config(self):
         for name, config in self.config.iteritems():
@@ -485,10 +493,10 @@ class Sandbox(ApplicationWorker):
         resource.RLIMIT_DATA: (10 * MB, 10 * MB),
         resource.RLIMIT_STACK: (1 * MB, 1 * MB),
         resource.RLIMIT_RSS: (10 * MB, 10 * MB),
-        resource.RLIMIT_NPROC: (1, 1),
+        ## resource.RLIMIT_NPROC: (1, 1),
         resource.RLIMIT_NOFILE: (10, 10),
         resource.RLIMIT_MEMLOCK: (64 * KB, 64 * KB),
-        resource.RLIMIT_AS: (50 * MB, 50 * MB),
+        resource.RLIMIT_AS: (64 * MB, 64 * MB),
         }
 
     def validate_config(self):
@@ -525,8 +533,9 @@ class Sandbox(ApplicationWorker):
         return SandboxApi(self.resources)
 
     def create_sandbox_protocol(self, sandbox_id, api):
-        return SandboxProtocol(sandbox_id, api, self.rlimits, self.timeout,
-                               self.recv_limit)
+        spawn_kwargs = dict(args=self.args, env={}, path=self.path)
+        return SandboxProtocol(sandbox_id, api, self.executable, spawn_kwargs,
+                               self.rlimits, self.timeout, self.recv_limit)
 
     def sandbox_id_for_message(self, msg):
         """Sub-classes should override this to retrieve an appropriate id."""
@@ -538,8 +547,7 @@ class Sandbox(ApplicationWorker):
 
     def _process_in_sandbox(self, sandbox_id, api, api_callback):
         sandbox_protocol = self.create_sandbox_protocol(sandbox_id, api)
-        sandbox_protocol.spawn(self.executable, args=self.args,
-                               env={}, path=self.path)
+        sandbox_protocol.spawn()
 
         def on_start(_result):
             api.sandbox_init()
