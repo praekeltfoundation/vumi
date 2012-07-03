@@ -58,6 +58,18 @@ class RapidSMSRelay(ApplicationWorker):
 
     :param str rapidsms_url:
         URL of the rapidsms http backend.
+    :param str web_path:
+        Path to listen for outbound messages from RapidSMS on.
+    :param str web_port:
+        Port to listen for outbound messages from RapidSMS on.
+    :param str auth_method:
+        Authentication method to use with `rapidsms_url` (default: 'basic').
+    :param str username:
+        Username to use for the `rapidsms_url` (default: no authentication).
+    :param str password:
+        Password to use for the `rapidsms_url` (default: none).
+    :param str http_method:
+        HTTP request method to use for the `rapidsms_url` (default: POST)
     """
 
     SEND_TO_TAGS = frozenset(['default'])
@@ -71,7 +83,7 @@ class RapidSMSRelay(ApplicationWorker):
             'basic': self.generate_basic_auth_headers,
         }
         self.username = self.config.get('username')
-        self.password = self.config.get('password')
+        self.password = self.config.get('password', '')
         self.http_method = self.config.get('http_method', 'POST')
         self.auth_method = self.config.get('auth_method', 'basic')
         if self.auth_method not in self.supported_auth_methods:
