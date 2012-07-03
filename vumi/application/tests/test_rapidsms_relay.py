@@ -1,6 +1,7 @@
 """Tests for vumi.application.rapidsms_relay."""
 
 from base64 import b64decode
+from urllib import urlencode
 
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.web import http
@@ -9,6 +10,8 @@ from twisted.web.resource import Resource
 from vumi.application.tests.test_base import ApplicationTestCase
 from vumi.tests.utils import TestResourceWorker, LogCatcher, get_stubbed_worker
 from vumi.application.rapidsms_relay import RapidSMSRelay
+from vumi.utils import http_request_full
+from vumi.message import TransportUserMessage
 
 
 class TestResource(Resource):
@@ -63,8 +66,8 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
     @inlineCallbacks
     def test_rapidsms_relay_success(self):
         def cb(request):
-            self.assertEqual(request.args['sms'], ['hello world'])
-            self.assertEqual(request.args['sender'], ['+41791234567'])
+            self.assertEqual(request.args['text'], ['hello world'])
+            self.assertEqual(request.args['id'], ['+41791234567'])
             return 'OK'
 
         yield self.setup_resource(cb)
@@ -80,8 +83,8 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
             username, password = b64decode(creds).split(':')
             self.assertEqual(username, 'username')
             self.assertEqual(password, 'password')
-            self.assertEqual(request.args['sms'], ['hello world'])
-            self.assertEqual(request.args['sender'], ['+41791234567'])
+            self.assertEqual(request.args['text'], ['hello world'])
+            self.assertEqual(request.args['id'], ['+41791234567'])
             return 'OK'
 
         yield self.setup_resource(cb)
@@ -113,3 +116,22 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
                 "Acknowledgement received for message u'1'",
             ])
         self.assertEqual([], self.get_dispatched_messages())
+
+    def _call_relay(self, **params):
+        host = self.app.web_resource.getHost()
+        send_url = "http://localhost:%d/send" % (host.port,)
+        send_url = "%s?%s" % (send_url, urlencode(params))
+        return http_request_full(send_url)
+
+    @inlineCallbacks
+    def test_rapidsms_relay_outbound(self):
+        def cb(request):
+            self.fail("RapidSMS relay should not send outbound messages to"
+                      " RapidSMS")
+
+        yield self.setup_resource(cb)
+        response = yield self._call_relay(id='+123456', text='foo')
+        msg = TransportUserMessage.from_json(response.delivered_body)
+        self.assertEqual([msg], self.get_dispatched_messages())
+        self.assertEqual(msg['to_addr'], '+123456')
+        self.assertEqual(msg['content'], 'foo')

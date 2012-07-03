@@ -2,8 +2,10 @@
 from urllib import urlencode
 from base64 import b64encode
 
+from twisted.internet.defer import inlineCallbacks
 from twisted.web import http
 from twisted.web.resource import Resource
+from twisted.web.server import NOT_DONE_YET
 
 from vumi.application.base import ApplicationWorker
 from vumi.utils import http_request_full
@@ -27,20 +29,26 @@ class SendResource(Resource):
         self.application = application
         Resource.__init__(self)
 
+    def finish_request(self, request, msg):
+        request.setResponseCode(http.OK)
+        request.write(msg.to_json())
+        request.finish()
+
     def render_(self, request):
         log.msg("Send request: %s" % (request,))
         request.setHeader("content-type", "application/json")
-        msg = self.application.handle_raw_outbound_message(request)
-        return msg.to_json()
+        d = self.application.handle_raw_outbound_message(request)
+        d.addCallback(lambda msg: self.finish_request(request, msg))
+        return NOT_DONE_YET
 
     def render_PUT(self, request):
-        return self.render_(request, "render_PUT")
+        return self.render_(request)
 
     def render_GET(self, request):
-        return self.render_(request, "render_GET")
+        return self.render_(request)
 
     def render_POST(self, request):
-        return self.render_(request, "render_POST")
+        return self.render_(request)
 
 
 class RapidSMSRelay(ApplicationWorker):
@@ -51,6 +59,8 @@ class RapidSMSRelay(ApplicationWorker):
     :param str rapidsms_url:
         URL of the rapidsms http backend.
     """
+
+    SEND_TO_TAGS = frozenset(['default'])
 
     def validate_config(self):
         self.rapidsms_url = self.config['rapidsms_url']
@@ -81,26 +91,33 @@ class RapidSMSRelay(ApplicationWorker):
             return handler(self.username, self.password)
         return {}
 
+    @inlineCallbacks
     def setup_application(self):
         # start receipt web resource
         self.web_resource = yield self.start_web_resources(
             [
                 (SendResource(self), self.web_path),
-                (HealthResource(self), 'health'),
+                (HealthResource(), 'health'),
             ],
             self.web_port)
 
+    @inlineCallbacks
     def teardown_application(self):
         yield self.web_resource.loseConnection()
 
     def handle_raw_outbound_message(self, request):
-        pass
+        # TODO: handle username and password?
+        # user=my_username
+        # password=my_password
+        to_addr = request.args['id'][0]
+        content = request.args['text'][0]
+        return self.send_to(to_addr, content)
 
     def _call_rapidsms(self, message):
         headers = self.get_auth_headers()
         params = {
-            'sms': message['content'] or '',
-            'sender': message['from_addr'],
+            'text': message['content'] or '',
+            'id': message['from_addr'],
         }
         url = "%s?%s" % (self.rapidsms_url, urlencode(params))
         return http_request_full(url, headers=headers)
