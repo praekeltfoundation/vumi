@@ -1,10 +1,14 @@
 # -*- test-case-name: vumi.application.tests.test_rapidsms_relay -*-
+from urllib2 import urlparse
+from urllib import urlencode
+import json
+
 from twisted.internet.defer import inlineCallbacks
+from twisted.internet.task import LoopingCall
+
 from vumi.application.base import ApplicationWorker
 from vumi.utils import http_request_full
 from vumi import log
-from urllib2 import urlparse
-from urllib import urlencode
 
 
 class RapidSMSRelayApplication(ApplicationWorker):
@@ -17,7 +21,6 @@ class RapidSMSRelayApplication(ApplicationWorker):
         at `<rapidsms_url>/router/receive`.
     """
 
-   #("^router/outbox", outbox),
    #("^router/can_send/(?P<message_id>\d+)/", can_send),
 
     def validate_config(self):
@@ -25,6 +28,32 @@ class RapidSMSRelayApplication(ApplicationWorker):
         self.rapidsms_password = self.config.get('rapidsms_password')
         self.rapidsms_backend = self.config.get('rapidsms_backend', 'vumi')
         self.delivered_on_ack = self.config.get('delivered_on_ack', False)
+        self.outbox_poll_period = int(self.config.get('outbox_poll_period',
+                                                      60))
+        self._outbox_polling = LoopingCall(self._poll_outbox)
+
+    def setup_application(self):
+        self._outbox_polling.start(self.outbox_poll_period)
+
+    def _poll_outbox(self):
+        d = self._rapidsms_call("router/outbox")
+        d.addCallback(lambda response: json.loads(response.delivered_body))
+        d.addCallback(self._process_outbox)
+        return d
+
+    def _process_outbox(self, outbox):
+        log.info("Polled outbox: %r" % (outbox.get('status', 'No status')))
+        for message in outbox.get('outbox', []):
+            pass
+            # TODO: call .send_to()
+            #return dict(
+            #        id=self.pk,
+            #        contact=self.connection.identity,
+            #        backend=self.connection.backend.name,
+            #        direction=self.direction,
+            #        status=self.status,
+            #        text=self.text,
+            #        date=self.date.isoformat())
 
     def _rapidsms_call(self, route, **kw):
         if self.rapidsms_password is not None:
