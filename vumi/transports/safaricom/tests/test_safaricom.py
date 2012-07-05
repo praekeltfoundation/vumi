@@ -65,7 +65,6 @@ class TestSafaricomTransportTestCase(TransportTestCase):
         self.assertEqual(msg['transport_metadata'], {
             'safaricom': {
                 'session_id': 'session-id',
-                'history': [],
             },
         })
 
@@ -78,7 +77,8 @@ class TestSafaricomTransportTestCase(TransportTestCase):
     def test_inbound_resume_and_reply_with_end(self):
         # first pre-populate the redis datastore to simulate prior BEG message
         self.session_manager.create_session('session-id',
-                to_addr='*167*7#', from_addr='27761234567')
+                to_addr='*167*7#', from_addr='27761234567',
+                last_ussd_params='7*a*b')
         # Safaricom gives us the history of the full session in the USSD_PARAMS
         # The last submitted bit of content is the last value delimited by '*'
         deferred = self.mk_request(USSD_PARAMS='7*a*b*c')
@@ -92,7 +92,6 @@ class TestSafaricomTransportTestCase(TransportTestCase):
         self.assertEqual(msg['transport_metadata'], {
             'safaricom': {
                 'session_id': 'session-id',
-                'history': ['a', 'b', 'c'],
             },
         })
 
@@ -166,3 +165,39 @@ class TestSafaricomTransportTestCase(TransportTestCase):
             continue_session=True)
         self.dispatch(reply)
         yield d2
+
+    @inlineCallbacks
+    def test_submitting_asterisks_as_values(self):
+        self.session_manager.create_session('session-id',
+                to_addr='*167*7#', from_addr='27761234567',
+                last_ussd_params='7*a*b')
+        # we're submitting a bunch of *s
+        deferred = self.mk_request(USSD_PARAMS='7*a*b*****')
+
+        [msg] = yield self.wait_for_dispatched_messages(1)
+        self.assertEqual(msg['content'], '****')
+
+        reply = TransportUserMessage(**msg.payload).reply('Hello',
+            continue_session=True)
+        self.dispatch(reply)
+        yield deferred
+        session = self.session_manager.load_session('session-id')
+        self.assertEqual(session['last_ussd_params'], '7*a*b*****')
+
+    @inlineCallbacks
+    def test_submitting_asterisks_as_values_after_asterisks(self):
+        self.session_manager.create_session('session-id',
+                to_addr='*167*7#', from_addr='27761234567',
+                last_ussd_params='7*a*b**')
+        # we're submitting a bunch of *s
+        deferred = self.mk_request(USSD_PARAMS='7*a*b*****')
+
+        [msg] = yield self.wait_for_dispatched_messages(1)
+        self.assertEqual(msg['content'], '**')
+
+        reply = TransportUserMessage(**msg.payload).reply('Hello',
+            continue_session=True)
+        self.dispatch(reply)
+        yield deferred
+        session = self.session_manager.load_session('session-id')
+        self.assertEqual(session['last_ussd_params'], '7*a*b*****')

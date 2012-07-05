@@ -55,10 +55,6 @@ class SafaricomTransport(HttpRpcTransport):
     def connect_to_redis(self):
         return redis.Redis(**self.redis_config)
 
-    def save_session(self, session_id, **kwargs):
-        return self.session_manager.create_session(
-            session_id, **kwargs)
-
     def get_field_values(self, request):
         values = {}
         errors = {}
@@ -74,13 +70,6 @@ class SafaricomTransport(HttpRpcTransport):
 
     @inlineCallbacks
     def handle_raw_inbound_message(self, message_id, request):
-        """
-        NOTE:   Safaricom's API keeps a history of USSD sessions responses
-                in the USSD_PARAMS parameter. These are delimited with the *
-                character. As a result the Safaricom USSD API will break
-                if an end user attempts to submit * as a response in a
-                USSD session.
-        """
         values, errors = self.get_field_values(request)
         if errors:
             log.msg('Unhappy incoming message: %s' % (errors,))
@@ -97,28 +86,21 @@ class SafaricomTransport(HttpRpcTransport):
         if session:
             session_event = TransportUserMessage.SESSION_RESUME
             to_addr = session['to_addr']
-            # Remove the trailing #
-            # *167*7*3# -> *167*7*3
-            routing_addr = to_addr[:-1]
-            # Remove the leading *<DEST>* characters
-            # *167*7*3 -> 7*3
-            routing_addr = routing_addr.replace('*%s*' % (dest,), '')
-            # Remove this from the USSD_PARAMS, the remainder are the variables
-            # provided as input for this session
-            ussd_params = ussd_params.replace(routing_addr, '')
-            if '*' in ussd_params:
-                history = filter(None, ussd_params.split('*'))
-                content = history[-1]
+            last_ussd_params = session['last_ussd_params']
+            new_params = ussd_params.replace(last_ussd_params, '')
+            if new_params:
+                content = new_params[1:]
             else:
-                history = []
                 content = ''
+            session['last_ussd_params'] = ussd_params
+            session = self.session_manager.save_session(session_id, session)
         else:
             session_event = TransportUserMessage.SESSION_NEW
             to_addr = '*%s*%s#' % (dest, ussd_params)
-            session = self.save_session(session_id, from_addr=from_addr,
-                to_addr=to_addr)
+            session = self.session_manager.create_session(session_id,
+                from_addr=from_addr, to_addr=to_addr,
+                last_ussd_params=ussd_params)
             content = ''
-            history = []
 
         yield self.publish_message(
             message_id=message_id,
@@ -131,7 +113,6 @@ class SafaricomTransport(HttpRpcTransport):
             transport_metadata={
                 'safaricom': {
                     'session_id': session_id,
-                    'history': history,
                 }
             }
         )
