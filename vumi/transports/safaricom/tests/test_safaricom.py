@@ -51,11 +51,12 @@ class TestSafaricomTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_inbound_begin(self):
-        # If we get a menu like *167*7# the USSD_PARAMS is '7'
-        # if we get a * in it, it is a follow up request, so '7*a' means
-        # the user submitted 'a'
-        deferred = self.mk_request(USSD_PARAMS='7')
+        # init session, should return empty response and 200
+        response = yield self.mk_request(USSD_PARAMS='7')
+        self.assertEqual(response, '')
 
+        # Second connect is the actual start of the session
+        deferred = self.mk_request(USSD_PARAMS='7')
         [msg] = yield self.wait_for_dispatched_messages(1)
         self.assertEqual(msg['content'], '')
         self.assertEqual(msg['to_addr'], '*167*7#')
@@ -78,7 +79,9 @@ class TestSafaricomTransportTestCase(TransportTestCase):
         # first pre-populate the redis datastore to simulate prior BEG message
         self.session_manager.create_session('session-id',
                 to_addr='*167*7#', from_addr='27761234567',
-                last_ussd_params='7*a*b')
+                last_ussd_params='7*a*b',
+                session_event=TransportUserMessage.SESSION_RESUME)
+
         # Safaricom gives us the history of the full session in the USSD_PARAMS
         # The last submitted bit of content is the last value delimited by '*'
         deferred = self.mk_request(USSD_PARAMS='7*a*b*c')
@@ -117,7 +120,11 @@ class TestSafaricomTransportTestCase(TransportTestCase):
             'ORIG': '12345',
             'SESSION_ID': 'session-id',
         }
+
         # initial connect
+        response = yield self.mk_full_request(USSD_PARAMS='7*1', **defaults)
+        self.assertEqual(response, '')
+
         d1 = self.mk_full_request(USSD_PARAMS='7*1', **defaults)
         [msg1] = yield self.wait_for_dispatched_messages(1)
         self.assertEqual(msg1['to_addr'], '*167*7*1#')
@@ -143,6 +150,11 @@ class TestSafaricomTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_hitting_url_twice_without_content(self):
+
+        # init
+        response = yield self.mk_request(USSD_PARAMS='7*3')
+        self.assertEqual(response, '')
+
         d1 = self.mk_request(USSD_PARAMS='7*3')
         [msg1] = yield self.wait_for_dispatched_messages(1)
         self.assertEqual(msg1['to_addr'], '*167*7*3#')
