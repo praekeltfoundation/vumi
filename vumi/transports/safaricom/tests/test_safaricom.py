@@ -65,6 +65,7 @@ class TestSafaricomTransportTestCase(TransportTestCase):
         self.assertEqual(msg['transport_metadata'], {
             'safaricom': {
                 'session_id': 'session-id',
+                'history': [],
             },
         })
 
@@ -80,7 +81,7 @@ class TestSafaricomTransportTestCase(TransportTestCase):
                 to_addr='*167*7#', from_addr='27761234567')
         # Safaricom gives us the history of the full session in the USSD_PARAMS
         # The last submitted bit of content is the last value delimited by '*'
-        deferred = self.mk_request(USSD_PARAMS='*7*a*b*c')
+        deferred = self.mk_request(USSD_PARAMS='7*a*b*c')
 
         [msg] = yield self.wait_for_dispatched_messages(1)
         self.assertEqual(msg['content'], 'c')
@@ -91,6 +92,7 @@ class TestSafaricomTransportTestCase(TransportTestCase):
         self.assertEqual(msg['transport_metadata'], {
             'safaricom': {
                 'session_id': 'session-id',
+                'history': ['a', 'b', 'c'],
             },
         })
 
@@ -137,5 +139,30 @@ class TestSafaricomTransportTestCase(TransportTestCase):
             TransportUserMessage.SESSION_RESUME)
         reply = TransportUserMessage(**msg2.payload).reply("hello world",
             continue_session=False)
+        self.dispatch(reply)
+        yield d2
+
+    @inlineCallbacks
+    def test_hitting_url_twice_without_content(self):
+        d1 = self.mk_request(USSD_PARAMS='7*3')
+        [msg1] = yield self.wait_for_dispatched_messages(1)
+        self.assertEqual(msg1['to_addr'], '*167*7*3#')
+        self.assertEqual(msg1['content'], '')
+        self.assertEqual(msg1['session_event'],
+            TransportUserMessage.SESSION_NEW)
+        reply = TransportUserMessage(**msg1.payload).reply('Hello',
+            continue_session=True)
+        self.dispatch(reply)
+        yield d1
+
+        # make the exact same request again
+        d2 = self.mk_request(USSD_PARAMS='7*3')
+        [msg1, msg2] = yield self.wait_for_dispatched_messages(2)
+        self.assertEqual(msg2['to_addr'], '*167*7*3#')
+        self.assertEqual(msg2['content'], '')
+        self.assertEqual(msg2['session_event'],
+            TransportUserMessage.SESSION_RESUME)
+        reply = TransportUserMessage(**msg2.payload).reply('Hello',
+            continue_session=True)
         self.dispatch(reply)
         yield d2

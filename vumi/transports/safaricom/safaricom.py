@@ -13,7 +13,7 @@ from vumi.application import SessionManager
 
 class SafaricomTransport(HttpRpcTransport):
     """
-    HTTP transport for Mediafone Cameroun.
+    HTTP transport for USSD with Safaricom in Kenya.
 
     :param str web_path:
         The HTTP path to listen on.
@@ -90,13 +90,28 @@ class SafaricomTransport(HttpRpcTransport):
         if session:
             session_event = TransportUserMessage.SESSION_RESUME
             to_addr = session['to_addr']
-            content = ussd_params.split('*')[-1]
+            # Remove the trailing #
+            # *167*7*3# -> *167*7*3
+            routing_addr = to_addr[:-1]
+            # Remove the leading *<DEST>* characters
+            # *167*7*3 -> 7*3
+            routing_addr = routing_addr.replace('*%s*' % (dest,), '')
+            # Remove this from the USSD_PARAMS, the remainder are the variables
+            # provided as input for this session
+            ussd_params = ussd_params.replace(routing_addr, '')
+            if '*' in ussd_params:
+                history = filter(None, ussd_params.split('*'))
+                content = history[-1]
+            else:
+                history = []
+                content = ''
         else:
             session_event = TransportUserMessage.SESSION_NEW
             to_addr = '*%s*%s#' % (dest, ussd_params)
             session = self.save_session(session_id, from_addr=from_addr,
                 to_addr=to_addr)
             content = ''
+            history = []
 
         yield self.publish_message(
             message_id=message_id,
@@ -109,6 +124,7 @@ class SafaricomTransport(HttpRpcTransport):
             transport_metadata={
                 'safaricom': {
                     'session_id': session_id,
+                    'history': history,
                 }
             }
         )
