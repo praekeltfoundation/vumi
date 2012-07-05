@@ -24,6 +24,11 @@ class HTTPRelayApplication(ApplicationWorker):
         URL to send incoming messages to.
     :param str event_url:
         URL to send events related to outbound messages to (default: `url`).
+    :param str web_path:
+        Path to listen for outbound messages on (default: None). If omitted
+        no outbound message server is started.
+    :param str web_port:
+        Port to listen for outbound messages on (default: None).
     :param str username:
         Username to use when calling the `url` (default: no authentication).
     :param str password:
