@@ -16,6 +16,24 @@ class HTTPRelayError(VumiError):
 
 
 class HTTPRelayApplication(ApplicationWorker):
+    """Application that relays messages over HTTP.
+
+    HTTP relay configuration options:
+
+    :param str url:
+        URL to send incoming messages to.
+    :param str event_url:
+        URL to send events related to outbound messages to (default: `url`).
+    :param str username:
+        Username to use when calling the `url` (default: no authentication).
+    :param str password:
+        Password to use when calling `url` (default: none).
+    :param str auth_method:
+        Authentication method to use with `url` (default: 'basic').
+        The 'basic' method is currently the only available method.
+    :param str http_method:
+        HTTP request method to when calling the `url` (default: POST)
+    """
 
     reply_header = 'X-Vumi-HTTPRelay-Reply'
 
