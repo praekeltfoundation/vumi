@@ -53,7 +53,7 @@ class TestSafaricomTransportTestCase(TransportTestCase):
     def test_inbound_begin(self):
         # init session, should return empty response and 200
         response = yield self.mk_request(USSD_PARAMS='7')
-        self.assertEqual(response, '')
+        self.assertEqual(response, 'CON')
 
         # Second connect is the actual start of the session
         deferred = self.mk_request(USSD_PARAMS='7')
@@ -123,7 +123,7 @@ class TestSafaricomTransportTestCase(TransportTestCase):
 
         # initial connect
         response = yield self.mk_full_request(USSD_PARAMS='7*1', **defaults)
-        self.assertEqual(response, '')
+        self.assertEqual(response, 'CON')
 
         d1 = self.mk_full_request(USSD_PARAMS='7*1', **defaults)
         [msg1] = yield self.wait_for_dispatched_messages(1)
@@ -153,7 +153,7 @@ class TestSafaricomTransportTestCase(TransportTestCase):
 
         # init
         response = yield self.mk_request(USSD_PARAMS='7*3')
-        self.assertEqual(response, '')
+        self.assertEqual(response, 'CON')
 
         d1 = self.mk_request(USSD_PARAMS='7*3')
         [msg1] = yield self.wait_for_dispatched_messages(1)

@@ -117,7 +117,7 @@ class SafaricomTransport(HttpRpcTransport):
             self.session_manager.create_session(session_id,
                 from_addr=from_addr, to_addr=to_addr,
                 last_ussd_params=ussd_params)
-            self.finish_request(message_id, '', code=200)
+            self.finish_request(message_id, 'CON', code=200)
 
     def handle_outbound_message(self, message):
         if message.payload.get('in_reply_to') and 'content' in message.payload:
