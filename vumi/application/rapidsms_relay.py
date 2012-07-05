@@ -136,7 +136,10 @@ class RapidSMSRelay(ApplicationWorker):
             'id': message['from_addr'],
         }
         url = "%s?%s" % (self.rapidsms_url, urlencode(params))
-        return http_request_full(url, headers=headers)
+        d = http_request_full(url, headers=headers)
+        d.addCallback(lambda response: log.info(response.code))
+        d.addErrback(lambda failure: log.err(failure))
+        return d
 
     def consume_user_message(self, message):
         return self._call_rapidsms(message)
