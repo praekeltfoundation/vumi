@@ -25,15 +25,14 @@ class HTTPRelayApplication(ApplicationWorker):
         }
         self.url = urlparse.urlparse(self.config['url'])
         self.event_url = urlparse.urlparse(self.config.get('event_url',
-                                            self.url.geturl()))
+                                           self.url.geturl()))
         self.username = self.config.get('username', '')
         self.password = self.config.get('password', '')
         self.http_method = self.config.get('http_method', 'POST')
         self.auth_method = self.config.get('auth_method', 'basic')
         if self.auth_method not in self.supported_auth_methods:
-            raise HTTPRelayError(
-                    'HTTP Authentication method %s not supported' % (
-                    repr(self.auth_method,)))
+            raise HTTPRelayError('HTTP Authentication method'
+                                 ' %r not supported' % (self.auth_method,))
 
     def generate_basic_auth_headers(self, username, password):
         credentials = ':'.join([username, password])
@@ -52,7 +51,8 @@ class HTTPRelayApplication(ApplicationWorker):
     def consume_user_message(self, message):
         headers = self.get_auth_headers()
         response = yield http_request_full(self.url.geturl(),
-                            message.to_json(), headers, self.http_method)
+                                           message.to_json(), headers,
+                                           self.http_method)
         headers = response.headers
         if response.code == http.OK:
             if headers.hasHeader(self.reply_header):
@@ -62,13 +62,13 @@ class HTTPRelayApplication(ApplicationWorker):
                     self.reply_to(message, content)
         else:
             log.err('%s responded with %s' % (self.url.geturl(),
-                                                response.code))
+                                              response.code))
 
     @inlineCallbacks
     def relay_event(self, event):
         headers = self.get_auth_headers()
         yield http_request_full(self.event_url.geturl(),
-            event.to_json(), headers, self.http_method)
+                                event.to_json(), headers, self.http_method)
 
     @inlineCallbacks
     def consume_ack(self, event):
