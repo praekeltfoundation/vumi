@@ -1,12 +1,52 @@
 # -*- test-case-name: vumi.application.tests.test_http_relay -*-
 from twisted.python import log
 from twisted.web import http
+from twisted.web.resource import Resource
+from twisted.web.server import NOT_DONE_YET
 from twisted.internet.defer import inlineCallbacks
 from vumi.application.base import ApplicationWorker
 from vumi.utils import http_request_full
 from vumi.errors import VumiError
 from urllib2 import urlparse
 from base64 import b64encode
+
+
+class HealthResource(Resource):
+    isLeaf = True
+
+    def render_GET(self, request):
+        request.setResponseCode(http.OK)
+        request.do_not_log = True
+        return 'OK'
+
+
+class SendResource(Resource):
+    isLeaf = True
+
+    def __init__(self, application):
+        self.application = application
+        Resource.__init__(self)
+
+    def finish_request(self, request, msg):
+        request.setResponseCode(http.OK)
+        request.write(msg.to_json())
+        request.finish()
+
+    def render_(self, request):
+        log.msg("Send request: %s" % (request,))
+        request.setHeader("content-type", "application/json")
+        d = self.application.handle_raw_outbound_message(request)
+        d.addCallback(lambda msg: self.finish_request(request, msg))
+        return NOT_DONE_YET
+
+    def render_PUT(self, request):
+        return self.render_(request)
+
+    def render_GET(self, request):
+        return self.render_(request)
+
+    def render_POST(self, request):
+        return self.render_(request)
 
 
 class HTTPRelayError(VumiError):
