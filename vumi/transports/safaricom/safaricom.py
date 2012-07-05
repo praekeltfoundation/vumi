@@ -74,6 +74,13 @@ class SafaricomTransport(HttpRpcTransport):
 
     @inlineCallbacks
     def handle_raw_inbound_message(self, message_id, request):
+        """
+        NOTE:   Safaricom's API keeps a history of USSD sessions responses
+                in the USSD_PARAMS parameter. These are delimited with the *
+                character. As a result the Safaricom USSD API will break
+                if an end user attempts to submit * as a response in a
+                USSD session.
+        """
         values, errors = self.get_field_values(request)
         if errors:
             log.msg('Unhappy incoming message: %s' % (errors,))
