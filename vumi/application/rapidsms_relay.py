@@ -125,8 +125,8 @@ class RapidSMSRelay(ApplicationWorker):
         # TODO: handle username and password?
         # user=my_username
         # password=my_password
-        to_addr = request.args['id'][0]
-        content = request.args['text'][0]
+        to_addr = request.args['id'][0].decode('utf-8')
+        content = request.args['text'][0].decode('utf-8')
         return self.send_to(to_addr, content)
 
     def _call_rapidsms(self, message):
@@ -135,6 +135,7 @@ class RapidSMSRelay(ApplicationWorker):
             'text': message['content'] or '',
             'id': message['from_addr'],
         }
+        params = dict((k, v.encode('utf-8')) for k, v in params.iteritems())
         url = "%s?%s" % (self.rapidsms_url, urlencode(params))
         d = http_request_full(url, headers=headers)
         d.addCallback(lambda response: log.info(response.code))

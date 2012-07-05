@@ -75,6 +75,17 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
         self.assertEqual([], self.get_dispatched_messages())
 
     @inlineCallbacks
+    def test_rapidsms_relay_unicode(self):
+        def cb(request):
+            self.assertEqual(request.args['text'],
+                             [u'h\xc6llo'.encode('utf-8')])
+            return 'OK'
+
+        yield self.setup_resource(cb)
+        yield self.dispatch(self.mkmsg_in(content=u'h\xc6llo'))
+        self.assertEqual([], self.get_dispatched_messages())
+
+    @inlineCallbacks
     def test_rapidsms_relay_with_basic_auth(self):
         def cb(request):
             headers = request.requestHeaders
@@ -120,6 +131,7 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
     def _call_relay(self, **params):
         host = self.app.web_resource.getHost()
         send_url = "http://localhost:%d/send" % (host.port,)
+        params = dict((k, v.encode('utf-8')) for k, v in params.iteritems())
         send_url = "%s?%s" % (send_url, urlencode(params))
         return http_request_full(send_url)
 
@@ -135,3 +147,16 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
         self.assertEqual([msg], self.get_dispatched_messages())
         self.assertEqual(msg['to_addr'], '+123456')
         self.assertEqual(msg['content'], 'foo')
+
+    @inlineCallbacks
+    def test_rapidsms_relay_outbound_unicode(self):
+        def cb(request):
+            self.fail("RapidSMS relay should not send outbound messages to"
+                      " RapidSMS")
+
+        yield self.setup_resource(cb)
+        response = yield self._call_relay(id='+123456', text=u'f\xc6r')
+        msg = TransportUserMessage.from_json(response.delivered_body)
+        self.assertEqual([msg], self.get_dispatched_messages())
+        self.assertEqual(msg['to_addr'], '+123456')
+        self.assertEqual(msg['content'], u'f\xc6r')
