@@ -1,14 +1,16 @@
 # -*- test-case-name: vumi.application.tests.test_http_relay -*-
+from urllib2 import urlparse
+from base64 import b64encode
+
 from twisted.python import log
 from twisted.web import http
 from twisted.web.resource import Resource
 from twisted.web.server import NOT_DONE_YET
 from twisted.internet.defer import inlineCallbacks
+
 from vumi.application.base import ApplicationWorker
 from vumi.utils import http_request_full
 from vumi.errors import VumiError
-from urllib2 import urlparse
-from base64 import b64encode
 
 
 class HealthResource(Resource):
