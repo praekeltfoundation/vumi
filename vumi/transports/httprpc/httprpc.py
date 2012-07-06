@@ -59,6 +59,10 @@ class HttpRpcTransport(Transport):
     of this transport of a given name.
     """
 
+    def validate_config(self):
+        self.web_path = self.config['web_path']
+        self.web_port = int(self.config['web_port'])
+
     def get_transport_url(self, suffix=''):
         """
         Get the URL for the HTTP resource. Requires the worker to be started.
@@ -77,20 +81,10 @@ class HttpRpcTransport(Transport):
         # start receipt web resource
         self.web_resource = yield self.start_web_resources(
             [
-                (HttpRpcResource(self), self.config['web_path']),
+                (HttpRpcResource(self), self.web_path),
                 (HttpRpcHealthResource(self), 'health'),
             ],
-            self.config['web_port'])
-
-    def validate_config(self):
-        if 'web_port' not in self.config:
-            raise ConfigError("HttpRPCTransport requires web_port in its"
-                              " configuration")
-        self.config['web_port'] = int(self.config['web_port'])
-
-        if 'web_path' not in self.config:
-            raise ConfigError("HttpRPCTransport requires web_path in its"
-                              " configuration")
+            self.web_port)
 
     @inlineCallbacks
     def teardown_transport(self):
