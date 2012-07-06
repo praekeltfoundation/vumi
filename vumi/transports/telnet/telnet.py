@@ -69,10 +69,13 @@ class TelnetServerTransport(Transport):
     def _format_addr(self, addr):
         return "%s:%s" % (addr.host, addr.port)
 
+    def _client_addr(self, client):
+        return self._format_addr(client.transport.getPeer())
+
     def register_client(self, client):
-        client_addr = self._format_addr(client.transport.getPeer())
+        client_addr = self._client_addr(client)
         log.msg("Registering client connected from %r" % client_addr)
-        self._clients[id(client)] = client
+        self._clients[client_addr] = client
         self.send_inbound_message(client, None,
                                   TransportUserMessage.SESSION_NEW)
 
@@ -80,40 +83,42 @@ class TelnetServerTransport(Transport):
         log.msg("Deregistering client.")
         self.send_inbound_message(client, None,
                                   TransportUserMessage.SESSION_CLOSE)
-        del self._clients[id(client)]
+        client_addr = self._client_addr(client)
+        del self._clients[client_addr]
 
     def handle_input(self, client, text):
         self.send_inbound_message(client, text,
                                   TransportUserMessage.SESSION_RESUME)
 
     def send_inbound_message(self, client, text, session_event):
-        from_addr = str(client.transport.getPeer().host)
-        transport_metadata = {'session_id': id(client)}
+        client_addr = self._client_addr(client)
         self.publish_message(
-            from_addr=from_addr,
+            from_addr=client_addr,
             to_addr=self._to_addr,
             session_event=session_event,
             content=text,
             transport_name=self.transport_name,
             transport_type="telnet",
-            transport_metadata=transport_metadata,
             )
 
     def handle_outbound_message(self, message):
-        client_id = message['transport_metadata']['session_id']
-        client = self._clients.get(client_id)
-        if client is None:
-            # client gone, don't deliver
-            return
-
         text = message['content']
         if text is None:
             text = ''
         else:
             text = text.encode("UTF-8")
-
         text = "\n".join(text.splitlines())
-        client.transport.write("%s\n" % text)
 
-        if message['session_event'] == TransportUserMessage.SESSION_CLOSE:
-            client.transport.loseConnection()
+        client_addr = message['to_addr']
+        client = self._clients.get(client_addr)
+        if client is None:
+            # unknown addr, deliver to all
+            clients = self._clients.values()
+            text = "UNKNOWN ADDR [%s]: %s" % (client_addr, text)
+        else:
+            clients = [client]
+
+        for client in clients:
+            client.transport.write("%s\n" % text)
+            if message['session_event'] == TransportUserMessage.SESSION_CLOSE:
+                client.transport.loseConnection()
