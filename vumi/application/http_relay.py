@@ -69,6 +69,12 @@ class HTTPRelayApplication(ApplicationWorker):
         no outbound message server is started.
     :param str web_port:
         Port to listen for outbound messages on (default: None).
+    :param str web_ssl_key:
+        Path to the file containing the SSL key for the web server
+        (default: don't use SSL).
+    :param str web_ssl_cert:
+        Path to the file containing the SSL certificate for the web
+        server (default: don't use SSL).
     :param str username:
         Username to use when calling the `url` (default: no authentication).
     :param str password:
@@ -89,6 +95,10 @@ class HTTPRelayApplication(ApplicationWorker):
         self.url = urlparse.urlparse(self.config['url'])
         self.event_url = urlparse.urlparse(self.config.get('event_url',
                                            self.url.geturl()))
+        self.web_path = self.config.get('web_path')
+        self.web_port = int(self.config.get('web_port') or 0)
+        self.web_ssl_key = self.config.get('web_ssl_key')
+        self.web_ssl_cert = self.config.get('web_ssl_cert')
         self.username = self.config.get('username', '')
         self.password = self.config.get('password', '')
         self.http_method = self.config.get('http_method', 'POST')
@@ -96,6 +106,25 @@ class HTTPRelayApplication(ApplicationWorker):
         if self.auth_method not in self.supported_auth_methods:
             raise HTTPRelayError('HTTP Authentication method'
                                  ' %r not supported' % (self.auth_method,))
+
+    @inlineCallbacks
+    def setup_application(self):
+        if self.web_path is not None:
+            # start receipt web resource
+            self.web_resource = yield self.start_web_resources(
+                [
+                    (SendResource(self), self.web_path),
+                    (HealthResource(), 'health'),
+                ],
+                self.web_port,
+                ssl_key=self.web_ssl_key, ssl_cert=self.web_ssl_cert)
+        else:
+            self.web_resource = None
+
+    @inlineCallbacks
+    def teardown_application(self):
+        if self.web_resource is not None:
+            yield self.web_resource.loseConnection()
 
     def generate_basic_auth_headers(self, username, password):
         credentials = ':'.join([username, password])
@@ -109,6 +138,12 @@ class HTTPRelayApplication(ApplicationWorker):
             handler = self.supported_auth_methods.get(self.auth_method)
             return handler(self.username, self.password)
         return {}
+
+    def handle_raw_outbound_message(self, request):
+        # TODO: use 'in_reply_to': to look up original message
+        to_addr = request.args['to_addr'][0].decode('utf-8')
+        content = request.args['content'][0].decode('utf-8')
+        return self.send_to(to_addr, content)
 
     @inlineCallbacks
     def consume_user_message(self, message):
