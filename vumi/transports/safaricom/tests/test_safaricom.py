@@ -51,10 +51,6 @@ class TestSafaricomTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_inbound_begin(self):
-        # init session, should return empty response and 200
-        response = yield self.mk_request(USSD_PARAMS='7')
-        self.assertEqual(response, 'CON')
-
         # Second connect is the actual start of the session
         deferred = self.mk_request(USSD_PARAMS='7')
         [msg] = yield self.wait_for_dispatched_messages(1)
@@ -121,10 +117,6 @@ class TestSafaricomTransportTestCase(TransportTestCase):
             'SESSION_ID': 'session-id',
         }
 
-        # initial connect
-        response = yield self.mk_full_request(USSD_PARAMS='7*1', **defaults)
-        self.assertEqual(response, 'CON')
-
         d1 = self.mk_full_request(USSD_PARAMS='7*1', **defaults)
         [msg1] = yield self.wait_for_dispatched_messages(1)
         self.assertEqual(msg1['to_addr'], '*167*7*1#')
@@ -150,11 +142,6 @@ class TestSafaricomTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_hitting_url_twice_without_content(self):
-
-        # init
-        response = yield self.mk_request(USSD_PARAMS='7*3')
-        self.assertEqual(response, 'CON')
-
         d1 = self.mk_request(USSD_PARAMS='7*3')
         [msg1] = yield self.wait_for_dispatched_messages(1)
         self.assertEqual(msg1['to_addr'], '*167*7*3#')
