@@ -62,6 +62,12 @@ class RapidSMSRelay(ApplicationWorker):
         Path to listen for outbound messages from RapidSMS on.
     :param str web_port:
         Port to listen for outbound messages from RapidSMS on.
+    :param str web_ssl_key:
+        Path to the file containing the SSL key for the web server
+        (default: don't use SSL).
+    :param str web_ssl_cert:
+        Path to the file containing the SSL certificate for the web
+        server (default: don't use SSL).
     :param str username:
         Username to use for the `rapidsms_url` (default: no authentication).
     :param str password:
@@ -82,6 +88,8 @@ class RapidSMSRelay(ApplicationWorker):
         self.rapidsms_url = self.config['rapidsms_url']
         self.web_path = self.config['web_path']
         self.web_port = int(self.config['web_port'])
+        self.web_ssl_key = self.config.get('web_ssl_key')
+        self.web_ssl_cert = self.config.get('web_ssl_cert')
 
         self.supported_auth_methods = {
             'basic': self.generate_basic_auth_headers,
@@ -115,7 +123,7 @@ class RapidSMSRelay(ApplicationWorker):
                 (SendResource(self), self.web_path),
                 (HealthResource(), 'health'),
             ],
-            self.web_port)
+            self.web_port, self.web_ssl_key, self.web_ssl_cert)
 
     @inlineCallbacks
     def teardown_application(self):
