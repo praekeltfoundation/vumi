@@ -1,6 +1,7 @@
 # -*- test-case-name: vumi.application.tests.test_http_relay -*-
 from urllib2 import urlparse
 from base64 import b64encode
+import json
 
 from twisted.python import log
 from twisted.web import http
@@ -86,6 +87,8 @@ class HTTPRelayApplication(ApplicationWorker):
         HTTP request method to when calling the `url` (default: POST)
     """
 
+    SEND_TO_TAGS = frozenset(['default'])
+
     reply_header = 'X-Vumi-HTTPRelay-Reply'
 
     def validate_config(self):
@@ -141,8 +144,10 @@ class HTTPRelayApplication(ApplicationWorker):
 
     def handle_raw_outbound_message(self, request):
         # TODO: use 'in_reply_to': to look up original message
-        to_addr = request.args['to_addr'][0].decode('utf-8')
-        content = request.args['content'][0].decode('utf-8')
+        msg_json = request.content.read()
+        payload = json.loads(msg_json)
+        to_addr = payload['to_addr']
+        content = payload['content']
         return self.send_to(to_addr, content)
 
     @inlineCallbacks
