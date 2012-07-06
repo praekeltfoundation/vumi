@@ -123,7 +123,8 @@ class RapidSMSRelay(ApplicationWorker):
                 (SendResource(self), self.web_path),
                 (HealthResource(), 'health'),
             ],
-            self.web_port, self.web_ssl_key, self.web_ssl_cert)
+            self.web_port, ssl_key=self.web_ssl_key,
+            ssl_cert=self.web_ssl_cert)
 
     @inlineCallbacks
     def teardown_application(self):
