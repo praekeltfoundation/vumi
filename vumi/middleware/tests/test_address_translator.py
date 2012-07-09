@@ -18,7 +18,7 @@ class AddressTranslationMiddlewareTestCase(TestCase):
         return {
             'to_addr': to_addr,
             'from_addr': from_addr,
-            }
+        }
 
     def test_handle_outbound(self):
         mw = self.mk_addr_trans({'555OUT': '555IN'})
@@ -31,7 +31,7 @@ class AddressTranslationMiddlewareTestCase(TestCase):
     def test_handle_inbound(self):
         mw = self.mk_addr_trans({'555OUT': '555IN'})
 
-        msg = mw.handle_inbound(self.mk_msg(from_addr="555OUT"), "inbound")
+        msg = mw.handle_inbound(self.mk_msg(from_addr="555IN"), "inbound")
         self.assertEqual(msg['from_addr'], "555OUT")
         msg = mw.handle_inbound(self.mk_msg(from_addr="555UNK"), "inbound")
         self.assertEqual(msg['from_addr'], "555UNK")
