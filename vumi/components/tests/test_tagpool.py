@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
 
-"""Tests for vumi.application.tagpool."""
+"""Tests for vumi.components.tagpool."""
 
 import json
 
 from twisted.trial.unittest import TestCase
 
-from vumi.tests.utils import FakeRedis
+from vumi.persist.fake_redis import FakeRedis
 
-from vumi.application.tagpool import TagpoolManager, TagpoolError
+from vumi.components.tagpool import TagpoolManager, TagpoolError
 
 
 class TestTagpoolManager(TestCase):
