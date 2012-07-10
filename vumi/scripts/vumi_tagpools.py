@@ -7,7 +7,7 @@ import yaml
 from twisted.python import usage
 
 from vumi.components import TagpoolManager
-from vumi.utils import redis_from_config
+from vumi.persist.redis_manager import RedisManager
 
 
 class PoolSubCmd(usage.Options):
@@ -148,9 +148,10 @@ class ConfigHolder(object):
         self.options = options
         self.config = yaml.safe_load(open(options['config'], "rb"))
         self.pools = self.config.get('pools', {})
-        r_server = redis_from_config(self.config.get('redis', {}))
-        r_prefix = self.config.get('r_prefix', 'vumi')
-        self.tagpool = TagpoolManager(r_server, r_prefix)
+        redis = RedisManager.from_config(self.config.get('redis', {}),
+                                         self.config.get('r_prefix',
+                                                         'vumi'))
+        self.tagpool = TagpoolManager(redis)
 
     def emit(self, s):
         print s
