@@ -12,5 +12,5 @@ redis
 python-smpp
 pytz
 riakasaurus
-https://github.com/basho/riak-python-client/tarball/master#egg=riak
+riak
 https://github.com/dustin/twitty-twister/tarball/master#egg=twittytwister-0.1.1
