@@ -5,13 +5,12 @@ txAMQP>=0.5
 PyYAML
 iso8601
 supervisor
-# Newer pyOpenSSL fails to build on MacOS X 10.6.
-pyOpenSSL==0.11
+pyOpenSSL
 python-ssmi
 wokkel
 redis
 python-smpp
 pytz
-https://github.com/basho/riak-python-client/tarball/master#egg=riak
-https://bitbucket.org/calston/txriak/get/tip.zip#egg=txriak-0.3.4
+riakasaurus
+riak
 https://github.com/dustin/twitty-twister/tarball/master#egg=twittytwister-0.1.1

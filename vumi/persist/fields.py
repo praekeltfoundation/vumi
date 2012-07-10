@@ -312,6 +312,10 @@ class DynamicDescriptor(FieldDescriptor):
         else:
             self.prefix = self.field.prefix
 
+    def initialize(self, modelobj, valuedict):
+        if valuedict is not None:
+            self.update(modelobj, valuedict)
+
     def get_value(self, modelobj):
         return DynamicProxy(self, modelobj)
 
@@ -414,7 +418,6 @@ class Dynamic(FieldWithSubtype):
         the name of the field followed by a dot ('.').
     """
     descriptor_class = DynamicDescriptor
-    initializable = False
 
     def __init__(self, field_type=None, prefix=None):
         super(Dynamic, self).__init__(field_type=field_type)
