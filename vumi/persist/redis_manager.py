@@ -4,9 +4,13 @@ import redis
 
 from vumi.persist.redis_base import Manager
 from vumi.persist.fake_redis import FakeRedis
+from vumi.persist.riak_manager import flatten_generator
 
 
 class RedisManager(Manager):
+
+    call_decorator = staticmethod(flatten_generator)
+
     @classmethod
     def _fake_manager(cls, key_prefix, client=None):
         if client is None:
