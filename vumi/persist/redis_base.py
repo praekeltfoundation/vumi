@@ -56,10 +56,16 @@ class Manager(object):
 
     __metaclass__ = CallMakerMetaclass
 
-    def __init__(self, client, key_prefix):
+    def __init__(self, client, key_prefix, key_separator='#'):
         self._client = client
         self._key_prefix = key_prefix
-        self._key_separator = '#'  # So we can override if necessary.
+        self._key_separator = key_separator
+
+    def sub_manager(self, sub_prefix):
+        key_prefix = "%s%s%s" % (self._key_prefix, self._key_separator,
+                                 sub_prefix)
+        return self.__class__(self._client, key_prefix,
+                              key_separator=self._key_separator)
 
     @staticmethod
     def calls_manager(manager_attr):
