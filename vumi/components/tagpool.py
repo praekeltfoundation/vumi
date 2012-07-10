@@ -13,6 +13,11 @@ class TagpoolError(VumiError):
 
 
 class TagpoolManager(object):
+    """Manage a set of tag pools.
+
+    :param redis:
+        An instance of :class:`vumi.persist.redis_base.Manager`.
+    """
 
     def __init__(self, redis):
         self.redis = redis
