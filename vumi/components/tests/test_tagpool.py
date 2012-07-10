@@ -8,11 +8,12 @@ from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.persist.txredis_manager import TxRedisManager
+from vumi.persist.redis_manager import RedisManager
 
 from vumi.components.tagpool import TagpoolManager, TagpoolError
 
 
-class TestTagpoolManager(TestCase):
+class TestTxTagpoolManager(TestCase):
 
     @inlineCallbacks
     def setUp(self):
@@ -113,12 +114,6 @@ class TestTagpoolManager(TestCase):
     @inlineCallbacks
     def test_metadata(self):
         mkey = self.pool_key_generator("poolA")("metadata")
-
-        def mget(field):
-            d = self.tagpool.redis.hget(mkey, field)
-            d.addCallback(json.loads)
-            return d
-
         metadata = {
             "transport_type": "sms",
             "default_msg_fields": {
@@ -131,9 +126,18 @@ class TestTagpoolManager(TestCase):
         yield self.tagpool.set_metadata("poolA", metadata)
         self.assertEqual((yield self.tagpool.get_metadata("poolA")),
                          metadata)
-        self.assertEqual((yield mget("transport_type")), "sms")
+        tt_json = yield self.tagpool.redis.hget(mkey, "transport_type")
+        transport_type = json.loads(tt_json)
+        self.assertEqual(transport_type, "sms")
 
         short_metadata = {"foo": "bar"}
         yield self.tagpool.set_metadata("poolA", short_metadata)
         self.assertEqual((yield self.tagpool.get_metadata("poolA")),
                          short_metadata)
+
+
+class TestTagpoolManager(TestTxTagpoolManager):
+
+    def setUp(self):
+        redis = RedisManager.from_config('FAKE_REDIS', 'teststore')
+        self.tagpool = TagpoolManager(redis)
