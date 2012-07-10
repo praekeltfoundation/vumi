@@ -29,6 +29,7 @@ class OldSimpleHttpTransport(HttpRpcTransport):
     """
 
     def validate_config(self):
+        super(OldSimpleHttpTransport, self).validate_config()
         self.identities = self.config.get('identities', {})
 
     def get_health_response(self):
