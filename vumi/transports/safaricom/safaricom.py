@@ -12,7 +12,7 @@ from vumi.components import SessionManager
 
 class SafaricomTransport(HttpRpcTransport):
     """
-    HTTP transport for Safaricom.
+    HTTP transport for USSD with Safaricom in Kenya.
 
     :param str web_path:
         The HTTP path to listen on.
@@ -50,10 +50,6 @@ class SafaricomTransport(HttpRpcTransport):
         yield self.session_manager.stop()
         yield super(SafaricomTransport, self).teardown_transport()
 
-    def save_session(self, session_id, **kwargs):
-        return self.session_manager.create_session(
-            session_id, **kwargs)
-
     def get_field_values(self, request):
         values = {}
         errors = {}
@@ -83,14 +79,23 @@ class SafaricomTransport(HttpRpcTransport):
 
         session = yield self.session_manager.load_session(session_id)
         if session:
-            session_event = TransportUserMessage.SESSION_RESUME
             to_addr = session['to_addr']
-            content = ussd_params.split('*')[-1]
+            last_ussd_params = session['last_ussd_params']
+            new_params = ussd_params.replace(last_ussd_params, '')
+            if new_params:
+                content = new_params[1:]
+            else:
+                content = ''
+
+            session['last_ussd_params'] = ussd_params
+            self.session_manager.save_session(session_id, session)
+            session_event = TransportUserMessage.SESSION_RESUME
         else:
-            session_event = TransportUserMessage.SESSION_NEW
             to_addr = '*%s*%s#' % (dest, ussd_params)
-            session = yield self.save_session(
-                session_id, from_addr=from_addr, to_addr=to_addr)
+            yield self.session_manager.create_session(session_id,
+                from_addr=from_addr, to_addr=to_addr,
+                last_ussd_params=ussd_params)
+            session_event = TransportUserMessage.SESSION_NEW
             content = ''
 
         yield self.publish_message(
