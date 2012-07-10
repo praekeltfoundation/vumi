@@ -14,12 +14,11 @@ from vumi.components.tagpool import TagpoolManager, TagpoolError
 class TestTagpoolManager(TestCase):
 
     def setUp(self):
-        self.prefix = "testpool"
-        self.tagpool = TagpoolManager(FakeRedis(), self.prefix)
+        self.tagpool = TagpoolManager(FakeRedis())
 
     def pool_key_generator(self, pool):
         def tkey(x):
-            return ":".join([self.prefix, "tagpools", pool, x])
+            return ":".join(["tagpools", pool, x])
         return tkey
 
     def test_declare_tags(self):
@@ -56,12 +55,12 @@ class TestTagpoolManager(TestCase):
         self.tagpool.declare_tags([tag1, tag2])
         self.assertEqual(self.tagpool.acquire_tag("poolA"), tag1)
         self.assertEqual(self.tagpool.acquire_tag("poolB"), None)
-        self.assertEqual(self.tagpool.r_server.lrange(tkey("free:list"),
-                                                    0, -1),
+        self.assertEqual(self.tagpool.redis.lrange(tkey("free:list"),
+                                                   0, -1),
                          ["tag2"])
-        self.assertEqual(self.tagpool.r_server.smembers(tkey("free:set")),
+        self.assertEqual(self.tagpool.redis.smembers(tkey("free:set")),
                          set(["tag2"]))
-        self.assertEqual(self.tagpool.r_server.smembers(tkey("inuse:set")),
+        self.assertEqual(self.tagpool.redis.smembers(tkey("inuse:set")),
                          set(["tag1"]))
 
     def test_acquire_specific_tag(self):
@@ -73,12 +72,12 @@ class TestTagpoolManager(TestCase):
         self.assertEqual(self.tagpool.acquire_specific_tag(tag5), None)
         free_local_tags = [t[1] for t in tags]
         free_local_tags.remove("tag5")
-        self.assertEqual(self.tagpool.r_server.lrange(tkey("free:list"),
-                                                    0, -1),
+        self.assertEqual(self.tagpool.redis.lrange(tkey("free:list"),
+                                                   0, -1),
                          free_local_tags)
-        self.assertEqual(self.tagpool.r_server.smembers(tkey("free:set")),
+        self.assertEqual(self.tagpool.redis.smembers(tkey("free:set")),
                          set(free_local_tags))
-        self.assertEqual(self.tagpool.r_server.smembers(tkey("inuse:set")),
+        self.assertEqual(self.tagpool.redis.smembers(tkey("inuse:set")),
                          set(["tag5"]))
 
     def test_release_tag(self):
@@ -88,27 +87,27 @@ class TestTagpoolManager(TestCase):
         self.tagpool.acquire_tag("poolA")
         self.tagpool.acquire_tag("poolA")
         self.tagpool.release_tag(tag1)
-        self.assertEqual(self.tagpool.r_server.lrange(tkey("free:list"),
-                                                    0, -1),
+        self.assertEqual(self.tagpool.redis.lrange(tkey("free:list"),
+                                                   0, -1),
                          ["tag3", "tag1"])
-        self.assertEqual(self.tagpool.r_server.smembers(tkey("free:set")),
+        self.assertEqual(self.tagpool.redis.smembers(tkey("free:set")),
                          set(["tag1", "tag3"]))
-        self.assertEqual(self.tagpool.r_server.smembers(tkey("inuse:set")),
+        self.assertEqual(self.tagpool.redis.smembers(tkey("inuse:set")),
                          set(["tag2"]))
 
     def test_metadata(self):
         mkey = self.pool_key_generator("poolA")("metadata")
-        mget = lambda field: json.loads(self.tagpool.r_server.hget(mkey,
-                                                                   field))
+        mget = lambda field: json.loads(self.tagpool.redis.hget(mkey,
+                                                                field))
         metadata = {
             "transport_type": "sms",
             "default_msg_fields": {
                 "transport_name": "sphex",
                 "helper_metadata": {
                     "even_more_nested": "foo",
-                    },
                 },
-            }
+            },
+        }
         self.tagpool.set_metadata("poolA", metadata)
         self.assertEqual(self.tagpool.get_metadata("poolA"), metadata)
         self.assertEqual(mget("transport_type"), "sms")
