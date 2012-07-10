@@ -9,6 +9,9 @@ from vumi.persist.fake_redis import FakeRedis
 
 
 class TxRedisManager(Manager):
+
+    call_decorator = staticmethod(inlineCallbacks)
+
     @classmethod
     def _fake_manager(cls, key_prefix, client=None):
         if client is None:
