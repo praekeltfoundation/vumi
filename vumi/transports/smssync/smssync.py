@@ -29,10 +29,14 @@ class SmsSyncTransport(HttpRpcTransport):
 
     @inlineCallbacks
     def handle_outbound_message(self, message):
+        # TODO: If the message has a reply message, generate a response
+        # that will allow you to reply.
         yield self.finish_request(message.payload['in_reply_to'],
                                   self.generate_response(True))
 
     def generate_response(self, success=False):
+        # TODO: Allow a message to be passed to this method, which sets
+        # the task as 'send' and an array of messages.
         response = {
             'payload': {
                 'success': success
@@ -43,16 +47,23 @@ class SmsSyncTransport(HttpRpcTransport):
 
     @inlineCallbacks
     def handle_raw_inbound_message(self, message_id, request):
+        # TODO: Handle get/ post requests differently.
+
         if self.secret != request.args['secret'][0]:
             yield self.finish_request(message_id, self.generate_response(False))
             return
 
-        message = {
-            'message_id': message_id,
-            'transport_type': self.transport_type,
-            'to_addr': request.args['sent_to'][0],
-            'from_addr': request.args['from'][0],
-            'content': request.args['message'][0]
-        }            
+        if request.method == 'POST':
+            message = {
+                'message_id': message_id,
+                'transport_type': self.transport_type,
+                'to_addr': request.args['sent_to'][0],
+                'from_addr': request.args['from'][0],
+                'content': request.args['message'][0]
+            }            
+            yield self.publish_message(**message)
 
-        yield self.publish_message(**message)
+
+        if request.method == 'GET' and request.args['task'][0] == 'send':
+            # TODO: Send outgoing messages.
+            pass
