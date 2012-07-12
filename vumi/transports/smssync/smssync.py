@@ -1,6 +1,7 @@
 # -*- test-case-name: vumi.transports.httprpc.tests.test_httprpc -*-
 
 import json
+import redis
 
 from twisted.internet.defer import inlineCallbacks
 from twisted.python import log
@@ -27,7 +28,7 @@ class SmsSyncResource(Resource):
         Resource.__init__(self)
 
     def render(self, request):
-        return 'pew'
+        return 'bar'
 
 
 class SmsSyncTransport(Transport):
@@ -43,12 +44,12 @@ class SmsSyncTransport(Transport):
     """
 
     def validate_config(self):
-
         self.web_path = self.config['web_path']
         self.web_port = int(self.config['web_port'])
         self.secret = self.config.get('secret', '')
-
+        
         self.redis_config = self.config.get('redis_config', {})
+        self.r_prefix = "smssync:%s" % (self.config['transport_name'],)
 
     @inlineCallbacks
     def setup_transport(self):
@@ -58,3 +59,19 @@ class SmsSyncTransport(Transport):
                 (SmsSyncHealthResource(), 'health')
             ], self.web_port
         )
+        
+        self.r_server = redis.Redis(**self.redis_config)
+    
+    def rkey_sms(self, direction):
+        return "%s:%s" % (self.r_prefix, direction)
+
+    def store_sms(self, sent_from, message, message_id, sent_to, sent_timestamp):
+        rkey_sms = self.rkey_sms('incoming')
+        payload = json.dumps({'sent_from': sent_from, 'message': message, 
+                            'message_id': message_id, 'sent_to': sent_to, 
+                            'sent_timestamp': sent_timestamp})
+        self.r_server.rpush(rkey_sms, payload)
+
+    def retrieve_smses(self):
+        self.rkey_memo('outgoing')
+        
