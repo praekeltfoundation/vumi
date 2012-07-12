@@ -31,11 +31,24 @@ class SmsSyncResource(Resource):
 
 
 class SmsSyncTransport(Transport):
+    """
+    Ushandi SMSSync Transport
+
+    :param str web_path:
+        The HTTP path to listen on.
+    :param int web_port:
+        The HTTP port
+    :param str secret:
+        An optional authentication method
+    """
 
     def validate_config(self):
+
         self.web_path = self.config['web_path']
         self.web_port = int(self.config['web_port'])
         self.secret = self.config.get('secret', '')
+
+        self.redis_config = self.config.get('redis_config', {})
 
     @inlineCallbacks
     def setup_transport(self):
