@@ -1,77 +1,58 @@
-# -*- test-case-name: vumi.transports.httprpc.tests.test_httprpc -*-
-
+# -*- test-case-name: vumi.transports.smssync.tests.test_smssync -*-
 import json
-import redis
 
-from twisted.internet.defer import inlineCallbacks
 from twisted.python import log
-from twisted.web import http
-from twisted.web.resource import Resource
+from twisted.internet.defer import inlineCallbacks
 
-from vumi.transports.base import Transport
-
-
-class SmsSyncHealthResource(Resource):
-    isLeaf = True
-
-    def render(self, request):
-        request.setResponseCode(http.OK)
-        request.do_not_log = True
-        return 'OK'
+from vumi.transports.httprpc import HttpRpcTransport
 
 
-class SmsSyncResource(Resource):
-    isLeaf = True
-
-    def __init__(self, transport):
-        self.transport = transport
-        Resource.__init__(self)
-
-    def render(self, request):
-        return 'bar'
-
-
-class SmsSyncTransport(Transport):
+class SmsSyncTransport(HttpRpcTransport):
     """
-    Ushandi SMSSync Transport
+    Ushandi SMSSync Transport for getting messages into vumi.
 
-    :param str web_path:
-        The HTTP path to listen on.
-    :param int web_port:
-        The HTTP port
-    :param str secret:
-        An optional authentication method
+    web_path : str
+        The path relative to the host where this listens
+    web_port : int
+        The port this listens on
+    transport_name : str
+        The name this transport instance will use to create its queues
+    secret : str (default '')
+        For security, compared against a string entered in the Android app.
     """
 
-    def validate_config(self):
-        self.web_path = self.config['web_path']
-        self.web_port = int(self.config['web_port'])
-        self.secret = self.config.get('secret', '')
-        
-        self.redis_config = self.config.get('redis_config', {})
-        self.r_prefix = "smssync:%s" % (self.config['transport_name'],)
+    transport_type = 'smssync'
+
+    def setup_transport(self):
+        self.secret = self.config.get('secret')
+        return super(SmsSyncTransport, self).setup_transport()
 
     @inlineCallbacks
-    def setup_transport(self):
-        self.web_resource = yield self.start_web_resources(
-            [
-                (SmsSyncResource(self), self.web_path),
-                (SmsSyncHealthResource(), 'health')
-            ], self.web_port
-        )
-        
-        self.r_server = redis.Redis(**self.redis_config)
-    
-    def rkey_sms(self, direction):
-        return "%s:%s" % (self.r_prefix, direction)
+    def handle_outbound_message(self, message):
+        yield self.finish_request(message.payload['in_reply_to'],
+                                  self.generate_response(True))
 
-    def store_sms(self, sent_from, message, message_id, sent_to, sent_timestamp):
-        rkey_sms = self.rkey_sms('incoming')
-        payload = json.dumps({'sent_from': sent_from, 'message': message, 
-                            'message_id': message_id, 'sent_to': sent_to, 
-                            'sent_timestamp': sent_timestamp})
-        self.r_server.rpush(rkey_sms, payload)
+    def generate_response(self, success=False):
+        response = {
+            'payload': {
+                'success': success
+            }
+        }
 
-    def retrieve_smses(self):
-        self.rkey_memo('outgoing')
-        
+        return json.dumps(response)
+
+    @inlineCallbacks
+    def handle_raw_inbound_message(self, message_id, request):
+        if self.secret != request.args['secret'][0]:
+            yield self.finish_request(message_id, self.generate_response(False))
+            return
+
+        message = {
+            'message_id': message_id,
+            'transport_type': self.transport_type,
+            'to_addr': request.args['sent_to'][0],
+            'from_addr': request.args['from'][0],
+            'content': request.args['message'][0]
+        }            
+
+        yield self.publish_message(**message)
