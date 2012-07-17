@@ -1,3 +1,5 @@
+# -*- test-case-name: vumi.persist.tests.test_redis_base -*-
+
 from functools import wraps
 
 from vumi.persist.ast_magic import make_function
@@ -62,8 +64,7 @@ class Manager(object):
         self._key_separator = key_separator
 
     def sub_manager(self, sub_prefix):
-        key_prefix = "%s%s%s" % (self._key_prefix, self._key_separator,
-                                 sub_prefix)
+        key_prefix = self._key(sub_prefix)
         return self.__class__(self._client, key_prefix,
                               key_separator=self._key_separator)
 
@@ -155,6 +156,8 @@ class Manager(object):
         """
         Generate a key using this manager's key prefix
         """
+        if self._key_prefix is None:
+            return key
         return "%s%s%s" % (self._key_prefix, self._key_separator, key)
 
     def _unkey(self, key):
