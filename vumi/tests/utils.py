@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from collections import namedtuple
 from contextlib import contextmanager
 import warnings
+from functools import wraps
 
 import pytz
 from twisted.internet import defer, reactor
@@ -14,7 +15,7 @@ from twisted.web.server import Site
 from twisted.internet.defer import DeferredQueue, inlineCallbacks
 from twisted.python import log
 
-from vumi.utils import vumi_resource_path, import_module
+from vumi.utils import vumi_resource_path, import_module, flatten_generator
 from vumi.service import get_spec, Worker, WorkerCreator
 from vumi.tests.fake_amqp import FakeAMQClient
 
@@ -297,3 +298,96 @@ class MockHttpServer(object):
     @inlineCallbacks
     def stop(self):
         yield self._webserver.loseConnection()
+
+
+def maybe_async(sync_attr):
+    """Decorate a method that may be sync or async.
+
+    This redecorates with the either @inlineCallbacks or @flatten_generator,
+    depending on the `sync_attr`.
+    """
+    if callable(sync_attr):
+        # If we don't get a sync attribute name, default to 'is_sync'.
+        return maybe_async('is_sync')(sync_attr)
+
+    def redecorate(func):
+        @wraps(func)
+        def wrapper(self, *args, **kw):
+            if getattr(self, sync_attr):
+                return flatten_generator(func)(self, *args, **kw)
+            return inlineCallbacks(func)(self, *args, **kw)
+        return wrapper
+
+    return redecorate
+
+
+class PersistenceMixin(object):
+    sync_persistence = False
+
+    sync_or_async = staticmethod(maybe_async('sync_persistence'))
+
+    def _persist_setUp(self):
+        self._persist_riak_managers = []
+        self._persist_redis_managers = []
+
+    @maybe_async('sync_persistence')
+    def _persist_tearDown(self):
+        for manager in self._persist_riak_managers:
+            yield self._persist_purge_riak(manager)
+        for manager in self._persist_redis_managers:
+            yield self._persist_purge_redis(manager)
+
+    def _persist_purge_riak(self, manager):
+        "This is a separate method to allow easy overriding."
+        return manager.purge_all()
+
+    def _persist_purge_redis(self, manager):
+        "This is a separate method to allow easy overriding."
+        return manager.close_manager()
+
+    def get_riak_manager(self, config=None):
+        if config is None:
+            config = {}
+        config.setdefault('bucket_prefix', type(self).__module__)
+
+        if self.sync_persistence:
+            return self._get_sync_riak_manager(config)
+        return self._get_async_riak_manager(config)
+
+    def _get_async_riak_manager(self, config):
+        from vumi.persist.txriak_manager import TxRiakManager
+        riak_manager = TxRiakManager.from_config(config)
+        self._persist_riak_managers.append(riak_manager)
+        return riak_manager
+
+    def _get_sync_riak_manager(self, config):
+        from vumi.persist.riak_manager import RiakManager
+        riak_manager = RiakManager.from_config(config)
+        self._persist_riak_managers.append(riak_manager)
+        return riak_manager
+
+    def get_redis_manager(self, config='FAKE_REDIS', key_prefix=None):
+        if key_prefix is None:
+            key_prefix = type(self).__module__
+
+        if self.sync_persistence:
+            return self._get_sync_redis_manager(config, key_prefix)
+        return self._get_async_redis_manager(config, key_prefix)
+
+    def _get_async_redis_manager(self, config, key_prefix):
+        from vumi.persist.txredis_manager import TxRedisManager
+
+        d = TxRedisManager.from_config(config, key_prefix)
+
+        def add_to_self(redis_manager):
+            self._persist_redis_managers.append(redis_manager)
+            return redis_manager
+
+        return d.addCallback(add_to_self)
+
+    def _get_sync_redis_manager(self, config, key_prefix):
+        from vumi.persist.redis_manager import RedisManager
+
+        redis_manager = RedisManager.from_config(config, key_prefix)
+        self._persist_redis_managers.append(redis_manager)
+        return redis_manager

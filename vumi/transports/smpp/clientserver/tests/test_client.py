@@ -4,21 +4,10 @@ from twisted.internet.defer import inlineCallbacks
 from smpp.pdu_builder import DeliverSM, BindTransceiverResp
 from smpp.pdu import unpack_pdu
 
-from vumi.tests.utils import LogCatcher
+from vumi.tests.utils import LogCatcher, PersistenceMixin
 from vumi.transports.smpp.clientserver.client import (
-        EsmeTransceiver,
-        EsmeReceiver,
-        EsmeTransmitter,
-        EsmeCallbacks,
-        ESME)
+    EsmeTransceiver, EsmeReceiver, EsmeTransmitter, EsmeCallbacks, ESME)
 from vumi.transports.smpp.clientserver.config import ClientConfig
-from vumi.persist.txredis_manager import TxRedisManager
-
-
-def mkredis(client_config):
-    r_prefix = "%s@%s:%s" % (
-        client_config.system_id, client_config.host, client_config.port)
-    return TxRedisManager.from_config("FAKE_REDIS", r_prefix)
 
 
 class FakeTransport(object):
@@ -65,30 +54,21 @@ class FakeEsmeTransmitter(EsmeTransmitter):
         pass
 
 
-class EsmeSequenceNumberTestCase(unittest.TestCase):
-
-    @inlineCallbacks
-    def test_sequence_rollover(self):
-        config = ClientConfig(host="127.0.0.1", port="0",
-                              system_id="1234", password="password")
-        redis = yield mkredis(config)
-        esme = FakeEsmeTransceiver(config, redis, None)
-        self.assertEqual(1, (yield esme.get_next_seq()))
-        self.assertEqual(2, (yield esme.get_next_seq()))
-        yield esme.redis.set('smpp_last_sequence_number', 0xFFFF0000)
-        self.assertEqual(0xFFFF0001, (yield esme.get_next_seq()))
-        self.assertEqual(1, (yield esme.get_next_seq()))
-
-
-class EsmeTestCaseBase(unittest.TestCase):
+class EsmeTestCaseBase(unittest.TestCase, PersistenceMixin):
     timeout = 5
     ESME_CLASS = None
+
+    def setUp(self):
+        self._persist_setUp()
+
+    def tearDown(self):
+        return self._persist_tearDown()
 
     def get_esme(self, **callbacks):
         config = ClientConfig(host="127.0.0.1", port="0",
                               system_id="1234", password="password")
         esme_callbacks = EsmeCallbacks(**callbacks)
-        redis_d = mkredis(config)
+        redis_d = self.get_redis_manager()
         return redis_d.addCallback(
             lambda r: self.ESME_CLASS(config, r, esme_callbacks))
 
@@ -156,6 +136,15 @@ class EsmeTransceiverTestCase(EsmeTestCaseBase):
         self.assertEqual(True, esme.transport.connected)
         self.assertEqual(None, esme._lose_conn)
         esme.lc_enquire.stop()
+
+    @inlineCallbacks
+    def test_sequence_rollover(self):
+        esme = yield self.get_esme()
+        self.assertEqual(1, (yield esme.get_next_seq()))
+        self.assertEqual(2, (yield esme.get_next_seq()))
+        yield esme.redis.set('smpp_last_sequence_number', 0xFFFF0000)
+        self.assertEqual(0xFFFF0001, (yield esme.get_next_seq()))
+        self.assertEqual(1, (yield esme.get_next_seq()))
 
 
 class EsmeTransmitterTestCase(EsmeTestCaseBase):

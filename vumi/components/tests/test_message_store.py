@@ -7,8 +7,6 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from vumi.message import TransportEvent
 from vumi.application.tests.test_base import ApplicationTestCase
 from vumi.components import MessageStore
-from vumi.persist.txriak_manager import TxRiakManager
-from vumi.persist.txredis_manager import TxRedisManager
 
 
 class TestMessageStore(ApplicationTestCase):
@@ -16,15 +14,10 @@ class TestMessageStore(ApplicationTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self.redis = yield TxRedisManager.from_config(
-            'FAKE_REDIS', 'teststore')
-        self.manager = TxRiakManager.from_config({'bucket_prefix': 'test.'})
+        yield super(TestMessageStore, self).setUp()
+        self.redis = yield self.get_redis_manager()
+        self.manager = self.get_riak_manager()
         self.store = MessageStore(self.manager, self.redis)
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield self.manager.purge_all()
-        yield self.redis._close()
 
     @inlineCallbacks
     def _maybe_batch(self, tag, by_batch):

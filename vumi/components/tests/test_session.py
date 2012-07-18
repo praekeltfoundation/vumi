@@ -6,23 +6,22 @@ from twisted.internet.defer import inlineCallbacks
 from twisted.trial.unittest import TestCase
 
 from vumi.components import SessionManager
-from vumi.persist.txredis_manager import TxRedisManager
+from vumi.tests.utils import PersistenceMixin
 
 
-class SessionManagerTestCase(TestCase):
+class SessionManagerTestCase(TestCase, PersistenceMixin):
     timeout = 2
 
     @inlineCallbacks
     def setUp(self):
-        self.manager = yield TxRedisManager.from_config("FAKE_REDIS", "test")
-        yield self.manager._purge_all()
+        self._persist_setUp()
+        self.manager = yield self.get_redis_manager()
+        yield self.manager._purge_all()  # Just in case
         self.sm = SessionManager(self.manager)
 
-    @inlineCallbacks
     def tearDown(self):
         self.sm.stop()
-        yield self.manager._purge_all()
-        yield self.manager._close()
+        return self._persist_tearDown()
 
     @inlineCallbacks
     def test_active_sessions(self):

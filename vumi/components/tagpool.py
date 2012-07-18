@@ -23,9 +23,9 @@ class TagpoolManager(object):
     """
 
     def __init__(self, redis):
-        self.redis = redis
-        self.manager = redis  # TODO: This is a bit of a hack to make the
-                              #       the calls_manager decorator work
+        self.redis = redis.sub_manager('tagpools')
+        self.manager = self.redis  # TODO: This is a bit of a hack to make the
+                                   #       the calls_manager decorator work
 
     @Manager.calls_manager
     def acquire_tag(self, pool):
@@ -85,8 +85,7 @@ class TagpoolManager(object):
             yield self._unregister_pool(pool)
 
     def list_pools(self):
-        pool_list_key = self._pool_list_key()
-        return self.redis.smembers(pool_list_key)
+        return self.redis.smembers("list")
 
     @Manager.calls_manager
     def free_tags(self, pool):
@@ -94,20 +93,15 @@ class TagpoolManager(object):
         free_tags = yield self.redis.smembers(free_set_key)
         returnValue([(pool, local_tag) for local_tag in free_tags])
 
-    def _pool_list_key(self):
-        return ":".join(["tagpools", "list"])
-
     @Manager.calls_manager
     def _register_pool(self, pool):
         """Add a pool to list of pools."""
-        pool_list_key = self._pool_list_key()
-        yield self.redis.sadd(pool_list_key, pool)
+        yield self.redis.sadd("list", pool)
 
     @Manager.calls_manager
     def _unregister_pool(self, pool):
         """Remove a pool to list of pools."""
-        pool_list_key = self._pool_list_key()
-        yield self.redis.srem(pool_list_key, pool)
+        yield self.redis.srem("list", pool)
 
     @Manager.calls_manager
     def inuse_tags(self, pool):
@@ -116,11 +110,11 @@ class TagpoolManager(object):
         returnValue([(pool, local_tag) for local_tag in inuse_tags])
 
     def _tag_pool_keys(self, pool):
-        return tuple(":".join(["tagpools", pool, state])
+        return tuple(":".join([pool, state])
                      for state in ("free:list", "free:set", "inuse:set"))
 
     def _tag_pool_metadata_key(self, pool):
-        return ":".join(["tagpools", pool, "metadata"])
+        return ":".join([pool, "metadata"])
 
     @Manager.calls_manager
     def _acquire_tag(self, pool):

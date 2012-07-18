@@ -103,6 +103,9 @@ class Manager(object):
         if config == "FAKE_REDIS":
             # We want a new fake redis.
             return cls._fake_manager(key_prefix)
+        if isinstance(config, cls):
+            # We want to unwrap an existing fake_redis to rewrap it.
+            config = config._client
         if isinstance(config, FakeRedis):
             # We want to wrap an existing fake_redis.
             return cls._fake_manager(key_prefix, config)
@@ -126,6 +129,9 @@ class Manager(object):
         """
         raise NotImplementedError("Sub-classes of Manager should implement"
                                   " ._manager_from_config(...)")
+
+    def close_manager(self):
+        return self._close()
 
     def _close(self):
         """Close redis connection."""

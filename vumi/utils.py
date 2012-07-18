@@ -6,6 +6,7 @@ import sys
 import base64
 import pkg_resources
 import warnings
+from functools import wraps
 
 import redis
 from zope.interface import implements
@@ -221,6 +222,31 @@ def redis_from_config(redis_config):
     if isinstance(redis_config, fake_redis.FakeRedis):
         return redis_config
     return redis.Redis(**redis_config)
+
+
+def flatten_generator(generator_func):
+    """
+    This is a synchronous version of @inlineCallbacks.
+
+    NOTE: It doesn't correctly handle returnValue() being called in a
+    non-decorated function called from the function we're decorating. We could
+    copy the Twisted code to do that, but it's messy.
+    """
+    @wraps(generator_func)
+    def wrapped(*args, **kw):
+        gen = generator_func(*args, **kw)
+        result = None
+        while True:
+            try:
+                result = gen.send(result)
+            except StopIteration:
+                # Fell off the end, or "return" statement.
+                return None
+            except defer._DefGen_Return, e:
+                # returnValue() called.
+                return e.value
+
+    return wrapped
 
 
 def filter_options_on_prefix(options, prefix, delimiter='-'):
