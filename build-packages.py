@@ -21,7 +21,7 @@ def configBuild(platform, platformver, dhmake):
 
   * Initial release.
 
- -- Jeremy Thurgood <jeremy@praekelt.com>  %s\n""" % (
+ -- Colin Alston <colin.alston@praekeltfoundation.org>  %s\n""" % (
         buildNumber, 
         platformver,
         platform, 
