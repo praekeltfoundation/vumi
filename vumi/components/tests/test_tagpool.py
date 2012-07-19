@@ -24,7 +24,7 @@ class TestTxTagpoolManager(TestCase, PersistenceMixin):
 
     def pool_key_generator(self, pool):
         def tkey(x):
-            return "tagpools#%s:%s" % (pool, x)
+            return "tagpools:%s:%s" % (pool, x)
         return tkey
 
     @inlineCallbacks
