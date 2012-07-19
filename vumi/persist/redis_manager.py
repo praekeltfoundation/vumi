@@ -21,7 +21,7 @@ class RedisManager(Manager):
         return manager
 
     @classmethod
-    def _manager_from_config(cls, config, key_prefix):
+    def _manager_from_config(cls, config, key_prefix, key_separator):
         """Construct a manager from a dictionary of options.
 
         :param dict config:
@@ -30,7 +30,7 @@ class RedisManager(Manager):
             Key prefix for namespacing.
         """
 
-        return cls(redis.Redis(**config), key_prefix)
+        return cls(redis.Redis(**config), key_prefix, key_separator)
 
     def _close(self):
         """Close redis connection."""

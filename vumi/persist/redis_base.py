@@ -58,7 +58,9 @@ class Manager(object):
 
     __metaclass__ = CallMakerMetaclass
 
-    def __init__(self, client, key_prefix, key_separator='#'):
+    def __init__(self, client, key_prefix, key_separator=None):
+        if key_separator is None:
+            key_separator = '#'
         self._client = client
         self._key_prefix = key_prefix
         self._key_separator = key_separator
@@ -90,7 +92,7 @@ class Manager(object):
         return redecorate
 
     @classmethod
-    def from_config(cls, config, key_prefix=None):
+    def from_config(cls, config, key_prefix=None, key_separator=None):
         """Construct a manager from a dictionary of options.
 
         :param dict config:
@@ -111,7 +113,8 @@ class Manager(object):
             return cls._fake_manager(key_prefix, config)
 
         # We pass a copy of the config so we can mutilate it.
-        return cls._manager_from_config(config.copy(), key_prefix)
+        return cls._manager_from_config(config.copy(), key_prefix,
+                                        key_separator)
 
     @classmethod
     def _fake_manager(cls, key_prefix, client=None):

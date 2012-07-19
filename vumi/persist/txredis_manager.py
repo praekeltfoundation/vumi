@@ -22,7 +22,7 @@ class TxRedisManager(Manager):
         return succeed(manager)
 
     @classmethod
-    def _manager_from_config(cls, config, key_prefix):
+    def _manager_from_config(cls, config, key_prefix, key_separator):
         """Construct a manager from a dictionary of options.
 
         :param dict config:
@@ -37,7 +37,7 @@ class TxRedisManager(Manager):
         factory = txredis.protocol.RedisClientFactory(**config)
         d = factory.deferred
         reactor.connectTCP(host, port, factory)
-        return d.addCallback(lambda r: cls(r, key_prefix))
+        return d.addCallback(lambda r: cls(r, key_prefix, key_separator))
 
     @inlineCallbacks
     def _close(self):
