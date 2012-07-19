@@ -27,13 +27,13 @@ class MemoWorker(ApplicationWorker):
     MEMO_RE = re.compile(r'^\S+ tell (\S+) (.*)$')
 
     def validate_config(self):
-        self.redis_config = self.config.get('redis', {})
+        self.redis_config = self.config.get('redis_manager', {})
         self.r_prefix = "ircbot:memos:%s" % (self.config['worker_name'],)
 
     @inlineCallbacks
     def setup_application(self):
-        self.redis = yield TxRedisManager.from_config(
-            self.redis_config, self.r_prefix)
+        redis = yield TxRedisManager.from_config(self.redis_config)
+        self.redis = redis.sub_manager(self.r_prefix)
 
     def teardown_application(self):
         return self.redis._close()

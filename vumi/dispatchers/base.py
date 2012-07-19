@@ -354,11 +354,12 @@ class UserGroupingRouter(SimpleDispatchRouter):
     """
 
     def setup_routing(self):
-        r_config = self.config.get('redis_config', {})
+        r_config = self.config.get('redis_manager', {})
         r_prefix = self.config['dispatcher_name']
         # FIXME: The following is a hack to deal with sync-only setup.
-        self._redis_d = TxRedisManager.from_config(
-            r_config, r_prefix).addCallback(self._setup_redis)
+        self._redis_d = TxRedisManager.from_config(r_config)
+        self._redis_d.addCallback(lambda m: m.sub_manager(r_prefix))
+        self._redis_d.addCallback(self._setup_redis)
 
         self.groups = self.config['group_mappings']
         self.nr_of_groups = len(self.groups)
@@ -435,7 +436,7 @@ class ContentKeywordRouter(SimpleDispatchRouter):
     DEFAULT_ROUTING_TIMEOUT = 60 * 60 * 24 * 7  # 7 days
 
     def setup_routing(self):
-        self.r_config = self.config.get('redis_config', {})
+        self.r_config = self.config.get('redis_manager', {})
         self.r_prefix = self.config['dispatcher_name']
 
         self.rules = []
@@ -456,8 +457,9 @@ class ContentKeywordRouter(SimpleDispatchRouter):
             'expire_routing_memory', self.DEFAULT_ROUTING_TIMEOUT))
 
         # FIXME: The following is a hack to deal with sync-only setup.
-        self._redis_d = TxRedisManager.from_config(
-            self.r_config, self.r_prefix).addCallback(self._setup_redis)
+        self._redis_d = TxRedisManager.from_config(self.r_config)
+        self._redis_d.addCallback(lambda m: m.sub_manager(self.r_prefix))
+        self._redis_d.addCallback(self._setup_redis)
 
     def _setup_redis(self, redis):
         self.redis = redis

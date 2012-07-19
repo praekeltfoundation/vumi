@@ -20,7 +20,6 @@ class TestCellulantTransportTestCase(TransportTestCase):
             'web_port': 0,
             'web_path': '/api/v1/ussd/cellulant/',
             'ussd_session_timeout': 60,
-            'redis': 'FAKE_REDIS',
         }
         self.transport = yield self.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url(

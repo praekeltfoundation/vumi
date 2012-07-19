@@ -52,7 +52,6 @@ class TwitterTransportTestCase(TransportTestCase):
             'access_token': 'token1',
             'access_token_secret': 'tokensecret1',
             'terms': ['some', 'trending', 'topic'],
-            'redis': 'FAKE_REDIS',
         }
         self.transport = yield self.get_transport(self.config, start=False)
         self.transport._twitter_class = FakeTwitter

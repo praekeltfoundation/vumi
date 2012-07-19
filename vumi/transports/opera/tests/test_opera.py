@@ -33,7 +33,6 @@ class OperaTransportTestCase(TransportTestCase):
             'web_receipt_path': '/receipt.xml',
             'web_receive_path': '/receive.xml',
             'web_port': self.port,
-            'redis': 'FAKE_REDIS',
         }
         default_config.update(config)
         return self.get_transport(default_config, cls)

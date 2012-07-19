@@ -89,9 +89,10 @@ class FailureWorker(Worker):
 
     @inlineCallbacks
     def set_up_redis(self):
-        self.r_prefix = "failures:%s" % (self.config['transport_name'],)
-        r_config = self.config.get('redis', {})
-        self.redis = yield TxRedisManager.from_config(r_config, self.r_prefix)
+        r_config = self.config.get('redis_manager', {})
+        redis = yield TxRedisManager.from_config(r_config)
+        self.redis = redis.sub_manager("failures:%s" % (
+                self.config['transport_name'],))
 
     def start_retry_delivery(self):
         self.delivery_loop = None

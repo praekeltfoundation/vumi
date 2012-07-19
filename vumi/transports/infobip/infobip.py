@@ -98,7 +98,7 @@ class InfobipTransport(HttpRpcTransport):
 
     def validate_config(self):
         super(InfobipTransport, self).validate_config()
-        self.r_config = self.config.get('redis', {})
+        self.r_config = self.config.get('redis_manager', {})
 
     @inlineCallbacks
     def setup_transport(self):

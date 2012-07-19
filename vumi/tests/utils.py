@@ -329,6 +329,18 @@ class PersistenceMixin(object):
     def _persist_setUp(self):
         self._persist_riak_managers = []
         self._persist_redis_managers = []
+        self._persist_config = {
+            'redis_manager': {
+                'FAKE_REDIS': 'yes',
+                'key_prefix': type(self).__module__,
+                },
+            'riak_manager': {
+                'bucket_prefix': type(self).__module__,
+                },
+            }
+
+    def mk_config(self, config):
+        return dict(self._persist_config, **config)
 
     @maybe_async('sync_persistence')
     def _persist_tearDown(self):
@@ -347,8 +359,7 @@ class PersistenceMixin(object):
 
     def get_riak_manager(self, config=None):
         if config is None:
-            config = {}
-        config.setdefault('bucket_prefix', type(self).__module__)
+            config = self._persist_config['riak_manager'].copy()
 
         if self.sync_persistence:
             return self._get_sync_riak_manager(config)
@@ -366,18 +377,18 @@ class PersistenceMixin(object):
         self._persist_riak_managers.append(riak_manager)
         return riak_manager
 
-    def get_redis_manager(self, config='FAKE_REDIS', key_prefix=None):
-        if key_prefix is None:
-            key_prefix = type(self).__module__
+    def get_redis_manager(self, config=None):
+        if config is None:
+            config = self._persist_config['redis_manager'].copy()
 
         if self.sync_persistence:
-            return self._get_sync_redis_manager(config, key_prefix)
-        return self._get_async_redis_manager(config, key_prefix)
+            return self._get_sync_redis_manager(config)
+        return self._get_async_redis_manager(config)
 
-    def _get_async_redis_manager(self, config, key_prefix):
+    def _get_async_redis_manager(self, config):
         from vumi.persist.txredis_manager import TxRedisManager
 
-        d = TxRedisManager.from_config(config, key_prefix)
+        d = TxRedisManager.from_config(config)
 
         def add_to_self(redis_manager):
             self._persist_redis_managers.append(redis_manager)
@@ -385,9 +396,9 @@ class PersistenceMixin(object):
 
         return d.addCallback(add_to_self)
 
-    def _get_sync_redis_manager(self, config, key_prefix):
+    def _get_sync_redis_manager(self, config):
         from vumi.persist.redis_manager import RedisManager
 
-        redis_manager = RedisManager.from_config(config, key_prefix)
+        redis_manager = RedisManager.from_config(config)
         self._persist_redis_managers.append(redis_manager)
         return redis_manager

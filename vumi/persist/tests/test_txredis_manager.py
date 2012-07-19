@@ -9,7 +9,8 @@ from vumi.persist.txredis_manager import TxRedisManager
 class RedisManagerTestCase(TestCase):
     @inlineCallbacks
     def setUp(self):
-        self.manager = yield TxRedisManager.from_config({}, 'redistest')
+        self.manager = yield TxRedisManager.from_config(
+            {'key_prefix': 'redistest'})
         yield self.manager._purge_all()
 
     @inlineCallbacks

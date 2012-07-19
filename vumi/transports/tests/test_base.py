@@ -2,13 +2,14 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.trial import unittest
 
 from vumi.tests.fake_amqp import FakeAMQPBroker
-from vumi.tests.utils import get_stubbed_worker, UTCNearNow, RegexMatcher
+from vumi.tests.utils import (
+    get_stubbed_worker, UTCNearNow, RegexMatcher, PersistenceMixin)
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.transports.base import Transport
 from vumi.transports.failures import FailureMessage
 
 
-class TransportTestCase(unittest.TestCase):
+class TransportTestCase(unittest.TestCase, PersistenceMixin):
     """
     This is a base class for testing transports.
 
@@ -23,6 +24,7 @@ class TransportTestCase(unittest.TestCase):
     transport_class = None
 
     def setUp(self):
+        self._persist_setUp()
         self._workers = []
         self._amqp = FakeAMQPBroker()
 
@@ -30,6 +32,7 @@ class TransportTestCase(unittest.TestCase):
     def tearDown(self):
         for worker in self._workers:
             yield worker.stopWorker()
+        yield self._persist_tearDown()
 
     def rkey(self, name):
         return "%s.%s" % (self.transport_name, name)
@@ -52,6 +55,7 @@ class TransportTestCase(unittest.TestCase):
 
         if cls is None:
             cls = self.transport_class
+        config = self.mk_config(config)
         config.setdefault('transport_name', self.transport_name)
         worker = get_stubbed_worker(cls, config, self._amqp)
         self._workers.append(worker)

@@ -134,7 +134,7 @@ class OperaTransport(Transport):
         self.opera_password = self.config['password']
         self.opera_service = self.config['service']
         self.max_segments = self.config.get('max_segments', 9)
-        self.r_config = self.config.get('redis', {})
+        self.r_config = self.config.get('redis_manager', {})
         self.transport_name = self.config['transport_name']
 
     def set_message_id_for_identifier(self, identifier, message_id):

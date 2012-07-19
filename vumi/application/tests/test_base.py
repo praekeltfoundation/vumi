@@ -276,6 +276,7 @@ class ApplicationTestCase(TestCase, PersistenceMixin):
 
         if cls is None:
             cls = self.application_class
+        config = self.mk_config(config)
         config.setdefault('transport_name', self.transport_name)
         if 'send_to' not in config and cls.SEND_TO_TAGS:
             config['send_to'] = {}

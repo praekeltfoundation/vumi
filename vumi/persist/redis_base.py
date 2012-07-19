@@ -67,8 +67,11 @@ class Manager(object):
 
     def sub_manager(self, sub_prefix):
         key_prefix = self._key(sub_prefix)
-        return self.__class__(self._client, key_prefix,
-                              key_separator=self._key_separator)
+        sub_man = self.__class__(self._client, key_prefix,
+                                 key_separator=self._key_separator)
+        if isinstance(self._client, FakeRedis):
+            sub_man._close = self._client.teardown
+        return sub_man
 
     @staticmethod
     def calls_manager(manager_attr):
@@ -92,37 +95,40 @@ class Manager(object):
         return redecorate
 
     @classmethod
-    def from_config(cls, config, key_prefix=None, key_separator=None):
+    def from_config(cls, config):
         """Construct a manager from a dictionary of options.
 
         :param dict config:
             Dictionary of options for the manager.
-        :param str key_prefix:
-            Key prefix for namespacing.
         """
 
-        # Is there a cleaner way to do this?
-        if config == "FAKE_REDIS":
-            # We want a new fake redis.
-            return cls._fake_manager(key_prefix)
-        if isinstance(config, cls):
-            # We want to unwrap an existing fake_redis to rewrap it.
-            config = config._client
-        if isinstance(config, FakeRedis):
-            # We want to wrap an existing fake_redis.
-            return cls._fake_manager(key_prefix, config)
+        # So we can mangle it
+        config = config.copy()
+        key_prefix = config.pop('key_prefix', None)
+        key_separator = config.pop('key_separator', '#')
 
-        # We pass a copy of the config so we can mutilate it.
-        return cls._manager_from_config(config.copy(), key_prefix,
-                                        key_separator)
+        if 'FAKE_REDIS' in config:
+            fake_redis = config.pop('FAKE_REDIS')
+            if isinstance(fake_redis, cls):
+                # We want to unwrap the existing fake_redis to rewrap it.
+                fake_redis = fake_redis._client
+            if isinstance(fake_redis, FakeRedis):
+                # We want to wrap the existing fake_redis.
+                pass
+            else:
+                # We want a new fake redis.
+                fake_redis = None
+            return cls._fake_manager(fake_redis, key_prefix, key_separator)
+
+        return cls._manager_from_config(config, key_prefix, key_separator)
 
     @classmethod
-    def _fake_manager(cls, key_prefix, client=None):
+    def _fake_manager(cls, fake_redis, key_prefix, key_separator):
         raise NotImplementedError("Sub-classes of Manager should implement"
                                   " ._fake_manager(...)")
 
     @classmethod
-    def _manager_from_config(cls, config, key_prefix):
+    def _manager_from_config(cls, config, key_prefix, key_separator):
         """Construct a client from a dictionary of options.
 
         :param dict config:

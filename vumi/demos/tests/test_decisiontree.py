@@ -119,9 +119,8 @@ class TestDecisionTreeWorker(ApplicationTestCase):
     def setUp(self):
         super(TestDecisionTreeWorker, self).setUp()
         self.worker = yield self.get_application({
-            'worker_name': 'test_decision_tree_worker',
-            'redis': 'FAKE_REDIS',
-            })
+                'worker_name': 'test_decision_tree_worker',
+                })
 
     def replace_timestamp(self, string):
         newstring = re.sub(r'imestamp": "\d*"',

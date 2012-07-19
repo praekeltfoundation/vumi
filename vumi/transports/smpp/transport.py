@@ -121,14 +121,15 @@ class SmppTransport(Transport):
                 60 * 60 * 24 * 7  # 1 week
                 )
 
-        r_config = self.config.get('redis', {})
+        r_config = self.config.get('redis_manager', {})
         default_prefix = "%s@%s:%s" % (
                 self.client_config.system_id,
                 self.client_config.host,
                 self.client_config.port,
                 )
         r_prefix = self.config.get('split_bind_prefix', default_prefix)
-        self.redis = yield TxRedisManager.from_config(r_config, r_prefix)
+        redis = yield TxRedisManager.from_config(r_config)
+        self.redis = redis.sub_manager(r_prefix)
 
         self.r_message_prefix = "message_json"
 

@@ -62,7 +62,6 @@ class TestTruteqTransport(TransportTestCase):
             'password': 'notarealpassword',
             'host': 'localhost',
             'port': 1234,
-            'redis': 'FAKE_REDIS',
             }
         self.transport = yield self.get_transport(self.config, start=True)
 

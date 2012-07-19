@@ -48,7 +48,6 @@ class FakeRedisRespTestCase(TransportTestCase):
                 "smpp_bind_timeout": 12,
                 "smpp_enquire_link_interval": 123,
                 "third_party_id_expiry": 3600,  # just 1 hour
-                "redis": "FAKE_REDIS",
                 }
         self.vumi_options = {
                 "vhost": "develop",
@@ -238,7 +237,6 @@ class EsmeToSmscTestCase(TransportTestCase):
             "password": "password",
             "host": "localhost",
             "port": 0,
-            "redis": "FAKE_REDIS",
             "transport_name": self.transport_name,
             "transport_type": "smpp",
         }
@@ -563,7 +561,6 @@ class EsmeToSmscTestCaseDeliveryYo(EsmeToSmscTestCase):
             "password": "password",
             "host": "localhost",
             "port": 0,
-            "redis": "FAKE_REDIS",
             "transport_name": self.transport_name,
             "transport_type": "smpp",
             "delivery_report_regex": delivery_report_regex,
@@ -602,7 +599,6 @@ class TxEsmeToSmscTestCase(TransportTestCase):
             "password": "password",
             "host": "localhost",
             "port": 0,
-            "redis": "FAKE_REDIS",
             "transport_name": self.transport_name,
             "transport_type": "smpp",
         }
@@ -698,7 +694,6 @@ class RxEsmeToSmscTestCase(TransportTestCase):
             "password": "password",
             "host": "localhost",
             "port": 0,
-            "redis": "FAKE_REDIS",
             "transport_name": self.transport_name,
             "transport_type": "smpp",
         }

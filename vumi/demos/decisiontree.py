@@ -335,7 +335,7 @@ class DecisionTreeWorker(ApplicationWorker):
             self.yaml_template = resource_string(__name__,
                                                  "toy_decision_tree.yaml")
 
-        r_config = self.config.get('redis', {})
+        r_config = self.config.get('redis_manager')
         r_prefix = "%(worker_name)s:%(transport_name)s" % self.config
         self.session_manager = yield SessionManager.from_redis_config(
             r_config, r_prefix, self.MAX_SESSION_LENGTH)

@@ -7,11 +7,11 @@ from vumi.message import TransportUserMessage, TransportEvent
 from vumi.dispatchers.base import (
     BaseDispatchWorker, ToAddrRouter, FromAddrMultiplexRouter)
 from vumi.middleware import MiddlewareStack
-from vumi.tests.utils import get_stubbed_worker, LogCatcher
+from vumi.tests.utils import get_stubbed_worker, LogCatcher, PersistenceMixin
 from vumi.tests.fake_amqp import FakeAMQPBroker
 
 
-class DispatcherTestCase(TestCase):
+class DispatcherTestCase(TestCase, PersistenceMixin):
 
     """
     This is a base class for testing dispatcher workers.
@@ -27,10 +27,13 @@ class DispatcherTestCase(TestCase):
     def setUp(self):
         self._workers = []
         self._amqp = FakeAMQPBroker()
+        self._persist_setUp()
 
+    @inlineCallbacks
     def tearDown(self):
         for worker in self._workers:
-            worker.stopWorker()
+            yield worker.stopWorker()
+        yield self._persist_tearDown()
 
     @inlineCallbacks
     def get_dispatcher(self, config, cls=None, start=True):
@@ -50,6 +53,7 @@ class DispatcherTestCase(TestCase):
 
         if cls is None:
             cls = self.dispatcher_class
+        config = self.mk_config(config)
         config.setdefault('dispatcher_name', self.dispatcher_name)
         worker = get_stubbed_worker(cls, config, self._amqp)
         self._workers.append(worker)
@@ -523,18 +527,12 @@ class UserGroupingRouterTestCase(DispatcherTestCase):
             'transport_mappings': {
                 'upstream1': self.transport_name,
                 },
-            'redis_config': 'FAKE_REDIS',
             }
 
         self.dispatcher = yield self.get_dispatcher(self.config)
         self.router = self.dispatcher._router
         yield self.router._redis_d
         self.redis = self.router.redis
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield super(UserGroupingRouterTestCase, self).tearDown()
-        yield self.redis._close()
 
     @inlineCallbacks
     def test_group_assignment(self):
@@ -633,7 +631,6 @@ class TestContentKeywordRouter(DispatcherTestCase):
                 },
             'fallback_application': 'fallback_app',
             'expire_routing_memory': '3',
-            'redis_config': 'FAKE_REDIS',
             }
         self.dispatcher = yield self.get_dispatcher(self.config)
         self.router = self.dispatcher._router
@@ -641,8 +638,8 @@ class TestContentKeywordRouter(DispatcherTestCase):
 
     @inlineCallbacks
     def tearDown(self):
-        yield super(TestContentKeywordRouter, self).tearDown()
         yield self.router.session_manager.stop()
+        yield super(TestContentKeywordRouter, self).tearDown()
 
     @inlineCallbacks
     def test_inbound_message_routing(self):

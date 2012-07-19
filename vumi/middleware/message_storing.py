@@ -40,10 +40,10 @@ class StoringMiddleware(BaseMiddleware):
     @inlineCallbacks
     def setup_middleware(self):
         store_prefix = self.config.get('store_prefix', 'message_store')
-        r_config = self.config.get('redis', {})
-        redis = yield TxRedisManager.from_config(r_config, store_prefix)
-        manager = TxRiakManager.from_config(self.config.get('riak'))
-        self.store = MessageStore(manager, redis)
+        r_config = self.config.get('redis_manager', {})
+        redis = yield TxRedisManager.from_config(r_config)
+        manager = TxRiakManager.from_config(self.config.get('riak_manager'))
+        self.store = MessageStore(manager, redis.sub_manager(store_prefix))
 
     @inlineCallbacks
     def handle_inbound(self, message, endpoint):

@@ -130,9 +130,7 @@ class TestHangmanGame(unittest.TestCase):
 
     def test_garbage_input(self):
         game = HangmanGame(word="zoo")
-        for garbage in [
-            ":", "!", "\x00", "+", "abc", "",
-            ]:
+        for garbage in [":", "!", "\x00", "+", "abc", ""]:
             game.event(garbage)
         self.assertEqual(game.guesses, set())
         game.event('z')
@@ -159,7 +157,6 @@ class TestHangmanWorker(ApplicationTestCase):
         self.worker = yield self.get_application({
                 'worker_name': 'test_hangman',
                 'random_word_url': random_word_url,
-                'redis': 'FAKE_REDIS',
                 })
 
     @inlineCallbacks

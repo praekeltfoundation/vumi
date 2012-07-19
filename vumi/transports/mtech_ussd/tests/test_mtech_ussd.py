@@ -25,7 +25,6 @@ class TestMtechUssdTransport(TransportTestCase):
             'web_port': 0,
             'username': 'testuser',
             'password': 'testpass',
-            'redis': 'FAKE_REDIS',
         }
         self.transport = yield self.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url().rstrip('/')

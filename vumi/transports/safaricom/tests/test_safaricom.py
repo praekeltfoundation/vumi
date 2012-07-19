@@ -20,7 +20,6 @@ class TestSafaricomTransportTestCase(TransportTestCase):
         self.config = {
             'web_port': 0,
             'web_path': '/api/v1/safaricom/ussd/',
-            'redis': 'FAKE_REDIS',
         }
         self.transport = yield self.get_transport(self.config)
         self.session_manager = self.transport.session_manager

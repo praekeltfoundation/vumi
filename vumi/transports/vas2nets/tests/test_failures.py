@@ -7,7 +7,8 @@ from twisted.trial import unittest
 from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
 
 from vumi.message import TransportUserMessage, from_json
-from vumi.tests.utils import get_stubbed_worker, TestResourceWorker
+from vumi.tests.utils import (
+    get_stubbed_worker, TestResourceWorker, PersistenceMixin)
 from vumi.tests.fake_amqp import FakeAMQPBroker
 from vumi.transports.failures import (FailureMessage, FailureWorker,
                                       TemporaryFailure)
@@ -44,12 +45,13 @@ class FailureCounter(object):
             self.deferred.callback(None)
 
 
-class Vas2NetsFailureWorkerTestCase(unittest.TestCase):
+class Vas2NetsFailureWorkerTestCase(unittest.TestCase, PersistenceMixin):
 
     timeout = 5
 
     @inlineCallbacks
     def setUp(self):
+        self._persist_setUp()
         self.today = datetime.utcnow().date()
         self.port = 9999
         self.path = '/api/v1/sms/vas2nets/receive/'
@@ -65,21 +67,22 @@ class Vas2NetsFailureWorkerTestCase(unittest.TestCase):
             'web_receipt_path': '/receipt',
             'web_port': 9998,
         }
-        self.fail_config = {
+        self.fail_config = self.mk_config({
             'transport_name': 'vas2nets',
             'retry_routing_key': '%(transport_name)s.outbound',
             'failures_routing_key': '%(transport_name)s.failures',
-            'redis': 'FAKE_REDIS',
-            }
+            })
         self.workers = []
         self.broker = FakeAMQPBroker()
         self.worker = yield self.mk_transport_worker(self.config, self.broker)
         self.fail_worker = yield self.mk_failure_worker(
             self.fail_config, self.broker)
 
+    @inlineCallbacks
     def tearDown(self):
         for worker in self.workers:
-            worker.stopWorker()
+            yield worker.stopWorker()
+        yield self._persist_tearDown()
 
     @inlineCallbacks
     def mk_transport_worker(self, config, broker):

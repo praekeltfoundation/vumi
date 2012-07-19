@@ -7,7 +7,7 @@ from vumi.persist.redis_manager import RedisManager
 
 class RedisManagerTestCase(TestCase):
     def setUp(self):
-        self.manager = RedisManager.from_config({}, 'redistest')
+        self.manager = RedisManager.from_config({'key_prefix': 'redistest'})
         self.manager._purge_all()
 
     def tearDown(self):

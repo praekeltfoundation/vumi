@@ -134,7 +134,7 @@ class HangmanWorker(ApplicationWorker):
        """
 
     def validate_config(self):
-        self.r_config = self.config.get('redis', {})
+        self.r_config = self.config.get('redis_manager', {})
 
     @inlineCallbacks
     def setup_application(self):

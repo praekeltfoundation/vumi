@@ -13,12 +13,12 @@ class TxRedisManager(Manager):
     call_decorator = staticmethod(inlineCallbacks)
 
     @classmethod
-    def _fake_manager(cls, key_prefix, client=None):
-        if client is None:
-            client = FakeRedis(async=True)
-        manager = cls(client, key_prefix)
+    def _fake_manager(cls, fake_redis, key_prefix, key_separator):
+        if fake_redis is None:
+            fake_redis = FakeRedis(async=True)
+        manager = cls(fake_redis, key_prefix)
         # Because ._close() assumes a real connection.
-        manager._close = client.teardown
+        manager._close = fake_redis.teardown
         return succeed(manager)
 
     @classmethod

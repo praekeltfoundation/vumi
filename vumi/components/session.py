@@ -36,12 +36,14 @@ class SessionManager(object):
             yield self.redis._close()
 
     @classmethod
-    def from_redis_config(cls, config, key_prefix='', max_session_length=None,
-                          gc_period=1.0):
+    def from_redis_config(cls, config, key_prefix=None,
+                          max_session_length=None, gc_period=1.0):
         """Create a `SessionManager` instance using `TxRedisManager`.
         """
         from vumi.persist.txredis_manager import TxRedisManager
-        d = TxRedisManager.from_config(config, key_prefix)
+        d = TxRedisManager.from_config(config)
+        if key_prefix is not None:
+            d.addCallback(lambda m: m.sub_manager(key_prefix))
         return d.addCallback(lambda m: cls(m, max_session_length, gc_period))
 
     @inlineCallbacks

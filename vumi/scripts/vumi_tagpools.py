@@ -148,10 +148,9 @@ class ConfigHolder(object):
         self.options = options
         self.config = yaml.safe_load(open(options['config'], "rb"))
         self.pools = self.config.get('pools', {})
-        redis = RedisManager.from_config(self.config.get('redis', {}),
-                                         self.config.get('r_prefix',
-                                                         'vumi'))
-        self.tagpool = TagpoolManager(redis)
+        redis = RedisManager.from_config(self.config.get('redis_manager', {}))
+        self.tagpool = TagpoolManager(redis.sub_manager(
+                self.config.get('tagpool_prefix', 'vumi')))
 
     def emit(self, s):
         print s

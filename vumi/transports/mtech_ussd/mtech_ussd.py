@@ -33,7 +33,7 @@ class MtechUssdTransport(HttpRpcTransport):
     @inlineCallbacks
     def setup_transport(self):
         super(MtechUssdTransport, self).setup_transport()
-        r_config = self.config.get('redis', {})
+        r_config = self.config.get('redis_manager', {})
         r_prefix = "mtech_ussd:%s" % self.transport_name
         session_timeout = int(self.config.get("ussd_session_timeout", 600))
         self.session_manager = yield SessionManager.from_redis_config(

@@ -76,7 +76,7 @@ class TruteqTransport(Transport):
         self.ussd_session_lifetime = self.config.get(
                 'ussd_session_lifetime', self.DEFAULT_USSD_SESSION_LIFETIME)
         self.transport_type = self.config.get('transport_type', 'ussd')
-        self.r_config = self.config.get('redis', {})
+        self.r_config = self.config.get('redis_manager', {})
         self.r_prefix = "%(transport_name)s:ussd_codes" % self.config
 
     @inlineCallbacks

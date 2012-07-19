@@ -12,12 +12,12 @@ class RedisManager(Manager):
     call_decorator = staticmethod(flatten_generator)
 
     @classmethod
-    def _fake_manager(cls, key_prefix, client=None):
-        if client is None:
-            client = FakeRedis()
-        manager = cls(client, key_prefix)
+    def _fake_manager(cls, fake_redis, key_prefix, key_separator):
+        if fake_redis is None:
+            fake_redis = FakeRedis(async=False)
+        manager = cls(fake_redis, key_prefix)
         # Because ._close() assumes a real connection.
-        manager._close = client.teardown
+        manager._close = fake_redis.teardown
         return manager
 
     @classmethod

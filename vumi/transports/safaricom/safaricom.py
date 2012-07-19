@@ -34,7 +34,7 @@ class SafaricomTransport(HttpRpcTransport):
     def validate_config(self):
         super(SafaricomTransport, self).validate_config()
         self.transport_type = self.config.get('transport_type', 'ussd')
-        self.redis_config = self.config.get('redis', {})
+        self.redis_config = self.config.get('redis_manager', {})
         self.r_prefix = "vumi.transports.safaricom:%s" % self.transport_name
         self.r_session_timeout = int(self.config.get("ussd_session_timeout",
                                                                         600))

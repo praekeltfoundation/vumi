@@ -25,7 +25,6 @@ class TestInfobipUssdTransport(TransportTestCase):
             'transport_type': 'ussd',
             'web_path': "/session/",
             'web_port': 0,
-            'redis': 'FAKE_REDIS',
             }
         self.transport = yield self.get_transport(config)
         self.transport_url = self.transport.get_transport_url()

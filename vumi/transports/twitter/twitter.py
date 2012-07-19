@@ -22,7 +22,7 @@ class TwitterTransport(Transport):
         self.consumer_secret = self.config['consumer_secret']
         self.access_token = self.config['access_token']
         self.access_token_secret = self.config['access_token_secret']
-        self.r_config = self.config.get('redis', {})
+        self.r_config = self.config.get('redis_manager', {})
         self.r_prefix = "%(transport_name)s@%(app_name)s:replies" % self.config
         self.terms = set(self.config.get('terms'))
         self.check_replies_interval = int(self.config.get(
@@ -30,7 +30,8 @@ class TwitterTransport(Transport):
 
     @inlineCallbacks
     def setup_transport(self):
-        self.redis = yield TxRedisManager.from_config(self.r_config)
+        redis = yield TxRedisManager.from_config(self.r_config)
+        self.redis = redis.sub_manager(self.r_prefix)
         consumer = oauth.OAuthConsumer(self.consumer_key, self.consumer_secret)
         token = oauth.OAuthToken(self.access_token, self.access_token_secret)
         self.twitter = self._twitter_class(consumer=consumer, token=token)
@@ -76,8 +77,8 @@ class TwitterTransport(Transport):
         arriving by tracking terms in realtime.
         """
         last_reply_timestamp = yield self.redis.get('last_reply_timestamp')
-        if last_reply_timestamp == None or \
-            message.published > last_reply_timestamp:
+        if (last_reply_timestamp is None or
+                message.published > last_reply_timestamp):
             self.publish_message(
                 message_id=message.id,
                 content=message.text,

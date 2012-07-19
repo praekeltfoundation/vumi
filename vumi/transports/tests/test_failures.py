@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from twisted.trial import unittest
 from twisted.internet.defer import inlineCallbacks
 
-from vumi.tests.utils import get_stubbed_worker
+from vumi.tests.utils import get_stubbed_worker, PersistenceMixin
 from vumi.transports.failures import FailureWorker
 
 
@@ -14,25 +14,27 @@ def mktimestamp(delta=0):
     return timestamp.isoformat().split('.')[0]
 
 
-class FailureWorkerTestCase(unittest.TestCase):
+class FailureWorkerTestCase(unittest.TestCase, PersistenceMixin):
 
     timeout = 5
 
     def setUp(self):
+        self._persist_setUp()
         return self.make_worker()
 
+    @inlineCallbacks
     def tearDown(self):
-        return self.worker.stopWorker()
+        yield self.worker.stopWorker()
+        yield self._persist_tearDown()
 
     @inlineCallbacks
     def make_worker(self, retry_delivery_period=0):
-        self.config = {
-            'transport_name': 'sphex',
-            'retry_routing_key': 'sms.outbound.%(transport_name)s',
-            'failures_routing_key': 'sms.failures.%(transport_name)s',
-            'retry_delivery_period': retry_delivery_period,
-            'redis': 'FAKE_REDIS',
-        }
+        self.config = self.mk_config({
+                'transport_name': 'sphex',
+                'retry_routing_key': 'sms.outbound.%(transport_name)s',
+                'failures_routing_key': 'sms.failures.%(transport_name)s',
+                'retry_delivery_period': retry_delivery_period,
+                })
         self.worker = get_stubbed_worker(FailureWorker, self.config)
         yield self.worker.startWorker()
         self.redis = self.worker.redis

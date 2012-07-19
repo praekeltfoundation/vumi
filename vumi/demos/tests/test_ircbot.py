@@ -15,10 +15,7 @@ class TestMemoWorker(ApplicationTestCase):
     @inlineCallbacks
     def setUp(self):
         super(TestMemoWorker, self).setUp()
-        self.worker = yield self.get_application({
-            'worker_name': 'testmemo',
-            'redis': 'FAKE_REDIS',
-            })
+        self.worker = yield self.get_application({'worker_name': 'testmemo'})
 
     @inlineCallbacks
     def send(self, content, from_addr='testnick', channel=None):
