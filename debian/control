@@ -3,7 +3,7 @@ Maintainer: Jeremy Thurgood <jeremy@praekelt.com>
 Section: net
 Priority: optional
 Standards-Version: 3.9.3
-Build-Depends: debhelper (>= 7.0.50~), python, python-central, python-setuptools
+Build-Depends: debhelper (>= 7.0.50~), python, python-central, python-setuptools, quilt
 
 Package: vumi
 Architecture: all

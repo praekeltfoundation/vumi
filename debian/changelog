@@ -1,5 +1,5 @@
-vumi (0.5.0~a+123-0~ppa3) precise; urgency=low
+vumi (0.5.0~a+3-0~ppa3) precise; urgency=low
 
   * Initial release.
 
- -- Jeremy Thurgood <jeremy@praekelt.com>  Mon, 16 Jul 2012 16:01:43 +0200
+ -- Colin Alston <colin.alston@praekeltfoundation.org>  Fri, 20 Jul 2012 10:50:31 +0200

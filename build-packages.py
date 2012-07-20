@@ -12,7 +12,7 @@ def configBuild(platform, platformver, dhmake):
         os.remove('./debian/rules')
 
     rules = open('./debian/rules', 'wt')
-    rules.write("#!/usr/bin/make -f\n\n%%:\n\t\tdh \"$@\" --with %s\n" % dhmake)
+    rules.write("#!/usr/bin/make -f\n\n%%:\n\t\tdh \"$@\" --with %s\noverride_dh_clean:\n\t\tdh_clean\n\t\trm -rf *.egg-info\n" % dhmake)
     rules.close()
 
     os.chmod('./debian/rules', 0755)
@@ -36,5 +36,5 @@ def runBuild(platform, platformver, dhmake):
 
     os.system('debuild -S -sn')
 
-runBuild('lucid', 1, 'python-central')
-runBuild('precise', 3, 'python2')
+runBuild('lucid', 1, 'quilt,python-central')
+runBuild('precise', 3, 'quilt,python2')
