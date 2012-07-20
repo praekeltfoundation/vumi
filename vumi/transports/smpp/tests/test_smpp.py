@@ -1,16 +1,9 @@
-import redis
-
-from twisted.internet import defer
-from twisted.internet.defer import inlineCallbacks
-from twisted.trial.unittest import TestCase
+from twisted.internet.defer import Deferred, inlineCallbacks, succeed
 from smpp.pdu_builder import SubmitSMResp, DeliverSM
 
-from vumi.tests.utils import FakeRedis
 from vumi.message import TransportUserMessage
 from vumi.transports.smpp.clientserver.client import (
-        EsmeTransceiver, ESME, KeyValueStore, EsmeCallbacks)
-from vumi.transports.smpp.clientserver.tests.test_client import (
-        KeyValueStoreTestCase)
+    EsmeTransceiver, EsmeCallbacks)
 from vumi.transports.smpp.transport import (SmppTransport,
                                             SmppTxTransport,
                                             SmppRxTransport)
@@ -18,48 +11,6 @@ from vumi.transports.smpp.service import SmppService
 from vumi.transports.smpp.clientserver.config import ClientConfig
 from vumi.transports.smpp.clientserver.tests.utils import SmscTestServer
 from vumi.transports.tests.test_base import TransportTestCase
-
-
-class EsmeClientInitTestcase(TestCase):
-
-    # TODO: replace this with a more generic means of
-    #       swapping in a real redis server.
-    # tests esme using real redis server -- uncomment
-    # only for debugging
-    def dont_test_esme_init_with_redis(self):
-        r_server = redis.Redis("localhost", db=13)
-        self.esme = ESME(None, r_server, None)
-        kvstc = KeyValueStoreTestCase()
-        kvstc.prefix = __name__
-        kvstc.run_all_tests_on_instance(self.esme.kvs)
-
-    def test_esme_init_with_fakeredis(self):
-        fake_redis = FakeRedis()
-        self.esme = ESME(None, fake_redis, None)
-        kvstc = KeyValueStoreTestCase()
-        kvstc.prefix = __name__
-        kvstc.run_all_tests_on_instance(self.esme.kvs)
-
-    def test_esme_init_with_simple_keyvaluestore(self):
-        key_value_store = KeyValueStore()
-        self.esme = ESME(None, key_value_store, None)
-        kvstc = KeyValueStoreTestCase()
-        kvstc.prefix = __name__
-        kvstc.run_all_tests_on_instance(self.esme.kvs)
-        self.assertTrue(key_value_store.is_empty())
-
-    def test_esme_init_with_bad_object(self):
-        key_value_store = self
-        self.esme = ESME(None, key_value_store, None)
-        kvstc = KeyValueStoreTestCase()
-        kvstc.prefix = __name__
-        exception_expected = None
-        try:
-            kvstc.run_all_tests_on_instance(self.esme.kvs)
-            self.assertTrue(key_value_store.is_empty())
-        except Exception, e:
-            exception_expected = e
-        self.assertTrue(exception_expected is not None)
 
 
 class RedisTestEsmeTransceiver(EsmeTransceiver):
@@ -82,7 +33,6 @@ class RedisTestSmppTransport(SmppTransport):
 
 
 class FakeRedisRespTestCase(TransportTestCase):
-
     transport_name = "redis_testing_transport"
     transport_class = RedisTestSmppTransport
 
@@ -106,26 +56,19 @@ class FakeRedisRespTestCase(TransportTestCase):
 
         # hack a lot of transport setup
         self.transport = yield self.get_transport(self.config, start=False)
-        self.transport.r_server = FakeRedis()
+        self.transport.esme_client = None
+        yield self.transport.startWorker()
+
         self.esme_callbacks = EsmeCallbacks(
             connect=lambda: None, disconnect=lambda: None,
             submit_sm_resp=self.transport.submit_sm_resp,
             delivery_report=lambda: None, deliver_sm=lambda: None)
-
         self.esme = RedisTestEsmeTransceiver(
-                self.clientConfig,
-                self.transport.r_server,
-                self.esme_callbacks)
+            self.clientConfig, self.transport.redis, self.esme_callbacks)
         self.esme.state = 'BOUND_TRX'
         self.transport.esme_client = self.esme
 
-        yield self.transport.startWorker()
         self.transport.esme_connected(self.esme)
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield super(FakeRedisRespTestCase, self).tearDown()
-        self.transport.r_server.teardown()
 
     def test_bind_and_enquire_config(self):
         self.assertEqual(12, self.transport.client_config.smpp_bind_timeout)
@@ -134,6 +77,7 @@ class FakeRedisRespTestCase(TransportTestCase):
         self.assertEqual(repr(123.0),
                 repr(self.transport.client_config.smpp_enquire_link_interval))
 
+    @inlineCallbacks
     def test_redis_message_persistence(self):
         # A simple test of set -> get -> delete for redis message persistence
         message1 = self.mkmsg_out(
@@ -141,48 +85,50 @@ class FakeRedisRespTestCase(TransportTestCase):
             content="hello world",
             to_addr="far-far-away")
         original_json = message1.to_json()
-        self.transport.r_set_message(message1)
-        retrieved_json = self.transport.r_get_message_json(
-                message1.payload['message_id'])
+        yield self.transport.r_set_message(message1)
+        retrieved_json = yield self.transport.r_get_message_json(
+            message1.payload['message_id'])
         self.assertEqual(original_json, retrieved_json)
-        retrieved_message = self.transport.r_get_message(
-                message1.payload['message_id'])
+        retrieved_message = yield self.transport.r_get_message(
+            message1.payload['message_id'])
         self.assertEqual(retrieved_message, message1)
-        self.assertTrue(self.transport.r_delete_message(
-            message1.payload['message_id']))
-        self.assertEqual(self.transport.r_get_message_json(
-            message1.payload['message_id']), None)
-        self.assertEqual(self.transport.r_get_message(
-            message1.payload['message_id']), None)
+        self.assertTrue((yield self.transport.r_delete_message(
+                    message1.payload['message_id'])))
+        self.assertEqual((yield self.transport.r_get_message_json(
+                    message1.payload['message_id'])), None)
+        self.assertEqual((yield self.transport.r_get_message(
+                    message1.payload['message_id'])), None)
 
+    @inlineCallbacks
     def test_redis_third_party_id_persistence(self):
         # Testing: set -> get -> delete, for redis third party id mapping
         self.assertEqual(self.transport.third_party_id_expiry, 3600)
         our_id = "blergh34534545433454354"
         their_id = "omghesvomitingnumbers"
-        self.transport.r_set_id_for_third_party_id(their_id, our_id)
-        retrieved_our_id = self.transport.r_get_id_for_third_party_id(their_id)
+        yield self.transport.r_set_id_for_third_party_id(their_id, our_id)
+        retrieved_our_id = (
+            yield self.transport.r_get_id_for_third_party_id(their_id))
         self.assertEqual(our_id, retrieved_our_id)
-        self.assertTrue(self.transport.r_delete_for_third_party_id(their_id))
-        self.assertEqual(self.transport.r_get_id_for_third_party_id(their_id),
-                                                                        None)
+        self.assertTrue((
+                yield self.transport.r_delete_for_third_party_id(their_id)))
+        self.assertEqual(None, (
+                yield self.transport.r_get_id_for_third_party_id(their_id)))
 
     @inlineCallbacks
     def test_match_resp(self):
+        # Sequence numbers are hardcoded, assuming we start fresh from 0.
         message1 = self.mkmsg_out(
             message_id='444',
             content="hello world",
             to_addr="1111111111")
-        sequence_num1 = self.esme.get_seq()
-        response1 = SubmitSMResp(sequence_num1, "3rd_party_id_1")
+        response1 = SubmitSMResp(1, "3rd_party_id_1")
         yield self.transport._process_message(message1)
 
         message2 = self.mkmsg_out(
             message_id='445',
             content="hello world",
             to_addr="1111111111")
-        sequence_num2 = self.esme.get_seq()
-        response2 = SubmitSMResp(sequence_num2, "3rd_party_id_2")
+        response2 = SubmitSMResp(2, "3rd_party_id_2")
         yield self.transport._process_message(message2)
 
         # respond out of order - just to keep things interesting
@@ -198,8 +144,7 @@ class FakeRedisRespTestCase(TransportTestCase):
             message_id='446',
             content="hello world",
             to_addr="1111111111")
-        sequence_num3 = self.esme.get_seq()
-        response3 = SubmitSMResp(sequence_num3, "3rd_party_id_3",
+        response3 = SubmitSMResp(3, "3rd_party_id_3",
                 command_status="ESME_RSUBMITFAIL")
         self.transport._process_message(message3)
         self.esme.handle_data(response3.get_bin())
@@ -214,8 +159,7 @@ class FakeRedisRespTestCase(TransportTestCase):
             message_id=447,
             content="hello world",
             to_addr="1111111111")
-        sequence_num4 = self.esme.get_seq()
-        response4 = SubmitSMResp(sequence_num4, "3rd_party_id_4",
+        response4 = SubmitSMResp(4, "3rd_party_id_4",
                 command_status="ESME_RTHROTTLED")
         self.transport._process_message(message4)
         self.esme.handle_data(response4.get_bin())
@@ -293,7 +237,6 @@ class EsmeToSmscTestCase(TransportTestCase):
             "password": "password",
             "host": "localhost",
             "port": 0,
-            "redis": {},
             "transport_name": self.transport_name,
             "transport_type": "smpp",
         }
@@ -302,18 +245,16 @@ class EsmeToSmscTestCase(TransportTestCase):
         self.service.factory.protocol = SmscTestServer
         self.config['port'] = self.service.listening.getHost().port
         self.transport = yield self.get_transport(self.config, start=False)
-        self.transport.r_server = FakeRedis()
         self.expected_delivery_status = 'delivered'
 
     @inlineCallbacks
     def startTransport(self):
-        self.transport._block_till_bind = defer.Deferred()
+        self.transport._block_till_bind = Deferred()
         yield self.transport.startWorker()
 
     @inlineCallbacks
     def tearDown(self):
         yield super(EsmeToSmscTestCase, self).tearDown()
-        self.transport.r_server.teardown()
         self.transport.factory.stopTrying()
         self.transport.factory.esme.transport.loseConnection()
         yield self.service.listening.stopListening()
@@ -389,9 +330,6 @@ class EsmeToSmscTestCase(TransportTestCase):
         self.assertEqual(ack['transport_name'], self.transport_name)
         self.assertEqual(ack['user_message_id'], user_message_id)
 
-        # We need the sent_message_id to check the delivery_report
-        sent_message_id = ack['sent_message_id']
-
         self.assertEqual(delv['message_type'], 'event')
         self.assertEqual(delv['event_type'], 'delivery_report')
         self.assertEqual(delv['transport_name'], self.transport_name)
@@ -454,7 +392,7 @@ class EsmeToSmscTestCase(TransportTestCase):
     @inlineCallbacks
     def test_submit_and_deliver(self):
 
-        self._block_till_bind = defer.Deferred()
+        self._block_till_bind = Deferred()
 
         # Startup
         yield self.startTransport()
@@ -493,9 +431,6 @@ class EsmeToSmscTestCase(TransportTestCase):
         self.assertEqual(ack['event_type'], 'ack')
         self.assertEqual(ack['transport_name'], self.transport_name)
         self.assertEqual(ack['user_message_id'], user_message_id)
-
-        # We need the sent_message_id to check the delivery_report
-        sent_message_id = ack['sent_message_id']
 
         self.assertEqual(delv['message_type'], 'event')
         self.assertEqual(delv['event_type'], 'delivery_report')
@@ -545,10 +480,10 @@ class EsmeToSmscTestCase(TransportTestCase):
     def test_submit_and_deliver_with_missing_id_lookup(self):
 
         def r_failing_get(third_party_id):
-            return None
+            return succeed(None)
         self.transport.r_get_id_for_third_party_id = r_failing_get
 
-        self._block_till_bind = defer.Deferred()
+        self._block_till_bind = Deferred()
 
         # Startup
         yield self.startTransport()
@@ -626,7 +561,6 @@ class EsmeToSmscTestCaseDeliveryYo(EsmeToSmscTestCase):
             "password": "password",
             "host": "localhost",
             "port": 0,
-            "redis": {},
             "transport_name": self.transport_name,
             "transport_type": "smpp",
             "delivery_report_regex": delivery_report_regex,
@@ -639,7 +573,6 @@ class EsmeToSmscTestCaseDeliveryYo(EsmeToSmscTestCase):
         self.service.factory.protocol = SmscTestServer
         self.config['port'] = self.service.listening.getHost().port
         self.transport = yield self.get_transport(self.config, start=False)
-        self.transport.r_server = FakeRedis()
         self.expected_delivery_status = 'delivered'  # stat:0 means delivered
 
 
@@ -666,7 +599,6 @@ class TxEsmeToSmscTestCase(TransportTestCase):
             "password": "password",
             "host": "localhost",
             "port": 0,
-            "redis": {},
             "transport_name": self.transport_name,
             "transport_type": "smpp",
         }
@@ -675,18 +607,16 @@ class TxEsmeToSmscTestCase(TransportTestCase):
         self.service.factory.protocol = SmscTestServer
         self.config['port'] = self.service.listening.getHost().port
         self.transport = yield self.get_transport(self.config, start=False)
-        self.transport.r_server = FakeRedis()
         self.expected_delivery_status = 'delivered'
 
     @inlineCallbacks
     def startTransport(self):
-        self.transport._block_till_bind = defer.Deferred()
+        self.transport._block_till_bind = Deferred()
         yield self.transport.startWorker()
 
     @inlineCallbacks
     def tearDown(self):
         yield super(TxEsmeToSmscTestCase, self).tearDown()
-        self.transport.r_server.teardown()
         self.transport.factory.stopTrying()
         self.transport.factory.esme.transport.loseConnection()
         yield self.service.listening.stopListening()
@@ -695,7 +625,7 @@ class TxEsmeToSmscTestCase(TransportTestCase):
     @inlineCallbacks
     def test_submit(self):
 
-        self._block_till_bind = defer.Deferred()
+        self._block_till_bind = Deferred()
 
         # Startup
         yield self.startTransport()
@@ -742,7 +672,6 @@ class RxEsmeToSmscTestCase(TransportTestCase):
 
     transport_name = "esme_testing_transport"
     transport_class = MockSmppRxTransport
-    timeout = 1
 
     def assert_pdu_header(self, expected, actual, field):
         self.assertEqual(expected['pdu']['header'][field],
@@ -765,7 +694,6 @@ class RxEsmeToSmscTestCase(TransportTestCase):
             "password": "password",
             "host": "localhost",
             "port": 0,
-            "redis": {},
             "transport_name": self.transport_name,
             "transport_type": "smpp",
         }
@@ -774,18 +702,16 @@ class RxEsmeToSmscTestCase(TransportTestCase):
         self.service.factory.protocol = SmscTestServer
         self.config['port'] = self.service.listening.getHost().port
         self.transport = yield self.get_transport(self.config, start=False)
-        self.transport.r_server = FakeRedis()
         self.expected_delivery_status = 'delivered'
 
     @inlineCallbacks
     def startTransport(self):
-        self.transport._block_till_bind = defer.Deferred()
+        self.transport._block_till_bind = Deferred()
         yield self.transport.startWorker()
 
     @inlineCallbacks
     def tearDown(self):
         yield super(RxEsmeToSmscTestCase, self).tearDown()
-        self.transport.r_server.teardown()
         self.transport.factory.stopTrying()
         self.transport.factory.esme.transport.loseConnection()
         yield self.service.listening.stopListening()
@@ -794,7 +720,7 @@ class RxEsmeToSmscTestCase(TransportTestCase):
     @inlineCallbacks
     def test_deliver(self):
 
-        self._block_till_bind = defer.Deferred()
+        self._block_till_bind = Deferred()
 
         # Startup
         yield self.startTransport()

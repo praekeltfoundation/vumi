@@ -3,7 +3,6 @@
 
 from datetime import datetime, timedelta
 from urlparse import parse_qs
-import redis
 
 from twisted.python import log
 from twisted.web import xmlrpc, http
@@ -14,6 +13,7 @@ from vumi.utils import normalize_msisdn
 from vumi.transports import Transport
 from vumi.transports.failures import TemporaryFailure, PermanentFailure
 from vumi.transports.opera import utils
+from vumi.components import SessionManager
 
 
 def get_receipts_xml(content):
@@ -134,7 +134,7 @@ class OperaTransport(Transport):
         self.opera_password = self.config['password']
         self.opera_service = self.config['service']
         self.max_segments = self.config.get('max_segments', 9)
-        self.r_config = self.config.get('redis', {})
+        self.r_config = self.config.get('redis_manager', {})
         self.transport_name = self.config['transport_name']
 
     def set_message_id_for_identifier(self, identifier, message_id):
@@ -149,9 +149,8 @@ class OperaTransport(Transport):
         :param message_id:
             The internal message id that was used when the message was sent.
         """
-        rkey = '%s#%s' % (self.r_prefix, identifier)
-        self.r_server.set(rkey, message_id)
-        self.r_server.expire(rkey, self.message_id_lifetime)
+        return self.session_manager.create_session(
+            identifier, message_id=message_id)
 
     def get_message_id_for_identifier(self, identifier):
         """
@@ -163,9 +162,10 @@ class OperaTransport(Transport):
             was accepted for delivery.
 
         """
-        rkey = '%s#%s' % (self.r_prefix, identifier)
-        return self.r_server.get(rkey)
+        d = self.session_manager.load_session(identifier)
+        return d.addCallback(lambda s: s.get('message_id', None))
 
+    @inlineCallbacks
     def handle_raw_incoming_receipt(self, receipt):
         # convert delivery receipt status values, anything not in
         # this status map defaults to `failed`
@@ -181,16 +181,17 @@ class OperaTransport(Transport):
         }
 
         internal_status = status_map.get(receipt.status, 'failed')
-        internal_message_id = self.get_message_id_for_identifier(
+        message_id = yield self.get_message_id_for_identifier(
             receipt.reference)
-        self.publish_delivery_report(internal_message_id, internal_status)
+        yield self.publish_delivery_report(message_id, internal_status)
 
     @inlineCallbacks
     def setup_transport(self):
         log.msg('Starting the OperaInboundTransport config: %s' %
             self.transport_name)
-        self.r_server = redis.Redis(**self.r_config)
-        self.r_prefix = "%(transport_name)s@%(url)s" % self.config
+        r_prefix = "%(transport_name)s@%(url)s" % self.config
+        self.session_manager = yield SessionManager.from_redis_config(
+            self.r_config, r_prefix, self.message_id_lifetime)
 
         self.proxy = xmlrpc.Proxy(self.opera_url)
         self.default_values = {
@@ -245,8 +246,8 @@ class OperaTransport(Transport):
         log.msg("Proxy response: %s" % proxy_response)
         transport_message_id = proxy_response['Identifier']
 
-        self.set_message_id_for_identifier(transport_message_id,
-            message['message_id'])
+        yield self.set_message_id_for_identifier(
+            transport_message_id, message['message_id'])
 
         yield self.publish_ack(
                 user_message_id=message['message_id'],
@@ -271,3 +272,4 @@ class OperaTransport(Transport):
         log.msg("Stopping the OperaOutboundTransport: %s" %
             self.transport_name)
         yield self.web_resource.loseConnection()
+        yield self.session_manager.stop()

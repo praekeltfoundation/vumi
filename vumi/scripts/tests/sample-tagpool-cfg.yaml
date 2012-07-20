@@ -1,5 +1,7 @@
-r_prefix: vumi.test.tagpools
-redis: FAKE_REDIS
+redis_manager:
+  FAKE_REDIS: yay
+  key_prefix: vumi.test.tagpools
+tagpool_prefix: vumi
 pools:
   shortcode:
     tags: '["%d" % i for i in range(10001, 10001 + 1000)]'
