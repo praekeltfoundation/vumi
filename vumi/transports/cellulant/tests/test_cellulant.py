@@ -5,7 +5,6 @@ from twisted.internet.defer import inlineCallbacks
 from vumi.transports.tests.test_base import TransportTestCase
 from vumi.transports.cellulant import CellulantTransport
 from vumi.message import TransportUserMessage
-from vumi.tests.utils import FakeRedis
 from vumi.utils import http_request
 
 
@@ -21,17 +20,10 @@ class TestCellulantTransportTestCase(TransportTestCase):
             'web_port': 0,
             'web_path': '/api/v1/ussd/cellulant/',
             'ussd_session_timeout': 60,
-            'redis': {}
         }
         self.transport = yield self.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url(
             self.config['web_path'])
-        self.transport.r_server = FakeRedis()
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield super(TestCellulantTransportTestCase, self).tearDown()
-        self.transport.r_server.teardown()
 
     def mk_request(self, **params):
         defaults = {
@@ -45,16 +37,17 @@ class TestCellulantTransportTestCase(TransportTestCase):
         return http_request('%s?%s' % (self.transport_url,
             urlencode(defaults)), data='', method='GET')
 
+    @inlineCallbacks
     def test_redis_caching(self):
         # delete the key that shouldn't exist (in case of testing real redis)
-        self.transport.r_server.delete(self.transport.r_key("msisdn", "123"))
-        self.assertEqual(
-                self.transport.get_ussd_for_msisdn_session("msisdn", "123"),
-                None)
-        self.transport.set_ussd_for_msisdn_session("msisdn", "123", "*bar#")
-        self.assertEqual(
-                self.transport.get_ussd_for_msisdn_session("msisdn", "123"),
-                "*bar#")
+        yield self.transport.session_manager.redis.delete("msisdn:123")
+
+        tx = self.transport
+        val = yield tx.get_ussd_for_msisdn_session("msisdn", "123")
+        self.assertEqual(None, val)
+        yield tx.set_ussd_for_msisdn_session("msisdn", "123", "*bar#")
+        val = yield tx.get_ussd_for_msisdn_session("msisdn", "123")
+        self.assertEqual("*bar#", val)
 
     @inlineCallbacks
     def test_inbound_begin(self):

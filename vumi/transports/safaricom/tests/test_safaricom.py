@@ -7,7 +7,6 @@ from vumi.transports.tests.test_base import TransportTestCase
 from vumi.transports.safaricom import SafaricomTransport
 from vumi.message import TransportUserMessage
 from vumi.utils import http_request
-from vumi.tests.utils import FakeRedis
 
 
 class TestSafaricomTransportTestCase(TransportTestCase):
@@ -21,19 +20,11 @@ class TestSafaricomTransportTestCase(TransportTestCase):
         self.config = {
             'web_port': 0,
             'web_path': '/api/v1/safaricom/ussd/',
-            'redis': {},
         }
-        self.patch(SafaricomTransport, 'connect_to_redis',
-            lambda s: FakeRedis(**s.redis_config))
         self.transport = yield self.get_transport(self.config)
         self.session_manager = self.transport.session_manager
         self.transport_url = self.transport.get_transport_url(
             self.config['web_path'])
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield super(TestSafaricomTransportTestCase, self).tearDown()
-        self.transport.r_server.teardown()
 
     def mk_full_request(self, **params):
         return http_request('%s?%s' % (self.transport_url,
@@ -51,11 +42,8 @@ class TestSafaricomTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_inbound_begin(self):
-        # If we get a menu like *167*7# the USSD_PARAMS is '7'
-        # if we get a * in it, it is a follow up request, so '7*a' means
-        # the user submitted 'a'
+        # Second connect is the actual start of the session
         deferred = self.mk_request(USSD_PARAMS='7')
-
         [msg] = yield self.wait_for_dispatched_messages(1)
         self.assertEqual(msg['content'], '')
         self.assertEqual(msg['to_addr'], '*167*7#')
@@ -77,10 +65,13 @@ class TestSafaricomTransportTestCase(TransportTestCase):
     def test_inbound_resume_and_reply_with_end(self):
         # first pre-populate the redis datastore to simulate prior BEG message
         self.session_manager.create_session('session-id',
-                to_addr='*167*7#', from_addr='27761234567')
+                to_addr='*167*7#', from_addr='27761234567',
+                last_ussd_params='7*a*b',
+                session_event=TransportUserMessage.SESSION_RESUME)
+
         # Safaricom gives us the history of the full session in the USSD_PARAMS
         # The last submitted bit of content is the last value delimited by '*'
-        deferred = self.mk_request(USSD_PARAMS='*7*a*b*c')
+        deferred = self.mk_request(USSD_PARAMS='7*a*b*c')
 
         [msg] = yield self.wait_for_dispatched_messages(1)
         self.assertEqual(msg['content'], 'c')
@@ -116,7 +107,7 @@ class TestSafaricomTransportTestCase(TransportTestCase):
             'ORIG': '12345',
             'SESSION_ID': 'session-id',
         }
-        # initial connect
+
         d1 = self.mk_full_request(USSD_PARAMS='7*1', **defaults)
         [msg1] = yield self.wait_for_dispatched_messages(1)
         self.assertEqual(msg1['to_addr'], '*167*7*1#')
@@ -139,3 +130,64 @@ class TestSafaricomTransportTestCase(TransportTestCase):
             continue_session=False)
         self.dispatch(reply)
         yield d2
+
+    @inlineCallbacks
+    def test_hitting_url_twice_without_content(self):
+        d1 = self.mk_request(USSD_PARAMS='7*3')
+        [msg1] = yield self.wait_for_dispatched_messages(1)
+        self.assertEqual(msg1['to_addr'], '*167*7*3#')
+        self.assertEqual(msg1['content'], '')
+        self.assertEqual(msg1['session_event'],
+            TransportUserMessage.SESSION_NEW)
+        reply = TransportUserMessage(**msg1.payload).reply('Hello',
+            continue_session=True)
+        self.dispatch(reply)
+        yield d1
+
+        # make the exact same request again
+        d2 = self.mk_request(USSD_PARAMS='7*3')
+        [msg1, msg2] = yield self.wait_for_dispatched_messages(2)
+        self.assertEqual(msg2['to_addr'], '*167*7*3#')
+        self.assertEqual(msg2['content'], '')
+        self.assertEqual(msg2['session_event'],
+            TransportUserMessage.SESSION_RESUME)
+        reply = TransportUserMessage(**msg2.payload).reply('Hello',
+            continue_session=True)
+        self.dispatch(reply)
+        yield d2
+
+    @inlineCallbacks
+    def test_submitting_asterisks_as_values(self):
+        self.session_manager.create_session('session-id',
+                to_addr='*167*7#', from_addr='27761234567',
+                last_ussd_params='7*a*b')
+        # we're submitting a bunch of *s
+        deferred = self.mk_request(USSD_PARAMS='7*a*b*****')
+
+        [msg] = yield self.wait_for_dispatched_messages(1)
+        self.assertEqual(msg['content'], '****')
+
+        reply = TransportUserMessage(**msg.payload).reply('Hello',
+            continue_session=True)
+        self.dispatch(reply)
+        yield deferred
+        session = yield self.session_manager.load_session('session-id')
+        self.assertEqual(session['last_ussd_params'], '7*a*b*****')
+
+    @inlineCallbacks
+    def test_submitting_asterisks_as_values_after_asterisks(self):
+        self.session_manager.create_session('session-id',
+                to_addr='*167*7#', from_addr='27761234567',
+                last_ussd_params='7*a*b**')
+        # we're submitting a bunch of *s
+        deferred = self.mk_request(USSD_PARAMS='7*a*b*****')
+
+        [msg] = yield self.wait_for_dispatched_messages(1)
+        self.assertEqual(msg['content'], '**')
+
+        reply = TransportUserMessage(**msg.payload).reply('Hello',
+            continue_session=True)
+        self.dispatch(reply)
+        yield deferred
+        session = yield self.session_manager.load_session('session-id')
+        self.assertEqual(session['last_ussd_params'], '7*a*b*****')
