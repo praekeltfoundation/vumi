@@ -5,32 +5,29 @@ from twisted.internet.defer import inlineCallbacks
 
 from vumi.middleware.message_storing import StoringMiddleware
 from vumi.middleware.tagger import TaggingMiddleware
-from vumi.tests.utils import FakeRedis
 from vumi.message import TransportUserMessage, TransportEvent
+from vumi.tests.utils import PersistenceMixin
 
 
-class StoringMiddlewareTestCase(TestCase):
+class StoringMiddlewareTestCase(TestCase, PersistenceMixin):
 
     DEFAULT_CONFIG = {
         }
 
     @inlineCallbacks
     def setUp(self):
+        self._persist_setUp()
         dummy_worker = object()
-        config = {
-            "riak": {
-                "bucket_prefix": "test.",
-                },
-            }
+        config = self.mk_config({})
         self.mw = StoringMiddleware("dummy_storer", config, dummy_worker)
-        self.mw.setup_middleware()
-        self.mw.store.r_server = FakeRedis()
+        yield self.mw.setup_middleware()
         self.store = self.mw.store
         yield self.store.manager.purge_all()
 
     @inlineCallbacks
     def tearDown(self):
         yield self.store.manager.purge_all()
+        yield self._persist_tearDown()
 
     def mk_msg(self):
         msg = TransportUserMessage(to_addr="45678", from_addr="12345",

@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks, returnValue
 
@@ -5,8 +7,7 @@ from vumi.errors import ConfigError
 from vumi.application.base import ApplicationWorker, SESSION_NEW, SESSION_CLOSE
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.tests.fake_amqp import FakeAMQPBroker
-from vumi.tests.utils import get_stubbed_worker
-from datetime import datetime
+from vumi.tests.utils import get_stubbed_worker, PersistenceMixin
 
 
 class DummyApplicationWorker(ApplicationWorker):
@@ -226,7 +227,7 @@ class TestApplicationWorker(TestCase):
         worker.close_session(FakeUserMessage())
 
 
-class ApplicationTestCase(TestCase):
+class ApplicationTestCase(TestCase, PersistenceMixin):
 
     """
     This is a base class for testing application workers.
@@ -243,10 +244,13 @@ class ApplicationTestCase(TestCase):
     def setUp(self):
         self._workers = []
         self._amqp = FakeAMQPBroker()
+        self._persist_setUp()
 
+    @inlineCallbacks
     def tearDown(self):
         for worker in self._workers:
-            worker.stopWorker()
+            yield worker.stopWorker()
+        yield self._persist_tearDown()
 
     def rkey(self, name):
         return "%s.%s" % (self.transport_name, name)
@@ -272,6 +276,7 @@ class ApplicationTestCase(TestCase):
 
         if cls is None:
             cls = self.application_class
+        config = self.mk_config(config)
         config.setdefault('transport_name', self.transport_name)
         if 'send_to' not in config and cls.SEND_TO_TAGS:
             config['send_to'] = {}

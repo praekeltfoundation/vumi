@@ -2,10 +2,11 @@
 
 import re
 import json
-import fnmatch
 from datetime import datetime, timedelta
 from collections import namedtuple
 from contextlib import contextmanager
+import warnings
+from functools import wraps
 
 import pytz
 from twisted.internet import defer, reactor
@@ -14,7 +15,7 @@ from twisted.web.server import Site
 from twisted.internet.defer import DeferredQueue, inlineCallbacks
 from twisted.python import log
 
-from vumi.utils import vumi_resource_path, import_module
+from vumi.utils import vumi_resource_path, import_module, flatten_generator
 from vumi.service import get_spec, Worker, WorkerCreator
 from vumi.tests.fake_amqp import FakeAMQClient
 
@@ -231,240 +232,12 @@ class TestResourceWorker(Worker):
             self.resources.stopListening()
 
 
-class FakeRedis(object):
-    """In process and memory implementation of redis-like data store.
-
-    It's intended to match the Python redis module API closely so that
-    it can be used in place of the redis module when testing.
-
-    Known limitations:
-
-    * Exceptions raised are not guaranteed to match the exception
-      types raised by the real Python redis module.
-    """
-
-    def __init__(self):
-        self._data = {}
-        self._expiries = {}
-
-    def teardown(self):
-        self._clean_up_expires()
-
-    def _clean_up_expires(self):
-        for key in self._expiries.keys():
-            delayed = self._expiries.pop(key)
-            if not delayed.cancelled:
-                delayed.cancel()
-
-    # Global operations
-
-    def exists(self, key):
-        return key in self._data
-
-    def keys(self, pattern='*'):
-        return fnmatch.filter(self._data.keys(), pattern)
-
-    def flushdb(self):
-        self._data = {}
-
-    # String operations
-
-    def get(self, key):
-        return self._data.get(key)
-
-    def set(self, key, value):
-        value = str(value)  # set() sets string value
-        self._data[key] = value
-
-    def delete(self, key):
-        existed = self.exists(key)
-        self._data.pop(key, None)
-        return existed
-
-    # Integer operations
-
-    # The python redis lib combines incr & incrby into incr(key, increment=1)
-    def incr(self, key, increment=1):
-        old_value = self._data.get(key)
-        if old_value is None:
-            old_value = 0
-        new_value = int(old_value) + increment
-        self.set(key, new_value)
-        return new_value
-
-    # Hash operations
-
-    def hset(self, key, field, value):
-        mapping = self._data.setdefault(key, {})
-        new_field = field not in mapping
-        mapping[field] = unicode(value)
-        return int(new_field)
-
-    def hget(self, key, field):
-        return self._data.get(key, {}).get(field)
-
-    def hdel(self, key, *fields):
-        mapping = self._data.get(key)
-        if mapping is None:
-            return 0
-        deleted = 0
-        for field in fields:
-            if field in mapping:
-                del mapping[field]
-                deleted += 1
-        return deleted
-
-    def hmset(self, key, mapping):
-        hval = self._data.setdefault(key, {})
-        hval.update(dict([(key, unicode(value))
-            for key, value in mapping.items()]))
-
-    def hgetall(self, key):
-        return self._data.get(key, {}).copy()
-
-    def hlen(self, key):
-        return len(self._data.get(key, {}))
-
-    def hvals(self, key):
-        return self._data.get(key, {}).values()
-
-    def hincrby(self, key, field, amount=1):
-        value = self._data.get(key, {}).get(field, "0")
-        # the int(str(..)) coerces amount to an int but rejects floats
-        value = int(value) + int(str(amount))
-        self._data.setdefault(key, {})[field] = str(value)
-        return value
-
-    def hexists(self, key, field):
-        return int(field in self._data.get(key, {}))
-
-    # Set operations
-
-    def sadd(self, key, *values):
-        sval = self._data.setdefault(key, set())
-        sval.update(map(unicode, values))
-
-    def smembers(self, key):
-        return self._data.get(key, set())
-
-    def spop(self, key):
-        sval = self._data.get(key, set())
-        if not sval:
-            return None
-        return sval.pop()
-
-    def srem(self, key, value):
-        sval = self._data.get(key, set())
-        if value in sval:
-            sval.remove(value)
-            return 1
-        return 0
-
-    def scard(self, key):
-        return len(self._data.get(key, set()))
-
-    def smove(self, src, dst, value):
-        result = self.srem(src, value)
-        if result:
-            self.sadd(dst, value)
-        return result
-
-    def sunion(self, key, *args):
-        union = set()
-        for rkey in (key,) + args:
-            union.update(self._data.get(rkey, set()))
-        return union
-
-    def sismember(self, key, value):
-        sval = self._data.get(key, set())
-        return value in sval
-
-    # Sorted set operations
-
-    def zadd(self, key, **valscores):
-        zval = self._data.setdefault(key, [])
-        new_zval = [val for val in zval if val[1] not in valscores]
-        for value, score in valscores.items():
-            new_zval.append((score, value))
-        new_zval.sort()
-        self._data[key] = new_zval
-
-    def zrem(self, key, value):
-        zval = self._data.setdefault(key, [])
-        new_zval = [val for val in zval if val[1] != value]
-        self._data[key] = new_zval
-
-    def zcard(self, key):
-        return len(self._data.get(key, []))
-
-    def zrange(self, key, start, stop, desc=False, withscores=False,
-                score_cast_func=float):
-        zval = self._data.get(key, [])
-        stop += 1  # redis start/stop are element indexes
-        if stop == 0:
-            stop = None
-        results = sorted(zval[start:stop],
-                    key=lambda (score, _): score_cast_func(score))
-        if desc:
-            results.reverse()
-        if withscores:
-            return results
-        else:
-            return [v for k, v in results]
-
-    # List operations
-    def llen(self, key):
-        return len(self._data.get(key, []))
-
-    def lpop(self, key):
-        if self.llen(key):
-            return self._data[key].pop(0)
-
-    def lpush(self, key, obj):
-        self._data.setdefault(key, []).insert(0, obj)
-
-    def rpush(self, key, obj):
-        self._data.setdefault(key, []).append(obj)
-        return self.llen(key) - 1
-
-    def lrange(self, key, start, end):
-        lval = self._data.get(key, [])
-        if end >= 0 or end < -1:
-            end += 1
-        else:
-            end = None
-        return lval[start:end]
-
-    def lrem(self, key, value, num=0):
-        removed = [0]
-
-        def keep(v):
-            if v == value and (num == 0 or removed[0] < abs(num)):
-                removed[0] += 1
-                return False
-            return True
-
-        lval = self._data.get(key, [])
-        if num >= 0:
-            lval = [v for v in lval if keep(v)]
-        else:
-            lval.reverse()
-            lval = [v for v in lval if keep(v)]
-            lval.reverse()
-        self._data[key] = lval
-        return removed[0]
-
-    # Expiry operations
-
-    def expire(self, key, seconds):
-        self.persist(key)
-        delayed = reactor.callLater(seconds, self.delete, key)
-        self._expiries[key] = delayed
-
-    def persist(self, key):
-        delayed = self._expiries.get(key)
-        if delayed is not None and not delayed.cancelled:
-            delayed.cancel()
+def FakeRedis():
+    warnings.warn("Use of FakeRedis is deprecated. "
+                  "Use persist.tests.fake_redis instead.",
+                  category=DeprecationWarning)
+    from vumi.persist import fake_redis
+    return fake_redis.FakeRedis()
 
 
 class LogCatcher(object):
@@ -525,3 +298,107 @@ class MockHttpServer(object):
     @inlineCallbacks
     def stop(self):
         yield self._webserver.loseConnection()
+
+
+def maybe_async(sync_attr):
+    """Decorate a method that may be sync or async.
+
+    This redecorates with the either @inlineCallbacks or @flatten_generator,
+    depending on the `sync_attr`.
+    """
+    if callable(sync_attr):
+        # If we don't get a sync attribute name, default to 'is_sync'.
+        return maybe_async('is_sync')(sync_attr)
+
+    def redecorate(func):
+        @wraps(func)
+        def wrapper(self, *args, **kw):
+            if getattr(self, sync_attr):
+                return flatten_generator(func)(self, *args, **kw)
+            return inlineCallbacks(func)(self, *args, **kw)
+        return wrapper
+
+    return redecorate
+
+
+class PersistenceMixin(object):
+    sync_persistence = False
+
+    sync_or_async = staticmethod(maybe_async('sync_persistence'))
+
+    def _persist_setUp(self):
+        self._persist_riak_managers = []
+        self._persist_redis_managers = []
+        self._persist_config = {
+            'redis_manager': {
+                'FAKE_REDIS': 'yes',
+                'key_prefix': type(self).__module__,
+                },
+            'riak_manager': {
+                'bucket_prefix': type(self).__module__,
+                },
+            }
+
+    def mk_config(self, config):
+        return dict(self._persist_config, **config)
+
+    @maybe_async('sync_persistence')
+    def _persist_tearDown(self):
+        for manager in self._persist_riak_managers:
+            yield self._persist_purge_riak(manager)
+        for manager in self._persist_redis_managers:
+            yield self._persist_purge_redis(manager)
+
+    def _persist_purge_riak(self, manager):
+        "This is a separate method to allow easy overriding."
+        return manager.purge_all()
+
+    def _persist_purge_redis(self, manager):
+        "This is a separate method to allow easy overriding."
+        return manager.close_manager()
+
+    def get_riak_manager(self, config=None):
+        if config is None:
+            config = self._persist_config['riak_manager'].copy()
+
+        if self.sync_persistence:
+            return self._get_sync_riak_manager(config)
+        return self._get_async_riak_manager(config)
+
+    def _get_async_riak_manager(self, config):
+        from vumi.persist.txriak_manager import TxRiakManager
+        riak_manager = TxRiakManager.from_config(config)
+        self._persist_riak_managers.append(riak_manager)
+        return riak_manager
+
+    def _get_sync_riak_manager(self, config):
+        from vumi.persist.riak_manager import RiakManager
+        riak_manager = RiakManager.from_config(config)
+        self._persist_riak_managers.append(riak_manager)
+        return riak_manager
+
+    def get_redis_manager(self, config=None):
+        if config is None:
+            config = self._persist_config['redis_manager'].copy()
+
+        if self.sync_persistence:
+            return self._get_sync_redis_manager(config)
+        return self._get_async_redis_manager(config)
+
+    def _get_async_redis_manager(self, config):
+        from vumi.persist.txredis_manager import TxRedisManager
+
+        d = TxRedisManager.from_config(config)
+
+        def add_to_self(redis_manager):
+            self._persist_redis_managers.append(redis_manager)
+            return redis_manager
+
+        return d.addCallback(add_to_self)
+
+    def _get_sync_redis_manager(self, config):
+        from vumi.persist.redis_manager import RedisManager
+
+        redis_manager = RedisManager.from_config(config)
+        self._persist_redis_managers.append(redis_manager)
+        return redis_manager

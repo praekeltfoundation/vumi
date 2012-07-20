@@ -8,13 +8,13 @@ import time
 import datetime
 from pkg_resources import resource_string
 
-import redis
+from twisted.internet.defer import inlineCallbacks, returnValue
 
-from twisted.python import log
-
+from vumi import log
 from vumi.errors import ConfigError, VumiError
 from vumi.message import TransportUserMessage
-from vumi.application import ApplicationWorker, SessionManager
+from vumi.application import ApplicationWorker
+from vumi.components import SessionManager
 
 SESSION_NEW = TransportUserMessage.SESSION_NEW
 SESSION_CLOSE = TransportUserMessage.SESSION_CLOSE
@@ -326,6 +326,7 @@ class DecisionTreeWorker(ApplicationWorker):
             raise ConfigError("DecisionTreeWorker requires a worker_name"
                               " in its configuration.")
 
+    @inlineCallbacks
     def setup_application(self):
         if "yaml_template" in self.config:
             with open(self.config["yaml_template"], "rb") as f:
@@ -333,14 +334,16 @@ class DecisionTreeWorker(ApplicationWorker):
         else:
             self.yaml_template = resource_string(__name__,
                                                  "toy_decision_tree.yaml")
-        self.r_server = redis.Redis(**self.config.get('redis', {}))
-        self.session_manager = SessionManager(self.r_server,
-             "%(worker_name)s:%(transport_name)s" % self.config,
-             max_session_length=self.MAX_SESSION_LENGTH)
+
+        r_config = self.config.get('redis_manager')
+        r_prefix = "%(worker_name)s:%(transport_name)s" % self.config
+        self.session_manager = yield SessionManager.from_redis_config(
+            r_config, r_prefix, self.MAX_SESSION_LENGTH)
 
     def teardown_application(self):
-        self.session_manager.stop()
+        return self.session_manager.stop()
 
+    @inlineCallbacks
     def consume_user_message(self, msg):
         user_id = msg.user()
         response = ''
@@ -350,7 +353,7 @@ class DecisionTreeWorker(ApplicationWorker):
             log.err("yaml_template is missing")
             return
 
-        decision_tree = self.get_decision_tree(user_id)
+        decision_tree = yield self.get_decision_tree(user_id)
         if not decision_tree.is_started():
             decision_tree.start()
         elif not decision_tree.is_completed():
@@ -359,11 +362,11 @@ class DecisionTreeWorker(ApplicationWorker):
         if not decision_tree.is_completed():
             response += decision_tree.question()
             continue_session = True
-            self.save_decision_tree(user_id, decision_tree)
+            yield self.save_decision_tree(user_id, decision_tree)
         else:
             response += decision_tree.finish() or ''
             self.post_result(decision_tree)
-            self.delete_decision_tree(user_id)
+            yield self.delete_decision_tree(user_id)
 
         self.reply_to(msg, response, continue_session)
 
@@ -373,22 +376,23 @@ class DecisionTreeWorker(ApplicationWorker):
     def get_initial_data(self, tree):
         return tree.get_initial_data()
 
+    @inlineCallbacks
     def get_decision_tree(self, user_id):
-        data = self.session_manager.load_session(user_id)
+        data = yield self.session_manager.load_session(user_id)
         if not data:
-            data = self.session_manager.create_session(user_id)
+            data = yield self.session_manager.create_session(user_id)
         if 'decision_tree' in data:
-            return yaml.safe_load(data['decision_tree'])
+            returnValue(yaml.safe_load(data['decision_tree']))
         else:
-            return self.setup_new_decision_tree()
+            returnValue(self.setup_new_decision_tree())
 
     def save_decision_tree(self, user_id, tree):
         data = {}
         data['decision_tree'] = yaml.safe_dump(tree)
-        self.session_manager.save_session(user_id, data)
+        return self.session_manager.save_session(user_id, data)
 
     def delete_decision_tree(self, user_id):
-        self.session_manager.clear_session(user_id)
+        return self.session_manager.clear_session(user_id)
 
     def setup_new_decision_tree(self):
         decision_tree = TraversedDecisionTree()

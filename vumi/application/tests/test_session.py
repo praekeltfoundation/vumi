@@ -1,8 +1,9 @@
 """Tests for vumi.application.session."""
 
 import time
+
 from twisted.trial.unittest import TestCase
-from vumi.tests.utils import FakeRedis
+from vumi.persist.fake_redis import FakeRedis
 from vumi.application import SessionManager
 
 

@@ -1,24 +1,28 @@
 # -*- test-case-name: vumi.transports.twitter.tests.test_twitter -*-
-import redis
+
 from twisted.python import log
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet import task
 from twittytwister import twitter
 from oauth import oauth
+
 from vumi.transports.base import Transport
 from vumi.message import TransportUserMessage
+from vumi.persist.txredis_manager import TxRedisManager
 
 
 class TwitterTransport(Transport):
 
     transport_type = 'twitter'
 
+    _twitter_class = twitter.TwitterFeed
+
     def validate_config(self):
         self.consumer_key = self.config['consumer_key']
         self.consumer_secret = self.config['consumer_secret']
         self.access_token = self.config['access_token']
         self.access_token_secret = self.config['access_token_secret']
-        self.r_config = self.config.get('redis', {})
+        self.r_config = self.config.get('redis_manager', {})
         self.r_prefix = "%(transport_name)s@%(app_name)s:replies" % self.config
         self.terms = set(self.config.get('terms'))
         self.check_replies_interval = int(self.config.get(
@@ -26,10 +30,11 @@ class TwitterTransport(Transport):
 
     @inlineCallbacks
     def setup_transport(self):
-        self.r_server = redis.Redis(**self.r_config)
+        redis = yield TxRedisManager.from_config(self.r_config)
+        self.redis = redis.sub_manager(self.r_prefix)
         consumer = oauth.OAuthConsumer(self.consumer_key, self.consumer_secret)
         token = oauth.OAuthToken(self.access_token, self.access_token_secret)
-        self.twitter = twitter.TwitterFeed(consumer=consumer, token=token)
+        self.twitter = self._twitter_class(consumer=consumer, token=token)
         yield self.start_tracking_terms()
         self.start_checking_for_replies()
 
@@ -46,10 +51,10 @@ class TwitterTransport(Transport):
     def teardown_transport(self):
         if self.check_replies.running:
             self.check_replies.stop()
+        return self.redis._close()
 
-    @inlineCallbacks
     def check_for_replies(self):
-        yield self.twitter.replies(self.handle_replies)
+        return self.twitter.replies(self.handle_replies)
 
     @inlineCallbacks
     def handle_outbound_message(self, message):
@@ -63,16 +68,7 @@ class TwitterTransport(Transport):
         self.publish_ack(user_message_id=message['message_id'],
                             sent_message_id=post_id)
 
-    @property
-    def last_reply_timestamp(self):
-        r_key = '%s:%s' % (self.r_prefix, 'last_reply_timestamp')
-        return self.r_server.get(r_key)
-
-    @last_reply_timestamp.setter
-    def last_reply_timestamp(self, value):
-        r_key = '%s:%s' % (self.r_prefix, 'last_reply_timestamp')
-        return self.r_server.set(r_key, value)
-
+    @inlineCallbacks
     def handle_replies(self, message):
         """
         handle_replies is called at a regular interval to check for replies
@@ -80,8 +76,9 @@ class TwitterTransport(Transport):
         event type to the messages to keep them distinguishable from messages
         arriving by tracking terms in realtime.
         """
-        if self.last_reply_timestamp == None or \
-            message.published > self.last_reply_timestamp:
+        last_reply_timestamp = yield self.redis.get('last_reply_timestamp')
+        if (last_reply_timestamp is None or
+                message.published > last_reply_timestamp):
             self.publish_message(
                 message_id=message.id,
                 content=message.text,
@@ -91,7 +88,7 @@ class TwitterTransport(Transport):
                 transport_type=self.transport_type,
                 transport_metadata=message.raw,
             )
-            self.last_reply_timestamp = message.published
+            yield self.redis.set('last_reply_timestamp', message.published)
 
     def handle_track(self, status):
         """
