@@ -9,6 +9,7 @@ pyOpenSSL
 python-ssmi
 wokkel
 redis
+txredis
 python-smpp
 pytz
 riakasaurus

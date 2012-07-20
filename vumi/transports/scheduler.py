@@ -5,11 +5,16 @@ import pytz
 import json
 from datetime import datetime
 from uuid import uuid4
+import warnings
 
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet.task import LoopingCall
 
 from vumi import message
+
+
+warnings.warn("vumi.transport.scheduler is deprecated. A replacement is coming"
+              " soon.", category=DeprecationWarning)
 
 
 class Scheduler(object):
