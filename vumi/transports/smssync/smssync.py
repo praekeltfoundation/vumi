@@ -1,7 +1,6 @@
 # -*- test-case-name: vumi.transports.smssync.tests.test_smssync -*-
 import json
 
-from twisted.python import log
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.transports.httprpc import HttpRpcTransport
@@ -50,7 +49,8 @@ class SmsSyncTransport(HttpRpcTransport):
         # TODO: Handle get/ post requests differently.
 
         if self.secret != request.args['secret'][0]:
-            yield self.finish_request(message_id, self.generate_response(False))
+            yield self.finish_request(message_id,
+                                      self.generate_response(False))
             return
 
         if request.method == 'POST':
@@ -59,10 +59,9 @@ class SmsSyncTransport(HttpRpcTransport):
                 'transport_type': self.transport_type,
                 'to_addr': request.args['sent_to'][0],
                 'from_addr': request.args['from'][0],
-                'content': request.args['message'][0]
-            }            
+                'content': request.args['message'][0],
+            }
             yield self.publish_message(**message)
-
 
         if request.method == 'GET' and request.args['task'][0] == 'send':
             # TODO: Send outgoing messages.
