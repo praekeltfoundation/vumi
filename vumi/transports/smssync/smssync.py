@@ -133,3 +133,18 @@ class SingleSmsSync(BaseSmsSyncTransport):
 
     def secret_for_message(self, msg):
         return self._secret
+
+
+class MultiSmsSync(BaseSmsSyncTransport):
+    """
+    Ushandi SMSSync Transport for a multiple phones.
+    """
+
+    def secret_for_request(self, request):
+        pathparts = request.path.split('/')
+        if pathparts:
+            return pathparts[-1]
+        return None
+
+    def secret_for_message(self, msg):
+        return msg['transport_metadata'].get('smssync_secret')
