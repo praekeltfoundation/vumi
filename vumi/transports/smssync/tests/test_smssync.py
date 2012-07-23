@@ -10,23 +10,23 @@ from twisted.internet.defer import inlineCallbacks
 
 from vumi.utils import http_request
 from vumi.transports.tests.test_base import TransportTestCase
-from vumi.transports.smssync import SmsSyncTransport
+from vumi.transports.smssync import SingleSmsSync
 
 
-class TestSmsSyncTransport(TransportTestCase):
+class TestSingleSmsSync(TransportTestCase):
 
     transport_name = 'test_smssync_transport'
-    transport_class = SmsSyncTransport
+    transport_class = SingleSmsSync
 
     @inlineCallbacks
     def setUp(self):
-        super(TestSmsSyncTransport, self).setUp()
+        super(TestSingleSmsSync, self).setUp()
         self.secret = "secretsecret"
         self.config = {
             'transport_name': self.transport_name,
             'web_path': "foo",
             'web_port': 0,
-            'secret': self.secret,
+            'smssync_secret': self.secret,
         }
         self.transport = yield self.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url()
@@ -54,12 +54,14 @@ class TestSmsSyncTransport(TransportTestCase):
         return self.smssync_call({'task': 'send'}, method='GET')
 
     def smssync_call(self, params, method):
-        url = self.mkurl_raw(params)
+        url = self.mkurl(params)
         d = http_request(url, '', method=method)
         d.addCallback(json.loads)
         return d
 
     def mkurl(self, params):
+        params = dict((k.encode('utf-8'), v.encode('utf-8'))
+                      for k, v in params.items())
         return '%s%s?%s' % (
             self.transport_url,
             self.config['web_path'],
@@ -68,7 +70,7 @@ class TestSmsSyncTransport(TransportTestCase):
 
     @inlineCallbacks
     def test_inbound_success(self):
-        now = datetime.datetime.utcnow().replace(seconds=0)
+        now = datetime.datetime.utcnow().replace(second=0, microsecond=0)
         response = yield self.smssync_inbound(content=u'hællo', timestamp=now)
         self.assertEqual(response, {"payload": {"success": "true"}})
 

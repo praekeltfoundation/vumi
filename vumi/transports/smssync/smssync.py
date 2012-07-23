@@ -1,68 +1,135 @@
 # -*- test-case-name: vumi.transports.smssync.tests.test_smssync -*-
 import json
+import datetime
 
 from twisted.internet.defer import inlineCallbacks
 
+from vumi.message import TransportUserMessage
+from vumi.persist.txredis_manager import TxRedisManager
+from vumi.transports.failures import PermanentFailure
 from vumi.transports.httprpc import HttpRpcTransport
 
 
-class SmsSyncTransport(HttpRpcTransport):
+class BaseSmsSyncTransport(HttpRpcTransport):
     """
     Ushandi SMSSync Transport for getting messages into vumi.
 
-    web_path : str
+    :param str web_path:
         The path relative to the host where this listens
-    web_port : int
+    :param int web_port:
         The port this listens on
-    transport_name : str
+    :param str transport_name:
         The name this transport instance will use to create its queues
-    secret : str (default '')
-        For security, compared against a string entered in the Android app.
+    :param dict redis_manager:
+        Redis client configuration.
     """
 
-    transport_type = 'smssync'
+    transport_type = 'sms'
 
+    # SMSSync True and False constants
+    SMSSYNC_TRUE, SMSSYNC_FALSE = ("true", "false")
+    SMSSYNC_DATE_FORMAT = "%m-%d-%y-%H:%M"
+
+    @inlineCallbacks
     def setup_transport(self):
-        self.secret = self.config.get('secret')
-        return super(SmsSyncTransport, self).setup_transport()
+        r_config = self.config.get('redis_manager', {})
+        self.redis = yield TxRedisManager.from_config(r_config)
+        yield super(BaseSmsSyncTransport, self).setup_transport()
+
+    def secret_for_request(self, request):
+        raise NotImplementedError("Sub-classes should implement"
+                                  " secret_for_request")
+
+    def secret_for_message(self, msg):
+        raise NotImplementedError("Sub-classes should implement"
+                                  " secret_for_message")
+
+    def check_secret(self, secret, supplied_secret):
+        return secret == supplied_secret
 
     @inlineCallbacks
-    def handle_outbound_message(self, message):
-        # TODO: If the message has a reply message, generate a response
-        # that will allow you to reply.
-        yield self.finish_request(message.payload['in_reply_to'],
-                                  self.generate_response(True))
-
-    def generate_response(self, success=False):
-        # TODO: Allow a message to be passed to this method, which sets
-        # the task as 'send' and an array of messages.
-        response = {
-            'payload': {
-                'success': success
-            }
-        }
-
-        return json.dumps(response)
-
-    @inlineCallbacks
-    def handle_raw_inbound_message(self, message_id, request):
-        # TODO: Handle get/ post requests differently.
-
-        if self.secret != request.args['secret'][0]:
-            yield self.finish_request(message_id,
-                                      self.generate_response(False))
+    def _handle_send(self, message_id, request):
+        secret = self.secret_for_request(request)
+        if secret is None:
+            yield self._send_response(message_id, success=self.SMSSYNC_FALSE)
             return
+        outbound_ids = []
+        outbound_messages = []
+        while True:
+            msg_json = yield self.redis.lpop(secret)
+            if msg_json is None:
+                break
+            msg = TransportUserMessage.from_json(msg_json)
+            outbound_ids.append(msg['message_id'])
+            outbound_messages.append({'to': msg['to_addr'],
+                                      'message': msg['content'] or ''})
+        yield self._send_response(message_id, task='send', secret=secret,
+                                  messages=outbound_messages)
+        for outbound_id in outbound_ids:
+            yield self.publish_ack(user_message_id=outbound_id,
+                                   sent_message_id=outbound_id)
 
-        if request.method == 'POST':
-            message = {
-                'message_id': message_id,
-                'transport_type': self.transport_type,
-                'to_addr': request.args['sent_to'][0],
-                'from_addr': request.args['from'][0],
-                'content': request.args['message'][0],
-            }
-            yield self.publish_message(**message)
+    @inlineCallbacks
+    def _handle_receive(self, message_id, request):
+        secret = self.secret_for_request(request)
+        supplied_secret = request.args['secret'][0]
+        if secret is None or not self.check_secret(secret, supplied_secret):
+            yield self._send_response(message_id, success=self.SMSSYNC_FALSE)
+            return
+        timestamp = datetime.datetime.strptime(
+            request.args['sent_timestamp'][0], self.SMSSYNC_DATE_FORMAT)
+        message = {
+            'message_id': message_id,
+            'transport_type': self.transport_type,
+            'to_addr': request.args['sent_to'][0],
+            'from_addr': request.args['from'][0],
+            'content': request.args['message'][0],
+            'timestamp': timestamp,
+        }
+        yield self.publish_message(**message)
+        yield self._send_response(message_id, success=self.SMSSYNC_TRUE)
 
-        if request.method == 'GET' and request.args['task'][0] == 'send':
-            # TODO: Send outgoing messages.
-            pass
+    def _send_response(self, message_id, **kw):
+        response = {'payload': kw}
+        return self.finish_request(message_id, json.dumps(response))
+
+    def handle_raw_inbound_message(self, message_id, request):
+        # This matches the dispatch logic in Usahidi's request
+        # handler for SMSSync.
+        # See https://github.com/ushahidi/Ushahidi_Web/blob/
+        #             master/plugins/smssync/controllers/smssync.php
+        tasks = request.args.get('task')
+        task = tasks[0] if tasks else None
+        if task == "send":
+            return self._handle_send(message_id, request)
+        else:
+            return self._handle_receive(message_id, request)
+
+    def handle_outbound_message(self, message):
+        secret = self.secret_for_message(message)
+        if secret is None:
+            raise PermanentFailure("SmsSyncTransport couldn't determine"
+                                   " secret for outbound message.")
+        else:
+            return self.redis.rpush(secret, message.to_json())
+
+
+class SingleSmsSync(BaseSmsSyncTransport):
+    """
+    Ushandi SMSSync Transport for a single phone.
+
+    Additional configuration options:
+
+    :param str smssync_secret:
+        Secret of the single phone (default: '', i.e. no secret set)
+    """
+
+    def validate_config(self):
+        super(SingleSmsSync, self).validate_config()
+        self._secret = self.config.get('smssync_secret', '')
+
+    def secret_for_request(self, request):
+        return self._secret
+
+    def secret_for_message(self, msg):
+        return self._secret
