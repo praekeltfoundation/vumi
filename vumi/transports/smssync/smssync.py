@@ -1,7 +1,6 @@
 # -*- test-case-name: vumi.transports.smssync.tests.test_smssync -*-
 import json
 import datetime
-import re
 
 from twisted.internet.defer import inlineCallbacks
 
