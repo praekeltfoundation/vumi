@@ -97,8 +97,8 @@ class TestSingleSmsSync(TransportTestCase):
 
     @inlineCallbacks
     def test_normalize_msisdn(self):
-        yield self.smssync_inbound(content="hi", from_addr="555-7171",
-                                   to_addr="555-7272")
+        yield self.smssync_inbound(content="hi", from_addr="0555-7171",
+                                   to_addr="0555-7272")
         [msg] = self.get_dispatched_messages()
         self.assertEqual(msg['from_addr'], "+275557171")
         self.assertEqual(msg['to_addr'], "+275557272")

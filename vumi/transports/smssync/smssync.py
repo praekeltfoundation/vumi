@@ -1,10 +1,12 @@
 # -*- test-case-name: vumi.transports.smssync.tests.test_smssync -*-
 import json
 import datetime
+import re
 
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.message import TransportUserMessage
+from vumi.utils import normalize_msisdn
 from vumi.persist.txredis_manager import TxRedisManager
 from vumi.transports.failures import PermanentFailure
 from vumi.transports.httprpc import HttpRpcTransport
@@ -114,11 +116,12 @@ class BaseSmsSyncTransport(HttpRpcTransport):
             return
         timestamp = datetime.datetime.strptime(
             request.args['sent_timestamp'][0], self.SMSSYNC_DATE_FORMAT)
+        normalize = lambda raw: normalize_msisdn(raw, msginfo.country_code)
         message = {
             'message_id': message_id,
             'transport_type': self.transport_type,
-            'to_addr': request.args['sent_to'][0],
-            'from_addr': request.args['from'][0],
+            'to_addr': normalize(request.args['sent_to'][0]),
+            'from_addr': normalize(request.args['from'][0]),
             'content': request.args['message'][0],
             'timestamp': timestamp,
         }
@@ -177,7 +180,7 @@ class SingleSmsSync(BaseSmsSyncTransport):
         # handles the lack of a secret).
         self._smssync_secret = self.config.get('smssync_secret', '')
         self._account_id = self.config.get('account_id', self._smssync_secret)
-        self._country_code = self.config.get('country_code', '')
+        self._country_code = self.config.get('country_code', '').lstrip('+')
 
     def msginfo_for_request(self, request):
         return SmsSyncMsgInfo(self._account_id, self._smssync_secret,
@@ -210,7 +213,7 @@ class MultiSmsSync(BaseSmsSyncTransport):
 
     def validate_config(self):
         super(MultiSmsSync, self).validate_config()
-        self._country_code = self.config.get('country_code', '')
+        self._country_code = self.config.get('country_code', '').lstrip('+')
 
     def msginfo_for_request(self, request):
         pathparts = request.path.rstrip('/').split('/')
