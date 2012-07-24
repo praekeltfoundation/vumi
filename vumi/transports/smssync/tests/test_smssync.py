@@ -12,35 +12,40 @@ from vumi.message import TransportUserMessage
 from vumi.utils import http_request
 from vumi.transports.tests.test_base import TransportTestCase
 from vumi.transports.smssync import SingleSmsSync, MultiSmsSync
+from vumi.transports.smssync.smssync import SmsSyncMsgInfo
 
 
 class TestSingleSmsSync(TransportTestCase):
 
     transport_name = 'test_smssync_transport'
     transport_class = SingleSmsSync
-    multi_smssync = False
+    account_in_url = False
 
     @inlineCallbacks
     def setUp(self):
         super(TestSingleSmsSync, self).setUp()
-        self.smssync_secret = "secretsecret"
         self.config = {
             'transport_name': self.transport_name,
             'web_path': "foo",
             'web_port': 0,
         }
-        if not self.multi_smssync:
-            self.config['smssync_secret'] = self.smssync_secret
+        self.add_transport_config()
         self.transport = yield self.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url()
+
+    def add_transport_config(self):
+        self.config["smssync_secret"] = self.smssync_secret = "secretsecret"
+        self.config["country_code"] = self.country_code = "+27"
+        self.config["account_id"] = self.account_id = "test_account"
 
     def smssync_inbound(self, content, from_addr='123', to_addr='555',
                         timestamp=None, message_id='1', secret=None):
         """Emulate an inbound message from SMSSync on an Android phone."""
+        msginfo = self.default_msginfo()
         if timestamp is None:
             timestamp = datetime.datetime.utcnow()
         if secret is None:
-            secret = self.default_param_secret()
+            secret = msginfo.smssync_secret
         # Timestamp format: mm-dd-yy-hh:mm, e.g. 11-27-11-07:11
         params = {
             'sent_to': to_addr,
@@ -63,23 +68,19 @@ class TestSingleSmsSync(TransportTestCase):
         return d
 
     def mkurl(self, params):
+        msginfo = self.default_msginfo()
         params = dict((k.encode('utf-8'), v.encode('utf-8'))
                       for k, v in params.items())
         return '%s%s%s?%s' % (
             self.transport_url,
             self.config['web_path'],
-            self.default_url_secret(),
+            ("/%s/" % msginfo.account_id) if self.account_in_url else '',
             urlencode(params),
         )
 
-    def default_url_secret(self):
-        return ''
-
-    def default_param_secret(self):
-        return self.smssync_secret
-
-    def add_default_secret_key_to_msg(self, msg):
-        pass
+    def default_msginfo(self):
+        return SmsSyncMsgInfo(self.account_id, self.smssync_secret,
+                              self.country_code)
 
     @inlineCallbacks
     def test_inbound_success(self):
@@ -110,13 +111,14 @@ class TestSingleSmsSync(TransportTestCase):
     @inlineCallbacks
     def test_poll_outbound(self):
         outbound_msg = self.mkmsg_out(content=u'hællo')
-        self.add_default_secret_key_to_msg(outbound_msg)
+        msginfo = self.default_msginfo()
+        self.transport.add_msginfo_metadata(outbound_msg.payload, msginfo)
         yield self.dispatch(outbound_msg)
         response = yield self.smssync_poll()
         self.assertEqual(response, {
             "payload": {
                 "task": "send",
-                "secret": self.default_param_secret(),
+                "secret": self.smssync_secret,
                 "messages": [{
                     "to": outbound_msg['to_addr'],
                     "message": outbound_msg['content'],
@@ -148,14 +150,12 @@ class TestMultiSmsSync(TestSingleSmsSync):
 
     transport_name = 'test_multismssync_transport'
     transport_class = MultiSmsSync
-    multi_smssync = True
+    account_in_url = True
 
-    def default_url_secret(self):
-        return "/" + self.smssync_secret + "/"
+    def add_transport_config(self):
+        self.account_id = "default_account_id"
+        self.smssync_secret = ""
+        self.config["country_code"] = self.country_code = "+27"
 
-    def default_param_secret(self):
-        return ""
-
-    def add_default_secret_key_to_msg(self, msg):
-        secret_key = self.transport.key_for_secret(self.smssync_secret)
-        self.transport.add_secret_key_to_msg(msg, secret_key)
+    def default_msginfo(self):
+        return SmsSyncMsgInfo(self.account_id, '', self.country_code)

@@ -10,6 +10,25 @@ from vumi.transports.failures import PermanentFailure
 from vumi.transports.httprpc import HttpRpcTransport
 
 
+class SmsSyncMsgInfo(object):
+    """Holder of attributes needed to process an SMSSync message.
+
+    :param str account_id:
+        An ID for the acocunt this message is being sent
+        to / from.
+    :param str smssync_secret:
+        The shared SMSSync secret for the account this message
+        is being sent to / from.
+    :param str country_code:
+        The default country_code for the account this message
+        is being sent to / from.
+    """
+    def __init__(self, account_id, smssync_secret, country_code):
+        self.account_id = account_id
+        self.smssync_secret = smssync_secret
+        self.country_code = country_code
+
+
 class BaseSmsSyncTransport(HttpRpcTransport):
     """
     Ushahidi SMSSync Transport for getting messages into vumi.
@@ -36,49 +55,51 @@ class BaseSmsSyncTransport(HttpRpcTransport):
         self.redis = yield TxRedisManager.from_config(r_config)
         yield super(BaseSmsSyncTransport, self).setup_transport()
 
-    def secrets_for_request(self, request):
-        """Returns a (secret, secret_key) tuple.
+    def msginfo_for_request(self, request):
+        """Returns an :class:`SmsSyncMsgInfo` instance for this request.
 
-        The `secret` is used for authentication checking, the
-        `secret_key` is used for redis look-ups.
+        May return a deferred that yields the actual result to its callback.
         """
         raise NotImplementedError("Sub-classes should implement"
-                                  " secret_for_request")
+                                  " msginfo_for_request")
 
-    def secret_key_for_message(self, msg):
-        """Returns `secret_key` for performing redis look-ups."""
+    def msginfo_for_message(self, msg):
+        """Returns an :class:`SmsSyncMsgInfo` instance for this outbound
+        message.
+
+        May return a deferred that yields the actual result to its callback.
+        """
         raise NotImplementedError("Sub-classes should implement"
-                                  " secret_for_message")
+                                  " msginfo_for_message")
 
-    @staticmethod
-    def add_secret_key_to_payload(payload, secret_key):
-        raise NotImplementedError("Sub-classes should implement"
-                                  " add_secret_key_to_payload")
+    def add_msginfo_metadata(self, payload, msginfo):
+        """Update an outbound message's payload's transport_metadata to allow
+        msginfo to be reconstructed from replies."""
+        raise NotImplementedError("Sub-class should implement"
+                                  " add_msginfo_metadata")
 
-    def key_for_secret(self, secret):
-        return "secret#%s" % (secret,)
-
-    @classmethod
-    def add_secret_key_to_msg(cls, msg, secret_key):
-        cls.add_secret_key_to_payload(msg.payload, secret_key)
+    def key_for_account(self, account_id):
+        return "outbound_messages#%s" % (account_id,)
 
     @inlineCallbacks
     def _handle_send(self, message_id, request):
-        secret, secret_key = self.secrets_for_request(request)
-        if secret_key is None:
+        msginfo = yield self.msginfo_for_request(request)
+        if msginfo is None:
             yield self._send_response(message_id, success=self.SMSSYNC_FALSE)
             return
         outbound_ids = []
         outbound_messages = []
+        account_key = self.key_for_account(msginfo.account_id)
         while True:
-            msg_json = yield self.redis.lpop(secret_key)
+            msg_json = yield self.redis.lpop(account_key)
             if msg_json is None:
                 break
             msg = TransportUserMessage.from_json(msg_json)
             outbound_ids.append(msg['message_id'])
             outbound_messages.append({'to': msg['to_addr'],
                                       'message': msg['content'] or ''})
-        yield self._send_response(message_id, task='send', secret=secret,
+        yield self._send_response(message_id, task='send',
+                                  secret=msginfo.smssync_secret,
                                   messages=outbound_messages)
         for outbound_id in outbound_ids:
             yield self.publish_ack(user_message_id=outbound_id,
@@ -86,9 +107,9 @@ class BaseSmsSyncTransport(HttpRpcTransport):
 
     @inlineCallbacks
     def _handle_receive(self, message_id, request):
-        secret, secret_key = self.secrets_for_request(request)
+        msginfo = yield self.msginfo_for_request(request)
         supplied_secret = request.args['secret'][0]
-        if secret_key is None or not secret == supplied_secret:
+        if msginfo is None or not msginfo.smssync_secret == supplied_secret:
             yield self._send_response(message_id, success=self.SMSSYNC_FALSE)
             return
         timestamp = datetime.datetime.strptime(
@@ -101,7 +122,7 @@ class BaseSmsSyncTransport(HttpRpcTransport):
             'content': request.args['message'][0],
             'timestamp': timestamp,
         }
-        self.add_secret_key_to_payload(message, secret_key)
+        self.add_msginfo_metadata(message, msginfo)
         yield self.publish_message(**message)
         yield self._send_response(message_id, success=self.SMSSYNC_TRUE)
 
@@ -121,13 +142,15 @@ class BaseSmsSyncTransport(HttpRpcTransport):
         else:
             return self._handle_receive(message_id, request)
 
+    @inlineCallbacks
     def handle_outbound_message(self, message):
-        secret_key = self.secret_key_for_message(message)
-        if secret_key is None:
+        msginfo = yield self.msginfo_for_message(message)
+        if msginfo is None:
             raise PermanentFailure("SmsSyncTransport couldn't determine"
                                    " secret for outbound message.")
         else:
-            return self.redis.rpush(secret_key, message.to_json())
+            account_key = self.key_for_account(msginfo.account_id)
+            yield self.redis.rpush(account_key, message.to_json())
 
 
 class SingleSmsSync(BaseSmsSyncTransport):
@@ -138,6 +161,13 @@ class SingleSmsSync(BaseSmsSyncTransport):
 
     :param str smssync_secret:
         Secret of the single phone (default: '', i.e. no secret set)
+    :param str account_id:
+        Account id for storing outbound messages under. Defaults to
+        the `smssync_secret` which is fine unless the secret changes.
+    :param str country_code:
+        Default country code to use when normalizing MSISDNs sent by
+        SMSSync (default is the empty string, which assumes numbers
+        already include the international dialing prefix).
     """
 
     def validate_config(self):
@@ -145,18 +175,21 @@ class SingleSmsSync(BaseSmsSyncTransport):
         # The secret is the empty string in the case where the single-phone
         # transport isn't using a secret (this fits with how the Ushahidi
         # handles the lack of a secret).
-        self._secret = self.config.get('smssync_secret', '')
+        self._smssync_secret = self.config.get('smssync_secret', '')
+        self._account_id = self.config.get('account_id', self._smssync_secret)
+        self._country_code = self.config.get('country_code', '')
 
-    def secrets_for_request(self, request):
-        return self._secret, self.key_for_secret(self._secret)
+    def msginfo_for_request(self, request):
+        return SmsSyncMsgInfo(self._account_id, self._smssync_secret,
+                              self._country_code)
 
-    def secret_key_for_message(self, msg):
-        return self.key_for_secret(self._secret)
+    def msginfo_for_message(self, msg):
+        return SmsSyncMsgInfo(self._account_id, self._smssync_secret,
+                              self._country_code)
 
-    @staticmethod
-    def add_secret_key_to_payload(payload, secret_key):
-        # single transports don't need to know which phone a message
-        # is destined for since there is only one
+    def add_msginfo_metadata(self, msg, msginfo):
+        # The single phone SMSSync transport doesn't require any
+        # transport metadata in order to reconstruct msginfo
         pass
 
 
@@ -164,19 +197,47 @@ class MultiSmsSync(BaseSmsSyncTransport):
     """
     Ushahidi SMSSync Transport for a multiple phones.
 
-    Each phone accesses a URL that has the form `<web_path>/<secret>/`.
+    Each phone accesses a URL that has the form `<web_path>/<account_id>/`.
     A blank secret should be entered into the SMSSync `secret` field.
-    """
-    def secrets_for_request(self, request):
-        pathparts = request.path.rstrip('/').split('/')
-        if pathparts and pathparts[-1]:
-            return ('', self.key_for_secret(pathparts[-1]))
-        return ('', None)
 
-    def secret_key_for_message(self, msg):
-        return msg['transport_metadata'].get('secret_key')
+    Additional configuration options:
+
+    :param str country_code:
+        Default country code to use when normalizing MSISDNs sent by
+        SMSSync (default is the empty string, which assumes numbers
+        already include the international dialing prefix).
+    """
+
+    def validate_config(self):
+        super(MultiSmsSync, self).validate_config()
+        self._country_code = self.config.get('country_code', '')
+
+    def msginfo_for_request(self, request):
+        pathparts = request.path.rstrip('/').split('/')
+        if not pathparts or not pathparts[-1]:
+            return None
+        return SmsSyncMsgInfo(pathparts[-1], '', self._country_code)
+
+    def msginfo_for_message(self, msg):
+        account_id = self.account_from_message(msg)
+        if account_id is None:
+            return None
+        return SmsSyncMsgInfo(account_id, '', self._country_code)
+
+    def add_msginfo_metadata(self, msg, msginfo):
+        # The single phone SMSSync transport doesn't require any
+        # transport metadata in order to reconstruct msginfo
+        self.add_account_to_payload(msg, msginfo.account_id)
 
     @staticmethod
-    def add_secret_key_to_payload(payload, secret_key):
+    def account_from_message(msg):
+        return msg['transport_metadata'].get('account_id')
+
+    @classmethod
+    def add_account_to_message(cls, msg, account_id):
+        return cls.add_account_to_payload(msg.payload, account_id)
+
+    @staticmethod
+    def add_account_to_payload(payload, account_id):
         transport_metadata = payload.setdefault('transport_metadata', {})
-        transport_metadata['secret_key'] = secret_key
+        transport_metadata['account_id'] = account_id
