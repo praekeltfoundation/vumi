@@ -121,7 +121,7 @@ class BaseSmsSyncTransport(HttpRpcTransport):
 
 class SingleSmsSync(BaseSmsSyncTransport):
     """
-    Ushandi SMSSync Transport for a single phone.
+    Ushahidi SMSSync Transport for a single phone.
 
     Additional configuration options:
 
@@ -145,7 +145,7 @@ class SingleSmsSync(BaseSmsSyncTransport):
 
 class MultiSmsSync(BaseSmsSyncTransport):
     """
-    Ushandi SMSSync Transport for a multiple phones.
+    Ushahidi SMSSync Transport for a multiple phones.
     """
 
     def secret_for_request(self, request):
