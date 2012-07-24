@@ -36,29 +36,31 @@ class BaseSmsSyncTransport(HttpRpcTransport):
         self.redis = yield TxRedisManager.from_config(r_config)
         yield super(BaseSmsSyncTransport, self).setup_transport()
 
-    def secret_for_request(self, request):
+    def secrets_for_request(self, request):
+        """Returns a (secret, secret_key) tuple.
+
+        The `secret` is used for authentication checking, the
+        `secret_key` is used for redis look-ups.
+        """
         raise NotImplementedError("Sub-classes should implement"
                                   " secret_for_request")
 
-    def secret_for_message(self, msg):
+    def secret_key_for_message(self, msg):
+        """Returns `secret_key` for performing redis look-ups."""
         raise NotImplementedError("Sub-classes should implement"
                                   " secret_for_message")
-
-    def check_secret(self, secret, supplied_secret):
-        return secret == supplied_secret
 
     def key_for_secret(self, secret):
         return "secret#%s" % (secret,)
 
     @inlineCallbacks
     def _handle_send(self, message_id, request):
-        secret = self.secret_for_request(request)
-        if secret is None:
+        secret, secret_key = self.secrets_for_request(request)
+        if secret_key is None:
             yield self._send_response(message_id, success=self.SMSSYNC_FALSE)
             return
         outbound_ids = []
         outbound_messages = []
-        secret_key = self.key_for_secret(secret)
         while True:
             msg_json = yield self.redis.lpop(secret_key)
             if msg_json is None:
@@ -75,9 +77,9 @@ class BaseSmsSyncTransport(HttpRpcTransport):
 
     @inlineCallbacks
     def _handle_receive(self, message_id, request):
-        secret = self.secret_for_request(request)
+        secret, secret_key = self.secrets_for_request(request)
         supplied_secret = request.args['secret'][0]
-        if secret is None or not self.check_secret(secret, supplied_secret):
+        if secret_key is None or not secret == supplied_secret:
             yield self._send_response(message_id, success=self.SMSSYNC_FALSE)
             return
         timestamp = datetime.datetime.strptime(
@@ -110,12 +112,11 @@ class BaseSmsSyncTransport(HttpRpcTransport):
             return self._handle_receive(message_id, request)
 
     def handle_outbound_message(self, message):
-        secret = self.secret_for_message(message)
-        if secret is None:
+        secret_key = self.secret_key_for_message(message)
+        if secret_key is None:
             raise PermanentFailure("SmsSyncTransport couldn't determine"
                                    " secret for outbound message.")
         else:
-            secret_key = self.key_for_secret(secret)
             return self.redis.rpush(secret_key, message.to_json())
 
 
@@ -136,23 +137,28 @@ class SingleSmsSync(BaseSmsSyncTransport):
         # handles the lack of a secret).
         self._secret = self.config.get('smssync_secret', '')
 
-    def secret_for_request(self, request):
-        return self._secret
+    def secrets_for_request(self, request):
+        return self._secret, self.key_for_secret(self._secret)
 
-    def secret_for_message(self, msg):
-        return self._secret
+    def secret_key_for_message(self, msg):
+        return self.key_for_secret(self._secret)
 
 
 class MultiSmsSync(BaseSmsSyncTransport):
     """
     Ushahidi SMSSync Transport for a multiple phones.
+
+    Each phone accesses a URL that has the form `<web_path>/<secret>/`.
+    A blank secret should be entered into the SMSSync `secret` field.
     """
+    def secrets_for_request(self, request):
+        pathparts = request.path.rstrip('/').split('/')
+        if pathparts and pathparts[-1]:
+            return ('', self.key_for_secret(pathparts[-1]))
+        return ('', None)
 
-    def secret_for_request(self, request):
-        pathparts = request.path.split('/')
-        if pathparts:
-            return pathparts[-1]
-        return None
-
-    def secret_for_message(self, msg):
-        return msg['transport_metadata'].get('smssync_secret')
+    def secret_key_for_message(self, msg):
+        secret = msg['transport_metadata'].get('smssync_secret')
+        if secret is None:
+            return None
+        return self.key_for_secret(secret)

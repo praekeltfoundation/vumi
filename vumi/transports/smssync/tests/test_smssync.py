@@ -10,24 +10,26 @@ from twisted.internet.defer import inlineCallbacks
 
 from vumi.utils import http_request
 from vumi.transports.tests.test_base import TransportTestCase
-from vumi.transports.smssync import SingleSmsSync
+from vumi.transports.smssync import SingleSmsSync, MultiSmsSync
 
 
 class TestSingleSmsSync(TransportTestCase):
 
     transport_name = 'test_smssync_transport'
     transport_class = SingleSmsSync
+    multi_smssync = False
 
     @inlineCallbacks
     def setUp(self):
         super(TestSingleSmsSync, self).setUp()
-        self.secret = "secretsecret"
+        self.smssync_secret = "secretsecret"
         self.config = {
             'transport_name': self.transport_name,
             'web_path': "foo",
             'web_port': 0,
-            'smssync_secret': self.secret,
         }
+        if not self.multi_smssync:
+            self.config['smssync_secret'] = self.smssync_secret
         self.transport = yield self.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url()
 
@@ -37,7 +39,7 @@ class TestSingleSmsSync(TransportTestCase):
         if timestamp is None:
             timestamp = datetime.datetime.utcnow()
         if secret is None:
-            secret = self.secret
+            secret = self.default_param_secret()
         # Timestamp format: mm-dd-yy-hh:mm, e.g. 11-27-11-07:11
         params = {
             'sent_to': to_addr,
@@ -62,11 +64,18 @@ class TestSingleSmsSync(TransportTestCase):
     def mkurl(self, params):
         params = dict((k.encode('utf-8'), v.encode('utf-8'))
                       for k, v in params.items())
-        return '%s%s?%s' % (
+        return '%s%s%s?%s' % (
             self.transport_url,
             self.config['web_path'],
-            urlencode(params)
+            self.default_url_secret(),
+            urlencode(params),
         )
+
+    def default_url_secret(self):
+        return ''
+
+    def default_param_secret(self):
+        return self.smssync_secret
 
     @inlineCallbacks
     def test_inbound_success(self):
@@ -94,7 +103,7 @@ class TestSingleSmsSync(TransportTestCase):
         self.assertEqual(response, {
             "payload": {
                 "task": "send",
-                "secret": self.secret,
+                "secret": self.default_param_secret(),
                 "messages": [{
                     "to": outbound_msg['to_addr'],
                     "message": outbound_msg['content'],
@@ -102,3 +111,16 @@ class TestSingleSmsSync(TransportTestCase):
                 ],
             },
         })
+
+
+class TestMultiSmsSync(TestSingleSmsSync):
+
+    transport_name = 'test_multismssync_transport'
+    transport_class = MultiSmsSync
+    multi_smssync = True
+
+    def default_url_secret(self):
+        return "/" + self.smssync_secret + "/"
+
+    def default_param_secret(self):
+        return ""
