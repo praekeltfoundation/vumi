@@ -50,8 +50,17 @@ class BaseSmsSyncTransport(HttpRpcTransport):
         raise NotImplementedError("Sub-classes should implement"
                                   " secret_for_message")
 
+    @staticmethod
+    def add_secret_key_to_payload(payload, secret_key):
+        raise NotImplementedError("Sub-classes should implement"
+                                  " add_secret_key_to_payload")
+
     def key_for_secret(self, secret):
         return "secret#%s" % (secret,)
+
+    @classmethod
+    def add_secret_key_to_msg(cls, msg, secret_key):
+        cls.add_secret_key_to_payload(msg.payload, secret_key)
 
     @inlineCallbacks
     def _handle_send(self, message_id, request):
@@ -92,6 +101,7 @@ class BaseSmsSyncTransport(HttpRpcTransport):
             'content': request.args['message'][0],
             'timestamp': timestamp,
         }
+        self.add_secret_key_to_payload(message, secret_key)
         yield self.publish_message(**message)
         yield self._send_response(message_id, success=self.SMSSYNC_TRUE)
 
@@ -143,6 +153,12 @@ class SingleSmsSync(BaseSmsSyncTransport):
     def secret_key_for_message(self, msg):
         return self.key_for_secret(self._secret)
 
+    @staticmethod
+    def add_secret_key_to_payload(payload, secret_key):
+        # single transports don't need to know which phone a message
+        # is destined for since there is only one
+        pass
+
 
 class MultiSmsSync(BaseSmsSyncTransport):
     """
@@ -158,7 +174,9 @@ class MultiSmsSync(BaseSmsSyncTransport):
         return ('', None)
 
     def secret_key_for_message(self, msg):
-        secret = msg['transport_metadata'].get('smssync_secret')
-        if secret is None:
-            return None
-        return self.key_for_secret(secret)
+        return msg['transport_metadata'].get('secret_key')
+
+    @staticmethod
+    def add_secret_key_to_payload(payload, secret_key):
+        transport_metadata = payload.setdefault('transport_metadata', {})
+        transport_metadata['secret_key'] = secret_key

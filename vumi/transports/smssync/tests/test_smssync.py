@@ -77,6 +77,9 @@ class TestSingleSmsSync(TransportTestCase):
     def default_param_secret(self):
         return self.smssync_secret
 
+    def add_default_secret_key_to_msg(self, msg):
+        pass
+
     @inlineCallbacks
     def test_inbound_success(self):
         now = datetime.datetime.utcnow().replace(second=0, microsecond=0)
@@ -98,6 +101,7 @@ class TestSingleSmsSync(TransportTestCase):
     @inlineCallbacks
     def test_poll_outbound(self):
         outbound_msg = self.mkmsg_out(content=u'hællo')
+        self.add_default_secret_key_to_msg(outbound_msg)
         self.dispatch(outbound_msg)
         response = yield self.smssync_poll()
         self.assertEqual(response, {
@@ -112,6 +116,8 @@ class TestSingleSmsSync(TransportTestCase):
             },
         })
 
+    # TODO: test replies
+
 
 class TestMultiSmsSync(TestSingleSmsSync):
 
@@ -124,3 +130,7 @@ class TestMultiSmsSync(TestSingleSmsSync):
 
     def default_param_secret(self):
         return ""
+
+    def add_default_secret_key_to_msg(self, msg):
+        secret_key = self.transport.key_for_secret(self.smssync_secret)
+        self.transport.add_secret_key_to_msg(msg, secret_key)
