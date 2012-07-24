@@ -205,27 +205,31 @@ class MultiSmsSync(BaseSmsSyncTransport):
 
     Additional configuration options:
 
-    :param str country_code:
-        Default country code to use when normalizing MSISDNs sent by
-        SMSSync (default is the empty string, which assumes numbers
-        already include the international dialing prefix).
+    :param dict country_codes:
+        Map from `account_id` to the country code to use when normalizing
+        MSISDNs sent by SMSSync to that API URL. If an `account_id` is not
+        in this map the default is to use an empty country code string).
     """
 
     def validate_config(self):
         super(MultiSmsSync, self).validate_config()
-        self._country_code = self.config.get('country_code', '').lstrip('+')
+        self._country_codes = self.config.get('country_codes', {})
+
+    def _country_code(self, account_id):
+        return self._country_codes.get(account_id, '').lstrip('+')
 
     def msginfo_for_request(self, request):
         pathparts = request.path.rstrip('/').split('/')
         if not pathparts or not pathparts[-1]:
             return None
-        return SmsSyncMsgInfo(pathparts[-1], '', self._country_code)
+        account_id = pathparts[-1]
+        return SmsSyncMsgInfo(account_id, '', self._country_code(account_id))
 
     def msginfo_for_message(self, msg):
         account_id = self.account_from_message(msg)
         if account_id is None:
             return None
-        return SmsSyncMsgInfo(account_id, '', self._country_code)
+        return SmsSyncMsgInfo(account_id, '', self._country_code(account_id))
 
     def add_msginfo_metadata(self, msg, msginfo):
         # The single phone SMSSync transport doesn't require any

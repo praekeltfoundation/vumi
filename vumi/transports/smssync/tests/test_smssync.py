@@ -155,7 +155,10 @@ class TestMultiSmsSync(TestSingleSmsSync):
     def add_transport_config(self):
         self.account_id = "default_account_id"
         self.smssync_secret = ""
-        self.config["country_code"] = self.country_code = "+27"
+        self.country_code = "+27"
+        self.config["country_codes"] = {
+            self.account_id: self.country_code
+        }
 
     def default_msginfo(self):
         return SmsSyncMsgInfo(self.account_id, '', self.country_code)
