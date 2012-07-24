@@ -8,6 +8,7 @@ from urllib import urlencode
 
 from twisted.internet.defer import inlineCallbacks
 
+from vumi.message import TransportUserMessage
 from vumi.utils import http_request
 from vumi.transports.tests.test_base import TransportTestCase
 from vumi.transports.smssync import SingleSmsSync, MultiSmsSync
@@ -116,7 +117,20 @@ class TestSingleSmsSync(TransportTestCase):
             },
         })
 
-    # TODO: test replies
+    @inlineCallbacks
+    def test_reply_round_trip(self):
+        # test that calling .reply(...) generates a working reply (this is
+        # non-trivial because the transport metadata needs to be correct for
+        # this to work).
+        yield self.smssync_inbound(content=u'Hi')
+        [msg] = self.get_dispatched_messages()
+        msg = TransportUserMessage.from_json(msg.to_json())
+        yield self.dispatch(msg.reply(content='Hi back!'))
+        response = yield self.smssync_poll()
+        self.assertEqual(response["payload"]["messages"], [{
+            "to": msg['from_addr'],
+            "message": "Hi back!",
+        }])
 
 
 class TestMultiSmsSync(TestSingleSmsSync):
