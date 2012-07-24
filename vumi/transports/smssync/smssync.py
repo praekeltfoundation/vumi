@@ -12,7 +12,7 @@ from vumi.transports.httprpc import HttpRpcTransport
 
 class BaseSmsSyncTransport(HttpRpcTransport):
     """
-    Ushandi SMSSync Transport for getting messages into vumi.
+    Ushahidi SMSSync Transport for getting messages into vumi.
 
     :param str web_path:
         The path relative to the host where this listens
@@ -47,6 +47,9 @@ class BaseSmsSyncTransport(HttpRpcTransport):
     def check_secret(self, secret, supplied_secret):
         return secret == supplied_secret
 
+    def key_for_secret(self, secret):
+        return "secret#%s" % (secret,)
+
     @inlineCallbacks
     def _handle_send(self, message_id, request):
         secret = self.secret_for_request(request)
@@ -55,8 +58,9 @@ class BaseSmsSyncTransport(HttpRpcTransport):
             return
         outbound_ids = []
         outbound_messages = []
+        secret_key = self.key_for_secret(secret)
         while True:
-            msg_json = yield self.redis.lpop(secret)
+            msg_json = yield self.redis.lpop(secret_key)
             if msg_json is None:
                 break
             msg = TransportUserMessage.from_json(msg_json)
@@ -111,7 +115,8 @@ class BaseSmsSyncTransport(HttpRpcTransport):
             raise PermanentFailure("SmsSyncTransport couldn't determine"
                                    " secret for outbound message.")
         else:
-            return self.redis.rpush(secret, message.to_json())
+            secret_key = self.key_for_secret(secret)
+            return self.redis.rpush(secret_key, message.to_json())
 
 
 class SingleSmsSync(BaseSmsSyncTransport):
@@ -126,6 +131,9 @@ class SingleSmsSync(BaseSmsSyncTransport):
 
     def validate_config(self):
         super(SingleSmsSync, self).validate_config()
+        # The secret is the empty string in the case where the single-phone
+        # transport isn't using a secret (this fits with how the Ushahidi
+        # handles the lack of a secret).
         self._secret = self.config.get('smssync_secret', '')
 
     def secret_for_request(self, request):
