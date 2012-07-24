@@ -116,6 +116,9 @@ class TestSingleSmsSync(TransportTestCase):
                 ],
             },
         })
+        [event] = yield self.get_dispatched_events()
+        self.assertEqual(event['event_type'], 'ack')
+        self.assertEqual(event['user_message_id'], outbound_msg['message_id'])
 
     @inlineCallbacks
     def test_reply_round_trip(self):
