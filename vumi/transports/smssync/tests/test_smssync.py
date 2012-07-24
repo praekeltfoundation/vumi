@@ -102,7 +102,7 @@ class TestSingleSmsSync(TransportTestCase):
     def test_poll_outbound(self):
         outbound_msg = self.mkmsg_out(content=u'hællo')
         self.add_default_secret_key_to_msg(outbound_msg)
-        self.dispatch(outbound_msg)
+        yield self.dispatch(outbound_msg)
         response = yield self.smssync_poll()
         self.assertEqual(response, {
             "payload": {
