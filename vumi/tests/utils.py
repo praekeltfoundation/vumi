@@ -375,7 +375,11 @@ class PersistenceMixin(object):
         return self._get_async_riak_manager(config)
 
     def _get_async_riak_manager(self, config):
-        from vumi.persist.txriak_manager import TxRiakManager
+        try:
+            from vumi.persist.txriak_manager import TxRiakManager
+        except ImportError, e:
+            import_skip(e, 'riakasaurus.riak')
+
         riak_manager = TxRiakManager.from_config(config)
         self._persist_riak_managers.append(riak_manager)
         return riak_manager

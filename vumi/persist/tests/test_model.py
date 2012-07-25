@@ -62,7 +62,10 @@ class TestModelOnTxRiak(TestCase):
 
     @inlineCallbacks
     def setUp(self):
-        from vumi.persist.txriak_manager import TxRiakManager
+        try:
+            from vumi.persist.txriak_manager import TxRiakManager
+        except ImportError, e:
+            import_skip(e, 'riakasaurus.riak')
         self.manager = TxRiakManager.from_config({'bucket_prefix': 'test.'})
         yield self.manager.purge_all()
 
