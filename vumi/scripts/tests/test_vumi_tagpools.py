@@ -2,14 +2,16 @@
 
 from pkg_resources import resource_filename
 
-from twisted.trial.unittest import TestCase, SkipTest
+from twisted.trial.unittest import TestCase
+
+from vumi.tests.utils import import_skip
 
 
 def make_cfg(args):
     try:
         from vumi.scripts.vumi_tagpools import ConfigHolder, Options
-    except ImportError:
-        raise SkipTest("Cannot import 'redis'.")
+    except ImportError, e:
+        import_skip(e, 'redis')
 
     class TestConfigHolder(ConfigHolder):
         def __init__(self, *args, **kwargs):

@@ -37,6 +37,14 @@ def teardown_django_test_database(runner, config):
     teardown_test_environment()
 
 
+def import_skip(exc, *expected):
+    msg = exc.args[0]
+    module = msg.split()[-1]
+    if expected and (module not in expected):
+        raise
+    raise SkipTest("Failed to import '%s'." % (module,))
+
+
 class UTCNearNow(object):
     def __init__(self, offset=10):
         self.now = datetime.utcnow()
@@ -400,8 +408,8 @@ class PersistenceMixin(object):
     def _get_sync_redis_manager(self, config):
         try:
             from vumi.persist.redis_manager import RedisManager
-        except ImportError:
-            raise SkipTest("Cannot import 'redis'.")
+        except ImportError, e:
+            import_skip(e, 'redis')
 
         redis_manager = RedisManager.from_config(config)
         self._persist_redis_managers.append(redis_manager)

@@ -1,6 +1,6 @@
 import os.path
 
-from twisted.trial.unittest import TestCase, SkipTest
+from twisted.trial.unittest import TestCase
 from twisted.internet import reactor
 from twisted.internet.defer import Deferred, inlineCallbacks
 from twisted.web.server import Site, NOT_DONE_YET
@@ -13,6 +13,7 @@ from vumi.utils import (normalize_msisdn, vumi_resource_path, cleanup_msisdn,
                         get_operator_name, http_request, http_request_full,
                         get_first_word, redis_from_config)
 from vumi.persist.fake_redis import FakeRedis
+from vumi.tests.utils import import_skip
 
 
 class UtilsTestCase(TestCase):
@@ -62,16 +63,16 @@ class UtilsTestCase(TestCase):
     def test_redis_from_config_str(self):
         try:
             fake_redis = redis_from_config("FAKE_REDIS")
-        except ImportError:
-            raise SkipTest("Cannot import 'redis'.")
+        except ImportError, e:
+            import_skip(e, 'redis')
         self.assertTrue(isinstance(fake_redis, FakeRedis))
 
     def test_redis_from_config_fake_redis(self):
         fake_redis = FakeRedis()
         try:
             self.assertEqual(redis_from_config(fake_redis), fake_redis)
-        except ImportError:
-            raise SkipTest("Cannot import 'redis'.")
+        except ImportError, e:
+            import_skip(e, 'redis')
 
 
 class FakeHTTP10(Protocol):
