@@ -51,7 +51,7 @@ class TestSingleSmsSync(TransportTestCase):
             'sent_to': to_addr,
             'from': from_addr,
             'message': content,
-            'sent_timestamp': timestamp.strftime("%m-%d-%y-%H:%M"),
+            'sent_timestamp': timestamp.strftime("%m-%d-%y %H:%M"),
             'message_id': message_id,
             'secret': secret,
         }

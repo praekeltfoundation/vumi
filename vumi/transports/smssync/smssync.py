@@ -49,7 +49,7 @@ class BaseSmsSyncTransport(HttpRpcTransport):
 
     # SMSSync True and False constants
     SMSSYNC_TRUE, SMSSYNC_FALSE = ("true", "false")
-    SMSSYNC_DATE_FORMAT = "%m-%d-%y-%H:%M"
+    SMSSYNC_DATE_FORMAT = "%m-%d-%y %H:%M"
 
     @inlineCallbacks
     def setup_transport(self):
@@ -128,8 +128,14 @@ class BaseSmsSyncTransport(HttpRpcTransport):
                         % (request, request.args))
             yield self._send_response(message_id, success=self.SMSSYNC_FALSE)
             return
-        timestamp = datetime.datetime.strptime(
-            request.args['sent_timestamp'][0], self.SMSSYNC_DATE_FORMAT)
+        try:
+            timestamp = datetime.datetime.strptime(
+                request.args['sent_timestamp'][0], self.SMSSYNC_DATE_FORMAT)
+        except ValueError:
+            log.warning("Bad timestmap format: %r (args: %r)"
+                        % (request, request.args))
+            yield self._send_response(message_id, success=self.SMSSYNC_FALSE)
+            return
         normalize = lambda raw: normalize_msisdn(raw, msginfo.country_code)
         message = {
             'message_id': message_id,
