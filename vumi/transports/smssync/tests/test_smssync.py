@@ -109,6 +109,11 @@ class TestSingleSmsSync(TransportTestCase):
         self.assertEqual(response, {"payload": {"success": "false"}})
 
     @inlineCallbacks
+    def test_inbound_garbage(self):
+        response = yield self.smssync_call({}, 'GET')
+        self.assertEqual(response, {"payload": {"success": "false"}})
+
+    @inlineCallbacks
     def test_poll_outbound(self):
         outbound_msg = self.mkmsg_out(content=u'hællo')
         msginfo = self.default_msginfo()

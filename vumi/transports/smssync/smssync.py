@@ -4,6 +4,7 @@ import datetime
 
 from twisted.internet.defer import inlineCallbacks
 
+from vumi import log
 from vumi.message import TransportUserMessage
 from vumi.utils import normalize_msisdn
 from vumi.persist.txredis_manager import TxRedisManager
@@ -86,6 +87,7 @@ class BaseSmsSyncTransport(HttpRpcTransport):
     def _handle_send(self, message_id, request):
         msginfo = yield self.msginfo_for_request(request)
         if msginfo is None:
+            log.warning("Bad account: %r (args: %r)" % (request, request.args))
             yield self._send_response(message_id, success=self.SMSSYNC_FALSE)
             return
         outbound_ids = []
@@ -106,11 +108,24 @@ class BaseSmsSyncTransport(HttpRpcTransport):
             yield self.publish_ack(user_message_id=outbound_id,
                                    sent_message_id=outbound_id)
 
+    def _check_request_args(self, request, expected_keys):
+        expected_keys = set(expected_keys)
+        present_keys = set(request.args.keys())
+        return expected_keys.issubset(present_keys)
+
     @inlineCallbacks
     def _handle_receive(self, message_id, request):
+        if not self._check_request_args(request, ['secret', 'sent_timestamp',
+                                                  'sent_to', 'from',
+                                                  'message']):
+            log.warning("Bad request: %r (args: %r)" % (request, request.args))
+            yield self._send_response(message_id, success=self.SMSSYNC_FALSE)
+            return
         msginfo = yield self.msginfo_for_request(request)
         supplied_secret = request.args['secret'][0]
         if msginfo is None or not msginfo.smssync_secret == supplied_secret:
+            log.warning("Bad secret or account: %r (args: %r)"
+                        % (request, request.args))
             yield self._send_response(message_id, success=self.SMSSYNC_FALSE)
             return
         timestamp = datetime.datetime.strptime(
