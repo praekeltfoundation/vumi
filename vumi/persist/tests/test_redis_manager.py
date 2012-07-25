@@ -1,12 +1,15 @@
 """Tests for vumi.persist.redis_manager."""
 
-from twisted.trial.unittest import TestCase
-
-from vumi.persist.redis_manager import RedisManager
+from twisted.trial.unittest import TestCase, SkipTest
 
 
 class RedisManagerTestCase(TestCase):
     def setUp(self):
+        try:
+            from vumi.persist.redis_manager import RedisManager
+        except ImportError:
+            raise SkipTest("Cannot import 'redis'.")
+
         self.manager = RedisManager.from_config(
             {'FAKE_REDIS': None,
              'key_prefix': 'redistest'})

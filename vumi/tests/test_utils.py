@@ -1,6 +1,6 @@
 import os.path
 
-from twisted.trial.unittest import TestCase
+from twisted.trial.unittest import TestCase, SkipTest
 from twisted.internet import reactor
 from twisted.internet.defer import Deferred, inlineCallbacks
 from twisted.web.server import Site, NOT_DONE_YET
@@ -60,12 +60,18 @@ class UtilsTestCase(TestCase):
         self.assertEqual('', get_first_word(None))
 
     def test_redis_from_config_str(self):
-        fake_redis = redis_from_config("FAKE_REDIS")
+        try:
+            fake_redis = redis_from_config("FAKE_REDIS")
+        except ImportError:
+            raise SkipTest("Cannot import 'redis'.")
         self.assertTrue(isinstance(fake_redis, FakeRedis))
 
     def test_redis_from_config_fake_redis(self):
         fake_redis = FakeRedis()
-        self.assertEqual(redis_from_config(fake_redis), fake_redis)
+        try:
+            self.assertEqual(redis_from_config(fake_redis), fake_redis)
+        except ImportError:
+            raise SkipTest("Cannot import 'redis'.")
 
 
 class FakeHTTP10(Protocol):

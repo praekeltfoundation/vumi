@@ -9,6 +9,7 @@ import warnings
 from functools import wraps
 
 import pytz
+from twisted.trial.unittest import SkipTest
 from twisted.internet import defer, reactor
 from twisted.web.resource import Resource
 from twisted.web.server import Site
@@ -397,7 +398,10 @@ class PersistenceMixin(object):
         return d.addCallback(add_to_self)
 
     def _get_sync_redis_manager(self, config):
-        from vumi.persist.redis_manager import RedisManager
+        try:
+            from vumi.persist.redis_manager import RedisManager
+        except ImportError:
+            raise SkipTest("Cannot import 'redis'.")
 
         redis_manager = RedisManager.from_config(config)
         self._persist_redis_managers.append(redis_manager)
