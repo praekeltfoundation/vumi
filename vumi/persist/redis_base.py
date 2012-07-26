@@ -1,5 +1,6 @@
 # -*- test-case-name: vumi.persist.tests.test_redis_base -*-
 
+import os
 from functools import wraps
 
 from vumi.persist.ast_magic import make_function
@@ -106,9 +107,11 @@ class Manager(object):
         config = config.copy()
         key_prefix = config.pop('key_prefix', None)
         key_separator = config.pop('key_separator', '#')
+        use_fake_redis = ('FAKE_REDIS' in config and
+                          'VUMITEST_USE_REAL_REDIS' not in os.environ)
+        fake_redis = config.pop('FAKE_REDIS', None)
 
-        if 'FAKE_REDIS' in config:
-            fake_redis = config.pop('FAKE_REDIS')
+        if use_fake_redis:
             if isinstance(fake_redis, cls):
                 # We want to unwrap the existing fake_redis to rewrap it.
                 fake_redis = fake_redis._client
