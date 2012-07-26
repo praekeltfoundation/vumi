@@ -9,6 +9,14 @@ from vumi.persist.fake_redis import FakeRedis
 
 
 class VumiRedis(txredis.protocol.Redis):
+    def hget(self, key, field):
+        d = super(VumiRedis, self).hget(key, field)
+        d.addCallback(lambda r: r[field])
+        return d
+
+    def lrem(self, key, value, num=0):
+        return super(VumiRedis, self).lrem(key, value, count=num)
+
     def lpop(self, key):
         return self.pop(key, tail=False)
 
@@ -20,6 +28,22 @@ class VumiRedis(txredis.protocol.Redis):
 
     def setnx(self, key, value):
         return self.set(key, value, preserve=True)
+
+    def zadd(self, key, *args, **kwargs):
+        if args:
+            if len(args) % 2 != 0:
+                raise ValueError("ZADD requires an equal number of "
+                                 "values and scores")
+        pieces = zip(args[::2], args[1::2])
+        pieces.extend(kwargs.iteritems())
+        orig_zadd = super(VumiRedis, self).zadd
+        deferreds = [orig_zadd(key, member, score) for member, score in pieces]
+        return DeferredList(deferreds)
+
+    def zrange(self, key, start, end, desc=False, withscores=False):
+        return super(VumiRedis, self).zrange(key, start, end,
+                                             withscores=withscores,
+                                             reverse=desc)
 
 
 class VumiRedisClientFactory(txredis.protocol.RedisClientFactory):
