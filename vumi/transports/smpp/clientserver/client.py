@@ -252,36 +252,34 @@ class EsmeTransceiver(Protocol):
         if self.state not in ['BOUND_RX', 'BOUND_TRX']:
             log.err('WARNING: Received deliver_sm in wrong state: %s' % (
                 self.state))
+            return
 
         if pdu['header']['command_status'] != 'ESME_ROK':
             return
 
-        # TODO: Do we want to send the response before parsing and such?
-        sequence_number = pdu['header']['sequence_number']
-        pdu_resp = DeliverSMResp(sequence_number, **self.defaults)
-        self.send_pdu(pdu_resp)
-
         pdu_params = pdu['body']['mandatory_parameters']
         delivery_report = self.config.delivery_report_re.search(
             pdu_params['short_message'] or '')
+
         if delivery_report:
-            self._handle_deliver_sm_delivery_report(pdu_params, delivery_report)
+            # This is small enough to be inline.
+            yield self.esme_callbacks.delivery_report(
+                destination_addr=pdu_params['destination_addr'],
+                source_addr=pdu_params['source_addr'],
+                delivery_report=delivery_report.groupdict(),
+                )
         elif detect_multipart(pdu):
-            self._handle_deliver_sm_multipart(pdu, pdu_params)
+            yield self._handle_deliver_sm_multipart(pdu, pdu_params)
         else:
-            self._handle_deliver_sm_sms(pdu_params)
-        yield None
+            yield self._handle_deliver_sm_sms(pdu_params)
 
-    @inlineCallbacks
+        # Only ACK messages once we've processed them.
+        sequence_number = pdu['header']['sequence_number']
+        pdu_resp = DeliverSMResp(sequence_number, **self.defaults)
+        yield self.send_pdu(pdu_resp)
+
     def _handle_deliver_sm_ussd(self, pdu):
-        yield self._handle_deliver_sm_sms(pdu)
-
-    def _handle_deliver_sm_delivery_report(self, pdu_params, delivery_report):
-        return self.esme_callbacks.delivery_report(
-            destination_addr=pdu_params['destination_addr'],
-            source_addr=pdu_params['source_addr'],
-            delivery_report=delivery_report.groupdict(),
-            )
+        raise NotImplementedError()
 
     @inlineCallbacks
     def _handle_deliver_sm_multipart(self, pdu, pdu_params):
