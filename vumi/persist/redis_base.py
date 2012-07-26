@@ -199,7 +199,7 @@ class Manager(object):
     set = RedisCall(['key', 'value'])
     setnx = RedisCall(['key', 'value'])
     delete = RedisCall(['key'])
-    setnx = RedisCall(['key', 'value'])
+    setex = RedisCall(['key', 'seconds', 'value'])
 
     # Integer operations
 
