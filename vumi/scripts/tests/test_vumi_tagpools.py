@@ -4,19 +4,23 @@ from pkg_resources import resource_filename
 
 from twisted.trial.unittest import TestCase
 
-from vumi.scripts.vumi_tagpools import ConfigHolder, Options
-
-
-class TestConfigHolder(ConfigHolder):
-    def __init__(self, *args, **kwargs):
-        self.output = []
-        super(TestConfigHolder, self).__init__(*args, **kwargs)
-
-    def emit(self, s):
-        self.output.append(s)
+from vumi.tests.utils import import_skip
 
 
 def make_cfg(args):
+    try:
+        from vumi.scripts.vumi_tagpools import ConfigHolder, Options
+    except ImportError, e:
+        import_skip(e, 'redis')
+
+    class TestConfigHolder(ConfigHolder):
+        def __init__(self, *args, **kwargs):
+            self.output = []
+            super(TestConfigHolder, self).__init__(*args, **kwargs)
+
+        def emit(self, s):
+            self.output.append(s)
+
     args = ["--config",
             resource_filename(__name__, "sample-tagpool-cfg.yaml")] + args
     options = Options()
