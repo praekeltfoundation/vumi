@@ -106,7 +106,11 @@ class TestSingleSmsSync(TransportTestCase):
     @inlineCallbacks
     def test_inbound_invalid_secret(self):
         response = yield self.smssync_inbound(content=u'hello', secret='wrong')
-        self.assertEqual(response, {"payload": {"success": "false"}})
+        if self.smssync_secret == '':
+            # blank secrets should not be checked
+            self.assertEqual(response, {"payload": {"success": "true"}})
+        else:
+            self.assertEqual(response, {"payload": {"success": "false"}})
 
     @inlineCallbacks
     def test_inbound_garbage(self):
@@ -164,6 +168,3 @@ class TestMultiSmsSync(TestSingleSmsSync):
         self.config["country_codes"] = {
             self.account_id: self.country_code
         }
-
-    def default_msginfo(self):
-        return SmsSyncMsgInfo(self.account_id, '', self.country_code)

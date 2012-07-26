@@ -123,7 +123,8 @@ class BaseSmsSyncTransport(HttpRpcTransport):
             return
         msginfo = yield self.msginfo_for_request(request)
         supplied_secret = request.args['secret'][0]
-        if msginfo is None or not msginfo.smssync_secret == supplied_secret:
+        if msginfo is None or (msginfo.smssync_secret and
+                               not msginfo.smssync_secret == supplied_secret):
             log.warning("Bad secret or account: %r (args: %r)"
                         % (request, request.args))
             yield self._send_response(message_id, success=self.SMSSYNC_FALSE)
