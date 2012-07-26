@@ -14,7 +14,7 @@ from vumi.transports.smpp.clientserver.client import (EsmeTransceiverFactory,
                                                       EsmeCallbacks)
 from vumi.transports.smpp.clientserver.config import ClientConfig
 from vumi.transports.failures import FailureMessage
-from vumi.message import Message
+from vumi.message import Message, TransportUserMessage
 from vumi.persist.txredis_manager import TxRedisManager
 
 
@@ -303,12 +303,27 @@ class SmppTransport(Transport):
                     transport_metadata=transport_metadata)))
 
     def deliver_sm(self, *args, **kwargs):
-        message = dict(
-                message_id=kwargs.get('message_id'),
-                to_addr=kwargs.get('destination_addr'),
-                from_addr=kwargs.get('source_addr'),
-                transport_type='sms',
-                content=kwargs.get('short_message'))
+        message_type = kwargs.get('message_type', 'sms')
+        message = {
+            'message_id': kwargs['message_id'],
+            'to_addr': kwargs['destination_addr'],
+            'from_addr': kwargs['source_addr'],
+            'content': kwargs['short_message'],
+            'transport_type': message_type,
+            }
+
+        if message_type == 'ussd':
+            session_event = TransportUserMessage.SESSION_CLOSE
+            if kwargs['continue_session']:
+                if kwargs['short_message'] is None:
+                    # Assume an empty message is a session start.
+                    session_event = TransportUserMessage.SESSION_NEW
+                else:
+                    session_event = TransportUserMessage.SESSION_RESUME
+            message.update({
+                    'session_event': session_event
+                    })
+
         log.msg("PUBLISHING INBOUND: %s" % (message,))
         # TODO: This logs messages that fail to serialize to JSON
         #       Usually this happens when an SMPP message has content

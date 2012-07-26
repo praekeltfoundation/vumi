@@ -85,17 +85,23 @@ class EsmeTestCaseBase(unittest.TestCase, PersistenceMixin):
         sm = DeliverSM(1, short_message=msg, data_coding=data_coding)
         return unpack_pdu(sm.get_bin())
 
-    def assertion_cb(self, expected, *message_path):
+    def make_cb(self, fun):
         cb_id = len(self._expected_callbacks)
         self._expected_callbacks.append(cb_id)
 
         def cb(**value):
             self._expected_callbacks.remove(cb_id)
+            return fun(value)
+
+        return cb
+
+    def assertion_cb(self, expected, *message_path):
+        def fun(value):
             for k in message_path:
                 value = value[k]
             self.assertEqual(expected, value)
 
-        return cb
+        return self.make_cb(fun)
 
 
 class EsmeGenericMixin(object):
@@ -192,6 +198,21 @@ class EsmeReceiverMixin(EsmeGenericMixin):
                 "\x05\x00\x03\xff\x02\x02 world"))
         yield esme.handle_deliver_sm(self.get_sm(
                 "\x05\x00\x03\xff\x02\x01hello"))
+
+    @inlineCallbacks
+    def test_deliver_sm_ussd_start(self):
+        def assert_ussd(value):
+            self.assertEqual('ussd', value['message_type'])
+            self.assertEqual(True, value['continue_session'])
+            self.assertEqual(None, value['short_message'])
+
+        esme = yield self.get_esme(deliver_sm=self.make_cb(assert_ussd))
+
+        sm = DeliverSM(1)
+        sm._PDU__add_optional_parameter('ussd_service_op', '02')
+        sm._PDU__add_optional_parameter('its_session_info', '0000')
+
+        yield esme.handle_deliver_sm(unpack_pdu(sm.get_bin()))
 
 
 class EsmeTransceiverTestCase(EsmeTestCaseBase, EsmeReceiverMixin,

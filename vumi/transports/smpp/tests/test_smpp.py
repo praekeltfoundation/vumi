@@ -750,3 +750,38 @@ class RxEsmeToSmscTestCase(TransportTestCase):
 
         dispatched_failures = self.get_dispatched_failures()
         self.assertEqual(dispatched_failures, [])
+
+    @inlineCallbacks
+    def test_deliver_ussd_start(self):
+
+        self._block_till_bind = Deferred()
+
+        # Startup
+        yield self.startTransport()
+        yield self.transport._block_till_bind
+        # The Server delivers a SMS to the Client
+
+        pdu = DeliverSM(
+            555, destination_addr="2772222222", source_addr="2772000000")
+        pdu._PDU__add_optional_parameter('ussd_service_op', '02')
+        pdu._PDU__add_optional_parameter('its_session_info', '0000')
+        self.service.factory.smsc.send_pdu(pdu)
+
+        wait_for_inbound = self._amqp.wait_messages(
+                "vumi",
+                "%s.inbound" % self.transport_name,
+                1,
+                )
+        yield wait_for_inbound
+
+        dispatched_messages = self.get_dispatched_messages()
+        mess = dispatched_messages[0].payload
+
+        self.assertEqual(mess['transport_type'], 'ussd')
+        self.assertEqual(mess['transport_name'], self.transport_name)
+        self.assertEqual(mess['content'], None)
+        self.assertEqual(mess['session_event'],
+                         TransportUserMessage.SESSION_NEW)
+
+        dispatched_failures = self.get_dispatched_failures()
+        self.assertEqual(dispatched_failures, [])

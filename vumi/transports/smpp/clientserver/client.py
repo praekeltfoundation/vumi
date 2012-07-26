@@ -27,6 +27,14 @@ from smpp.pdu_inspector import (MultipartMessage,
                                 )
 
 
+def detect_ussd(pdu):
+    # TODO: Push this back to python-smpp?
+    for opt_param in pdu['body'].get('optional_parameters', []):
+        if opt_param['tag'] == 'ussd_service_op':
+            return True
+    return False
+
+
 class EsmeTransceiver(Protocol):
     BIND_PDU = BindTransceiver
     CONNECTED_STATE = 'BOUND_TRX'
@@ -269,19 +277,51 @@ class EsmeTransceiver(Protocol):
             pdu_params['short_message'] or '')
 
         if delivery_report:
-            # This is small enough to be inline.
+            # We have a delivery report.
             yield self.esme_callbacks.delivery_report(
                 destination_addr=pdu_params['destination_addr'],
                 source_addr=pdu_params['source_addr'],
                 delivery_report=delivery_report.groupdict(),
                 )
+        elif detect_ussd(pdu):
+            # We have a USSD message.
+            yield self._handle_deliver_sm_ussd(pdu, pdu_params)
         elif detect_multipart(pdu):
+            # We have a multipart SMS.
             yield self._handle_deliver_sm_multipart(pdu, pdu_params)
         else:
+            # We have a standard SMS.
             yield self._handle_deliver_sm_sms(pdu_params)
 
-    def _handle_deliver_sm_ussd(self, pdu):
-        raise NotImplementedError()
+    def _handle_deliver_sm_ussd(self, pdu, pdu_params):
+        pdu_opts = {}
+        for opt in pdu['body']['optional_parameters']:
+            pdu_opts[opt['tag']] = opt['value']
+
+        continue_session = (int(pdu_opts['its_session_info'], 16) % 2 == 0)
+
+        message_id = str(uuid.uuid4())
+        decoded_msg = self._decode_message(pdu_params['short_message'],
+                                           pdu_params['data_coding'])
+        return self.esme_callbacks.deliver_sm(
+            destination_addr=pdu_params['destination_addr'],
+            source_addr=pdu_params['source_addr'],
+            short_message=decoded_msg,
+            message_id=message_id,
+            message_type='ussd',
+            continue_session=continue_session,
+            )
+
+    def _handle_deliver_sm_sms(self, pdu_params):
+        message_id = str(uuid.uuid4())
+        decoded_msg = self._decode_message(pdu_params['short_message'],
+                                           pdu_params['data_coding'])
+        return self.esme_callbacks.deliver_sm(
+            destination_addr=pdu_params['destination_addr'],
+            source_addr=pdu_params['source_addr'],
+            short_message=decoded_msg,
+            message_id=message_id,
+            )
 
     @inlineCallbacks
     def _handle_deliver_sm_multipart(self, pdu, pdu_params):
@@ -307,17 +347,6 @@ class EsmeTransceiver(Protocol):
         else:
             yield self.redis.set(
                 redis_key, json.dumps(multi.get_array()))
-
-    def _handle_deliver_sm_sms(self, pdu_params):
-        message_id = str(uuid.uuid4())
-        decoded_msg = self._decode_message(pdu_params['short_message'],
-                                           pdu_params['data_coding'])
-        return self.esme_callbacks.deliver_sm(
-            destination_addr=pdu_params['destination_addr'],
-            source_addr=pdu_params['source_addr'],
-            short_message=decoded_msg,
-            message_id=message_id,
-            )
 
     def handle_enquire_link(self, pdu):
         if pdu['header']['command_status'] == 'ESME_ROK':
