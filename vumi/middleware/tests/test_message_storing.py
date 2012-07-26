@@ -3,7 +3,6 @@
 from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
 
-from vumi.middleware.message_storing import StoringMiddleware
 from vumi.middleware.tagger import TaggingMiddleware
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.tests.utils import PersistenceMixin
@@ -19,6 +18,15 @@ class StoringMiddlewareTestCase(TestCase, PersistenceMixin):
         self._persist_setUp()
         dummy_worker = object()
         config = self.mk_config({})
+
+        # Create and stash a riak manager to clean up afterwards, because we
+        # don't get access to the one inside the middleware.
+        self.get_riak_manager()
+
+        # We've already skipped the test by now if we don't have riakasaurus,
+        # so it's safe to import stuff that pulls it in without guards.
+        from vumi.middleware.message_storing import StoringMiddleware
+
         self.mw = StoringMiddleware("dummy_storer", config, dummy_worker)
         yield self.mw.setup_middleware()
         self.store = self.mw.store

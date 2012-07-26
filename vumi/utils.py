@@ -8,7 +8,6 @@ import pkg_resources
 import warnings
 from functools import wraps
 
-import redis
 from zope.interface import implements
 from twisted.internet import defer
 from twisted.internet import reactor, protocol
@@ -213,9 +212,10 @@ def redis_from_config(redis_config):
 
     Otherwise a new real redis client is returned.
     """
-    warnings.warn("Use of redis is deprecated. Use txredis instead.",
-                  category=DeprecationWarning)
+    warnings.warn("Use of redis directly is deprecated. Use vumi.persist "
+                  "instead.", category=DeprecationWarning)
 
+    import redis
     from vumi.persist import fake_redis
     if redis_config == "FAKE_REDIS":
         return fake_redis.FakeRedis()

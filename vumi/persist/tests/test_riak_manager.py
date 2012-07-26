@@ -5,16 +5,22 @@ from itertools import count
 from twisted.trial.unittest import TestCase
 from twisted.internet.defer import returnValue
 
-from vumi.persist.riak_manager import RiakManager, flatten_generator
-from vumi.persist.tests.test_txriak_manager import (CommonRiakManagerTests,
-                                                        DummyModel)
+from vumi.persist.tests.test_txriak_manager import (
+    CommonRiakManagerTests, DummyModel)
 from vumi.persist.model import Manager
+from vumi.tests.utils import import_skip
 
 
 class TestRiakManager(CommonRiakManagerTests, TestCase):
     """Most tests are inherited from the CommonRiakManagerTests mixin."""
 
     def setUp(self):
+        try:
+            from vumi.persist.riak_manager import (
+                RiakManager, flatten_generator)
+        except ImportError, e:
+            import_skip(e, 'riak')
+        self.call_decorator = flatten_generator
         self.manager = RiakManager.from_config({'bucket_prefix': 'test.'})
         self.manager.purge_all()
 
@@ -22,13 +28,14 @@ class TestRiakManager(CommonRiakManagerTests, TestCase):
         self.manager.purge_all()
 
     def test_call_decorator(self):
-        self.assertEqual(RiakManager.call_decorator, flatten_generator)
+        self.assertEqual(type(self.manager).call_decorator,
+                         self.call_decorator)
 
     def test_flatten_generator(self):
         results = []
         counter = count()
 
-        @flatten_generator
+        @self.call_decorator
         def f():
             for i in range(3):
                 a = yield counter.next()
@@ -39,7 +46,7 @@ class TestRiakManager(CommonRiakManagerTests, TestCase):
         self.assertEqual(results, list(range(3)))
 
     def test_flatter_generator_with_return_value(self):
-        @flatten_generator
+        @self.call_decorator
         def f():
             yield None
             returnValue("foo")
