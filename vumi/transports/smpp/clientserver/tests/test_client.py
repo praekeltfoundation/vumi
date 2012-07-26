@@ -72,13 +72,60 @@ class EsmeTestCaseBase(unittest.TestCase, PersistenceMixin):
         return redis_d.addCallback(
             lambda r: self.ESME_CLASS(config, r, esme_callbacks))
 
-
-class EsmeTransceiverTestCase(EsmeTestCaseBase):
-    ESME_CLASS = FakeEsmeTransceiver
-
     def get_sm(self, msg, data_coding=3):
         sm = DeliverSM(1, short_message=msg, data_coding=data_coding)
         return unpack_pdu(sm.get_bin())
+
+
+class EsmeGenericMixin(object):
+    """Generic tests."""
+
+    @inlineCallbacks
+    def test_bind_timeout(self):
+        esme = yield self.get_esme()
+        yield esme.connectionMade()
+
+        self.assertEqual(True, esme.transport.connected)
+        self.assertNotEqual(None, esme._lose_conn)
+
+        esme.clock.advance(esme.smpp_bind_timeout)
+
+        self.assertEqual(False, esme.transport.connected)
+        self.assertEqual(None, esme._lose_conn)
+
+    @inlineCallbacks
+    def test_bind_no_timeout(self):
+        esme = yield self.get_esme()
+        yield esme.connectionMade()
+
+        self.assertEqual(True, esme.transport.connected)
+        self.assertNotEqual(None, esme._lose_conn)
+
+        esme.handle_bind_transceiver_resp(unpack_pdu(
+            BindTransceiverResp(1).get_bin()))
+
+        self.assertEqual(True, esme.transport.connected)
+        self.assertEqual(None, esme._lose_conn)
+        esme.lc_enquire.stop()
+
+    @inlineCallbacks
+    def test_sequence_rollover(self):
+        esme = yield self.get_esme()
+        self.assertEqual(1, (yield esme.get_next_seq()))
+        self.assertEqual(2, (yield esme.get_next_seq()))
+        yield esme.redis.set('smpp_last_sequence_number', 0xFFFF0000)
+        self.assertEqual(0xFFFF0001, (yield esme.get_next_seq()))
+        self.assertEqual(1, (yield esme.get_next_seq()))
+
+
+class EsmeTransmitterMixin(EsmeGenericMixin):
+    """Transmitter-side tests."""
+
+    # TODO: Write some.
+
+
+class EsmeReceiverMixin(EsmeGenericMixin):
+    """Receiver-side tests."""
 
     @inlineCallbacks
     def test_deliver_sm_simple(self):
@@ -129,50 +176,14 @@ class EsmeTransceiverTestCase(EsmeTestCaseBase):
         esme.handle_deliver_sm(self.get_sm("\x05\x00\x03\xff\x02\x02 world"))
         esme.handle_deliver_sm(self.get_sm("\x05\x00\x03\xff\x02\x01hello"))
 
-    @inlineCallbacks
-    def test_bind_timeout(self):
-        esme = yield self.get_esme()
-        yield esme.connectionMade()
 
-        self.assertEqual(True, esme.transport.connected)
-        self.assertNotEqual(None, esme._lose_conn)
-
-        esme.clock.advance(esme.smpp_bind_timeout)
-
-        self.assertEqual(False, esme.transport.connected)
-        self.assertEqual(None, esme._lose_conn)
-
-    @inlineCallbacks
-    def test_bind_no_timeout(self):
-        esme = yield self.get_esme()
-        yield esme.connectionMade()
-
-        self.assertEqual(True, esme.transport.connected)
-        self.assertNotEqual(None, esme._lose_conn)
-
-        esme.handle_bind_transceiver_resp(unpack_pdu(
-            BindTransceiverResp(1).get_bin()))
-
-        self.assertEqual(True, esme.transport.connected)
-        self.assertEqual(None, esme._lose_conn)
-        esme.lc_enquire.stop()
-
-    @inlineCallbacks
-    def test_sequence_rollover(self):
-        esme = yield self.get_esme()
-        self.assertEqual(1, (yield esme.get_next_seq()))
-        self.assertEqual(2, (yield esme.get_next_seq()))
-        yield esme.redis.set('smpp_last_sequence_number', 0xFFFF0000)
-        self.assertEqual(0xFFFF0001, (yield esme.get_next_seq()))
-        self.assertEqual(1, (yield esme.get_next_seq()))
+class EsmeTransceiverTestCase(EsmeTestCaseBase, EsmeReceiverMixin,
+                              EsmeTransmitterMixin):
+    ESME_CLASS = FakeEsmeTransceiver
 
 
-class EsmeTransmitterTestCase(EsmeTestCaseBase):
+class EsmeTransmitterTestCase(EsmeTestCaseBase, EsmeTransmitterMixin):
     ESME_CLASS = FakeEsmeTransmitter
-
-    def get_sm(self, msg, data_coding=3):
-        sm = DeliverSM(1, short_message=msg, data_coding=data_coding)
-        return unpack_pdu(sm.get_bin())
 
     @inlineCallbacks
     def test_deliver_sm_simple(self):
@@ -189,12 +200,8 @@ class EsmeTransmitterTestCase(EsmeTestCaseBase):
             self.assertTrue('deliver_sm in wrong state' in error['message'][0])
 
 
-class EsmeReceiverTestCase(EsmeTestCaseBase):
+class EsmeReceiverTestCase(EsmeTestCaseBase, EsmeReceiverMixin):
     ESME_CLASS = FakeEsmeReceiver
-
-    def get_sm(self, msg, data_coding=3):
-        sm = DeliverSM(1, short_message=msg, data_coding=data_coding)
-        return unpack_pdu(sm.get_bin())
 
     @inlineCallbacks
     def test_submit_sm_simple(self):
