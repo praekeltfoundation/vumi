@@ -107,9 +107,12 @@ class Manager(object):
         config = config.copy()
         key_prefix = config.pop('key_prefix', None)
         key_separator = config.pop('key_separator', '#')
-        use_fake_redis = ('FAKE_REDIS' in config and
-                          'VUMITEST_USE_REAL_REDIS' not in os.environ)
         fake_redis = config.pop('FAKE_REDIS', None)
+        if 'VUMITEST_REDIS_DB' in os.environ:
+            use_fake_redis = False
+            config['db'] = int(os.environ['VUMITEST_REDIS_DB'])
+        else:
+            use_fake_redis = 'FAKE_REDIS' in config
 
         if use_fake_redis:
             if isinstance(fake_redis, cls):
