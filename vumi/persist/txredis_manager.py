@@ -8,6 +8,18 @@ from vumi.persist.redis_base import Manager
 from vumi.persist.fake_redis import FakeRedis
 
 
+class VumiRedis(txredis.protocol.Redis):
+    def lpop(self, key):
+        return self.pop(key, tail=False)
+
+    def rpop(self, key):
+        return self.pop(key, tail=True)
+
+
+class VumiRedisClientFactory(txredis.protocol.RedisClientFactory):
+    protocol = VumiRedis
+
+
 class TxRedisManager(Manager):
 
     call_decorator = staticmethod(inlineCallbacks)
@@ -34,7 +46,7 @@ class TxRedisManager(Manager):
         host = config.pop('host', 'localhost')
         port = config.pop('port', 6379)
 
-        factory = txredis.protocol.RedisClientFactory(**config)
+        factory = VumiRedisClientFactory(**config)
         d = factory.deferred
         reactor.connectTCP(host, port, factory)
         return d.addCallback(lambda r: cls(r, key_prefix, key_separator))
