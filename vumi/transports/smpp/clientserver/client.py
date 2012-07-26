@@ -253,54 +253,71 @@ class EsmeTransceiver(Protocol):
             log.err('WARNING: Received deliver_sm in wrong state: %s' % (
                 self.state))
 
-        if pdu['header']['command_status'] == 'ESME_ROK':
-            sequence_number = pdu['header']['sequence_number']
-            message_id = str(uuid.uuid4())
-            pdu_resp = DeliverSMResp(sequence_number,
-                    **self.defaults)
-            self.send_pdu(pdu_resp)
-            pdu_params = pdu['body']['mandatory_parameters']
-            delivery_report = self.config.delivery_report_re.search(
-                    pdu_params['short_message'] or ''
-                    )
-            if delivery_report:
-                self.esme_callbacks.delivery_report(
-                        destination_addr=pdu_params['destination_addr'],
-                        source_addr=pdu_params['source_addr'],
-                        delivery_report=delivery_report.groupdict(),
-                        )
-            elif detect_multipart(pdu):
-                redis_key = "multi_%s" % (
-                    multipart_key(detect_multipart(pdu)),)
-                log.msg("Redis multipart key: %s" % (redis_key))
-                value = yield self.redis.get(redis_key)
-                value = json.loads(value or 'null')
-                log.msg("Retrieved value: %s" % (repr(value)))
-                multi = MultipartMessage(value)
-                multi.add_pdu(pdu)
-                completed = multi.get_completed()
-                if completed:
-                    yield self.redis.delete(redis_key)
-                    log.msg("Reassembled Message: %s" % (completed['message']))
-                    # and we can finally pass the whole message on
-                    self.esme_callbacks.deliver_sm(
-                            destination_addr=completed['to_msisdn'],
-                            source_addr=completed['from_msisdn'],
-                            short_message=completed['message'],
-                            message_id=message_id,
-                            )
-                else:
-                    yield self.redis.set(
-                        redis_key, json.dumps(multi.get_array()))
-            else:
-                decoded_msg = self._decode_message(pdu_params['short_message'],
-                                                   pdu_params['data_coding'])
-                self.esme_callbacks.deliver_sm(
-                        destination_addr=pdu_params['destination_addr'],
-                        source_addr=pdu_params['source_addr'],
-                        short_message=decoded_msg,
-                        message_id=message_id,
-                        )
+        if pdu['header']['command_status'] != 'ESME_ROK':
+            return
+
+        # TODO: Do we want to send the response before parsing and such?
+        sequence_number = pdu['header']['sequence_number']
+        pdu_resp = DeliverSMResp(sequence_number, **self.defaults)
+        self.send_pdu(pdu_resp)
+
+        pdu_params = pdu['body']['mandatory_parameters']
+        delivery_report = self.config.delivery_report_re.search(
+            pdu_params['short_message'] or '')
+        if delivery_report:
+            self._handle_deliver_sm_delivery_report(pdu_params, delivery_report)
+        elif detect_multipart(pdu):
+            self._handle_deliver_sm_multipart(pdu, pdu_params)
+        else:
+            self._handle_deliver_sm_sms(pdu_params)
+        yield None
+
+    @inlineCallbacks
+    def _handle_deliver_sm_ussd(self, pdu):
+        yield self._handle_deliver_sm_sms(pdu)
+
+    def _handle_deliver_sm_delivery_report(self, pdu_params, delivery_report):
+        return self.esme_callbacks.delivery_report(
+            destination_addr=pdu_params['destination_addr'],
+            source_addr=pdu_params['source_addr'],
+            delivery_report=delivery_report.groupdict(),
+            )
+
+    @inlineCallbacks
+    def _handle_deliver_sm_multipart(self, pdu, pdu_params):
+        message_id = str(uuid.uuid4())
+        redis_key = "multi_%s" % (multipart_key(detect_multipart(pdu)),)
+        log.msg("Redis multipart key: %s" % (redis_key))
+        value = yield self.redis.get(redis_key)
+        value = json.loads(value or 'null')
+        log.msg("Retrieved value: %s" % (repr(value)))
+        multi = MultipartMessage(value)
+        multi.add_pdu(pdu)
+        completed = multi.get_completed()
+        if completed:
+            yield self.redis.delete(redis_key)
+            log.msg("Reassembled Message: %s" % (completed['message']))
+            # and we can finally pass the whole message on
+            yield self.esme_callbacks.deliver_sm(
+                destination_addr=completed['to_msisdn'],
+                source_addr=completed['from_msisdn'],
+                short_message=completed['message'],
+                message_id=message_id,
+                )
+        else:
+            yield self.redis.set(
+                redis_key, json.dumps(multi.get_array()))
+
+    def _handle_deliver_sm_sms(self, pdu_params):
+        message_id = str(uuid.uuid4())
+        decoded_msg = self._decode_message(pdu_params['short_message'],
+                                           pdu_params['data_coding'])
+        return self.esme_callbacks.deliver_sm(
+            destination_addr=pdu_params['destination_addr'],
+            source_addr=pdu_params['source_addr'],
+            short_message=decoded_msg,
+            message_id=message_id,
+            )
 
     def handle_enquire_link(self, pdu):
         if pdu['header']['command_status'] == 'ESME_ROK':

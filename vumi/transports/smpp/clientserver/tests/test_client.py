@@ -110,6 +110,26 @@ class EsmeTransceiverTestCase(EsmeTestCaseBase):
         esme.handle_deliver_sm(self.get_sm(bad_msg, 8))
 
     @inlineCallbacks
+    def test_deliver_sm_delivery_report(self):
+        def cb(**kw):
+            self.assertEqual(u'DELIVRD', kw['delivery_report']['stat'])
+
+        esme = yield self.get_esme(delivery_report=cb)
+        esme.handle_deliver_sm(self.get_sm(
+                'id:1b1720be-5f48-41c4-b3f8-6e59dbf45366 sub:001 dlvrd:001 '
+                'submit date:120726132548 done date:120726132548 stat:DELIVRD '
+                'err:000 text:'))
+
+    @inlineCallbacks
+    def test_deliver_sm_multipart(self):
+        def cb(**kw):
+            self.assertEqual(u'hello world', kw['short_message'])
+
+        esme = yield self.get_esme(deliver_sm=cb)
+        esme.handle_deliver_sm(self.get_sm("\x05\x00\x03\xff\x02\x02 world"))
+        esme.handle_deliver_sm(self.get_sm("\x05\x00\x03\xff\x02\x01hello"))
+
+    @inlineCallbacks
     def test_bind_timeout(self):
         esme = yield self.get_esme()
         yield esme.connectionMade()
