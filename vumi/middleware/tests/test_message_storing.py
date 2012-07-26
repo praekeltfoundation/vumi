@@ -31,9 +31,11 @@ class StoringMiddlewareTestCase(TestCase, PersistenceMixin):
         yield self.mw.setup_middleware()
         self.store = self.mw.store
         yield self.store.manager.purge_all()
+        yield self.store.redis._purge_all()  # just in case
 
     @inlineCallbacks
     def tearDown(self):
+        yield self.mw.teardown_middleware()
         yield self.store.manager.purge_all()
         yield self._persist_tearDown()
 
