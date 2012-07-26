@@ -8,6 +8,9 @@ import redis
 
 def option_parser():
     parser = OptionParser()
+    parser.add_option("-d", "--db",
+                      type="int", dest="db", default=1,
+                      help="Redis DB to clear.")
     parser.add_option("-f", "--force",
                       action="store_true", dest="force", default=False,
                       help="Don't ask for confirmation.")
@@ -25,7 +28,7 @@ def main():
                             "Press Y to confirm, N to exit: ")
         if confirm.lower() != 'y':
             return 1
-    r_server = redis.Redis()
+    r_server = redis.Redis(db=options.db)
     keys = r_server.keys()
     for key in keys:
         r_server.delete(key)
