@@ -28,6 +28,8 @@ from smpp.pdu_inspector import (MultipartMessage,
 
 
 class EsmeTransceiver(Protocol):
+    BIND_PDU = BindTransceiver
+    CONNECTED_STATE = 'BOUND_TRX'
 
     callLater = reactor.callLater
 
@@ -128,10 +130,10 @@ class EsmeTransceiver(Protocol):
         self.state = 'OPEN'
         log.msg('STATE: %s' % (self.state))
         seq = yield self.get_next_seq()
-        pdu = BindTransceiver(seq, **self.defaults)
+        pdu = self.BIND_PDU(seq, **self.defaults)
         log.msg(pdu.get_obj())
         self.send_pdu(pdu)
-        self.schedule_lose_connection('BOUND_TRX')
+        self.schedule_lose_connection(self.CONNECTED_STATE)
 
     def schedule_lose_connection(self, expected_status):
         self._lose_conn = self.callLater(self.smpp_bind_timeout,
@@ -257,6 +259,11 @@ class EsmeTransceiver(Protocol):
         if pdu['header']['command_status'] != 'ESME_ROK':
             return
 
+        # TODO: Only ACK messages once we've processed them?
+        sequence_number = pdu['header']['sequence_number']
+        pdu_resp = DeliverSMResp(sequence_number, **self.defaults)
+        yield self.send_pdu(pdu_resp)
+
         pdu_params = pdu['body']['mandatory_parameters']
         delivery_report = self.config.delivery_report_re.search(
             pdu_params['short_message'] or '')
@@ -272,11 +279,6 @@ class EsmeTransceiver(Protocol):
             yield self._handle_deliver_sm_multipart(pdu, pdu_params)
         else:
             yield self._handle_deliver_sm_sms(pdu_params)
-
-        # Only ACK messages once we've processed them.
-        sequence_number = pdu['header']['sequence_number']
-        pdu_resp = DeliverSMResp(sequence_number, **self.defaults)
-        yield self.send_pdu(pdu_resp)
 
     def _handle_deliver_sm_ussd(self, pdu):
         raise NotImplementedError()
@@ -404,16 +406,8 @@ class EsmeTransceiver(Protocol):
 
 
 class EsmeTransmitter(EsmeTransceiver):
-
-    @inlineCallbacks
-    def connectionMade(self):
-        self.state = 'OPEN'
-        log.msg('STATE: %s' % (self.state))
-        seq = yield self.get_next_seq()
-        pdu = BindTransmitter(seq, **self.defaults)
-        log.msg(pdu.get_obj())
-        self.send_pdu(pdu)
-        self.schedule_lose_connection('BOUND_TX')
+    BIND_PDU = BindTransmitter
+    CONNECTED_STATE = 'BOUND_TX'
 
     def handle_bind_transmitter_resp(self, pdu):
         if pdu['header']['command_status'] == 'ESME_ROK':
@@ -423,16 +417,8 @@ class EsmeTransmitter(EsmeTransceiver):
 
 
 class EsmeReceiver(EsmeTransceiver):
-
-    @inlineCallbacks
-    def connectionMade(self):
-        self.state = 'OPEN'
-        log.msg('STATE: %s' % (self.state))
-        seq = yield self.get_next_seq()
-        pdu = BindReceiver(seq, **self.defaults)
-        log.msg(pdu.get_obj())
-        self.send_pdu(pdu)
-        self.schedule_lose_connection('BOUND_RX')
+    BIND_PDU = BindReceiver
+    CONNECTED_STATE = 'BOUND_RX'
 
     def handle_bind_receiver_resp(self, pdu):
         if pdu['header']['command_status'] == 'ESME_ROK':

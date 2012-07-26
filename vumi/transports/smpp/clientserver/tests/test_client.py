@@ -1,6 +1,6 @@
 from twisted.trial import unittest
 from twisted.internet.task import Clock
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import inlineCallbacks, returnValue
 from smpp.pdu_builder import DeliverSM, BindTransceiverResp
 from smpp.pdu import unpack_pdu
 
@@ -60,21 +60,42 @@ class EsmeTestCaseBase(unittest.TestCase, PersistenceMixin):
 
     def setUp(self):
         self._persist_setUp()
+        self._expected_callbacks = []
 
     def tearDown(self):
+        self.assertEqual(self._expected_callbacks, [], "Uncalled callbacks.")
         return self._persist_tearDown()
 
-    def get_esme(self, **callbacks):
+    @inlineCallbacks
+    def get_unbound_esme(self, **callbacks):
         config = ClientConfig(host="127.0.0.1", port="0",
                               system_id="1234", password="password")
         esme_callbacks = EsmeCallbacks(**callbacks)
-        redis_d = self.get_redis_manager()
-        return redis_d.addCallback(
-            lambda r: self.ESME_CLASS(config, r, esme_callbacks))
+        redis = yield self.get_redis_manager()
+        returnValue(self.ESME_CLASS(config, redis, esme_callbacks))
+
+    @inlineCallbacks
+    def get_esme(self, **callbacks):
+        esme = yield self.get_unbound_esme(**callbacks)
+        yield esme.connectionMade()
+        esme.state = esme.CONNECTED_STATE
+        returnValue(esme)
 
     def get_sm(self, msg, data_coding=3):
         sm = DeliverSM(1, short_message=msg, data_coding=data_coding)
         return unpack_pdu(sm.get_bin())
+
+    def assertion_cb(self, expected, *message_path):
+        cb_id = len(self._expected_callbacks)
+        self._expected_callbacks.append(cb_id)
+
+        def cb(**value):
+            self._expected_callbacks.remove(cb_id)
+            for k in message_path:
+                value = value[k]
+            self.assertEqual(expected, value)
+
+        return cb
 
 
 class EsmeGenericMixin(object):
@@ -82,7 +103,7 @@ class EsmeGenericMixin(object):
 
     @inlineCallbacks
     def test_bind_timeout(self):
-        esme = yield self.get_esme()
+        esme = yield self.get_unbound_esme()
         yield esme.connectionMade()
 
         self.assertEqual(True, esme.transport.connected)
@@ -95,7 +116,7 @@ class EsmeGenericMixin(object):
 
     @inlineCallbacks
     def test_bind_no_timeout(self):
-        esme = yield self.get_esme()
+        esme = yield self.get_unbound_esme()
         yield esme.connectionMade()
 
         self.assertEqual(True, esme.transport.connected)
@@ -110,7 +131,7 @@ class EsmeGenericMixin(object):
 
     @inlineCallbacks
     def test_sequence_rollover(self):
-        esme = yield self.get_esme()
+        esme = yield self.get_unbound_esme()
         self.assertEqual(1, (yield esme.get_next_seq()))
         self.assertEqual(2, (yield esme.get_next_seq()))
         yield esme.redis.set('smpp_last_sequence_number', 0xFFFF0000)
@@ -130,51 +151,47 @@ class EsmeReceiverMixin(EsmeGenericMixin):
     @inlineCallbacks
     def test_deliver_sm_simple(self):
         """A simple message should be delivered."""
-        def cb(**kw):
-            self.assertEqual(u'hello', kw['short_message'])
-
-        esme = yield self.get_esme(deliver_sm=cb)
-        esme.handle_deliver_sm(self.get_sm('hello'))
+        esme = yield self.get_esme(
+            deliver_sm=self.assertion_cb(u'hello', 'short_message'))
+        yield esme.handle_deliver_sm(self.get_sm('hello'))
 
     @inlineCallbacks
     def test_deliver_sm_ucs2(self):
         """A UCS-2 message should be delivered."""
-        def cb(**kw):
-            self.assertEqual(u'hello', kw['short_message'])
-
-        esme = yield self.get_esme(deliver_sm=cb)
-        esme.handle_deliver_sm(self.get_sm('\x00h\x00e\x00l\x00l\x00o', 8))
+        esme = yield self.get_esme(
+            deliver_sm=self.assertion_cb(u'hello', 'short_message'))
+        yield esme.handle_deliver_sm(
+            self.get_sm('\x00h\x00e\x00l\x00l\x00o', 8))
 
     @inlineCallbacks
     def test_bad_sm_ucs2(self):
         """An invalid UCS-2 message should be discarded."""
-        def cb(**kw):
-            self.assertEqual(bad_msg, kw['short_message'])
-            self.flushLoggedErrors()
-
-        esme = yield self.get_esme(deliver_sm=cb)
         bad_msg = '\n\x00h\x00e\x00l\x00l\x00o'
-        esme.handle_deliver_sm(self.get_sm(bad_msg, 8))
+
+        esme = yield self.get_esme(
+            deliver_sm=self.assertion_cb(bad_msg, 'short_message'))
+
+        yield esme.handle_deliver_sm(self.get_sm(bad_msg, 8))
+        self.flushLoggedErrors()
 
     @inlineCallbacks
     def test_deliver_sm_delivery_report(self):
-        def cb(**kw):
-            self.assertEqual(u'DELIVRD', kw['delivery_report']['stat'])
+        esme = yield self.get_esme(delivery_report=self.assertion_cb(
+                u'DELIVRD', 'delivery_report', 'stat'))
 
-        esme = yield self.get_esme(delivery_report=cb)
-        esme.handle_deliver_sm(self.get_sm(
+        yield esme.handle_deliver_sm(self.get_sm(
                 'id:1b1720be-5f48-41c4-b3f8-6e59dbf45366 sub:001 dlvrd:001 '
                 'submit date:120726132548 done date:120726132548 stat:DELIVRD '
                 'err:000 text:'))
 
     @inlineCallbacks
     def test_deliver_sm_multipart(self):
-        def cb(**kw):
-            self.assertEqual(u'hello world', kw['short_message'])
-
-        esme = yield self.get_esme(deliver_sm=cb)
-        esme.handle_deliver_sm(self.get_sm("\x05\x00\x03\xff\x02\x02 world"))
-        esme.handle_deliver_sm(self.get_sm("\x05\x00\x03\xff\x02\x01hello"))
+        esme = yield self.get_esme(
+            deliver_sm=self.assertion_cb(u'hello world', 'short_message'))
+        yield esme.handle_deliver_sm(self.get_sm(
+                "\x05\x00\x03\xff\x02\x02 world"))
+        yield esme.handle_deliver_sm(self.get_sm(
+                "\x05\x00\x03\xff\x02\x01hello"))
 
 
 class EsmeTransceiverTestCase(EsmeTestCaseBase, EsmeReceiverMixin,
