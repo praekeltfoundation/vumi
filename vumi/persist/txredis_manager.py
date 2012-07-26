@@ -15,6 +15,12 @@ class VumiRedis(txredis.protocol.Redis):
     def rpop(self, key):
         return self.pop(key, tail=True)
 
+    def setex(self, key, seconds, value):
+        return self.set(key, value, expire=seconds)
+
+    def setnx(self, key, value):
+        return self.set(key, value, preserve=True)
+
 
 class VumiRedisClientFactory(txredis.protocol.RedisClientFactory):
     protocol = VumiRedis
