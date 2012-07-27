@@ -11,7 +11,7 @@ Depends:
  python-iso8601,
  python-openssl,
  python-pkg-resources,
- python-redis,
+ python-txredis,
  python-smpp,
  python-ssmi,
  python-twisted (>= 10.0.0-2ubuntu2~),
@@ -24,7 +24,13 @@ Depends:
  redis-server (>= 2:2.4.10-ubuntu1~),
  ${misc:Depends},
  ${python:Depends}
-Suggests: supervisor
+Recommends:
+ python-riakasaurus
+Suggests:
+ python-riak,
+ python-redis,
+ python-twittytwister,
+ supervisor
 Description: Super-scalable mobile messaging engine
  Messaging engine for the delivery of SMS, Star Menu and chat messages to
  diverse audiences in emerging markets and beyond.
