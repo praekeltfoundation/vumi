@@ -569,3 +569,10 @@ class RedirectOutboundRouter(BaseDispatchRouter):
         else:
             log.error('No redirect_outbound specified for %s' % (
                 transport_name,))
+
+
+class RulesBasedDispatcher(BaseDispatchWorker):
+    def __init__(self):
+        # I tyoped a pull-request creation, so now I need something to actually
+        # put in this branch.
+        raise NotImplementedError()
