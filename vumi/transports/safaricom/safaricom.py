@@ -88,7 +88,7 @@ class SafaricomTransport(HttpRpcTransport):
                 content = ''
 
             session['last_ussd_params'] = ussd_params
-            self.session_manager.save_session(session_id, session)
+            yield self.session_manager.save_session(session_id, session)
             session_event = TransportUserMessage.SESSION_RESUME
         else:
             to_addr = '*%s*%s#' % (dest, ussd_params)
