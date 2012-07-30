@@ -24,8 +24,9 @@ def main():
         parser.print_help()
         return 1
     if not options.force:
-        confirm = raw_input("About to delete ALL redis keys. "
-                            "Press Y to confirm, N to exit: ")
+        confirm = raw_input("About to delete ALL redis keys in db %d. "
+                            "Press Y to confirm, N to exit: " %
+                            (options.db,))
         if confirm.lower() != 'y':
             return 1
     r_server = redis.Redis(db=options.db)
