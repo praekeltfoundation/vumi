@@ -109,12 +109,10 @@ class Manager(object):
         key_separator = config.pop('key_separator', '#')
         fake_redis = config.pop('FAKE_REDIS', None)
         if 'VUMITEST_REDIS_DB' in os.environ:
-            use_fake_redis = False
+            fake_redis = None
             config['db'] = int(os.environ['VUMITEST_REDIS_DB'])
-        else:
-            use_fake_redis = 'FAKE_REDIS' in config
 
-        if use_fake_redis:
+        if fake_redis is not None:
             if isinstance(fake_redis, cls):
                 # We want to unwrap the existing fake_redis to rewrap it.
                 fake_redis = fake_redis._client
