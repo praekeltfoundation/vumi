@@ -343,6 +343,8 @@ class SmppTransport(Transport):
         to_addr = message['to_addr']
         from_addr = message['from_addr']
         text = message['content']
+        continue_session = (
+            message['session_event'] != TransportUserMessage.SESSION_CLOSE)
         route = get_operator_number(to_addr,
                 self.config.get('COUNTRY_CODE', ''),
                 self.config.get('OPERATOR_PREFIX', {}),
@@ -351,6 +353,8 @@ class SmppTransport(Transport):
                 short_message=text.encode('utf-8'),
                 destination_addr=str(to_addr),
                 source_addr=route,
+                message_type=message['transport_type'],
+                continue_session=continue_session,
                 )
 
     def stopWorker(self):
