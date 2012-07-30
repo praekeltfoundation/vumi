@@ -6,7 +6,8 @@ from smpp.pdu import unpack_pdu
 
 from vumi.tests.utils import LogCatcher, PersistenceMixin
 from vumi.transports.smpp.clientserver.client import (
-    EsmeTransceiver, EsmeReceiver, EsmeTransmitter, EsmeCallbacks, ESME)
+    EsmeTransceiver, EsmeReceiver, EsmeTransmitter, EsmeCallbacks, ESME,
+    unpacked_pdu_opts)
 from vumi.transports.smpp.clientserver.config import ClientConfig
 
 
@@ -18,40 +19,42 @@ class FakeTransport(object):
         self.connected = False
 
 
-class FakeEsmeTransceiver(EsmeTransceiver):
+class FakeEsmeMixin(object):
+    def setup_fake(self):
+        self.transport = FakeTransport()
+        self.clock = Clock()
+        self.callLater = self.clock.callLater
+        self.fake_sent_pdus = []
 
+    def fake_send_pdu(self, pdu):
+        self.fake_sent_pdus.append(pdu)
+
+
+class FakeEsmeTransceiver(EsmeTransceiver, FakeEsmeMixin):
     def __init__(self, *args, **kwargs):
         EsmeTransceiver.__init__(self, *args, **kwargs)
-        self.transport = FakeTransport()
-        self.clock = Clock()
-        self.callLater = self.clock.callLater
+        self.setup_fake()
 
-    def send_pdu(self, *args):
-        pass
+    def send_pdu(self, pdu):
+        return self.fake_send_pdu(pdu)
 
 
-class FakeEsmeReceiver(EsmeReceiver):
-
+class FakeEsmeReceiver(EsmeReceiver, FakeEsmeMixin):
     def __init__(self, *args, **kwargs):
         EsmeReceiver.__init__(self, *args, **kwargs)
-        self.transport = FakeTransport()
-        self.clock = Clock()
-        self.callLater = self.clock.callLater
+        self.setup_fake()
 
-    def send_pdu(self, *args):
-        pass
+    def send_pdu(self, pdu):
+        return self.fake_send_pdu(pdu)
 
 
-class FakeEsmeTransmitter(EsmeTransmitter):
-
+class FakeEsmeTransmitter(EsmeTransmitter, FakeEsmeMixin):
     def __init__(self, *args, **kwargs):
         EsmeTransmitter.__init__(self, *args, **kwargs)
-        self.transport = FakeTransport()
-        self.clock = Clock()
-        self.callLater = self.clock.callLater
+        self.setup_fake()
 
-    def send_pdu(self, *args):
-        pass
+    def send_pdu(self, pdu):
+        return self.fake_send_pdu(pdu)
 
 
 class EsmeTestCaseBase(unittest.TestCase, PersistenceMixin):
@@ -78,6 +81,7 @@ class EsmeTestCaseBase(unittest.TestCase, PersistenceMixin):
     def get_esme(self, **callbacks):
         esme = yield self.get_unbound_esme(**callbacks)
         yield esme.connectionMade()
+        esme.fake_sent_pdus.pop()  # Clear bind PDU.
         esme.state = esme.CONNECTED_STATE
         returnValue(esme)
 
@@ -148,7 +152,49 @@ class EsmeGenericMixin(object):
 class EsmeTransmitterMixin(EsmeGenericMixin):
     """Transmitter-side tests."""
 
-    # TODO: Write some.
+    @inlineCallbacks
+    def test_submit_sm_sms(self):
+        """Submit a USSD message with a session continue flag."""
+        esme = yield self.get_esme()
+        yield esme.submit_sm(short_message='hello')
+        [sm_pdu] = esme.fake_sent_pdus
+        sm = unpack_pdu(sm_pdu.get_bin())
+        self.assertEqual('submit_sm', sm['header']['command_id'])
+        self.assertEqual(
+            'hello', sm['body']['mandatory_parameters']['short_message'])
+        self.assertEqual([], sm['body'].get('optional_parameters', []))
+
+    @inlineCallbacks
+    def test_submit_sm_ussd_continue(self):
+        """Submit a USSD message with a session continue flag."""
+        esme = yield self.get_esme()
+        yield esme.submit_sm(
+            short_message='hello', message_type='ussd', continue_session=True)
+        [sm_pdu] = esme.fake_sent_pdus
+        sm = unpack_pdu(sm_pdu.get_bin())
+        pdu_opts = unpacked_pdu_opts(sm)
+
+        self.assertEqual('submit_sm', sm['header']['command_id'])
+        self.assertEqual(
+            'hello', sm['body']['mandatory_parameters']['short_message'])
+        self.assertEqual('02', pdu_opts['ussd_service_op'])
+        self.assertEqual('0000', pdu_opts['its_session_info'])
+
+    @inlineCallbacks
+    def test_submit_sm_ussd_end(self):
+        """Submit a USSD message with a session continue flag."""
+        esme = yield self.get_esme()
+        yield esme.submit_sm(
+            short_message='hello', message_type='ussd', continue_session=False)
+        [sm_pdu] = esme.fake_sent_pdus
+        sm = unpack_pdu(sm_pdu.get_bin())
+        pdu_opts = unpacked_pdu_opts(sm)
+
+        self.assertEqual('submit_sm', sm['header']['command_id'])
+        self.assertEqual(
+            'hello', sm['body']['mandatory_parameters']['short_message'])
+        self.assertEqual('02', pdu_opts['ussd_service_op'])
+        self.assertEqual('0001', pdu_opts['its_session_info'])
 
 
 class EsmeReceiverMixin(EsmeGenericMixin):

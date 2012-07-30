@@ -27,12 +27,23 @@ from smpp.pdu_inspector import (MultipartMessage,
                                 )
 
 
+def unpacked_pdu_opts(unpacked_pdu):
+    pdu_opts = {}
+    for opt in unpacked_pdu['body'].get('optional_parameters', []):
+        pdu_opts[opt['tag']] = opt['value']
+    return pdu_opts
+
+
 def detect_ussd(pdu):
     # TODO: Push this back to python-smpp?
-    for opt_param in pdu['body'].get('optional_parameters', []):
-        if opt_param['tag'] == 'ussd_service_op':
-            return True
-    return False
+    return ('ussd_service_op' in unpacked_pdu_opts(pdu))
+
+
+def update_ussd_pdu(sm_pdu, continue_session):
+    session_info = '0000' if continue_session else '0001'
+    sm_pdu._PDU__add_optional_parameter('ussd_service_op', '02')
+    sm_pdu._PDU__add_optional_parameter('its_session_info', session_info)
+    return sm_pdu
 
 
 class EsmeTransceiver(Protocol):
@@ -294,9 +305,7 @@ class EsmeTransceiver(Protocol):
             yield self._handle_deliver_sm_sms(pdu_params)
 
     def _handle_deliver_sm_ussd(self, pdu, pdu_params):
-        pdu_opts = {}
-        for opt in pdu['body']['optional_parameters']:
-            pdu_opts[opt['tag']] = opt['value']
+        pdu_opts = unpacked_pdu_opts(pdu)
 
         continue_session = (int(pdu_opts['its_session_info'], 16) % 2 == 0)
 
@@ -377,12 +386,14 @@ class EsmeTransceiver(Protocol):
             log.err(('WARNING: submit_sm in wrong state: %s, '
                      'dropping message: %s' % (self.state, kwargs)))
             returnValue(0)
-        else:
-            sequence_number = yield self.get_next_seq()
-            pdu = SubmitSM(sequence_number, **dict(self.defaults, **kwargs))
-            self.send_pdu(pdu)
-            self.push_unacked(sequence_number)
-            returnValue(sequence_number)
+
+        sequence_number = yield self.get_next_seq()
+        pdu = SubmitSM(sequence_number, **dict(self.defaults, **kwargs))
+        if kwargs.get('message_type', 'sms') == 'ussd':
+            update_ussd_pdu(pdu, kwargs.get('continue_session', True))
+        self.send_pdu(pdu)
+        self.push_unacked(sequence_number)
+        returnValue(sequence_number)
 
     @inlineCallbacks
     def submit_multi(self, dest_address=[], **kwargs):
