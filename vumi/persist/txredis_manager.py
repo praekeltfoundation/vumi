@@ -1,6 +1,16 @@
 # -*- test-case-name: vumi.persist.tests.test_txredis_manager -*-
 
-import txredis.protocol
+# txredis is made of silliness.
+# There are two variants, both of which call themselves version 2.2. One has
+# everything in txredis.protocol, the other has the client stuff in
+# txredis.client.
+try:
+    import txredis.client as txrc
+    txr = txrc
+except ImportError:
+    import txredis.protocol as txrp
+    txr = txrp
+
 from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, DeferredList, succeed
 
@@ -8,7 +18,7 @@ from vumi.persist.redis_base import Manager
 from vumi.persist.fake_redis import FakeRedis
 
 
-class VumiRedis(txredis.protocol.Redis):
+class VumiRedis(txr.Redis):
     def hget(self, key, field):
         d = super(VumiRedis, self).hget(key, field)
         d.addCallback(lambda r: r[field])
@@ -46,7 +56,7 @@ class VumiRedis(txredis.protocol.Redis):
                                              reverse=desc)
 
 
-class VumiRedisClientFactory(txredis.protocol.RedisClientFactory):
+class VumiRedisClientFactory(txr.RedisClientFactory):
     protocol = VumiRedis
 
 
