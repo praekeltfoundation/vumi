@@ -31,10 +31,6 @@ class TestMtechUssdTransport(TransportTestCase):
         self.url = "%s%s" % (self.transport_url, self.config['web_path'])
         yield self.transport.session_manager.redis._purge_all()  # just in case
 
-    @inlineCallbacks
-    def tearDown(self):
-        yield super(TestMtechUssdTransport, self).tearDown()
-
     def make_ussd_request_full(self, session_id, **kwargs):
         lines = [
             '<?xml version="1.0" encoding="UTF-8"?>',
