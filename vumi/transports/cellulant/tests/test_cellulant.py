@@ -24,6 +24,7 @@ class TestCellulantTransportTestCase(TransportTestCase):
         self.transport = yield self.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url(
             self.config['web_path'])
+        yield self.transport.session_manager.redis._purge_all()  # just in case
 
     def mk_request(self, **params):
         defaults = {
@@ -71,7 +72,7 @@ class TestCellulantTransportTestCase(TransportTestCase):
     @inlineCallbacks
     def test_inbound_resume_and_reply_with_end(self):
         # first pre-populate the redis datastore to simulate prior BEG message
-        self.transport.set_ussd_for_msisdn_session(
+        yield self.transport.set_ussd_for_msisdn_session(
                 '27761234567',
                 '1',
                 '*120*VERY_FAKE_CODE#',
@@ -103,7 +104,7 @@ class TestCellulantTransportTestCase(TransportTestCase):
     @inlineCallbacks
     def test_inbound_abort_opcode(self):
         # first pre-populate the redis datastore to simulate prior BEG message
-        self.transport.set_ussd_for_msisdn_session(
+        yield self.transport.set_ussd_for_msisdn_session(
                 '27761234567',
                 '1',
                 '*120*VERY_FAKE_CODE#',
