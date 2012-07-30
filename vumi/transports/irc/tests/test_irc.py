@@ -4,7 +4,7 @@ from StringIO import StringIO
 
 from twisted.trial import unittest
 from twisted.internet.defer import (inlineCallbacks, returnValue,
-                                    DeferredQueue)
+                                    DeferredQueue, Deferred)
 from twisted.internet.protocol import FileWrapper
 
 from vumi.tests.utils import LogCatcher
@@ -171,27 +171,32 @@ from twisted.internet import reactor
 from twisted.words.protocols.irc import IRC
 
 
-class StubbyIrcProtocol(IRC):
+class StubbyIrcServerProtocol(IRC):
 
-    def __init__(self, events):
-        self.events = events
+    def __init__(self, factory):
+        self.factory = factory
+        self.events = factory.events
 
     def irc_unknown(self, prefix, command, params):
         self.events.put((prefix, command, params))
 
+    def connectionLost(self, reason):
+        IRC.connectionLost(self, reason)
+        self.factory.finished_d.callback(None)
+
 
 class StubbyIrcServer(ServerFactory):
 
-    protocol = StubbyIrcProtocol
+    protocol = StubbyIrcServerProtocol
 
     def __init__(self, *args, **kw):
-        # ServerFactory.__init__(self, *args, **kw)
-        self.client = None
+        self.server = None
         self.events = DeferredQueue()
+        self.finished_d = Deferred()
 
     def buildProtocol(self, addr):
-        self.client = self.protocol(self.events)
-        return self.client
+        self.server = self.protocol(self)
+        return self.server
 
     @inlineCallbacks
     def filter_events(self, command_type):
@@ -232,7 +237,8 @@ class TestIrcTransport(TransportTestCase):
     @inlineCallbacks
     def tearDown(self):
         yield self.irc_connector.stopListening()
-        super(TestIrcTransport, self).tearDown()
+        yield super(TestIrcTransport, self).tearDown()
+        yield self.irc_server.finished_d
 
     def mkmsg_out_irc(self, *args, **kw):
         helper_metadata = kw.setdefault('helper_metadata', {'irc': {}})
@@ -262,7 +268,7 @@ class TestIrcTransport(TransportTestCase):
             })
 
     def send_irc_message(self, content, recipient, sender="user!ident@host"):
-        self.irc_server.client.privmsg(sender, recipient, content)
+        self.irc_server.server.privmsg(sender, recipient, content)
 
     @inlineCallbacks
     def test_handle_inbound_to_channel(self):
@@ -304,7 +310,7 @@ class TestIrcTransport(TransportTestCase):
     @inlineCallbacks
     def test_handle_inbound_channel_notice(self):
         sender, recipient, text = "user!ident@host", "#zoo", "Hello gooites"
-        self.irc_server.client.notice(sender, recipient, text)
+        self.irc_server.server.notice(sender, recipient, text)
         [msg] = yield self.wait_for_dispatched_messages(1)
         self.assertEqual(msg['transport_name'], self.transport_name)
         self.assertEqual(msg['to_addr'], None)
@@ -327,7 +333,7 @@ class TestIrcTransport(TransportTestCase):
     @inlineCallbacks
     def test_handle_inbound_user_notice(self):
         sender, recipient, text = "user!ident@host", "bot", "Hello gooites"
-        self.irc_server.client.notice(sender, recipient, text)
+        self.irc_server.server.notice(sender, recipient, text)
         [msg] = yield self.wait_for_dispatched_messages(1)
         self.assertEqual(msg['transport_name'], self.transport_name)
         self.assertEqual(msg['to_addr'], "bot")
