@@ -26,12 +26,13 @@ class SessionManager(object):
         self.redis = redis
 
         self.gc = task.LoopingCall(lambda: self.active_sessions())
-        self.gc.start(gc_period)
+        self.gc_done = self.gc.start(gc_period)
 
     @inlineCallbacks
     def stop(self, stop_redis=True):
         if self.gc.running:
-            yield self.gc.stop()
+            self.gc.stop()
+            yield self.gc_done
         if stop_redis:
             yield self.redis._close()
 
