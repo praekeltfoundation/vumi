@@ -353,22 +353,25 @@ class PersistenceMixin(object):
 
     @maybe_async('sync_persistence')
     def _persist_tearDown(self):
+        # We don't always have all the managers we want to clean up.
+        # Therefore, we create one of each with the base configuration.
+        yield self.get_redis_manager()
+        yield self.get_riak_manager()
+
         for manager in self._persist_riak_managers:
             yield self._persist_purge_riak(manager)
         for manager in self._persist_redis_managers:
             yield self._persist_purge_redis(manager)
-        # To clean up the real redis, should we have one:
-        redis_manager = yield self.get_redis_manager()
-        yield redis_manager._purge_all()
-        yield redis_manager.close_manager()
 
     def _persist_purge_riak(self, manager):
         "This is a separate method to allow easy overriding."
         return manager.purge_all()
 
+    @maybe_async('sync_persistence')
     def _persist_purge_redis(self, manager):
         "This is a separate method to allow easy overriding."
-        return manager.close_manager()
+        yield manager._purge_all()
+        yield manager.close_manager()
 
     def get_riak_manager(self, config=None):
         if config is None:
