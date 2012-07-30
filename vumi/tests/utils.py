@@ -357,6 +357,10 @@ class PersistenceMixin(object):
             yield self._persist_purge_riak(manager)
         for manager in self._persist_redis_managers:
             yield self._persist_purge_redis(manager)
+        # To clean up the real redis, should we have one:
+        redis_manager = yield self.get_redis_manager()
+        yield redis_manager._purge_all()
+        yield redis_manager.close_manager()
 
     def _persist_purge_riak(self, manager):
         "This is a separate method to allow easy overriding."
