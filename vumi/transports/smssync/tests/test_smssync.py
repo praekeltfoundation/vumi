@@ -7,6 +7,7 @@ import datetime
 from urllib import urlencode
 
 from twisted.internet.defer import inlineCallbacks
+from twisted.internet.task import Clock
 
 from vumi.message import TransportUserMessage
 from vumi.utils import http_request
@@ -24,14 +25,24 @@ class TestSingleSmsSync(TransportTestCase):
     @inlineCallbacks
     def setUp(self):
         super(TestSingleSmsSync, self).setUp()
+        self.clock = Clock()
+        self.reply_delay = 0.5
+        self.auto_advance_clock = True
         self.config = {
             'transport_name': self.transport_name,
             'web_path': "foo",
             'web_port': 0,
+            'reply_delay': self.reply_delay,
         }
         self.add_transport_config()
         self.transport = yield self.get_transport(self.config)
+        self.transport.callLater = self._dummy_call_later
         self.transport_url = self.transport.get_transport_url()
+
+    def _dummy_call_later(self, *args, **kw):
+        self.clock.callLater(*args, **kw)
+        if self.auto_advance_clock:
+            self.clock.advance(self.reply_delay)
 
     def add_transport_config(self):
         self.config["smssync_secret"] = self.smssync_secret = "secretsecret"
@@ -95,6 +106,26 @@ class TestSingleSmsSync(TransportTestCase):
         self.assertEqual(msg['from_addr'], "123")
         self.assertEqual(msg['content'], u"hællo")
         self.assertEqual(msg['timestamp'], now)
+
+    @inlineCallbacks
+    def test_inbound_with_reply(self):
+        self.auto_advance_clock = False
+        now = datetime.datetime.utcnow().replace(second=0, microsecond=0)
+        inbound_d = self.smssync_inbound(content=u'hællo', timestamp=now)
+
+        [msg] = yield self.wait_for_dispatched_messages(1)
+        msg = TransportUserMessage.from_json(msg.to_json())
+        reply = msg.reply(content=u'ræply')
+        yield self.dispatch(reply)
+
+        self.clock.advance(self.reply_delay)
+        response = yield inbound_d
+        self.assertEqual(response, {"payload": {"success": "true",
+                                                "messages": [{
+                                                    "to": reply['to_addr'],
+                                                    "message": u"ræply",
+                                                }],
+                                                }})
 
     @inlineCallbacks
     def test_normalize_msisdn(self):
