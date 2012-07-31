@@ -57,6 +57,11 @@ class BaseSmsSyncTransport(HttpRpcTransport):
         self.redis = yield TxRedisManager.from_config(r_config)
         yield super(BaseSmsSyncTransport, self).setup_transport()
 
+    @inlineCallbacks
+    def teardown_transport(self):
+        yield super(BaseSmsSyncTransport, self).teardown_transport()
+        yield self.redis.close_manager()
+
     def msginfo_for_request(self, request):
         """Returns an :class:`SmsSyncMsgInfo` instance for this request.
 
