@@ -370,7 +370,12 @@ class PersistenceMixin(object):
     @maybe_async('sync_persistence')
     def _persist_purge_redis(self, manager):
         "This is a separate method to allow easy overriding."
-        yield manager._purge_all()
+        try:
+            yield manager._purge_all()
+        except RuntimeError, e:
+            # Ignore managers that are already closed.
+            if e.args[0] != 'Not connected':
+                raise
         yield manager.close_manager()
 
     def get_riak_manager(self, config=None):

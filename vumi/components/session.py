@@ -11,7 +11,6 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 class SessionManager(object):
     """A manager for sessions.
 
-    :type r_server: redis.Redis
     :param TxRedisManager redis:
         Redis manager object.
     :param int max_session_length:
@@ -20,8 +19,7 @@ class SessionManager(object):
         Time in seconds between checking for session expiry.
     """
 
-    def __init__(self, redis, max_session_length=None,
-                 gc_period=1.0):
+    def __init__(self, redis, max_session_length=None, gc_period=1.0):
         self.max_session_length = max_session_length
         self.redis = redis
 
