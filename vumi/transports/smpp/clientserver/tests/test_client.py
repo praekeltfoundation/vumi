@@ -68,7 +68,14 @@ class EsmeTestCaseBase(unittest.TestCase, PersistenceMixin):
         config = ClientConfig(host="127.0.0.1", port="0",
                               system_id="1234", password="password")
         esme_callbacks = EsmeCallbacks(**callbacks)
+
+        def purge_manager(redis_manager):
+            d = redis_manager._purge_all()  # just in case
+            d.addCallback(lambda result: redis_manager)
+            return d
+
         redis_d = self.get_redis_manager()
+        redis_d.addCallback(purge_manager)
         return redis_d.addCallback(
             lambda r: self.ESME_CLASS(config, r, esme_callbacks))
 
@@ -136,6 +143,7 @@ class EsmeTransceiverTestCase(EsmeTestCaseBase):
         self.assertEqual(True, esme.transport.connected)
         self.assertEqual(None, esme._lose_conn)
         esme.lc_enquire.stop()
+        yield esme.lc_enquire.deferred
 
     @inlineCallbacks
     def test_sequence_rollover(self):
@@ -183,10 +191,10 @@ class EsmeReceiverTestCase(EsmeTestCaseBase):
         with LogCatcher() as log:
             esme = yield self.get_esme()
             esme.state = 'BOUND_RX'  # Fake RX bind
-            esme.submit_sm(short_message='hello')
+            yield esme.submit_sm(short_message='hello')
             [error] = log.errors
             self.assertTrue(('submit_sm in wrong state' in
-                                            error['message'][0]))
+                             error['message'][0]))
 
 
 class ESMETestCase(unittest.TestCase):

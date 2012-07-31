@@ -77,9 +77,13 @@ class FailureWorker(Worker):
                                            message_class=FailureMessage)
         self.start_retry_delivery()
 
+    @inlineCallbacks
     def stopWorker(self):
         if self.delivery_loop and self.delivery_loop.running:
             self.delivery_loop.stop()
+            yield self.delivery_done
+        yield self.consumer.stop()
+        yield self.redis.close_manager()
 
     def configure_retries(self):
         for param in ['GRANULARITY', 'MAX_DELAY', 'INITIAL_DELAY',
@@ -98,7 +102,7 @@ class FailureWorker(Worker):
         self.delivery_loop = None
         if self.DELIVERY_PERIOD:
             self.delivery_loop = LoopingCall(self.deliver_retries)
-            self.delivery_loop.start(self.DELIVERY_PERIOD)
+            self.delivery_done = self.delivery_loop.start(self.DELIVERY_PERIOD)
 
     def get_rkey(self, route_name):
         return self.config['%s_routing_key' % route_name] % self.config

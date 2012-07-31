@@ -533,6 +533,12 @@ class UserGroupingRouterTestCase(DispatcherTestCase):
         self.router = self.dispatcher._router
         yield self.router._redis_d
         self.redis = self.router.redis
+        yield self.redis._purge_all()  # just in case
+
+    @inlineCallbacks
+    def tearDown(self):
+        yield super(UserGroupingRouterTestCase, self).tearDown()
+        yield self.redis.close_manager()
 
     @inlineCallbacks
     def test_group_assignment(self):
@@ -635,6 +641,8 @@ class TestContentKeywordRouter(DispatcherTestCase):
         self.dispatcher = yield self.get_dispatcher(self.config)
         self.router = self.dispatcher._router
         yield self.router._redis_d
+        self.redis = self.router.redis
+        yield self.redis._purge_all()  # just in case
 
     @inlineCallbacks
     def tearDown(self):

@@ -28,6 +28,7 @@ class TestInfobipUssdTransport(TransportTestCase):
             }
         self.transport = yield self.get_transport(config)
         self.transport_url = self.transport.get_transport_url()
+        yield self.transport.session_manager.redis._purge_all()  # just in case
 
     DEFAULT_START_DATA = {
         "msisdn": "385955363443",
