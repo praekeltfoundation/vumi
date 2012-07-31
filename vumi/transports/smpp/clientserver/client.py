@@ -213,12 +213,10 @@ class EsmeTransceiver(Protocol):
                 command_status=pdu['header']['command_status'],
                 command_id=pdu['header']['command_id'],
                 message_id=message_id)
-        if pdu['header']['command_status'] == 'ESME_ROK':
-            pass
 
     def handle_submit_multi_resp(self, pdu):
-        if pdu['header']['command_status'] == 'ESME_ROK':
-            pass
+        # XXX: Should we be doing something here?
+        pass
 
     def _decode_message(self, message, data_coding):
         """
