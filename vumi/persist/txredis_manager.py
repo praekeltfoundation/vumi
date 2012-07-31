@@ -12,13 +12,31 @@ except ImportError:
     txr = txrp
 
 from twisted.internet import reactor
-from twisted.internet.defer import inlineCallbacks, DeferredList, succeed
+from twisted.internet.defer import (
+    inlineCallbacks, DeferredList, succeed, Deferred)
 
 from vumi.persist.redis_base import Manager
 from vumi.persist.fake_redis import FakeRedis
 
 
 class VumiRedis(txr.Redis):
+    """Wrapper around txredis to make it more suitable for our needs.
+
+    Aside from the various API operations we need to implement to match the
+    other redis client, we add a deferred that fires when we've finished
+    connecting to the redis server. This avoids problems with trying to use a
+    client that hasn't completely connected yet.
+    """
+
+    def __init__(self, *args, **kw):
+        super(VumiRedis, self).__init__(*args, **kw)
+        self.connected_d = Deferred()
+
+    def connectionMade(self):
+        d = super(VumiRedis, self).connectionMade()
+        d.addCallback(lambda _: self)
+        return d.chainDeferred(self.connected_d)
+
     def hget(self, key, field):
         d = super(VumiRedis, self).hget(key, field)
         d.addCallback(lambda r: r[field])
@@ -87,7 +105,7 @@ class TxRedisManager(Manager):
         port = config.pop('port', 6379)
 
         factory = VumiRedisClientFactory(**config)
-        d = factory.deferred
+        d = factory.deferred.addCallback(lambda r: r.connected_d)
         reactor.connectTCP(host, port, factory)
         return d.addCallback(lambda r: cls(r, key_prefix, key_separator))
 
