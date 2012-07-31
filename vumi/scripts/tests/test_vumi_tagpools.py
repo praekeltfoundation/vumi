@@ -4,14 +4,11 @@ from pkg_resources import resource_filename
 
 from twisted.trial.unittest import TestCase
 
-from vumi.tests.utils import import_skip
+from vumi.tests.utils import PersistenceMixin
 
 
 def make_cfg(args):
-    try:
-        from vumi.scripts.vumi_tagpools import ConfigHolder, Options
-    except ImportError, e:
-        import_skip(e, 'redis')
+    from vumi.scripts.vumi_tagpools import ConfigHolder, Options
 
     class TestConfigHolder(ConfigHolder):
         def __init__(self, *args, **kwargs):
@@ -28,7 +25,19 @@ def make_cfg(args):
     return TestConfigHolder(options)
 
 
-class CreatePoolCmdTestCase(TestCase):
+class TagPoolBaseTestCase(TestCase, PersistenceMixin):
+    sync_persistence = True
+
+    def setUp(self):
+        self._persist_setUp()
+        # Make sure we start fresh.
+        self.get_redis_manager()._purge_all()
+
+    def tearDown(self):
+        return self._persist_tearDown()
+
+
+class CreatePoolCmdTestCase(TagPoolBaseTestCase):
     def test_create_pool_range_tags(self):
         cfg = make_cfg(["create-pool", "shortcode"])
         cfg.run()
@@ -60,7 +69,7 @@ class CreatePoolCmdTestCase(TestCase):
         self.assertEqual(cfg.tagpool.inuse_tags("xmpp"), [])
 
 
-class UpdatePoolMetadataCmdTestCase(TestCase):
+class UpdatePoolMetadataCmdTestCase(TagPoolBaseTestCase):
     def test_create_pool_range_tags(self):
         cfg = make_cfg(["update-pool-metadata", "shortcode"])
         cfg.run()
@@ -72,7 +81,7 @@ class UpdatePoolMetadataCmdTestCase(TestCase):
                          {'transport_type': 'sms'})
 
 
-class PurgePoolCmdTestCase(TestCase):
+class PurgePoolCmdTestCase(TagPoolBaseTestCase):
     def test_purge_pool(self):
         cfg = make_cfg(["purge-pool", "foo"])
         cfg.tagpool.declare_tags([("foo", "tag1"), ("foo", "tag2")])
@@ -86,8 +95,9 @@ class PurgePoolCmdTestCase(TestCase):
         self.assertEqual(cfg.tagpool.get_metadata("foo"), {})
 
 
-class ListKeysCmdTestCase(TestCase):
+class ListKeysCmdTestCase(TagPoolBaseTestCase):
     def setUp(self):
+        super(ListKeysCmdTestCase, self).setUp()
         self.test_tags = [("foo", "tag%d" % i) for
                           i in [1, 2, 3, 5, 6, 7, 9]]
 
@@ -118,7 +128,7 @@ class ListKeysCmdTestCase(TestCase):
             ])
 
 
-class ListPoolsCmdTestCase(TestCase):
+class ListPoolsCmdTestCase(TagPoolBaseTestCase):
     def test_list_pools_with_only_pools_in_config(self):
         cfg = make_cfg(["list-pools"])
         cfg.run()
