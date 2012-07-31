@@ -7,7 +7,13 @@ import redis
 
 
 def option_parser():
-    parser = OptionParser()
+    parser = OptionParser(description="""
+        Utility for purging all the keys in a Redis database. Useful
+        when using VUMITEST_REDIS_DB=x (where x is the number of the
+        Redis database) to run tests against a real redis instance
+        and the tests aren't properly cleaning up after / before
+        themselves.
+        """.strip())
     parser.add_option("-d", "--db",
                       type="int", dest="db", default=1,
                       help="Redis DB to clear.")
