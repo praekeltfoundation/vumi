@@ -148,8 +148,12 @@ class SmppTransport(Transport):
                 self.client_config.port,
                 self.factory)
 
+    @inlineCallbacks
     def teardown_transport(self):
-        return self.redis._close()
+        if hasattr(self, 'factory'):
+            self.factory.stopTrying()
+            self.factory.esme.transport.loseConnection()
+        yield self.redis._close()
 
     def make_factory(self):
         return EsmeTransceiverFactory(

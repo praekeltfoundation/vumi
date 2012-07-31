@@ -232,7 +232,7 @@ class HangmanWorker(ApplicationWorker):
         elif game.exit_code == game.DONE_WANTS_NEW:
             game = yield self.new_game(user_id)
         else:
-            self.save_game(user_id, game)
+            yield self.save_game(user_id, game)
 
         self.reply_to(msg, game.draw_board(), continue_session)
 

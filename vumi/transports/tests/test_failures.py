@@ -38,6 +38,7 @@ class FailureWorkerTestCase(unittest.TestCase, PersistenceMixin):
         self.worker = get_stubbed_worker(FailureWorker, self.config)
         yield self.worker.startWorker()
         self.redis = self.worker.redis
+        yield self.redis._purge_all()  # Just in case
         self.broker = self.worker._amqp_client.broker
 
     def assert_write_timestamp(self, expected, delta, now):
@@ -356,8 +357,8 @@ class FailureWorkerTestCase(unittest.TestCase, PersistenceMixin):
         The retry publisher should start when configured appropriately.
         """
         self.assertEqual(None, self.worker.delivery_loop)
+        yield self.worker.stopWorker()
         yield self.make_worker(1)
         self.assertEqual(self.worker.deliver_retries,
                          self.worker.delivery_loop.f)
         self.assertTrue(self.worker.delivery_loop.running)
-        yield self.worker.stopWorker()

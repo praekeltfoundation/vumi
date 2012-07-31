@@ -1,5 +1,6 @@
 # -*- test-case-name: vumi.persist.tests.test_redis_base -*-
 
+import os
 from functools import wraps
 
 from vumi.persist.ast_magic import make_function
@@ -106,9 +107,12 @@ class Manager(object):
         config = config.copy()
         key_prefix = config.pop('key_prefix', None)
         key_separator = config.pop('key_separator', '#')
+        fake_redis = config.pop('FAKE_REDIS', None)
+        if 'VUMITEST_REDIS_DB' in os.environ:
+            fake_redis = None
+            config['db'] = int(os.environ['VUMITEST_REDIS_DB'])
 
-        if 'FAKE_REDIS' in config:
-            fake_redis = config.pop('FAKE_REDIS')
+        if fake_redis is not None:
             if isinstance(fake_redis, cls):
                 # We want to unwrap the existing fake_redis to rewrap it.
                 fake_redis = fake_redis._client
@@ -199,7 +203,7 @@ class Manager(object):
     set = RedisCall(['key', 'value'])
     setnx = RedisCall(['key', 'value'])
     delete = RedisCall(['key'])
-    setnx = RedisCall(['key', 'value'])
+    setex = RedisCall(['key', 'seconds', 'value'])
 
     # Integer operations
 

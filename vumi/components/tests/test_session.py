@@ -19,9 +19,10 @@ class SessionManagerTestCase(TestCase, PersistenceMixin):
         yield self.manager._purge_all()  # Just in case
         self.sm = SessionManager(self.manager)
 
+    @inlineCallbacks
     def tearDown(self):
-        self.sm.stop()
-        return self._persist_tearDown()
+        yield self.sm.stop()
+        yield self._persist_tearDown()
 
     @inlineCallbacks
     def test_active_sessions(self):
