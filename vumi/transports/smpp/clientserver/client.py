@@ -43,6 +43,10 @@ class EsmeTransceiver(Protocol):
         self.datastream = ''
         self.redis = redis
         self._lose_conn = None
+        # The PDU queue ensures that PDUs are processed in the order
+        # they arrive. `self._process_pdu_queue()` loops forever
+        # pulling PDUs off the queue and handling each before grabbing
+        # the next.
         self._pdu_queue = DeferredQueue()
         self._process_pdu_queue()  # intentionally throw away deferred
 
