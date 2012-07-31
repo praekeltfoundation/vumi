@@ -3,6 +3,7 @@ import json
 import datetime
 
 from twisted.internet.defer import inlineCallbacks
+from twisted.internet import reactor
 
 from vumi import log
 from vumi.message import TransportUserMessage
@@ -43,6 +44,11 @@ class BaseSmsSyncTransport(HttpRpcTransport):
         The name this transport instance will use to create its queues
     :param dict redis_manager:
         Redis client configuration.
+    :param float reply_delay:
+        The amount of time to wait (in seconds) for a reply message
+        before closing the SMSSync HTTP inbound message
+        request. Replies received within this amount of time will be
+        returned with the reply (default: 0.1s).
     """
 
     transport_type = 'sms'
@@ -50,6 +56,12 @@ class BaseSmsSyncTransport(HttpRpcTransport):
     # SMSSync True and False constants
     SMSSYNC_TRUE, SMSSYNC_FALSE = ("true", "false")
     SMSSYNC_DATE_FORMAT = "%m-%d-%y %H:%M"
+
+    callLater = reactor.callLater
+
+    def validate_config(self):
+        super(BaseSmsSyncTransport, self).validate_config()
+        self._reply_delay = float(self.config.get('reply_delay', '0.1'))
 
     @inlineCallbacks
     def setup_transport(self):
@@ -95,23 +107,8 @@ class BaseSmsSyncTransport(HttpRpcTransport):
             log.warning("Bad account: %r (args: %r)" % (request, request.args))
             yield self._send_response(message_id, success=self.SMSSYNC_FALSE)
             return
-        outbound_ids = []
-        outbound_messages = []
-        account_key = self.key_for_account(msginfo.account_id)
-        while True:
-            msg_json = yield self.redis.lpop(account_key)
-            if msg_json is None:
-                break
-            msg = TransportUserMessage.from_json(msg_json)
-            outbound_ids.append(msg['message_id'])
-            outbound_messages.append({'to': msg['to_addr'],
-                                      'message': msg['content'] or ''})
-        yield self._send_response(message_id, task='send',
-                                  secret=msginfo.smssync_secret,
-                                  messages=outbound_messages)
-        for outbound_id in outbound_ids:
-            yield self.publish_ack(user_message_id=outbound_id,
-                                   sent_message_id=outbound_id)
+        yield self._respond_with_pending_messages(
+            msginfo, message_id, task='send', secret=msginfo.smssync_secret)
 
     def _check_request_args(self, request, expected_keys):
         expected_keys = set(expected_keys)
@@ -153,11 +150,31 @@ class BaseSmsSyncTransport(HttpRpcTransport):
         }
         self.add_msginfo_metadata(message, msginfo)
         yield self.publish_message(**message)
-        yield self._send_response(message_id, success=self.SMSSYNC_TRUE)
+        self.callLater(self._reply_delay, self._respond_with_pending_messages,
+                       msginfo, message_id, success=self.SMSSYNC_TRUE)
 
     def _send_response(self, message_id, **kw):
         response = {'payload': kw}
         return self.finish_request(message_id, json.dumps(response))
+
+    @inlineCallbacks
+    def _respond_with_pending_messages(self, msginfo, message_id, **kw):
+        """Gathers pending messages and sends a response including them."""
+        outbound_ids = []
+        outbound_messages = []
+        account_key = self.key_for_account(msginfo.account_id)
+        while True:
+            msg_json = yield self.redis.lpop(account_key)
+            if msg_json is None:
+                break
+            msg = TransportUserMessage.from_json(msg_json)
+            outbound_ids.append(msg['message_id'])
+            outbound_messages.append({'to': msg['to_addr'],
+                                      'message': msg['content'] or ''})
+        yield self._send_response(message_id, messages=outbound_messages, **kw)
+        for outbound_id in outbound_ids:
+            yield self.publish_ack(user_message_id=outbound_id,
+                                   sent_message_id=outbound_id)
 
     def handle_raw_inbound_message(self, message_id, request):
         # This matches the dispatch logic in Usahidi's request

@@ -86,7 +86,8 @@ class TestSingleSmsSync(TransportTestCase):
     def test_inbound_success(self):
         now = datetime.datetime.utcnow().replace(second=0, microsecond=0)
         response = yield self.smssync_inbound(content=u'hællo', timestamp=now)
-        self.assertEqual(response, {"payload": {"success": "true"}})
+        self.assertEqual(response, {"payload": {"success": "true",
+                                                "messages": []}})
 
         [msg] = self.get_dispatched_messages()
         self.assertEqual(msg['transport_name'], self.transport_name)
@@ -108,7 +109,8 @@ class TestSingleSmsSync(TransportTestCase):
         response = yield self.smssync_inbound(content=u'hello', secret='wrong')
         if self.smssync_secret == '':
             # blank secrets should not be checked
-            self.assertEqual(response, {"payload": {"success": "true"}})
+            self.assertEqual(response, {"payload": {"success": "true",
+                                                    "messages": []}})
         else:
             self.assertEqual(response, {"payload": {"success": "false"}})
 
