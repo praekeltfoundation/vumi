@@ -9,6 +9,7 @@ import warnings
 from functools import wraps
 
 import pytz
+from twisted.trial.unittest import SkipTest
 from twisted.internet import defer, reactor
 from twisted.web.resource import Resource
 from twisted.web.server import Site
@@ -34,6 +35,14 @@ def teardown_django_test_database(runner, config):
     from django.test.utils import teardown_test_environment
     runner.teardown_databases(config)
     teardown_test_environment()
+
+
+def import_skip(exc, *expected):
+    msg = exc.args[0]
+    module = msg.split()[-1]
+    if expected and (module not in expected):
+        raise
+    raise SkipTest("Failed to import '%s'." % (module,))
 
 
 class UTCNearNow(object):
@@ -344,6 +353,11 @@ class PersistenceMixin(object):
 
     @maybe_async('sync_persistence')
     def _persist_tearDown(self):
+        # We don't always have all the managers we want to clean up.
+        # Therefore, we create one of each with the base configuration.
+        yield self.get_redis_manager()
+        yield self.get_riak_manager()
+
         for manager in self._persist_riak_managers:
             yield self._persist_purge_riak(manager)
         for manager in self._persist_redis_managers:
@@ -353,9 +367,16 @@ class PersistenceMixin(object):
         "This is a separate method to allow easy overriding."
         return manager.purge_all()
 
+    @maybe_async('sync_persistence')
     def _persist_purge_redis(self, manager):
         "This is a separate method to allow easy overriding."
-        return manager.close_manager()
+        try:
+            yield manager._purge_all()
+        except RuntimeError, e:
+            # Ignore managers that are already closed.
+            if e.args[0] != 'Not connected':
+                raise
+        yield manager.close_manager()
 
     def get_riak_manager(self, config=None):
         if config is None:
@@ -366,13 +387,21 @@ class PersistenceMixin(object):
         return self._get_async_riak_manager(config)
 
     def _get_async_riak_manager(self, config):
-        from vumi.persist.txriak_manager import TxRiakManager
+        try:
+            from vumi.persist.txriak_manager import TxRiakManager
+        except ImportError, e:
+            import_skip(e, 'riakasaurus.riak')
+
         riak_manager = TxRiakManager.from_config(config)
         self._persist_riak_managers.append(riak_manager)
         return riak_manager
 
     def _get_sync_riak_manager(self, config):
-        from vumi.persist.riak_manager import RiakManager
+        try:
+            from vumi.persist.riak_manager import RiakManager
+        except ImportError, e:
+            import_skip(e, 'riak')
+
         riak_manager = RiakManager.from_config(config)
         self._persist_riak_managers.append(riak_manager)
         return riak_manager
@@ -397,7 +426,10 @@ class PersistenceMixin(object):
         return d.addCallback(add_to_self)
 
     def _get_sync_redis_manager(self, config):
-        from vumi.persist.redis_manager import RedisManager
+        try:
+            from vumi.persist.redis_manager import RedisManager
+        except ImportError, e:
+            import_skip(e, 'redis')
 
         redis_manager = RedisManager.from_config(config)
         self._persist_redis_managers.append(redis_manager)

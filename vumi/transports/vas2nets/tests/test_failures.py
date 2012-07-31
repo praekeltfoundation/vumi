@@ -55,7 +55,7 @@ class Vas2NetsFailureWorkerTestCase(unittest.TestCase, PersistenceMixin):
         self.today = datetime.utcnow().date()
         self.port = 9999
         self.path = '/api/v1/sms/vas2nets/receive/'
-        self.config = {
+        self.config = self.mk_config({
             'transport_name': 'vas2nets',
             'url': 'http://localhost:%s%s' % (self.port, self.path),
             'username': 'username',
@@ -66,7 +66,7 @@ class Vas2NetsFailureWorkerTestCase(unittest.TestCase, PersistenceMixin):
             'web_receive_path': '/receive',
             'web_receipt_path': '/receipt',
             'web_port': 9998,
-        }
+        })
         self.fail_config = self.mk_config({
             'transport_name': 'vas2nets',
             'retry_routing_key': '%(transport_name)s.outbound',

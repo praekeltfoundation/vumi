@@ -24,12 +24,11 @@ class RedisTestSmppTransport(SmppTransport):
     def send_smpp(self, message):
         to_addr = message['to_addr']
         text = message['content']
-        sequence_number = self.esme_client.submit_sm(
+        return self.esme_client.submit_sm(
                 short_message=text.encode('utf-8'),
                 destination_addr=str(to_addr),
                 source_addr="1234567890",
                 )
-        return sequence_number
 
 
 class FakeRedisRespTestCase(TransportTestCase):
@@ -87,17 +86,17 @@ class FakeRedisRespTestCase(TransportTestCase):
         original_json = message1.to_json()
         yield self.transport.r_set_message(message1)
         retrieved_json = yield self.transport.r_get_message_json(
-            message1.payload['message_id'])
+            message1['message_id'])
         self.assertEqual(original_json, retrieved_json)
         retrieved_message = yield self.transport.r_get_message(
-            message1.payload['message_id'])
+            message1['message_id'])
         self.assertEqual(retrieved_message, message1)
         self.assertTrue((yield self.transport.r_delete_message(
-                    message1.payload['message_id'])))
+                    message1['message_id'])))
         self.assertEqual((yield self.transport.r_get_message_json(
-                    message1.payload['message_id'])), None)
+                    message1['message_id'])), None)
         self.assertEqual((yield self.transport.r_get_message(
-                    message1.payload['message_id'])), None)
+                    message1['message_id'])), None)
 
     @inlineCallbacks
     def test_redis_third_party_id_persistence(self):
@@ -122,18 +121,18 @@ class FakeRedisRespTestCase(TransportTestCase):
             content="hello world",
             to_addr="1111111111")
         response1 = SubmitSMResp(1, "3rd_party_id_1")
-        yield self.transport._process_message(message1)
+        yield self.dispatch(message1)
 
         message2 = self.mkmsg_out(
             message_id='445',
             content="hello world",
             to_addr="1111111111")
         response2 = SubmitSMResp(2, "3rd_party_id_2")
-        yield self.transport._process_message(message2)
+        yield self.dispatch(message2)
 
         # respond out of order - just to keep things interesting
-        self.esme.handle_data(response2.get_bin())
-        self.esme.handle_data(response1.get_bin())
+        yield self.esme.handle_data(response2.get_bin())
+        yield self.esme.handle_data(response1.get_bin())
 
         self.assertEqual([
                 self.mkmsg_ack('445', '3rd_party_id_2'),
@@ -146,13 +145,13 @@ class FakeRedisRespTestCase(TransportTestCase):
             to_addr="1111111111")
         response3 = SubmitSMResp(3, "3rd_party_id_3",
                 command_status="ESME_RSUBMITFAIL")
-        self.transport._process_message(message3)
-        self.esme.handle_data(response3.get_bin())
+        yield self.dispatch(message3)
+        yield self.esme.handle_data(response3.get_bin())
         # There should be no ack
         self.assertEqual([], self.get_dispatched_events()[2:])
 
         comparison = self.mkmsg_fail(message3.payload, 'ESME_RSUBMITFAIL')
-        actual = self.get_dispatched_failures()[0]
+        [actual] = yield self.get_dispatched_failures()
         self.assertEqual(actual, comparison)
 
         message4 = self.mkmsg_out(
@@ -161,8 +160,8 @@ class FakeRedisRespTestCase(TransportTestCase):
             to_addr="1111111111")
         response4 = SubmitSMResp(4, "3rd_party_id_4",
                 command_status="ESME_RTHROTTLED")
-        self.transport._process_message(message4)
-        self.esme.handle_data(response4.get_bin())
+        yield self.dispatch(message4)
+        yield self.esme.handle_data(response4.get_bin())
         # There should be no ack
         self.assertEqual([], self.get_dispatched_events()[3:])
 
@@ -319,11 +318,9 @@ class EsmeToSmscTestCase(TransportTestCase):
             self.assert_server_pdu(expected_message, actual_message)
 
         # We need the user_message_id to check the ack
-        user_message_id = msg.payload["message_id"]
+        user_message_id = msg["message_id"]
 
-        dispatched_events = self.get_dispatched_events()
-        ack = dispatched_events[0].payload
-        delv = dispatched_events[1].payload
+        [ack, delv] = yield self.wait_for_dispatched_events(2)
 
         self.assertEqual(ack['message_type'], 'event')
         self.assertEqual(ack['event_type'], 'ack')
@@ -350,8 +347,7 @@ class EsmeToSmscTestCase(TransportTestCase):
             actual_message = yield pdu_queue.get()
             self.assert_server_pdu(expected_message, actual_message)
 
-        dispatched_messages = self.get_dispatched_messages()
-        mess = dispatched_messages[0].payload
+        [mess] = self.get_dispatched_messages()
 
         self.assertEqual(mess['message_type'], 'user_message')
         self.assertEqual(mess['transport_name'], self.transport_name)
@@ -414,18 +410,9 @@ class EsmeToSmscTestCase(TransportTestCase):
         yield self.dispatch(msg)
 
         # We need the user_message_id to check the ack
-        user_message_id = msg.payload["message_id"]
+        user_message_id = msg["message_id"]
 
-        wait_for_events = self._amqp.wait_messages(
-                "vumi",
-                "%s.event" % self.transport_name,
-                2,
-                )
-        yield wait_for_events
-
-        dispatched_events = self.get_dispatched_events()
-        ack = dispatched_events[0].payload
-        delv = dispatched_events[1].payload
+        [ack, delv] = yield self.wait_for_dispatched_events(2)
 
         self.assertEqual(ack['message_type'], 'event')
         self.assertEqual(ack['event_type'], 'ack')
@@ -453,16 +440,7 @@ class EsmeToSmscTestCase(TransportTestCase):
                                          to_addr="2772222222",
                                          from_addr="2772000000")
 
-        wait_for_inbound = self._amqp.wait_messages(
-                "vumi",
-                "%s.inbound" % self.transport_name,
-                2,
-                )
-        yield wait_for_inbound
-
-        dispatched_messages = self.get_dispatched_messages()
-        mess = dispatched_messages[0].payload
-        multipart = dispatched_messages[1].payload
+        [mess, multipart] = yield self.wait_for_dispatched_messages(2)
 
         self.assertEqual(mess['message_type'], 'user_message')
         self.assertEqual(mess['transport_name'], self.transport_name)
@@ -505,18 +483,9 @@ class EsmeToSmscTestCase(TransportTestCase):
         yield self.dispatch(msg)
 
         # We need the user_message_id to check the ack
-        user_message_id = msg.payload["message_id"]
+        user_message_id = msg["message_id"]
 
-        wait_for_events = self._amqp.wait_messages(
-                "vumi",
-                "%s.event" % self.transport_name,
-                2,
-                )
-        yield wait_for_events
-
-        dispatched_events = self.get_dispatched_events()
-        ack = dispatched_events[0].payload
-        delv = dispatched_events[1].payload
+        [ack, delv] = yield self.wait_for_dispatched_events(2)
 
         self.assertEqual(ack['message_type'], 'event')
         self.assertEqual(ack['event_type'], 'ack')
@@ -647,17 +616,9 @@ class TxEsmeToSmscTestCase(TransportTestCase):
         yield self.dispatch(msg)
 
         # We need the user_message_id to check the ack
-        user_message_id = msg.payload["message_id"]
+        user_message_id = msg["message_id"]
 
-        wait_for_events = self._amqp.wait_messages(
-                "vumi",
-                "%s.event" % self.transport_name,
-                1,
-                )
-        yield wait_for_events
-
-        dispatched_events = self.get_dispatched_events()
-        ack = dispatched_events[0].payload
+        [ack, _delv] = yield self.wait_for_dispatched_events(2)
 
         self.assertEqual(ack['message_type'], 'event')
         self.assertEqual(ack['event_type'], 'ack')
@@ -733,16 +694,7 @@ class RxEsmeToSmscTestCase(TransportTestCase):
                 source_addr="2772000000",
                 )
         self.service.factory.smsc.send_pdu(pdu)
-
-        wait_for_inbound = self._amqp.wait_messages(
-                "vumi",
-                "%s.inbound" % self.transport_name,
-                1,
-                )
-        yield wait_for_inbound
-
-        dispatched_messages = self.get_dispatched_messages()
-        mess = dispatched_messages[0].payload
+        [mess] = yield self.wait_for_dispatched_messages(1)
 
         self.assertEqual(mess['message_type'], 'user_message')
         self.assertEqual(mess['transport_name'], self.transport_name)

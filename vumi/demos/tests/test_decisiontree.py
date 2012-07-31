@@ -121,6 +121,7 @@ class TestDecisionTreeWorker(ApplicationTestCase):
         self.worker = yield self.get_application({
                 'worker_name': 'test_decision_tree_worker',
                 })
+        yield self.worker.session_manager.redis._purge_all()  # just in case
 
     def replace_timestamp(self, string):
         newstring = re.sub(r'imestamp": "\d*"',
