@@ -4,14 +4,14 @@ from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.message import TransportUserMessage, TransportEvent
-from vumi.dispatchers.base import (BaseDispatchWorker, ToAddrRouter,
-                                   FromAddrMultiplexRouter)
+from vumi.dispatchers.base import (
+    BaseDispatchWorker, ToAddrRouter, FromAddrMultiplexRouter)
 from vumi.middleware import MiddlewareStack
-from vumi.tests.utils import get_stubbed_worker, FakeRedis, LogCatcher
+from vumi.tests.utils import get_stubbed_worker, LogCatcher, PersistenceMixin
 from vumi.tests.fake_amqp import FakeAMQPBroker
 
 
-class DispatcherTestCase(TestCase):
+class DispatcherTestCase(TestCase, PersistenceMixin):
 
     """
     This is a base class for testing dispatcher workers.
@@ -27,10 +27,13 @@ class DispatcherTestCase(TestCase):
     def setUp(self):
         self._workers = []
         self._amqp = FakeAMQPBroker()
+        self._persist_setUp()
 
+    @inlineCallbacks
     def tearDown(self):
         for worker in self._workers:
-            worker.stopWorker()
+            yield worker.stopWorker()
+        yield self._persist_tearDown()
 
     @inlineCallbacks
     def get_dispatcher(self, config, cls=None, start=True):
@@ -50,6 +53,7 @@ class DispatcherTestCase(TestCase):
 
         if cls is None:
             cls = self.dispatcher_class
+        config = self.mk_config(config)
         config.setdefault('dispatcher_name', self.dispatcher_name)
         worker = get_stubbed_worker(cls, config, self._amqp)
         self._workers.append(worker)
@@ -169,7 +173,7 @@ class MessageMakerMixIn(object):
 
 
 class TestBaseDispatchWorker(TestCase, MessageMakerMixIn):
-    timeout = 3
+    timeout = 5
 
     @inlineCallbacks
     def setUp(self):
@@ -522,28 +526,36 @@ class UserGroupingRouterTestCase(DispatcherTestCase):
                 },
             'transport_mappings': {
                 'upstream1': self.transport_name,
-                }
+                },
             }
 
-        self.fake_redis = FakeRedis()
         self.dispatcher = yield self.get_dispatcher(self.config)
         self.router = self.dispatcher._router
-        self.router.r_server = self.fake_redis
-        self.router.setup_routing()
+        yield self.router._redis_d
+        self.redis = self.router.redis
+        yield self.redis._purge_all()  # just in case
 
+    @inlineCallbacks
+    def tearDown(self):
+        yield super(UserGroupingRouterTestCase, self).tearDown()
+        yield self.redis.close_manager()
+
+    @inlineCallbacks
     def test_group_assignment(self):
         msg = self.mkmsg_in(transport_name=self.transport_name)
-        selected_group = self.router.get_group_for_user(msg.user())
+        selected_group = yield self.router.get_group_for_user(msg.user())
         self.assertTrue(selected_group)
         for i in range(0, 10):
-            group = self.router.get_group_for_user(msg.user())
+            group = yield self.router.get_group_for_user(msg.user())
             self.assertEqual(group, selected_group)
 
+    @inlineCallbacks
     def test_round_robin_group_assignment(self):
-        messages = [self.mkmsg_in(transport_name=self.transport_name,
-                        from_addr='from_%s' % (i,)) for i in range(0, 4)]
-        groups = [self.router.get_group_for_user(message.user())
-                    for message in messages]
+        messages = [self.mkmsg_in(
+                transport_name=self.transport_name,
+                from_addr='from_%s' % (i,)) for i in range(0, 4)]
+        groups = [(yield self.router.get_group_for_user(message.user()))
+                  for message in messages]
         self.assertEqual(groups, [
             'group1',
             'group2',
@@ -551,33 +563,30 @@ class UserGroupingRouterTestCase(DispatcherTestCase):
             'group2',
         ])
 
+    def mkmsg_from(self, from_addr):
+        return self.mkmsg_in(
+            transport_name=self.transport_name, from_addr=from_addr)
+
     @inlineCallbacks
     def test_routing_to_application(self):
         # generate 4 messages, 2 from each user
-        msg1 = self.mkmsg_in(transport_name=self.transport_name,
-                                from_addr='from_1')
-        msg2 = self.mkmsg_in(transport_name=self.transport_name,
-                                from_addr='from_2')
-        msg3 = self.mkmsg_in(transport_name=self.transport_name,
-                                from_addr='from_1')
-        msg4 = self.mkmsg_in(transport_name=self.transport_name,
-                                from_addr='from_2')
+        msg1 = self.mkmsg_from('from_1')
+        msg2 = self.mkmsg_from('from_2')
+        msg3 = self.mkmsg_from('from_3')
+        msg4 = self.mkmsg_from('from_4')
         # send them through to the dispatcher
         messages = [msg1, msg2, msg3, msg4]
         for message in messages:
             yield self.dispatch(message, transport_name=self.transport_name)
 
-        app1_messages = self.get_dispatched_messages('app1',
-                                                        direction='inbound')
-        app2_messages = self.get_dispatched_messages('app2',
-                                                        direction='inbound')
-        self.assertEqual(app1_messages, [msg1, msg3])
-        self.assertEqual(app2_messages, [msg2, msg4])
+        app1_msgs = self.get_dispatched_messages('app1', direction='inbound')
+        app2_msgs = self.get_dispatched_messages('app2', direction='inbound')
+        self.assertEqual(app1_msgs, [msg1, msg3])
+        self.assertEqual(app2_msgs, [msg2, msg4])
 
     @inlineCallbacks
     def test_routing_to_transport(self):
-        app_msg = self.mkmsg_in(transport_name=self.transport_name,
-                                from_addr='from_1')
+        app_msg = self.mkmsg_from('from_1')
         yield self.dispatch(app_msg, transport_name='app1',
                                 direction='outbound')
         [transport_msg] = self.get_dispatched_messages(self.transport_name,
@@ -596,6 +605,8 @@ class UserGroupingRouterTestCase(DispatcherTestCase):
 
 
 class TestContentKeywordRouter(DispatcherTestCase):
+
+    timeout = 5
 
     dispatcher_class = BaseDispatchWorker
     transport_name = 'test_transport'
@@ -627,14 +638,16 @@ class TestContentKeywordRouter(DispatcherTestCase):
             'fallback_application': 'fallback_app',
             'expire_routing_memory': '3',
             }
-        self.fake_redis = FakeRedis()
         self.dispatcher = yield self.get_dispatcher(self.config)
         self.router = self.dispatcher._router
-        self.router.r_server = self.fake_redis
+        yield self.router._redis_d
+        self.redis = self.router.redis
+        yield self.redis._purge_all()  # just in case
 
+    @inlineCallbacks
     def tearDown(self):
-        self.fake_redis.teardown()
-        super(TestContentKeywordRouter, self).tearDown()
+        yield self.router.session_manager.stop()
+        yield super(TestContentKeywordRouter, self).tearDown()
 
     @inlineCallbacks
     def test_inbound_message_routing(self):
@@ -708,8 +721,8 @@ class TestContentKeywordRouter(DispatcherTestCase):
     def test_inbound_event_routing_ok(self):
         msg = self.mkmsg_ack(user_message_id='1',
                              transport_name='transport1')
-        self.router.r_server.set('keyword_dispatcher:message:1',
-                                 'app2')
+        yield self.router.session_manager.create_session(
+            'message:1', name='app2')
 
         yield self.dispatch(msg,
                             transport_name='transport1',
@@ -769,8 +782,8 @@ class TestContentKeywordRouter(DispatcherTestCase):
                                                        direction='outbound')
         self.assertEqual(transport2_msgs, [])
 
-        app2_route = self.fake_redis.get('keyword_dispatcher:message:1')
-        self.assertEqual(app2_route, 'app2')
+        session = yield self.router.session_manager.load_session('message:1')
+        self.assertEqual(session['name'], 'app2')
 
 
 class TestRedirectOutboundRouter(DispatcherTestCase):

@@ -5,8 +5,9 @@ import re
 import sys
 import base64
 import pkg_resources
+import warnings
+from functools import wraps
 
-import redis
 from zope.interface import implements
 from twisted.internet import defer
 from twisted.internet import reactor, protocol
@@ -16,8 +17,6 @@ from twisted.web.server import Site
 from twisted.web.http_headers import Headers
 from twisted.web.iweb import IBodyProducer
 from twisted.web.http import PotentialDataLoss
-
-import redis
 
 
 def import_module(name):
@@ -213,12 +212,41 @@ def redis_from_config(redis_config):
 
     Otherwise a new real redis client is returned.
     """
-    from vumi.tests.utils import FakeRedis
+    warnings.warn("Use of redis directly is deprecated. Use vumi.persist "
+                  "instead.", category=DeprecationWarning)
+
+    import redis
+    from vumi.persist import fake_redis
     if redis_config == "FAKE_REDIS":
-        return FakeRedis()
-    if isinstance(redis_config, FakeRedis):
+        return fake_redis.FakeRedis()
+    if isinstance(redis_config, fake_redis.FakeRedis):
         return redis_config
     return redis.Redis(**redis_config)
+
+
+def flatten_generator(generator_func):
+    """
+    This is a synchronous version of @inlineCallbacks.
+
+    NOTE: It doesn't correctly handle returnValue() being called in a
+    non-decorated function called from the function we're decorating. We could
+    copy the Twisted code to do that, but it's messy.
+    """
+    @wraps(generator_func)
+    def wrapped(*args, **kw):
+        gen = generator_func(*args, **kw)
+        result = None
+        while True:
+            try:
+                result = gen.send(result)
+            except StopIteration:
+                # Fell off the end, or "return" statement.
+                return None
+            except defer._DefGen_Return, e:
+                # returnValue() called.
+                return e.value
+
+    return wrapped
 
 
 def filter_options_on_prefix(options, prefix, delimiter='-'):

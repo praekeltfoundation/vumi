@@ -37,10 +37,11 @@ class TelnetServerTransportTestCase(TransportTestCase):
         self.client = yield self.make_client()
         yield self.wait_for_client_start()
 
+    @inlineCallbacks
     def tearDown(self):
-        super(TelnetServerTransportTestCase, self).tearDown()
         if self.client.transport.connected:
-            self.client.transport.loseConnection()
+            yield self.client.transport.loseConnection()
+        yield super(TelnetServerTransportTestCase, self).tearDown()
 
     def get_messages(self, rkey, cls=TransportUserMessage):
         contents = self._amqp.get_dispatched('vumi', rkey)

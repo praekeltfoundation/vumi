@@ -2,7 +2,6 @@ from twisted.internet.defer import inlineCallbacks
 from twisted.trial.unittest import TestCase
 
 from vumi.transports.tests.test_base import TransportTestCase
-from vumi.tests.utils import FakeRedis
 from vumi.utils import http_request_full
 from vumi.message import TransportUserMessage
 from vumi.transports.mtech_ussd import MtechUssdTransport
@@ -27,16 +26,10 @@ class TestMtechUssdTransport(TransportTestCase):
             'username': 'testuser',
             'password': 'testpass',
         }
-        self.patch(MtechUssdTransport, 'connect_to_redis',
-                   lambda s: FakeRedis(**s.redis_config))
         self.transport = yield self.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url().rstrip('/')
         self.url = "%s%s" % (self.transport_url, self.config['web_path'])
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield self.transport.r_server.teardown()
-        yield super(TestMtechUssdTransport, self).tearDown()
+        yield self.transport.session_manager.redis._purge_all()  # just in case
 
     def make_ussd_request_full(self, session_id, **kwargs):
         lines = [
@@ -109,7 +102,7 @@ class TestMtechUssdTransport(TransportTestCase):
     @inlineCallbacks
     def test_inbound_resume_continue(self):
         sid = 'a41739890287485d968ea66e8b44bfd3'
-        self.transport.save_session(sid, '2348085832481', '*120*666#')
+        yield self.transport.save_session(sid, '2348085832481', '*120*666#')
         response_d = self.make_ussd_request(sid, page_id="indexX", data="foo")
 
         msg = yield self.reply_to_message("OK")
@@ -206,7 +199,7 @@ class TestMtechUssdTransport(TransportTestCase):
     @inlineCallbacks
     def test_inbound_resume_close(self):
         sid = 'a41739890287485d968ea66e8b44bfd3'
-        self.transport.save_session(sid, '2348085832481', '*120*666#')
+        yield self.transport.save_session(sid, '2348085832481', '*120*666#')
         response_d = self.make_ussd_request(sid, page_id="indexX", data="foo")
 
         msg = yield self.reply_to_message("OK", False)
@@ -233,7 +226,7 @@ class TestMtechUssdTransport(TransportTestCase):
     @inlineCallbacks
     def test_inbound_cancel(self):
         sid = 'a41739890287485d968ea66e8b44bfd3'
-        self.transport.save_session(sid, '2348085832481', '*120*666#')
+        yield self.transport.save_session(sid, '2348085832481', '*120*666#')
         response = yield self.make_ussd_request(sid, status="1")
 
         correct_response = ''.join([

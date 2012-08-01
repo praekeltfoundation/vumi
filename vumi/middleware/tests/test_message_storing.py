@@ -3,34 +3,41 @@
 from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
 
-from vumi.middleware.message_storing import StoringMiddleware
 from vumi.middleware.tagger import TaggingMiddleware
-from vumi.tests.utils import FakeRedis
 from vumi.message import TransportUserMessage, TransportEvent
+from vumi.tests.utils import PersistenceMixin
 
 
-class StoringMiddlewareTestCase(TestCase):
+class StoringMiddlewareTestCase(TestCase, PersistenceMixin):
 
     DEFAULT_CONFIG = {
         }
 
     @inlineCallbacks
     def setUp(self):
+        self._persist_setUp()
         dummy_worker = object()
-        config = {
-            "riak": {
-                "bucket_prefix": "test.",
-                },
-            }
+        config = self.mk_config({})
+
+        # Create and stash a riak manager to clean up afterwards, because we
+        # don't get access to the one inside the middleware.
+        self.get_riak_manager()
+
+        # We've already skipped the test by now if we don't have riakasaurus,
+        # so it's safe to import stuff that pulls it in without guards.
+        from vumi.middleware.message_storing import StoringMiddleware
+
         self.mw = StoringMiddleware("dummy_storer", config, dummy_worker)
-        self.mw.setup_middleware()
-        self.mw.store.r_server = FakeRedis()
+        yield self.mw.setup_middleware()
         self.store = self.mw.store
         yield self.store.manager.purge_all()
+        yield self.store.redis._purge_all()  # just in case
 
     @inlineCallbacks
     def tearDown(self):
+        yield self.mw.teardown_middleware()
         yield self.store.manager.purge_all()
+        yield self._persist_tearDown()
 
     def mk_msg(self):
         msg = TransportUserMessage(to_addr="45678", from_addr="12345",

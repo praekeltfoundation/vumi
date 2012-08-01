@@ -11,7 +11,6 @@ from vumi.demos.decisiontree import (DecisionTreeWorker, TemplatedDecisionTree,
                                      TraversedDecisionTree)
 from vumi.message import TransportUserMessage
 from vumi.application.tests.test_base import ApplicationTestCase
-from vumi.tests.utils import FakeRedis
 
 
 class TemplatedDecisionTreeTestCase(TestCase):
@@ -120,14 +119,9 @@ class TestDecisionTreeWorker(ApplicationTestCase):
     def setUp(self):
         super(TestDecisionTreeWorker, self).setUp()
         self.worker = yield self.get_application({
-            'worker_name': 'test_decision_tree_worker',
-            })
-        self.worker.r_server = FakeRedis()
-        self.worker.session_manager.r_server = self.worker.r_server
-
-    def tearDown(self):
-        super(TestDecisionTreeWorker, self).tearDown()
-        self.worker.r_server.teardown()
+                'worker_name': 'test_decision_tree_worker',
+                })
+        yield self.worker.session_manager.redis._purge_all()  # just in case
 
     def replace_timestamp(self, string):
         newstring = re.sub(r'imestamp": "\d*"',

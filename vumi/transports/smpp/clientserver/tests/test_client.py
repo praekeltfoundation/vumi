@@ -1,85 +1,13 @@
-import uuid
-
 from twisted.trial import unittest
 from twisted.internet.task import Clock
+from twisted.internet.defer import inlineCallbacks
 from smpp.pdu_builder import DeliverSM, BindTransceiverResp
 from smpp.pdu import unpack_pdu
 
-from vumi.tests.utils import FakeRedis, LogCatcher
+from vumi.tests.utils import LogCatcher, PersistenceMixin
 from vumi.transports.smpp.clientserver.client import (
-        EsmeTransceiver,
-        EsmeReceiver,
-        EsmeTransmitter,
-        EsmeCallbacks,
-        KeyValueBase,
-        KeyValueStore,
-        ESME)
+    EsmeTransceiver, EsmeReceiver, EsmeTransmitter, EsmeCallbacks, ESME)
 from vumi.transports.smpp.clientserver.config import ClientConfig
-
-
-class KeyValueStoreTestCase(unittest.TestCase):
-
-    def setUp(self):
-        self.kvs = KeyValueStore()
-        KeyValueBase.register(self.kvs.__class__)
-        self.prefix = "smpp_test_%s" % uuid.uuid4()
-
-    def tearDown(self):
-        pass
-
-    def run_all_tests_on_instance(self, instance):
-        self.kvs = instance
-        KeyValueBase.register(instance.__class__)
-        self.test_implements_abstract()
-        self.test_set_get_delete()
-        self.test_incr()
-
-    def test_instance_test(self):
-        newKeyValueStoreTestCase = KeyValueStoreTestCase()
-        newKeyValueStoreTestCase.prefix = "smpp_test_%s" % uuid.uuid4()
-        instance = KeyValueStore()
-        newKeyValueStoreTestCase.run_all_tests_on_instance(instance)
-
-    def test_implements_abstract(self):
-        self.assertTrue(issubclass(KeyValueStore, KeyValueBase))
-        self.assertTrue(isinstance(self.kvs, KeyValueBase))
-
-    def test_set_get_delete(self):
-        key1 = "%s#cookie" % self.prefix
-
-        try:
-            self.assertEqual(self.kvs.get(key1), None)
-            self.kvs.set(key1, "monster")
-            self.assertEqual(self.kvs.get(key1), "monster")
-            self.kvs.set(key1, "crumbles")
-            self.assertNotEqual(self.kvs.get(key1), "monster")
-            self.assertEqual(self.kvs.get(key1), "crumbles")
-            self.assertEqual(self.kvs.delete(key1), True)
-            self.assertEqual(self.kvs.get(key1), None)
-
-        except:
-            self.kvs.delete(key1)
-            raise
-
-    def test_incr(self):
-        key1 = "%s#counter" % self.prefix
-
-        try:
-            self.assertEqual(self.kvs.get(key1), None)
-            self.assertEqual(self.kvs.incr(key1), 1)
-            self.kvs.set(key1, 1)
-            self.assertEqual(self.kvs.incr(key1), 2)
-            self.kvs.set(key1, "1")
-            self.assertEqual(self.kvs.incr(key1), 2)
-            self.kvs.delete(key1)
-            self.assertEqual(self.kvs.incr(key1), 1)
-            self.assertEqual(self.kvs.incr(key1), 2)
-            self.assertEqual(self.kvs.incr(key1), 3)
-            self.assertEqual(self.kvs.delete(key1), True)
-
-        except:
-            self.kvs.delete(key1)
-            raise
 
 
 class FakeTransport(object):
@@ -126,62 +54,72 @@ class FakeEsmeTransmitter(EsmeTransmitter):
         pass
 
 
-class EsmeSequenceNumberTestCase(unittest.TestCase):
+class EsmeTestCaseBase(unittest.TestCase, PersistenceMixin):
+    timeout = 5
+    ESME_CLASS = None
 
-    def test_sequence_rollover(self):
-        config = ClientConfig(host="127.0.0.1", port="0",
-                              system_id="1234", password="password")
-        esme = FakeEsmeTransceiver(config, FakeRedis(), None)
-        self.assertEqual(1, esme.get_seq())
-        esme.get_next_seq()
-        self.assertEqual(2, esme.get_seq())
-        esme.set_seq(4004004004)
-        self.assertEqual(4004004004, esme.get_seq())
-        esme.get_next_seq()
-        self.assertEqual(1, esme.get_seq())
+    def setUp(self):
+        self._persist_setUp()
 
+    def tearDown(self):
+        return self._persist_tearDown()
 
-class EsmeTransceiverTestCase(unittest.TestCase):
     def get_esme(self, **callbacks):
         config = ClientConfig(host="127.0.0.1", port="0",
                               system_id="1234", password="password")
         esme_callbacks = EsmeCallbacks(**callbacks)
-        esme = FakeEsmeTransceiver(config, FakeRedis(), esme_callbacks)
-        return esme
+
+        def purge_manager(redis_manager):
+            d = redis_manager._purge_all()  # just in case
+            d.addCallback(lambda result: redis_manager)
+            return d
+
+        redis_d = self.get_redis_manager()
+        redis_d.addCallback(purge_manager)
+        return redis_d.addCallback(
+            lambda r: self.ESME_CLASS(config, r, esme_callbacks))
+
+
+class EsmeTransceiverTestCase(EsmeTestCaseBase):
+    ESME_CLASS = FakeEsmeTransceiver
 
     def get_sm(self, msg, data_coding=3):
         sm = DeliverSM(1, short_message=msg, data_coding=data_coding)
         return unpack_pdu(sm.get_bin())
 
+    @inlineCallbacks
     def test_deliver_sm_simple(self):
         """A simple message should be delivered."""
         def cb(**kw):
             self.assertEqual(u'hello', kw['short_message'])
 
-        esme = self.get_esme(deliver_sm=cb)
+        esme = yield self.get_esme(deliver_sm=cb)
         esme.handle_deliver_sm(self.get_sm('hello'))
 
+    @inlineCallbacks
     def test_deliver_sm_ucs2(self):
         """A UCS-2 message should be delivered."""
         def cb(**kw):
             self.assertEqual(u'hello', kw['short_message'])
 
-        esme = self.get_esme(deliver_sm=cb)
+        esme = yield self.get_esme(deliver_sm=cb)
         esme.handle_deliver_sm(self.get_sm('\x00h\x00e\x00l\x00l\x00o', 8))
 
+    @inlineCallbacks
     def test_bad_sm_ucs2(self):
         """An invalid UCS-2 message should be discarded."""
         def cb(**kw):
             self.assertEqual(bad_msg, kw['short_message'])
             self.flushLoggedErrors()
 
-        esme = self.get_esme(deliver_sm=cb)
+        esme = yield self.get_esme(deliver_sm=cb)
         bad_msg = '\n\x00h\x00e\x00l\x00l\x00o'
         esme.handle_deliver_sm(self.get_sm(bad_msg, 8))
 
+    @inlineCallbacks
     def test_bind_timeout(self):
-        esme = self.get_esme()
-        esme.connectionMade()
+        esme = yield self.get_esme()
+        yield esme.connectionMade()
 
         self.assertEqual(True, esme.transport.connected)
         self.assertNotEqual(None, esme._lose_conn)
@@ -191,9 +129,10 @@ class EsmeTransceiverTestCase(unittest.TestCase):
         self.assertEqual(False, esme.transport.connected)
         self.assertEqual(None, esme._lose_conn)
 
+    @inlineCallbacks
     def test_bind_no_timeout(self):
-        esme = self.get_esme()
-        esme.connectionMade()
+        esme = yield self.get_esme()
+        yield esme.connectionMade()
 
         self.assertEqual(True, esme.transport.connected)
         self.assertNotEqual(None, esme._lose_conn)
@@ -204,20 +143,26 @@ class EsmeTransceiverTestCase(unittest.TestCase):
         self.assertEqual(True, esme.transport.connected)
         self.assertEqual(None, esme._lose_conn)
         esme.lc_enquire.stop()
+        yield esme.lc_enquire.deferred
+
+    @inlineCallbacks
+    def test_sequence_rollover(self):
+        esme = yield self.get_esme()
+        self.assertEqual(1, (yield esme.get_next_seq()))
+        self.assertEqual(2, (yield esme.get_next_seq()))
+        yield esme.redis.set('smpp_last_sequence_number', 0xFFFF0000)
+        self.assertEqual(0xFFFF0001, (yield esme.get_next_seq()))
+        self.assertEqual(1, (yield esme.get_next_seq()))
 
 
-class EsmeTransmitterTestCase(unittest.TestCase):
-    def get_esme(self, **callbacks):
-        config = ClientConfig(host="127.0.0.1", port="0",
-                              system_id="1234", password="password")
-        esme_callbacks = EsmeCallbacks(**callbacks)
-        esme = FakeEsmeTransmitter(config, FakeRedis(), esme_callbacks)
-        return esme
+class EsmeTransmitterTestCase(EsmeTestCaseBase):
+    ESME_CLASS = FakeEsmeTransmitter
 
     def get_sm(self, msg, data_coding=3):
         sm = DeliverSM(1, short_message=msg, data_coding=data_coding)
         return unpack_pdu(sm.get_bin())
 
+    @inlineCallbacks
     def test_deliver_sm_simple(self):
         """A message delivery should log an error since we're supposed
         to be a transmitter only."""
@@ -225,35 +170,31 @@ class EsmeTransmitterTestCase(unittest.TestCase):
             self.assertEqual(u'hello', kw['short_message'])
 
         with LogCatcher() as log:
-            esme = self.get_esme(deliver_sm=cb)
+            esme = yield self.get_esme(deliver_sm=cb)
             esme.state = 'BOUND_TX'  # Assume we've bound correctly as a TX
             esme.handle_deliver_sm(self.get_sm('hello'))
             [error] = log.errors
             self.assertTrue('deliver_sm in wrong state' in error['message'][0])
 
 
-class EsmeReceiverTestCase(unittest.TestCase):
-    def get_esme(self, **callbacks):
-        config = ClientConfig(host="127.0.0.1", port="0",
-                              system_id="1234", password="password")
-        esme_callbacks = EsmeCallbacks(**callbacks)
-        esme = FakeEsmeReceiver(config, FakeRedis(), esme_callbacks)
-        return esme
+class EsmeReceiverTestCase(EsmeTestCaseBase):
+    ESME_CLASS = FakeEsmeReceiver
 
     def get_sm(self, msg, data_coding=3):
         sm = DeliverSM(1, short_message=msg, data_coding=data_coding)
         return unpack_pdu(sm.get_bin())
 
+    @inlineCallbacks
     def test_submit_sm_simple(self):
         """A simple message log an error when trying to send over
         a receiver."""
         with LogCatcher() as log:
-            esme = self.get_esme()
+            esme = yield self.get_esme()
             esme.state = 'BOUND_RX'  # Fake RX bind
-            esme.submit_sm(short_message='hello')
+            yield esme.submit_sm(short_message='hello')
             [error] = log.errors
             self.assertTrue(('submit_sm in wrong state' in
-                                            error['message'][0]))
+                             error['message'][0]))
 
 
 class ESMETestCase(unittest.TestCase):
@@ -271,4 +212,4 @@ class ESMETestCase(unittest.TestCase):
                          self.esme_callbacks)
 
     def test_bind_as_transceiver(self):
-        self.esme.bindTransciever()
+        return self.esme.bindTransciever()

@@ -1,14 +1,13 @@
 # -*- test-case-name: vumi.transports.safaricom.tests.test_safaricom -*-
 
 import json
-import redis
 
 from twisted.python import log
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.transports.httprpc import HttpRpcTransport
 from vumi.message import TransportUserMessage
-from vumi.application import SessionManager
+from vumi.components import SessionManager
 
 
 class SafaricomTransport(HttpRpcTransport):
@@ -35,25 +34,21 @@ class SafaricomTransport(HttpRpcTransport):
     def validate_config(self):
         super(SafaricomTransport, self).validate_config()
         self.transport_type = self.config.get('transport_type', 'ussd')
-        self.redis_config = self.config.get('redis', {})
+        self.redis_config = self.config.get('redis_manager', {})
         self.r_prefix = "vumi.transports.safaricom:%s" % self.transport_name
         self.r_session_timeout = int(self.config.get("ussd_session_timeout",
                                                                         600))
 
+    @inlineCallbacks
     def setup_transport(self):
         super(SafaricomTransport, self).setup_transport()
-        self.r_server = self.connect_to_redis()
-        self.session_manager = SessionManager(
-            self.r_server, self.r_prefix,
-            max_session_length=self.r_session_timeout)
+        self.session_manager = yield SessionManager.from_redis_config(
+            self.redis_config, self.r_prefix, self.r_session_timeout)
 
+    @inlineCallbacks
     def teardown_transport(self):
-        self.session_manager.stop()
-        super(SafaricomTransport, self).teardown_transport()
-
-    # the connection to redis is a seperate method to allow overriding in tests
-    def connect_to_redis(self):
-        return redis.Redis(**self.redis_config)
+        yield self.session_manager.stop()
+        yield super(SafaricomTransport, self).teardown_transport()
 
     def get_field_values(self, request):
         values = {}
@@ -82,7 +77,7 @@ class SafaricomTransport(HttpRpcTransport):
         dest = values['DEST']
         ussd_params = values['USSD_PARAMS']
 
-        session = self.session_manager.load_session(session_id)
+        session = yield self.session_manager.load_session(session_id)
         if session:
             to_addr = session['to_addr']
             last_ussd_params = session['last_ussd_params']
@@ -93,11 +88,11 @@ class SafaricomTransport(HttpRpcTransport):
                 content = ''
 
             session['last_ussd_params'] = ussd_params
-            self.session_manager.save_session(session_id, session)
+            yield self.session_manager.save_session(session_id, session)
             session_event = TransportUserMessage.SESSION_RESUME
         else:
             to_addr = '*%s*%s#' % (dest, ussd_params)
-            self.session_manager.create_session(session_id,
+            yield self.session_manager.create_session(session_id,
                 from_addr=from_addr, to_addr=to_addr,
                 last_ussd_params=ussd_params)
             session_event = TransportUserMessage.SESSION_NEW

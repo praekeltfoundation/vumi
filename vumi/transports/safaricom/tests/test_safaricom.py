@@ -7,7 +7,6 @@ from vumi.transports.tests.test_base import TransportTestCase
 from vumi.transports.safaricom import SafaricomTransport
 from vumi.message import TransportUserMessage
 from vumi.utils import http_request
-from vumi.tests.utils import FakeRedis
 
 
 class TestSafaricomTransportTestCase(TransportTestCase):
@@ -21,19 +20,12 @@ class TestSafaricomTransportTestCase(TransportTestCase):
         self.config = {
             'web_port': 0,
             'web_path': '/api/v1/safaricom/ussd/',
-            'redis': {},
         }
-        self.patch(SafaricomTransport, 'connect_to_redis',
-            lambda s: FakeRedis(**s.redis_config))
         self.transport = yield self.get_transport(self.config)
         self.session_manager = self.transport.session_manager
         self.transport_url = self.transport.get_transport_url(
             self.config['web_path'])
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield super(TestSafaricomTransportTestCase, self).tearDown()
-        self.transport.r_server.teardown()
+        yield self.session_manager.redis._purge_all()  # just in case
 
     def mk_full_request(self, **params):
         return http_request('%s?%s' % (self.transport_url,
@@ -73,7 +65,7 @@ class TestSafaricomTransportTestCase(TransportTestCase):
     @inlineCallbacks
     def test_inbound_resume_and_reply_with_end(self):
         # first pre-populate the redis datastore to simulate prior BEG message
-        self.session_manager.create_session('session-id',
+        yield self.session_manager.create_session('session-id',
                 to_addr='*167*7#', from_addr='27761234567',
                 last_ussd_params='7*a*b',
                 session_event=TransportUserMessage.SESSION_RESUME)
@@ -167,7 +159,7 @@ class TestSafaricomTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_submitting_asterisks_as_values(self):
-        self.session_manager.create_session('session-id',
+        yield self.session_manager.create_session('session-id',
                 to_addr='*167*7#', from_addr='27761234567',
                 last_ussd_params='7*a*b')
         # we're submitting a bunch of *s
@@ -180,12 +172,12 @@ class TestSafaricomTransportTestCase(TransportTestCase):
             continue_session=True)
         self.dispatch(reply)
         yield deferred
-        session = self.session_manager.load_session('session-id')
+        session = yield self.session_manager.load_session('session-id')
         self.assertEqual(session['last_ussd_params'], '7*a*b*****')
 
     @inlineCallbacks
     def test_submitting_asterisks_as_values_after_asterisks(self):
-        self.session_manager.create_session('session-id',
+        yield self.session_manager.create_session('session-id',
                 to_addr='*167*7#', from_addr='27761234567',
                 last_ussd_params='7*a*b**')
         # we're submitting a bunch of *s
@@ -198,5 +190,5 @@ class TestSafaricomTransportTestCase(TransportTestCase):
             continue_session=True)
         self.dispatch(reply)
         yield deferred
-        session = self.session_manager.load_session('session-id')
+        session = yield self.session_manager.load_session('session-id')
         self.assertEqual(session['last_ussd_params'], '7*a*b*****')

@@ -12,7 +12,8 @@ from twisted.internet.protocol import Protocol, Factory
 from vumi.utils import (normalize_msisdn, vumi_resource_path, cleanup_msisdn,
                         get_operator_name, http_request, http_request_full,
                         get_first_word, redis_from_config)
-from vumi.tests.utils import FakeRedis
+from vumi.persist.fake_redis import FakeRedis
+from vumi.tests.utils import import_skip
 
 
 class UtilsTestCase(TestCase):
@@ -60,12 +61,18 @@ class UtilsTestCase(TestCase):
         self.assertEqual('', get_first_word(None))
 
     def test_redis_from_config_str(self):
-        fake_redis = redis_from_config("FAKE_REDIS")
+        try:
+            fake_redis = redis_from_config("FAKE_REDIS")
+        except ImportError, e:
+            import_skip(e, 'redis')
         self.assertTrue(isinstance(fake_redis, FakeRedis))
 
     def test_redis_from_config_fake_redis(self):
         fake_redis = FakeRedis()
-        self.assertEqual(redis_from_config(fake_redis), fake_redis)
+        try:
+            self.assertEqual(redis_from_config(fake_redis), fake_redis)
+        except ImportError, e:
+            import_skip(e, 'redis')
 
 
 class FakeHTTP10(Protocol):
