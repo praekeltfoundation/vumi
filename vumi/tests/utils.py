@@ -11,6 +11,7 @@ from functools import wraps
 import pytz
 from twisted.trial.unittest import SkipTest
 from twisted.internet import defer, reactor
+from twisted.internet.error import ConnectionRefusedError
 from twisted.web.resource import Resource
 from twisted.web.server import Site
 from twisted.internet.defer import DeferredQueue, inlineCallbacks
@@ -355,11 +356,22 @@ class PersistenceMixin(object):
     def _persist_tearDown(self):
         # We don't always have all the managers we want to clean up.
         # Therefore, we create one of each with the base configuration.
-        yield self.get_redis_manager()
-        yield self.get_riak_manager()
+        # We may not have all the bits necessary here, so we ignore certain
+        # exceptions.
+        try:
+            yield self.get_redis_manager()
+        except (SkipTest, ConnectionRefusedError):
+            pass
+        try:
+            yield self.get_riak_manager()
+        except SkipTest:
+            pass
 
         for manager in self._persist_riak_managers:
-            yield self._persist_purge_riak(manager)
+            try:
+                yield self._persist_purge_riak(manager)
+            except ConnectionRefusedError:
+                pass
         for manager in self._persist_redis_managers:
             yield self._persist_purge_redis(manager)
 
