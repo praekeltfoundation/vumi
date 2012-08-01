@@ -48,7 +48,7 @@ class BaseSmsSyncTransport(HttpRpcTransport):
         The amount of time to wait (in seconds) for a reply message
         before closing the SMSSync HTTP inbound message
         request. Replies received within this amount of time will be
-        returned with the reply (default: 0.1s).
+        returned with the reply (default: 0.5s).
     """
 
     transport_type = 'sms'
@@ -61,7 +61,7 @@ class BaseSmsSyncTransport(HttpRpcTransport):
 
     def validate_config(self):
         super(BaseSmsSyncTransport, self).validate_config()
-        self._reply_delay = float(self.config.get('reply_delay', '0.1'))
+        self._reply_delay = float(self.config.get('reply_delay', '0.5'))
 
     @inlineCallbacks
     def setup_transport(self):
