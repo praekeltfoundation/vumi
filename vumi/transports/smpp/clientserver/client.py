@@ -392,7 +392,7 @@ class EsmeTransceiver(Protocol):
         if pdu['header']['command_status'] == 'ESME_ROK':
             log.msg("enquire_link_resp OK")
         else:
-            log.msg("enquire_link NOT OK: %r" % (pdu,))
+            log.msg("enquire_link_resp NOT OK: %r" % (pdu,))
 
     def get_unacked_count(self):
         return self.redis.llen("unacked").addCallback(int)
