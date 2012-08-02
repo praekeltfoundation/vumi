@@ -2,16 +2,15 @@
 
 from datetime import datetime
 
-from twisted.python import log
 from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, returnValue
 
+from vumi import log
 from vumi.utils import get_operator_number
 from vumi.transports.base import Transport
-from vumi.transports.smpp.clientserver.client import (EsmeTransceiverFactory,
-                                                      EsmeTransmitterFactory,
-                                                      EsmeReceiverFactory,
-                                                      EsmeCallbacks)
+from vumi.transports.smpp.clientserver.client import (
+    EsmeTransceiverFactory, EsmeTransmitterFactory, EsmeReceiverFactory,
+    EsmeCallbacks)
 from vumi.transports.smpp.clientserver.config import ClientConfig
 from vumi.transports.failures import FailureMessage
 from vumi.message import Message, TransportUserMessage
@@ -167,8 +166,8 @@ class SmppTransport(Transport):
 
     @inlineCallbacks
     def handle_outbound_message(self, message):
-        log.msg("Consumed outgoing message", message)
-        log.msg("Unacknowledged message count: %s" % (
+        log.debug("Consumed outgoing message", message)
+        log.debug("Unacknowledged message count: %s" % (
                 (yield self.esme_client.get_unacked_count()),))
         yield self.r_set_message(message)
         sequence_number = yield self.send_smpp(message)
@@ -255,9 +254,9 @@ class SmppTransport(Transport):
     @inlineCallbacks
     def submit_sm_success(self, sent_sms_id, transport_msg_id):
         yield self.r_delete_message(sent_sms_id)
-        log.msg("Mapping transport_msg_id=%s to sent_sms_id=%s" % (
+        log.debug("Mapping transport_msg_id=%s to sent_sms_id=%s" % (
             transport_msg_id, sent_sms_id))
-        log.msg("PUBLISHING ACK: (%s -> %s)" % (
+        log.debug("PUBLISHING ACK: (%s -> %s)" % (
             sent_sms_id, transport_msg_id))
         self.publish_ack(
             user_message_id=sent_sms_id,
@@ -340,7 +339,7 @@ class SmppTransport(Transport):
             log.err(e)
 
     def send_smpp(self, message):
-        log.msg("Sending SMPP message: %s" % (message))
+        log.debug("Sending SMPP message: %s" % (message))
         # first do a lookup in our YAML to see if we've got a source_addr
         # defined for the given MT number, if not, trust the from_addr
         # in the message

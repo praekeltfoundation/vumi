@@ -3,7 +3,6 @@
 import json
 import uuid
 
-from twisted.python import log
 from twisted.internet import reactor
 from twisted.internet.protocol import Protocol, ReconnectingClientFactory
 from twisted.internet.task import LoopingCall
@@ -25,6 +24,8 @@ from smpp.pdu_inspector import (MultipartMessage,
                                 detect_multipart,
                                 multipart_key,
                                 )
+
+from vumi import log
 
 
 def unpacked_pdu_opts(unpacked_pdu):
@@ -140,13 +141,13 @@ class EsmeTransceiver(Protocol):
     @inlineCallbacks
     def handle_data(self, data):
         pdu = unpack_pdu(data)
-        log.msg('INCOMING <<<< %s' % binascii.b2a_hex(data))
-        log.msg('INCOMING <<<< %s' % pdu)
         command_id = pdu['header']['command_id']
+        if command_id not in ('enquire_link', 'enquire_link_resp'):
+            log.debug('INCOMING <<<< %s' % binascii.b2a_hex(data))
+            log.debug('INCOMING <<<< %s' % pdu)
         handler = getattr(self, 'handle_%s' % (command_id,),
                           self._command_handler_not_found)
         yield handler(pdu)
-        log.msg('STATE: %s' % (self.state,))
 
     @inlineCallbacks
     def _process_pdu_queue(self):
@@ -198,7 +199,7 @@ class EsmeTransceiver(Protocol):
 
     def send_pdu(self, pdu):
         data = pdu.get_bin()
-        log.msg('OUTGOING >>>> %s' % unpack_pdu(data))
+        log.debug('OUTGOING >>>> %s' % unpack_pdu(data))
         self.transport.write(data)
 
     @inlineCallbacks
@@ -354,10 +355,10 @@ class EsmeTransceiver(Protocol):
     def _handle_deliver_sm_multipart(self, pdu, pdu_params):
         message_id = str(uuid.uuid4())
         redis_key = "multi_%s" % (multipart_key(detect_multipart(pdu)),)
-        log.msg("Redis multipart key: %s" % (redis_key))
+        log.debug("Redis multipart key: %s" % (redis_key))
         value = yield self.redis.get(redis_key)
         value = json.loads(value or 'null')
-        log.msg("Retrieved value: %s" % (repr(value)))
+        log.debug("Retrieved value: %s" % (repr(value)))
         multi = MultipartMessage(value)
         multi.add_pdu(pdu)
         completed = multi.get_completed()
@@ -377,6 +378,7 @@ class EsmeTransceiver(Protocol):
 
     def handle_enquire_link(self, pdu):
         if pdu['header']['command_status'] == 'ESME_ROK':
+            log.msg("enquire_link OK")
             sequence_number = pdu['header']['sequence_number']
             pdu_resp = EnquireLinkResp(sequence_number)
             self.send_pdu(pdu_resp)
