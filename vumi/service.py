@@ -329,11 +329,11 @@ class Consumer(object):
 
     @inlineCallbacks
     def stop(self):
+        log.msg("Consumer stopping...")
         self.keep_consuming = False
-        # This just marks the channel as closed on the client
-        #self.channel.close(None)
         # This actually closes the channel on the server
         yield self.channel.channel_close()
+        # This just marks the channel as closed on the client
         self.channel.close(None)
         returnValue(self.keep_consuming)
 
