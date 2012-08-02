@@ -14,7 +14,7 @@ class StoringMiddleware(BaseMiddleware):
     Middleware for storing inbound and outbound messages and events.
 
     Failures are not stored currently because these are typically
-    stored by :class:`vumi.transports.FailureWorker`s.
+    stored by :class:`vumi.transports.FailureWorker` instances.
 
     Messages are always stored. However, in order for messages to be
     associated with a particular batch_id (
