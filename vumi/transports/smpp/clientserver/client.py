@@ -199,7 +199,10 @@ class EsmeTransceiver(Protocol):
 
     def send_pdu(self, pdu):
         data = pdu.get_bin()
-        log.debug('OUTGOING >>>> %s' % unpack_pdu(data))
+        unpacked = unpack_pdu(data)
+        command_id = unpacked['header']['command_id']
+        if command_id not in ('enquire_link', 'enquire_link_resp'):
+            log.debug('OUTGOING >>>> %s' % unpacked)
         self.transport.write(data)
 
     @inlineCallbacks
@@ -382,10 +385,14 @@ class EsmeTransceiver(Protocol):
             sequence_number = pdu['header']['sequence_number']
             pdu_resp = EnquireLinkResp(sequence_number)
             self.send_pdu(pdu_resp)
+        else:
+            log.msg("enquire_link NOT OK: %r" % (pdu,))
 
     def handle_enquire_link_resp(self, pdu):
         if pdu['header']['command_status'] == 'ESME_ROK':
-            pass
+            log.msg("enquire_link_resp OK")
+        else:
+            log.msg("enquire_link NOT OK: %r" % (pdu,))
 
     def get_unacked_count(self):
         return self.redis.llen("unacked").addCallback(int)
