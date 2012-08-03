@@ -57,7 +57,8 @@ class OperaTransportTestCase(TransportTestCase):
         message_id = '123456'
         # prime redis to match the incoming identifier to an
         # internal message id
-        self.transport.set_message_id_for_identifier(identifier, message_id)
+        yield self.transport.set_message_id_for_identifier(
+            identifier, message_id)
 
         xml_data = """
         <?xml version="1.0"?>
@@ -76,7 +77,7 @@ class OperaTransportTestCase(TransportTestCase):
         yield http_request('%s/receipt.xml' % self.url, xml_data)
         self.assertEqual([], self.get_dispatched_failures())
         self.assertEqual([], self.get_dispatched_messages())
-        [event] = self.get_dispatched_events()
+        [event] = yield self.wait_for_dispatched_events(1)
         self.assertEqual(event['delivery_status'], 'delivered')
         self.assertEqual(event['message_type'], 'event')
         self.assertEqual(event['event_type'], 'delivery_report')

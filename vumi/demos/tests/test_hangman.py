@@ -158,6 +158,7 @@ class TestHangmanWorker(ApplicationTestCase):
                 'worker_name': 'test_hangman',
                 'random_word_url': random_word_url,
                 })
+        yield self.worker.session_manager.redis._purge_all()  # just in case
 
     @inlineCallbacks
     def send(self, content, session_event=None):

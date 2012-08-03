@@ -7,9 +7,8 @@ from vumi.persist.model import Model, Manager
 from vumi.persist.fields import (
     ValidationError, Integer, Unicode, VumiMessage, Dynamic, ListOf,
     ForeignKey, ManyToMany)
-from vumi.persist.riak_manager import RiakManager
-from vumi.persist.txriak_manager import TxRiakManager
 from vumi.message import TransportUserMessage
+from vumi.tests.utils import import_skip
 
 
 class SimpleModel(Model):
@@ -63,6 +62,10 @@ class TestModelOnTxRiak(TestCase):
 
     @inlineCallbacks
     def setUp(self):
+        try:
+            from vumi.persist.txriak_manager import TxRiakManager
+        except ImportError, e:
+            import_skip(e, 'riakasaurus.riak')
         self.manager = TxRiakManager.from_config({'bucket_prefix': 'test.'})
         yield self.manager.purge_all()
 
@@ -451,5 +454,10 @@ class TestModelOnTxRiak(TestCase):
 class TestModelOnRiak(TestModelOnTxRiak):
 
     def setUp(self):
+        try:
+            from vumi.persist.riak_manager import RiakManager
+        except ImportError, e:
+            import_skip(e, 'riak')
+
         self.manager = RiakManager.from_config({'bucket_prefix': 'test.'})
         self.manager.purge_all()

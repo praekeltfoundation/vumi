@@ -3,8 +3,8 @@
 from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
 
-from vumi.persist.txriak_manager import TxRiakManager
 from vumi.persist.model import Manager
+from vumi.tests.utils import import_skip
 
 
 class DummyModel(object):
@@ -135,14 +135,18 @@ class CommonRiakManagerTests(object):
 
 
 class TestTxRiakManager(CommonRiakManagerTests, TestCase):
+
     @inlineCallbacks
     def setUp(self):
+        try:
+            from vumi.persist.txriak_manager import TxRiakManager
+        except ImportError, e:
+            import_skip(e, 'riakasaurus.riak')
         self.manager = TxRiakManager.from_config({'bucket_prefix': 'test.'})
         yield self.manager.purge_all()
 
-    @inlineCallbacks
     def tearDown(self):
-        yield self.manager.purge_all()
+        return self.manager.purge_all()
 
     def test_call_decorator(self):
-        self.assertEqual(TxRiakManager.call_decorator, inlineCallbacks)
+        self.assertEqual(type(self.manager).call_decorator, inlineCallbacks)

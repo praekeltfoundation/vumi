@@ -14,7 +14,7 @@ class StoringMiddleware(BaseMiddleware):
     Middleware for storing inbound and outbound messages and events.
 
     Failures are not stored currently because these are typically
-    stored by :class:`vumi.transports.FailureWorker`s.
+    stored by :class:`vumi.transports.FailureWorker` instances.
 
     Messages are always stored. However, in order for messages to be
     associated with a particular batch_id (
@@ -41,9 +41,14 @@ class StoringMiddleware(BaseMiddleware):
     def setup_middleware(self):
         store_prefix = self.config.get('store_prefix', 'message_store')
         r_config = self.config.get('redis_manager', {})
-        redis = yield TxRedisManager.from_config(r_config)
+        self.redis = yield TxRedisManager.from_config(r_config)
         manager = TxRiakManager.from_config(self.config.get('riak_manager'))
-        self.store = MessageStore(manager, redis.sub_manager(store_prefix))
+        self.store = MessageStore(manager,
+                                  self.redis.sub_manager(store_prefix))
+
+    @inlineCallbacks
+    def teardown_middleware(self):
+        yield self.redis.close_manager()
 
     @inlineCallbacks
     def handle_inbound(self, message, endpoint):

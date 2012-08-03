@@ -16,6 +16,7 @@ class TestMemoWorker(ApplicationTestCase):
     def setUp(self):
         super(TestMemoWorker, self).setUp()
         self.worker = yield self.get_application({'worker_name': 'testmemo'})
+        yield self.worker.redis._purge_all()  # just in case
 
     @inlineCallbacks
     def send(self, content, from_addr='testnick', channel=None):

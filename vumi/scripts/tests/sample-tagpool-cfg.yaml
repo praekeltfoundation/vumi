@@ -1,6 +1,6 @@
 redis_manager:
   FAKE_REDIS: yay
-  key_prefix: vumi.test.tagpools
+  key_prefix: vumi.scripts.tests.test_vumi_tagpools
 tagpool_prefix: vumi
 pools:
   shortcode:

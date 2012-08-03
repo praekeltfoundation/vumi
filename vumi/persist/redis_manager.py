@@ -4,7 +4,7 @@ import redis
 
 from vumi.persist.redis_base import Manager
 from vumi.persist.fake_redis import FakeRedis
-from vumi.persist.riak_manager import flatten_generator
+from vumi.utils import flatten_generator
 
 
 class RedisManager(Manager):

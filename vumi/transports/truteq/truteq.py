@@ -11,7 +11,7 @@ from ssmi import client
 from vumi.utils import normalize_msisdn
 from vumi.message import TransportUserMessage
 from vumi.transports.base import Transport
-from vumi.components import SessionManager
+from vumi.components.session import SessionManager
 
 
 # # Turn on debug logging in the SSMI library.
@@ -85,9 +85,10 @@ class TruteqTransport(Transport):
         ssmi_d = Deferred()
         # the strange wrapping of the funciton in a lambda is to get around
         # an odd type check in client.SSMIClient.__init__.
-        factory = client.SSMIFactory(
+        self.factory = client.SSMIFactory(
             lambda ssmi_client: self._setup_ssmi_client(ssmi_client, ssmi_d))
-        self.ssmi_connector = reactor.connectTCP(self.host, self.port, factory)
+        self.ssmi_connector = reactor.connectTCP(
+            self.host, self.port, self.factory)
 
         self.session_manager = yield SessionManager.from_redis_config(
             self.r_config, self.r_prefix, self.ussd_session_lifetime)
@@ -104,6 +105,7 @@ class TruteqTransport(Transport):
 
     @inlineCallbacks
     def teardown_transport(self):
+        self.factory.stopTrying()
         yield self.ssmi_connector.disconnect()
         yield self.session_manager.stop()
 
@@ -124,7 +126,7 @@ class TruteqTransport(Transport):
             text = message
 
         if session_event == TransportUserMessage.SESSION_CLOSE:
-            self.session_manager.clear_session(msisdn)
+            yield self.session_manager.clear_session(msisdn)
 
         self.publish_message(
             from_addr=msisdn,
