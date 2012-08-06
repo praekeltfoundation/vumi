@@ -21,7 +21,7 @@ Depends:
  python-yaml,
  python-zope.interface,
  rabbitmq-server,
- redis-server (>= 2:2.4.10-ubuntu1~),
+ redis-server (>= 2:2.2),
  ${misc:Depends},
  ${python:Depends}
 Recommends:
