@@ -31,7 +31,9 @@ class CellulantSmsTransport(HttpRpcTransport):
 
     transport_type = 'sms'
 
-    EXPECTED_FIELDS = set(['msisdn', 'source', 'message'])
+    EXPECTED_FIELDS = set(["SOURCEADDR", "DESTADDR", "MESSAGE", "ID"])
+    IGNORED_FIELDS = set(["channelID", "keyword", "CHANNELID", "serviceID",
+                          "SERVICEID", "unsub"])
 
     def setup_transport(self):
         self._username = self.config['username']
@@ -58,7 +60,7 @@ class CellulantSmsTransport(HttpRpcTransport):
         values = {}
         errors = {}
         for field in request.args:
-            if field not in self.EXPECTED_FIELDS:
+            if field not in (self.EXPECTED_FIELDS | self.IGNORED_FIELDS):
                 errors.setdefault('unexpected_parameter', []).append(field)
             else:
                 values[field] = str(request.args.get(field)[0])
@@ -74,15 +76,16 @@ class CellulantSmsTransport(HttpRpcTransport):
             log.msg('Unhappy incoming message: %s' % (errors,))
             yield self.finish_request(message_id, json.dumps(errors), code=400)
             return
-        log.msg(('CellulantSmsTransport sending from %(msisdn)s to %(source)s '
-                 'message "%(message)s"') % values)
+        log.msg(('CellulantSmsTransport sending from %(SOURCEADDR)s to '
+                 '%(DESTADDR)s message "%(MESSAGE)s"') % values)
         yield self.publish_message(
             message_id=message_id,
-            content=values['message'],
-            to_addr=values['source'],
-            from_addr=values['msisdn'],
+            content=values['MESSAGE'],
+            to_addr=values['DESTADDR'],
+            from_addr=values['SOURCEADDR'],
             provider='vumi',
             transport_type=self.transport_type,
+            transport_metadata={'transport_message_id': values['ID']},
         )
         yield self.finish_request(
             message_id, json.dumps({'message_id': message_id}))

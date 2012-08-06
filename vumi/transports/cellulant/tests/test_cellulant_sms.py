@@ -48,9 +48,10 @@ class TestCellulantSmsTransport(TransportTestCase):
 
     def mkurl(self, content, from_addr="2371234567", **kw):
         params = {
-            'source': '12345',
-            'msisdn': from_addr,
-            'message': content,
+            'SOURCEADDR': from_addr,
+            'DESTADDR': '12345',
+            'MESSAGE': content,
+            'ID': '1234567',
             }
         params.update(kw)
         return self.mkurl_raw(**params)
@@ -116,8 +117,18 @@ class TestCellulantSmsTransport(TransportTestCase):
 
     @inlineCallbacks
     def test_missing_parameters(self):
-        url = self.mkurl_raw(source='12345', message='hello')
+        url = self.mkurl_raw(ID='12345678', DESTADDR='12345', MESSAGE='hello')
         response = yield http_request_full(url, '', method='GET')
         self.assertEqual(400, response.code)
         self.assertEqual(json.loads(response.delivered_body),
-                         {'missing_parameter': ['msisdn']})
+                         {'missing_parameter': ['SOURCEADDR']})
+
+    @inlineCallbacks
+    def test_ignored_parameters(self):
+        url = self.mkurl('hello', channelID='a', keyword='b', CHANNELID='c',
+                         serviceID='d', SERVICEID='e', unsub='f')
+        response = yield http_request(url, '', method='GET')
+        [msg] = self.get_dispatched_messages()
+        self.assertEqual(msg['content'], "hello")
+        self.assertEqual(json.loads(response),
+                         {'message_id': msg['message_id']})
