@@ -216,6 +216,21 @@ class EsmeReceiverMixin(EsmeGenericMixin):
         yield esme.handle_deliver_sm(self.get_sm('hello'))
 
     @inlineCallbacks
+    def test_deliver_sm_data_coding_override(self):
+        """A simple message should be delivered."""
+        esme = yield self.get_esme(
+            deliver_sm=self.assertion_cb(u'hello', 'short_message'))
+        esme.config.data_coding_overrides = {0: 'utf-16be'}
+        yield esme.handle_deliver_sm(
+            self.get_sm('\x00h\x00e\x00l\x00l\x00o', 0))
+
+        esme = yield self.get_esme(
+            deliver_sm=self.assertion_cb(u'hello', 'short_message'))
+        esme.config.data_coding_overrides = {0: 'ascii'}
+        yield esme.handle_deliver_sm(
+            self.get_sm('hello', 0))
+
+    @inlineCallbacks
     def test_deliver_sm_ucs2(self):
         """A UCS-2 message should be delivered."""
         esme = yield self.get_esme(
