@@ -316,16 +316,12 @@ class SmppTransport(Transport):
             }
 
         if message_type == 'ussd':
-            session_event = TransportUserMessage.SESSION_CLOSE
-            if kwargs['continue_session']:
-                if kwargs['short_message'] is None:
-                    # Assume an empty message is a session start.
-                    session_event = TransportUserMessage.SESSION_NEW
-                else:
-                    session_event = TransportUserMessage.SESSION_RESUME
-            message.update({
-                    'session_event': session_event
-                    })
+            session_event = {
+                'new': TransportUserMessage.SESSION_NEW,
+                'continue': TransportUserMessage.SESSION_RESUME,
+                'close': TransportUserMessage.SESSION_CLOSE,
+                }[kwargs['session_event']]
+            message['session_event'] = session_event
 
         log.msg("PUBLISHING INBOUND: %s" % (message,))
         # TODO: This logs messages that fail to serialize to JSON

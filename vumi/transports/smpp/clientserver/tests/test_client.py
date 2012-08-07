@@ -257,13 +257,13 @@ class EsmeReceiverMixin(EsmeGenericMixin):
     def test_deliver_sm_ussd_start(self):
         def assert_ussd(value):
             self.assertEqual('ussd', value['message_type'])
-            self.assertEqual(True, value['continue_session'])
+            self.assertEqual('new', value['session_event'])
             self.assertEqual(None, value['short_message'])
 
         esme = yield self.get_esme(deliver_sm=self.make_cb(assert_ussd))
 
         sm = DeliverSM(1)
-        sm._PDU__add_optional_parameter('ussd_service_op', '02')
+        sm._PDU__add_optional_parameter('ussd_service_op', '01')
         sm._PDU__add_optional_parameter('its_session_info', '0000')
 
         yield esme.handle_deliver_sm(unpack_pdu(sm.get_bin()))

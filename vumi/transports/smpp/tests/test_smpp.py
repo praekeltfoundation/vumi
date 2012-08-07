@@ -878,7 +878,7 @@ class RxEsmeToSmscTestCase(TransportTestCase):
 
         pdu = DeliverSM(
             555, destination_addr="2772222222", source_addr="2772000000")
-        pdu._PDU__add_optional_parameter('ussd_service_op', '02')
+        pdu._PDU__add_optional_parameter('ussd_service_op', '01')
         pdu._PDU__add_optional_parameter('its_session_info', '0000')
         self.service.factory.smsc.send_pdu(pdu)
 

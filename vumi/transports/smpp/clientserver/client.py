@@ -327,9 +327,25 @@ class EsmeTransceiver(Protocol):
             yield self._handle_deliver_sm_sms(pdu_params)
 
     def _handle_deliver_sm_ussd(self, pdu, pdu_params):
-        pdu_opts = unpacked_pdu_opts(pdu)
+        # Some of this stuff might be specific to Tata's setup.
 
-        continue_session = (int(pdu_opts['its_session_info'], 16) % 2 == 0)
+        pdu_opts = unpacked_pdu_opts(pdu)
+        service_op = pdu_opts['ussd_service_op']
+
+        session_event = 'close'
+        if service_op == '01':
+            # PSSR request. Let's assume it means a new session.
+            session_event = 'new'
+        elif service_op == '11':
+            # PSSR response. This means session end.
+            session_event = 'close'
+        elif service_op in ('02', '12'):
+            # USSR request or response. I *think* we only get the latter.
+            session_event = 'continue'
+
+        if (int(pdu_opts['its_session_info'], 16) % 2) == 1:
+            # We have an explicit "end session" flag.
+            session_event = 'close'
 
         message_id = str(uuid.uuid4())
         decoded_msg = self._decode_message(pdu_params['short_message'],
@@ -340,7 +356,7 @@ class EsmeTransceiver(Protocol):
             short_message=decoded_msg,
             message_id=message_id,
             message_type='ussd',
-            continue_session=continue_session,
+            session_event=session_event,
             )
 
     def _handle_deliver_sm_sms(self, pdu_params):
