@@ -250,7 +250,10 @@ class Worker(MultiService, object):
         resources = sorted(resources, key=lambda r: len(r[1]))
         for resource, path in resources:
             request_path = filter(None, path.split('/'))
-            nodes, leaf = request_path[0:-1], request_path[-1]
+            nodes = request_path[0:-1]
+            leaf = ''
+            if len(request_path) > 0:
+                leaf = request_path[-1]
 
             def create_node(node, path):
                 if path in node.children:
