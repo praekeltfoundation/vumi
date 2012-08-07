@@ -13,7 +13,7 @@ class RedisManagerTestCase(TestCase):
             import_skip(e, 'redis')
 
         self.manager = RedisManager.from_config(
-            {'FAKE_REDIS': None,
+            {'FAKE_REDIS': 'yes',
              'key_prefix': 'redistest'})
         self.manager._purge_all()
 
