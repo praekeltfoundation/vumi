@@ -177,7 +177,8 @@ class EsmeTransmitterMixin(EsmeGenericMixin):
         """Submit a USSD message with a session continue flag."""
         esme = yield self.get_esme()
         yield esme.submit_sm(
-            short_message='hello', message_type='ussd', continue_session=True)
+            short_message='hello', message_type='ussd', continue_session=True,
+            session_info='0100')
         [sm_pdu] = esme.fake_sent_pdus
         sm = unpack_pdu(sm_pdu.get_bin())
         pdu_opts = unpacked_pdu_opts(sm)
@@ -186,7 +187,7 @@ class EsmeTransmitterMixin(EsmeGenericMixin):
         self.assertEqual(
             'hello', sm['body']['mandatory_parameters']['short_message'])
         self.assertEqual('02', pdu_opts['ussd_service_op'])
-        self.assertEqual('0000', pdu_opts['its_session_info'])
+        self.assertEqual('0100', pdu_opts['its_session_info'])
 
     @inlineCallbacks
     def test_submit_sm_ussd_close(self):

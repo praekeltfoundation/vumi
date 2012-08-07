@@ -313,6 +313,7 @@ class SmppTransport(Transport):
             'from_addr': kwargs['source_addr'],
             'content': kwargs['short_message'],
             'transport_type': message_type,
+            'transport_metadata': {},
             }
 
         if message_type == 'ussd':
@@ -322,6 +323,8 @@ class SmppTransport(Transport):
                 'close': TransportUserMessage.SESSION_CLOSE,
                 }[kwargs['session_event']]
             message['session_event'] = session_event
+            session_info = kwargs.get('session_info')
+            message['transport_metadata']['session_info'] = session_info
 
         log.msg("PUBLISHING INBOUND: %s" % (message,))
         # TODO: This logs messages that fail to serialize to JSON
@@ -354,6 +357,7 @@ class SmppTransport(Transport):
                 source_addr=route,
                 message_type=message['transport_type'],
                 continue_session=continue_session,
+                session_info=message['transport_metadata'].get('session_info'),
                 )
 
     def stopWorker(self):

@@ -40,8 +40,10 @@ def detect_ussd(pdu):
     return ('ussd_service_op' in unpacked_pdu_opts(pdu))
 
 
-def update_ussd_pdu(sm_pdu, continue_session):
-    session_info = '0000' if continue_session else '0001'
+def update_ussd_pdu(sm_pdu, continue_session, session_info=None):
+    if session_info is None:
+        session_info = '0000'
+    session_info = "%04x" % (int(session_info, 16) + int(not continue_session))
     sm_pdu._PDU__add_optional_parameter('ussd_service_op', '02')
     sm_pdu._PDU__add_optional_parameter('its_session_info', session_info)
     return sm_pdu
@@ -343,7 +345,19 @@ class EsmeTransceiver(Protocol):
             # USSR request or response. I *think* we only get the latter.
             session_event = 'continue'
 
-        if (int(pdu_opts['its_session_info'], 16) % 2) == 1:
+        # According to the spec, the first octet is the session id and the
+        # second is the client dialog id (first 7 bits) and end session flag
+        # (last bit).
+
+        # Since we don't use the client dialog id and the spec says it's
+        # ESME-defined, treat the whole thing as opaque "session info" that
+        # gets passed back in reply messages.
+
+        its_session_number = int(pdu_opts['its_session_info'], 16)
+        end_session = bool(its_session_number % 2)
+        session_info = "%04x" % (its_session_number & 0xfffe)
+
+        if end_session:
             # We have an explicit "end session" flag.
             session_event = 'close'
 
@@ -357,6 +371,7 @@ class EsmeTransceiver(Protocol):
             message_id=message_id,
             message_type='ussd',
             session_event=session_event,
+            session_info=session_info,
             )
 
     def _handle_deliver_sm_sms(self, pdu_params):
@@ -433,7 +448,8 @@ class EsmeTransceiver(Protocol):
         sequence_number = yield self.get_next_seq()
         pdu = SubmitSM(sequence_number, **dict(self.defaults, **kwargs))
         if kwargs.get('message_type', 'sms') == 'ussd':
-            update_ussd_pdu(pdu, kwargs.get('continue_session', True))
+            update_ussd_pdu(pdu, kwargs.get('continue_session', True),
+                            kwargs.get('session_info', None))
         self.send_pdu(pdu)
         yield self.push_unacked(sequence_number)
         returnValue(sequence_number)
