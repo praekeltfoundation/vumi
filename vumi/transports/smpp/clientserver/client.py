@@ -10,20 +10,11 @@ from twisted.internet.defer import inlineCallbacks, returnValue, DeferredQueue
 
 import binascii
 from smpp.pdu import unpack_pdu
-from smpp.pdu_builder import (BindTransceiver,
-                                BindTransmitter,
-                                BindReceiver,
-                                DeliverSMResp,
-                                SubmitSM,
-                                SubmitMulti,
-                                EnquireLink,
-                                EnquireLinkResp,
-                                QuerySM,
-                                )
-from smpp.pdu_inspector import (MultipartMessage,
-                                detect_multipart,
-                                multipart_key,
-                                )
+from smpp.pdu_builder import (
+    BindTransceiver, BindTransmitter, BindReceiver, DeliverSMResp, SubmitSM,
+    SubmitMulti, EnquireLink, EnquireLinkResp, QuerySM)
+from smpp.pdu_inspector import (
+    MultipartMessage, detect_multipart, multipart_key)
 
 from vumi import log
 
@@ -456,31 +447,34 @@ class EsmeTransceiver(Protocol):
 
     @inlineCallbacks
     def submit_multi(self, dest_address=[], **kwargs):
-        if self.state in ['BOUND_TX', 'BOUND_TRX']:
-            sequence_number = yield self.get_next_seq()
-            pdu = SubmitMulti(sequence_number, **dict(self.defaults, **kwargs))
-            for item in dest_address:
-                if isinstance(item, str):
-                    # assume strings are addresses not lists
+        if self.state not in ['BOUND_TX', 'BOUND_TRX']:
+            log.err(('WARNING: submit_sm in wrong state: %s, '
+                     'dropping message: %s' % (self.state, kwargs)))
+            returnValue(0)
+
+        sequence_number = yield self.get_next_seq()
+        pdu = SubmitMulti(sequence_number, **dict(self.defaults, **kwargs))
+        for item in dest_address:
+            if isinstance(item, str):
+                # assume strings are addresses not lists
+                pdu.addDestinationAddress(
+                    item,
+                    dest_addr_ton=self.defaults['dest_addr_ton'],
+                    dest_addr_npi=self.defaults['dest_addr_npi'],
+                    )
+            elif isinstance(item, dict):
+                if item.get('dest_flag') == 1:
                     pdu.addDestinationAddress(
-                            item,
-                            dest_addr_ton=self.defaults['dest_addr_ton'],
-                            dest_addr_npi=self.defaults['dest_addr_npi'],
-                            )
-                elif isinstance(item, dict):
-                    if item.get('dest_flag') == 1:
-                        pdu.addDestinationAddress(
-                                item.get('destination_addr', ''),
-                                dest_addr_ton=item.get('dest_addr_ton',
-                                    self.defaults['dest_addr_ton']),
-                                dest_addr_npi=item.get('dest_addr_npi',
-                                    self.defaults['dest_addr_npi']),
-                                )
-                    elif item.get('dest_flag') == 2:
-                        pdu.addDistributionList(item.get('dl_name'))
-            self.send_pdu(pdu)
-            returnValue(sequence_number)
-        returnValue(0)
+                        item.get('destination_addr', ''),
+                        dest_addr_ton=item.get(
+                            'dest_addr_ton', self.defaults['dest_addr_ton']),
+                        dest_addr_npi=item.get(
+                            'dest_addr_npi', self.defaults['dest_addr_npi']),
+                        )
+                elif item.get('dest_flag') == 2:
+                    pdu.addDistributionList(item.get('dl_name'))
+        self.send_pdu(pdu)
+        returnValue(sequence_number)
 
     @inlineCallbacks
     def enquire_link(self, **kwargs):
