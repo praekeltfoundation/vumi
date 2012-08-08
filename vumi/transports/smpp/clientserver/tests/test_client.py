@@ -173,6 +173,23 @@ class EsmeTransmitterMixin(EsmeGenericMixin):
         self.assertEqual([], sm['body'].get('optional_parameters', []))
 
     @inlineCallbacks
+    def test_submit_sm_sms_long(self):
+        """Submit a USSD message with a session continue flag."""
+        esme = yield self.get_esme()
+        esme.config.send_long_messages = True
+        long_message = 'This is a long message.' * 20
+        yield esme.submit_sm(short_message=long_message)
+        [sm_pdu] = esme.fake_sent_pdus
+        sm = unpack_pdu(sm_pdu.get_bin())
+        pdu_opts = unpacked_pdu_opts(sm)
+
+        self.assertEqual('submit_sm', sm['header']['command_id'])
+        self.assertEqual(
+            None, sm['body']['mandatory_parameters']['short_message'])
+        self.assertEqual(''.join('%02x' % ord(c) for c in long_message),
+                         pdu_opts['message_payload'])
+
+    @inlineCallbacks
     def test_submit_sm_ussd_continue(self):
         """Submit a USSD message with a session continue flag."""
         esme = yield self.get_esme()

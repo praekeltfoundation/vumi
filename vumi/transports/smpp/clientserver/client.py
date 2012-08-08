@@ -437,10 +437,18 @@ class EsmeTransceiver(Protocol):
             returnValue(0)
 
         sequence_number = yield self.get_next_seq()
-        pdu = SubmitSM(sequence_number, **dict(self.defaults, **kwargs))
+        pdu_params = self.defaults.copy()
+        pdu_params.update(kwargs)
+
+        pdu = SubmitSM(sequence_number, **pdu_params)
         if kwargs.get('message_type', 'sms') == 'ussd':
             update_ussd_pdu(pdu, kwargs.get('continue_session', True),
                             kwargs.get('session_info', None))
+
+        message = pdu_params['short_message']
+        if self.config.send_long_messages and len(message) > 254:
+            pdu.add_message_payload(''.join('%02x' % ord(c) for c in message))
+
         self.send_pdu(pdu)
         yield self.push_unacked(sequence_number)
         returnValue(sequence_number)
