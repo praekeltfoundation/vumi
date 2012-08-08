@@ -82,6 +82,19 @@ class SmppTransport(Transport):
         Whether to ask for delivery reports. Default 1 (request delivery
         reports).
 
+    :param dict data_coding_overrides:
+        Overrides for data_coding character set mapping. This is useful for
+        setting the default encoding (0), adding additional undefined encodings
+        (such as 4 or 8) or overriding encodings in cases where the SMSC is
+        violating the spec (which happens a lot). Keys should be integers,
+        values should be strings containing valid Python character encoding
+        names.
+
+    :param bool send_long_messages:
+        If `True`, messages longer than 254 characters will be sent in the
+        `message_paylod` optional field instead of the `short_message` field.
+        Default is `False`, simply because that maintains previous behaviour.
+
     The list of SMPP protocol configuration options given above is not
     exhaustive. Any other options specified are passed through to the
     python-smpp library PDU (protocol data unit) builder.
