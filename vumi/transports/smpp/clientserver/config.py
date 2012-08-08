@@ -47,7 +47,8 @@ class ClientConfig(object):
         if delivery_report_regex is None:
             delivery_report_regex = self.DELIVERY_REPORT_REGEX
         self.delivery_report_re = re.compile(delivery_report_regex)
-        self.data_coding_overrides = data_coding_overrides or {}
+        self.data_coding_overrides = dict(
+            (int(k), v) for k, v in (data_coding_overrides or {}).items())
         self.send_long_messages = send_long_messages
 
     def __eq__(self, other):
