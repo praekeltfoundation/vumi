@@ -92,7 +92,7 @@ class SmppTransport(Transport):
 
     :param bool send_long_messages:
         If `True`, messages longer than 254 characters will be sent in the
-        `message_paylod` optional field instead of the `short_message` field.
+        `message_payload` optional field instead of the `short_message` field.
         Default is `False`, simply because that maintains previous behaviour.
 
     The list of SMPP protocol configuration options given above is not
