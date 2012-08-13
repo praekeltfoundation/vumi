@@ -2,19 +2,18 @@
 
 from datetime import datetime
 
-from twisted.python import log
 from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, returnValue
 
+from vumi import log
 from vumi.utils import get_operator_number
 from vumi.transports.base import Transport
-from vumi.transports.smpp.clientserver.client import (EsmeTransceiverFactory,
-                                                      EsmeTransmitterFactory,
-                                                      EsmeReceiverFactory,
-                                                      EsmeCallbacks)
+from vumi.transports.smpp.clientserver.client import (
+    EsmeTransceiverFactory, EsmeTransmitterFactory, EsmeReceiverFactory,
+    EsmeCallbacks)
 from vumi.transports.smpp.clientserver.config import ClientConfig
 from vumi.transports.failures import FailureMessage
-from vumi.message import Message
+from vumi.message import Message, TransportUserMessage
 from vumi.persist.txredis_manager import TxRedisManager
 
 
@@ -82,6 +81,19 @@ class SmppTransport(Transport):
     :param registered_delivery:
         Whether to ask for delivery reports. Default 1 (request delivery
         reports).
+
+    :param dict data_coding_overrides:
+        Overrides for data_coding character set mapping. This is useful for
+        setting the default encoding (0), adding additional undefined encodings
+        (such as 4 or 8) or overriding encodings in cases where the SMSC is
+        violating the spec (which happens a lot). Keys should be integers,
+        values should be strings containing valid Python character encoding
+        names.
+
+    :param bool send_long_messages:
+        If `True`, messages longer than 254 characters will be sent in the
+        `message_payload` optional field instead of the `short_message` field.
+        Default is `False`, simply because that maintains previous behaviour.
 
     The list of SMPP protocol configuration options given above is not
     exhaustive. Any other options specified are passed through to the
@@ -167,8 +179,8 @@ class SmppTransport(Transport):
 
     @inlineCallbacks
     def handle_outbound_message(self, message):
-        log.msg("Consumed outgoing message", message)
-        log.msg("Unacknowledged message count: %s" % (
+        log.debug("Consumed outgoing message", message)
+        log.debug("Unacknowledged message count: %s" % (
                 (yield self.esme_client.get_unacked_count()),))
         yield self.r_set_message(message)
         sequence_number = yield self.send_smpp(message)
@@ -255,9 +267,9 @@ class SmppTransport(Transport):
     @inlineCallbacks
     def submit_sm_success(self, sent_sms_id, transport_msg_id):
         yield self.r_delete_message(sent_sms_id)
-        log.msg("Mapping transport_msg_id=%s to sent_sms_id=%s" % (
+        log.debug("Mapping transport_msg_id=%s to sent_sms_id=%s" % (
             transport_msg_id, sent_sms_id))
-        log.msg("PUBLISHING ACK: (%s -> %s)" % (
+        log.debug("PUBLISHING ACK: (%s -> %s)" % (
             sent_sms_id, transport_msg_id))
         self.publish_ack(
             user_message_id=sent_sms_id,
@@ -307,12 +319,26 @@ class SmppTransport(Transport):
                     transport_metadata=transport_metadata)))
 
     def deliver_sm(self, *args, **kwargs):
-        message = dict(
-                message_id=kwargs.get('message_id'),
-                to_addr=kwargs.get('destination_addr'),
-                from_addr=kwargs.get('source_addr'),
-                transport_type='sms',
-                content=kwargs.get('short_message'))
+        message_type = kwargs.get('message_type', 'sms')
+        message = {
+            'message_id': kwargs['message_id'],
+            'to_addr': kwargs['destination_addr'],
+            'from_addr': kwargs['source_addr'],
+            'content': kwargs['short_message'],
+            'transport_type': message_type,
+            'transport_metadata': {},
+            }
+
+        if message_type == 'ussd':
+            session_event = {
+                'new': TransportUserMessage.SESSION_NEW,
+                'continue': TransportUserMessage.SESSION_RESUME,
+                'close': TransportUserMessage.SESSION_CLOSE,
+                }[kwargs['session_event']]
+            message['session_event'] = session_event
+            session_info = kwargs.get('session_info')
+            message['transport_metadata']['session_info'] = session_info
+
         log.msg("PUBLISHING INBOUND: %s" % (message,))
         # TODO: This logs messages that fail to serialize to JSON
         #       Usually this happens when an SMPP message has content
@@ -325,13 +351,15 @@ class SmppTransport(Transport):
             log.err(e)
 
     def send_smpp(self, message):
-        log.msg("Sending SMPP message: %s" % (message))
+        log.debug("Sending SMPP message: %s" % (message))
         # first do a lookup in our YAML to see if we've got a source_addr
         # defined for the given MT number, if not, trust the from_addr
         # in the message
         to_addr = message['to_addr']
         from_addr = message['from_addr']
         text = message['content']
+        continue_session = (
+            message['session_event'] != TransportUserMessage.SESSION_CLOSE)
         route = get_operator_number(to_addr,
                 self.config.get('COUNTRY_CODE', ''),
                 self.config.get('OPERATOR_PREFIX', {}),
@@ -340,6 +368,9 @@ class SmppTransport(Transport):
                 short_message=text.encode('utf-8'),
                 destination_addr=str(to_addr),
                 source_addr=route,
+                message_type=message['transport_type'],
+                continue_session=continue_session,
+                session_info=message['transport_metadata'].get('session_info'),
                 )
 
     def stopWorker(self):

@@ -9,6 +9,7 @@ from vumi.transports.smpp.transport import (SmppTransport,
                                             SmppRxTransport)
 from vumi.transports.smpp.service import SmppService
 from vumi.transports.smpp.clientserver.config import ClientConfig
+from vumi.transports.smpp.clientserver.client import unpacked_pdu_opts
 from vumi.transports.smpp.clientserver.tests.utils import SmscTestServer
 from vumi.transports.tests.test_base import TransportTestCase
 
@@ -227,6 +228,16 @@ class EsmeToSmscTestCase(TransportTestCase):
         self.assert_pdu_header(expected, actual, 'sequence_number')
         self.assert_pdu_header(expected, actual, 'command_status')
         self.assert_pdu_header(expected, actual, 'command_id')
+
+    @inlineCallbacks
+    def clear_link_pdus(self):
+        for expected in [
+                mk_expected_pdu("inbound", 1, "bind_transceiver"),
+                mk_expected_pdu("outbound", 1, "bind_transceiver_resp"),
+                mk_expected_pdu("inbound", 2, "enquire_link"),
+                mk_expected_pdu("outbound", 2, "enquire_link_resp")]:
+            pdu = yield self.service.factory.smsc.pdu_queue.get()
+            self.assert_server_pdu(expected, pdu)
 
     @inlineCallbacks
     def setUp(self):
@@ -455,6 +466,157 @@ class EsmeToSmscTestCase(TransportTestCase):
         self.assertEqual(dispatched_failures, [])
 
     @inlineCallbacks
+    def test_submit_and_deliver_ussd_continue(self):
+
+        self._block_till_bind = Deferred()
+
+        # Startup
+        yield self.startTransport()
+        yield self.transport._block_till_bind
+        yield self.clear_link_pdus()
+
+        # Next the Client submits a USSD message to the Server
+        # and recieves an ack
+
+        msg = TransportUserMessage(
+                to_addr="2772222222",
+                from_addr="2772000000",
+                content='hello world',
+                transport_name=self.transport_name,
+                transport_type='ussd',
+                transport_metadata={},
+                rkey='%s.outbound' % self.transport_name,
+                timestamp='0',
+                )
+        yield self.dispatch(msg)
+
+        # First we make sure the Client binds to the Server
+        # and enquire_link pdu's are exchanged as expected
+        pdu_queue = self.service.factory.smsc.pdu_queue
+
+        submit_sm_pdu = yield pdu_queue.get()
+        self.assert_server_pdu(
+            mk_expected_pdu('inbound', 3, 'submit_sm'), submit_sm_pdu)
+        pdu_opts = unpacked_pdu_opts(submit_sm_pdu['pdu'])
+        self.assertEqual('02', pdu_opts['ussd_service_op'])
+        self.assertEqual('0000', pdu_opts['its_session_info'])
+
+        # We need the user_message_id to check the ack
+        user_message_id = msg.payload["message_id"]
+
+        [ack, delv] = yield self.wait_for_dispatched_events(2)
+
+        self.assertEqual(ack['message_type'], 'event')
+        self.assertEqual(ack['event_type'], 'ack')
+        self.assertEqual(ack['transport_name'], self.transport_name)
+        self.assertEqual(ack['user_message_id'], user_message_id)
+
+        self.assertEqual(delv['message_type'], 'event')
+        self.assertEqual(delv['event_type'], 'delivery_report')
+        self.assertEqual(delv['transport_name'], self.transport_name)
+        self.assertEqual(delv['user_message_id'], user_message_id)
+        self.assertEqual(delv['delivery_status'],
+                         self.expected_delivery_status)
+
+        # Finally the Server delivers a USSD message to the Client
+
+        pdu = DeliverSM(555,
+                short_message="reply!",
+                destination_addr="2772222222",
+                source_addr="2772000000",
+                )
+        pdu._PDU__add_optional_parameter('ussd_service_op', '02')
+        pdu._PDU__add_optional_parameter('its_session_info', '0000')
+        self.service.factory.smsc.send_pdu(pdu)
+
+        [mess] = yield self.wait_for_dispatched_messages(1)
+
+        self.assertEqual(mess['message_type'], 'user_message')
+        self.assertEqual(mess['transport_name'], self.transport_name)
+        self.assertEqual(mess['content'], "reply!")
+        self.assertEqual(mess['transport_type'], "ussd")
+        self.assertEqual(mess['session_event'],
+                         TransportUserMessage.SESSION_RESUME)
+
+        self.assertEqual([], self.get_dispatched_failures())
+
+    @inlineCallbacks
+    def test_submit_and_deliver_ussd_close(self):
+
+        self._block_till_bind = Deferred()
+
+        # Startup
+        yield self.startTransport()
+        yield self.transport._block_till_bind
+        yield self.clear_link_pdus()
+
+        # Next the Client submits a USSD message to the Server
+        # and recieves an ack
+
+        msg = TransportUserMessage(
+                to_addr="2772222222",
+                from_addr="2772000000",
+                content='hello world',
+                transport_name=self.transport_name,
+                transport_type='ussd',
+                transport_metadata={},
+                rkey='%s.outbound' % self.transport_name,
+                timestamp='0',
+                session_event=TransportUserMessage.SESSION_CLOSE,
+                )
+        yield self.dispatch(msg)
+
+        # First we make sure the Client binds to the Server
+        # and enquire_link pdu's are exchanged as expected
+        pdu_queue = self.service.factory.smsc.pdu_queue
+
+        submit_sm_pdu = yield pdu_queue.get()
+        self.assert_server_pdu(
+            mk_expected_pdu('inbound', 3, 'submit_sm'), submit_sm_pdu)
+        pdu_opts = unpacked_pdu_opts(submit_sm_pdu['pdu'])
+        self.assertEqual('02', pdu_opts['ussd_service_op'])
+        self.assertEqual('0001', pdu_opts['its_session_info'])
+
+        # We need the user_message_id to check the ack
+        user_message_id = msg.payload["message_id"]
+
+        [ack, delv] = yield self.wait_for_dispatched_events(2)
+
+        self.assertEqual(ack['message_type'], 'event')
+        self.assertEqual(ack['event_type'], 'ack')
+        self.assertEqual(ack['transport_name'], self.transport_name)
+        self.assertEqual(ack['user_message_id'], user_message_id)
+
+        self.assertEqual(delv['message_type'], 'event')
+        self.assertEqual(delv['event_type'], 'delivery_report')
+        self.assertEqual(delv['transport_name'], self.transport_name)
+        self.assertEqual(delv['user_message_id'], user_message_id)
+        self.assertEqual(delv['delivery_status'],
+                         self.expected_delivery_status)
+
+        # Finally the Server delivers a USSD message to the Client
+
+        pdu = DeliverSM(555,
+                short_message="reply!",
+                destination_addr="2772222222",
+                source_addr="2772000000",
+                )
+        pdu._PDU__add_optional_parameter('ussd_service_op', '02')
+        pdu._PDU__add_optional_parameter('its_session_info', '0001')
+        self.service.factory.smsc.send_pdu(pdu)
+
+        [mess] = yield self.wait_for_dispatched_messages(1)
+
+        self.assertEqual(mess['message_type'], 'user_message')
+        self.assertEqual(mess['transport_name'], self.transport_name)
+        self.assertEqual(mess['content'], "reply!")
+        self.assertEqual(mess['transport_type'], "ussd")
+        self.assertEqual(mess['session_event'],
+                         TransportUserMessage.SESSION_CLOSE)
+
+        self.assertEqual([], self.get_dispatched_failures())
+
+    @inlineCallbacks
     def test_submit_and_deliver_with_missing_id_lookup(self):
 
         def r_failing_get(third_party_id):
@@ -618,7 +780,7 @@ class TxEsmeToSmscTestCase(TransportTestCase):
         # We need the user_message_id to check the ack
         user_message_id = msg["message_id"]
 
-        [ack, _delv] = yield self.wait_for_dispatched_events(2)
+        [ack] = yield self.wait_for_dispatched_events(1)
 
         self.assertEqual(ack['message_type'], 'event')
         self.assertEqual(ack['event_type'], 'ack')
@@ -694,11 +856,39 @@ class RxEsmeToSmscTestCase(TransportTestCase):
                 source_addr="2772000000",
                 )
         self.service.factory.smsc.send_pdu(pdu)
+
         [mess] = yield self.wait_for_dispatched_messages(1)
 
         self.assertEqual(mess['message_type'], 'user_message')
         self.assertEqual(mess['transport_name'], self.transport_name)
         self.assertEqual(mess['content'], "SMS from server")
+
+        dispatched_failures = self.get_dispatched_failures()
+        self.assertEqual(dispatched_failures, [])
+
+    @inlineCallbacks
+    def test_deliver_ussd_start(self):
+
+        self._block_till_bind = Deferred()
+
+        # Startup
+        yield self.startTransport()
+        yield self.transport._block_till_bind
+        # The Server delivers a SMS to the Client
+
+        pdu = DeliverSM(
+            555, destination_addr="2772222222", source_addr="2772000000")
+        pdu._PDU__add_optional_parameter('ussd_service_op', '01')
+        pdu._PDU__add_optional_parameter('its_session_info', '0000')
+        self.service.factory.smsc.send_pdu(pdu)
+
+        [mess] = yield self.wait_for_dispatched_messages(1)
+
+        self.assertEqual(mess['transport_type'], 'ussd')
+        self.assertEqual(mess['transport_name'], self.transport_name)
+        self.assertEqual(mess['content'], None)
+        self.assertEqual(mess['session_event'],
+                         TransportUserMessage.SESSION_NEW)
 
         dispatched_failures = self.get_dispatched_failures()
         self.assertEqual(dispatched_failures, [])
