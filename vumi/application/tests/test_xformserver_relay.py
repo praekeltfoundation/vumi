@@ -19,8 +19,10 @@ class XformServerRelayTestCase(ApplicationTestCase):
         yield super(XformServerRelayTestCase, self).setUp()
         self.path = ''
 
-    #def _persist_tearDown(self):
-        #pass
+    # TODO figure out why I need this, and it's not because
+    # riak, or redis for that matter, isn't running
+    def _persist_tearDown(self):
+        pass
 
     @inlineCallbacks
     def setup_resource_with_callback(self, callback):
