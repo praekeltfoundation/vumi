@@ -11,14 +11,16 @@ from uuid import uuid4
 
 from twisted.internet import reactor
 from twisted.internet.protocol import ProcessProtocol
-from twisted.internet.defer import Deferred
+from twisted.internet.defer import (Deferred, inlineCallbacks,
+                                    maybeDeferred, returnValue)
 from twisted.internet.error import ProcessDone
 from twisted.python.failure import Failure
 
 from vumi.application.base import ApplicationWorker
 from vumi.message import Message
 from vumi.errors import ConfigError
-from vumi.utils import load_class_by_string, redis_from_config
+from vumi.persist.txredis_manager import TxRedisManager
+from vumi.utils import load_class_by_string
 from vumi import log
 
 
@@ -201,12 +203,14 @@ class SandboxProtocol(ProcessProtocol):
     def outReceived(self, data):
         lines = self._process_data(self.chunk, data)
         for i in range(len(lines) - 1):
+            # dispatch_request() calls are async (i.e. return deferreds)
             self.api.dispatch_request(self._parse_command(lines[i]))
         self.chunk = lines[-1]
 
     def outConnectionLost(self):
         if self.chunk:
             line, self.chunk = self.chunk, ""
+            # dispatch_request() calls are async (i.e. return deferreds)
             self.api.dispatch_request(self._parse_command(line))
 
     def errReceived(self, data):
@@ -251,13 +255,15 @@ class SandboxResources(object):
             cls = load_class_by_string(config.pop('cls'))
             self.resources[name] = cls(name, self.app_worker, config)
 
+    @inlineCallbacks
     def setup_resources(self):
         for resource in self.resources.itervalues():
-            resource.setup()
+            yield resource.setup()
 
+    @inlineCallbacks
     def teardown_resources(self):
         for resource in self.resources.itervalues():
-            resource.teardown()
+            yield resource.teardown()
 
 
 class SandboxResource(object):
@@ -287,7 +293,7 @@ class SandboxResource(object):
     def dispatch_request(self, api, command):
         handler_name = 'handle_%s' % (command['cmd'],)
         handler = getattr(self, handler_name, self.unknown_request)
-        return handler(api, command)
+        return maybeDeferred(handler, api, command)
 
     def unknown_request(self, api, command):
         self.log_error("Resource %s: unknown command %r received from"
@@ -297,47 +303,54 @@ class SandboxResource(object):
 
 
 class RedisResource(SandboxResource):
+
+    @inlineCallbacks
     def setup(self):
-        self.r_prefix = self.config.get('r_prefix')
-        self.r_server = redis_from_config(self.config.get('redis', {}))
+        self.r_config = self.config.get('redis_manager', {})
         self.keys_per_user = self.config.get('keys_per_user', 100)
+        self.redis = yield TxRedisManager.from_config(self.r_config)
 
     def _count_key(self, sandbox_id):
-        return ":".join([self.r_prefix, "count", sandbox_id])
+        return "#".join(["count", sandbox_id])
 
     def _sandboxed_key(self, sandbox_id, key):
-        return ":".join([self.r_prefix, "sandboxes", sandbox_id, key])
+        return "#".join(["sandboxes", sandbox_id, key])
 
+    @inlineCallbacks
     def check_keys(self, sandbox_id, key):
-        if self.r_server.exists(key):
-            return True
+        if (yield self.redis.exists(key)):
+            returnValue(True)
         count_key = self._count_key(sandbox_id)
-        if self.r_server.incr(count_key, 1) > self.keys_per_user:
-            self.r_server.incr(count_key, -1)
-            return False
-        return True
+        if (yield self.redis.incr(count_key, 1)) > self.keys_per_user:
+            yield self.redis.incr(count_key, -1)
+            returnValue(False)
+        returnValue(True)
 
+    @inlineCallbacks
     def handle_set(self, api, command):
         key = self._sandboxed_key(api.sandbox_id, command.get('key'))
-        if not self.check_keys(api.sandbox_id, key):
-            return command.reply("Too many keys")
+        if not (yield self.check_keys(api.sandbox_id, key)):
+            returnValue(command.reply("Too many keys"))
         value = command.get('value')
-        self.r_server.set(key, json.dumps(value))
-        return self.reply(command, success=True)
+        yield self.redis.set(key, json.dumps(value))
+        returnValue(self.reply(command, success=True))
 
+    @inlineCallbacks
     def handle_get(self, api, command):
         key = self._sandboxed_key(api.sandbox_id, command.get('key'))
-        return self.reply(command, success=True,
-                          value=json.loads(self.r_server.get(key)))
+        raw_value = yield self.redis.get(key)
+        returnValue(self.reply(command, success=True,
+                          value=json.loads(raw_value)))
 
+    @inlineCallbacks
     def handle_delete(self, api, command):
         key = self._sandboxed_key(api.sandbox_id, command.get('key'))
-        existed = bool(self.r_server.delete(key))
+        existed = bool((yield self.redis.delete(key)))
         if existed:
             count_key = self._count_key(api.sandbox_id)
-            self.r_server.incr(count_key, -1)
-        return self.reply(command, success=True,
-                          existed=existed)
+            yield self.redis.incr(count_key, -1)
+        returnValue(self.reply(command, success=True,
+                               existed=existed))
 
 
 class OutboundResource(SandboxResource):
@@ -421,6 +434,7 @@ class SandboxApi(object):
     def get_inbound_message(self, message_id):
         return self._inbound_messages.get(message_id)
 
+    @inlineCallbacks
     def dispatch_request(self, command):
         resource_name, sep, rest = command['cmd'].partition('.')
         if not sep:
@@ -428,7 +442,7 @@ class SandboxApi(object):
         command['cmd'] = rest
         resource = self.resources.resources.get(resource_name,
                                                 self.fallback_resource)
-        reply = resource.dispatch_request(self, command)
+        reply = yield resource.dispatch_request(self, command)
         if reply is not None:
             reply['cmd'] = '%s%s%s' % (resource_name, sep, rest)
             self.sandbox_send(reply)

@@ -15,7 +15,7 @@ from vumi.application.tests.test_base import ApplicationTestCase
 from vumi.application.sandbox import (Sandbox, SandboxCommand, SandboxError,
                                       RedisResource, OutboundResource,
                                       JsSandboxResource, LoggingResource)
-from vumi.tests.utils import FakeRedis, LogCatcher
+from vumi.tests.utils import FakeRedis, LogCatcher, PersistenceMixin
 
 
 class SandboxTestCaseBase(ApplicationTestCase):
@@ -291,15 +291,17 @@ class ResourceTestCaseBase(TestCase):
         self.sandbox = self.app_worker.create_sandbox_protocol(self.sandbox_id,
                                                                self.api)
 
+    @inlineCallbacks
     def tearDown(self):
         if self.resource is not None:
-            self.resource.teardown()
+            yield self.resource.teardown()
 
+    @inlineCallbacks
     def create_resource(self, config):
         resource = self.resource_cls(self.resource_name,
                                      self.app_worker,
                                      config)
-        resource.setup()
+        yield resource.setup()
         self.resource = resource
 
     def dispatch_command(self, cmd, **kwargs):
@@ -310,43 +312,54 @@ class ResourceTestCaseBase(TestCase):
         return self.resource.dispatch_request(self.api, msg)
 
 
-class TestRedisResource(ResourceTestCaseBase):
+class TestRedisResource(ResourceTestCaseBase, PersistenceMixin):
 
     resource_cls = RedisResource
 
+    @inlineCallbacks
     def setUp(self):
         super(TestRedisResource, self).setUp()
-        self.r_server = FakeRedis()
-        self.create_resource({
-            'r_prefix': 'test',
-            'redis': self.r_server,
-            })
+        yield self._persist_setUp()
+        self.r_server = yield self.get_redis_manager()
+        yield self.create_resource({
+            'redis_manager': {
+                'FAKE_REDIS': self.r_server,
+                'key_prefix': self.r_server._key_prefix,
+            }})
 
+    @inlineCallbacks
     def tearDown(self):
-        super(TestRedisResource, self).tearDown()
-        self.r_server.teardown()
+        yield super(TestRedisResource, self).tearDown()
+        yield self._persist_tearDown()
 
+    @inlineCallbacks
     def test_handle_set(self):
-        reply = self.dispatch_command('set', key='foo', value='bar')
+        reply = yield self.dispatch_command('set', key='foo', value='bar')
         self.assertEqual(reply['success'], True)
-        self.assertEqual(self.r_server.get('test:sandboxes:test_id:foo'),
+        self.assertEqual((yield
+                          self.r_server.get('sandboxes#test_id#foo')),
                          json.dumps('bar'))
-        self.assertEqual(self.r_server.get('test:count:test_id'), '1')
+        self.assertEqual((yield self.r_server.get('count#test_id')), '1')
 
+    @inlineCallbacks
     def test_handle_get(self):
-        self.r_server.set('test:sandboxes:test_id:foo', json.dumps('bar'))
-        reply = self.dispatch_command('get', key='foo')
+        yield self.r_server.set('sandboxes#test_id#foo', json.dumps('bar'))
+        reply = yield self.dispatch_command('get', key='foo')
         self.assertEqual(reply['success'], True)
         self.assertEqual(reply['value'], 'bar')
 
+    @inlineCallbacks
     def test_handle_delete(self):
-        self.r_server.set('test:sandboxes:test_id:foo', json.dumps('bar'))
-        self.r_server.set('test:count:test_id', '1')
-        reply = self.dispatch_command('delete', key='foo')
+        yield self.r_server.set('sandboxes#test_id#foo',
+                                json.dumps('bar'))
+        yield self.r_server.set('count#test_id', '1')
+        reply = yield self.dispatch_command('delete', key='foo')
         self.assertEqual(reply['success'], True)
         self.assertEqual(reply['existed'], True)
-        self.assertEqual(self.r_server.get('test:sandboxes:test_id:foo'), None)
-        self.assertEqual(self.r_server.get('test:count:test_id'), '0')
+        self.assertEqual((yield
+                          self.r_server.get('sandboxes#test_id#foo')),
+                         None)
+        self.assertEqual((yield self.r_server.get('count#test_id')), '0')
 
 
 class TestOutboundResource(ResourceTestCaseBase):
