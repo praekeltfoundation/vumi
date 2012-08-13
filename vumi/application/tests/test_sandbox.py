@@ -90,7 +90,7 @@ class SandboxTestCase(SandboxTestCaseBase):
 
     @inlineCallbacks
     def test_resource_setup(self):
-        r_server = FakeRedis()
+        r_server = yield self.get_redis_manager()
         json_data = SandboxCommand(cmd='db.set', key='foo',
                                    value={'a': 1, 'b': 2}).to_json()
         app = yield self.setup_app(
@@ -99,17 +99,19 @@ class SandboxTestCase(SandboxTestCaseBase):
             {'sandbox': {
                 'db': {
                     'cls': 'vumi.application.sandbox.RedisResource',
-                    'redis': r_server,
-                    'r_prefix': 'test',
+                    'redis_manager': {
+                        'FAKE_REDIS': r_server,
+                        'key_prefix': r_server._key_prefix,
+                    },
                 },
             }})
         status = yield app.process_event_in_sandbox(self.mk_event())
         self.assertEqual(status, 0)
-        self.assertEqual(sorted(r_server.keys()),
-                         ['test:count:sandbox1',
-                          'test:sandboxes:sandbox1:foo'])
-        self.assertEqual(r_server.get('test:count:sandbox1'), '1')
-        self.assertEqual(r_server.get('test:sandboxes:sandbox1:foo'),
+        self.assertEqual(sorted((yield r_server.keys())),
+                         ['count#sandbox1',
+                          'sandboxes#sandbox1#foo'])
+        self.assertEqual((yield r_server.get('count#sandbox1')), '1')
+        self.assertEqual((yield r_server.get('sandboxes#sandbox1#foo')),
                          json.dumps({'a': 1, 'b': 2}))
 
     @inlineCallbacks
