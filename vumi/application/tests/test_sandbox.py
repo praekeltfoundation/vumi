@@ -366,32 +366,36 @@ class TestOutboundResource(ResourceTestCaseBase):
 
     resource_cls = OutboundResource
 
+    @inlineCallbacks
     def setUp(self):
         super(TestOutboundResource, self).setUp()
-        self.create_resource({})
+        yield self.create_resource({})
 
+    @inlineCallbacks
     def test_handle_reply_to(self):
         self.api.get_inbound_message = lambda msg_id: msg_id
-        reply = self.dispatch_command('reply_to', content='hello',
-                                      continue_session=True,
-                                      in_reply_to='msg1')
+        reply = yield self.dispatch_command('reply_to', content='hello',
+                                            continue_session=True,
+                                            in_reply_to='msg1')
         self.assertEqual(reply, None)
         self.assertEqual(self.app_worker.mock_calls['reply_to'],
                          [(('msg1', 'hello'), {'continue_session': True})])
 
+    @inlineCallbacks
     def test_handle_reply_to_group(self):
         self.api.get_inbound_message = lambda msg_id: msg_id
-        reply = self.dispatch_command('reply_to_group', content='hello',
-                                      continue_session=True,
-                                      in_reply_to='msg1')
+        reply = yield self.dispatch_command('reply_to_group', content='hello',
+                                            continue_session=True,
+                                            in_reply_to='msg1')
         self.assertEqual(reply, None)
         self.assertEqual(self.app_worker.mock_calls['reply_to_group'],
                          [(('msg1', 'hello'), {'continue_session': True})])
 
+    @inlineCallbacks
     def test_handle_send_to(self):
-        reply = self.dispatch_command('send_to', content='hello',
-                                      to_addr='1234',
-                                      tag='default')
+        reply = yield self.dispatch_command('send_to', content='hello',
+                                            to_addr='1234',
+                                            tag='default')
         self.assertEqual(reply, None)
         self.assertEqual(self.app_worker.mock_calls['send_to'],
                          [(('1234', 'hello'), {'tag': 'default'})])
@@ -401,9 +405,10 @@ class TestJsSandboxResource(ResourceTestCaseBase):
 
     resource_cls = JsSandboxResource
 
+    @inlineCallbacks
     def setUp(self):
         super(TestJsSandboxResource, self).setUp()
-        self.create_resource({
+        yield self.create_resource({
             'javascript': 'testscript',
             })
 
@@ -420,13 +425,15 @@ class TestLoggingResource(ResourceTestCaseBase):
 
     resource_cls = LoggingResource
 
+    @inlineCallbacks
     def setUp(self):
         super(TestLoggingResource, self).setUp()
-        self.create_resource({})
+        yield self.create_resource({})
 
+    @inlineCallbacks
     def test_handle_info(self):
         with LogCatcher() as lc:
-            reply = self.dispatch_command('info', msg='foo')
+            reply = yield self.dispatch_command('info', msg='foo')
             msgs = [log['message'][0] for log in lc.logs if log['message']]
         self.assertEqual(reply['success'], True)
         self.assertEqual(msgs, ['foo'])
