@@ -24,7 +24,10 @@ class ClientConfig(object):
                  registered_delivery=0, smpp_bind_timeout=30,
                  smpp_enquire_link_interval=55.0,
                  initial_reconnect_delay=5.0,
-                 delivery_report_regex=None):
+                 delivery_report_regex=None,
+                 data_coding_overrides=None,
+                 send_long_messages=False,
+                 ):
         # in SMPP system_id is the username
         self.host = host
         self.port = port
@@ -44,6 +47,9 @@ class ClientConfig(object):
         if delivery_report_regex is None:
             delivery_report_regex = self.DELIVERY_REPORT_REGEX
         self.delivery_report_re = re.compile(delivery_report_regex)
+        self.data_coding_overrides = dict(
+            (int(k), v) for k, v in (data_coding_overrides or {}).items())
+        self.send_long_messages = send_long_messages
 
     def __eq__(self, other):
         if not isinstance(other, ClientConfig):

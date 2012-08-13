@@ -39,6 +39,10 @@ class ClientConfigTestCase(unittest.TestCase):
             "registered_delivery": 1,
             "smpp_bind_timeout": 33,
             "some_garbage_param_that_should_not_be_here": "foo",
+            "data_coding_overrides": {
+                    0: 'ascii',
+                    8: 'utf-8',
+                    },
             })
         expected_config = ClientConfig(
             host='localhost',
@@ -51,6 +55,10 @@ class ClientConfigTestCase(unittest.TestCase):
             dest_addr_npi=1,
             registered_delivery=1,
             smpp_bind_timeout=33,
+            data_coding_overrides={
+                0: 'ascii',
+                8: 'utf-8',
+                },
             )
         self.assertEqual(client_config, expected_config)
 
