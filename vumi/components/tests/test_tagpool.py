@@ -17,6 +17,7 @@ class TestTxTagpoolManager(TestCase, PersistenceMixin):
     def setUp(self):
         self._persist_setUp()
         self.redis = yield self.get_redis_manager()
+        yield self.redis._purge_all()  # Just in case
         self.tpm = TagpoolManager(self.redis)
 
     def tearDown(self):

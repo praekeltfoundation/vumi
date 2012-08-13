@@ -420,9 +420,9 @@ class ContentKeywordRouter(SimpleDispatchRouter):
         are just logged.
 
     :param dict transport_mappings:
-        Mapping from message `from_addr`es to transports names.  If a
-        message's from_addr matches a given from_addr, the message is
-        sent to the associated transport.
+        Mapping from message `from_addr` values to transports names.
+        If a message's from_addr matches a given from_addr, the
+        message is sent to the associated transport.
 
     :param int expire_routing_memory:
         Time in seconds before outbound message's ids are expired from

@@ -2,12 +2,19 @@
 
 from twisted.trial.unittest import TestCase
 
-from vumi.persist.redis_manager import RedisManager
+from vumi.tests.utils import import_skip
 
 
 class RedisManagerTestCase(TestCase):
     def setUp(self):
-        self.manager = RedisManager.from_config({'key_prefix': 'redistest'})
+        try:
+            from vumi.persist.redis_manager import RedisManager
+        except ImportError, e:
+            import_skip(e, 'redis')
+
+        self.manager = RedisManager.from_config(
+            {'FAKE_REDIS': 'yes',
+             'key_prefix': 'redistest'})
         self.manager._purge_all()
 
     def tearDown(self):

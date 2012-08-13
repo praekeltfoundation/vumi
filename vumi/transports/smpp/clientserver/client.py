@@ -3,31 +3,46 @@
 import json
 import uuid
 
-from twisted.python import log
 from twisted.internet import reactor
 from twisted.internet.protocol import Protocol, ReconnectingClientFactory
 from twisted.internet.task import LoopingCall
-from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.defer import inlineCallbacks, returnValue, DeferredQueue
 
 import binascii
 from smpp.pdu import unpack_pdu
-from smpp.pdu_builder import (BindTransceiver,
-                                BindTransmitter,
-                                BindReceiver,
-                                DeliverSMResp,
-                                SubmitSM,
-                                SubmitMulti,
-                                EnquireLink,
-                                EnquireLinkResp,
-                                QuerySM,
-                                )
-from smpp.pdu_inspector import (MultipartMessage,
-                                detect_multipart,
-                                multipart_key,
-                                )
+from smpp.pdu_builder import (
+    BindTransceiver, BindTransmitter, BindReceiver, DeliverSMResp, SubmitSM,
+    EnquireLink, EnquireLinkResp, QuerySM)
+from smpp.pdu_inspector import (
+    MultipartMessage, detect_multipart, multipart_key)
+
+from vumi import log
+
+
+def unpacked_pdu_opts(unpacked_pdu):
+    pdu_opts = {}
+    for opt in unpacked_pdu['body'].get('optional_parameters', []):
+        pdu_opts[opt['tag']] = opt['value']
+    return pdu_opts
+
+
+def detect_ussd(pdu):
+    # TODO: Push this back to python-smpp?
+    return ('ussd_service_op' in unpacked_pdu_opts(pdu))
+
+
+def update_ussd_pdu(sm_pdu, continue_session, session_info=None):
+    if session_info is None:
+        session_info = '0000'
+    session_info = "%04x" % (int(session_info, 16) + int(not continue_session))
+    sm_pdu._PDU__add_optional_parameter('ussd_service_op', '02')
+    sm_pdu._PDU__add_optional_parameter('its_session_info', session_info)
+    return sm_pdu
 
 
 class EsmeTransceiver(Protocol):
+    BIND_PDU = BindTransceiver
+    CONNECTED_STATE = 'BOUND_TRX'
 
     callLater = reactor.callLater
 
@@ -43,6 +58,12 @@ class EsmeTransceiver(Protocol):
         self.datastream = ''
         self.redis = redis
         self._lose_conn = None
+        # The PDU queue ensures that PDUs are processed in the order
+        # they arrive. `self._process_pdu_queue()` loops forever
+        # pulling PDUs off the queue and handling each before grabbing
+        # the next.
+        self._pdu_queue = DeferredQueue()
+        self._process_pdu_queue()  # intentionally throw away deferred
 
     @inlineCallbacks
     def get_next_seq(self):
@@ -110,15 +131,23 @@ class EsmeTransceiver(Protocol):
                 self.datastream = self.datastream[command_length:]
         return data
 
+    @inlineCallbacks
     def handle_data(self, data):
         pdu = unpack_pdu(data)
-        log.msg('INCOMING <<<< %s' % binascii.b2a_hex(data))
-        log.msg('INCOMING <<<< %s' % pdu)
         command_id = pdu['header']['command_id']
+        if command_id not in ('enquire_link', 'enquire_link_resp'):
+            log.debug('INCOMING <<<< %s' % binascii.b2a_hex(data))
+            log.debug('INCOMING <<<< %s' % pdu)
         handler = getattr(self, 'handle_%s' % (command_id,),
-            self._command_handler_not_found)
-        handler(pdu)
-        log.msg('STATE: %s' % (self.state,))
+                          self._command_handler_not_found)
+        yield handler(pdu)
+
+    @inlineCallbacks
+    def _process_pdu_queue(self):
+        data = yield self._pdu_queue.get()
+        while data is not None:
+            yield self.handle_data(data)
+            data = yield self._pdu_queue.get()
 
     def _command_handler_not_found(self, pdu):
         log.err('No command handler available for %s' % (pdu,))
@@ -128,14 +157,15 @@ class EsmeTransceiver(Protocol):
         self.state = 'OPEN'
         log.msg('STATE: %s' % (self.state))
         seq = yield self.get_next_seq()
-        pdu = BindTransceiver(seq, **self.defaults)
+        pdu = self.BIND_PDU(seq, **self.defaults)
         log.msg(pdu.get_obj())
         self.send_pdu(pdu)
-        self.schedule_lose_connection('BOUND_TRX')
+        self.schedule_lose_connection(self.CONNECTED_STATE)
 
     def schedule_lose_connection(self, expected_status):
         self._lose_conn = self.callLater(self.smpp_bind_timeout,
-            self.lose_unbound_connection, expected_status)
+                                         self.lose_unbound_connection,
+                                         expected_status)
 
     def lose_unbound_connection(self, required_state):
         if self.state != required_state:
@@ -156,53 +186,55 @@ class EsmeTransceiver(Protocol):
     def dataReceived(self, data):
         self.datastream += data
         data = self.pop_data()
-        while data != None:
-            self.handle_data(data)
+        while data is not None:
+            self._pdu_queue.put(data)
             data = self.pop_data()
 
     def send_pdu(self, pdu):
         data = pdu.get_bin()
-        log.msg('OUTGOING >>>> %s' % unpack_pdu(data))
+        unpacked = unpack_pdu(data)
+        command_id = unpacked['header']['command_id']
+        if command_id not in ('enquire_link', 'enquire_link_resp'):
+            log.debug('OUTGOING >>>> %s' % unpacked)
         self.transport.write(data)
 
+    @inlineCallbacks
     def start_enquire_link(self):
         self.lc_enquire = LoopingCall(self.enquire_link)
         self.lc_enquire.start(self.smpp_enquire_link_interval)
         self.cancel_drop_connection_call()
-        self.esme_callbacks.connect(self)
+        yield self.esme_callbacks.connect(self)
 
+    @inlineCallbacks
     def stop_enquire_link(self):
         lc_enquire = getattr(self, 'lc_enquire', None)
         if lc_enquire and lc_enquire.running:
             lc_enquire.stop()
             log.msg('Stopped enquire link looping call')
+            yield lc_enquire.deferred
 
     def cancel_drop_connection_call(self):
         if self._lose_conn is not None:
             self._lose_conn.cancel()
             self._lose_conn = None
 
+    @inlineCallbacks
     def handle_bind_transceiver_resp(self, pdu):
         if pdu['header']['command_status'] == 'ESME_ROK':
             self.state = 'BOUND_TRX'
-            self.start_enquire_link()
+            yield self.start_enquire_link()
         log.msg('STATE: %s' % (self.state))
 
+    @inlineCallbacks
     def handle_submit_sm_resp(self, pdu):
-        self.pop_unacked()
+        yield self.pop_unacked()
         message_id = pdu.get('body', {}).get(
                 'mandatory_parameters', {}).get('message_id')
-        self.esme_callbacks.submit_sm_resp(
+        yield self.esme_callbacks.submit_sm_resp(
                 sequence_number=pdu['header']['sequence_number'],
                 command_status=pdu['header']['command_status'],
                 command_id=pdu['header']['command_id'],
                 message_id=message_id)
-        if pdu['header']['command_status'] == 'ESME_ROK':
-            pass
-
-    def handle_submit_multi_resp(self, pdu):
-        if pdu['header']['command_status'] == 'ESME_ROK':
-            pass
 
     def _decode_message(self, message, data_coding):
         """
@@ -230,11 +262,11 @@ class EsmeTransceiver(Protocol):
 
         Particularly problematic are the "Octet unspecified" encodings.
         """
-        codec = {
+        codec = dict({
             1: 'ascii',
             3: 'latin1',
             8: 'utf-16be',  # Actually UCS-2, but close enough.
-            }.get(data_coding, None)
+            }, **self.config.data_coding_overrides).get(data_coding, None)
         if codec is None or message is None:
             log.msg("WARNING: Not decoding message with data_coding=%s" % (
                     data_coding,))
@@ -252,65 +284,133 @@ class EsmeTransceiver(Protocol):
         if self.state not in ['BOUND_RX', 'BOUND_TRX']:
             log.err('WARNING: Received deliver_sm in wrong state: %s' % (
                 self.state))
+            return
 
-        if pdu['header']['command_status'] == 'ESME_ROK':
-            sequence_number = pdu['header']['sequence_number']
-            message_id = str(uuid.uuid4())
-            pdu_resp = DeliverSMResp(sequence_number,
-                    **self.defaults)
-            self.send_pdu(pdu_resp)
-            pdu_params = pdu['body']['mandatory_parameters']
-            delivery_report = self.config.delivery_report_re.search(
-                    pdu_params['short_message'] or ''
-                    )
-            if delivery_report:
-                self.esme_callbacks.delivery_report(
-                        destination_addr=pdu_params['destination_addr'],
-                        source_addr=pdu_params['source_addr'],
-                        delivery_report=delivery_report.groupdict(),
-                        )
-            elif detect_multipart(pdu):
-                redis_key = "multi_%s" % (
-                    multipart_key(detect_multipart(pdu)),)
-                log.msg("Redis multipart key: %s" % (redis_key))
-                value = yield self.redis.get(redis_key)
-                value = json.loads(value or 'null')
-                log.msg("Retrieved value: %s" % (repr(value)))
-                multi = MultipartMessage(value)
-                multi.add_pdu(pdu)
-                completed = multi.get_completed()
-                if completed:
-                    yield self.redis.delete(redis_key)
-                    log.msg("Reassembled Message: %s" % (completed['message']))
-                    # and we can finally pass the whole message on
-                    self.esme_callbacks.deliver_sm(
-                            destination_addr=completed['to_msisdn'],
-                            source_addr=completed['from_msisdn'],
-                            short_message=completed['message'],
-                            message_id=message_id,
-                            )
-                else:
-                    yield self.redis.set(
-                        redis_key, json.dumps(multi.get_array()))
-            else:
-                decoded_msg = self._decode_message(pdu_params['short_message'],
-                                                   pdu_params['data_coding'])
-                self.esme_callbacks.deliver_sm(
-                        destination_addr=pdu_params['destination_addr'],
-                        source_addr=pdu_params['source_addr'],
-                        short_message=decoded_msg,
-                        message_id=message_id,
-                        )
+        if pdu['header']['command_status'] != 'ESME_ROK':
+            return
+
+        # TODO: Only ACK messages once we've processed them?
+        sequence_number = pdu['header']['sequence_number']
+        pdu_resp = DeliverSMResp(sequence_number, **self.defaults)
+        yield self.send_pdu(pdu_resp)
+
+        pdu_params = pdu['body']['mandatory_parameters']
+        delivery_report = self.config.delivery_report_re.search(
+            pdu_params['short_message'] or '')
+
+        if delivery_report:
+            # We have a delivery report.
+            yield self.esme_callbacks.delivery_report(
+                destination_addr=pdu_params['destination_addr'],
+                source_addr=pdu_params['source_addr'],
+                delivery_report=delivery_report.groupdict(),
+                )
+        elif detect_ussd(pdu):
+            # We have a USSD message.
+            yield self._handle_deliver_sm_ussd(pdu, pdu_params)
+        elif detect_multipart(pdu):
+            # We have a multipart SMS.
+            yield self._handle_deliver_sm_multipart(pdu, pdu_params)
+        else:
+            # We have a standard SMS.
+            yield self._handle_deliver_sm_sms(pdu_params)
+
+    def _handle_deliver_sm_ussd(self, pdu, pdu_params):
+        # Some of this stuff might be specific to Tata's setup.
+
+        pdu_opts = unpacked_pdu_opts(pdu)
+        service_op = pdu_opts['ussd_service_op']
+
+        session_event = 'close'
+        if service_op == '01':
+            # PSSR request. Let's assume it means a new session.
+            session_event = 'new'
+        elif service_op == '11':
+            # PSSR response. This means session end.
+            session_event = 'close'
+        elif service_op in ('02', '12'):
+            # USSR request or response. I *think* we only get the latter.
+            session_event = 'continue'
+
+        # According to the spec, the first octet is the session id and the
+        # second is the client dialog id (first 7 bits) and end session flag
+        # (last bit).
+
+        # Since we don't use the client dialog id and the spec says it's
+        # ESME-defined, treat the whole thing as opaque "session info" that
+        # gets passed back in reply messages.
+
+        its_session_number = int(pdu_opts['its_session_info'], 16)
+        end_session = bool(its_session_number % 2)
+        session_info = "%04x" % (its_session_number & 0xfffe)
+
+        if end_session:
+            # We have an explicit "end session" flag.
+            session_event = 'close'
+
+        message_id = str(uuid.uuid4())
+        decoded_msg = self._decode_message(pdu_params['short_message'],
+                                           pdu_params['data_coding'])
+        return self.esme_callbacks.deliver_sm(
+            destination_addr=pdu_params['destination_addr'],
+            source_addr=pdu_params['source_addr'],
+            short_message=decoded_msg,
+            message_id=message_id,
+            message_type='ussd',
+            session_event=session_event,
+            session_info=session_info,
+            )
+
+    def _handle_deliver_sm_sms(self, pdu_params):
+        message_id = str(uuid.uuid4())
+        decoded_msg = self._decode_message(pdu_params['short_message'],
+                                           pdu_params['data_coding'])
+        return self.esme_callbacks.deliver_sm(
+            destination_addr=pdu_params['destination_addr'],
+            source_addr=pdu_params['source_addr'],
+            short_message=decoded_msg,
+            message_id=message_id,
+            )
+
+    @inlineCallbacks
+    def _handle_deliver_sm_multipart(self, pdu, pdu_params):
+        message_id = str(uuid.uuid4())
+        redis_key = "multi_%s" % (multipart_key(detect_multipart(pdu)),)
+        log.debug("Redis multipart key: %s" % (redis_key))
+        value = yield self.redis.get(redis_key)
+        value = json.loads(value or 'null')
+        log.debug("Retrieved value: %s" % (repr(value)))
+        multi = MultipartMessage(value)
+        multi.add_pdu(pdu)
+        completed = multi.get_completed()
+        if completed:
+            yield self.redis.delete(redis_key)
+            log.msg("Reassembled Message: %s" % (completed['message']))
+            # and we can finally pass the whole message on
+            yield self.esme_callbacks.deliver_sm(
+                destination_addr=completed['to_msisdn'],
+                source_addr=completed['from_msisdn'],
+                short_message=completed['message'],
+                message_id=message_id,
+                )
+        else:
+            yield self.redis.set(
+                redis_key, json.dumps(multi.get_array()))
 
     def handle_enquire_link(self, pdu):
         if pdu['header']['command_status'] == 'ESME_ROK':
+            log.msg("enquire_link OK")
             sequence_number = pdu['header']['sequence_number']
             pdu_resp = EnquireLinkResp(sequence_number)
             self.send_pdu(pdu_resp)
+        else:
+            log.msg("enquire_link NOT OK: %r" % (pdu,))
 
     def handle_enquire_link_resp(self, pdu):
         if pdu['header']['command_status'] == 'ESME_ROK':
-            pass
+            log.msg("enquire_link_resp OK")
+        else:
+            log.msg("enquire_link_resp NOT OK: %r" % (pdu,))
 
     def get_unacked_count(self):
         return self.redis.llen("unacked").addCallback(int)
@@ -331,40 +431,23 @@ class EsmeTransceiver(Protocol):
             log.err(('WARNING: submit_sm in wrong state: %s, '
                      'dropping message: %s' % (self.state, kwargs)))
             returnValue(0)
-        else:
-            sequence_number = yield self.get_next_seq()
-            pdu = SubmitSM(sequence_number, **dict(self.defaults, **kwargs))
-            self.send_pdu(pdu)
-            self.push_unacked(sequence_number)
-            returnValue(sequence_number)
 
-    @inlineCallbacks
-    def submit_multi(self, dest_address=[], **kwargs):
-        if self.state in ['BOUND_TX', 'BOUND_TRX']:
-            sequence_number = yield self.get_next_seq()
-            pdu = SubmitMulti(sequence_number, **dict(self.defaults, **kwargs))
-            for item in dest_address:
-                if isinstance(item, str):
-                    # assume strings are addresses not lists
-                    pdu.addDestinationAddress(
-                            item,
-                            dest_addr_ton=self.defaults['dest_addr_ton'],
-                            dest_addr_npi=self.defaults['dest_addr_npi'],
-                            )
-                elif isinstance(item, dict):
-                    if item.get('dest_flag') == 1:
-                        pdu.addDestinationAddress(
-                                item.get('destination_addr', ''),
-                                dest_addr_ton=item.get('dest_addr_ton',
-                                    self.defaults['dest_addr_ton']),
-                                dest_addr_npi=item.get('dest_addr_npi',
-                                    self.defaults['dest_addr_npi']),
-                                )
-                    elif item.get('dest_flag') == 2:
-                        pdu.addDistributionList(item.get('dl_name'))
-            self.send_pdu(pdu)
-            returnValue(sequence_number)
-        returnValue(0)
+        sequence_number = yield self.get_next_seq()
+        pdu_params = self.defaults.copy()
+        pdu_params.update(kwargs)
+
+        pdu = SubmitSM(sequence_number, **pdu_params)
+        if kwargs.get('message_type', 'sms') == 'ussd':
+            update_ussd_pdu(pdu, kwargs.get('continue_session', True),
+                            kwargs.get('session_info', None))
+
+        message = pdu_params['short_message']
+        if self.config.send_long_messages and len(message) > 254:
+            pdu.add_message_payload(''.join('%02x' % ord(c) for c in message))
+
+        self.send_pdu(pdu)
+        yield self.push_unacked(sequence_number)
+        returnValue(sequence_number)
 
     @inlineCallbacks
     def enquire_link(self, **kwargs):
@@ -389,40 +472,26 @@ class EsmeTransceiver(Protocol):
 
 
 class EsmeTransmitter(EsmeTransceiver):
+    BIND_PDU = BindTransmitter
+    CONNECTED_STATE = 'BOUND_TX'
 
     @inlineCallbacks
-    def connectionMade(self):
-        self.state = 'OPEN'
-        log.msg('STATE: %s' % (self.state))
-        seq = yield self.get_next_seq()
-        pdu = BindTransmitter(seq, **self.defaults)
-        log.msg(pdu.get_obj())
-        self.send_pdu(pdu)
-        self.schedule_lose_connection('BOUND_TX')
-
     def handle_bind_transmitter_resp(self, pdu):
         if pdu['header']['command_status'] == 'ESME_ROK':
             self.state = 'BOUND_TX'
-            self.start_enquire_link()
+            yield self.start_enquire_link()
         log.msg('STATE: %s' % (self.state))
 
 
 class EsmeReceiver(EsmeTransceiver):
+    BIND_PDU = BindReceiver
+    CONNECTED_STATE = 'BOUND_RX'
 
     @inlineCallbacks
-    def connectionMade(self):
-        self.state = 'OPEN'
-        log.msg('STATE: %s' % (self.state))
-        seq = yield self.get_next_seq()
-        pdu = BindReceiver(seq, **self.defaults)
-        log.msg(pdu.get_obj())
-        self.send_pdu(pdu)
-        self.schedule_lose_connection('BOUND_RX')
-
     def handle_bind_receiver_resp(self, pdu):
         if pdu['header']['command_status'] == 'ESME_ROK':
             self.state = 'BOUND_RX'
-            self.start_enquire_link()
+            yield self.start_enquire_link()
         log.msg('STATE: %s' % (self.state))
 
 
@@ -446,9 +515,10 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
         self.resetDelay()
         return self.esme
 
+    @inlineCallbacks
     def clientConnectionLost(self, connector, reason):
         log.msg('Lost connection.  Reason:', reason)
-        self.esme_callbacks.disconnect()
+        yield self.esme_callbacks.disconnect()
         ReconnectingClientFactory.clientConnectionLost(
                 self, connector, reason)
 

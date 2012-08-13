@@ -74,6 +74,8 @@ class TestFakeVas2NetsWorker(FakeVas2NetsWorker):
 
 class FakeVas2NetsWorkerTestCase(unittest.TestCase):
 
+    timeout = 5
+
     def setUp(self):
         self.config = {
             'web_port': 9999,

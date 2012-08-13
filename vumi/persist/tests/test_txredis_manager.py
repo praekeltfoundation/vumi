@@ -10,7 +10,8 @@ class RedisManagerTestCase(TestCase):
     @inlineCallbacks
     def setUp(self):
         self.manager = yield TxRedisManager.from_config(
-            {'key_prefix': 'redistest'})
+            {'FAKE_REDIS': 'yes',
+             'key_prefix': 'redistest'})
         yield self.manager._purge_all()
 
     @inlineCallbacks

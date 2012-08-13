@@ -274,6 +274,10 @@ class Worker(MultiService, object):
             return reactor.listenSSL(port, site_factory, ssl_context)
 
 
+class QueueCloseMarker(object):
+    "This is a marker for closing consumer queues."
+
+
 class Consumer(object):
 
     exchange_name = "vumi"
@@ -299,6 +303,9 @@ class Consumer(object):
             try:
                 while self.keep_consuming:
                     message = yield self.queue.get()
+                    if isinstance(message, QueueCloseMarker):
+                        log.msg("Queue closed.")
+                        return
                     yield self.consume(message)
             except txamqp.queue.Closed, e:
                 log.err("Queue has closed", e)
@@ -334,12 +341,13 @@ class Consumer(object):
 
     @inlineCallbacks
     def stop(self):
+        log.msg("Consumer stopping...")
         self.keep_consuming = False
-        # This just marks the channel as closed on the client
-        #self.channel.close(None)
         # This actually closes the channel on the server
         yield self.channel.channel_close()
+        # This just marks the channel as closed on the client
         self.channel.close(None)
+        self.queue.put(QueueCloseMarker())
         returnValue(self.keep_consuming)
 
 
