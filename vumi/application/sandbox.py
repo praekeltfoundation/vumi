@@ -601,14 +601,20 @@ class Sandbox(ApplicationWorker):
     def process_message_in_sandbox(self, msg):
         sandbox_id = self.sandbox_id_for_message(msg)
         api = self.create_sandbox_api()
-        return self._process_in_sandbox(sandbox_id, api,
-                lambda sandbox: api.sandbox_inbound_message(msg))
+
+        def sandbox_init(sandbox):
+            api.sandbox_inbound_message(msg)
+
+        return self._process_in_sandbox(sandbox_id, api, sandbox_init)
 
     def process_event_in_sandbox(self, event):
         sandbox_id = self.sandbox_id_for_event(event)
         api = self.create_sandbox_api()
-        return self._process_in_sandbox(sandbox_id, api,
-                lambda sandbox: api.sandbox_inbound_event(event))
+
+        def sandbox_init(sandbox):
+            api.sandbox_inbound_event(event)
+
+        return self._process_in_sandbox(sandbox_id, api, sandbox_init)
 
     def consume_user_message(self, msg):
         return self.process_message_in_sandbox(msg)
