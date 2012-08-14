@@ -303,6 +303,16 @@ class SandboxResource(object):
 
 
 class RedisResource(SandboxResource):
+    """Resource that provices access to a simple key-value store.
+
+    Configuration options:
+
+    :param dict redis_manager:
+        Redis manager configuration options.
+    :param int keys_per_user:
+        Maximum number of keys each user may make use of in redis
+        (default: 100).
+    """
 
     @inlineCallbacks
     def setup(self):
@@ -340,7 +350,7 @@ class RedisResource(SandboxResource):
         key = self._sandboxed_key(api.sandbox_id, command.get('key'))
         raw_value = yield self.redis.get(key)
         returnValue(self.reply(command, success=True,
-                          value=json.loads(raw_value)))
+                               value=json.loads(raw_value)))
 
     @inlineCallbacks
     def handle_delete(self, api, command):
@@ -354,6 +364,8 @@ class RedisResource(SandboxResource):
 
 
 class OutboundResource(SandboxResource):
+    """Resource that provides the ability to send outbound messages.
+    """
 
     def handle_reply_to(self, api, command):
         content = command['content']
@@ -377,6 +389,16 @@ class OutboundResource(SandboxResource):
 
 
 class JsSandboxResource(SandboxResource):
+    """Resource that initializes a Javascript sandbox.
+
+    Typically used alongside vumi/applicaiton/sandboxer.js which is
+    a simple node.js based Javascript sandbox.
+
+    Configuration options:
+
+    :param str javascript:
+        Javascript to execute inside the sandbox.
+    """
     def setup(self):
         self.javascript = self.config.get('javascript')
 
@@ -386,7 +408,9 @@ class JsSandboxResource(SandboxResource):
 
 
 class LoggingResource(SandboxResource):
-
+    """Resource that allows a sandbox to log messages via Twisted's
+    logging framework.
+    """
     def handle_info(self, api, command):
         log.info(command['msg'])
         return self.reply(command, success=True)
@@ -466,7 +490,7 @@ class SandboxCommand(Message):
             'cmd',
             'cmd_id',
             'reply',
-            )
+        )
 
 
 class Sandbox(ApplicationWorker):
@@ -511,7 +535,7 @@ class Sandbox(ApplicationWorker):
         resource.RLIMIT_NOFILE: (10, 10),
         resource.RLIMIT_MEMLOCK: (64 * KB, 64 * KB),
         resource.RLIMIT_AS: (64 * MB, 64 * MB),
-        }
+    }
 
     def validate_config(self):
         self.executable = self.config.get("executable")
