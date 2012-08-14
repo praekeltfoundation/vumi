@@ -128,6 +128,22 @@ class SandboxRlimiter(object):
 
 
 class SandboxProtocol(ProcessProtocol):
+    """A protocol for communicating over stdin and stdout with a sandboxed
+    process.
+
+    The sandbox process is created by calling :meth:`spawn`. This:
+
+    * Spawns a new Python process that applies the supplied rlimits.
+    * The spawned process then `execs` the supplied executable.
+
+    Once a spawned process starts, the parent process communicates with
+    it over `stdin`, `stdout` and `stderr` reading and writing a stream
+    of newline separated JSON commands that are parsed and formatted by
+    :class:`SandboxCommand`.
+
+    Incoming commands are dispatched to :class:`SandboxResource` instances
+    via the supplied :class:`SandboxApi`.
+    """
 
     def __init__(self, sandbox_id, api, executable, spawn_kwargs,
                  rlimits, timeout, recv_limit):
