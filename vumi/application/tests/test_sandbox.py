@@ -15,7 +15,7 @@ from vumi.application.tests.test_base import ApplicationTestCase
 from vumi.application.sandbox import (Sandbox, SandboxCommand, SandboxError,
                                       RedisResource, OutboundResource,
                                       JsSandboxResource, LoggingResource)
-from vumi.tests.utils import FakeRedis, LogCatcher, PersistenceMixin
+from vumi.tests.utils import LogCatcher, PersistenceMixin
 
 
 class SandboxTestCaseBase(ApplicationTestCase):
@@ -30,7 +30,7 @@ class SandboxTestCaseBase(ApplicationTestCase):
             'args': args,
             'path': tmp_path,
             'timeout': '10',
-            }
+        }
         if extra_config is not None:
             config.update(extra_config)
         return self.get_application(config)
@@ -39,7 +39,7 @@ class SandboxTestCaseBase(ApplicationTestCase):
         msg_kw = {
             'event_type': 'ack', 'user_message_id': '1',
             'sent_message_id': '1', 'sandbox_id': 'sandbox1',
-            }
+        }
         msg_kw.update(kw)
         return TransportEvent(**msg_kw)
 
@@ -48,7 +48,7 @@ class SandboxTestCaseBase(ApplicationTestCase):
             'to_addr': "1", 'from_addr': "2",
             'transport_name': "test", 'transport_type': "sphex",
             'sandbox_id': 'sandbox1',
-            }
+        }
         msg_kw.update(kw)
         return TransportUserMessage(**msg_kw)
 
@@ -67,7 +67,7 @@ class SandboxTestCase(SandboxTestCaseBase):
             "sys.stdout.write('{}\\n')\n"
             "sys.stdout.flush()\n"
             "time.sleep(5)\n"
-            )
+        )
         status = yield app.process_event_in_sandbox(self.mk_event())
         [sandbox_err] = self.flushLoggedErrors(SandboxError)
         self.assertEqual(str(sandbox_err.value).split(' [')[0],
@@ -82,7 +82,7 @@ class SandboxTestCase(SandboxTestCaseBase):
         app = yield self.setup_app(
             "import sys\n"
             "sys.stderr.write('err\\n')\n"
-            )
+        )
         status = yield app.process_event_in_sandbox(self.mk_event())
         self.assertEqual(status, 0)
         [sandbox_err] = self.flushLoggedErrors(SandboxError)
@@ -124,10 +124,10 @@ class SandboxTestCase(SandboxTestCaseBase):
             "import sys\n"
             "sys.stdout.write(%r)\n" % json_data,
             {'sandbox': {
-                    'outbound': {
-                        'cls': 'vumi.application.sandbox.OutboundResource',
-                    },
-             }})
+                'outbound': {
+                    'cls': 'vumi.application.sandbox.OutboundResource',
+                },
+            }})
         status = yield app.process_message_in_sandbox(msg)
         self.assertEqual(status, 0)
         [reply] = self.get_dispatched_messages()
@@ -160,7 +160,7 @@ class SandboxTestCase(SandboxTestCaseBase):
             {'sandbox': {
                 'log': {'cls': 'vumi.application.sandbox.LoggingResource'},
             }},
-            )
+        )
         with LogCatcher() as lc:
             status = yield getattr(app, handler_name)(msg)
             cmd_json = [log['message'][0] for log in lc.logs][0]
@@ -193,7 +193,7 @@ class NodeJsSandboxTestCase(SandboxTestCaseBase):
     possible_nodejs_executables = [
         '/usr/local/bin/node',
         '/usr/bin/node',
-        ]
+    ]
 
     def setUp(self):
         super(NodeJsSandboxTestCase, self).setUp()
@@ -210,14 +210,14 @@ class NodeJsSandboxTestCase(SandboxTestCaseBase):
         extra_config = extra_config or {}
         sandbox_config = extra_config.setdefault('sandbox', {})
         sandbox_config.update({
-                'log': {
-                    'cls': 'vumi.application.sandbox.LoggingResource',
-                    },
-                 'js': {
-                    'cls': 'vumi.application.sandbox.JsSandboxResource',
-                    'javascript': javascript_code,
-                    },
-            })
+            'log': {
+                'cls': 'vumi.application.sandbox.LoggingResource',
+            },
+            'js': {
+                'cls': 'vumi.application.sandbox.JsSandboxResource',
+                'javascript': javascript_code,
+            },
+        })
         return super(NodeJsSandboxTestCase, self).setup_app(
             self.nodejs_executable, [self.sandboxer_js],
             extra_config=extra_config)
@@ -242,7 +242,7 @@ class NodeJsSandboxTestCase(SandboxTestCaseBase):
             'From command: inbound-message',
             'Log successful: true',
             'Done.',
-            ])
+        ])
 
 
 class DummyAppWorker(object):
@@ -412,7 +412,7 @@ class TestJsSandboxResource(ResourceTestCaseBase):
         super(TestJsSandboxResource, self).setUp()
         yield self.create_resource({
             'javascript': 'testscript',
-            })
+        })
 
     def test_sandbox_init(self):
         msgs = []
