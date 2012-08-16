@@ -7,7 +7,7 @@ from twisted.python import log
 from twisted.application.service import MultiService
 from twisted.application.internet import TCPClient
 from twisted.internet.defer import inlineCallbacks, returnValue
-from twisted.internet import protocol, reactor, ssl
+from twisted.internet import protocol, reactor
 from twisted.web.resource import Resource
 import txamqp
 from txamqp.client import TwistedDelegate
@@ -242,8 +242,7 @@ class Worker(MultiService, object):
     def start_publisher(self, publisher_class, *args, **kw):
         return self._amqp_client.start_publisher(publisher_class, *args, **kw)
 
-    def start_web_resources(self, resources, port, site_class=None,
-                            ssl_key=None, ssl_cert=None):
+    def start_web_resources(self, resources, port, site_class=None):
         # start the HTTP server for receiving the receipts
         root = Resource()
         # sort by ascending path length to make sure we create
@@ -267,11 +266,7 @@ class Worker(MultiService, object):
         if site_class is None:
             site_class = LogFilterSite
         site_factory = site_class(root)
-        if ssl_key is None:
-            return reactor.listenTCP(port, site_factory)
-        else:
-            ssl_context = ssl.DefaultOpenSSLContextFactory(ssl_key, ssl_cert)
-            return reactor.listenSSL(port, site_factory, ssl_context)
+        return reactor.listenTCP(port, site_factory)
 
 
 class QueueCloseMarker(object):
