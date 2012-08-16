@@ -6,7 +6,6 @@ from twisted.python import log
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.transports.httprpc import HttpRpcTransport
-from vumi.transports.base import Transport
 
 
 class MediaEdgeGSMTransport(HttpRpcTransport):
