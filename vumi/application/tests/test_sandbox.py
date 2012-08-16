@@ -163,7 +163,7 @@ class SandboxTestCase(SandboxTestCaseBase):
         )
         with LogCatcher() as lc:
             status = yield getattr(app, handler_name)(msg)
-            cmd_json = [log['message'][0] for log in lc.logs][0]
+            [cmd_json] = lc.messages()
 
         self.assertEqual(status, 0)
         echoed_cmd = json.loads(cmd_json)
@@ -232,7 +232,7 @@ class NodeJsSandboxTestCase(SandboxTestCaseBase):
         with LogCatcher() as lc:
             status = yield app.process_message_in_sandbox(self.mk_msg())
             failures = [log['failure'].value for log in lc.errors]
-            msgs = [log['message'][0] for log in lc.logs if log['message']]
+            msgs = lc.messages()
         self.assertEqual(failures, [])
         self.assertEqual(status, 0)
         self.assertEqual(msgs, [
@@ -436,6 +436,6 @@ class TestLoggingResource(ResourceTestCaseBase):
     def test_handle_info(self):
         with LogCatcher() as lc:
             reply = yield self.dispatch_command('info', msg='foo')
-            msgs = [log['message'][0] for log in lc.logs if log['message']]
+            msgs = lc.messages()
         self.assertEqual(reply['success'], True)
         self.assertEqual(msgs, ['foo'])

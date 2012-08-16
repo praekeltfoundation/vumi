@@ -120,8 +120,8 @@ class TestVumiBotProtocol(unittest.TestCase):
     def test_connection_lost(self):
         with LogCatcher() as logger:
             self.vb.connectionLost("test loss of connection")
-            [log] = logger.logs
-            self.assertEqual(log['message'][0],
+            [logmsg] = logger.messages()
+            self.assertEqual(logmsg,
                              'Disconnected (nickname was: %s).' % self.nick)
             self.assertEqual(logger.errors, [])
 
@@ -132,8 +132,8 @@ class TestVumiBotProtocol(unittest.TestCase):
     def test_joined(self):
         with LogCatcher() as logger:
             self.vb.joined(self.channel)
-            [log] = logger.logs
-            self.assertEqual(log['message'][0], 'Joined %r' % self.channel)
+            [logmsg] = logger.messages()
+            self.assertEqual(logmsg, 'Joined %r' % self.channel)
 
     def test_privmsg(self):
         sender, command, recipient, text = (self.nick, 'PRIVMSG', "#zoo",
@@ -156,8 +156,8 @@ class TestVumiBotProtocol(unittest.TestCase):
     def test_irc_nick(self):
         with LogCatcher() as logger:
             self.vb.irc_NICK("oldnick!host", ["newnick"])
-            [log] = logger.logs
-            self.assertEqual(log['message'][0],
+            [logmsg] = logger.messages()
+            self.assertEqual(logmsg,
                              "Nick changed from 'oldnick' to 'newnick'")
 
     def test_alter_collided_nick(self):
