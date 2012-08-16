@@ -125,7 +125,7 @@ class TestMediaEdgeGSMTransport(TransportTestCase):
         self.assertEqual(msg['content'], u"öæł")
 
         tum = TransportUserMessage(**msg.payload)
-        reply_msg = tum.reply(u'Zöe says hi')
+        reply_msg = tum.reply(u'Zoë says hi')
         yield self.dispatch(reply_msg)
 
         response = yield deferred
