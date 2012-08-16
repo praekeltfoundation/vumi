@@ -23,9 +23,9 @@ class TestMediaEdgeGSMTransport(TransportTestCase):
     def setUp(self):
         super(TestMediaEdgeGSMTransport, self).setUp()
 
-        self.mediafone_calls = DeferredQueue()
-        self.mock_mediafone = MockHttpServer(self.handle_request)
-        yield self.mock_mediafone.start()
+        self.mediaedgegsm_calls = DeferredQueue()
+        self.mock_mediaedgegsm = MockHttpServer(self.handle_request)
+        yield self.mock_mediaedgegsm.start()
 
         self.config = {
             'transport_name': self.transport_name,
@@ -39,11 +39,11 @@ class TestMediaEdgeGSMTransport(TransportTestCase):
 
     @inlineCallbacks
     def tearDown(self):
-        yield self.mock_mediafone.stop()
+        yield self.mock_mediaedgegsm.stop()
         yield super(TestMediaEdgeGSMTransport, self).tearDown()
 
     def handle_request(self, request):
-        self.mediafone_calls.put(request)
+        self.mediaedgegsm_calls.put(request)
         return ''
 
     def mkurl(self, content, from_addr="2371234567", **kw):
