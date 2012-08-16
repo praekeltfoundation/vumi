@@ -260,6 +260,9 @@ class LogCatcher(object):
     def errors(self):
         return [ev for ev in self.logs if ev["isError"]]
 
+    def messages(self):
+        return [msg['message'][0] for msg in self.logs if not msg["isError"]]
+
     def _gather_logs(self, event_dict):
         self.logs.append(event_dict)
 
