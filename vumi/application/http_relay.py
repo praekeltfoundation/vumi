@@ -70,12 +70,6 @@ class HTTPRelayApplication(ApplicationWorker):
         no outbound message server is started.
     :param str web_port:
         Port to listen for outbound messages on (default: None).
-    :param str web_ssl_key:
-        Path to the file containing the SSL key for the web server
-        (default: don't use SSL).
-    :param str web_ssl_cert:
-        Path to the file containing the SSL certificate for the web
-        server (default: don't use SSL).
     :param str username:
         Username to use when calling the `url` (default: no authentication).
     :param str password:
@@ -100,8 +94,6 @@ class HTTPRelayApplication(ApplicationWorker):
                                            self.url.geturl()))
         self.web_path = self.config.get('web_path')
         self.web_port = int(self.config.get('web_port') or 0)
-        self.web_ssl_key = self.config.get('web_ssl_key')
-        self.web_ssl_cert = self.config.get('web_ssl_cert')
         self.username = self.config.get('username', '')
         self.password = self.config.get('password', '')
         self.http_method = self.config.get('http_method', 'POST')
@@ -119,8 +111,7 @@ class HTTPRelayApplication(ApplicationWorker):
                     (SendResource(self), self.web_path),
                     (HealthResource(), 'health'),
                 ],
-                self.web_port,
-                ssl_key=self.web_ssl_key, ssl_cert=self.web_ssl_cert)
+                self.web_port)
         else:
             self.web_resource = None
 
