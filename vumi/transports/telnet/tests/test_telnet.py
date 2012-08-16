@@ -94,7 +94,7 @@ class TelnetServerTransportTestCase(TransportTestCase):
                          TransportUserMessage.SESSION_RESUME)
 
     @inlineCallbacks
-    def test_outbound_message(self):
+    def test_outbound_reply(self):
         [reg] = self.get_messages('test.inbound')
         reply = reg.reply(content="reply_foo", continue_session=False)
         yield self.dispatch(reply)
@@ -112,3 +112,12 @@ class TelnetServerTransportTestCase(TransportTestCase):
         line = yield self.client.transport.protocol.queue.get()
         self.assertEqual(line, "DONE")
         self.assertFalse(self.client.transport.connected)
+
+    @inlineCallbacks
+    def test_outbound_send(self):
+        [reg] = self.get_messages('test.inbound')
+        msg = self.mkmsg_out(content="send_foo", to_addr=reg['from_addr'])
+        yield self.dispatch(msg)
+        line = yield self.client.transport.protocol.queue.get()
+        self.assertEqual(line, "send_foo")
+        self.assertTrue(self.client.transport.connected)
