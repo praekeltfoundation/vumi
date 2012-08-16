@@ -14,8 +14,6 @@ from vumi.message import TransportUserMessage
 
 class TestMediaEdgeGSMTransport(TransportTestCase):
 
-    timeout = 5
-
     transport_name = 'test_mediaedgegsm_transport'
     transport_class = MediaEdgeGSMTransport
 
@@ -115,3 +113,23 @@ class TestMediaEdgeGSMTransport(TransportTestCase):
         self.assertEqual(400, response.code)
         self.assertEqual(json.loads(response.delivered_body),
                          {'credentials': 'invalid'})
+
+    @inlineCallbacks
+    def test_handle_non_ascii_input(self):
+        url = self.mkurl(u"öæł".encode("utf-8"))
+        deferred = http_request_full(url, '', method='GET')
+        [msg] = yield self.wait_for_dispatched_messages(1)
+        self.assertEqual(msg['transport_name'], self.transport_name)
+        self.assertEqual(msg['to_addr'], "12345")
+        self.assertEqual(msg['from_addr'], "2371234567")
+        self.assertEqual(msg['content'], u"öæł")
+
+        tum = TransportUserMessage(**msg.payload)
+        reply_msg = tum.reply(u'Zöe says hi')
+        yield self.dispatch(reply_msg)
+
+        response = yield deferred
+        self.assertEqual(response.headers.getRawHeaders('Content-Type'),
+            ['text/plain; charset=utf-8'])
+        self.assertEqual(response.delivered_body,
+            u'Zoë says hi'.encode('utf-8'))

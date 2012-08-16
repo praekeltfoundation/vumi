@@ -33,7 +33,7 @@ class HttpRpcResource(Resource):
 
     def render_(self, request, http_action=None):
         log.msg("HttpRpcResource HTTP Action: %s" % (request,))
-        request.setHeader("content-type", "text/plain")
+        request.setHeader("content-type", self.transport.content_type)
         msgid = Transport.generate_message_id()
         self.transport.requests[msgid] = request
         self.transport.handle_raw_inbound_message(msgid, request)
@@ -58,6 +58,7 @@ class HttpRpcTransport(Transport):
     currently there many only be one transport worker for each instance
     of this transport of a given name.
     """
+    content_type = 'text/plain'
 
     def validate_config(self):
         self.web_path = self.config['web_path']

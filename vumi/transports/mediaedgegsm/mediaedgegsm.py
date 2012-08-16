@@ -6,6 +6,7 @@ from twisted.python import log
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.transports.httprpc import HttpRpcTransport
+from vumi.transports.base import Transport
 
 
 class MediaEdgeGSMTransport(HttpRpcTransport):
@@ -26,6 +27,7 @@ class MediaEdgeGSMTransport(HttpRpcTransport):
     """
 
     transport_type = 'sms'
+    content_type = 'text/plain; charset=utf-8'
 
     EXPECTED_FIELDS = set(['USN', 'PWD', 'PhoneNumber',
         'ServiceNumber', 'Operator', 'SMSBODY'])
