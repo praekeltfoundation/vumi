@@ -42,10 +42,10 @@ class HTTPRelayTestCase(ApplicationTestCase):
 
     @inlineCallbacks
     def make_resource_worker(self, code=http.OK, content='',
-                                headers={}, callback=None):
+                             headers={}, callback=None):
         w = get_stubbed_worker(TestResourceWorker, {})
         w.set_resources([
-                (self.path, TestResource, (code, content, headers, callback))])
+            (self.path, TestResource, (code, content, headers, callback))])
         self._workers.append(w)
         yield w.startWorker()
         returnValue(w)
