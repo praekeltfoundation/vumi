@@ -81,7 +81,7 @@ class SafaricomTransport(HttpRpcTransport):
         if session:
             to_addr = session['to_addr']
             last_ussd_params = session['last_ussd_params']
-            new_params = ussd_params.replace(last_ussd_params, '')
+            new_params = ussd_params[len(last_ussd_params):]
             if new_params:
                 if last_ussd_params:
                     content = new_params[1:]
