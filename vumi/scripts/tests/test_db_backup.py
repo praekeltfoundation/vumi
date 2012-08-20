@@ -65,10 +65,14 @@ class DbBackupBaseTestCase(TestCase, PersistenceMixin):
         config['key_prefix'] = self.redis._key(config['key_prefix'])
         return self.get_redis_manager(config)
 
-    def mkdbbackup(self, data=None):
+    def mkdbbackup(self, data=None, raw=False):
         if data is None:
             data = self.DB_BACKUP
-        return self.mkfile("\n".join([json.dumps(x) for x in data]))
+        if raw:
+            dumps = lambda x: x
+        else:
+            dumps = json.dumps
+        return self.mkfile("\n".join([dumps(x) for x in data]))
 
 
 class BackupDbCmdTestCase(DbBackupBaseTestCase):
@@ -105,12 +109,39 @@ class RestoreDbCmdTestCase(DbBackupBaseTestCase):
         {'baz': "bar"},
     ]
 
-    def test_empty_backup(self):
+    def _bad_header_test(self, data, expected_response, raw=False):
         cfg = self.make_cfg(["restore", self.mkdbconfig("bar"),
-                             self.mkdbbackup([])])
+                             self.mkdbbackup(data, raw=raw)])
         cfg.run()
-        self.assertEqual(cfg.output, [
+        self.assertEqual(cfg.output, expected_response)
+
+    def test_empty_backup(self):
+        self._bad_header_test([], [
             'Header not found.',
+            'Aborting restore.',
+        ])
+
+    def test_header_not_json(self):
+        self._bad_header_test(["."], [
+            'Header not JSON.',
+            'Aborting restore.',
+        ], raw=True)
+
+    def test_non_json_dict(self):
+        self._bad_header_test(["."], [
+            'Header not JSON dict.',
+            'Aborting restore.',
+        ])
+
+    def test_header_missing_backup_type(self):
+        self._bad_header_test([{}], [
+            'Header missing backup_type.',
+            'Aborting restore.',
+        ])
+
+    def test_unsupported_backup_type(self):
+        self._bad_header_test([{'backup_type': 'notredis'}], [
+            'Only redis backup type currently supported.',
             'Aborting restore.',
         ])
 

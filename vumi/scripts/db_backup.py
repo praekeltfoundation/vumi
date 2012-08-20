@@ -75,7 +75,7 @@ class RestoreDbsCmd(usage.Options):
         if not isinstance(header, dict):
             return "Header not JSON dict."
         if 'backup_type' not in header:
-            return "Header missing backup_type"
+            return "Header missing backup_type."
         if header['backup_type'] != 'redis':
             return "Only redis backup type currently supported."
         return None
