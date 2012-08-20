@@ -11,6 +11,10 @@ class BackupDbsCmd(usage.Options):
 
     synopsis = "<db-config.yaml>"
 
+    optFlags = [
+        ["not-sorted", None, "Don't sort keys when doing backup."],
+    ]
+
     def parseArgs(self, db_config):
         self.db_config = yaml.safe_load(open(db_config))
         self.redis_config = self.db_config.get('redis_manager', {})
@@ -18,7 +22,10 @@ class BackupDbsCmd(usage.Options):
     def run(self, cfg):
         cfg.emit("Backing up dbs ...")
         redis = cfg.get_redis(self.redis_config)
-        for key in sorted(redis.keys()):
+        keys = redis.keys()
+        if not self.opts['not-sorted']:
+            keys = sorted(keys)
+        for key in keys:
             cfg.emit(key)
 
 
