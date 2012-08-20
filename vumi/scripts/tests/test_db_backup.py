@@ -7,17 +7,22 @@ from twisted.trial.unittest import TestCase
 
 from vumi.tests.utils import PersistenceMixin
 
-from vumi.scripts.db_backup import ConfigHolder, Options
+from vumi.scripts.db_backup import ConfigHolder, Options, vumi_version
 
 
 class TestConfigHolder(ConfigHolder):
     def __init__(self, testcase, *args, **kwargs):
         self.testcase = testcase
         self.output = []
+        self.utcnow = None
         super(TestConfigHolder, self).__init__(*args, **kwargs)
 
     def emit(self, s):
         self.output.append(s)
+
+    def get_utcnow(self):
+        self.utcnow = super(TestConfigHolder, self).get_utcnow()
+        return self.utcnow
 
     def get_redis(self, config):
         return self.testcase.get_sub_redis(config)
@@ -80,6 +85,13 @@ class BackupDbCmdTestCase(DbBackupBaseTestCase):
         ])
         with open(db_backup) as backup:
             self.assertEqual([json.loads(x) for x in backup], [
+                {"vumi_version": vumi_version(),
+                 "format": "LF separated JSON",
+                 "backup_type": "redis",
+                 "timestamp": cfg.utcnow.isoformat(),
+                 "sorted": True,
+                 "redis_config": {"key_prefix": "bar"},
+                 },
                 {"bar": "2"},
                 {"baz": "bar"},
             ])
