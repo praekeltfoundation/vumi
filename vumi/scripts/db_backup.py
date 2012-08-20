@@ -1,5 +1,6 @@
 # -*- test-case-name: vumi.scripts.tests.test_db_backup -*-
 import sys
+import json
 
 import yaml
 from twisted.python import usage
@@ -9,14 +10,15 @@ from vumi.persist.redis_manager import RedisManager
 
 class BackupDbsCmd(usage.Options):
 
-    synopsis = "<db-config.yaml>"
+    synopsis = "<db-config.yaml> <db-backup-output.json>"
 
     optFlags = [
         ["not-sorted", None, "Don't sort keys when doing backup."],
     ]
 
-    def parseArgs(self, db_config):
+    def parseArgs(self, db_config, db_backup):
         self.db_config = yaml.safe_load(open(db_config))
+        self.db_backup = open(db_backup, "wb")
         self.redis_config = self.db_config.get('redis_manager', {})
 
     def run(self, cfg):
@@ -25,8 +27,12 @@ class BackupDbsCmd(usage.Options):
         keys = redis.keys()
         if not self.opts['not-sorted']:
             keys = sorted(keys)
+        # TODO: dump header?
         for key in keys:
-            cfg.emit(key)
+            self.db_backup.write(json.dumps({key: redis.get(key)}))
+            self.db_backup.write("\n")
+        self.db_backup.close()
+        cfg.emit("Backed up %d keys." % (len(keys),))
 
 
 class RestoreDbsCmd(usage.Options):

@@ -70,14 +70,19 @@ class BackupDbCmdTestCase(DbBackupBaseTestCase):
     def test_backup_db(self):
         self.redis.set("foo", 1)
         self.redis.set("bar#bar", 2)
-        self.redis.set("bar#baz", 2)
-        cfg = self.make_cfg(["backup", self.mkdbconfig("bar")])
+        self.redis.set("bar#baz", "bar")
+        db_backup = self.mktemp()
+        cfg = self.make_cfg(["backup", self.mkdbconfig("bar"), db_backup])
         cfg.run()
         self.assertEqual(cfg.output, [
             'Backing up dbs ...',
-            'bar',
-            'baz',
+            'Backed up 2 keys.',
         ])
+        with open(db_backup) as backup:
+            self.assertEqual([json.loads(x) for x in backup], [
+                {"bar": "2"},
+                {"baz": "bar"},
+            ])
 
 
 class RestoreDbCmdTestCase(DbBackupBaseTestCase):
