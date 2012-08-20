@@ -4,7 +4,7 @@ import sys
 import yaml
 from twisted.python import usage
 
-from vumi.persist.txredis_manager import TxRedisManager
+from vumi.persist.redis_manager import RedisManager
 
 
 class BackupDbsCmd(usage.Options):
@@ -12,10 +12,14 @@ class BackupDbsCmd(usage.Options):
     synopsis = "<db-config.yaml>"
 
     def parseArgs(self, db_config):
-        self.db_config = yaml.safe_load(db_config)
+        self.db_config = yaml.safe_load(open(db_config))
+        self.redis_config = self.db_config.get('redis_manager', {})
 
     def run(self, cfg):
         cfg.emit("Backing up dbs ...")
+        redis = cfg.get_redis(self.redis_config)
+        for key in sorted(redis.keys()):
+            cfg.emit(key)
 
 
 class RestoreDbsCmd(usage.Options):
@@ -51,6 +55,9 @@ class ConfigHolder(object):
 
     def emit(self, s):
         print s
+
+    def get_redis(self, config):
+        return RedisManager.from_config(config)
 
     def run(self):
         self.options.subOptions.run(self)
