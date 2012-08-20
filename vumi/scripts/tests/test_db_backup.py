@@ -1,5 +1,8 @@
 """Tests for vumi.scripts.db_backup."""
 
+import json
+
+import yaml
 from twisted.trial.unittest import TestCase
 
 from vumi.tests.utils import PersistenceMixin
@@ -25,6 +28,9 @@ def make_cfg(args):
 class DbBackupBaseTestCase(TestCase, PersistenceMixin):
     sync_persistence = True
 
+    DB_CONFIG = {
+    }
+
     def setUp(self):
         self._persist_setUp()
         # Make sure we start fresh.
@@ -33,10 +39,24 @@ class DbBackupBaseTestCase(TestCase, PersistenceMixin):
     def tearDown(self):
         return self._persist_tearDown()
 
+    def mkfile(self, data):
+        name = self.mktemp()
+        with open(name, "wb") as data_file:
+            data_file.write(data)
+        return name
+
+    def mkdbconfig(self):
+        return self.mkfile(yaml.safe_dump(self.DB_CONFIG))
+
+    def mkdbbackup(self, data=None):
+        if data is None:
+            data = self.DB_BACKUP
+        return self.mkfile("\n".join([json.dumps(x) for x in data]))
+
 
 class BackupDbCmdTestCase(DbBackupBaseTestCase):
     def test_backup_db(self):
-        cfg = make_cfg(["backup", "db_config.yaml"])
+        cfg = make_cfg(["backup", self.mkdbconfig()])
         cfg.run()
         self.assertEqual(cfg.output, [
             'Backing up dbs ...',
@@ -44,8 +64,12 @@ class BackupDbCmdTestCase(DbBackupBaseTestCase):
 
 
 class RestoreDbCmdTestCase(DbBackupBaseTestCase):
+
+    DB_BACKUP = [
+    ]
+
     def test_create_pool_range_tags(self):
-        cfg = make_cfg(["restore", "db_backup.json"])
+        cfg = make_cfg(["restore", self.mkdbbackup()])
         cfg.run()
         self.assertEqual(cfg.output, [
             'Restoring dbs ...',

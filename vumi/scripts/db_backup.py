@@ -48,7 +48,6 @@ class Options(usage.Options):
 class ConfigHolder(object):
     def __init__(self, options):
         self.options = options
-        self.config = yaml.safe_load(open(options['config'], "rb"))
 
     def emit(self, s):
         print s
