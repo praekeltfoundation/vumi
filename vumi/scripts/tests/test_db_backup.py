@@ -45,8 +45,10 @@ class DbBackupBaseTestCase(TestCase, PersistenceMixin):
             data_file.write(data)
         return name
 
-    def mkdbconfig(self):
-        return self.mkfile(yaml.safe_dump(self.DB_CONFIG))
+    def mkdbconfig(self, config=None):
+        if config is None:
+            config = self.DB_CONFIG
+        return self.mkfile(yaml.safe_dump(config))
 
     def mkdbbackup(self, data=None):
         if data is None:
