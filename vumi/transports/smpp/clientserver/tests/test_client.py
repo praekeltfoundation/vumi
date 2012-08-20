@@ -234,6 +234,15 @@ class EsmeReceiverMixin(EsmeGenericMixin):
         yield esme.handle_deliver_sm(self.get_sm('hello'))
 
     @inlineCallbacks
+    def test_deliver_sm_message_payload(self):
+        """A message in the `message_payload` field should be delivered."""
+        esme = yield self.get_esme(
+            deliver_sm=self.assertion_cb(u'hello', 'short_message'))
+        sm = DeliverSM(1, short_message='')
+        sm.add_message_payload(''.join('%02x' % ord(c) for c in 'hello'))
+        yield esme.handle_deliver_sm(unpack_pdu(sm.get_bin()))
+
+    @inlineCallbacks
     def test_deliver_sm_data_coding_override(self):
         """A simple message should be delivered."""
         esme = yield self.get_esme(
