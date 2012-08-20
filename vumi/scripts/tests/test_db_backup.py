@@ -100,11 +100,29 @@ class BackupDbCmdTestCase(DbBackupBaseTestCase):
 class RestoreDbCmdTestCase(DbBackupBaseTestCase):
 
     DB_BACKUP = [
+        {'backup_type': 'redis'},
+        {'bar': "2"},
+        {'baz': "bar"},
     ]
 
-    def test_create_pool_range_tags(self):
-        cfg = self.make_cfg(["restore", self.mkdbbackup()])
+    def test_empty_backup(self):
+        cfg = self.make_cfg(["restore", self.mkdbconfig("bar"),
+                             self.mkdbbackup([])])
+        cfg.run()
+        self.assertEqual(cfg.output, [
+            'Header not found.',
+            'Aborting restore.',
+        ])
+
+    def test_restore_backup(self):
+        cfg = self.make_cfg(["restore", self.mkdbconfig("bar"),
+                             self.mkdbbackup()])
         cfg.run()
         self.assertEqual(cfg.output, [
             'Restoring dbs ...',
+            '2 keys successfully restored.',
         ])
+        redis_data = sorted((k, self.redis.get(k)) for k in self.redis.keys())
+        expected_data = [tuple(x.items()[0]) for x in self.DB_BACKUP[1:]]
+        expected_data = [("bar#%s" % k, v) for k, v in expected_data]
+        self.assertEqual(redis_data, expected_data)

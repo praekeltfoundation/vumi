@@ -2,6 +2,7 @@
 import sys
 import json
 import pkg_resources
+import traceback
 from datetime import datetime
 
 import yaml
@@ -57,13 +58,64 @@ class BackupDbsCmd(usage.Options):
 
 class RestoreDbsCmd(usage.Options):
 
-    synopsis = "<db-backup.json>"
+    synopsis = "<db-config.yaml> <db-backup.json>"
 
-    def parseArgs(self, db_backup):
+    def parseArgs(self, db_config, db_backup):
+        self.db_config = yaml.safe_load(open(db_config))
         self.db_backup = open(db_backup, "rb")
+        self.redis_config = self.db_config.get('redis_manager', {})
+
+    def check_header(self, header):
+        if header is None:
+            return "Header not found."
+        try:
+            header = json.loads(header)
+        except Exception:
+            return "Header not JSON."
+        if not isinstance(header, dict):
+            return "Header not JSON dict."
+        if 'backup_type' not in header:
+            return "Header missing backup_type"
+        if header['backup_type'] != 'redis':
+            return "Only redis backup type currently supported."
+        return None
 
     def run(self, cfg):
+        line_iter = iter(self.db_backup)
+        try:
+            header = line_iter.next()
+        except StopIteration:
+            header = None
+
+        error = self.check_header(header)
+        if error:
+            cfg.emit(error)
+            cfg.emit("Aborting restore.")
+            return
+
         cfg.emit("Restoring dbs ...")
+        redis = cfg.get_redis(self.redis_config)
+        keys, skipped = 0, 0
+        for i, line in enumerate(line_iter):
+            try:
+                data = json.loads(line)
+            except Exception:
+                excinfo = sys.exc_info()
+                for s in traceback.format_exception(*excinfo):
+                    cfg.emit(s)
+                skipped += 1
+                continue
+            if not isinstance(data, dict) or len(data) != 1:
+                cfg.emit("Skipping bad backup line %d:" % (i + 1,))
+                skipped += 1
+                continue
+            key, value = data.items()[0]
+            redis.set(key, value)
+            keys += 1
+
+        cfg.emit("%d keys successfully restored." % keys)
+        if skipped != 0:
+            cfg.emit("WARNING: %d bad backup lines skipped." % skipped)
 
 
 class Options(usage.Options):
