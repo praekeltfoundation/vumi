@@ -1,6 +1,7 @@
 """Tests for vumi.scripts.db_backup."""
 
 import json
+import datetime
 
 import yaml
 from twisted.trial.unittest import TestCase
@@ -223,15 +224,19 @@ class RestoreDbCmdTestCase(DbBackupBaseTestCase):
         cfg.run()
         self.assertEqual(redis.get("foo"), None)
 
-    def check_restore(self, backup_data, restored_data, redis_get):
+    def check_restore(self, backup_data, restored_data, redis_get,
+                      timestamp=None, args=(), key_prefix="bar"):
+        if timestamp is None:
+            timestamp = datetime.datetime.utcnow()
         backup_data = [{'backup_type': 'redis',
-                        'timestamp': '2012-08-21T23:18:52.413504',
+                        'timestamp': timestamp.isoformat(),
                         }] + backup_data
-        cfg = self.make_cfg(["restore", self.mkdbconfig("bar"),
+        cfg = self.make_cfg(["restore"] + list(args) +
+                            [self.mkdbconfig(key_prefix),
                              self.mkdbbackup(backup_data)])
         cfg.run()
         redis_data = sorted((k, redis_get(k)) for k in self.redis.keys())
-        restored_data = sorted([("bar#%s" % k, v)
+        restored_data = sorted([("%s#%s" % (key_prefix, k), v)
                                 for k, v in restored_data.items()])
         self.assertEqual(redis_data, restored_data)
 
@@ -266,3 +271,18 @@ class RestoreDbCmdTestCase(DbBackupBaseTestCase):
         self.check_restore([{'key': 'h', 'type': 'hash', 'value': hvalue,
                              'ttl': None}],
                            {'h': hvalue}, self.redis.hgetall)
+
+    def test_restore_ttl(self):
+        self.check_restore([{'key': 's', 'type': 'string', 'value': 'ping',
+                             'ttl': 30}],
+                           {'s': 'ping'}, self.redis.get, key_prefix="bar")
+        self.assertTrue(0 < self.redis.ttl("bar#s") <= 30)
+
+    def test_restore_ttl_frozen(self):
+        yesterday = datetime.datetime.utcnow() - datetime.timedelta(days=1)
+        self.check_restore([{'key': 's', 'type': 'string', 'value': 'ping',
+                             'ttl': 30}],
+                           {'s': 'ping'}, self.redis.get,
+                           timestamp=yesterday,
+                           args=["--frozen-ttls"], key_prefix="bar")
+        self.assertTrue(0 < self.redis.ttl("bar#s") <= 30)
