@@ -100,16 +100,43 @@ class BackupDbCmdTestCase(DbBackupBaseTestCase):
                 {'key': 'baz', 'type': 'string', 'value': 'bar'},
             ])
 
-    def test_non_string_keys(self):
-        self.redis.hmset("bar#set", {"foo": "1", "baz": "2"})
+    def check_backup(self, key_prefix, expected):
         db_backup = self.mktemp()
-        cfg = self.make_cfg(["backup", self.mkdbconfig("bar"), db_backup])
+        cfg = self.make_cfg(["backup", self.mkdbconfig(key_prefix), db_backup])
         cfg.run()
         with open(db_backup) as backup:
-            self.assertEqual([json.loads(x) for x in backup][1:], [
-                {'key': 'set', 'type': 'hash',
-                 'value': {"foo": "1", "baz": "2"}},
-            ])
+            self.assertEqual([json.loads(x) for x in backup][1:], expected)
+
+    def test_backup_string(self):
+        self.redis.set("bar#s", "foo")
+        self.check_backup("bar", [{'key': 's', 'type': 'string',
+                                   'value': "foo"}])
+
+    def test_backup_list(self):
+        lvalue = ["a", "c", "b"]
+        for item in lvalue:
+            self.redis.rpush("bar#l", item)
+        self.check_backup("bar", [{'key': 'l', 'type': 'list',
+                                   'value': lvalue}])
+
+    def test_backup_set(self):
+        svalue = set(["a", "c", "b"])
+        for item in svalue:
+            self.redis.sadd("bar#s", item)
+        self.check_backup("bar", [{'key': 's', 'type': 'set',
+                                   'value': sorted(svalue)}])
+
+    def test_backup_zset(self):
+        zvalue = [['z', 1], ['a', 2], ['c', 3]]
+        for item, score in zvalue:
+            self.redis.zadd("bar#z", **{item: score})
+        self.check_backup("bar", [{'key': 'z', 'type': 'zset',
+                                   'value': zvalue}])
+
+    def test_hash_backup(self):
+        self.redis.hmset("bar#set", {"foo": "1", "baz": "2"})
+        self.check_backup("bar", [{'key': 'set', 'type': 'hash',
+                                   'value': {"foo": "1", "baz": "2"}}])
 
 
 class RestoreDbCmdTestCase(DbBackupBaseTestCase):

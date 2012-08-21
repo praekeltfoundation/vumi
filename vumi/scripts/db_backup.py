@@ -62,7 +62,7 @@ class KeyHandler(object):
             redis.rpush(key, item)
 
     def set_get(self, redis, key):
-        return list(redis.smembers(key))
+        return sorted(redis.smembers(key))
 
     def set_set(self, redis, key, value):
         for item in value:
