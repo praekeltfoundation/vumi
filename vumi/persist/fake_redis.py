@@ -54,6 +54,22 @@ class FakeRedis(object):
     # Global operations
 
     @maybe_async
+    def type(self, key):
+        value = self._data.get(key)
+        if value is None:
+            return 'none'
+        if isinstance(value, basestring):
+            return 'string'
+        if isinstance(value, list):
+            return 'list'
+        if isinstance(value, set):
+            return 'set'
+        if isinstance(value, Zset):
+            return 'zset'
+        if isinstance(value, dict):
+            return 'hash'
+
+    @maybe_async
     def exists(self, key):
         return key in self._data
 
@@ -210,34 +226,25 @@ class FakeRedis(object):
 
     @maybe_async
     def zadd(self, key, **valscores):
-        zval = self._data.setdefault(key, [])
-        new_zval = [val for val in zval if val[1] not in valscores]
-        for value, score in valscores.items():
-            new_zval.append((score, value))
-        new_zval.sort()
-        self._data[key] = new_zval
+        zval = self._data.setdefault(key, Zset())
+        return zval.zadd(**valscores)
 
     @maybe_async
     def zrem(self, key, value):
-        zval = self._data.setdefault(key, [])
-        new_zval = [val for val in zval if val[1] != value]
-        self._data[key] = new_zval
+        zval = self._data.setdefault(key, Zset())
+        return zval.zrem(value)
 
     @maybe_async
     def zcard(self, key):
-        return len(self._data.get(key, []))
+        zval = self._data.get(key, Zset())
+        return zval.zcard()
 
     @maybe_async
     def zrange(self, key, start, stop, desc=False, withscores=False,
-                score_cast_func=float):
-        zval = self._data.get(key, [])
-        stop += 1  # redis start/stop are element indexes
-        if stop == 0:
-            stop = None
-        results = sorted(zval[start:stop],
-                    key=lambda (score, _): score_cast_func(score))
-        if desc:
-            results.reverse()
+               score_cast_func=float):
+        zval = self._data.get(key, Zset())
+        results = zval.zrange(start, stop, desc=desc,
+                              score_cast_func=score_cast_func)
         if withscores:
             return results
         else:
@@ -316,3 +323,36 @@ class FakeRedis(object):
             delayed.cancel()
             return 1
         return 0
+
+
+class Zset(object):
+    """A Redis-like ordered set implementation."""
+
+    def __init__(self):
+        self._zval = []
+
+    def zadd(self, **valscores):
+        new_zval = [val for val in self._zval if val[1] not in valscores]
+        new_zval.extend((score, value) for value, score in valscores.items())
+        new_zval.sort()
+        added = len(new_zval) - len(self._zval)
+        self._zval = new_zval
+        return added
+
+    def zrem(self, value):
+        new_zval = [val for val in self._zval if val[1] != value]
+        existed = len(new_zval) != len(self._zval)
+        self._zval = new_zval
+        return existed
+
+    def zcard(self):
+        return len(self._zval)
+
+    def zrange(self, start, stop, desc=False, score_cast_func=float):
+        stop += 1  # redis start/stop are element indexes
+        if stop == 0:
+            stop = None
+        results = [(score_cast_func(k), v) for k, v in self._zval[start:stop]]
+        if desc:
+            results.reverse()
+        return results

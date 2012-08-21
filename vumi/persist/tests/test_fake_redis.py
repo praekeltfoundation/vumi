@@ -50,6 +50,13 @@ class FakeRedisTestCase(TestCase):
         yield self.assert_redis_op('111', 'get', "inc")
 
     @inlineCallbacks
+    def test_zadd(self):
+        yield self.assert_redis_op(1, 'zadd', 'set', one=1.0)
+        yield self.assert_redis_op(0, 'zadd', 'set', one=2.0)
+        yield self.assert_redis_op([(2.0, 'one')], 'zrange', 'set', 0, -1,
+                                   withscores=True)
+
+    @inlineCallbacks
     def test_zrange(self):
         yield self.redis.zadd('set', one=0.1, two=0.2, three=0.3)
         yield self.assert_redis_op(['one'], 'zrange', 'set', 0, 0)
@@ -68,6 +75,22 @@ class FakeRedisTestCase(TestCase):
         yield self.assert_redis_op(
             [(0.3, 'three'), (0.2, 'two'), (0.1, 'one')],
             'zrange', 'set', 0, -1, withscores=True, desc=True)
+
+    @inlineCallbacks
+    def test_zcard(self):
+        yield self.assert_redis_op(0, 'zcard', 'set')
+        yield self.redis.zadd('set', one=0.1, two=0.2)
+        yield self.assert_redis_op(2, 'zcard', 'set')
+        yield self.redis.zadd('set', three=0.3)
+        yield self.assert_redis_op(3, 'zcard', 'set')
+
+    @inlineCallbacks
+    def test_zrem(self):
+        yield self.redis.zadd('set', one=0.1, two=0.2)
+        yield self.assert_redis_op(True, 'zrem', 'set', 'one')
+        yield self.assert_redis_op(False, 'zrem', 'set', 'one')
+        yield self.assert_redis_op(
+            [(0.2, 'two')], 'zrange', 'set', 0, -1, withscores=True)
 
     @inlineCallbacks
     def test_hgetall_returns_copy(self):
@@ -172,6 +195,20 @@ class FakeRedisTestCase(TestCase):
         yield self.assert_redis_op(-1, 'ttl', "tempval")
         yield self.assert_redis_op(0, 'persist', "tempval")
         yield self.assert_redis_op(1, 'expire', "tempval", 10)
+
+    @inlineCallbacks
+    def test_type(self):
+        yield self.assert_redis_op('none', 'type', 'unknown_key')
+        yield self.redis.set("string_key", "a")
+        yield self.assert_redis_op('string', 'type', 'string_key')
+        yield self.redis.lpush("list_key", "a")
+        yield self.assert_redis_op('list', 'type', 'list_key')
+        yield self.redis.sadd("set_key", "a")
+        yield self.assert_redis_op('set', 'type', 'set_key')
+        yield self.redis.zadd("zset_key", a=1.0)
+        yield self.assert_redis_op('zset', 'type', 'zset_key')
+        yield self.redis.hset("hash_key", "a", 1.0)
+        yield self.assert_redis_op('hash', 'type', 'hash_key')
 
 
 class FakeTxRedisTestCase(FakeRedisTestCase):
