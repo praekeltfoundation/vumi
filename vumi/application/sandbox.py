@@ -154,6 +154,7 @@ class SandboxProtocol(ProcessProtocol):
         self.rlimits = rlimits
         self._started = MultiDeferred()
         self._done = MultiDeferred()
+        self._pending_requests = []
         self.exit_reason = None
         self.timeout_task = reactor.callLater(timeout, self.kill)
         self.recv_limit = recv_limit
@@ -219,15 +220,15 @@ class SandboxProtocol(ProcessProtocol):
     def outReceived(self, data):
         lines = self._process_data(self.chunk, data)
         for i in range(len(lines) - 1):
-            # dispatch_request() calls are async (i.e. return deferreds)
-            self.api.dispatch_request(self._parse_command(lines[i]))
+            d = self.api.dispatch_request(self._parse_command(lines[i]))
+            self._pending_requests.append(d)
         self.chunk = lines[-1]
 
     def outConnectionLost(self):
         if self.chunk:
             line, self.chunk = self.chunk, ""
-            # dispatch_request() calls are async (i.e. return deferreds)
-            self.api.dispatch_request(self._parse_command(line))
+            d = self.api.dispatch_request(self._parse_command(line))
+            self._pending_requests.append(d)
 
     def errReceived(self, data):
         lines = self._process_data(self.error_chunk, data)
@@ -240,6 +241,12 @@ class SandboxProtocol(ProcessProtocol):
             log.error(Failure(SandboxError(self.error_chunk)))
             self.error_chunk = ""
 
+    @inlineCallbacks
+    def _wait_for_requests(self, result):
+        for d in self._pending_requests:
+            yield d
+        self._done.callback(result)
+
     def processEnded(self, reason):
         if self.timeout_task.active():
             self.timeout_task.cancel()
@@ -250,7 +257,7 @@ class SandboxProtocol(ProcessProtocol):
         if not self._started.fired():
             self._started.callback(Failure(
                 SandboxError("Process failed to start.")))
-        self._done.callback(result)
+        self._wait_for_requests(result)
 
 
 class SandboxResources(object):
