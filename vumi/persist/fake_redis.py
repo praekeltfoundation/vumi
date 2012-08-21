@@ -248,7 +248,7 @@ class FakeRedis(object):
         if withscores:
             return results
         else:
-            return [v for k, v in results]
+            return [v for v, k in results]
 
     # List operations
     @maybe_async
@@ -355,4 +355,4 @@ class Zset(object):
         results = [(score_cast_func(k), v) for k, v in self._zval[start:stop]]
         if desc:
             results.reverse()
-        return results
+        return [(v, k) for k, v in results]
