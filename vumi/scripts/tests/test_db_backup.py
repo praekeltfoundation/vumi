@@ -201,6 +201,14 @@ class RestoreDbCmdTestCase(DbBackupBaseTestCase):
         expected_data = [("bar#%s" % k, v) for k, v in expected_data]
         self.assertEqual(redis_data, expected_data)
 
+    def test_restore_with_purge(self):
+        redis = self.redis.sub_manager("bar")
+        redis.set("foo", 1)
+        cfg = self.make_cfg(["restore", "--purge", self.mkdbconfig("bar"),
+                             self.mkdbbackup()])
+        cfg.run()
+        self.assertEqual(redis.get("foo"), None)
+
     def check_restore(self, backup_data, restored_data, redis_get):
         backup_data = [{'backup_type': 'redis'}] + backup_data
         cfg = self.make_cfg(["restore", self.mkdbconfig("bar"),

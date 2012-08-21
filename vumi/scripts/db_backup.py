@@ -128,6 +128,11 @@ class RestoreDbsCmd(usage.Options):
 
     synopsis = "<db-config.yaml> <db-backup.json>"
 
+    optFlags = [
+        ["purge", None, "Purge all keys from the redis manager before "
+                        "restoring."],
+    ]
+
     def parseArgs(self, db_config, db_backup):
         self.db_config = yaml.safe_load(open(db_config))
         self.db_backup = open(db_backup, "rb")
@@ -163,6 +168,8 @@ class RestoreDbsCmd(usage.Options):
 
         cfg.emit("Restoring dbs ...")
         redis = cfg.get_redis(self.redis_config)
+        if self.opts['purge']:
+            redis._purge_all()
         key_handler = KeyHandler()
         keys, skipped = 0, 0
         for i, line in enumerate(line_iter):
