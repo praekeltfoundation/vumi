@@ -139,11 +139,24 @@ class BackupDbCmdTestCase(DbBackupBaseTestCase):
                                    'value': {"foo": "1", "baz": "2"},
                                    'ttl': None}])
 
+    def test_ttl_backup(self):
+        self.redis.set("bar#s", "foo")
+        self.redis.expire("bar#s", 30)
+        db_backup = self.mktemp()
+        cfg = self.make_cfg(["backup", self.mkdbconfig("bar"), db_backup])
+        cfg.run()
+        with open(db_backup) as backup:
+            [record] = [json.loads(x) for x in backup][1:]
+            self.assertTrue(0 < record.pop('ttl') <= 30)
+            self.assertEqual(record, {'key': 's', 'type': 'string',
+                                      'value': "foo"})
+
 
 class RestoreDbCmdTestCase(DbBackupBaseTestCase):
 
     DB_BACKUP = [
-        {'backup_type': 'redis'},
+        {'backup_type': 'redis',
+         'timestamp': '2012-08-21T23:18:52.413504'},
         {'key': 'bar', 'type': 'string', 'value': "2", 'ttl': None},
         {'key': 'baz', 'type': 'string', 'value': "bar", 'ttl': None},
     ]
@@ -211,7 +224,9 @@ class RestoreDbCmdTestCase(DbBackupBaseTestCase):
         self.assertEqual(redis.get("foo"), None)
 
     def check_restore(self, backup_data, restored_data, redis_get):
-        backup_data = [{'backup_type': 'redis'}] + backup_data
+        backup_data = [{'backup_type': 'redis',
+                        'timestamp': '2012-08-21T23:18:52.413504',
+                        }] + backup_data
         cfg = self.make_cfg(["restore", self.mkdbconfig("bar"),
                              self.mkdbbackup(backup_data)])
         cfg.run()
