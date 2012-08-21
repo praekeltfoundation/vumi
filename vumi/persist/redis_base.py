@@ -193,6 +193,7 @@ class Manager(object):
 
     # Global operations
 
+    type = RedisCall(['key'])
     exists = RedisCall(['key'])
     keys = RedisCall(['pattern'], defaults=['*'], key_args=['pattern'],
                      filter_func='_unkeys')
