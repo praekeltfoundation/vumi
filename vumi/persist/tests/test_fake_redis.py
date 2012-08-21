@@ -177,12 +177,12 @@ class FakeRedisTestCase(TestCase):
     @inlineCallbacks
     def test_expire_persist_ttl(self):
         # Missing key.
-        yield self.assert_redis_op(-1, 'ttl', "tempval")
+        yield self.assert_redis_op(None, 'ttl', "tempval")
         yield self.assert_redis_op(0, 'expire', "tempval", 10)
         yield self.assert_redis_op(0, 'persist', "tempval")
         # Persistent key.
         yield self.redis.set("tempval", 1)
-        yield self.assert_redis_op(-1, 'ttl', "tempval")
+        yield self.assert_redis_op(None, 'ttl', "tempval")
         yield self.assert_redis_op(0, 'persist', "tempval")
         yield self.assert_redis_op(1, 'expire', "tempval", 10)
         # Temporary key.
@@ -192,7 +192,7 @@ class FakeRedisTestCase(TestCase):
         yield self.assert_redis_op(1, 'persist', "tempval")
         # Persistent key again.
         yield self.redis.set("tempval", 1)
-        yield self.assert_redis_op(-1, 'ttl', "tempval")
+        yield self.assert_redis_op(None, 'ttl', "tempval")
         yield self.assert_redis_op(0, 'persist', "tempval")
         yield self.assert_redis_op(1, 'expire', "tempval", 10)
 

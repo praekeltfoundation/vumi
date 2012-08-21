@@ -314,7 +314,7 @@ class FakeRedis(object):
         delayed = self._expiries.get(key)
         if delayed is not None and delayed.active():
             return int(delayed.getTime() - self.clock.seconds())
-        return -1
+        return None
 
     @maybe_async
     def persist(self, key):
