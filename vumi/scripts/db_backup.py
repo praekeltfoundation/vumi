@@ -16,6 +16,69 @@ def vumi_version():
     return str(vumi)
 
 
+class KeyHandler(object):
+
+    REDIS_TYPES = ('string', 'list', 'set', 'zset', 'hash')
+
+    def __init__(self):
+        self._get_handlers = dict((ktype, getattr(self, '%s_get' % ktype))
+                                  for ktype in self.REDIS_TYPES)
+        self._set_handlers = dict((ktype, getattr(self, '%s_set' % ktype))
+                                  for ktype in self.REDIS_TYPES)
+
+    def dump_key(self, redis, key):
+        # TODO: save TTL
+        key_type = redis.type(key)
+        record = {
+            'type': key_type,
+            'key': key,
+            'value': self._get_handlers[key_type](redis, key),
+        }
+        return record
+
+    def restore_key(self, redis, record):
+        key_type = record['type']
+        self._set_handlers[key_type](redis, record['key'], record['value'])
+
+    def record_okay(self, record):
+        if not isinstance(record, dict):
+            return False
+        for key in ('type', 'key', 'value'):
+            if key not in record:
+                return False
+        return True
+
+    def string_get(self, redis, key):
+        return redis.get(key)
+
+    def string_set(self, redis, key, value):
+        redis.set(key, value)
+
+    def list_get(self, redis, key):
+        return redis.lrange(key, 0, -1)
+
+    def list_set(self, redis, key, value):
+        redis.rpush(key, value)
+
+    def set_get(self, redis, key):
+        pass
+
+    def set_set(self, redis, key, value):
+        pass
+
+    def zset_get(self, redis, key):
+        pass
+
+    def zset_set(self, redis, key, value):
+        pass
+
+    def hash_get(self, redis, key):
+        return redis.hgetall(key)
+
+    def hash_set(self, redis, key, value):
+        redis.hmset(key, value)
+
+
 class BackupDbsCmd(usage.Options):
 
     synopsis = "<db-config.yaml> <db-backup-output.json>"
@@ -46,12 +109,14 @@ class BackupDbsCmd(usage.Options):
     def run(self, cfg):
         cfg.emit("Backing up dbs ...")
         redis = cfg.get_redis(self.redis_config)
+        key_handler = KeyHandler()
         keys = redis.keys()
         if not self.opts['not-sorted']:
             keys = sorted(keys)
         self.write_line(self.header(cfg))
         for key in keys:
-            self.write_line({key: redis.get(key)})
+            record = key_handler.dump_key(redis, key)
+            self.write_line(record)
         self.db_backup.close()
         cfg.emit("Backed up %d keys." % (len(keys),))
 
@@ -95,22 +160,22 @@ class RestoreDbsCmd(usage.Options):
 
         cfg.emit("Restoring dbs ...")
         redis = cfg.get_redis(self.redis_config)
+        key_handler = KeyHandler()
         keys, skipped = 0, 0
         for i, line in enumerate(line_iter):
             try:
-                data = json.loads(line)
+                record = json.loads(line)
             except Exception:
                 excinfo = sys.exc_info()
                 for s in traceback.format_exception(*excinfo):
                     cfg.emit(s)
                 skipped += 1
                 continue
-            if not isinstance(data, dict) or len(data) != 1:
-                cfg.emit("Skipping bad backup line %d:" % (i + 1,))
+            if not key_handler.record_okay(record):
+                cfg.emit("Skipping bad backup record on line %d." % (i + 1,))
                 skipped += 1
                 continue
-            key, value = data.items()[0]
-            redis.set(key, value)
+            key_handler.restore_key(redis, record)
             keys += 1
 
         cfg.emit("%d keys successfully restored." % keys)

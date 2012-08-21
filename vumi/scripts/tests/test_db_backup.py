@@ -96,8 +96,19 @@ class BackupDbCmdTestCase(DbBackupBaseTestCase):
                  "sorted": True,
                  "redis_config": {"key_prefix": "bar"},
                  },
-                {"bar": "2"},
-                {"baz": "bar"},
+                {'key': 'bar', 'type': 'string', 'value': '2'},
+                {'key': 'baz', 'type': 'string', 'value': 'bar'},
+            ])
+
+    def test_non_string_keys(self):
+        self.redis.hmset("bar#set", {"foo": "1", "baz": "2"})
+        db_backup = self.mktemp()
+        cfg = self.make_cfg(["backup", self.mkdbconfig("bar"), db_backup])
+        cfg.run()
+        with open(db_backup) as backup:
+            self.assertEqual([json.loads(x) for x in backup][1:], [
+                {'key': 'set', 'type': 'hash',
+                 'value': {"foo": "1", "baz": "2"}},
             ])
 
 
@@ -105,7 +116,12 @@ class RestoreDbCmdTestCase(DbBackupBaseTestCase):
 
     DB_BACKUP = [
         {'backup_type': 'redis'},
-        {'bar': "2"},
+        {'key': 'bar', 'type': 'string', 'value': "2"},
+        {'key': 'baz', 'type': 'string', 'value': "bar"},
+    ]
+
+    RESTORED_DATA = [
+        {'bar': '2'},
         {'baz': "bar"},
     ]
 
@@ -154,6 +170,6 @@ class RestoreDbCmdTestCase(DbBackupBaseTestCase):
             '2 keys successfully restored.',
         ])
         redis_data = sorted((k, self.redis.get(k)) for k in self.redis.keys())
-        expected_data = [tuple(x.items()[0]) for x in self.DB_BACKUP[1:]]
+        expected_data = [tuple(x.items()[0]) for x in self.RESTORED_DATA]
         expected_data = [("bar#%s" % k, v) for k, v in expected_data]
         self.assertEqual(redis_data, expected_data)
