@@ -295,15 +295,12 @@ class EsmeTransceiver(Protocol):
         yield self.send_pdu(pdu_resp)
 
         pdu_params = pdu['body']['mandatory_parameters']
-        # We might have a `message_payload` optional field to worry about.
         pdu_opts = unpacked_pdu_opts(pdu)
-        if 'message_payload' in pdu_opts:
-            chars = []
-            data = pdu_opts['message_payload']
-            while data:
-                chars.append(chr(int(data[:2], 16)))
-                data = data[2:]
-            pdu_params['short_message'] = ''.join(chars)
+
+        # We might have a `message_payload` optional field to worry about.
+        message_payload = pdu_opts.get('message_payload', None)
+        if message_payload is not None:
+            pdu_params['short_message'] = message_payload.decode('hex')
 
         delivery_report = self.config.delivery_report_re.search(
             pdu_params['short_message'] or '')
