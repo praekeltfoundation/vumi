@@ -343,6 +343,9 @@ class RedisResource(SandboxResource):
         self.keys_per_user = self.config.get('keys_per_user', 100)
         self.redis = yield TxRedisManager.from_config(self.r_config)
 
+    def teardown(self):
+        return self.redis.close_manager()
+
     def _count_key(self, sandbox_id):
         return "#".join(["count", sandbox_id])
 
