@@ -173,3 +173,41 @@ class RestoreDbCmdTestCase(DbBackupBaseTestCase):
         expected_data = [tuple(x.items()[0]) for x in self.RESTORED_DATA]
         expected_data = [("bar#%s" % k, v) for k, v in expected_data]
         self.assertEqual(redis_data, expected_data)
+
+    def check_restore(self, backup_data, restored_data, redis_get):
+        backup_data = [{'backup_type': 'redis'}] + backup_data
+        cfg = self.make_cfg(["restore", self.mkdbconfig("bar"),
+                             self.mkdbbackup(backup_data)])
+        cfg.run()
+        redis_data = sorted((k, redis_get(k)) for k in self.redis.keys())
+        restored_data = sorted([("bar#%s" % k, v)
+                                for k, v in restored_data.items()])
+        self.assertEqual(redis_data, restored_data)
+
+    def test_restore_string(self):
+        self.check_restore([{'key': 's', 'type': 'string', 'value': 'ping'}],
+                           {'s': 'ping'}, self.redis.get)
+
+    def test_restore_list(self):
+        lvalue = ['z', 'a', 'c']
+        self.check_restore([{'key': 'l', 'type': 'list', 'value': lvalue}],
+                           {'l': lvalue},
+                           lambda k: self.redis.lrange(k, 0, -1))
+
+    def test_restore_set(self):
+        svalue = set(['z', 'a', 'c'])
+        self.check_restore([{'key': 's', 'type': 'set',
+                             'value': list(svalue)}],
+                           {'s': svalue}, self.redis.smembers)
+
+    def test_restore_zset(self):
+        def get_zset(k):
+            return self.redis.zrange(k, 0, -1, withscores=True)
+        zvalue = [('z', 1), ('a', 2), ('c', 3)]
+        self.check_restore([{'key': 'z', 'type': 'zset', 'value': zvalue}],
+                           {'z': zvalue}, get_zset)
+
+    def test_restore_hash(self):
+        hvalue = {'a': 'foo', 'b': 'bing'}
+        self.check_restore([{'key': 'h', 'type': 'hash', 'value': hvalue}],
+                           {'h': hvalue}, self.redis.hgetall)

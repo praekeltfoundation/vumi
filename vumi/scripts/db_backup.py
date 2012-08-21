@@ -58,19 +58,22 @@ class KeyHandler(object):
         return redis.lrange(key, 0, -1)
 
     def list_set(self, redis, key, value):
-        redis.rpush(key, value)
+        for item in value:
+            redis.rpush(key, item)
 
     def set_get(self, redis, key):
-        pass
+        return list(redis.smembers(key))
 
     def set_set(self, redis, key, value):
-        pass
+        for item in value:
+            redis.sadd(key, item)
 
     def zset_get(self, redis, key):
-        pass
+        return redis.zrange(key, 0, -1, withscores=True)
 
     def zset_set(self, redis, key, value):
-        pass
+        for item, score in value:
+            redis.zadd(key, **{item: score})
 
     def hash_get(self, redis, key):
         return redis.hgetall(key)
