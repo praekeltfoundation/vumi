@@ -33,17 +33,24 @@ class KeyHandler(object):
             'type': key_type,
             'key': key,
             'value': self._get_handlers[key_type](redis, key),
+            'ttl': redis.ttl(key),
         }
         return record
 
-    def restore_key(self, redis, record):
-        key_type = record['type']
-        self._set_handlers[key_type](redis, record['key'], record['value'])
+    def restore_key(self, redis, record, ttl_offset=0):
+        key, key_type, ttl = record['key'], record['type'], record['ttl']
+        if ttl is not None:
+            ttl -= ttl_offset
+            if ttl <= 0:
+                return
+        self._set_handlers[key_type](redis, key, record['value'])
+        if ttl is not None:
+            redis.expire(key, ttl)
 
     def record_okay(self, record):
         if not isinstance(record, dict):
             return False
-        for key in ('type', 'key', 'value'):
+        for key in ('type', 'key', 'value', 'ttl'):
             if key not in record:
                 return False
         return True
@@ -131,6 +138,12 @@ class RestoreDbsCmd(usage.Options):
     optFlags = [
         ["purge", None, "Purge all keys from the redis manager before "
                         "restoring."],
+        ["frozen-ttls", None, "Restore TTLs of keys to the same value they "
+                              "had when the backup was created, disregarding "
+                              "how much time has passed since the backup was "
+                              "created. The default is adjust TTLs by the "
+                              "amount of time that has passed and to expire "
+                              "keys whose TTLs are then zero or negative."],
     ]
 
     def parseArgs(self, db_config, db_backup):
@@ -166,6 +179,11 @@ class RestoreDbsCmd(usage.Options):
             cfg.emit("Aborting restore.")
             return
 
+        if self.opts['frozen-ttls']:
+            ttl_offset = 0
+        else:
+            ttl_offset = 0
+
         cfg.emit("Restoring dbs ...")
         redis = cfg.get_redis(self.redis_config)
         if self.opts['purge']:
@@ -185,7 +203,7 @@ class RestoreDbsCmd(usage.Options):
                 cfg.emit("Skipping bad backup record on line %d." % (i + 1,))
                 skipped += 1
                 continue
-            key_handler.restore_key(redis, record)
+            key_handler.restore_key(redis, record, ttl_offset)
             keys += 1
 
         cfg.emit("%d keys successfully restored." % keys)

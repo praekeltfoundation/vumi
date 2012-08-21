@@ -96,8 +96,8 @@ class BackupDbCmdTestCase(DbBackupBaseTestCase):
                  "sorted": True,
                  "redis_config": {"key_prefix": "bar"},
                  },
-                {'key': 'bar', 'type': 'string', 'value': '2'},
-                {'key': 'baz', 'type': 'string', 'value': 'bar'},
+                {'key': 'bar', 'type': 'string', 'value': '2', 'ttl': None},
+                {'key': 'baz', 'type': 'string', 'value': 'bar', 'ttl': None},
             ])
 
     def check_backup(self, key_prefix, expected):
@@ -110,41 +110,42 @@ class BackupDbCmdTestCase(DbBackupBaseTestCase):
     def test_backup_string(self):
         self.redis.set("bar#s", "foo")
         self.check_backup("bar", [{'key': 's', 'type': 'string',
-                                   'value': "foo"}])
+                                   'value': "foo", 'ttl': None}])
 
     def test_backup_list(self):
         lvalue = ["a", "c", "b"]
         for item in lvalue:
             self.redis.rpush("bar#l", item)
         self.check_backup("bar", [{'key': 'l', 'type': 'list',
-                                   'value': lvalue}])
+                                   'value': lvalue, 'ttl': None}])
 
     def test_backup_set(self):
         svalue = set(["a", "c", "b"])
         for item in svalue:
             self.redis.sadd("bar#s", item)
         self.check_backup("bar", [{'key': 's', 'type': 'set',
-                                   'value': sorted(svalue)}])
+                                   'value': sorted(svalue), 'ttl': None}])
 
     def test_backup_zset(self):
         zvalue = [['z', 1], ['a', 2], ['c', 3]]
         for item, score in zvalue:
             self.redis.zadd("bar#z", **{item: score})
         self.check_backup("bar", [{'key': 'z', 'type': 'zset',
-                                   'value': zvalue}])
+                                   'value': zvalue, 'ttl': None}])
 
     def test_hash_backup(self):
         self.redis.hmset("bar#set", {"foo": "1", "baz": "2"})
         self.check_backup("bar", [{'key': 'set', 'type': 'hash',
-                                   'value': {"foo": "1", "baz": "2"}}])
+                                   'value': {"foo": "1", "baz": "2"},
+                                   'ttl': None}])
 
 
 class RestoreDbCmdTestCase(DbBackupBaseTestCase):
 
     DB_BACKUP = [
         {'backup_type': 'redis'},
-        {'key': 'bar', 'type': 'string', 'value': "2"},
-        {'key': 'baz', 'type': 'string', 'value': "bar"},
+        {'key': 'bar', 'type': 'string', 'value': "2", 'ttl': None},
+        {'key': 'baz', 'type': 'string', 'value': "bar", 'ttl': None},
     ]
 
     RESTORED_DATA = [
@@ -220,29 +221,33 @@ class RestoreDbCmdTestCase(DbBackupBaseTestCase):
         self.assertEqual(redis_data, restored_data)
 
     def test_restore_string(self):
-        self.check_restore([{'key': 's', 'type': 'string', 'value': 'ping'}],
+        self.check_restore([{'key': 's', 'type': 'string', 'value': 'ping',
+                             'ttl': None}],
                            {'s': 'ping'}, self.redis.get)
 
     def test_restore_list(self):
         lvalue = ['z', 'a', 'c']
-        self.check_restore([{'key': 'l', 'type': 'list', 'value': lvalue}],
+        self.check_restore([{'key': 'l', 'type': 'list', 'value': lvalue,
+                             'ttl': None}],
                            {'l': lvalue},
                            lambda k: self.redis.lrange(k, 0, -1))
 
     def test_restore_set(self):
         svalue = set(['z', 'a', 'c'])
         self.check_restore([{'key': 's', 'type': 'set',
-                             'value': list(svalue)}],
+                             'value': list(svalue), 'ttl': None}],
                            {'s': svalue}, self.redis.smembers)
 
     def test_restore_zset(self):
         def get_zset(k):
             return self.redis.zrange(k, 0, -1, withscores=True)
         zvalue = [('z', 1), ('a', 2), ('c', 3)]
-        self.check_restore([{'key': 'z', 'type': 'zset', 'value': zvalue}],
+        self.check_restore([{'key': 'z', 'type': 'zset', 'value': zvalue,
+                             'ttl': None}],
                            {'z': zvalue}, get_zset)
 
     def test_restore_hash(self):
         hvalue = {'a': 'foo', 'b': 'bing'}
-        self.check_restore([{'key': 'h', 'type': 'hash', 'value': hvalue}],
+        self.check_restore([{'key': 'h', 'type': 'hash', 'value': hvalue,
+                             'ttl': None}],
                            {'h': hvalue}, self.redis.hgetall)
