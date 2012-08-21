@@ -3,6 +3,8 @@ import sys
 import json
 import pkg_resources
 import traceback
+import time
+import calendar
 from datetime import datetime
 
 import yaml
@@ -153,18 +155,23 @@ class RestoreDbsCmd(usage.Options):
 
     def check_header(self, header):
         if header is None:
-            return "Header not found."
+            return None, "Header not found."
         try:
             header = json.loads(header)
         except Exception:
-            return "Header not JSON."
+            return None, "Header not JSON."
         if not isinstance(header, dict):
-            return "Header not JSON dict."
+            return None, "Header not JSON dict."
         if 'backup_type' not in header:
-            return "Header missing backup_type."
+            return None, "Header missing backup_type."
         if header['backup_type'] != 'redis':
-            return "Only redis backup type currently supported."
-        return None
+            return None, "Only redis backup type currently supported."
+        return header, None
+
+    def seconds_from_now(self, iso_timestamp):
+        seconds_timestamp, _dot, _milliseconds = iso_timestamp.partition('.')
+        time_of_backup = time.strptime(seconds_timestamp, "%Y-%m-%dT%H:%M:%S")
+        return time.time() - calendar.timegm(time_of_backup)
 
     def run(self, cfg):
         line_iter = iter(self.db_backup)
@@ -173,8 +180,8 @@ class RestoreDbsCmd(usage.Options):
         except StopIteration:
             header = None
 
-        error = self.check_header(header)
-        if error:
+        header, error = self.check_header(header)
+        if error is not None:
             cfg.emit(error)
             cfg.emit("Aborting restore.")
             return
@@ -182,7 +189,7 @@ class RestoreDbsCmd(usage.Options):
         if self.opts['frozen-ttls']:
             ttl_offset = 0
         else:
-            ttl_offset = 0
+            ttl_offset = self.seconds_from_now(header['timestamp'])
 
         cfg.emit("Restoring dbs ...")
         redis = cfg.get_redis(self.redis_config)
