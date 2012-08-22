@@ -79,8 +79,8 @@ class DbBackupBaseTestCase(TestCase, PersistenceMixin):
 class BackupDbCmdTestCase(DbBackupBaseTestCase):
     def test_backup_db(self):
         self.redis.set("foo", 1)
-        self.redis.set("bar#bar", 2)
-        self.redis.set("bar#baz", "bar")
+        self.redis.set("bar:bar", 2)
+        self.redis.set("bar:baz", "bar")
         db_backup = self.mktemp()
         cfg = self.make_cfg(["backup", self.mkdbconfig("bar"), db_backup])
         cfg.run()
@@ -109,40 +109,40 @@ class BackupDbCmdTestCase(DbBackupBaseTestCase):
             self.assertEqual([json.loads(x) for x in backup][1:], expected)
 
     def test_backup_string(self):
-        self.redis.set("bar#s", "foo")
+        self.redis.set("bar:s", "foo")
         self.check_backup("bar", [{'key': 's', 'type': 'string',
                                    'value': "foo", 'ttl': None}])
 
     def test_backup_list(self):
         lvalue = ["a", "c", "b"]
         for item in lvalue:
-            self.redis.rpush("bar#l", item)
+            self.redis.rpush("bar:l", item)
         self.check_backup("bar", [{'key': 'l', 'type': 'list',
                                    'value': lvalue, 'ttl': None}])
 
     def test_backup_set(self):
         svalue = set(["a", "c", "b"])
         for item in svalue:
-            self.redis.sadd("bar#s", item)
+            self.redis.sadd("bar:s", item)
         self.check_backup("bar", [{'key': 's', 'type': 'set',
                                    'value': sorted(svalue), 'ttl': None}])
 
     def test_backup_zset(self):
         zvalue = [['z', 1], ['a', 2], ['c', 3]]
         for item, score in zvalue:
-            self.redis.zadd("bar#z", **{item: score})
+            self.redis.zadd("bar:z", **{item: score})
         self.check_backup("bar", [{'key': 'z', 'type': 'zset',
                                    'value': zvalue, 'ttl': None}])
 
     def test_hash_backup(self):
-        self.redis.hmset("bar#set", {"foo": "1", "baz": "2"})
+        self.redis.hmset("bar:set", {"foo": "1", "baz": "2"})
         self.check_backup("bar", [{'key': 'set', 'type': 'hash',
                                    'value': {"foo": "1", "baz": "2"},
                                    'ttl': None}])
 
     def test_ttl_backup(self):
-        self.redis.set("bar#s", "foo")
-        self.redis.expire("bar#s", 30)
+        self.redis.set("bar:s", "foo")
+        self.redis.expire("bar:s", 30)
         db_backup = self.mktemp()
         cfg = self.make_cfg(["backup", self.mkdbconfig("bar"), db_backup])
         cfg.run()
@@ -213,7 +213,7 @@ class RestoreDbCmdTestCase(DbBackupBaseTestCase):
         ])
         redis_data = sorted((k, self.redis.get(k)) for k in self.redis.keys())
         expected_data = [tuple(x.items()[0]) for x in self.RESTORED_DATA]
-        expected_data = [("bar#%s" % k, v) for k, v in expected_data]
+        expected_data = [("bar:%s" % k, v) for k, v in expected_data]
         self.assertEqual(redis_data, expected_data)
 
     def test_restore_with_purge(self):
@@ -236,7 +236,7 @@ class RestoreDbCmdTestCase(DbBackupBaseTestCase):
                              self.mkdbbackup(backup_data)])
         cfg.run()
         redis_data = sorted((k, redis_get(k)) for k in self.redis.keys())
-        restored_data = sorted([("%s#%s" % (key_prefix, k), v)
+        restored_data = sorted([("%s:%s" % (key_prefix, k), v)
                                 for k, v in restored_data.items()])
         self.assertEqual(redis_data, restored_data)
 
@@ -276,7 +276,7 @@ class RestoreDbCmdTestCase(DbBackupBaseTestCase):
         self.check_restore([{'key': 's', 'type': 'string', 'value': 'ping',
                              'ttl': 30}],
                            {'s': 'ping'}, self.redis.get, key_prefix="bar")
-        self.assertTrue(0 < self.redis.ttl("bar#s") <= 30)
+        self.assertTrue(0 < self.redis.ttl("bar:s") <= 30)
 
     def test_restore_ttl_frozen(self):
         yesterday = datetime.datetime.utcnow() - datetime.timedelta(days=1)
@@ -285,4 +285,4 @@ class RestoreDbCmdTestCase(DbBackupBaseTestCase):
                            {'s': 'ping'}, self.redis.get,
                            timestamp=yesterday,
                            args=["--frozen-ttls"], key_prefix="bar")
-        self.assertTrue(0 < self.redis.ttl("bar#s") <= 30)
+        self.assertTrue(0 < self.redis.ttl("bar:s") <= 30)
