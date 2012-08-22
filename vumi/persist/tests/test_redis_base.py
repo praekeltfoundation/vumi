@@ -13,8 +13,8 @@ class ManagerTestCase(TestCase):
 
     def test_key_prefix(self):
         manager = self.mk_manager()
-        self.assertEqual('test#None', manager._key(None))
-        self.assertEqual('test#foo', manager._key('foo'))
+        self.assertEqual('test:None', manager._key(None))
+        self.assertEqual('test:foo', manager._key('foo'))
 
     def test_no_key_prefix(self):
         manager = self.mk_manager(None)
@@ -24,7 +24,7 @@ class ManagerTestCase(TestCase):
     def test_sub_manager(self):
         manager = self.mk_manager()
         sub_manager = manager.sub_manager("foo")
-        self.assertEqual(sub_manager._key_prefix, "test#foo")
+        self.assertEqual(sub_manager._key_prefix, "test:foo")
         self.assertEqual(sub_manager._client, manager._client)
         self.assertEqual(sub_manager._key_separator, manager._key_separator)
 
