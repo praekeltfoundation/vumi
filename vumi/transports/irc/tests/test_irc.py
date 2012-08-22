@@ -172,13 +172,10 @@ from twisted.words.protocols.irc import IRC
 
 
 class StubbyIrcServerProtocol(IRC):
-
-    def __init__(self, factory):
-        self.factory = factory
-        self.events = factory.events
+    hostname = 'localhost'
 
     def irc_unknown(self, prefix, command, params):
-        self.events.put((prefix, command, params))
+        self.factory.events.put((prefix, command, params))
 
     def connectionLost(self, reason):
         IRC.connectionLost(self, reason)
@@ -186,16 +183,16 @@ class StubbyIrcServerProtocol(IRC):
 
 
 class StubbyIrcServer(ServerFactory):
-
     protocol = StubbyIrcServerProtocol
 
-    def __init__(self, *args, **kw):
+    def startFactory(self):
         self.server = None
         self.events = DeferredQueue()
         self.finished_d = Deferred()
 
     def buildProtocol(self, addr):
-        self.server = self.protocol(self)
+        self.server = ServerFactory.buildProtocol(self, addr)
+        self.server.factory = self
         return self.server
 
     @inlineCallbacks
@@ -207,8 +204,6 @@ class StubbyIrcServer(ServerFactory):
 
 
 class TestIrcTransport(TransportTestCase):
-
-    timeout = 5
 
     transport_name = 'test_irc_transport'
     transport_class = IrcTransport
