@@ -28,7 +28,7 @@ class SessionManager(object):
     def __init__(self, r_server, prefix, max_session_length=None,
                  gc_period=1.0):
         warnings.warn("vumi.application.SessionManager is deprecated. Use "
-                      "vumi.session instead.", category=DeprecationWarning)
+              "vumi.components.session instead.", category=DeprecationWarning)
         self.max_session_length = max_session_length
         self.r_server = r_server
         self.r_prefix = prefix
