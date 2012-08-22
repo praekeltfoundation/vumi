@@ -45,17 +45,28 @@ class VumiRedis(txr.Redis):
     def lrem(self, key, value, num=0):
         return super(VumiRedis, self).lrem(key, value, count=num)
 
-    def lpop(self, key):
-        return self.pop(key, tail=False)
+    # lpop() and rpop() are implemented in txredis 2.2.1 (which is in Ubuntu),
+    # but not 2.2 (which is in pypi). Annoyingly, pop() in 2.2.1 calls lpop()
+    # and rpop(), so we can't just delegate to that as we did before.
 
     def rpop(self, key):
-        return self.pop(key, tail=True)
+        self._send('RPOP', key)
+        return self.getResponse()
+
+    def lpop(self, key):
+        self._send('LPOP', key)
+        return self.getResponse()
 
     def setex(self, key, seconds, value):
         return self.set(key, value, expire=seconds)
 
+    # setnx() is implemented in txredis 2.2.1 (which is in Ubuntu), but not 2.2
+    # (which is in pypi). Annoyingly, set() in 2.2.1 calls setnx(), so we can't
+    # just delegate to that as we did before.
+
     def setnx(self, key, value):
-        return self.set(key, value, preserve=True)
+        self._send('SETNX', key, value)
+        return self.getResponse()
 
     def zadd(self, key, *args, **kwargs):
         if args:
