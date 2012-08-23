@@ -900,7 +900,8 @@ class RxEsmeToSmscTestCase(TransportTestCase):
         self.assertEqual(dispatched_failures, [])
 
         [failure] = self.flushLoggedErrors(UnicodeDecodeError)
-        self.assertTrue('unexpected code byte' in failure.getErrorMessage())
+        self.assertTrue(failure.getErrorMessage().startswith(
+                "'utf8' codec can't decode byte 0xa7 in position 27"))
 
     @inlineCallbacks
     def test_deliver_ussd_start(self):
