@@ -29,7 +29,6 @@ class KeyHandler(object):
                                   for ktype in self.REDIS_TYPES)
 
     def dump_key(self, redis, key):
-        # TODO: save TTL
         key_type = redis.type(key)
         record = {
             'type': key_type,
