@@ -286,3 +286,40 @@ class RestoreDbCmdTestCase(DbBackupBaseTestCase):
                            timestamp=yesterday,
                            args=["--frozen-ttls"], key_prefix="bar")
         self.assertTrue(0 < self.redis.ttl("bar:s") <= 30)
+
+
+class AnalyzeCmdTestCase(DbBackupBaseTestCase):
+    def mkkeysbackup(self, keys):
+        records = [{'backup_type': 'redis'}]
+        records.extend({'key': k} for k in keys)
+        return self.mkdbbackup(records)
+
+    def check_tree(self, keys, output):
+        db_backup = self.mkkeysbackup(keys)
+        cfg = self.make_cfg(["analyze", db_backup])
+        cfg.run()
+        self.assertEqual(cfg.output, ["Keys:", "-----"] + output)
+
+    def test_no_keys(self):
+        self.check_tree([], [])
+
+    def test_one_key(self):
+        self.check_tree(["foo"], ["foo"])
+
+    def test_two_distinct_keys(self):
+        self.check_tree(["foo", "bar"], ["bar", "foo"])
+
+    def test_two_keys_that_share_prefix(self):
+        self.check_tree(["foo:bar", "foo:baz"], [
+            "foo: (2 leaves)",
+        ])
+
+    def test_full_tree(self):
+        keys = (["foo:%d" % i for i in range(10)] +
+                ["foo:bar:%d" % i for i in range(3)] +
+                ["bar:%d" % i for i in range(4)])
+        self.check_tree(keys, [
+            "bar: (4 leaves)",
+            "foo: (10 leaves)",
+            "  bar: (3 leaves)",
+        ])
