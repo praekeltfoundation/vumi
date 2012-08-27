@@ -288,6 +288,39 @@ class RestoreDbCmdTestCase(DbBackupBaseTestCase):
         self.assertTrue(0 < self.redis.ttl("bar:s") <= 30)
 
 
+class MigrateDbCmdTestCase(DbBackupBaseTestCase):
+
+    def mkrules(self, rules):
+        config = {
+            "rules": rules,
+        }
+        return self.mkfile(yaml.safe_dump(config))
+
+    def check_rules(self, rules, data, output, expected):
+        header = [{"backup_type": "redis"}]
+        result_file = self.mkfile("")
+        cfg = self.make_cfg(["migrate",
+                             self.mkrules(rules),
+                             self.mkdbbackup(header + data),
+                             result_file])
+        cfg.run()
+        self.assertEqual(cfg.output, ["Migrating backup ...",
+                                      "Summary of changes:"
+                                      ] + output)
+
+        result = [json.loads(x) for x in open(result_file)]
+        self.assertEqual(result, header + expected)
+
+    def test_single_regex_rename(self):
+        self.check_rules([{"type": "rename", "from": r"foo:", "to": r"baz:"}],
+                         [{"key": "foo:bar", "value": "foobar"},
+                          {"key": "bar:foo", "value": "barfoo"}],
+                         ["  2 records processed.",
+                          "  1 records altered."],
+                         [{"key": "baz:bar", "value": "foobar"},
+                          {"key": "bar:foo", "value": "barfoo"}])
+
+
 class AnalyzeCmdTestCase(DbBackupBaseTestCase):
     def mkkeysbackup(self, keys):
         records = [{'backup_type': 'redis'}]
