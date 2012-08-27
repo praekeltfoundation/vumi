@@ -320,6 +320,16 @@ class MigrateDbCmdTestCase(DbBackupBaseTestCase):
                          [{"key": "baz:bar", "value": "foobar"},
                           {"key": "bar:foo", "value": "barfoo"}])
 
+    def test_multiple_renames(self):
+        self.check_rules([{"type": "rename", "from": r"foo:", "to": r"baz:"},
+                          {"type": "rename", "from": r"bar:", "to": r"rab:"}],
+                         [{"key": "foo:bar", "value": "foobar"},
+                          {"key": "bar:foo", "value": "barfoo"}],
+                         ["  2 records processed.",
+                          "  2 records altered."],
+                         [{"key": "baz:bar", "value": "foobar"},
+                          {"key": "rab:foo", "value": "barfoo"}])
+
 
 class AnalyzeCmdTestCase(DbBackupBaseTestCase):
     def mkkeysbackup(self, keys):

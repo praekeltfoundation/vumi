@@ -241,6 +241,8 @@ class MigrateDbsCmd(usage.Options):
         def rule(record):
             key = record['key']
             record['key'] = from_regex.sub(to_template, key)
+            if record['key'] == key:
+                return False
             return True
 
         return rule
