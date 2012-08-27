@@ -5,12 +5,14 @@ import pkg_resources
 import traceback
 import time
 import calendar
+import re
 from datetime import datetime
 
 import yaml
 from twisted.python import usage
 
 from vumi.persist.redis_manager import RedisManager
+from vumi.errors import ConfigError
 
 
 def vumi_version():
@@ -218,12 +220,78 @@ class RestoreDbsCmd(usage.Options):
             cfg.emit("WARNING: %d bad backup lines skipped." % skipped)
 
 
+class MigrateDbsCmd(usage.Options):
+
+    synopsis = ("<migration-config.yaml> <db-backup.json>"
+                " <migrated-backup.json>")
+
+    def parseArgs(self, migration_config, db_backup, migrated_backup):
+        self.migration_config = yaml.safe_load(open(migration_config))
+        self.db_backup = open(db_backup, "rb")
+        self.migrated_backup = open(migrated_backup, "wb")
+
+    def postOptions(self):
+        self.rules = self.create_rules(self.migration_config)
+
+    def make_rule_rename(self, kw):
+        from_regex = re.compile(kw['from'])
+        to_template = kw['to']
+
+        def rule(record):
+            key = record['key']
+            record['key'] = from_regex.sub(to_template, key)
+            return True
+
+        return rule
+
+    def create_rules(self, migration_config):
+        rules = []
+        for rule in migration_config['rules']:
+            kw = rule.copy()
+            rule_name = kw.pop('type')
+            rule_maker = getattr(self, "make_rule_%s" % rule_name, None)
+            if rule_maker is None:
+                raise ConfigError("Unknown rule type %r" % rule_name)
+            rules.append(rule_maker(kw))
+        return rules
+
+    def apply_rules(self, record):
+        for rule in self.rules:
+            done = rule(record)
+            if done:
+                return
+
+    def write_line(self, record):
+        self.migrated_backup.write(json.dumps(record))
+        self.migrated_backup.write("\n")
+
+    def run(self, cfg):
+        line_iter = iter(self.db_backup)
+        try:
+            header = line_iter.next()
+        except StopIteration:
+            cfg.emit("No header in backup.")
+            return
+        self.write_line(json.loads(header))
+
+        cfg.emit("Migrating backup ...")
+        for data in line_iter:
+            record = json.loads(data)
+            self.apply_rules(record)
+            self.write_line(record)
+        self.migrated_backup.close()
+
+        cfg.emit("Summary of changes:")
+
+
 class Options(usage.Options):
     subCommands = [
         ["backup", None, BackupDbsCmd,
          "Backup databases."],
         ["restore", None, RestoreDbsCmd,
          "Restore databases."],
+        ["migrate", None, MigrateDbsCmd,
+         "Rename keys in a database backup."],
     ]
 
     longdesc = """Back-up and restore utility for Vumi
