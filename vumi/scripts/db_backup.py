@@ -6,6 +6,7 @@ import traceback
 import time
 import calendar
 import re
+import copy
 from datetime import datetime
 
 import yaml
@@ -275,13 +276,20 @@ class MigrateDbsCmd(usage.Options):
         self.write_line(json.loads(header))
 
         cfg.emit("Migrating backup ...")
+        changed, processed = 0, 0
         for data in line_iter:
             record = json.loads(data)
-            self.apply_rules(record)
-            self.write_line(record)
+            new_record = copy.deepcopy(record)
+            self.apply_rules(new_record)
+            if record != new_record:
+                changed += 1
+            processed += 1
+            self.write_line(new_record)
         self.migrated_backup.close()
 
         cfg.emit("Summary of changes:")
+        cfg.emit("  %d records processed." % processed)
+        cfg.emit("  %d records altered." % changed)
 
 
 class Options(usage.Options):

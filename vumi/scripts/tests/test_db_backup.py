@@ -315,6 +315,7 @@ class MigrateDbCmdTestCase(DbBackupBaseTestCase):
         self.check_rules([{"type": "rename", "from": r"foo:", "to": r"baz:"}],
                          [{"key": "foo:bar", "value": "foobar"},
                           {"key": "bar:foo", "value": "barfoo"}],
-                         [],
+                         ["  2 records processed.",
+                          "  1 records altered."],
                          [{"key": "baz:bar", "value": "foobar"},
                           {"key": "bar:foo", "value": "barfoo"}])
