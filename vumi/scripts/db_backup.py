@@ -3,6 +3,7 @@ import sys
 import json
 import pkg_resources
 import traceback
+import re
 import time
 import calendar
 import re
@@ -32,7 +33,6 @@ class KeyHandler(object):
                                   for ktype in self.REDIS_TYPES)
 
     def dump_key(self, redis, key):
-        # TODO: save TTL
         key_type = redis.type(key)
         record = {
             'type': key_type,
@@ -292,6 +292,86 @@ class MigrateDbsCmd(usage.Options):
         cfg.emit("  %d records altered." % changed)
 
 
+class PrefixTree(object):
+    def __init__(self):
+        self._root = {}
+
+    def add_key(self, key):
+        node = self._root
+        for c in key:
+            if c not in node:
+                node[c] = {}
+            node = node[c]
+
+    def compress_edges(self, edge_pattern):
+        edge_regex = re.compile(edge_pattern)
+        new_root = {}
+
+        stack = [(self._root, new_root, '')]
+        while stack:
+            current_old, current_new, prefix = stack.pop()
+            for c, next_old in current_old.iteritems():
+                edge = prefix + c
+                if edge_regex.match(edge):
+                    current_new[edge] = next_new = {}
+                    stack.append((next_old, next_new, ''))
+                elif next_old:
+                    stack.append((next_old, current_new, edge))
+                else:
+                    current_new[edge] = {}
+
+        self._root = new_root
+
+    def _print_tree(self, emit, indent, node, level):
+        full_indent = indent * level
+        for edge, node_edge in sorted(node.items()):
+            sub_trees = dict((k, v) for k, v in node_edge.items() if v)
+            leaves = len(node_edge) - len(sub_trees)
+            emit("%s%s%s" % (full_indent, edge,
+                             " (%d leaves)" % leaves if leaves else ""))
+            if sub_trees:
+                self._print_tree(emit, indent, sub_trees, level + 1)
+
+    def print_tree(self, emit, indent="  "):
+        return self._print_tree(emit, indent, self._root, 0)
+
+
+class AnalyzeCmd(usage.Options):
+
+    synopsis = "<db-backup-output.json>"
+
+    optParameters = [
+        ["separators", "s", "[:#]",
+         "Regular expression for allowed key part separators."],
+    ]
+
+    def parseArgs(self, db_backup):
+        self.db_backup = open(db_backup, "rb")
+
+    def run(self, cfg):
+        backup_lines = iter(self.db_backup)
+        try:
+            backup_lines.next()  # skip header
+        except StopIteration:
+            cfg.emit("No header found. Aborting.")
+            return
+
+        tree = PrefixTree()
+        for i, line in enumerate(backup_lines):
+            try:
+                key = json.loads(line)['key']
+            except:
+                cfg.emit("Bad record %d: %r" % (i, line))
+                continue
+            tree.add_key(key)
+        edge_pattern = r".*%s" % self.opts['separators']
+        tree.compress_edges(edge_pattern)
+
+        cfg.emit("Keys:")
+        cfg.emit("-----")
+        tree.print_tree(cfg.emit)
+
+
 class Options(usage.Options):
     subCommands = [
         ["backup", None, BackupDbsCmd,
@@ -300,6 +380,8 @@ class Options(usage.Options):
          "Restore databases."],
         ["migrate", None, MigrateDbsCmd,
          "Rename keys in a database backup."],
+        ["analyze", None, AnalyzeCmd,
+         "Analyze a database backup."],
     ]
 
     longdesc = """Back-up and restore utility for Vumi
