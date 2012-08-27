@@ -330,6 +330,23 @@ class MigrateDbCmdTestCase(DbBackupBaseTestCase):
                          [{"key": "baz:bar", "value": "foobar"},
                           {"key": "rab:foo", "value": "barfoo"}])
 
+    def test_single_drop(self):
+        self.check_rules([{"type": "drop", "key": r"foo:"}],
+                         [{"key": "foo:bar", "value": "foobar"},
+                          {"key": "bar:foo", "value": "barfoo"}],
+                         ["  2 records processed.",
+                          "  1 records altered."],
+                         [{"key": "bar:foo", "value": "barfoo"}])
+
+    def test_multiple_drops(self):
+        self.check_rules([{"type": "drop", "key": r"foo:"},
+                          {"type": "drop", "key": r"bar:"}],
+                         [{"key": "foo:bar", "value": "foobar"},
+                          {"key": "bar:foo", "value": "barfoo"}],
+                         ["  2 records processed.",
+                          "  2 records altered."],
+                         [])
+
 
 class AnalyzeCmdTestCase(DbBackupBaseTestCase):
     def mkkeysbackup(self, keys):
