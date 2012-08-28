@@ -87,8 +87,7 @@ class TxRiakManager(Manager):
 
         def map_results(raw_results):
             deferreds = []
-            for row in raw_results:
-                link = RiakLink(row[0], row[1])
+            for link in raw_results:
                 deferreds.append(maybeDeferred(mapper_func, self, link))
             return gatherResults(deferreds)
 
