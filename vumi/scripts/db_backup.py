@@ -6,7 +6,6 @@ import traceback
 import re
 import time
 import calendar
-import re
 import copy
 from datetime import datetime
 
@@ -50,7 +49,7 @@ class KeyHandler(object):
                 return
         self._set_handlers[key_type](redis, key, record['value'])
         if ttl is not None:
-            redis.expire(key, ttl)
+            redis.expire(key, int(round(ttl)))
 
     def record_okay(self, record):
         if not isinstance(record, dict):
@@ -234,6 +233,16 @@ class MigrateDbsCmd(usage.Options):
     def postOptions(self):
         self.rules = self.create_rules(self.migration_config)
 
+    def make_rule_drop(self, kw):
+        key_regex = re.compile(kw['key'])
+
+        def rule(record):
+            if key_regex.match(record['key']):
+                return True, None
+            return False, record
+
+        return rule
+
     def make_rule_rename(self, kw):
         from_regex = re.compile(kw['from'])
         to_template = kw['to']
@@ -241,7 +250,9 @@ class MigrateDbsCmd(usage.Options):
         def rule(record):
             key = record['key']
             record['key'] = from_regex.sub(to_template, key)
-            return True
+            if record['key'] == key:
+                return False, record
+            return True, record
 
         return rule
 
@@ -258,9 +269,10 @@ class MigrateDbsCmd(usage.Options):
 
     def apply_rules(self, record):
         for rule in self.rules:
-            done = rule(record)
+            done, record = rule(record)
             if done:
-                return
+                break
+        return record
 
     def write_line(self, record):
         self.migrated_backup.write(json.dumps(record))
@@ -279,12 +291,12 @@ class MigrateDbsCmd(usage.Options):
         changed, processed = 0, 0
         for data in line_iter:
             record = json.loads(data)
-            new_record = copy.deepcopy(record)
-            self.apply_rules(new_record)
+            new_record = self.apply_rules(copy.deepcopy(record))
             if record != new_record:
                 changed += 1
             processed += 1
-            self.write_line(new_record)
+            if new_record is not None:
+                self.write_line(new_record)
         self.migrated_backup.close()
 
         cfg.emit("Summary of changes:")
