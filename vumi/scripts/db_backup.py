@@ -50,7 +50,7 @@ class KeyHandler(object):
                 return
         self._set_handlers[key_type](redis, key, record['value'])
         if ttl is not None:
-            redis.expire(key, ttl)
+            redis.expire(key, int(round(ttl)))
 
     def record_okay(self, record):
         if not isinstance(record, dict):
