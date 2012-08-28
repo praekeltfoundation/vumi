@@ -39,7 +39,7 @@ class VumiRedis(txr.Redis):
 
     def hget(self, key, field):
         d = super(VumiRedis, self).hget(key, field)
-        d.addCallback(lambda r: r[field])
+        d.addCallback(lambda r: r.get(field) if r else None)
         return d
 
     def lrem(self, key, value, num=0):
