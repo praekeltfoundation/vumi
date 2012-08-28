@@ -26,6 +26,9 @@ class VumiRedis(txr.Redis):
     other redis client, we add a deferred that fires when we've finished
     connecting to the redis server. This avoids problems with trying to use a
     client that hasn't completely connected yet.
+
+    TODO: We need to find a way to test this stuff
+
     """
 
     def __init__(self, *args, **kw):
@@ -39,7 +42,7 @@ class VumiRedis(txr.Redis):
 
     def hget(self, key, field):
         d = super(VumiRedis, self).hget(key, field)
-        d.addCallback(lambda r: r[field])
+        d.addCallback(lambda r: r.get(field) if r else None)
         return d
 
     def lrem(self, key, value, num=0):
