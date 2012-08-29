@@ -84,7 +84,7 @@ class KeyHandler(object):
 
     def zset_set(self, redis, key, value):
         for item, score in value:
-            redis.zadd(key, **{item: score})
+            redis.zadd(key, **{item.encode('utf8'): score})
 
     def hash_get(self, redis, key):
         return redis.hgetall(key)
