@@ -67,6 +67,7 @@ class Manager(object):
         self._key_separator = key_separator
 
     def get_key_prefix(self):
+        """This is only intended for use in testing, not production."""
         return self._key_prefix
 
     def sub_manager(self, sub_prefix):
