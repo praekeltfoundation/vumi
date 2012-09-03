@@ -69,12 +69,6 @@ class Manager(object):
     def get_key_prefix(self):
         return self._key_prefix
 
-    def get_key_separator(self):
-        return self._key_separator
-
-    def get_client(self):
-        return self._client
-
     def sub_manager(self, sub_prefix):
         key_prefix = self._key(sub_prefix)
         sub_man = self.__class__(self._client, key_prefix,
