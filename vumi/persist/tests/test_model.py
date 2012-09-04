@@ -128,6 +128,29 @@ class TestModelOnTxRiak(TestCase):
         self.assertEqual((yield search(b="a\'bc")), ["one"])
 
     @Manager.calls_manager
+    def test_simple_riak_search(self):
+        simple_model = self.manager.proxy(SimpleModel)
+        yield simple_model.enable_search()
+        yield simple_model("one", a=1, b=u'abc').save()
+        yield simple_model("two", a=2, b=u'def').save()
+        yield simple_model("three", a=2, b=u'ghi').save()
+
+        [s1] = yield simple_model.riak_search('a:1')
+        self.assertEqual(s1.key, "one")
+        self.assertEqual(s1.a, 1)
+        self.assertEqual(s1.b, u'abc')
+
+        [s2] = yield simple_model.riak_search('a:2 AND b:def')
+        self.assertEqual(s2.key, "two")
+
+        [s1, s2] = yield simple_model.riak_search('b:abc OR b:def')
+        self.assertEqual(s1.key, "one")
+        self.assertEqual(s2.key, "two")
+
+        keys = yield simple_model.riak_search('a:2', return_keys=True)
+        self.assertEqual(sorted(keys), ["three", "two"])
+
+    @Manager.calls_manager
     def test_simple_instance(self):
         simple_model = self.manager.proxy(SimpleModel)
         s1 = simple_model("foo", a=5, b=u'3')

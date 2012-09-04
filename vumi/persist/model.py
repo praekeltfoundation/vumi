@@ -338,5 +338,8 @@ class ModelProxy(object):
     def search(self, **kw):
         return self._modelcls.search(self._manager, **kw)
 
+    def riak_search(self, *args, **kw):
+        return self._modelcls.riak_search(self._manager, *args, **kw)
+
     def enable_search(self):
         return self._modelcls.enable_search(self._manager)
