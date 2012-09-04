@@ -181,7 +181,18 @@ class Model(object):
             value = value.replace("'", "\\'")
             kw[k] = value
         query = " AND ".join("%s:'%s'" % (k, v) for k, v in kw.iteritems())
-        return manager.riak_search(cls, query, return_keys=return_keys)
+        return cls.riak_search(manager, query, return_keys=return_keys)
+
+    @classmethod
+    def riak_search(cls, manager, query, return_keys=False):
+        """
+        Performs a raw riak search, does no inspection on the given query.
+
+        :returns:
+            A lit of model instances (or a list of keys if
+            return_keys is set to True)
+        """
+        return manager.riak_search(cls, query, return_keys)
 
     @classmethod
     def enable_search(cls, manager):
