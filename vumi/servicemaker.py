@@ -8,6 +8,7 @@ from zope.interface import implements
 from twisted.python import usage
 from twisted.application.service import IServiceMaker
 from twisted.plugin import IPlugin
+from twisted.python import log
 
 from vumi.service import WorkerCreator
 from vumi.utils import load_class_by_string
@@ -38,6 +39,36 @@ def read_yaml_config(config_file, optional=True):
         return yaml.safe_load(stream)
 
 
+def setup_sentry(dsn):
+    import raven
+    if not dsn.startswith("twisted+http:"):
+        raise ValueError("Invalid Sentry DSN. It must start with"
+                         " 'twisted+http:'.")
+    client = raven.Client(dsn=dsn)
+
+    SENTRY_CONTEXT = object()
+
+    def raw_log(event):
+        failure = event.get('failure')
+        if failure:
+            exc_info = (failure.type, failure.value, failure.stack)
+            log.callWithContext({SENTRY_CONTEXT: True},
+                                client.captureException,
+                                exc_info)
+        else:
+            for msg in event['message']:
+                client.captureMessage(msg)
+            else:
+                client.captureMessage("No message.")
+
+    def log_to_sentry(event):
+        if SENTRY_CONTEXT in event:
+            return
+        log.callWithContext({SENTRY_CONTEXT: True}, raw_log, event)
+
+    log.theLogPublisher.addObserver(log_to_sentry)
+
+
 class VumiOptions(usage.Options):
     """
     Options global to everything vumi.
@@ -49,6 +80,7 @@ class VumiOptions(usage.Options):
         ["password", None, None, "AMQP password (*)"],
         ["vhost", None, None, "AMQP virtual host (*)"],
         ["specfile", None, None, "AMQP spec file (*)"],
+        ["sentry", None, None, "Sentry DSN (*)"],
         ["vumi-config", None, None,
          "YAML config file for setting core vumi options (any command-line"
          " parameter marked with an asterisk)"],
@@ -61,6 +93,7 @@ class VumiOptions(usage.Options):
         "password": "vumi",
         "vhost": "/develop",
         "specfile": "amqp-spec-0-8.xml",
+        "sentry": None,
         }
 
     def get_vumi_options(self):
@@ -168,6 +201,10 @@ class VumiWorkerServiceMaker(object):
     options = StartWorkerOptions
 
     def makeService(self, options):
+        sentry_dsn = options.vumi_options.pop('sentry', None)
+        if sentry_dsn is not None:
+            setup_sentry(sentry_dsn)
+
         worker_creator = WorkerCreator(options.vumi_options)
         worker = worker_creator.create_worker(options.worker_class,
                                               options.worker_config)
