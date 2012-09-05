@@ -300,17 +300,17 @@ class MigrateDbsCmd(usage.Options):
                 changed += 1
             processed += 1
 
-            if possible_overwrites.get(new_record['key']):
-                possible_overwrites[new_record['key']].append({
-                        "rule_number": rule_number,
-                        "original_key": record['key']})
-                duplicates += 1
-            else:
-                possible_overwrites[new_record['key']] = [{
-                        "rule_number": rule_number,
-                        "original_key": record['key']}]
-
             if new_record is not None:
+                if possible_overwrites.get(new_record['key']):
+                    possible_overwrites[new_record['key']].append({
+                            "rule_number": rule_number,
+                            "original_key": record['key']})
+                    duplicates += 1
+                else:
+                    possible_overwrites[new_record['key']] = [{
+                            "rule_number": rule_number,
+                            "original_key": record['key']}]
+
                 if records.get(new_record['key']):
                     overwritten += 1
 
@@ -326,12 +326,12 @@ class MigrateDbsCmd(usage.Options):
                     if p['rule_number'] > max_rule:
                         max_rule = p['rule_number']
                 if len(rule_precedence) > 1:
-                    print rule_precedence, "use no.", max_rule
                     if rule_precedence[record['key']] != max_rule:
                         use_this_record = False
-                    print "use_this_record:", record['key'], "->", use_this_record
-                    print ""
-
+                    if  __name__ == "__main__":
+                        print "Possible overwrite:"
+                        print "Rules %s Max_rule %s" % (rule_precedence, max_rule)
+                        print "Use this record? %s -> %s\n" % (record['key'], use_this_record)
 
                 if use_this_record:
                     records[new_record['key']] = new_record

@@ -316,7 +316,11 @@ class MigrateDbCmdTestCase(DbBackupBaseTestCase):
                          [{"key": "foo:bar", "value": "foobar"},
                           {"key": "bar:foo", "value": "barfoo"}],
                          ["  2 records processed.",
-                          "  1 records altered."],
+                          "  1 records altered.",
+                          "  0 duplicate keys.",
+                          "  0 records overwritten.",
+                          "  2 records in migration."
+                          ],
                          [{"key": "baz:bar", "value": "foobar"},
                           {"key": "bar:foo", "value": "barfoo"}])
 
@@ -326,16 +330,39 @@ class MigrateDbCmdTestCase(DbBackupBaseTestCase):
                          [{"key": "foo:bar", "value": "foobar"},
                           {"key": "bar:foo", "value": "barfoo"}],
                          ["  2 records processed.",
-                          "  2 records altered."],
+                          "  2 records altered.",
+                          "  0 duplicate keys.",
+                          "  0 records overwritten.",
+                          "  2 records in migration."
+                          ],
                          [{"key": "baz:bar", "value": "foobar"},
                           {"key": "rab:foo", "value": "barfoo"}])
+
+    def test_multiple_colliding_renames(self):
+        self.check_rules([
+                          {"type": "rename", "from": r"bar:foo", "to": r"uno"},
+                          {"type": "rename", "from": r"foo:bar", "to": r"uno"},
+                          ],
+                         [{"key": "foo:bar", "value": "foobar"},
+                          {"key": "bar:foo", "value": "barfoo"}],
+                         ["  2 records processed.",
+                          "  2 records altered.",
+                          "  1 duplicate keys.",
+                          "  1 records overwritten.",
+                          "  1 records in migration."
+                          ],
+                         [{"key": "uno", "value": "foobar"}])
 
     def test_single_drop(self):
         self.check_rules([{"type": "drop", "key": r"foo:"}],
                          [{"key": "foo:bar", "value": "foobar"},
                           {"key": "bar:foo", "value": "barfoo"}],
                          ["  2 records processed.",
-                          "  1 records altered."],
+                          "  1 records altered.",
+                          "  0 duplicate keys.",
+                          "  0 records overwritten.",
+                          "  1 records in migration."
+                          ],
                          [{"key": "bar:foo", "value": "barfoo"}])
 
     def test_multiple_drops(self):
@@ -344,7 +371,11 @@ class MigrateDbCmdTestCase(DbBackupBaseTestCase):
                          [{"key": "foo:bar", "value": "foobar"},
                           {"key": "bar:foo", "value": "barfoo"}],
                          ["  2 records processed.",
-                          "  2 records altered."],
+                          "  2 records altered.",
+                          "  0 duplicate keys.",
+                          "  0 records overwritten.",
+                          "  0 records in migration."
+                          ],
                          [])
 
 
