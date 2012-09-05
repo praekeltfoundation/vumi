@@ -12,7 +12,8 @@ from uuid import uuid4
 from twisted.internet import reactor
 from twisted.internet.protocol import ProcessProtocol
 from twisted.internet.defer import (Deferred, inlineCallbacks,
-                                    maybeDeferred, returnValue)
+                                    maybeDeferred, returnValue,
+                                    DeferredList)
 from twisted.internet.error import ProcessDone
 from twisted.python.failure import Failure
 
@@ -154,6 +155,7 @@ class SandboxProtocol(ProcessProtocol):
         self.rlimits = rlimits
         self._started = MultiDeferred()
         self._done = MultiDeferred()
+        self._pending_requests = []
         self.exit_reason = None
         self.timeout_task = reactor.callLater(timeout, self.kill)
         self.recv_limit = recv_limit
@@ -219,15 +221,15 @@ class SandboxProtocol(ProcessProtocol):
     def outReceived(self, data):
         lines = self._process_data(self.chunk, data)
         for i in range(len(lines) - 1):
-            # dispatch_request() calls are async (i.e. return deferreds)
-            self.api.dispatch_request(self._parse_command(lines[i]))
+            d = self.api.dispatch_request(self._parse_command(lines[i]))
+            self._pending_requests.append(d)
         self.chunk = lines[-1]
 
     def outConnectionLost(self):
         if self.chunk:
             line, self.chunk = self.chunk, ""
-            # dispatch_request() calls are async (i.e. return deferreds)
-            self.api.dispatch_request(self._parse_command(line))
+            d = self.api.dispatch_request(self._parse_command(line))
+            self._pending_requests.append(d)
 
     def errReceived(self, data):
         lines = self._process_data(self.error_chunk, data)
@@ -240,6 +242,11 @@ class SandboxProtocol(ProcessProtocol):
             log.error(Failure(SandboxError(self.error_chunk)))
             self.error_chunk = ""
 
+    def _process_request_results(self, results):
+        for success, result in results:
+            if not success:
+                log.error(result)
+
     def processEnded(self, reason):
         if self.timeout_task.active():
             self.timeout_task.cancel()
@@ -250,7 +257,9 @@ class SandboxProtocol(ProcessProtocol):
         if not self._started.fired():
             self._started.callback(Failure(
                 SandboxError("Process failed to start.")))
-        self._done.callback(result)
+        requests_done = DeferredList(self._pending_requests)
+        requests_done.addCallback(self._process_request_results)
+        requests_done.addCallback(lambda _r: self._done.callback(result))
 
 
 class SandboxResources(object):
@@ -335,6 +344,9 @@ class RedisResource(SandboxResource):
         self.r_config = self.config.get('redis_manager', {})
         self.keys_per_user = self.config.get('keys_per_user', 100)
         self.redis = yield TxRedisManager.from_config(self.r_config)
+
+    def teardown(self):
+        return self.redis.close_manager()
 
     def _count_key(self, sandbox_id):
         return "#".join(["count", sandbox_id])

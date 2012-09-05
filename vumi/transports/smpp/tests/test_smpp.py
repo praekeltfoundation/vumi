@@ -867,6 +867,43 @@ class RxEsmeToSmscTestCase(TransportTestCase):
         self.assertEqual(dispatched_failures, [])
 
     @inlineCallbacks
+    def test_deliver_bad_encoding(self):
+
+        self._block_till_bind = Deferred()
+
+        # Startup
+        yield self.startTransport()
+        yield self.transport._block_till_bind
+        # The Server delivers a SMS to the Client
+
+        bad_pdu = DeliverSM(555,
+                short_message="SMS from server containing \xa7",
+                destination_addr="2772222222",
+                source_addr="2772000000",
+                )
+
+        good_pdu = DeliverSM(555,
+                short_message="Next message",
+                destination_addr="2772222222",
+                source_addr="2772000000",
+                )
+
+        self.service.factory.smsc.send_pdu(bad_pdu)
+        self.service.factory.smsc.send_pdu(good_pdu)
+        [mess] = yield self.wait_for_dispatched_messages(1)
+
+        self.assertEqual(mess['message_type'], 'user_message')
+        self.assertEqual(mess['transport_name'], self.transport_name)
+        self.assertEqual(mess['content'], "Next message")
+
+        dispatched_failures = self.get_dispatched_failures()
+        self.assertEqual(dispatched_failures, [])
+
+        [failure] = self.flushLoggedErrors(UnicodeDecodeError)
+        self.assertTrue(failure.getErrorMessage().startswith(
+                "'utf8' codec can't decode byte 0xa7 in position 27"))
+
+    @inlineCallbacks
     def test_deliver_ussd_start(self):
 
         self._block_till_bind = Deferred()

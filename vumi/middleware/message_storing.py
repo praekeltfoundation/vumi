@@ -70,6 +70,7 @@ class StoringMiddleware(BaseMiddleware):
         #        json.dumps() that RiakObject uses is unhappy with that.
         if 'date' in transport_metadata:
             date = transport_metadata['date']
-            transport_metadata['date'] = date.isoformat()
+            if not isinstance(date, basestring):
+                transport_metadata['date'] = date.isoformat()
         yield self.store.add_event(event)
         returnValue(event)

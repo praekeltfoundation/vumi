@@ -61,7 +61,7 @@ class Manager(object):
 
     def __init__(self, client, key_prefix, key_separator=None):
         if key_separator is None:
-            key_separator = '#'
+            key_separator = ':'
         self._client = client
         self._key_prefix = key_prefix
         self._key_separator = key_separator
@@ -106,7 +106,7 @@ class Manager(object):
         # So we can mangle it
         config = config.copy()
         key_prefix = config.pop('key_prefix', None)
-        key_separator = config.pop('key_separator', '#')
+        key_separator = config.pop('key_separator', ':')
         fake_redis = config.pop('FAKE_REDIS', None)
         if 'VUMITEST_REDIS_DB' in os.environ:
             fake_redis = None
@@ -193,6 +193,7 @@ class Manager(object):
 
     # Global operations
 
+    type = RedisCall(['key'])
     exists = RedisCall(['key'])
     keys = RedisCall(['pattern'], defaults=['*'], key_args=['pattern'],
                      filter_func='_unkeys')

@@ -81,9 +81,12 @@ class SafaricomTransport(HttpRpcTransport):
         if session:
             to_addr = session['to_addr']
             last_ussd_params = session['last_ussd_params']
-            new_params = ussd_params.replace(last_ussd_params, '')
+            new_params = ussd_params[len(last_ussd_params):]
             if new_params:
-                content = new_params[1:]
+                if last_ussd_params:
+                    content = new_params[1:]
+                else:
+                    content = new_params
             else:
                 content = ''
 
@@ -91,7 +94,10 @@ class SafaricomTransport(HttpRpcTransport):
             yield self.session_manager.save_session(session_id, session)
             session_event = TransportUserMessage.SESSION_RESUME
         else:
-            to_addr = '*%s*%s#' % (dest, ussd_params)
+            if ussd_params:
+                to_addr = '*%s*%s#' % (dest, ussd_params)
+            else:
+                to_addr = '*%s#' % (dest,)
             yield self.session_manager.create_session(session_id,
                 from_addr=from_addr, to_addr=to_addr,
                 last_ussd_params=ussd_params)

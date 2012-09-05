@@ -345,10 +345,7 @@ class SmppTransport(Transport):
         #       we can't decode (e.g. data_coding == 4). We should
         #       remove the try-except once we handle such messages
         #       better.
-        try:
-            return self.publish_message(**message)
-        except Exception, e:
-            log.err(e)
+        return self.publish_message(**message).addErrback(log.err)
 
     def send_smpp(self, message):
         log.debug("Sending SMPP message: %s" % (message))

@@ -120,8 +120,8 @@ class TestVumiBotProtocol(unittest.TestCase):
     def test_connection_lost(self):
         with LogCatcher() as logger:
             self.vb.connectionLost("test loss of connection")
-            [log] = logger.logs
-            self.assertEqual(log['message'][0],
+            [logmsg] = logger.messages()
+            self.assertEqual(logmsg,
                              'Disconnected (nickname was: %s).' % self.nick)
             self.assertEqual(logger.errors, [])
 
@@ -132,8 +132,8 @@ class TestVumiBotProtocol(unittest.TestCase):
     def test_joined(self):
         with LogCatcher() as logger:
             self.vb.joined(self.channel)
-            [log] = logger.logs
-            self.assertEqual(log['message'][0], 'Joined %r' % self.channel)
+            [logmsg] = logger.messages()
+            self.assertEqual(logmsg, 'Joined %r' % self.channel)
 
     def test_privmsg(self):
         sender, command, recipient, text = (self.nick, 'PRIVMSG', "#zoo",
@@ -156,8 +156,8 @@ class TestVumiBotProtocol(unittest.TestCase):
     def test_irc_nick(self):
         with LogCatcher() as logger:
             self.vb.irc_NICK("oldnick!host", ["newnick"])
-            [log] = logger.logs
-            self.assertEqual(log['message'][0],
+            [logmsg] = logger.messages()
+            self.assertEqual(logmsg,
                              "Nick changed from 'oldnick' to 'newnick'")
 
     def test_alter_collided_nick(self):
@@ -172,13 +172,10 @@ from twisted.words.protocols.irc import IRC
 
 
 class StubbyIrcServerProtocol(IRC):
-
-    def __init__(self, factory):
-        self.factory = factory
-        self.events = factory.events
+    hostname = 'localhost'
 
     def irc_unknown(self, prefix, command, params):
-        self.events.put((prefix, command, params))
+        self.factory.events.put((prefix, command, params))
 
     def connectionLost(self, reason):
         IRC.connectionLost(self, reason)
@@ -186,16 +183,16 @@ class StubbyIrcServerProtocol(IRC):
 
 
 class StubbyIrcServer(ServerFactory):
-
     protocol = StubbyIrcServerProtocol
 
-    def __init__(self, *args, **kw):
+    def startFactory(self):
         self.server = None
         self.events = DeferredQueue()
         self.finished_d = Deferred()
 
     def buildProtocol(self, addr):
-        self.server = self.protocol(self)
+        self.server = ServerFactory.buildProtocol(self, addr)
+        self.server.factory = self
         return self.server
 
     @inlineCallbacks
@@ -207,8 +204,6 @@ class StubbyIrcServer(ServerFactory):
 
 
 class TestIrcTransport(TransportTestCase):
-
-    timeout = 5
 
     transport_name = 'test_irc_transport'
     transport_class = IrcTransport
