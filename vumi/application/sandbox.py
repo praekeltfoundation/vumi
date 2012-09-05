@@ -556,7 +556,7 @@ class Sandbox(ApplicationWorker):
         resource.RLIMIT_CORE: (1 * MB, 1 * MB),
         resource.RLIMIT_CPU: (60, 60),
         resource.RLIMIT_FSIZE: (1 * MB, 1 * MB),
-        resource.RLIMIT_DATA: (10 * MB, 10 * MB),
+        resource.RLIMIT_DATA: (32 * MB, 32 * MB),
         resource.RLIMIT_STACK: (1 * MB, 1 * MB),
         resource.RLIMIT_RSS: (10 * MB, 10 * MB),
         resource.RLIMIT_NOFILE: (10, 10),
