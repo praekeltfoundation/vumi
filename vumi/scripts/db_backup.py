@@ -225,6 +225,11 @@ class MigrateDbsCmd(usage.Options):
     synopsis = ("<migration-config.yaml> <db-backup.json>"
                 " <migrated-backup.json>")
 
+    optFlags = [
+        ["verbose", "v", "Output details of overwrites performed by"
+         " the migration."],
+    ]
+
     def parseArgs(self, migration_config, db_backup, migrated_backup):
         self.migration_config = yaml.safe_load(open(migration_config))
         self.db_backup = open(db_backup, "rb")
@@ -281,7 +286,7 @@ class MigrateDbsCmd(usage.Options):
         self.migrated_backup.write("\n")
 
     def run(self, cfg):
-        print cfg.__dict__
+        verbose = self.opts.get('verbose', False)
         records = {}
         line_iter = iter(self.db_backup)
         try:
@@ -330,14 +335,17 @@ class MigrateDbsCmd(usage.Options):
                     if rule_precedence[record['key']] != max_rule:
                         use_this_record = False
 
-                    cfg.emit("Possible overwrite:")
-                    cfg.emit("Rules %s Max_rule %s" % (rule_precedence, max_rule))
-                    cfg.emit("Use this record? %s -> %s\n" % (record['key'], use_this_record))
+                    if verbose:
+                        cfg.emit("Possible overwrite:")
+                        cfg.emit("Rules %s Max_rule %s"
+                                 % (rule_precedence, max_rule))
+                        cfg.emit("Use this record? %s -> %s"
+                                 % (record['key'], use_this_record))
 
                 if use_this_record:
                     records[new_record['key']] = new_record
 
-        for k,v in records.items():
+        for k, v in records.items():
             self.write_line(v)
         self.migrated_backup.close()
 
