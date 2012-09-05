@@ -281,6 +281,7 @@ class MigrateDbsCmd(usage.Options):
         self.migrated_backup.write("\n")
 
     def run(self, cfg):
+        print cfg.__dict__
         records = {}
         line_iter = iter(self.db_backup)
         try:
@@ -328,10 +329,10 @@ class MigrateDbsCmd(usage.Options):
                 if len(rule_precedence) > 1:
                     if rule_precedence[record['key']] != max_rule:
                         use_this_record = False
-                    if  __name__ == "__main__":
-                        print "Possible overwrite:"
-                        print "Rules %s Max_rule %s" % (rule_precedence, max_rule)
-                        print "Use this record? %s -> %s\n" % (record['key'], use_this_record)
+
+                    cfg.emit("Possible overwrite:")
+                    cfg.emit("Rules %s Max_rule %s" % (rule_precedence, max_rule))
+                    cfg.emit("Use this record? %s -> %s\n" % (record['key'], use_this_record))
 
                 if use_this_record:
                     records[new_record['key']] = new_record
