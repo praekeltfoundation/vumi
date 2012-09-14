@@ -32,8 +32,9 @@ class DevNullTransportTestCase(TransportTestCase):
     def test_ack_publishing(self):
         msg = self.mkmsg_out()
         yield self.dispatch(msg)
-        event = (yield self.wait_for_dispatched_events(1))[0]
-        self.assertTrue(event['event_type'], 'ack')
+        [ack, dr] = self.get_dispatched_events()
+        self.assertEqual(ack['event_type'], 'ack')
+        self.assertEqual(dr['event_type'], 'delivery_report')
 
     @inlineCallbacks
     def test_reply_sending(self):
