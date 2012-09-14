@@ -17,15 +17,19 @@ class DevNullTransport(Transport):
 
     Configuration parameters:
 
-    :param transport_type str:
+    :type transport_type: str
+    :param transport_type:
         The transport type to emulate, defaults to sms.
-    :param failure_rate float:
+    :type failure_rate: float
+    :param failure_rate:
         How many messages should be treated as failures.
         Float value between 0.0 and 1.0.
-    :param reply_rate float:
+    :type reply_rate: float
+    :param reply_rate:
         For how many messages should we generate a reply?
         Float value between 0.0 and 1.0.
-    :param reply_copy str:
+    :type reply_copy: str
+    :param reply_copy:
         What copy should be sent as the reply, defaults to echo-ing the content
         of the outbound message.
     """
