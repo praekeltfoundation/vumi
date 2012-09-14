@@ -22,8 +22,7 @@ class DevNullTransportTestCase(TransportTestCase):
         msg = self.mkmsg_out()
         with LogCatcher() as logger:
             yield self.dispatch(msg)
-        [log] = logger.logs
-        log_msg = log['message'][0]
+        log_msg = logger.messages()[0]
         self.assertTrue(msg['to_addr'] in log_msg)
         self.assertTrue(msg['from_addr'] in log_msg)
         self.assertTrue(msg['content'] in log_msg)
@@ -38,10 +37,15 @@ class DevNullTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_reply_sending(self):
-        for i in range(10):
-            msg = self.mkmsg_out()
-            yield self.dispatch(msg)
+        with LogCatcher() as logger:
+            for i in range(20):
+                msg = self.mkmsg_out()
+                yield self.dispatch(msg)
         messages = self.get_dispatched_messages()
         # we should've received at least 1 reply.
         self.assertTrue(messages)
         self.assertEqual(messages[0]['content'], msg['content'])
+        log_msg = logger.messages()[0]
+        self.assertTrue(msg['to_addr'] in log_msg)
+        self.assertTrue(msg['from_addr'] in log_msg)
+        self.assertTrue(msg['content'] in log_msg)

@@ -46,7 +46,7 @@ class DevNullTransport(Transport):
     def handle_outbound_message(self, message):
         dr = ('failed' if random.random() < self.failure_rate
                 else 'delivered')
-        log.info('%(dr)s: %(from_addr)s -> %(to_addr)s: %(content)s' % {
+        log.info('MT %(dr)s: %(from_addr)s -> %(to_addr)s: %(content)s' % {
             'dr': dr,
             'from_addr': message['from_addr'],
             'to_addr': message['to_addr'],
@@ -56,9 +56,15 @@ class DevNullTransport(Transport):
             sent_message_id=uuid.uuid4().hex)
         yield self.publish_delivery_report(message['message_id'], dr)
         if random.random() < self.reply_rate:
+            reply_copy = self.reply_copy or message['content']
+            log.info('MO %(from_addr)s -> %(to_addr)s: %(content)s' % {
+                'from_addr': message['to_addr'],
+                'to_addr': message['from_addr'],
+                'content': reply_copy,
+                })
             yield self.publish_message(
                 message_id=uuid.uuid4().hex,
-                content=self.reply_copy or message['content'],
+                content=reply_copy,
                 to_addr=message['from_addr'],
                 from_addr=message['to_addr'],
                 provider='devnull',
