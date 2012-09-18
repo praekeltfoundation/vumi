@@ -152,7 +152,7 @@ class TestPermissiveCellulantSmsTransport(TransportTestCase):
             'username': 'user',
             'password': 'pass',
             'outbound_url': self.mock_cellulant_sms.url,
-            'mode': 'permissive',
+            'validation_mode': 'permissive',
         }
         self.transport = yield self.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url()
