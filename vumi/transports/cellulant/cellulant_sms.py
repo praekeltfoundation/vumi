@@ -33,7 +33,7 @@ class CellulantSmsTransport(HttpRpcTransport):
 
     EXPECTED_FIELDS = set(["SOURCEADDR", "DESTADDR", "MESSAGE", "ID"])
     IGNORED_FIELDS = set(["channelID", "keyword", "CHANNELID", "serviceID",
-                          "SERVICEID", "unsub"])
+                          "SERVICEID", "unsub", "transactionID"])
     STRICT_MODE = 'strict'
     PERMISSIVE = 'permissive'
     DEFAULT_VALIDATION_MODE = STRICT_MODE
