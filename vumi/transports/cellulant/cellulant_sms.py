@@ -34,10 +34,14 @@ class CellulantSmsTransport(HttpRpcTransport):
     EXPECTED_FIELDS = set(["SOURCEADDR", "DESTADDR", "MESSAGE", "ID"])
     IGNORED_FIELDS = set(["channelID", "keyword", "CHANNELID", "serviceID",
                           "SERVICEID", "unsub"])
+    STRICT_MODE = 'strict'
+    PERMISSIVE = 'permissive'
+    DEFAULT_VALIDATION_MODE = STRICT_MODE
 
     def setup_transport(self):
         self._username = self.config['username']
         self._password = self.config['password']
+        self._mode = self.config.get('mode', self.DEFAULT_VALIDATION_MODE)
         self._outbound_url = self.config['outbound_url']
         return super(CellulantSmsTransport, self).setup_transport()
 
@@ -61,7 +65,8 @@ class CellulantSmsTransport(HttpRpcTransport):
         errors = {}
         for field in request.args:
             if field not in (self.EXPECTED_FIELDS | self.IGNORED_FIELDS):
-                errors.setdefault('unexpected_parameter', []).append(field)
+                if self._mode == self.STRICT_MODE:
+                    errors.setdefault('unexpected_parameter', []).append(field)
             else:
                 values[field] = str(request.args.get(field)[0])
         for field in self.EXPECTED_FIELDS:

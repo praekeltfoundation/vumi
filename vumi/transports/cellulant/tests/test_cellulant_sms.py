@@ -13,8 +13,6 @@ from vumi.transports.cellulant import CellulantSmsTransport
 
 class TestCellulantSmsTransport(TransportTestCase):
 
-    timeout = 5
-
     transport_name = 'test_cellulant_sms_transport'
     transport_class = CellulantSmsTransport
 
@@ -114,6 +112,85 @@ class TestCellulantSmsTransport(TransportTestCase):
         self.assertEqual(400, response.code)
         self.assertEqual(json.loads(response.delivered_body),
                          {'unexpected_parameter': ['foo']})
+
+    @inlineCallbacks
+    def test_missing_parameters(self):
+        url = self.mkurl_raw(ID='12345678', DESTADDR='12345', MESSAGE='hello')
+        response = yield http_request_full(url, '', method='GET')
+        self.assertEqual(400, response.code)
+        self.assertEqual(json.loads(response.delivered_body),
+                         {'missing_parameter': ['SOURCEADDR']})
+
+    @inlineCallbacks
+    def test_ignored_parameters(self):
+        url = self.mkurl('hello', channelID='a', keyword='b', CHANNELID='c',
+                         serviceID='d', SERVICEID='e', unsub='f')
+        response = yield http_request(url, '', method='GET')
+        [msg] = self.get_dispatched_messages()
+        self.assertEqual(msg['content'], "hello")
+        self.assertEqual(json.loads(response),
+                         {'message_id': msg['message_id']})
+
+
+class TestPermissiveCellulantSmsTransport(TransportTestCase):
+
+    transport_name = 'test_cellulant_sms_transport'
+    transport_class = CellulantSmsTransport
+
+    @inlineCallbacks
+    def setUp(self):
+        super(TestPermissiveCellulantSmsTransport, self).setUp()
+
+        self.cellulant_sms_calls = DeferredQueue()
+        self.mock_cellulant_sms = MockHttpServer(self.handle_request)
+        yield self.mock_cellulant_sms.start()
+
+        self.config = {
+            'transport_name': self.transport_name,
+            'web_path': "foo",
+            'web_port': 0,
+            'username': 'user',
+            'password': 'pass',
+            'outbound_url': self.mock_cellulant_sms.url,
+            'mode': 'permissive',
+        }
+        self.transport = yield self.get_transport(self.config)
+        self.transport_url = self.transport.get_transport_url()
+
+    def handle_request(self, request):
+        self.cellulant_sms_calls.put(request)
+        return ''
+
+    def mkurl(self, content, from_addr="2371234567", **kw):
+        params = {
+            'SOURCEADDR': from_addr,
+            'DESTADDR': '12345',
+            'MESSAGE': content,
+            'ID': '1234567',
+            }
+        params.update(kw)
+        return self.mkurl_raw(**params)
+
+    def mkurl_raw(self, **params):
+        return '%s%s?%s' % (
+            self.transport_url,
+            self.config['web_path'],
+            urlencode(params)
+        )
+
+    @inlineCallbacks
+    def tearDown(self):
+        yield self.mock_cellulant_sms.stop()
+        yield super(TestPermissiveCellulantSmsTransport, self).tearDown()
+
+    @inlineCallbacks
+    def test_bad_parameter_in_permissive_mode(self):
+        url = self.mkurl('hello', foo='bar')
+        response = yield http_request_full(url, '', method='GET')
+        [msg] = self.get_dispatched_messages()
+        self.assertEqual(200, response.code)
+        self.assertEqual(json.loads(response.delivered_body),
+                         {'message_id': msg['message_id']})
 
     @inlineCallbacks
     def test_missing_parameters(self):
