@@ -7,6 +7,7 @@ from twisted.python import log
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.utils import http_request_full
+from vumi.errors import ConfigError
 from vumi.transports.httprpc import HttpRpcTransport
 
 
@@ -26,6 +27,11 @@ class CellulantSmsTransport(HttpRpcTransport):
         CellulantSms account password.
     :param str outbound_url:
         The URL to send outbound messages to.
+    :param str validation_mode:
+        The mode to operate in. Can be 'strict' or 'permissive'. If 'strict'
+        then any parameter received that is not listed in EXPECTED_FIELDS nor
+        in IGNORED_FIELDS will raise an error. If 'permissive' then no error
+        is raised as long as all the EXPECTED_FIELDS are present.
 
     """
 
@@ -33,13 +39,23 @@ class CellulantSmsTransport(HttpRpcTransport):
 
     EXPECTED_FIELDS = set(["SOURCEADDR", "DESTADDR", "MESSAGE", "ID"])
     IGNORED_FIELDS = set(["channelID", "keyword", "CHANNELID", "serviceID",
-                          "SERVICEID", "unsub"])
+                          "SERVICEID", "unsub", "transactionID"])
 
-    def setup_transport(self):
+    STRICT_MODE = 'strict'
+    PERMISSIVE_MODE = 'permissive'
+    DEFAULT_VALIDATION_MODE = STRICT_MODE
+    KNOWN_VALIDATION_MODES = [STRICT_MODE, PERMISSIVE_MODE]
+
+    def validate_config(self):
         self._username = self.config['username']
         self._password = self.config['password']
+        self._validation_mode = self.config.get('validation_mode',
+            self.STRICT_MODE)
+        if self._validation_mode not in self.KNOWN_VALIDATION_MODES:
+            raise ConfigError('Invalid validation mode: %s' % (
+                self._validation_mode,))
         self._outbound_url = self.config['outbound_url']
-        return super(CellulantSmsTransport, self).setup_transport()
+        return super(CellulantSmsTransport, self).validate_config()
 
     @inlineCallbacks
     def handle_outbound_message(self, message):
@@ -61,7 +77,8 @@ class CellulantSmsTransport(HttpRpcTransport):
         errors = {}
         for field in request.args:
             if field not in (self.EXPECTED_FIELDS | self.IGNORED_FIELDS):
-                errors.setdefault('unexpected_parameter', []).append(field)
+                if self._validation_mode == self.STRICT_MODE:
+                    errors.setdefault('unexpected_parameter', []).append(field)
             else:
                 values[field] = str(request.args.get(field)[0])
         for field in self.EXPECTED_FIELDS:
