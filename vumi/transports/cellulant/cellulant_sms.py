@@ -27,6 +27,11 @@ class CellulantSmsTransport(HttpRpcTransport):
         CellulantSms account password.
     :param str outbound_url:
         The URL to send outbound messages to.
+    :param str validation_mode:
+        The mode to operate in. Can be 'strict' or 'permissive'. If 'strict'
+        then any parameter received that is not listed in EXPECTED_FIELDS nor
+        in IGNORED_FIELDS will raise an error. If 'permissive' then no error
+        is raised as long as all the EXPECTED_FIELDS are present.
 
     """
 
