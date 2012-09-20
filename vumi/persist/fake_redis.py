@@ -1,7 +1,6 @@
 # -*- test-case-name: vumi.persist.tests.test_fake_redis -*-
 
 import fnmatch
-import chardet
 from functools import wraps
 
 from twisted.internet.defer import Deferred
@@ -24,16 +23,6 @@ def maybe_async(func):
     wrapper.sync = func
     return wrapper
 
-def force_utf8(value, threshold=0.5, fallback_encoding='utf8', errors='strict'):
-    if isinstance(value, unicode):
-        return value.encode('utf8')
-    if isinstance(value, basestring):
-        guess = chardet.detect(value)
-        if guess['confidence'] >= threshold:
-            return unicode(value, guess['encoding'], errors).encode('utf8')
-        return unicode(value, fallback_encoding, errors).encode('utf8')
-    return str(value).encode('utf8')
-
 
 class FakeRedis(object):
     """In process and memory implementation of redis-like data store.
@@ -47,14 +36,27 @@ class FakeRedis(object):
       types raised by the real Python redis module.
     """
 
-    def __init__(self, async=False):
+    def __init__(self, charset='utf-8', errors='strict', async=False):
         self._data = {}
         self._expiries = {}
         self._is_async = async
         self.clock = Clock()
+        self._charset = charset
+        self._charset_errors = errors
 
     def teardown(self):
         self._clean_up_expires()
+
+    def _encode(self, value):
+        # Replicated from
+        # redis-py's redis/connection.py
+        if isinstance(value, str):
+            return value
+        if not isinstance(value, unicode):
+            value = str(value)
+        if isinstance(value, unicode):
+            value = value.encode(self._charset, self._charset_errors)
+        return value
 
     def _clean_up_expires(self):
         for key in self._expiries.keys():
@@ -100,12 +102,12 @@ class FakeRedis(object):
 
     @maybe_async
     def set(self, key, value):
-        value = str(value)  # set() sets string value
+        value = self._encode(value)  # set() sets string value
         self._data[key] = value
 
     @maybe_async
     def setnx(self, key, value):
-        value = str(value)  # set() sets string value
+        value = self._encode(value)  # set() sets string value
         if key not in self._data:
             self._data[key] = value
             return 1
@@ -142,7 +144,7 @@ class FakeRedis(object):
     def hget(self, key, field):
         value = self._data.get(key, {}).get(field)
         if value is not None:
-            return force_utf8(value)
+            return self._encode(value)
 
     @maybe_async
     def hdel(self, key, *fields):
@@ -164,7 +166,7 @@ class FakeRedis(object):
 
     @maybe_async
     def hgetall(self, key):
-        return dict((force_utf8(k), force_utf8(v)) for k, v in
+        return dict((self._encode(k), self._encode(v)) for k, v in
             self._data.get(key, {}).items())
 
     @maybe_async
@@ -173,7 +175,7 @@ class FakeRedis(object):
 
     @maybe_async
     def hvals(self, key):
-        return [force_utf8(value) for value in self._data.get(key, {}).values()]
+        return map(self._encode, self._data.get(key, {}).values())
 
     @maybe_async
     def hincrby(self, key, field, amount=1):
@@ -192,7 +194,7 @@ class FakeRedis(object):
     @maybe_async
     def sadd(self, key, *values):
         sval = self._data.setdefault(key, set())
-        sval.update(map(force_utf8, values))
+        sval.update(map(self._encode, values))
 
     @maybe_async
     def smembers(self, key):
