@@ -1,6 +1,7 @@
 # -*- test-case-name: vumi.persist.tests.test_fake_redis -*-
 
 import fnmatch
+import chardet
 from functools import wraps
 
 from twisted.internet.defer import Deferred
@@ -22,6 +23,16 @@ def maybe_async(func):
         return result
     wrapper.sync = func
     return wrapper
+
+def force_utf8(value, threshold=0.5, fallback_encoding='utf8', errors='strict'):
+    if isinstance(value, unicode):
+        return value.encode('utf8')
+    if isinstance(value, basestring):
+        guess = chardet.detect(value)
+        if guess['confidence'] >= threshold:
+            return unicode(value, guess['encoding'], errors).encode('utf8')
+        return unicode(value, fallback_encoding, errors).encode('utf8')
+    return str(value).encode('utf8')
 
 
 class FakeRedis(object):
@@ -124,12 +135,14 @@ class FakeRedis(object):
     def hset(self, key, field, value):
         mapping = self._data.setdefault(key, {})
         new_field = field not in mapping
-        mapping[field] = unicode(value)
+        mapping[field] = value
         return int(new_field)
 
     @maybe_async
     def hget(self, key, field):
-        return self._data.get(key, {}).get(field)
+        value = self._data.get(key, {}).get(field)
+        if value is not None:
+            return force_utf8(value)
 
     @maybe_async
     def hdel(self, key, *fields):
@@ -146,12 +159,13 @@ class FakeRedis(object):
     @maybe_async
     def hmset(self, key, mapping):
         hval = self._data.setdefault(key, {})
-        hval.update(dict([(key, unicode(value))
+        hval.update(dict([(key, value)
             for key, value in mapping.items()]))
 
     @maybe_async
     def hgetall(self, key):
-        return self._data.get(key, {}).copy()
+        return dict((force_utf8(k), force_utf8(v)) for k, v in
+            self._data.get(key, {}).items())
 
     @maybe_async
     def hlen(self, key):
@@ -159,7 +173,7 @@ class FakeRedis(object):
 
     @maybe_async
     def hvals(self, key):
-        return self._data.get(key, {}).values()
+        return [force_utf8(value) for value in self._data.get(key, {}).values()]
 
     @maybe_async
     def hincrby(self, key, field, amount=1):
@@ -178,7 +192,7 @@ class FakeRedis(object):
     @maybe_async
     def sadd(self, key, *values):
         sval = self._data.setdefault(key, set())
-        sval.update(map(unicode, values))
+        sval.update(map(force_utf8, values))
 
     @maybe_async
     def smembers(self, key):
