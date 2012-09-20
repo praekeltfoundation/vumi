@@ -3,3 +3,4 @@ coverage
 python-subunit
 junitxml
 pep8
+chardet
