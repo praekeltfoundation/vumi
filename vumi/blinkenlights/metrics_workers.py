@@ -305,13 +305,13 @@ class GraphiteMetricsCollector(MetricsCollectorWorker):
 
 
 class UDPMetricsProtocol(DatagramProtocol):
-    def __init__(self, host, port):
+    def __init__(self, ip, port):
         # NOTE: `host` must be an IP, not a hostname.
-        self._host = host
+        self._ip = ip
         self._port = port
 
     def startProtocol(self):
-        self.transport.connect(self._host, self._port)
+        self.transport.connect(self._ip, self._port)
 
     def send_metric(self, metric_string):
         return self.transport.write(metric_string)
@@ -329,9 +329,10 @@ class UDPMetricsCollector(MetricsCollectorWorker):
             'format_string', self.DEFAULT_FORMAT_STRING)
         self.timestamp_format = self.config.get(
             'timestamp_format', self.DEFAULT_TIMESTAMP_FORMAT)
-        self.host = yield reactor.resolve(self.config['metrics_host'])
-        self.port = int(self.config['metrics_port'])
-        self.metrics_protocol = UDPMetricsProtocol(self.host, self.port)
+        self.metrics_ip = yield reactor.resolve(self.config['metrics_host'])
+        self.metrics_port = int(self.config['metrics_port'])
+        self.metrics_protocol = UDPMetricsProtocol(
+            self.metrics_ip, self.metrics_port)
         self.listener = yield reactor.listenUDP(0, self.metrics_protocol)
 
     def teardown_worker(self):
