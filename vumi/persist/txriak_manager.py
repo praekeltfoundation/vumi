@@ -87,7 +87,12 @@ class TxRiakManager(Manager):
 
         def map_results(raw_results):
             deferreds = []
-            for link in raw_results:
+            for row in raw_results:
+                if riakasaurus.VERSION>="1.0.6":
+                    link = row
+                else:
+                    link = RiakLink(row[0], row[1])
+
                 deferreds.append(maybeDeferred(mapper_func, self, link))
             return gatherResults(deferreds)
 
