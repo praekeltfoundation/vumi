@@ -320,7 +320,7 @@ class UDPMetricsProtocol(DatagramProtocol):
 class UDPMetricsCollector(MetricsCollectorWorker):
     """Worker that collects Vumi metrics and publishes them over UDP."""
 
-    DEFAULT_FORMAT_STRING = '%(timestamp)s %(metric_name)s %(value)s'
+    DEFAULT_FORMAT_STRING = '%(timestamp)s %(metric_name)s %(value)s\n'
     DEFAULT_TIMESTAMP_FORMAT = '%Y-%m-%d %H:%M:%S%z'
 
     @inlineCallbacks
@@ -345,7 +345,7 @@ class UDPMetricsCollector(MetricsCollectorWorker):
                 'metric_name': metric_name,
                 'value': value,
                 }
-            self.metrics_protocol.send_metric(metric_string + '\n')
+            self.metrics_protocol.send_metric(metric_string)
 
 
 class RandomMetricsGenerator(Worker):
