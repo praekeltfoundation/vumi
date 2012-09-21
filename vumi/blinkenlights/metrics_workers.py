@@ -252,6 +252,25 @@ class MetricAggregator(Worker):
         self.check_buckets()
 
 
+class MetricsCollectorWorker(Worker):
+    @inlineCallbacks
+    def startWorker(self):
+        log.msg("Starting %s with config: %s" % (
+                type(self).__name__, self.config))
+        yield self.setup_worker()
+        self.consumer = yield self.start_consumer(
+            AggregatedMetricConsumer, self.consume_metrics)
+
+    def stopWorker(self):
+        log.msg("Stopping %s" % (type(self).__name__,))
+
+    def setup_worker(self):
+        raise NotImplementedError()
+
+    def consume_metrics(self, metric_name, values):
+        raise NotImplementedError()
+
+
 class GraphitePublisher(Publisher):
     """Publisher for sending messages to Graphite."""
 
@@ -266,24 +285,17 @@ class GraphitePublisher(Publisher):
         self.publish_raw("%f %d" % (value, timestamp), routing_key=metric)
 
 
-class GraphiteMetricsCollector(Worker):
+class GraphiteMetricsCollector(MetricsCollectorWorker):
     """Worker that collects Vumi metrics and publishes them to Graphite."""
 
     @inlineCallbacks
-    def startWorker(self):
-        log.msg("Starting the GraphiteMetricsCollector with"
-                " config: %s" % self.config)
+    def setup_worker(self):
         self.graphite_publisher = yield self.start_publisher(GraphitePublisher)
-        self.consumer = yield self.start_consumer(AggregatedMetricConsumer,
-                                                  self.consume_metrics)
 
     def consume_metrics(self, metric_name, values):
         for timestamp, value in values:
-            self.graphite_publisher.publish_metric(metric_name, value,
-                                                   timestamp)
-
-    def stopWorker(self):
-        log.msg("Stopping the GraphiteMetricsCollector")
+            self.graphite_publisher.publish_metric(
+                metric_name, value, timestamp)
 
 
 class RandomMetricsGenerator(Worker):
