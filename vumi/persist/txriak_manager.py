@@ -3,6 +3,7 @@
 """A manager implementation on top of txriak."""
 
 from riakasaurus.riak import RiakClient, RiakObject, RiakMapReduce, RiakLink
+import riakasaurus
 from twisted.internet.defer import (
     inlineCallbacks, gatherResults, maybeDeferred, succeed)
 
