@@ -3,11 +3,13 @@
 import time
 import random
 import hashlib
+from datetime import datetime
 
 from twisted.python import log
 from twisted.internet.defer import inlineCallbacks, Deferred
 from twisted.internet import reactor
 from twisted.internet.task import LoopingCall
+from twisted.internet.protocol import DatagramProtocol
 
 from vumi.service import Consumer, Publisher, Worker
 from vumi.blinkenlights.metrics import (MetricsConsumer, MetricManager, Count,
@@ -263,9 +265,13 @@ class MetricsCollectorWorker(Worker):
 
     def stopWorker(self):
         log.msg("Stopping %s" % (type(self).__name__,))
+        return self.teardown_worker()
 
     def setup_worker(self):
-        raise NotImplementedError()
+        pass
+
+    def teardown_worker(self):
+        pass
 
     def consume_metrics(self, metric_name, values):
         raise NotImplementedError()
@@ -296,6 +302,50 @@ class GraphiteMetricsCollector(MetricsCollectorWorker):
         for timestamp, value in values:
             self.graphite_publisher.publish_metric(
                 metric_name, value, timestamp)
+
+
+class UDPMetricsProtocol(DatagramProtocol):
+    def __init__(self, host, port):
+        # NOTE: `host` must be an IP, not a hostname.
+        self._host = host
+        self._port = port
+
+    def startProtocol(self):
+        self.transport.connect(self._host, self._port)
+
+    def send_metric(self, metric_string):
+        return self.transport.write(metric_string)
+
+
+class UDPMetricsCollector(MetricsCollectorWorker):
+    """Worker that collects Vumi metrics and publishes them over UDP."""
+
+    DEFAULT_FORMAT_STRING = '%(timestamp)s %(metric_name)s %(value)s'
+    DEFAULT_TIMESTAMP_FORMAT = '%Y-%m-%d %H:%M:%S%z'
+
+    @inlineCallbacks
+    def setup_worker(self):
+        self.format_string = self.config.get(
+            'format_string', self.DEFAULT_FORMAT_STRING)
+        self.timestamp_format = self.config.get(
+            'timestamp_format', self.DEFAULT_TIMESTAMP_FORMAT)
+        self.host = yield reactor.resolve(self.config['metrics_host'])
+        self.port = int(self.config['metrics_port'])
+        self.metrics_protocol = UDPMetricsProtocol(self.host, self.port)
+        self.listener = yield reactor.listenUDP(0, self.metrics_protocol)
+
+    def teardown_worker(self):
+        return self.listener.stopListening()
+
+    def consume_metrics(self, metric_name, values):
+        for timestamp, value in values:
+            timestamp = datetime.utcfromtimestamp(timestamp)
+            metric_string = self.format_string % {
+                'timestamp': timestamp.strftime(self.timestamp_format),
+                'metric_name': metric_name,
+                'value': value,
+                }
+            self.metrics_protocol.send_metric(metric_string + '\n')
 
 
 class RandomMetricsGenerator(Worker):
