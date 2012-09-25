@@ -1,6 +1,7 @@
 # -*- test-case-name: vumi.middleware.tests.test_base -*-
 
-from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.defer import (inlineCallbacks, returnValue, DeferredList,
+    maybeDeferred)
 
 from vumi.utils import load_class_by_string
 from vumi.errors import ConfigError, VumiError
@@ -44,6 +45,15 @@ class BaseMiddleware(object):
         :rtype: Deferred or None
         :returns: May return a deferred that is called when setup is
                   complete.
+        """
+        pass
+
+    def teardown_middleware(self):
+        """"Any custom teardown may be done here
+
+        :rtype: Deferred or None
+        :returns: May return a Deferred that is called when teardown is
+                    complete
         """
         pass
 
@@ -122,6 +132,10 @@ class MiddlewareStack(object):
     def apply_publish(self, handler_name, message, endpoint):
         return self._handle(
             reversed(self.middlewares), handler_name, message, endpoint)
+
+    def teardown(self):
+        return DeferredList([maybeDeferred(mw.teardown_middleware)
+            for mw in self.middlewares])
 
 
 def create_middlewares_from_config(worker, config):
