@@ -1,5 +1,8 @@
 from twisted.trial.unittest import TestCase
-from twisted.internet.defer import inlineCallbacks, Deferred
+from twisted.internet.defer import inlineCallbacks, Deferred, DeferredQueue
+from twisted.internet.protocol import DatagramProtocol
+from twisted.internet import reactor
+
 from vumi.tests.utils import TestChannel, get_stubbed_worker
 from vumi.tests.fake_amqp import FakeAMQPBroker
 from vumi.blinkenlights import metrics_workers
@@ -267,6 +270,52 @@ class TestGraphiteMetricsCollector(TestCase):
         value, ts = float(parts[0]), int(parts[1])
         self.assertEqual(value, 1.5)
         self.assertEqual(ts, 1234)
+
+
+class UDPMetricsCatcher(DatagramProtocol):
+    def __init__(self):
+        self.queue = DeferredQueue()
+
+    def datagramReceived(self, datagram, addr):
+        self.queue.put(datagram)
+
+
+class TestUDPMetricsCollector(TestCase):
+    @inlineCallbacks
+    def setUp(self):
+        self.udp_protocol = UDPMetricsCatcher()
+        self.udp_server = yield reactor.listenUDP(0, self.udp_protocol)
+        self.worker = get_stubbed_worker(metrics_workers.UDPMetricsCollector, {
+                'metrics_host': 'localhost',
+                'metrics_port': self.udp_server.getHost().port,
+                })
+        self.broker = BrokerWrapper(self.worker._amqp_client.broker)
+        yield self.worker.startWorker()
+
+    @inlineCallbacks
+    def tearDown(self):
+        yield self.worker.stopWorker()
+        yield self.udp_server.stopListening()
+
+    def send_metrics(self, *metrics):
+        datapoints = [("vumi.test.foo", "", list(metrics))]
+        self.broker.send_datapoints("vumi.metrics.aggregates",
+                                    "vumi.metrics.aggregates", datapoints)
+        return self.broker.kick_delivery()
+
+    @inlineCallbacks
+    def test_single_message(self):
+        yield self.send_metrics((1234, 1.5))
+        received = yield self.udp_protocol.queue.get()
+        self.assertEqual('1970-01-01 00:20:34 vumi.test.foo 1.5\n', received)
+
+    @inlineCallbacks
+    def test_multiple_messages(self):
+        yield self.send_metrics((1234, 1.5), (1235, 2.5))
+        received = yield self.udp_protocol.queue.get()
+        self.assertEqual('1970-01-01 00:20:34 vumi.test.foo 1.5\n', received)
+        received = yield self.udp_protocol.queue.get()
+        self.assertEqual('1970-01-01 00:20:35 vumi.test.foo 2.5\n', received)
 
 
 class TestRandomMetricsGenerator(TestCase):
