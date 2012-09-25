@@ -90,13 +90,16 @@ class TxRiakManager(Manager):
 
         def map_results(raw_results):
             deferreds = []
-            for row in raw_results:
-                if LooseVersion(riakasaurus.VERSION) >= LooseVersion("1.0.6"):
-                    link = row
-                else:
-                    link = RiakLink(row[0], row[1])
 
-                deferreds.append(maybeDeferred(mapper_func, self, link))
+            if LooseVersion(riakasaurus.VERSION) >= LooseVersion("1.0.6"):
+                # Riakasaurus now provides links by default
+                for link in raw_results:
+                    deferreds.append(maybeDeferred(mapper_func, self, link))
+            else:
+                for row in raw_results:
+                    link = RiakLink(row[0], row[1])
+                    deferreds.append(maybeDeferred(mapper_func, self, link))
+
             return gatherResults(deferreds)
 
         mapreduce_done.addCallback(map_results)
