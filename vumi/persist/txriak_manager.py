@@ -7,6 +7,8 @@ import riakasaurus
 from twisted.internet.defer import (
     inlineCallbacks, gatherResults, maybeDeferred, succeed)
 
+from distutils import LooseVersion
+
 from vumi.persist.model import Manager
 
 
@@ -89,7 +91,7 @@ class TxRiakManager(Manager):
         def map_results(raw_results):
             deferreds = []
             for row in raw_results:
-                if riakasaurus.VERSION>="1.0.6":
+                if LooseVersion(riakasaurus.VERSION) >= LooseVersion("1.0.6"):
                     link = row
                 else:
                     link = RiakLink(row[0], row[1])
