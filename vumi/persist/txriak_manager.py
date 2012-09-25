@@ -7,7 +7,7 @@ import riakasaurus
 from twisted.internet.defer import (
     inlineCallbacks, gatherResults, maybeDeferred, succeed)
 
-from distutils import LooseVersion
+from distutils.version import LooseVersion
 
 from vumi.persist.model import Manager
 
