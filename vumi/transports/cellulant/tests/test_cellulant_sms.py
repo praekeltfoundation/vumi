@@ -28,8 +28,16 @@ class TestCellulantSmsTransport(TransportTestCase):
             'transport_name': self.transport_name,
             'web_path': "foo",
             'web_port': 0,
-            'username': 'user',
-            'password': 'pass',
+            'credentials': {
+                '2371234567': {
+                    'username': 'user',
+                    'password': 'pass',
+                },
+                '9292': {
+                    'username': 'user',
+                    'password': 'pass',
+                }
+            },
             'outbound_url': self.mock_cellulant_sms.url,
         }
         self.transport = yield self.get_transport(self.config)
@@ -149,8 +157,16 @@ class TestPermissiveCellulantSmsTransport(TransportTestCase):
             'transport_name': self.transport_name,
             'web_path': "foo",
             'web_port': 0,
-            'username': 'user',
-            'password': 'pass',
+            'credentials': {
+                '2371234567': {
+                    'username': 'user',
+                    'password': 'pass',
+                },
+                '9292': {
+                    'username': 'user',
+                    'password': 'pass',
+                }
+            },
             'outbound_url': self.mock_cellulant_sms.url,
             'validation_mode': 'permissive',
         }
