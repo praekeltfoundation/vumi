@@ -36,6 +36,10 @@ class BaseDispatchWorker(Worker):
         yield self.setup_transport_consumers()
         yield self.setup_exposed_consumers()
 
+    @inlineCallbacks
+    def stopWorker(self):
+        yield self.teardown_middleware()
+
     def setup_endpoints(self):
         self._transport_names = self.config.get('transport_names', [])
         self._exposed_names = self.config.get('exposed_names', [])
@@ -44,6 +48,9 @@ class BaseDispatchWorker(Worker):
     def setup_middleware(self):
         middlewares = yield setup_middlewares_from_config(self, self.config)
         self._middlewares = MiddlewareStack(middlewares)
+
+    def teardown_middleware(self):
+        return self._middlewares.teardown()
 
     def setup_router(self):
         router_cls = load_class_by_string(self.config['router_class'])
