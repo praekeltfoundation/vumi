@@ -34,8 +34,8 @@ class TestCellulantSmsTransport(TransportTestCase):
                     'password': 'pass',
                 },
                 '9292': {
-                    'username': 'user',
-                    'password': 'pass',
+                    'username': 'other-user',
+                    'password': 'other-pass',
                 }
             },
             'outbound_url': self.mock_cellulant_sms.url,
@@ -94,12 +94,41 @@ class TestCellulantSmsTransport(TransportTestCase):
         self.assertEqual(req.path, '/')
         self.assertEqual(req.method, 'GET')
         self.assertEqual({
-                'username': ['user'],
-                'password': ['pass'],
+                'username': ['other-user'],
+                'password': ['other-pass'],
                 'source': ['9292'],
                 'destination': ['2371234567'],
                 'message': ['hello world'],
                 }, req.args)
+
+    @inlineCallbacks
+    def test_outbound_creds_selection(self):
+        yield self.dispatch(self.mkmsg_out(to_addr="2371234567",
+            from_addr='2371234567'))
+        req = yield self.cellulant_sms_calls.get()
+        self.assertEqual(req.path, '/')
+        self.assertEqual(req.method, 'GET')
+        self.assertEqual({
+                'username': ['user'],
+                'password': ['pass'],
+                'source': ['2371234567'],
+                'destination': ['2371234567'],
+                'message': ['hello world'],
+                }, req.args)
+
+        yield self.dispatch(self.mkmsg_out(to_addr="2371234567",
+            from_addr='9292'))
+        req = yield self.cellulant_sms_calls.get()
+        self.assertEqual(req.path, '/')
+        self.assertEqual(req.method, 'GET')
+        self.assertEqual({
+                'username': ['other-user'],
+                'password': ['other-pass'],
+                'source': ['9292'],
+                'destination': ['2371234567'],
+                'message': ['hello world'],
+                }, req.args)
+
 
     @inlineCallbacks
     def test_handle_non_ascii_input(self):
