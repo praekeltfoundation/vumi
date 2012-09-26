@@ -192,8 +192,8 @@ class TestPermissiveCellulantSmsTransport(TransportTestCase):
                     'password': 'pass',
                 },
                 '9292': {
-                    'username': 'user',
-                    'password': 'pass',
+                    'username': 'other-user',
+                    'password': 'other-pass',
                 }
             },
             'outbound_url': self.mock_cellulant_sms.url,
