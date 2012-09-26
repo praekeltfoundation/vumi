@@ -28,8 +28,16 @@ class TestCellulantSmsTransport(TransportTestCase):
             'transport_name': self.transport_name,
             'web_path': "foo",
             'web_port': 0,
-            'username': 'user',
-            'password': 'pass',
+            'credentials': {
+                '2371234567': {
+                    'username': 'user',
+                    'password': 'pass',
+                },
+                '9292': {
+                    'username': 'other-user',
+                    'password': 'other-pass',
+                }
+            },
             'outbound_url': self.mock_cellulant_sms.url,
         }
         self.transport = yield self.get_transport(self.config)
@@ -86,12 +94,41 @@ class TestCellulantSmsTransport(TransportTestCase):
         self.assertEqual(req.path, '/')
         self.assertEqual(req.method, 'GET')
         self.assertEqual({
-                'username': ['user'],
-                'password': ['pass'],
+                'username': ['other-user'],
+                'password': ['other-pass'],
                 'source': ['9292'],
                 'destination': ['2371234567'],
                 'message': ['hello world'],
                 }, req.args)
+
+    @inlineCallbacks
+    def test_outbound_creds_selection(self):
+        yield self.dispatch(self.mkmsg_out(to_addr="2371234567",
+            from_addr='2371234567'))
+        req = yield self.cellulant_sms_calls.get()
+        self.assertEqual(req.path, '/')
+        self.assertEqual(req.method, 'GET')
+        self.assertEqual({
+                'username': ['user'],
+                'password': ['pass'],
+                'source': ['2371234567'],
+                'destination': ['2371234567'],
+                'message': ['hello world'],
+                }, req.args)
+
+        yield self.dispatch(self.mkmsg_out(to_addr="2371234567",
+            from_addr='9292'))
+        req = yield self.cellulant_sms_calls.get()
+        self.assertEqual(req.path, '/')
+        self.assertEqual(req.method, 'GET')
+        self.assertEqual({
+                'username': ['other-user'],
+                'password': ['other-pass'],
+                'source': ['9292'],
+                'destination': ['2371234567'],
+                'message': ['hello world'],
+                }, req.args)
+
 
     @inlineCallbacks
     def test_handle_non_ascii_input(self):
@@ -149,8 +186,16 @@ class TestPermissiveCellulantSmsTransport(TransportTestCase):
             'transport_name': self.transport_name,
             'web_path': "foo",
             'web_port': 0,
-            'username': 'user',
-            'password': 'pass',
+            'credentials': {
+                '2371234567': {
+                    'username': 'user',
+                    'password': 'pass',
+                },
+                '9292': {
+                    'username': 'other-user',
+                    'password': 'other-pass',
+                }
+            },
             'outbound_url': self.mock_cellulant_sms.url,
             'validation_mode': 'permissive',
         }

@@ -21,10 +21,10 @@ class CellulantSmsTransport(HttpRpcTransport):
         The HTTP port
     :param str transport_name:
         The name this transport instance will use to create its queues
-    :param str username:
-        CellulantSms account username.
-    :param str password:
-        CellulantSms account password.
+    :param dict credentials:
+        A dictionary where the `from_addr` is used for the key lookup and the
+        returned value should be a dictionary containing the username and
+        password.
     :param str outbound_url:
         The URL to send outbound messages to.
     :param str validation_mode:
@@ -47,8 +47,7 @@ class CellulantSmsTransport(HttpRpcTransport):
     KNOWN_VALIDATION_MODES = [STRICT_MODE, PERMISSIVE_MODE]
 
     def validate_config(self):
-        self._username = self.config['username']
-        self._password = self.config['password']
+        self._credentials = self.config['credentials']
         self._validation_mode = self.config.get('validation_mode',
             self.STRICT_MODE)
         if self._validation_mode not in self.KNOWN_VALIDATION_MODES:
@@ -59,9 +58,12 @@ class CellulantSmsTransport(HttpRpcTransport):
 
     @inlineCallbacks
     def handle_outbound_message(self, message):
+        creds = self._credentials.get(message['from_addr'], {})
+        username = creds.get('username', '')
+        password = creds.get('password', '')
         params = {
-            'username': self._username,
-            'password': self._password,
+            'username': username,
+            'password': password,
             'source': message['from_addr'],
             'destination': message['to_addr'],
             'message': message['content'],
