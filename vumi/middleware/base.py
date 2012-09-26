@@ -1,7 +1,6 @@
 # -*- test-case-name: vumi.middleware.tests.test_base -*-
 
-from twisted.internet.defer import (inlineCallbacks, returnValue, DeferredList,
-    maybeDeferred)
+from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.utils import load_class_by_string
 from vumi.errors import ConfigError, VumiError
@@ -133,9 +132,10 @@ class MiddlewareStack(object):
         return self._handle(
             reversed(self.middlewares), handler_name, message, endpoint)
 
+    @inlineCallbacks
     def teardown(self):
-        return DeferredList([maybeDeferred(mw.teardown_middleware)
-            for mw in self.middlewares])
+        for mw in reversed(self.middlewares):
+            yield mw.teardown_middleware()
 
 
 def create_middlewares_from_config(worker, config):
