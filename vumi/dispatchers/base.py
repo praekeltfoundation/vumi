@@ -6,7 +6,7 @@ import re
 import functools
 from collections import defaultdict
 
-from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.defer import inlineCallbacks, returnValue, maybeDeferred
 
 from vumi.service import Worker
 from vumi.errors import ConfigError
@@ -38,6 +38,7 @@ class BaseDispatchWorker(Worker):
 
     @inlineCallbacks
     def stopWorker(self):
+        yield self.teardown_router()
         yield self.teardown_middleware()
 
     def setup_endpoints(self):
@@ -55,6 +56,10 @@ class BaseDispatchWorker(Worker):
     def setup_router(self):
         router_cls = load_class_by_string(self.config['router_class'])
         self._router = router_cls(self, self.config)
+        return maybeDeferred(self._router.setup_routing)
+
+    def teardown_router(self):
+        return maybeDeferred(self._router.teardown_routing)
 
     @inlineCallbacks
     def setup_transport_publishers(self):
@@ -155,10 +160,23 @@ class BaseDispatchRouter(object):
     def __init__(self, dispatcher, config):
         self.dispatcher = dispatcher
         self.config = config
-        self.setup_routing()
 
     def setup_routing(self):
-        """Perform setup required for routing messages."""
+        """Perform setup required for router.
+
+        :rtype: Deferred or None
+        :returns: May return a Deferred that is called when setup is
+                    complete
+        """
+        pass
+
+    def teardown_routing(self):
+        """Perform teardown required for router.
+
+        :rtype: Deferred or None
+        :returns: May return a Deferred that is called when teardown is
+                    complete
+        """
         pass
 
     def dispatch_inbound_message(self, msg):
