@@ -129,7 +129,6 @@ class TestCellulantSmsTransport(TransportTestCase):
                 'message': ['hello world'],
                 }, req.args)
 
-
     @inlineCallbacks
     def test_handle_non_ascii_input(self):
         url = self.mkurl(u"öæł".encode("utf-8"))

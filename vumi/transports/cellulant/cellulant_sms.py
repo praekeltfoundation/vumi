@@ -49,7 +49,7 @@ class CellulantSmsTransport(HttpRpcTransport):
         'E0',  # Insufficient HTTP Params passed
         'E1',  # Invalid username or password
         'E2',  # Credits have expired or run out
-        '1005', # Suspect source address
+        '1005',  # Suspect source address
     ]
 
     def validate_config(self):
