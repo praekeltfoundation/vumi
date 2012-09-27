@@ -244,6 +244,7 @@ class Manager(object):
     zcard = RedisCall(['key'])
     zrange = RedisCall(['key', 'start', 'stop', 'desc', 'withscores'],
                        defaults=[False, False])
+    zscore = RedisCall(['key', 'value'])
 
     # List operations
 

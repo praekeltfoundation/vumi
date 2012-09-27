@@ -266,6 +266,11 @@ class FakeRedis(object):
         else:
             return [v for v, k in results]
 
+    @maybe_async
+    def zscore(self, key, value):
+        zval = self._data.get(key, Zset())
+        return zval.zscore(value)
+
     # List operations
     @maybe_async
     def llen(self, key):
@@ -372,3 +377,8 @@ class Zset(object):
         if desc:
             results.reverse()
         return [(v, k) for k, v in results]
+
+    def zscore(self, val):
+        for score, value in self._zval:
+            if value == val:
+                return score
