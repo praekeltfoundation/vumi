@@ -47,3 +47,12 @@ exec { "Clone git repository":
         File['/var/praekelt']
     ],
 }
+exec { "Vumi setup":
+    command => "python setup.py develop",
+    cwd => "/var/praekelt/vumi/",
+    user => "root",
+    subscribe => [
+        Exec['Clone git repository']
+    ],
+    refreshonly => true
+}
