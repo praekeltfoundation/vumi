@@ -1,6 +1,6 @@
 # defaults for Exec
 Exec {
-    path => ["/bin", "/usr/bin", "/usr/local/bin"],
+    path => ["/bin", "/usr/bin", "/usr/local/bin", "/usr/local/bin"],
     user => 'vagrant',
 }
 
@@ -16,6 +16,13 @@ define apt::package($ensure='latest') {
         ensure => $ensure,
         subscribe => Exec['apt-get update'];
     }
+}
+
+exec { "redis-ppa":
+    command => "add-apt-repository ppa:rwky/redis",
+    user => "root",
+    require => Package['python-software-properties'],
+    unless => "test -f /etc/apt/sources.list.d/rwky-redis-lucid.list"
 }
 
 # Install these packages
