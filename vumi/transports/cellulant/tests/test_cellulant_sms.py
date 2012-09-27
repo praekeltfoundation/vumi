@@ -250,10 +250,15 @@ class TestAcksCellulantSmsTransport(TransportTestCase):
         self.assertEqual(event['user_message_id'], 'id_1005')
 
     @inlineCallbacks
+    def test_unknown_response(self):
+        events = yield self.mock_event('something unexpected')
+        self.assertEqual(events, [])
+
+    @inlineCallbacks
     def test_ack_success(self):
-        [event] = yield self.mock_event('12345')
+        [event] = yield self.mock_event('1')
         self.assertEqual(event['event_type'], 'ack')
-        self.assertEqual(event['user_message_id'], 'id_12345')
+        self.assertEqual(event['user_message_id'], 'id_1')
 
 
 class TestPermissiveCellulantSmsTransport(TransportTestCase):

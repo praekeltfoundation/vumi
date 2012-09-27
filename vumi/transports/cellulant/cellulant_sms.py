@@ -3,11 +3,11 @@
 import json
 from urllib import urlencode
 
-from twisted.python import log
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.utils import http_request_full
 from vumi.errors import ConfigError
+from vumi import log
 from vumi.transports.httprpc import HttpRpcTransport
 
 
@@ -80,11 +80,15 @@ class CellulantSmsTransport(HttpRpcTransport):
         response = yield http_request_full(url, '', method='GET')
         log.msg("Response: (%s) %r" % (response.code, response.delivered_body))
         content = response.delivered_body.strip()
-        if content in self.KNOWN_ERROR_RESPONSE_CODES:
-            yield self.publish_delivery_report(message['message_id'], 'failed')
-        else:
+        # we'll only send 1 message at a time and so the API can only return
+        # this on a valid ack
+        if content == '1':
             yield self.publish_ack(user_message_id=message['message_id'],
                                     sent_message_id=message['message_id'])
+        elif content in self.KNOWN_ERROR_RESPONSE_CODES:
+            yield self.publish_delivery_report(message['message_id'], 'failed')
+        else:
+            log.error('Unknown response code: %s' % (content,))
 
     def get_field_values(self, request):
         values = {}
