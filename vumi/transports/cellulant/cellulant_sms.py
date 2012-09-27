@@ -32,7 +32,10 @@ class CellulantSmsTransport(HttpRpcTransport):
         then any parameter received that is not listed in EXPECTED_FIELDS nor
         in IGNORED_FIELDS will raise an error. If 'permissive' then no error
         is raised as long as all the EXPECTED_FIELDS are present.
-
+    :param bool eager_delivery_reporting:
+        Defaults to `False`. If `True` then the transport will send delivery
+        reports on Cellulant's behalf if we notice that an permanent error
+        is returned by the API.
     """
 
     transport_type = 'sms'
@@ -60,6 +63,7 @@ class CellulantSmsTransport(HttpRpcTransport):
             raise ConfigError('Invalid validation mode: %s' % (
                 self._validation_mode,))
         self._outbound_url = self.config['outbound_url']
+        self._eager_drs = self.config.get('eager_delivery_reporting', False)
         return super(CellulantSmsTransport, self).validate_config()
 
     @inlineCallbacks
@@ -86,7 +90,11 @@ class CellulantSmsTransport(HttpRpcTransport):
             yield self.publish_ack(user_message_id=message['message_id'],
                                     sent_message_id=message['message_id'])
         elif content in self.KNOWN_ERROR_RESPONSE_CODES:
-            yield self.publish_delivery_report(message['message_id'], 'failed')
+            yield self.publish_ack(user_message_id=message['message_id'],
+                                    sent_message_id=message['message_id'])
+            if self._eager_drs:
+                yield self.publish_delivery_report(message['message_id'],
+                    'failed')
         else:
             log.error('Unknown response code: %s' % (content,))
 
