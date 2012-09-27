@@ -3,11 +3,11 @@
 import json
 from urllib import urlencode
 
-from twisted.python import log
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.utils import http_request_full
 from vumi.errors import ConfigError
+from vumi import log
 from vumi.transports.httprpc import HttpRpcTransport
 
 
@@ -32,7 +32,10 @@ class CellulantSmsTransport(HttpRpcTransport):
         then any parameter received that is not listed in EXPECTED_FIELDS nor
         in IGNORED_FIELDS will raise an error. If 'permissive' then no error
         is raised as long as all the EXPECTED_FIELDS are present.
-
+    :param bool eager_delivery_reporting:
+        Defaults to `False`. If `True` then the transport will send delivery
+        reports on Cellulant's behalf if we notice that an permanent error
+        is returned by the API.
     """
 
     transport_type = 'sms'
@@ -45,6 +48,12 @@ class CellulantSmsTransport(HttpRpcTransport):
     PERMISSIVE_MODE = 'permissive'
     DEFAULT_VALIDATION_MODE = STRICT_MODE
     KNOWN_VALIDATION_MODES = [STRICT_MODE, PERMISSIVE_MODE]
+    KNOWN_ERROR_RESPONSE_CODES = [
+        'E0',  # Insufficient HTTP Params passed
+        'E1',  # Invalid username or password
+        'E2',  # Credits have expired or run out
+        '1005',  # Suspect source address
+    ]
 
     def validate_config(self):
         self._credentials = self.config['credentials']
@@ -54,6 +63,7 @@ class CellulantSmsTransport(HttpRpcTransport):
             raise ConfigError('Invalid validation mode: %s' % (
                 self._validation_mode,))
         self._outbound_url = self.config['outbound_url']
+        self._eager_drs = self.config.get('eager_delivery_reporting', False)
         return super(CellulantSmsTransport, self).validate_config()
 
     @inlineCallbacks
@@ -73,6 +83,17 @@ class CellulantSmsTransport(HttpRpcTransport):
         log.msg("Making HTTP request: %s" % (url,))
         response = yield http_request_full(url, '', method='GET')
         log.msg("Response: (%s) %r" % (response.code, response.delivered_body))
+        content = response.delivered_body.strip()
+        # we'll only send 1 message at a time and so the API can only return
+        # this on a valid ack
+        yield self.publish_ack(user_message_id=message['message_id'],
+                                sent_message_id=message['message_id'])
+        if not content == '1':
+            if self._eager_drs:
+                yield self.publish_delivery_report(message['message_id'],
+                    'failed')
+            if content not in self.KNOWN_ERROR_RESPONSE_CODES:
+                log.error('Unknown response code: %s' % (content,))
 
     def get_field_values(self, request):
         values = {}
