@@ -56,3 +56,16 @@ exec { "Vumi setup":
     ],
     refreshonly => true
 }
+
+exec { "RabbitMq setup":
+    command => "/var/praekelt/vumi/utils/rabbitmq.setup.sh",
+    user => "root",
+    subscribe => [
+        Exec['Vumi setup']
+    ],
+    refreshonly => true,
+    require => [
+        Package['rabbitmq-server'],
+        Exec['Clone git repository']
+    ]
+}
