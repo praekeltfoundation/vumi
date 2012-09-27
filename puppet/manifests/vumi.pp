@@ -1,6 +1,6 @@
 # defaults for Exec
 Exec {
-    path => ["/bin", "/usr/bin", "/usr/local/bin", "/usr/local/bin"],
+    path => ["/bin", "/usr/bin", "/usr/local/bin", "/usr/local/sbin"],
     user => 'vagrant',
 }
 
@@ -18,8 +18,9 @@ define apt::package($ensure='latest') {
     }
 }
 
+# Install redis ppa and update again
 exec { "redis-ppa":
-    command => "add-apt-repository ppa:rwky/redis",
+    command => "add-apt-repository ppa:rwky/redis && apt-get update",
     user => "root",
     require => Package['python-software-properties'],
     unless => "test -f /etc/apt/sources.list.d/rwky-redis-lucid.list"
