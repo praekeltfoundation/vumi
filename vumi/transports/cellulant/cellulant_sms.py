@@ -86,17 +86,14 @@ class CellulantSmsTransport(HttpRpcTransport):
         content = response.delivered_body.strip()
         # we'll only send 1 message at a time and so the API can only return
         # this on a valid ack
-        if content == '1':
-            yield self.publish_ack(user_message_id=message['message_id'],
-                                    sent_message_id=message['message_id'])
-        elif content in self.KNOWN_ERROR_RESPONSE_CODES:
-            yield self.publish_ack(user_message_id=message['message_id'],
-                                    sent_message_id=message['message_id'])
+        yield self.publish_ack(user_message_id=message['message_id'],
+                                sent_message_id=message['message_id'])
+        if not content == '1':
             if self._eager_drs:
                 yield self.publish_delivery_report(message['message_id'],
                     'failed')
-        else:
-            log.error('Unknown response code: %s' % (content,))
+            if content not in self.KNOWN_ERROR_RESPONSE_CODES:
+                log.error('Unknown response code: %s' % (content,))
 
     def get_field_values(self, request):
         values = {}
