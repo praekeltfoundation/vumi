@@ -19,18 +19,18 @@ define apt::package($ensure='latest') {
 }
 
 # Install these packages
-package { "build-essential": ensure => "11.4build1" }
-package { "python": ensure => "2.6.5-0ubuntu1" }
-package { "python-dev": ensure => "2.6.5-0ubuntu1" }
-package { "python-setuptools": ensure => "0.6.10-4ubuntu1" }
-package { "python-pip": ensure => "0.3.1-1ubuntu2" }
-package { "python-virtualenv": ensure => "1.4.5-1ubuntu1" }
-package { "rabbitmq-server": ensure => "1.7.2-1ubuntu1" }
-package { "git-core": ensure => "1:1.7.0.4-1ubuntu0.2" }
-package { "openjdk-6-jre-headless": ensure => "6b20-1.9.10-0ubuntu1~10.04.3" }
-package { "libcurl3": ensure => "7.19.7-1ubuntu1.1" }
-package { "libcurl4-openssl-dev": ensure => "7.19.7-1ubuntu1.1" }
-package { "redis-server": ensure => "2:1.2.0-1" }
+package { "build-essential": ensure => latest }
+package { "python": ensure => latest }
+package { "python-dev": ensure => latest }
+package { "python-setuptools": ensure => latest }
+package { "python-pip": ensure => latest }
+package { "python-virtualenv": ensure => latest }
+package { "rabbitmq-server": ensure => latest }
+package { "git-core": ensure => latest }
+package { "openjdk-6-jre-headless": ensure => latest }
+package { "libcurl3": ensure => latest }
+package { "libcurl4-openssl-dev": ensure => latest }
+package { "redis-server": ensure => latest }
 
 file {
     "/var/praekelt":
