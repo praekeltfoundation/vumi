@@ -30,6 +30,7 @@ package { "build-essential": ensure => latest }
 package { "python": ensure => latest }
 package { "python-dev": ensure => latest }
 package { "python-setuptools": ensure => latest }
+package { "python-software-properties": ensure => latest }
 package { "python-pip": ensure => latest }
 package { "python-virtualenv": ensure => latest }
 package { "rabbitmq-server": ensure => latest }
