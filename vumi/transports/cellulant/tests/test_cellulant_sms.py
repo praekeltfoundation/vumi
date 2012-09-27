@@ -3,7 +3,7 @@
 import json
 from urllib import urlencode
 
-from twisted.internet.defer import inlineCallbacks, DeferredQueue
+from twisted.internet.defer import inlineCallbacks, DeferredQueue, returnValue
 
 from vumi.utils import http_request, http_request_full
 from vumi.tests.utils import MockHttpServer
@@ -167,6 +167,94 @@ class TestCellulantSmsTransport(TransportTestCase):
         self.assertEqual(msg['content'], "hello")
         self.assertEqual(json.loads(response),
                          {'message_id': msg['message_id']})
+
+
+class TestAcksCellulantSmsTransport(TransportTestCase):
+
+    transport_class = CellulantSmsTransport
+
+    @inlineCallbacks
+    def setUp(self):
+        super(TestAcksCellulantSmsTransport, self).setUp()
+
+        self.cellulant_sms_calls = DeferredQueue()
+        self.mock_cellulant_sms = MockHttpServer(self.handle_request)
+        self._mock_response = ''
+        yield self.mock_cellulant_sms.start()
+
+        self.config = {
+            'transport_name': self.transport_name,
+            'web_path': "foo",
+            'web_port': 0,
+            'credentials': {
+                '2371234567': {
+                    'username': 'user',
+                    'password': 'pass',
+                },
+                '9292': {
+                    'username': 'other-user',
+                    'password': 'other-pass',
+                }
+            },
+            'outbound_url': self.mock_cellulant_sms.url,
+            'validation_mode': 'permissive',
+        }
+        self.transport = yield self.get_transport(self.config)
+        self.transport_url = self.transport.get_transport_url()
+
+    @inlineCallbacks
+    def tearDown(self):
+        yield self.mock_cellulant_sms.stop()
+        yield super(TestAcksCellulantSmsTransport, self).tearDown()
+
+    def mock_response(self, response):
+        self._mock_response = response
+
+    def handle_request(self, request):
+        self.cellulant_sms_calls.put(request)
+        return self._mock_response
+
+    @inlineCallbacks
+    def mock_event(self, msg):
+        self.mock_response(msg)
+        yield self.dispatch(self.mkmsg_out(to_addr='2371234567',
+            message_id='id_%s' % (msg,)))
+        yield self.cellulant_sms_calls.get()
+        returnValue(self.get_dispatched_events())
+
+    @inlineCallbacks
+    def test_dr_param_error_E0(self):
+        [event] = yield self.mock_event('E0')
+        self.assertEqual(event['event_type'], 'delivery_report')
+        self.assertEqual(event['delivery_status'], 'failed')
+        self.assertEqual(event['sent_message_id'], 'id_E0')
+
+    @inlineCallbacks
+    def test_dr_login_error_E1(self):
+        [event] = yield self.mock_event('E1')
+        self.assertEqual(event['event_type'], 'delivery_report')
+        self.assertEqual(event['delivery_status'], 'failed')
+        self.assertEqual(event['sent_message_id'], 'id_E1')
+
+    @inlineCallbacks
+    def test_dr_credits_error_E2(self):
+        [event] = yield self.mock_event('E2')
+        self.assertEqual(event['event_type'], 'delivery_report')
+        self.assertEqual(event['delivery_status'], 'failed')
+        self.assertEqual(event['sent_message_id'], 'id_E2')
+
+    @inlineCallbacks
+    def test_dr_delivery_failed_1005(self):
+        [event] = yield self.mock_event('1005')
+        self.assertEqual(event['event_type'], 'delivery_report')
+        self.assertEqual(event['delivery_status'], 'failed')
+        self.assertEqual(event['sent_message_id'], 'id_1005')
+
+    @inlineCallbacks
+    def test_ack_success(self):
+        [event] = yield self.mock_event('12345')
+        self.assertEqual(event['event_type'], 'ack')
+        self.assertEqual(event['sent_message_id'], 'id_12345')
 
 
 class TestPermissiveCellulantSmsTransport(TransportTestCase):
