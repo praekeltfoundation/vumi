@@ -160,7 +160,6 @@ class XMPPTransport(Transport):
         self.xmpp_client.logTraffic = self.debug
         self.xmpp_client.setServiceParent(self)
 
-
         self.presence = TransportPresenceClientProtocol(self.announce_presence)
         self.presence.setHandlerParent(self.xmpp_client)
 
