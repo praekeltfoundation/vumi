@@ -45,6 +45,12 @@ class CellulantSmsTransport(HttpRpcTransport):
     PERMISSIVE_MODE = 'permissive'
     DEFAULT_VALIDATION_MODE = STRICT_MODE
     KNOWN_VALIDATION_MODES = [STRICT_MODE, PERMISSIVE_MODE]
+    KNOWN_ERROR_RESPONSE_CODES = [
+        'E0',  # Insufficient HTTP Params passed
+        'E1',  # Invalid username or password
+        'E2',  # Credits have expired or run out
+        '1005', # Suspect source address
+    ]
 
     def validate_config(self):
         self._credentials = self.config['credentials']
@@ -73,6 +79,12 @@ class CellulantSmsTransport(HttpRpcTransport):
         log.msg("Making HTTP request: %s" % (url,))
         response = yield http_request_full(url, '', method='GET')
         log.msg("Response: (%s) %r" % (response.code, response.delivered_body))
+        content = response.delivered_body.strip()
+        if content in self.KNOWN_ERROR_RESPONSE_CODES:
+            yield self.publish_delivery_report(message['message_id'], 'failed')
+        else:
+            yield self.publish_ack(user_message_id=message['message_id'],
+                                    sent_message_id=message['message_id'])
 
     def get_field_values(self, request):
         values = {}

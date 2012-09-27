@@ -227,34 +227,34 @@ class TestAcksCellulantSmsTransport(TransportTestCase):
         [event] = yield self.mock_event('E0')
         self.assertEqual(event['event_type'], 'delivery_report')
         self.assertEqual(event['delivery_status'], 'failed')
-        self.assertEqual(event['sent_message_id'], 'id_E0')
+        self.assertEqual(event['user_message_id'], 'id_E0')
 
     @inlineCallbacks
     def test_dr_login_error_E1(self):
         [event] = yield self.mock_event('E1')
         self.assertEqual(event['event_type'], 'delivery_report')
         self.assertEqual(event['delivery_status'], 'failed')
-        self.assertEqual(event['sent_message_id'], 'id_E1')
+        self.assertEqual(event['user_message_id'], 'id_E1')
 
     @inlineCallbacks
     def test_dr_credits_error_E2(self):
         [event] = yield self.mock_event('E2')
         self.assertEqual(event['event_type'], 'delivery_report')
         self.assertEqual(event['delivery_status'], 'failed')
-        self.assertEqual(event['sent_message_id'], 'id_E2')
+        self.assertEqual(event['user_message_id'], 'id_E2')
 
     @inlineCallbacks
     def test_dr_delivery_failed_1005(self):
         [event] = yield self.mock_event('1005')
         self.assertEqual(event['event_type'], 'delivery_report')
         self.assertEqual(event['delivery_status'], 'failed')
-        self.assertEqual(event['sent_message_id'], 'id_1005')
+        self.assertEqual(event['user_message_id'], 'id_1005')
 
     @inlineCallbacks
     def test_ack_success(self):
         [event] = yield self.mock_event('12345')
         self.assertEqual(event['event_type'], 'ack')
-        self.assertEqual(event['sent_message_id'], 'id_12345')
+        self.assertEqual(event['user_message_id'], 'id_12345')
 
 
 class TestPermissiveCellulantSmsTransport(TransportTestCase):
