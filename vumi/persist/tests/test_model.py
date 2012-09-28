@@ -143,7 +143,8 @@ class TestModelOnTxRiak(TestCase):
         [s2] = yield simple_model.riak_search('a:2 AND b:def')
         self.assertEqual(s2.key, "two")
 
-        [s1, s2] = yield simple_model.riak_search('b:abc OR b:def')
+        results = yield simple_model.riak_search('b:abc OR b:def')
+        [s1, s2] = sorted(results, key=lambda r: r.key)
         self.assertEqual(s1.key, "one")
         self.assertEqual(s2.key, "two")
 
