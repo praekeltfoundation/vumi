@@ -2,6 +2,7 @@
 
 import fnmatch
 from functools import wraps
+from itertools import takewhile, dropwhile
 
 from twisted.internet.defer import Deferred
 from twisted.internet.task import Clock
@@ -389,47 +390,34 @@ class Zset(object):
     def zrangebyscore(self, min='-inf', max='+inf', start=0, num=None,
         score_cast_func=float):
         results = self.zrange(0, -1, score_cast_func=score_cast_func)
-        if not results:
-            return []
+        results.sort(key=lambda val: val[1])
 
-        min, max = str(min), str(max)
+        def mkcheck(spec, is_upper_bound):
+            spec = str(spec)
+            # Handling infinities are easy, so get them out the way first.
+            if spec.endswith('-inf'):
+                return lambda val: False
+            if spec.endswith('+inf'):
+                return lambda val: True
 
-        if max.startswith('('):
-            inclusive_max = False
-            max = max[1:]
-        else:
-            inclusive_max = True
-        if min.startswith('('):
-            inclusive_min = False
-            min = min[1:]
-        else:
-            inclusive_min = True
+            is_exclusive = False
+            if spec.startswith('('):
+                is_exclusive = True
+                spec = spec[1:]
+            spec = score_cast_func(spec)
 
-        # Forced to do this crazy sorting to get the `max` because the
-        # function signature overwrites the `max()` and `min()` functions
-        if min == '-inf':
-            min = sorted(results, key=lambda r: r[1])[0][1]
-        if max == '+inf':
-            max = sorted(results, key=lambda r: r[1], reverse=True)[0][1]
+            # For the lower bound, exclusive means drop less than or equal to.
+            # For the upper bound, exclusive means take less than.
+            if is_exclusive == is_upper_bound:
+                return lambda val: val[1] < spec
+            return lambda val: val[1] <= spec
 
-        min = score_cast_func(min)
-        max = score_cast_func(max)
-
-        if inclusive_min and inclusive_max:
-            results = [r for r in results if min <= r[1] <= max]
-        elif inclusive_min:
-            results = [r for r in results if min <= r[1] < max]
-        elif inclusive_max:
-            results = [r for r in results if min < r[1] <= max]
-        else:
-            results = [r for r in results if min < r[1] < max]
-
-        if start is not None and num is not None:
-            results = results[start:start + num]
-        if start is not None:
-            results = results[start:]
-
-        return results
+        results = dropwhile(mkcheck(min, False), results)
+        results = takewhile(mkcheck(max, True), results)
+        results = list(results)[start:]
+        if num is not None:
+            results = results[:num]
+        return list(results)
 
     def zscore(self, val):
         for score, value in self._zval:

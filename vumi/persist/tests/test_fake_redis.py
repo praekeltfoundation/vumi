@@ -7,7 +7,6 @@ from vumi.persist.fake_redis import FakeRedis
 
 class FakeRedisTestCase(TestCase):
 
-
     def setUp(self):
         self.redis = FakeRedis()
 
