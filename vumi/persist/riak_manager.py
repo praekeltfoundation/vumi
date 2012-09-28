@@ -42,7 +42,7 @@ class RiakManager(Manager):
             riak_object.set_indexes(indexes)
             riak_object.set_encoded_data(data)
         else:
-            riak_object.set_data({})
+            riak_object.set_data({'VERSION': cls.VERSION})
             riak_object.set_content_type("application/json")
         return riak_object
 
@@ -57,8 +57,14 @@ class RiakManager(Manager):
         riak_object = self.riak_object(cls, key, result)
         if not result:
             riak_object.reload()
-        return (cls(self, key, _riak_object=riak_object)
-                if riak_object.get_data() is not None else None)
+        data = riak_object.get_data()
+        while data is not None:
+            data_version = data.get('VERSION')
+            if data_version == cls.VERSION:
+                riak_object.set_data(data)
+                return cls(self, key, _riak_object=riak_object)
+            data = self.migrate_object(cls, data, data_version)
+        return None
 
     def load_list(self, cls, keys):
         return [self.load(cls, key) for key in keys]

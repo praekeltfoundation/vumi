@@ -4,7 +4,12 @@
 
 from functools import wraps
 
+from vumi.errors import VumiError
 from vumi.persist.fields import Field, FieldDescriptor, ValidationError
+
+
+class ModelMigrationError(VumiError):
+    pass
 
 
 class ModelMetaClass(type):
@@ -78,6 +83,9 @@ class Model(object):
     """A model is a description of an entity persisted in a data store."""
 
     __metaclass__ = ModelMetaClass
+
+    VERSION = None
+    MIGRATORS = lambda _: None
 
     bucket = None
 
@@ -268,6 +276,14 @@ class Manager(object):
         """Delete the modelobj from Riak."""
         raise NotImplementedError("Sub-classes of Manager should implement"
                                   " .delete(...)")
+
+    def migrate_object(self, cls, data, data_version):
+        migrator = cls.MIGRATORS(data_version)
+        if migrator is None:
+            raise ModelMigrationError(
+                'No migrators defined for %s version %s' % (
+                    cls.__name__, data_version))
+        return migrator(data)
 
     def load(self, cls, key):
         """Load a model instance for the key from Riak.

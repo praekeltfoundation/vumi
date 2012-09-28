@@ -35,7 +35,7 @@ class TxRiakManager(Manager):
             riak_object.set_indexes(metadata['index'].items())
             riak_object.set_encoded_data(data)
         else:
-            riak_object.set_data({})
+            riak_object.set_data({'VERSION': cls.VERSION})
             riak_object.set_content_type("application/json")
         return riak_object
 
@@ -49,13 +49,21 @@ class TxRiakManager(Manager):
 
     def load(self, cls, key, result=None):
         riak_object = self.riak_object(cls, key, result)
-        if result:
-            return succeed(cls(self, key, _riak_object=riak_object))
-        else:
-            d = riak_object.reload()
-            d.addCallback(lambda result: cls(self, key, _riak_object=result)
-                            if result.get_data() is not None else None)
-            return d
+        d = succeed(riak_object) if result else riak_object.reload()
+
+        def build_model_object(riak_object):
+            data = riak_object.get_data()
+            if data is None:
+                return None
+            data_version = data.get('VERSION')
+            if data_version == cls.VERSION:
+                return cls(self, key, _riak_object=riak_object)
+            md = maybeDeferred(self.migrate_object, cls, data, data_version)
+            md.addCallback(lambda data: riak_object.set_data(data))
+            md.addCallback(lambda _: riak_object)
+            return md.addCallback(build_model_object)
+
+        return d.addCallback(build_model_object)
 
     def load_list(self, cls, keys):
         deferreds = []

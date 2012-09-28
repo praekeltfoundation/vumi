@@ -3,7 +3,7 @@
 from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
 
-from vumi.persist.model import Model, Manager
+from vumi.persist.model import Model, Manager, ModelMigrationError
 from vumi.persist.fields import (
     ValidationError, Integer, Unicode, VumiMessage, Dynamic, ListOf,
     ForeignKey, ManyToMany)
@@ -48,6 +48,36 @@ class InheritedModel(SimpleModel):
 
 class OverriddenModel(InheritedModel):
     c = Integer(min=0, max=5)
+
+
+class VersionedModelMigrator(object):
+    def __call__(self, old_version):
+        return getattr(self, 'migrate_from_%s' % old_version, None)
+
+    def migrate_from_None(self, data):
+        assert set(data.keys()) == set(['VERSION', 'a'])
+        assert data['VERSION'] is None
+        return {
+            'VERSION': 1,
+            'b': data['a'],
+            }
+
+
+class OldVersionedModel(Model):
+    bucket = 'versionedmodel'
+    a = Integer()
+
+
+class VersionedModel(Model):
+    VERSION = 1
+    MIGRATORS = VersionedModelMigrator()
+    b = Integer()
+
+
+class UnknownVersionedModel(Model):
+    VERSION = 2
+    bucket = 'versionedmodel'
+    c = Integer()
 
 
 class TestModelOnTxRiak(TestCase):
@@ -473,6 +503,30 @@ class TestModelOnTxRiak(TestCase):
         overridden_model("foo", a=1, b=u"2", c=3)
         self.assertRaises(ValidationError, overridden_model, "foo",
                           a=1, b=u"2", c=-1)
+
+    @Manager.calls_manager
+    def test_version_migration(self):
+        old_model = self.manager.proxy(OldVersionedModel)
+        new_model = self.manager.proxy(VersionedModel)
+        foo_old = old_model("foo", a=1)
+        yield foo_old.save()
+
+        foo_new = yield new_model.load("foo")
+        self.assertEqual(foo_new.b, 1)
+
+    @Manager.calls_manager
+    def test_version_migration_failure(self):
+        odd_model = self.manager.proxy(UnknownVersionedModel)
+        new_model = self.manager.proxy(VersionedModel)
+        foo_odd = odd_model("foo", c=1)
+        yield foo_odd.save()
+
+        try:
+            yield new_model.load("foo")
+            self.fail('Expected ModelMigrationError.')
+        except ModelMigrationError, e:
+            self.assertEqual(
+                e.args[0], 'No migrators defined for VersionedModel version 2')
 
 
 class TestModelOnRiak(TestModelOnTxRiak):
