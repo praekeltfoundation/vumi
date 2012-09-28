@@ -378,6 +378,34 @@ class Zset(object):
             results.reverse()
         return [(v, k) for k, v in results]
 
+    def zrangebyscore(self, min='-inf', max='+inf', start=None, num=None,
+        score_cast_func=float):
+        results = self.zrange(0, -1, score_cast_func=score_cast_func)
+        if not results:
+            return []
+
+        inclusive_min = False if min.startswith('(') else True
+        inclusive_max = False if max.startswith('(') else True
+
+        if min == '-inf':
+            min = sorted(results, key=lambda r: r[0])[0]
+        if max == '+inf':
+            max = sorted(results, key=lambda r: r[0], reverse=True)[0]
+
+        if inclusive_max and inclusive_max:
+            results = [r for r in results if min <= r[0] <= max]
+        elif inclusive_min:
+            results = [r for r in results if min <= r[0] < max]
+        elif inclusive_max:
+            results = [r for r in results if min < r[0] <= max]
+
+        if start and num:
+            results = results[start:start + num]
+        if start:
+            results = results[start:]
+
+        return results
+
     def zscore(self, val):
         for score, value in self._zval:
             if value == val:
