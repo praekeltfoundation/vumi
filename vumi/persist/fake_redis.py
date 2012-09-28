@@ -267,6 +267,14 @@ class FakeRedis(object):
             return [v for v, k in results]
 
     @maybe_async
+    def zrangebyscore(self, key, min='-inf', max='+inf', start=0, num=None,
+                score_cast_func=float):
+        zval = self._data.get(key, Zset())
+        results = zval.zrangebyscore(min, max, start, num,
+                              score_cast_func=score_cast_func)
+        return [v for v, k in results]
+
+    @maybe_async
     def zscore(self, key, value):
         zval = self._data.get(key, Zset())
         return zval.zscore(value)
@@ -378,26 +386,26 @@ class Zset(object):
             results.reverse()
         return [(v, k) for k, v in results]
 
-    def zrangebyscore(self, min='-inf', max='+inf', start=None, num=None,
+    def zrangebyscore(self, min='-inf', max='+inf', start=0, num=None,
         score_cast_func=float):
         results = self.zrange(0, -1, score_cast_func=score_cast_func)
         if not results:
             return []
 
-        inclusive_min = False if min.startswith('(') else True
-        inclusive_max = False if max.startswith('(') else True
+        inclusive_min = False if str(min).startswith('(') else True
+        inclusive_max = False if str(max).startswith('(') else True
 
         if min == '-inf':
-            min = sorted(results, key=lambda r: r[0])[0]
+            min = sorted(results, key=lambda r: r[1])[0]
         if max == '+inf':
-            max = sorted(results, key=lambda r: r[0], reverse=True)[0]
+            max = sorted(results, key=lambda r: r[1], reverse=True)[0]
 
         if inclusive_max and inclusive_max:
-            results = [r for r in results if min <= r[0] <= max]
+            results = [r for r in results if min <= r[1] <= max]
         elif inclusive_min:
-            results = [r for r in results if min <= r[0] < max]
+            results = [r for r in results if min <= r[1] < max]
         elif inclusive_max:
-            results = [r for r in results if min < r[0] <= max]
+            results = [r for r in results if min < r[1] <= max]
 
         if start and num:
             results = results[start:start + num]
