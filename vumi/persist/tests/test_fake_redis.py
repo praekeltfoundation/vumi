@@ -83,21 +83,14 @@ class FakeRedisTestCase(TestCase):
             five=0.5)
         yield self.assert_redis_op(['two', 'three', 'four'], 'zrangebyscore',
             'set', 0.2, 0.4)
-        # yield self.assert_redis_op(['one', 'two'], 'zrange', 'set', 0, 1)
-        # yield self.assert_redis_op(
-        #     ['one', 'two', 'three'], 'zrange', 'set', 0, 2)
-        # yield self.assert_redis_op(
-        #     ['one', 'two', 'three'], 'zrange', 'set', 0, 3)
-        # yield self.assert_redis_op(
-        #     ['one', 'two', 'three'], 'zrange', 'set', 0, -1)
-        # yield self.assert_redis_op(
-        #     [('one', 0.1), ('two', 0.2), ('three', 0.3)],
-        #     'zrange', 'set', 0, -1, withscores=True)
-        # yield self.assert_redis_op(
-        #     ['three', 'two', 'one'], 'zrange', 'set', 0, -1, desc=True)
-        # yield self.assert_redis_op(
-        #     [('three', 0.3), ('two', 0.2), ('one', 0.1)],
-        #     'zrange', 'set', 0, -1, withscores=True, desc=True)
+        yield self.assert_redis_op(['two', 'three'], 'zrangebyscore',
+            'set', 0.2, 0.4, 0, 2)
+        yield self.assert_redis_op(['three'], 'zrangebyscore',
+            'set', '(0.2', '(0.4')
+        yield self.assert_redis_op(['two', 'three', 'four', 'five'],
+            'zrangebyscore', 'set', '0.2', '+inf')
+        yield self.assert_redis_op(['one', 'two'],
+            'zrangebyscore', 'set', '-inf', '0.2')
 
     @inlineCallbacks
     def test_zcard(self):

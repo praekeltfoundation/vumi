@@ -392,24 +392,41 @@ class Zset(object):
         if not results:
             return []
 
-        inclusive_min = False if str(min).startswith('(') else True
-        inclusive_max = False if str(max).startswith('(') else True
+        min, max = str(min), str(max)
 
+        if max.startswith('('):
+            inclusive_max = False
+            max = max[1:]
+        else:
+            inclusive_max = True
+        if min.startswith('('):
+            inclusive_min = False
+            min = min[1:]
+        else:
+            inclusive_min = True
+
+        # Forced to do this crazy sorting to get the `max` because the
+        # function signature overwrites the `max()` and `min()` functions
         if min == '-inf':
-            min = sorted(results, key=lambda r: r[1])[0]
+            min = sorted(results, key=lambda r: r[1])[0][1]
         if max == '+inf':
-            max = sorted(results, key=lambda r: r[1], reverse=True)[0]
+            max = sorted(results, key=lambda r: r[1], reverse=True)[0][1]
 
-        if inclusive_max and inclusive_max:
+        min = score_cast_func(min)
+        max = score_cast_func(max)
+
+        if inclusive_min and inclusive_max:
             results = [r for r in results if min <= r[1] <= max]
         elif inclusive_min:
             results = [r for r in results if min <= r[1] < max]
         elif inclusive_max:
             results = [r for r in results if min < r[1] <= max]
+        else:
+            results = [r for r in results if min < r[1] < max]
 
-        if start and num:
+        if start is not None and num is not None:
             results = results[start:start + num]
-        if start:
+        if start is not None:
             results = results[start:]
 
         return results
