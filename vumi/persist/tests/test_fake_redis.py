@@ -7,7 +7,6 @@ from vumi.persist.fake_redis import FakeRedis
 
 class FakeRedisTestCase(TestCase):
 
-
     def setUp(self):
         self.redis = FakeRedis()
 
@@ -76,6 +75,21 @@ class FakeRedisTestCase(TestCase):
         yield self.assert_redis_op(
             [('three', 0.3), ('two', 0.2), ('one', 0.1)],
             'zrange', 'set', 0, -1, withscores=True, desc=True)
+
+    @inlineCallbacks
+    def test_zrangebyscore(self):
+        yield self.redis.zadd('set', one=0.1, two=0.2, three=0.3, four=0.4,
+            five=0.5)
+        yield self.assert_redis_op(['two', 'three', 'four'], 'zrangebyscore',
+            'set', 0.2, 0.4)
+        yield self.assert_redis_op(['two', 'three'], 'zrangebyscore',
+            'set', 0.2, 0.4, 0, 2)
+        yield self.assert_redis_op(['three'], 'zrangebyscore',
+            'set', '(0.2', '(0.4')
+        yield self.assert_redis_op(['two', 'three', 'four', 'five'],
+            'zrangebyscore', 'set', '0.2', '+inf')
+        yield self.assert_redis_op(['one', 'two'],
+            'zrangebyscore', 'set', '-inf', '0.2')
 
     @inlineCallbacks
     def test_zcard(self):

@@ -2,6 +2,7 @@
 
 import fnmatch
 from functools import wraps
+from itertools import takewhile, dropwhile
 
 from twisted.internet.defer import Deferred
 from twisted.internet.task import Clock
@@ -267,6 +268,14 @@ class FakeRedis(object):
             return [v for v, k in results]
 
     @maybe_async
+    def zrangebyscore(self, key, min='-inf', max='+inf', start=0, num=None,
+                score_cast_func=float):
+        zval = self._data.get(key, Zset())
+        results = zval.zrangebyscore(min, max, start, num,
+                              score_cast_func=score_cast_func)
+        return [v for v, k in results]
+
+    @maybe_async
     def zscore(self, key, value):
         zval = self._data.get(key, Zset())
         return zval.zscore(value)
@@ -389,6 +398,38 @@ class Zset(object):
         if desc:
             results.reverse()
         return [(v, k) for k, v in results]
+
+    def zrangebyscore(self, min='-inf', max='+inf', start=0, num=None,
+        score_cast_func=float):
+        results = self.zrange(0, -1, score_cast_func=score_cast_func)
+        results.sort(key=lambda val: val[1])
+
+        def mkcheck(spec, is_upper_bound):
+            spec = str(spec)
+            # Handling infinities are easy, so get them out the way first.
+            if spec.endswith('-inf'):
+                return lambda val: False
+            if spec.endswith('+inf'):
+                return lambda val: True
+
+            is_exclusive = False
+            if spec.startswith('('):
+                is_exclusive = True
+                spec = spec[1:]
+            spec = score_cast_func(spec)
+
+            # For the lower bound, exclusive means drop less than or equal to.
+            # For the upper bound, exclusive means take less than.
+            if is_exclusive == is_upper_bound:
+                return lambda val: val[1] < spec
+            return lambda val: val[1] <= spec
+
+        results = dropwhile(mkcheck(min, False), results)
+        results = takewhile(mkcheck(max, True), results)
+        results = list(results)[start:]
+        if num is not None:
+            results = results[:num]
+        return list(results)
 
     def zscore(self, val):
         for score, value in self._zval:
