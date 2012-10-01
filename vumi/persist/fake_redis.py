@@ -61,7 +61,7 @@ class FakeRedis(object):
     def _clean_up_expires(self):
         for key in self._expiries.keys():
             delayed = self._expiries.pop(key)
-            if not delayed.cancelled:
+            if not (delayed.cancelled or delayed.called):
                 delayed.cancel()
 
     # Global operations
@@ -282,6 +282,11 @@ class FakeRedis(object):
             return self._data[key].pop(0)
 
     @maybe_async
+    def rpop(self, key):
+        if self.llen.sync(self, key):
+            return self._data[key].pop(-1)
+
+    @maybe_async
     def lpush(self, key, obj):
         self._data.setdefault(key, []).insert(0, obj)
 
@@ -318,6 +323,13 @@ class FakeRedis(object):
             lval.reverse()
         self._data[key] = lval
         return removed[0]
+
+    @maybe_async
+    def rpoplpush(self, source, destination):
+        value = self.rpop.sync(self, source)
+        if value:
+            self.lpush.sync(self, destination, value)
+            return value
 
     # Expiry operations
 

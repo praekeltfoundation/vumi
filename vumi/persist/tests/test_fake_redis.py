@@ -155,6 +155,30 @@ class FakeRedisTestCase(TestCase):
         yield self.assert_redis_op(set(), 'sunion', 'other')
 
     @inlineCallbacks
+    def test_rpop(self):
+        yield self.redis.lpush('key', 1)
+        yield self.redis.lpush('key', 2)
+        yield self.redis.lpush('key', 3)
+        yield self.assert_redis_op(1, 'rpop', 'key')
+        yield self.assert_redis_op(2, 'rpop', 'key')
+        yield self.assert_redis_op(3, 'rpop', 'key')
+        yield self.assert_redis_op(None, 'rpop', 'key')
+
+    @inlineCallbacks
+    def test_rpoplpush(self):
+        yield self.redis.lpush('source', 1)
+        yield self.redis.lpush('source', 2)
+        yield self.redis.lpush('source', 3)
+        yield self.assert_redis_op(1, 'rpoplpush', 'source', 'destination')
+        yield self.assert_redis_op(2, 'rpoplpush', 'source', 'destination')
+        yield self.assert_redis_op(3, 'rpoplpush', 'source', 'destination')
+        yield self.assert_redis_op(None, 'rpop', 'source')
+        yield self.assert_redis_op(1, 'rpop', 'destination')
+        yield self.assert_redis_op(2, 'rpop', 'destination')
+        yield self.assert_redis_op(3, 'rpop', 'destination')
+        yield self.assert_redis_op(None, 'rpop', 'destination')
+
+    @inlineCallbacks
     def test_lrem(self):
         for i in range(5):
             yield self.assert_redis_op(2 * i, 'rpush', 'list', 'v%d' % i)
