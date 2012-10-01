@@ -79,13 +79,29 @@ class BackLinkProxy(object):
         return wrapped_backlink
 
 
+class ModelMigrator(object):
+    def __init__(self, model_class, manager, data_version):
+        self.model_class = model_class
+        self.manager = manager
+        self.data_version = data_version
+        migration_method_name = 'migrate_from_%s' % str(self.data_version)
+        self.migration_method = getattr(self, migration_method_name, None)
+
+    def __call__(self, data):
+        if self.migration_method is None:
+            raise ModelMigrationError(
+                'No migrators defined for %s version %s' % (
+                    self.model_class.__name__, self.data_version))
+        return self.migration_method(data)
+
+
 class Model(object):
     """A model is a description of an entity persisted in a data store."""
 
     __metaclass__ = ModelMetaClass
 
     VERSION = None
-    MIGRATORS = lambda _: None
+    MIGRATOR = ModelMigrator
 
     bucket = None
 
@@ -278,11 +294,7 @@ class Manager(object):
                                   " .delete(...)")
 
     def migrate_object(self, cls, data, data_version):
-        migrator = cls.MIGRATORS(data_version)
-        if migrator is None:
-            raise ModelMigrationError(
-                'No migrators defined for %s version %s' % (
-                    cls.__name__, data_version))
+        migrator = cls.MIGRATOR(cls, self, data_version)
         return migrator(data)
 
     def load(self, cls, key):
