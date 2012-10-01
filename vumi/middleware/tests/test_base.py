@@ -1,8 +1,8 @@
+import time
+import yaml
 
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.trial.unittest import TestCase
-
-import yaml
 
 from vumi.middleware.base import (BaseMiddleware, MiddlewareStack,
                                   create_middlewares_from_config,
@@ -21,6 +21,10 @@ class ToyMiddleware(BaseMiddleware):
 
     def setup_middleware(self):
         self._setup_done = True
+        self._teardown_done = False
+
+    def teardown_middleware(self):
+        self._teardown_done = time.time()
 
     def handle_inbound(self, message, endpoint):
         return self._handle('inbound', message, endpoint)
@@ -77,6 +81,20 @@ class MiddlewareStackTestCase(TestCase):
                 ('mw2', 'inbound', 'dummy_msg.mw3.mw2', 'end_foo'),
                 ('mw1', 'inbound', 'dummy_msg.mw3.mw2.mw1', 'end_foo'),
                 ])
+
+    @inlineCallbacks
+    def test_teardown_in_reverse_order(self):
+
+        def get_teardown_timestamps():
+            return [mw._teardown_done for mw in self.stack.middlewares]
+
+        self.assertFalse(any(get_teardown_timestamps()))
+        yield self.stack.teardown()
+        self.assertTrue(all(get_teardown_timestamps()))
+        teardown_order = sorted(self.stack.middlewares,
+            key=lambda mw: mw._teardown_done)
+        self.assertEqual([mw.name for mw in teardown_order],
+            ['mw3', 'mw2', 'mw1'])
 
 
 class UtilityFunctionsTestCase(TestCase):

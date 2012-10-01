@@ -68,6 +68,7 @@ class Transport(Worker):
             consumer = self._consumers.pop()
             yield consumer.stop()
         yield self.teardown_transport()
+        yield self.teardown_middleware()
 
     def get_rkey(self, mtype):
         return '%s.%s' % (self.transport_name, mtype)
@@ -112,6 +113,15 @@ class Transport(Worker):
         """
         middlewares = yield setup_middlewares_from_config(self, self.config)
         self._middlewares = MiddlewareStack(middlewares)
+
+    def teardown_middleware(self):
+        """
+        Middleware teardown happens here.
+
+        Subclasses should not override this unless they need to do nonstandard
+        middleware teardown.
+        """
+        return self._middlewares.teardown()
 
     @inlineCallbacks
     def _setup_message_publisher(self):

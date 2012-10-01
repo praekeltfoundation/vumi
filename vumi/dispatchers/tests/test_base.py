@@ -362,6 +362,8 @@ class DummyDispatcher(BaseDispatchWorker):
 
 
 class TestToAddrRouter(TestCase, MessageMakerMixIn):
+
+    @inlineCallbacks
     def setUp(self):
         self.config = {
             'transport_names': ['transport1'],
@@ -373,6 +375,7 @@ class TestToAddrRouter(TestCase, MessageMakerMixIn):
             }
         self.dispatcher = DummyDispatcher(self.config)
         self.router = ToAddrRouter(self.dispatcher, self.config)
+        yield self.router.setup_routing()
 
     def test_dispatch_inbound_message(self):
         msg = self.mkmsg_in(to_addr='to:foo:1', transport_name='transport1')
@@ -446,6 +449,8 @@ class TestTransportToTransportRouter(TestCase, MessageMakerMixIn):
 
 
 class TestFromAddrMultiplexRouter(TestCase, MessageMakerMixIn):
+
+    @inlineCallbacks
     def setUp(self):
         config = {
             "transport_names": [
@@ -463,6 +468,10 @@ class TestFromAddrMultiplexRouter(TestCase, MessageMakerMixIn):
             }
         self.dispatcher = DummyDispatcher(config)
         self.router = FromAddrMultiplexRouter(self.dispatcher, config)
+        yield self.router.setup_routing()
+
+    def tearDown(self):
+        return self.router.teardown_routing()
 
     def mkmsg_in_mux(self, content, from_addr, transport_name):
         return self.mkmsg_in(
