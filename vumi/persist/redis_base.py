@@ -244,6 +244,8 @@ class Manager(object):
     zcard = RedisCall(['key'])
     zrange = RedisCall(['key', 'start', 'stop', 'desc', 'withscores'],
                        defaults=[False, False])
+    zrangebyscore = RedisCall(['key', 'min', 'max', 'start', 'num',
+        'withscores'], defaults=['-inf', '+inf', None, None, False])
     zscore = RedisCall(['key', 'value'])
 
     # List operations
@@ -254,6 +256,8 @@ class Manager(object):
     rpush = RedisCall(['key', 'obj'])
     lrange = RedisCall(['key', 'start', 'end'])
     lrem = RedisCall(['key', 'value', 'num'], defaults=[0])
+    rpoplpush = RedisCall(['source'], vararg='destination',
+        key_args=['source', 'destination'])
 
     # Expiry operations
 
