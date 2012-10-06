@@ -269,11 +269,14 @@ class FakeRedis(object):
 
     @maybe_async
     def zrangebyscore(self, key, min='-inf', max='+inf', start=0, num=None,
-                score_cast_func=float):
+                withscores=False, score_cast_func=float):
         zval = self._data.get(key, Zset())
         results = zval.zrangebyscore(min, max, start, num,
                               score_cast_func=score_cast_func)
-        return [v for v, k in results]
+        if withscores:
+            return results
+        else:
+            return [v for v, k in results]
 
     @maybe_async
     def zscore(self, key, value):
