@@ -44,13 +44,13 @@ class ManholeMiddleware(BaseMiddleware):
     def setup_middleware(self):
         self.validate_config()
         checker = SSHPubKeyDatabase(self.authorized_keys)
-        sshRealm = manhole_ssh.TerminalRealm()
-        sshRealm.chainedProtocolFactory = manhole_tap.chainedProtocolFactory({
+        ssh_realm = manhole_ssh.TerminalRealm()
+        ssh_realm.chainedProtocolFactory = manhole_tap.chainedProtocolFactory({
             'worker': self.worker,
             })
-        sshPortal = portal.Portal(sshRealm, [checker])
-        sshFactory = manhole_ssh.ConchFactory(sshPortal)
-        self.socket = reactor.listenTCP(self.port, sshFactory)
+        ssh_portal = portal.Portal(ssh_realm, [checker])
+        ssh_factory = manhole_ssh.ConchFactory(ssh_portal)
+        self.socket = reactor.listenTCP(self.port, ssh_factory)
 
     def teardown_middleware(self):
         self.socket.loseConnection()
