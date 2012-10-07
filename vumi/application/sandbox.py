@@ -77,6 +77,7 @@ class SandboxRlimiter(object):
         rlimits = json.loads(data) if data.strip() else {}
         for rlimit, (soft, hard) in rlimits.iteritems():
             resource.setrlimit(int(rlimit), (soft, hard))
+        sys.stdout.write('DONE\n')
 
     def _reset_signals(self):
         # reset all signal handlers to their defaults
@@ -162,6 +163,7 @@ class SandboxProtocol(ProcessProtocol):
         self.recv_bytes = 0
         self.chunk = ''
         self.error_chunk = ''
+        self._process_stdout = self._wait_for_rlimits
         api.set_sandbox(self)
 
     @staticmethod
@@ -203,7 +205,6 @@ class SandboxProtocol(ProcessProtocol):
 
     def connectionMade(self):
         self._send_rlimits()
-        self._started.callback(self)
 
     def _process_data(self, chunk, data):
         if not self.check_recv(len(data)):
@@ -219,6 +220,23 @@ class SandboxProtocol(ProcessProtocol):
             return SandboxCommand(cmd="unknown", line=line, exception=e)
 
     def outReceived(self, data):
+        return self._process_stdout(data)
+
+    def _wait_for_rlimits(self, data):
+        data = self.chunk + data
+        if '\n' not in data:
+            self.chunk = data
+            return
+        data, self.chunk = data.split('\n', 1)
+        self.recv_bytes += len(self.chunk)
+        if data != 'DONE':
+            raise SandboxError(
+                "Bad response from RLIMIT setup in sandbox %r: %r" % (
+                    self.sandbox_id, data))
+        self._started.callback(self)
+        self._process_stdout = self._out_received
+
+    def _out_received(self, data):
         lines = self._process_data(self.chunk, data)
         for i in range(len(lines) - 1):
             d = self.api.dispatch_request(self._parse_command(lines[i]))
