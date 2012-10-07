@@ -141,11 +141,13 @@ class SandboxTestCase(SandboxTestCaseBase):
             "import sys, time\n"
             "sys.stderr.write(%r)\n"
             "sys.stdout.write('\\n')\n"
+            "sys.stdout.flush()\n"
             "time.sleep(5)\n"
-            % ("a" * (recv_limit - 1) + "\\n"),
+            % ("a" * (recv_limit - 1) + "\n"),
             {'recv_limit': str(recv_limit)})
         status = yield app.process_message_in_sandbox(self.mk_msg())
         self.assertEqual(status, None)
+        [stderr_err] = self.flushLoggedErrors(SandboxError)
         [kill_err] = self.flushLoggedErrors(ProcessTerminated)
         self.assertTrue('process ended by signal' in str(kill_err.value))
 
