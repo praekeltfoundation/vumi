@@ -220,9 +220,14 @@ class SandboxProtocol(ProcessProtocol):
             return SandboxCommand(cmd="unknown", line=line, exception=e)
 
     def outReceived(self, data):
+        # self._process_stdout starts out being set to self._wait_for_rlimits
+        # so we can avoid sending input to the rlimiter before we execvpe to
+        # the sandboxed environment. After that, it gets set to
+        # self._out_received to handle sandbox output.
         return self._process_stdout(data)
 
     def _wait_for_rlimits(self, data):
+        "outReceived handler for RLIMIT setup."
         data = self.chunk + data
         if '\n' not in data:
             self.chunk = data
@@ -237,6 +242,7 @@ class SandboxProtocol(ProcessProtocol):
         self._process_stdout = self._out_received
 
     def _out_received(self, data):
+        "outReceived handler for sandbox."
         lines = self._process_data(self.chunk, data)
         for i in range(len(lines) - 1):
             d = self.api.dispatch_request(self._parse_command(lines[i]))
