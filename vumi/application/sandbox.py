@@ -102,9 +102,15 @@ class SandboxRlimiter(object):
     @classmethod
     def _override_python_path(cls, env):
         """Override PYTHONPATH so that SandboxRlimiter can be found."""
+        # First, add the place(s) where vumi can be found to the path.
+        python_path = [os.path.dirname(p)
+                       for p in sys.modules[__name__.split('.')[0]].__path__]
+        # Next, add anything from the PYTHONPATH envvar.
+        python_path.extend(os.environ.get('PYTHONPATH', '').split(os.pathsep))
+
         if 'PYTHONPATH' in env:
             env[cls._SANDBOXED_PYTHONPATH_] = env['PYTHONPATH']
-        env['PYTHONPATH'] = os.pathsep.join(sys.path)
+        env['PYTHONPATH'] = os.pathsep.join(python_path)
 
     @classmethod
     def _restore_python_path(cls, env):
@@ -592,6 +598,7 @@ class Sandbox(ApplicationWorker):
         self.executable = self.config.get("executable")
         self.args = [self.executable] + self.config.get("args", [])
         self.path = self.config.get("path", None)
+        self.env = self.config.get("env", {})
         self.timeout = int(self.config.get("timeout", "60"))
         self.recv_limit = int(self.config.get("recv_limit", 1024 * 1024))
         self.resources = self.create_sandbox_resources(
@@ -622,7 +629,7 @@ class Sandbox(ApplicationWorker):
         return SandboxApi(self.resources)
 
     def create_sandbox_protocol(self, sandbox_id, api):
-        spawn_kwargs = dict(args=self.args, env={}, path=self.path)
+        spawn_kwargs = dict(args=self.args, env=self.env, path=self.path)
         return SandboxProtocol(sandbox_id, api, self.executable, spawn_kwargs,
                                self.rlimits, self.timeout, self.recv_limit)
 
