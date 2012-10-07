@@ -104,7 +104,7 @@ class SandboxRlimiter(object):
         """Override PYTHONPATH so that SandboxRlimiter can be found."""
         if 'PYTHONPATH' in env:
             env[cls._SANDBOXED_PYTHONPATH_] = env['PYTHONPATH']
-        env['PYTHONPATH'] = ':'.join(sys.path)
+        env['PYTHONPATH'] = os.pathsep.join(sys.path)
 
     @classmethod
     def _restore_python_path(cls, env):
