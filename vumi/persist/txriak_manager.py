@@ -25,8 +25,7 @@ class TxRiakManager(Manager):
         return cls(client, bucket_prefix)
 
     def riak_object(self, cls, key, result=None):
-        bucket_name = self.bucket_name(cls)
-        bucket = self.client.bucket(bucket_name)
+        bucket = self.bucket_for_cls(cls)
         riak_object = RiakObject(self.client, bucket, key)
         if result:
             metadata = result['metadata']
