@@ -53,6 +53,16 @@ class CommonRiakManagerTests(object):
         self.assertEqual(sub_manager.client, self.manager.client)
         self.assertEqual(sub_manager.bucket_prefix, 'test.foo.')
 
+    def test_bucket_name_on_cls(self):
+        dummy = self.mkdummy("bar")
+        bucket_name = self.manager.bucket_name(type(dummy))
+        self.assertEqual(bucket_name, "test.dummy_model")
+
+    def test_bucket_name_on_instance(self):
+        dummy = self.mkdummy("bar")
+        bucket_name = self.manager.bucket_name(dummy)
+        self.assertEqual(bucket_name, "test.dummy_model")
+
     def test_riak_object(self):
         dummy = DummyModel(self.manager, "foo")
         riak_object = self.manager.riak_object(dummy, "foo")
