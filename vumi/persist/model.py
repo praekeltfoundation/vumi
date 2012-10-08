@@ -90,7 +90,7 @@ class Model(object):
         if _riak_object is not None:
             self._riak_object = _riak_object
         else:
-            self._riak_object = manager.riak_object(self.__class__, key)
+            self._riak_object = manager.riak_object(type(self), key)
             for field_name, descriptor in self.field_descriptors.iteritems():
                 field = descriptor.field
                 if not field.initializable:
