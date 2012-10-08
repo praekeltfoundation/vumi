@@ -92,22 +92,13 @@ class TxRiakManager(Manager):
         return bucket.enable_search()
 
     def run_map_reduce(self, mapreduce, mapper_func):
-        mapreduce_done = mapreduce.run()
-
         def map_results(raw_results):
             deferreds = []
-
-            if LooseVersion(riakasaurus.VERSION) >= LooseVersion("1.0.6"):
-                # Riakasaurus now provides links by default
-                for link in raw_results:
-                    deferreds.append(maybeDeferred(mapper_func, self, link))
-            else:
-                for row in raw_results:
-                    link = RiakLink(row[0], row[1])
-                    deferreds.append(maybeDeferred(mapper_func, self, link))
-
+            for row in raw_results:
+                deferreds.append(maybeDeferred(mapper_func, self, row))
             return gatherResults(deferreds)
 
+        mapreduce_done = mapreduce.run()
         mapreduce_done.addCallback(map_results)
         return mapreduce_done
 
