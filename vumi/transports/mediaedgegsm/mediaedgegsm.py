@@ -1,11 +1,13 @@
 # -*- test-case-name: vumi.transports.mediaedgegsm.tests.test_mediaedgegsm -*-
 
 import json
+from urllib import urlencode
 
 from twisted.python import log
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.transports.httprpc import HttpRpcTransport
+from vumi.utils import http_request_full, get_operator_name
 
 
 class MediaEdgeGSMTransport(HttpRpcTransport):
@@ -22,7 +24,14 @@ class MediaEdgeGSMTransport(HttpRpcTransport):
         MediaEdgeGSM account username.
     :param str password:
         MediaEdgeGSM account password.
-
+    :param str outbound_url:
+        The URL to hit for outbound messages that aren't replies.
+    :param str outbound_username:
+        The username for outbound non-reply messages.
+    :param str outbound_password:
+        The username for outbound non-reply messages.
+    :param dict operator_mappings:
+        A nested dictionary mapping MSISDN prefixes to operator names
     """
 
     transport_type = 'sms'
@@ -34,6 +43,10 @@ class MediaEdgeGSMTransport(HttpRpcTransport):
     def setup_transport(self):
         self._username = self.config.get('username')
         self._password = self.config.get('password')
+        self._outbound_url = self.config.get('outbound_url')
+        self._outbound_url_username = self.config.get('outbound_username', '')
+        self._outbound_url_password = self.config.get('outbound_password', '')
+        self._operator_mappings = self.config.get('operator_mappings', {})
         return super(MediaEdgeGSMTransport, self).setup_transport()
 
     def get_field_values(self, request):
@@ -48,6 +61,29 @@ class MediaEdgeGSMTransport(HttpRpcTransport):
             if field not in values:
                 errors.setdefault('missing_parameter', []).append(field)
         return values, errors
+
+    @inlineCallbacks
+    def handle_outbound_message(self, message):
+        if message.payload.get('in_reply_to') and 'content' in message.payload:
+            super(MediaEdgeGSMTransport, self).handle_outbound_message(message)
+        else:
+
+            msisdn = message['to_addr'].lstrip('+')
+            params = {
+                "USN": self._outbound_url_username,
+                "PWD": self._outbound_url_password,
+                "SmsID": message['message_id'],
+                "PhoneNumber": msisdn,
+                "Operator": get_operator_name(msisdn, self._operator_mappings),
+                "SmsBody": message['content'],
+            }
+
+            url = '%s?%s' % (self._outbound_url, urlencode(params))
+            response = yield http_request_full(url, '', method='GET')
+            log.msg("Response: (%s) %r" % (response.code,
+                response.delivered_body))
+            yield self.publish_ack(user_message_id=message['message_id'],
+                sent_message_id=message['message_id'])
 
     @inlineCallbacks
     def handle_raw_inbound_message(self, message_id, request):
