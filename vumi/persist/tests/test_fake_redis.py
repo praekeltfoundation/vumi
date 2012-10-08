@@ -92,6 +92,14 @@ class FakeRedisTestCase(TestCase):
             'zrangebyscore', 'set', '-inf', '0.2')
 
     @inlineCallbacks
+    def test_zrangebyscore_with_scores(self):
+        yield self.redis.zadd('set', one=0.1, two=0.2, three=0.3, four=0.4,
+            five=0.5)
+        yield self.assert_redis_op(
+            [('two', 0.2), ('three', 0.3), ('four', 0.4)],
+            'zrangebyscore', 'set', 0.2, 0.4, withscores=True)
+
+    @inlineCallbacks
     def test_zcard(self):
         yield self.assert_redis_op(0, 'zcard', 'set')
         yield self.redis.zadd('set', one=0.1, two=0.2)
