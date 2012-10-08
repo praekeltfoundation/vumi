@@ -114,8 +114,9 @@ class TestMediaEdgeGSMTransport(TransportTestCase):
         req3 = yield self.mediaedgegsm_calls.get()
         requests = [req1, req2, req3]
 
-        self.assertTrue(all([req.path == '/' for req in requests]))
-        self.assertTrue(all([req.method == 'GET' for req in requests]))
+        for req in requests:
+            self.assertEqual(req.path, '/')
+            self.assertEqual(req.method, 'GET')
 
         collections = zip(msisdns, operators, sent_messages, requests)
         for msisdn, operator, msg, req in collections:
