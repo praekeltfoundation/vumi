@@ -2,12 +2,9 @@
 
 """A manager implementation on top of txriak."""
 
-from riakasaurus.riak import RiakClient, RiakObject, RiakMapReduce, RiakLink
-import riakasaurus
+from riakasaurus.riak import RiakClient, RiakObject, RiakMapReduce
 from twisted.internet.defer import (
     inlineCallbacks, gatherResults, maybeDeferred, succeed)
-
-from distutils.version import LooseVersion
 
 from vumi.persist.model import Manager
 
