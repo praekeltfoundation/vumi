@@ -18,14 +18,6 @@ define apt::package($ensure='latest') {
     }
 }
 
-# Install redis ppa and update again
-exec { "redis-ppa":
-    command => "add-apt-repository ppa:rwky/redis && apt-get update",
-    user => "root",
-    require => Package['python-software-properties'],
-    unless => "test -f /etc/apt/sources.list.d/rwky-redis-lucid.list"
-}
-
 # Install these packages
 apt::package { "build-essential": ensure => latest }
 apt::package { "python": ensure => latest }
