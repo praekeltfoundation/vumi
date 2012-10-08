@@ -17,6 +17,7 @@ from twisted.internet.defer import (Deferred, inlineCallbacks,
 from twisted.internet.error import ProcessDone
 from twisted.python.failure import Failure
 
+import vumi
 from vumi.application.base import ApplicationWorker
 from vumi.message import Message
 from vumi.errors import ConfigError
@@ -73,11 +74,10 @@ class SandboxRlimiter(object):
         self._env = env
 
     def _apply_rlimits(self):
-        data = sys.stdin.readline()
+        data = os.environ[self._SANDBOX_RLIMITS_]
         rlimits = json.loads(data) if data.strip() else {}
         for rlimit, (soft, hard) in rlimits.iteritems():
             resource.setrlimit(int(rlimit), (soft, hard))
-        sys.stdout.write('DONE\n')
 
     def _reset_signals(self):
         # reset all signal handlers to their defaults
@@ -91,37 +91,43 @@ class SandboxRlimiter(object):
         os.closerange(3, maxfds)
 
     def execute(self):
-        self._restore_python_path(os.environ)
         self._apply_rlimits()
+        self._restore_child_env(os.environ)
         self._sanitize_fds()
         self._reset_signals()
         os.execvpe(self._executable, self._args, self._env)
 
     _SANDBOXED_PYTHONPATH_ = "_SANDBOXED_PYTHONPATH_"
+    _SANDBOX_RLIMITS_ = "_SANDBOX_RLIMITS_"
 
     @classmethod
-    def _override_python_path(cls, env):
-        """Override PYTHONPATH so that SandboxRlimiter can be found."""
+    def _override_child_env(cls, env, rlimits):
+        """Put RLIMIT config and a suitable PYTHONPATH in the env.
+
+        The PYTHONPATH needs to be set appropriately for the child process to
+        find this module.
+        """
         # First, add the place(s) where vumi can be found to the path.
-        python_path = [os.path.dirname(p)
-                       for p in sys.modules[__name__.split('.')[0]].__path__]
+        python_path = [os.path.dirname(p) for p in vumi.__path__]
         # Next, add anything from the PYTHONPATH envvar.
         python_path.extend(os.environ.get('PYTHONPATH', '').split(os.pathsep))
 
         if 'PYTHONPATH' in env:
             env[cls._SANDBOXED_PYTHONPATH_] = env['PYTHONPATH']
         env['PYTHONPATH'] = os.pathsep.join(python_path)
+        env[cls._SANDBOX_RLIMITS_] = json.dumps(rlimits)
 
     @classmethod
-    def _restore_python_path(cls, env):
-        """Remove PYTHONPATH override."""
+    def _restore_child_env(cls, env):
+        """Remove PYTHONPATH override and RLIMIT config."""
+        del env[cls._SANDBOX_RLIMITS_]
         if 'PYTHONPATH' in env:
             del env['PYTHONPATH']
         if cls._SANDBOXED_PYTHONPATH_ in env:
             env['PYTHONPATH'] = env.pop(cls._SANDBOXED_PYTHONPATH_)
 
     @classmethod
-    def spawn(cls, protocol, executable, **kwargs):
+    def spawn(cls, protocol, executable, rlimits, **kwargs):
         # spawns a SandboxRlimiter, connectionMade then passes the rlimits
         # through to stdin and the SandboxRlimiter applies them
         args = kwargs.pop('args', [])
@@ -130,7 +136,7 @@ class SandboxRlimiter(object):
         # gone)
         args = [sys.executable, '-u', '-m', __name__, '--'] + args
         env = kwargs.pop('env', {})
-        cls._override_python_path(env)
+        cls._override_child_env(env, rlimits)
         reactor.spawnProcess(protocol, sys.executable, args=args, env=env,
                              **kwargs)
 
@@ -169,7 +175,6 @@ class SandboxProtocol(ProcessProtocol):
         self.recv_bytes = 0
         self.chunk = ''
         self.error_chunk = ''
-        self._process_stdout = self._wait_for_rlimits
         api.set_sandbox(self)
 
     @staticmethod
@@ -177,7 +182,8 @@ class SandboxProtocol(ProcessProtocol):
         return SandboxRlimiter(args, env)
 
     def spawn(self):
-        SandboxRlimiter.spawn(self, self.executable, **self.spawn_kwargs)
+        SandboxRlimiter.spawn(
+            self, self.executable, self.rlimits, **self.spawn_kwargs)
 
     def done(self):
         """Returns a deferred that will be called when the process ends."""
@@ -205,12 +211,8 @@ class SandboxProtocol(ProcessProtocol):
             self.kill()
             return False
 
-    def _send_rlimits(self):
-        self.transport.write(json.dumps(self.rlimits))
-        self.transport.write("\n")
-
     def connectionMade(self):
-        self._send_rlimits()
+        self._started.callback(self)
 
     def _process_data(self, chunk, data):
         if not self.check_recv(len(data)):
@@ -226,29 +228,6 @@ class SandboxProtocol(ProcessProtocol):
             return SandboxCommand(cmd="unknown", line=line, exception=e)
 
     def outReceived(self, data):
-        # self._process_stdout starts out being set to self._wait_for_rlimits
-        # so we can avoid sending input to the rlimiter before we execvpe to
-        # the sandboxed environment. After that, it gets set to
-        # self._out_received to handle sandbox output.
-        return self._process_stdout(data)
-
-    def _wait_for_rlimits(self, data):
-        "outReceived handler for RLIMIT setup."
-        data = self.chunk + data
-        if '\n' not in data:
-            self.chunk = data
-            return
-        data, self.chunk = data.split('\n', 1)
-        self.recv_bytes += len(self.chunk)
-        if data != 'DONE':
-            raise SandboxError(
-                "Bad response from RLIMIT setup in sandbox %r: %r" % (
-                    self.sandbox_id, data))
-        self._started.callback(self)
-        self._process_stdout = self._out_received
-
-    def _out_received(self, data):
-        "outReceived handler for sandbox."
         lines = self._process_data(self.chunk, data)
         for i in range(len(lines) - 1):
             d = self.api.dispatch_request(self._parse_command(lines[i]))
