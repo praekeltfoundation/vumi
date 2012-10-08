@@ -2,12 +2,9 @@
 
 """A manager implementation on top of txriak."""
 
-from riakasaurus.riak import RiakClient, RiakObject, RiakMapReduce, RiakLink
-import riakasaurus
+from riakasaurus.riak import RiakClient, RiakObject, RiakMapReduce
 from twisted.internet.defer import (
     inlineCallbacks, gatherResults, maybeDeferred, succeed)
-
-from distutils.version import LooseVersion
 
 from vumi.persist.model import Manager
 
@@ -29,9 +26,16 @@ class TxRiakManager(Manager):
         riak_object = RiakObject(self.client, bucket, key)
         if result:
             metadata = result['metadata']
+            indexes = metadata['index']
+            if hasattr(indexes, 'items'):
+                # TODO: I think this is a Riak bug. In some cases
+                #       (maybe when there are no indexes?) the index
+                #       comes back as a list, in others (maybe when
+                #       there are indexes?) it comes back as a dict.
+                indexes = indexes.items()
             data = result['data']
             riak_object.set_content_type(metadata['content-type'])
-            riak_object.set_indexes(metadata['index'].items())
+            riak_object.set_indexes(indexes)
             riak_object.set_encoded_data(data)
         else:
             riak_object.set_data({})
@@ -67,17 +71,22 @@ class TxRiakManager(Manager):
 
     def riak_search(self, cls, query, return_keys=False):
         bucket_name = self.bucket_name(cls)
+        mr = self.riak_map_reduce().search(bucket_name, query)
+        if not return_keys:
+            mr = mr.map(function="""
+                function (v) {
+                    return [[v.key, v.values[0]]]
+                }
+                """)
 
-        def map_result_to_objects(result):
-            docs = result['response']['docs']
-            keys = [doc['id'] for doc in docs]
+        def map_handler(manager, key_and_result):
             if return_keys:
-                return keys
-            return self.load_list(cls, keys)
+                return key_and_result.get_key()
+            else:
+                key, result = key_and_result
+                return cls.load(manager, key, result)
 
-        d = self.client.solr().search(bucket_name, query)
-        d.addCallback(map_result_to_objects)
-        return d
+        return self.run_map_reduce(mr, map_handler)
 
     def riak_enable_search(self, cls):
         bucket_name = self.bucket_name(cls)
@@ -85,22 +94,13 @@ class TxRiakManager(Manager):
         return bucket.enable_search()
 
     def run_map_reduce(self, mapreduce, mapper_func):
-        mapreduce_done = mapreduce.run()
-
         def map_results(raw_results):
             deferreds = []
-
-            if LooseVersion(riakasaurus.VERSION) >= LooseVersion("1.0.6"):
-                # Riakasaurus now provides links by default
-                for link in raw_results:
-                    deferreds.append(maybeDeferred(mapper_func, self, link))
-            else:
-                for row in raw_results:
-                    link = RiakLink(row[0], row[1])
-                    deferreds.append(maybeDeferred(mapper_func, self, link))
-
+            for row in raw_results:
+                deferreds.append(maybeDeferred(mapper_func, self, row))
             return gatherResults(deferreds)
 
+        mapreduce_done = mapreduce.run()
         mapreduce_done.addCallback(map_results)
         return mapreduce_done
 
