@@ -32,6 +32,7 @@ apt::package { "openjdk-6-jre-headless": ensure => latest }
 apt::package { "libcurl3": ensure => latest }
 apt::package { "libcurl4-openssl-dev": ensure => latest }
 apt::package { "redis-server": ensure => latest }
+apt::package { "protobuf-compiler": ensure => latest }
 
 file {
     "/var/praekelt":
