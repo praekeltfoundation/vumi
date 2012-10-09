@@ -33,8 +33,14 @@ class TxRiakManager(Manager):
                 #       comes back as a list, in others (maybe when
                 #       there are indexes?) it comes back as a dict.
                 indexes = indexes.items()
-            data = result['data']
-            riak_object.set_content_type(metadata['content-type'])
+
+            print indexes
+            content_type = metadata['content-type'].encode('utf-8')
+            indexes = [
+                (k.encode('utf-8'), v.encode('utf-8')) for k, v in indexes]
+            data = result['data'].encode('utf-8')
+
+            riak_object.set_content_type(content_type)
             riak_object.set_indexes(indexes)
             riak_object.set_encoded_data(data)
         else:
