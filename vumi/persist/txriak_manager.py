@@ -36,13 +36,13 @@ class TxRiakManager(Manager):
         """
         encoded = []
         for key, value in iterable:
-            if isinstance(value, (list, tuple)):
-                value = ", ".join([v.encode(encoding) for v in value])
-                key = key.encode(encoding)
-            else:
-                value = value.encode(encoding)
-                key = key.encode(encoding)
-                encoded.append((key, value))
+            if not isinstance(value, (list, tuple)):
+                value = [value]
+
+            value = ", ".join([v.encode(encoding) for v in value])
+            key = key.encode(encoding)
+            encoded.append((key, value))
+
         return encoded
 
     def riak_object(self, cls, key, result=None):
