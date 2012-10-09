@@ -34,7 +34,6 @@ class TxRiakManager(Manager):
                 #       there are indexes?) it comes back as a dict.
                 indexes = indexes.items()
 
-            print indexes
             content_type = metadata['content-type'].encode('utf-8')
             indexes = [
                 (k.encode('utf-8'), v.encode('utf-8')) for k, v in indexes]
