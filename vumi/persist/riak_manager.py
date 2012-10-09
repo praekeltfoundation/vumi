@@ -12,10 +12,6 @@ class RiakManager(Manager):
     """A persistence manager for the riak Python package."""
 
     call_decorator = staticmethod(flatten_generator)
-    # Since this is a synchronous manager we want to fetch objects
-    # as part of the mapreduce call. Async managers might prefer
-    # to request the objects in parallel as this could be more efficient.
-    fetch_objects = True
 
     @classmethod
     def from_config(cls, config):
