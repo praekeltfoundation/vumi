@@ -57,12 +57,31 @@ class HttpRpcTransport(Transport):
     transport worker that generated the inbound message. This means that
     currently there many only be one transport worker for each instance
     of this transport of a given name.
+
+    Takes the following configuration parameters:
+
+    :param str web_path:
+        The path to listen for requests on.
+    :param int web_port:
+        The port to listen for requests on, defaults to `0`.
+    :param int request_cleanup_interval:
+        How often should we actively look for old connections that should
+        manually be timed out. Anything less than `1` disables the request
+        cleanup meaning that all request objects will be kept in memory until
+        the server is restarted, regardless if the remote side has dropped
+        the connection or not.
+    :param int request_timeout:
+        How long should we wait for the remote side generating the response
+        for this synchronous operation to come back. Any connection that has
+        waited longer than `request_timeout` seconds will manually be closed
     """
     content_type = 'text/plain'
 
     def validate_config(self):
         self.web_path = self.config['web_path']
         self.web_port = int(self.config['web_port'])
+        self.gc_requests_interval = int(
+            self.config.get('request_cleanup_interval', 0))
 
     def get_transport_url(self, suffix=''):
         """
