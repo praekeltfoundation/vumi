@@ -203,13 +203,6 @@ class Model(object):
 class Manager(object):
     """A wrapper around a Riak client."""
 
-    # By default we do not fetch the objects as part of a mapreduce call.
-    # This has the mapreduce return a list of keys which would require
-    # another set of calls to get the individual objects. For asynchronous
-    # managers this would be preferable, for synchronous managers one
-    # would likely want to fetch the objects as part of the mapreduce call.
-    fetch_objects = False
-
     def __init__(self, client, bucket_prefix):
         self.client = client
         self.bucket_prefix = bucket_prefix
