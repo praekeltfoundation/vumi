@@ -90,7 +90,7 @@ class Model(object):
         if _riak_object is not None:
             self._riak_object = _riak_object
         else:
-            self._riak_object = manager.riak_object(self, key)
+            self._riak_object = manager.riak_object(type(self), key)
             for field_name, descriptor in self.field_descriptors.iteritems():
                 field = descriptor.field
                 if not field.initializable:
@@ -203,16 +203,10 @@ class Model(object):
 class Manager(object):
     """A wrapper around a Riak client."""
 
-    # By default we do not fetch the objects as part of a mapreduce call.
-    # This has the mapreduce return a list of keys which would require
-    # another set of calls to get the individual objects. For asynchronous
-    # managers this would be preferable, for synchronous managers one
-    # would likely want to fetch the objects as part of the mapreduce call.
-    fetch_objects = False
-
     def __init__(self, client, bucket_prefix):
         self.client = client
         self.bucket_prefix = bucket_prefix
+        self._bucket_cache = {}
 
     def proxy(self, modelcls):
         return ModelProxy(self, modelcls)
@@ -222,6 +216,15 @@ class Manager(object):
 
     def bucket_name(self, modelcls_or_obj):
         return self.bucket_prefix + modelcls_or_obj.bucket
+
+    def bucket_for_cls(self, cls):
+        cls_id = id(cls)
+        bucket = self._bucket_cache.get(cls_id)
+        if bucket is None:
+            bucket_name = self.bucket_name(cls)
+            bucket = self.client.bucket(bucket_name)
+            self._bucket_cache[cls_id] = bucket
+        return bucket
 
     @staticmethod
     def calls_manager(manager_attr):

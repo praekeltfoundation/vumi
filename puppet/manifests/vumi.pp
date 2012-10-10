@@ -4,7 +4,7 @@ Exec {
     user => 'vagrant',
 }
 
-# Make sure packge index is updated
+# Make sure package index is updated (when referenced by require)
 exec { "apt-get update":
     command => "apt-get update",
     user => "root",
@@ -14,32 +14,25 @@ exec { "apt-get update":
 define apt::package($ensure='latest') {
     package { $name:
         ensure => $ensure,
-        subscribe => Exec['apt-get update'];
+        require => Exec['apt-get update'];
     }
 }
 
-# Install redis ppa and update again
-exec { "redis-ppa":
-    command => "add-apt-repository ppa:rwky/redis && apt-get update",
-    user => "root",
-    require => Package['python-software-properties'],
-    unless => "test -f /etc/apt/sources.list.d/rwky-redis-lucid.list"
-}
-
 # Install these packages
-package { "build-essential": ensure => latest }
-package { "python": ensure => latest }
-package { "python-dev": ensure => latest }
-package { "python-setuptools": ensure => latest }
-package { "python-software-properties": ensure => latest }
-package { "python-pip": ensure => latest }
-package { "python-virtualenv": ensure => latest }
-package { "rabbitmq-server": ensure => latest }
-package { "git-core": ensure => latest }
-package { "openjdk-6-jre-headless": ensure => latest }
-package { "libcurl3": ensure => latest }
-package { "libcurl4-openssl-dev": ensure => latest }
-package { "redis-server": ensure => latest }
+apt::package { "build-essential": ensure => latest }
+apt::package { "python": ensure => latest }
+apt::package { "python-dev": ensure => latest }
+apt::package { "python-setuptools": ensure => latest }
+apt::package { "python-software-properties": ensure => latest }
+apt::package { "python-pip": ensure => latest }
+apt::package { "python-virtualenv": ensure => latest }
+apt::package { "rabbitmq-server": ensure => latest }
+apt::package { "git-core": ensure => latest }
+apt::package { "openjdk-6-jre-headless": ensure => latest }
+apt::package { "libcurl3": ensure => latest }
+apt::package { "libcurl4-openssl-dev": ensure => latest }
+apt::package { "redis-server": ensure => latest }
+apt::package { "protobuf-compiler": ensure => latest }
 
 file {
     "/var/praekelt":

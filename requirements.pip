@@ -12,7 +12,7 @@ redis
 txredis
 python-smpp
 pytz
-riakasaurus
+riakasaurus>=1.0.6
 riak
 https://github.com/dustin/twitty-twister/tarball/master#egg=twittytwister-0.1.1
 pyasn1

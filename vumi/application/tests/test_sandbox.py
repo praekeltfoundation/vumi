@@ -141,13 +141,57 @@ class SandboxTestCase(SandboxTestCaseBase):
             "import sys, time\n"
             "sys.stderr.write(%r)\n"
             "sys.stdout.write('\\n')\n"
+            "sys.stdout.flush()\n"
             "time.sleep(5)\n"
-            % ("a" * (recv_limit - 1) + "\\n"),
+            % ("a" * (recv_limit - 1) + "\n"),
             {'recv_limit': str(recv_limit)})
         status = yield app.process_message_in_sandbox(self.mk_msg())
         self.assertEqual(status, None)
+        [stderr_err] = self.flushLoggedErrors(SandboxError)
         [kill_err] = self.flushLoggedErrors(ProcessTerminated)
         self.assertTrue('process ended by signal' in str(kill_err.value))
+
+    @inlineCallbacks
+    def test_python_path_set(self):
+        app = yield self.setup_app(
+            "import sys, json\n"
+            "path = ':'.join(sys.path)\n"
+            "log = {'cmd': 'log.info', 'cmd_id': '1',\n"
+            "       'reply': False, 'msg': path}\n"
+            "sys.stdout.write(json.dumps(log) + '\\n')\n",
+            {'env': {'PYTHONPATH': '/pp1:/pp2'},
+             'sandbox': {
+                'log': {'cls': 'vumi.application.sandbox.LoggingResource'},
+            }},
+        )
+        with LogCatcher() as lc:
+            status = yield app.process_message_in_sandbox(self.mk_msg())
+            [path_str] = lc.messages()
+        self.assertEqual(status, 0)
+        path = path_str.split(':')
+        self.assertTrue('/pp1' in path)
+        self.assertTrue('/pp2' in path)
+
+    @inlineCallbacks
+    def test_python_path_unset(self):
+        app = yield self.setup_app(
+            "import sys, json\n"
+            "path = ':'.join(sys.path)\n"
+            "log = {'cmd': 'log.info', 'cmd_id': '1',\n"
+            "       'reply': False, 'msg': path}\n"
+            "sys.stdout.write(json.dumps(log) + '\\n')\n",
+            {'env': {},
+             'sandbox': {
+                'log': {'cls': 'vumi.application.sandbox.LoggingResource'},
+            }},
+        )
+        with LogCatcher() as lc:
+            status = yield app.process_message_in_sandbox(self.mk_msg())
+            [path_str] = lc.messages()
+        self.assertEqual(status, 0)
+        path = path_str.split(':')
+        self.assertTrue('/pp1' not in path)
+        self.assertTrue('/pp2' not in path)
 
     @inlineCallbacks
     def echo_check(self, handler_name, msg, expected_cmd):

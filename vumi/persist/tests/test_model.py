@@ -65,7 +65,7 @@ class TestModelOnTxRiak(TestCase):
         try:
             from vumi.persist.txriak_manager import TxRiakManager
         except ImportError, e:
-            import_skip(e, 'riakasaurus.riak')
+            import_skip(e, 'riakasaurus', 'riakasaurus.riak')
         self.manager = TxRiakManager.from_config({'bucket_prefix': 'test.'})
         yield self.manager.purge_all()
 
@@ -143,7 +143,8 @@ class TestModelOnTxRiak(TestCase):
         [s2] = yield simple_model.riak_search('a:2 AND b:def')
         self.assertEqual(s2.key, "two")
 
-        [s1, s2] = yield simple_model.riak_search('b:abc OR b:def')
+        [s1, s2] = sorted((yield simple_model.riak_search('b:abc OR b:def')),
+                          key=lambda s: s.key)
         self.assertEqual(s1.key, "one")
         self.assertEqual(s2.key, "two")
 

@@ -12,10 +12,6 @@ class RiakManager(Manager):
     """A persistence manager for the riak Python package."""
 
     call_decorator = staticmethod(flatten_generator)
-    # Since this is a synchronous manager we want to fetch objects
-    # as part of the mapreduce call. Async managers might prefer
-    # to request the objects in parallel as this could be more efficient.
-    fetch_objects = True
 
     @classmethod
     def from_config(cls, config):
@@ -25,8 +21,7 @@ class RiakManager(Manager):
         return cls(client, bucket_prefix)
 
     def riak_object(self, cls, key, result=None):
-        bucket_name = self.bucket_name(cls)
-        bucket = self.client.bucket(bucket_name)
+        bucket = self.bucket_for_cls(cls)
         riak_object = RiakObject(self.client, bucket, key)
         if result:
             metadata = result['metadata']

@@ -64,9 +64,6 @@ class TestRiakManager(CommonRiakManagerTests, TestCase):
         mr = self.manager.riak_map_reduce()
         mr.index('test.dummy_model', 'test_index_bin', 'test_key')
         mr.map(function='function(v) { return [[v.key, v.values[0]]] }')
-        # We should be using the sync manager and fetch the objects
-        # as part of a mapreduce call
-        self.assertTrue(self.manager.fetch_objects)
         mr_results = []
 
         def mapper(manager, key_and_result_tuple):
