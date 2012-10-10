@@ -18,14 +18,6 @@ define apt::package($ensure='latest') {
     }
 }
 
-# Install redis ppa and update again
-exec { "redis-ppa":
-    command => "add-apt-repository ppa:rwky/redis && apt-get update",
-    user => "root",
-    require => Package['python-software-properties'],
-    unless => "test -f /etc/apt/sources.list.d/rwky-redis-lucid.list"
-}
-
 # Install these packages
 apt::package { "build-essential": ensure => latest }
 apt::package { "python": ensure => latest }
@@ -40,6 +32,7 @@ apt::package { "openjdk-6-jre-headless": ensure => latest }
 apt::package { "libcurl3": ensure => latest }
 apt::package { "libcurl4-openssl-dev": ensure => latest }
 apt::package { "redis-server": ensure => latest }
+apt::package { "protobuf-compiler": ensure => latest }
 
 file {
     "/var/praekelt":
