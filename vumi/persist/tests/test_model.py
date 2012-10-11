@@ -1,7 +1,7 @@
 """Tests for vumi.persist.model."""
 
 from twisted.trial.unittest import TestCase
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import inlineCallbacks, maybeDeferred
 
 from vumi.persist.model import Model, Manager
 from vumi.persist.fields import (
@@ -150,6 +150,22 @@ class TestModelOnTxRiak(TestCase):
 
         keys = yield simple_model.riak_search('a:2', return_keys=True)
         self.assertEqual(sorted(keys), ["three", "two"])
+
+    @Manager.calls_manager
+    def test_simple_riak_search_count(self):
+        simple_model = self.manager.proxy(SimpleModel)
+        yield simple_model.enable_search()
+        yield simple_model("one", a=1, b=u'abc').save()
+        yield simple_model("two", a=2, b=u'def').save()
+        yield simple_model("three", a=2, b=u'ghi').save()
+
+        def assert_count(expected, query):
+            d = maybeDeferred(simple_model.riak_search_count, query)
+            return d.addCallback(self.assertEqual, expected)
+
+        yield assert_count([1], 'a:1')
+        yield assert_count([1], 'a:2 AND b:def')
+        yield assert_count([2], 'b:abc OR b:def')
 
     @Manager.calls_manager
     def test_simple_instance(self):
