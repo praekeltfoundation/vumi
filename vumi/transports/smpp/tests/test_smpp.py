@@ -144,12 +144,13 @@ class SmppTransportTestCase(TransportTestCase):
         clock = Clock()
         self.transport.callLater = clock.callLater
 
-        def assert_throttled_status(message_count, acks):
-            self.assert_sent_contents(["Heimlich"] * message_count)
+        def assert_throttled_status(throttled, messages, acks):
+            self.assertEqual(self.transport.throttled, throttled)
+            self.assert_sent_contents(messages)
             self.assertEqual(acks, self.get_dispatched_events())
             self.assertEqual([], self.get_dispatched_failures())
 
-        assert_throttled_status(0, [])
+        assert_throttled_status(False, [], [])
 
         message = self.mkmsg_out("Heimlich", message_id="447")
         response = SubmitSMResp(1, "3rd_party_id_4",
@@ -157,16 +158,23 @@ class SmppTransportTestCase(TransportTestCase):
         yield self.dispatch(message)
         yield self.esme.handle_data(response.get_bin())
 
-        assert_throttled_status(1, [])
+        assert_throttled_status(True, ["Heimlich"], [])
         # Still waiting to resend
         clock.advance(0.05)
-        assert_throttled_status(1, [])
+        assert_throttled_status(True, ["Heimlich"], [])
+        message2 = self.mkmsg_out("Other", message_id="448")
+        yield self.dispatch(message2)
+        assert_throttled_status(True, ["Heimlich"], [])
         # Resent
         clock.advance(0.05)
-        assert_throttled_status(2, [])
+        assert_throttled_status(True, ["Heimlich", "Heimlich"], [])
         # And acknowledged by the other side
         yield self.esme.handle_data(SubmitSMResp(2, "3rd_party_5").get_bin())
-        assert_throttled_status(2, [self.mkmsg_ack('447', '3rd_party_5')])
+        yield self._amqp.kick_delivery()
+        yield self.esme.handle_data(SubmitSMResp(3, "3rd_party_6").get_bin())
+        assert_throttled_status(False, ["Heimlich", "Heimlich", "Other"],
+                                [self.mkmsg_ack('447', '3rd_party_5'),
+                                 self.mkmsg_ack('448', '3rd_party_6')])
 
     @inlineCallbacks
     def test_reconnect(self):

@@ -59,6 +59,10 @@ class SmppTransport(Transport):
         This _only_ needs to be done for TX & RX since messages sent via the TX
         bind are handled by the RX bind and they need to share the same prefix
         for the lookup for message ids in delivery reports to work.
+    :type throttle_delay: float, optional
+    :param throttle_delay:
+        Delay (in seconds) before retrying a message after receiving
+        `ESME_RTHROTTLED`. Default 0.1
 
     SMPP protocol configuration options:
 
@@ -125,6 +129,7 @@ class SmppTransport(Transport):
 
     def validate_config(self):
         self.client_config = ClientConfig.from_config(self.config)
+        self.throttle_delay = float(self.config.get('throttle_delay', 0.1))
 
     @inlineCallbacks
     def setup_transport(self):
@@ -146,6 +151,7 @@ class SmppTransport(Transport):
         self.redis = redis.sub_manager(r_prefix)
 
         self.r_message_prefix = "message_json"
+        self.throttled = False
 
         self.esme_callbacks = EsmeCallbacks(
             connect=self.esme_connected,
@@ -250,6 +256,20 @@ class SmppTransport(Transport):
         yield self.redis.set(rkey, id)
         yield self.redis.expire(rkey, self.third_party_id_expiry)
 
+    def _start_throttling(self):
+        if self.throttled:
+            return
+        log.err("Throttling outbound messages.")
+        self.throttled = True
+        return self._teardown_message_consumer()
+
+    def _stop_throttling(self):
+        if not self.throttled:
+            return
+        log.err("No longer throttling outbound messages.")
+        self.throttled = False
+        return self._setup_message_consumer()
+
     @inlineCallbacks
     def submit_sm_resp(self, *args, **kwargs):
         transport_msg_id = kwargs['message_id']
@@ -266,11 +286,14 @@ class SmppTransport(Transport):
             if status == 'ESME_ROK':
                 # The sms was submitted ok
                 yield self.submit_sm_success(sent_sms_id, transport_msg_id)
+                yield self._stop_throttling()
             elif status == 'ESME_RTHROTTLED':
+                yield self._start_throttling()
                 yield self.submit_sm_throttled(sent_sms_id)
             else:
                 # We have an error
                 yield self.submit_sm_failure(sent_sms_id, status)
+                yield self._stop_throttling()
 
     @inlineCallbacks
     def submit_sm_success(self, sent_sms_id, transport_msg_id):
@@ -303,7 +326,8 @@ class SmppTransport(Transport):
             log.err("Could not retrieve throttled message:%s" % (
                 sent_sms_id))
         else:
-            self.callLater(0.1, self._submit_outbound_message, message)
+            self.callLater(self.throttle_delay,
+                           self._submit_outbound_message, message)
 
     def delivery_status(self, state):
         if state in [
