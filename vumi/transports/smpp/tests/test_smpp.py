@@ -14,33 +14,19 @@ from vumi.transports.smpp.clientserver.tests.utils import SmscTestServer
 from vumi.transports.tests.test_base import TransportTestCase
 
 
-class RedisTestEsmeTransceiver(EsmeTransceiver):
-
+class StubbedEsmeTransceiver(EsmeTransceiver):
     def send_pdu(self, pdu):
         pass  # don't actually send anything
 
 
-class RedisTestSmppTransport(SmppTransport):
-
-    def send_smpp(self, message):
-        to_addr = message['to_addr']
-        text = message['content']
-        return self.esme_client.submit_sm(
-                short_message=text.encode('utf-8'),
-                destination_addr=str(to_addr),
-                source_addr="1234567890",
-                )
-
-
-class FakeRedisRespTestCase(TransportTestCase):
-    transport_name = "redis_testing_transport"
-    transport_class = RedisTestSmppTransport
+class SmppTransportTestCase(TransportTestCase):
+    transport_class = SmppTransport
 
     @inlineCallbacks
     def setUp(self):
-        super(FakeRedisRespTestCase, self).setUp()
+        super(SmppTransportTestCase, self).setUp()
         self.config = {
-                "transport_name": "redis_testing_transport",
+                "transport_name": self.transport_name,
                 "system_id": "vumitest-vumitest-vumitest",
                 "host": "host",
                 "port": "port",
@@ -48,9 +34,6 @@ class FakeRedisRespTestCase(TransportTestCase):
                 "smpp_bind_timeout": 12,
                 "smpp_enquire_link_interval": 123,
                 "third_party_id_expiry": 3600,  # just 1 hour
-                }
-        self.vumi_options = {
-                "vhost": "develop",
                 }
         self.clientConfig = ClientConfig.from_config(self.config)
 
@@ -63,7 +46,7 @@ class FakeRedisRespTestCase(TransportTestCase):
             connect=lambda: None, disconnect=lambda: None,
             submit_sm_resp=self.transport.submit_sm_resp,
             delivery_report=lambda: None, deliver_sm=lambda: None)
-        self.esme = RedisTestEsmeTransceiver(
+        self.esme = StubbedEsmeTransceiver(
             self.clientConfig, self.transport.redis, self.esme_callbacks)
         self.esme.state = 'BOUND_TRX'
         self.transport.esme_client = self.esme
@@ -78,7 +61,7 @@ class FakeRedisRespTestCase(TransportTestCase):
                 repr(self.transport.client_config.smpp_enquire_link_interval))
 
     @inlineCallbacks
-    def test_redis_message_persistence(self):
+    def test_message_persistence(self):
         # A simple test of set -> get -> delete for redis message persistence
         message1 = self.mkmsg_out(
             message_id='1234567890abcdefg',
