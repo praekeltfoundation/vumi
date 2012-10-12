@@ -121,6 +121,8 @@ class SmppTransport(Transport):
     # We only want to start this after we finish connecting to SMPP.
     start_message_consumer = False
 
+    callLater = reactor.callLater
+
     def validate_config(self):
         self.client_config = ClientConfig.from_config(self.config)
 
@@ -183,6 +185,10 @@ class SmppTransport(Transport):
         log.debug("Unacknowledged message count: %s" % (
                 (yield self.esme_client.get_unacked_count()),))
         yield self.r_set_message(message)
+        yield self._submit_outbound_message(message)
+
+    @inlineCallbacks
+    def _submit_outbound_message(self, message):
         sequence_number = yield self.send_smpp(message)
         yield self.r_set_id_for_sequence(
             sequence_number, message.payload.get("message_id"))
@@ -256,13 +262,15 @@ class SmppTransport(Transport):
             yield self.r_set_id_for_third_party_id(
                 transport_msg_id, sent_sms_id)
             yield self.r_delete_for_sequence(kwargs['sequence_number'])
-            if kwargs['command_status'] == 'ESME_ROK':
+            status = kwargs['command_status']
+            if status == 'ESME_ROK':
                 # The sms was submitted ok
                 yield self.submit_sm_success(sent_sms_id, transport_msg_id)
+            elif status == 'ESME_RTHROTTLED':
+                yield self.submit_sm_throttled(sent_sms_id)
             else:
                 # We have an error
-                yield self.submit_sm_failure(
-                    sent_sms_id, kwargs['command_status'])
+                yield self.submit_sm_failure(sent_sms_id, status)
 
     @inlineCallbacks
     def submit_sm_success(self, sent_sms_id, transport_msg_id):
@@ -287,6 +295,15 @@ class SmppTransport(Transport):
                     message=error_message.payload,
                     failure_code=None,
                     reason=reason))
+
+    @inlineCallbacks
+    def submit_sm_throttled(self, sent_sms_id):
+        message = yield self.r_get_message(sent_sms_id)
+        if message is None:
+            log.err("Could not retrieve throttled message:%s" % (
+                sent_sms_id))
+        else:
+            self.callLater(0.1, self._submit_outbound_message, message)
 
     def delivery_status(self, state):
         if state in [

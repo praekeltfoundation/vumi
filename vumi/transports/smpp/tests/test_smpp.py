@@ -1,4 +1,5 @@
 from twisted.internet.defer import Deferred, inlineCallbacks, succeed
+from twisted.internet.task import Clock
 from smpp.pdu_builder import SubmitSMResp, DeliverSM
 
 from vumi.message import TransportUserMessage
@@ -12,11 +13,6 @@ from vumi.transports.smpp.clientserver.config import ClientConfig
 from vumi.transports.smpp.clientserver.client import unpacked_pdu_opts
 from vumi.transports.smpp.clientserver.tests.utils import SmscTestServer
 from vumi.transports.tests.test_base import TransportTestCase
-
-
-class StubbedEsmeTransceiver(EsmeTransceiver):
-    def send_pdu(self, pdu):
-        pass  # don't actually send anything
 
 
 class SmppTransportTestCase(TransportTestCase):
@@ -42,16 +38,25 @@ class SmppTransportTestCase(TransportTestCase):
         self.transport.esme_client = None
         yield self.transport.startWorker()
 
+        self._make_esme()
+        self.transport.esme_client = self.esme
+        self.transport.esme_connected(self.esme)
+
+    def _make_esme(self):
         self.esme_callbacks = EsmeCallbacks(
             connect=lambda: None, disconnect=lambda: None,
             submit_sm_resp=self.transport.submit_sm_resp,
             delivery_report=lambda: None, deliver_sm=lambda: None)
-        self.esme = StubbedEsmeTransceiver(
+        self.esme = EsmeTransceiver(
             self.clientConfig, self.transport.redis, self.esme_callbacks)
+        self.esme.sent_pdus = []
+        self.esme.send_pdu = self.esme.sent_pdus.append
         self.esme.state = 'BOUND_TRX'
-        self.transport.esme_client = self.esme
 
-        self.transport.esme_connected(self.esme)
+    def assert_sent_contents(self, expected):
+        pdu_contents = [p.obj['body']['mandatory_parameters']['short_message']
+                        for p in self.esme.sent_pdus]
+        self.assertEqual(expected, pdu_contents)
 
     def test_bind_and_enquire_config(self):
         self.assertEqual(12, self.transport.client_config.smpp_bind_timeout)
@@ -100,14 +105,15 @@ class SmppTransportTestCase(TransportTestCase):
     @inlineCallbacks
     def test_out_of_order_responses(self):
         # Sequence numbers are hardcoded, assuming we start fresh from 0.
-        message1 = self.mkmsg_out(message_id='444')
+        message1 = self.mkmsg_out("message 1", message_id='444')
         response1 = SubmitSMResp(1, "3rd_party_id_1")
         yield self.dispatch(message1)
 
-        message2 = self.mkmsg_out(message_id='445')
+        message2 = self.mkmsg_out("message 2", message_id='445')
         response2 = SubmitSMResp(2, "3rd_party_id_2")
         yield self.dispatch(message2)
 
+        self.assert_sent_contents(["message 1", "message 2"])
         # respond out of order - just to keep things interesting
         yield self.esme.handle_data(response2.get_bin())
         yield self.esme.handle_data(response1.get_bin())
@@ -119,11 +125,13 @@ class SmppTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_failed_submit(self):
-        message = self.mkmsg_out(message_id='446')
+        message = self.mkmsg_out("message", message_id='446')
         response = SubmitSMResp(1, "3rd_party_id_3",
                                 command_status="ESME_RSUBMITFAIL")
         yield self.dispatch(message)
         yield self.esme.handle_data(response.get_bin())
+
+        self.assert_sent_contents(["message"])
         # There should be no ack
         self.assertEqual([], self.get_dispatched_events())
 
@@ -133,17 +141,32 @@ class SmppTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_throttled_submit(self):
-        message = self.mkmsg_out(message_id="447")
+        clock = Clock()
+        self.transport.callLater = clock.callLater
+
+        def assert_throttled_status(message_count, acks):
+            self.assert_sent_contents(["Heimlich"] * message_count)
+            self.assertEqual(acks, self.get_dispatched_events())
+            self.assertEqual([], self.get_dispatched_failures())
+
+        assert_throttled_status(0, [])
+
+        message = self.mkmsg_out("Heimlich", message_id="447")
         response = SubmitSMResp(1, "3rd_party_id_4",
                                 command_status="ESME_RTHROTTLED")
         yield self.dispatch(message)
         yield self.esme.handle_data(response.get_bin())
-        # There should be no ack
-        self.assertEqual([], self.get_dispatched_events())
 
-        comparison = self.mkmsg_fail(message.payload, 'ESME_RTHROTTLED')
-        [actual] = self.get_dispatched_failures()
-        self.assertEqual(actual, comparison)
+        assert_throttled_status(1, [])
+        # Still waiting to resend
+        clock.advance(0.05)
+        assert_throttled_status(1, [])
+        # Resent
+        clock.advance(0.05)
+        assert_throttled_status(2, [])
+        # And acknowledged by the other side
+        yield self.esme.handle_data(SubmitSMResp(2, "3rd_party_5").get_bin())
+        assert_throttled_status(2, [self.mkmsg_ack('447', '3rd_party_5')])
 
     @inlineCallbacks
     def test_reconnect(self):
