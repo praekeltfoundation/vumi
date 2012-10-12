@@ -98,19 +98,13 @@ class SmppTransportTestCase(TransportTestCase):
                 yield self.transport.r_get_id_for_third_party_id(their_id)))
 
     @inlineCallbacks
-    def test_match_resp(self):
+    def test_out_of_order_responses(self):
         # Sequence numbers are hardcoded, assuming we start fresh from 0.
-        message1 = self.mkmsg_out(
-            message_id='444',
-            content="hello world",
-            to_addr="1111111111")
+        message1 = self.mkmsg_out(message_id='444')
         response1 = SubmitSMResp(1, "3rd_party_id_1")
         yield self.dispatch(message1)
 
-        message2 = self.mkmsg_out(
-            message_id='445',
-            content="hello world",
-            to_addr="1111111111")
+        message2 = self.mkmsg_out(message_id='445')
         response2 = SubmitSMResp(2, "3rd_party_id_2")
         yield self.dispatch(message2)
 
@@ -123,34 +117,32 @@ class SmppTransportTestCase(TransportTestCase):
                 self.mkmsg_ack('444', '3rd_party_id_1'),
                 ], self.get_dispatched_events())
 
-        message3 = self.mkmsg_out(
-            message_id='446',
-            content="hello world",
-            to_addr="1111111111")
-        response3 = SubmitSMResp(3, "3rd_party_id_3",
-                command_status="ESME_RSUBMITFAIL")
-        yield self.dispatch(message3)
-        yield self.esme.handle_data(response3.get_bin())
+    @inlineCallbacks
+    def test_failed_submit(self):
+        message = self.mkmsg_out(message_id='446')
+        response = SubmitSMResp(1, "3rd_party_id_3",
+                                command_status="ESME_RSUBMITFAIL")
+        yield self.dispatch(message)
+        yield self.esme.handle_data(response.get_bin())
         # There should be no ack
-        self.assertEqual([], self.get_dispatched_events()[2:])
+        self.assertEqual([], self.get_dispatched_events())
 
-        comparison = self.mkmsg_fail(message3.payload, 'ESME_RSUBMITFAIL')
+        comparison = self.mkmsg_fail(message.payload, 'ESME_RSUBMITFAIL')
         [actual] = yield self.get_dispatched_failures()
         self.assertEqual(actual, comparison)
 
-        message4 = self.mkmsg_out(
-            message_id=447,
-            content="hello world",
-            to_addr="1111111111")
-        response4 = SubmitSMResp(4, "3rd_party_id_4",
-                command_status="ESME_RTHROTTLED")
-        yield self.dispatch(message4)
-        yield self.esme.handle_data(response4.get_bin())
+    @inlineCallbacks
+    def test_throttled_submit(self):
+        message = self.mkmsg_out(message_id="447")
+        response = SubmitSMResp(1, "3rd_party_id_4",
+                                command_status="ESME_RTHROTTLED")
+        yield self.dispatch(message)
+        yield self.esme.handle_data(response.get_bin())
         # There should be no ack
-        self.assertEqual([], self.get_dispatched_events()[3:])
+        self.assertEqual([], self.get_dispatched_events())
 
-        comparison = self.mkmsg_fail(message4.payload, 'ESME_RTHROTTLED')
-        actual = self.get_dispatched_failures()[1]
+        comparison = self.mkmsg_fail(message.payload, 'ESME_RTHROTTLED')
+        [actual] = self.get_dispatched_failures()
         self.assertEqual(actual, comparison)
 
     @inlineCallbacks
