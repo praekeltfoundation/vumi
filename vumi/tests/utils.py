@@ -120,25 +120,6 @@ def fake_amq_message(dictionary, delivery_tag='delivery_tag'):
                    content=Content(body=json.dumps(dictionary)))
 
 
-class TestQueue(object):
-    """
-    A test queue that mimicks txAMQP's queue behaviour (DEPRECATED)
-    """
-    def __init__(self, queue, fake_broker=None):
-        self.queue = queue
-        self.fake_broker = fake_broker
-        # TODO: Hook this up.
-
-    def push(self, item):
-        self.queue.append(item)
-
-    def get(self):
-        d = defer.Deferred()
-        if self.queue:
-            d.callback(self.queue.pop())
-        return d
-
-
 def get_stubbed_worker(worker_class, config=None, broker=None):
     spec = get_spec(vumi_resource_path("amqp-spec-0-8.xml"))
     amq_client = FakeAMQClient(spec, {}, broker)
