@@ -3,7 +3,7 @@ from twisted.internet.defer import inlineCallbacks
 from twisted.web import http
 
 from vumi.utils import http_request, http_request_full
-from vumi.transports.tests.test_base import TransportTestCase
+from vumi.transports.tests.utils import TransportTestCase
 from vumi.transports.api import (OldSimpleHttpTransport,
                                  OldTemplateHttpTransport)
 from base64 import b64encode

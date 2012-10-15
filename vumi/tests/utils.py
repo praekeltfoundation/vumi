@@ -4,7 +4,6 @@ import re
 import json
 from datetime import datetime, timedelta
 from collections import namedtuple
-from contextlib import contextmanager
 import warnings
 from functools import wraps
 
