@@ -139,52 +139,6 @@ class TestQueue(object):
         return d
 
 
-class TestChannel(object):
-    "(DEPRECATED)"
-
-    def __init__(self, channel_id=None, fake_broker=None):
-        self.channel_id = channel_id
-        self.fake_broker = fake_broker
-        self.ack_log = []
-        self.publish_log = []
-        self.publish_message_log = self.publish_log  # TODO: Nuke
-
-    def basic_ack(self, tag, multiple=False):
-        self.ack_log.append((tag, multiple))
-
-    def channel_close(self, *args, **kwargs):
-        return defer.succeed(None)
-
-    def channel_open(self, *args, **kwargs):
-        return defer.succeed(None)
-
-    def basic_publish(self, *args, **kwargs):
-        self.publish_log.append(kwargs)
-        if self.fake_broker:
-            self.fake_broker.publish(**kwargs)
-
-    def basic_qos(self, *args, **kwargs):
-        return defer.succeed(None)
-
-    def exchange_declare(self, *args, **kwargs):
-        if self.fake_broker:
-            self.fake_broker.exchange_declare(*args, **kwargs)
-
-    def queue_declare(self, *args, **kwargs):
-        if self.fake_broker:
-            self.fake_broker.queue_declare(*args, **kwargs)
-
-    def queue_bind(self, *args, **kwargs):
-        if self.fake_broker:
-            self.fake_broker.queue_bind(*args, **kwargs)
-
-    def basic_consume(self, queue, **kwargs):
-        return namedtuple('Reply', ['consumer_tag'])(consumer_tag=queue)
-
-    def close(self, *args, **kwargs):
-        return True
-
-
 def get_stubbed_worker(worker_class, config=None, broker=None):
     spec = get_spec(vumi_resource_path("amqp-spec-0-8.xml"))
     amq_client = FakeAMQClient(spec, {}, broker)
