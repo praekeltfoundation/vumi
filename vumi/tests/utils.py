@@ -95,24 +95,6 @@ def mocking(fn):
     return Mocking(fn)
 
 
-class TestPublisher(object):
-    """
-    A test publisher that caches outbound messages in an internal queue
-    for testing, instead of publishing over AMQP.
-
-    Useful for testing consumers
-    """
-    def __init__(self):
-        self.queue = []
-
-    @contextmanager
-    def transaction(self):
-        yield
-
-    def publish_message(self, message, **kwargs):
-        self.queue.append((message, kwargs))
-
-
 def fake_amq_message(dictionary, delivery_tag='delivery_tag'):
     Content = namedtuple('Content', ['body'])
     Message = namedtuple('Message', ['content', 'delivery_tag'])
