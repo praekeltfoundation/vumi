@@ -22,22 +22,6 @@ from vumi.service import get_spec, Worker, WorkerCreator
 from vumi.tests.fake_amqp import FakeAMQClient
 
 
-def setup_django_test_database():
-    from django.test.simple import DjangoTestSuiteRunner
-    from django.test.utils import setup_test_environment
-    from south.management.commands import patch_for_test_db_setup
-    runner = DjangoTestSuiteRunner(verbosity=0, failfast=False)
-    patch_for_test_db_setup()
-    setup_test_environment()
-    return runner, runner.setup_databases()
-
-
-def teardown_django_test_database(runner, config):
-    from django.test.utils import teardown_test_environment
-    runner.teardown_databases(config)
-    teardown_test_environment()
-
-
 def import_skip(exc, *expected):
     msg = exc.args[0]
     module = msg.split()[-1]
