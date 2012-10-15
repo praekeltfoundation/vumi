@@ -384,15 +384,8 @@ class VumiWorkerTestCase(TestCase):
         :param config: Config dict.
         :param cls: The worker class to instantiate.
         :param start: True to start the worker (default), False otherwise.
-
-        Some default config values are helpfully provided in the
-        interests of reducing boilerplate:
-
-        * ``transport_name`` defaults to :attr:`self.transport_name`
         """
 
-        config = config.copy()
-        config.setdefault('transport_name', self.transport_name)
         worker = get_stubbed_worker(cls, config, self._amqp)
         self._workers.append(worker)
         if start:
@@ -400,51 +393,53 @@ class VumiWorkerTestCase(TestCase):
         returnValue(worker)
 
     def mkmsg_ack(self, user_message_id='1', sent_message_id='abc',
-                  transport_metadata=None):
+                  transport_metadata=None, transport_name=None):
         if transport_metadata is None:
             transport_metadata = {}
+        if transport_name is None:
+            transport_name = self.transport_name
         return TransportEvent(
             event_type='ack',
             user_message_id=user_message_id,
             sent_message_id=sent_message_id,
-            transport_name=self.transport_name,
+            transport_name=transport_name,
             transport_metadata=transport_metadata,
             )
 
     def mkmsg_delivery(self, status='delivered', user_message_id='abc',
-                       transport_metadata=None):
+                       transport_metadata=None, transport_name=None):
         if transport_metadata is None:
             transport_metadata = {}
+        if transport_name is None:
+            transport_name = self.transport_name
         return TransportEvent(
             event_type='delivery_report',
-            transport_name=self.transport_name,
+            transport_name=transport_name,
             user_message_id=user_message_id,
             delivery_status=status,
             to_addr='+41791234567',
             transport_metadata=transport_metadata,
             )
 
-    def match_ack(self, *args, **kw):
-        msg = self.mkmsg_ack(*args, **kw)
-        msg['event_id'] = RegexMatcher(r'^[0-9a-fA-F]{32}$')
-        return msg
-
     def mkmsg_in(self, content='hello world', message_id='abc',
                  to_addr='9292', from_addr='+41791234567', group=None,
                  session_event=None, transport_type=None,
-                 helper_metadata=None, transport_metadata=None):
+                 helper_metadata=None, transport_metadata=None,
+                 transport_name=None):
         if transport_type is None:
             transport_type = self.transport_type
         if helper_metadata is None:
             helper_metadata = {}
         if transport_metadata is None:
             transport_metadata = {}
+        if transport_name is None:
+            transport_name = self.transport_name
         return TransportUserMessage(
             from_addr=from_addr,
             to_addr=to_addr,
             group=group,
             message_id=message_id,
-            transport_name=self.transport_name,
+            transport_name=transport_name,
             transport_type=transport_type,
             transport_metadata=transport_metadata,
             helper_metadata=helper_metadata,
@@ -457,12 +452,14 @@ class VumiWorkerTestCase(TestCase):
                   to_addr='+41791234567', from_addr='9292', group=None,
                   session_event=None, in_reply_to=None,
                   transport_type=None, transport_metadata=None,
-                  helper_metadata=None,
+                  transport_name=None, helper_metadata=None,
                   ):
         if transport_type is None:
             transport_type = self.transport_type
         if transport_metadata is None:
             transport_metadata = {}
+        if transport_name is None:
+            transport_name = self.transport_name
         if helper_metadata is None:
             helper_metadata = {}
         params = dict(
@@ -470,7 +467,7 @@ class VumiWorkerTestCase(TestCase):
             from_addr=from_addr,
             group=group,
             message_id=message_id,
-            transport_name=self.transport_name,
+            transport_name=transport_name,
             transport_type=transport_type,
             transport_metadata=transport_metadata,
             content=content,

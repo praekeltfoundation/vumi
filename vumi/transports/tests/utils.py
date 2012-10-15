@@ -38,6 +38,7 @@ class TransportTestCase(VumiWorkerTestCase, PersistenceMixin):
         if cls is None:
             cls = self.transport_class
         config = self.mk_config(config)
+        config.setdefault('transport_name', self.transport_name)
         return self.get_worker(config, cls, start)
 
     def assert_rkey_attr(self, rkey_suffix, obj, tr_name=None):

@@ -492,8 +492,6 @@ class UserGroupingRouterTestCase(DispatcherTestCase):
 
 class TestContentKeywordRouter(DispatcherTestCase):
 
-    timeout = 5
-
     dispatcher_class = BaseDispatchWorker
     transport_name = 'test_transport'
 
