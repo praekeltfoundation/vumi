@@ -1,5 +1,5 @@
 from twisted.internet.defer import inlineCallbacks
-from vumi.transports.tests.test_base import TransportTestCase
+from vumi.transports.tests.utils import TransportTestCase
 from vumi.scripts.inject_messages import MessageInjector
 import json
 import StringIO

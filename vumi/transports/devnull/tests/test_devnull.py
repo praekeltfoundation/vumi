@@ -1,6 +1,6 @@
 from twisted.internet.defer import inlineCallbacks
 
-from vumi.transports.tests.test_base import TransportTestCase
+from vumi.transports.tests.utils import TransportTestCase
 from vumi.transports.devnull import DevNullTransport
 from vumi.tests.utils import LogCatcher
 

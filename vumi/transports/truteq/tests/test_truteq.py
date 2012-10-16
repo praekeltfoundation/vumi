@@ -10,7 +10,7 @@ from twisted.internet.protocol import ServerFactory
 from ssmi import client
 
 from vumi.message import TransportUserMessage
-from vumi.transports.tests.test_base import TransportTestCase
+from vumi.transports.tests.utils import TransportTestCase
 from vumi.transports.truteq.truteq import TruteqTransport
 from vumi.tests.utils import LogCatcher
 
