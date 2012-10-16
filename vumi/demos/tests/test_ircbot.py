@@ -2,7 +2,7 @@
 
 from twisted.internet.defer import inlineCallbacks, returnValue
 
-from vumi.application.tests.test_base import ApplicationTestCase
+from vumi.application.tests.utils import ApplicationTestCase
 
 from vumi.demos.ircbot import MemoWorker
 from vumi.message import TransportUserMessage

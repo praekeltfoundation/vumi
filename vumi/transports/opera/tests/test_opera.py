@@ -11,7 +11,7 @@ from vumi.utils import http_request
 from vumi.transports.failures import PermanentFailure, TemporaryFailure
 from vumi.transports.opera.tests.test_opera_stubs import FakeXMLRPCService
 from vumi.transports.opera import OperaTransport
-from vumi.transports.tests.test_base import TransportTestCase
+from vumi.transports.tests.utils import TransportTestCase
 
 
 class OperaTransportTestCase(TransportTestCase):
