@@ -83,4 +83,6 @@ class TransportTestCase(VumiWorkerTestCase, PersistenceMixin):
         return self.clear_dispatched_inbound()
 
     def dispatch(self, message, rkey=None, exchange='vumi'):
-        return self.dispatch_outbound(message, rkey, exchange)
+        if rkey is None:
+            rkey = self.rkey('outbound')
+        return self._dispatch(message, rkey, exchange)

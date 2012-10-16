@@ -60,4 +60,6 @@ class ApplicationTestCase(VumiWorkerTestCase, PersistenceMixin):
         return self.clear_dispatched_outbound()
 
     def dispatch(self, message, rkey=None, exchange='vumi'):
-        return self.dispatch_inbound(message, rkey, exchange)
+        if rkey is None:
+            rkey = self.rkey('inbound')
+        return self._dispatch(message, rkey, exchange)

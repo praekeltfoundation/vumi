@@ -532,12 +532,14 @@ class VumiWorkerTestCase(TestCase):
         self._amqp.publish_message(exchange, rkey, message)
         return self._amqp.kick_delivery()
 
-    def dispatch_inbound(self, message, rkey=None, exchange='vumi'):
-        if rkey is None:
-            rkey = self.rkey('inbound')
-        return self._dispatch(message, rkey, exchange)
+    def dispatch_inbound(self, message):
+        return self._dispatch(message, self.rkey('inbound'))
 
-    def dispatch_outbound(self, message, rkey=None, exchange='vumi'):
-        if rkey is None:
-            rkey = self.rkey('outbound')
-        return self._dispatch(message, rkey, exchange)
+    def dispatch_outbound(self, message):
+        return self._dispatch(message, self.rkey('outbound'))
+
+    def dispatch_event(self, message):
+        return self._dispatch(message, self.rkey('event'))
+
+    def dispatch_failure(self, message):
+        return self._dispatch(message, self.rkey('failure'))
