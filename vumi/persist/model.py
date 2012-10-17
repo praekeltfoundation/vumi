@@ -195,6 +195,16 @@ class Model(object):
         return manager.riak_search(cls, query, return_keys)
 
     @classmethod
+    def riak_search_count(cls, manager, query):
+        """
+        Performs a raw riak search, does no inspection on the given query.
+
+        :returns:
+            A count of the results
+        """
+        return manager.riak_search_count(cls, query)
+
+    @classmethod
     def enable_search(cls, manager):
         """Enable solr indexing over for this model and manager."""
         return manager.riak_enable_search(cls)
@@ -305,8 +315,29 @@ class Manager(object):
         """Run a solr search over the bucket associated with cls and
         return the results as instances of cls (or as keys if return_keys is
         set to True)."""
-        raise NotImplementedError("Sub-classes of Manager should implement"
-                                  " .riak_search(...)")
+        bucket_name = self.bucket_name(cls)
+        mr = self.riak_map_reduce().search(bucket_name, query)
+        if not return_keys:
+            mr = mr.map(function="""
+                function (v) {
+                    return [[v.key, v.values[0]]]
+                }
+                """)
+
+        def map_handler(manager, key_and_result):
+            if return_keys:
+                return key_and_result.get_key()
+            else:
+                key, result = key_and_result
+                return cls.load(manager, key, result)
+
+        return self.run_map_reduce(mr, map_handler)
+
+    def riak_search_count(self, cls, query):
+        bucket_name = self.bucket_name(cls)
+        mr = self.riak_map_reduce().search(bucket_name, query)
+        mr = mr.reduce(function=["riak_kv_mapreduce", "reduce_count_inputs"])
+        return self.run_map_reduce(mr)
 
     def riak_enable_search(self, cls):
         """Enable solr searching indexing for the bucket associated with
@@ -343,6 +374,9 @@ class ModelProxy(object):
 
     def riak_search(self, *args, **kw):
         return self._modelcls.riak_search(self._manager, *args, **kw)
+
+    def riak_search_count(self, *args, **kw):
+        return self._modelcls.riak_search_count(self._manager, *args, **kw)
 
     def enable_search(self):
         return self._modelcls.enable_search(self._manager)

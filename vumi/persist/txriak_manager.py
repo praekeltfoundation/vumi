@@ -97,31 +97,12 @@ class TxRiakManager(Manager):
     def riak_map_reduce(self):
         return RiakMapReduce(self.client)
 
-    def riak_search(self, cls, query, return_keys=False):
-        bucket_name = self.bucket_name(cls)
-        mr = self.riak_map_reduce().search(bucket_name, query)
-        if not return_keys:
-            mr = mr.map(function="""
-                function (v) {
-                    return [[v.key, v.values[0]]]
-                }
-                """)
-
-        def map_handler(manager, key_and_result):
-            if return_keys:
-                return key_and_result.get_key()
-            else:
-                key, result = key_and_result
-                return cls.load(manager, key, result)
-
-        return self.run_map_reduce(mr, map_handler)
-
     def riak_enable_search(self, cls):
         bucket_name = self.bucket_name(cls)
         bucket = self.client.bucket(bucket_name)
         return bucket.enable_search()
 
-    def run_map_reduce(self, mapreduce, mapper_func):
+    def run_map_reduce(self, mapreduce, mapper_func=None):
         def map_results(raw_results):
             deferreds = []
             for row in raw_results:
@@ -129,7 +110,8 @@ class TxRiakManager(Manager):
             return gatherResults(deferreds)
 
         mapreduce_done = mapreduce.run()
-        mapreduce_done.addCallback(map_results)
+        if mapper_func is not None:
+            mapreduce_done.addCallback(map_results)
         return mapreduce_done
 
     @inlineCallbacks
