@@ -102,11 +102,14 @@ def fake_amq_message(dictionary, delivery_tag='delivery_tag'):
                    content=Content(body=json.dumps(dictionary)))
 
 
-def get_stubbed_worker(worker_class, config=None, broker=None):
+def get_fake_amq_client(broker=None):
     spec = get_spec(vumi_resource_path("amqp-spec-0-8.xml"))
-    amq_client = FakeAMQClient(spec, {}, broker)
+    return FakeAMQClient(spec, {}, broker)
+
+
+def get_stubbed_worker(worker_class, config=None, broker=None):
     worker = worker_class({}, config)
-    worker._amqp_client = amq_client
+    worker._amqp_client = get_fake_amq_client(broker)
     return worker
 
 
@@ -114,8 +117,7 @@ class StubbedWorkerCreator(WorkerCreator):
     broker = None
 
     def _connect(self, worker, timeout, bindAddress):
-        spec = get_spec(vumi_resource_path("amqp-spec-0-8.xml"))
-        amq_client = FakeAMQClient(spec, self.options, self.broker)
+        amq_client = get_fake_amq_client(self.broker)
         self.broker = amq_client.broker  # So we use the same broker for all.
         reactor.callLater(0, worker._amqp_connected, amq_client)
 
