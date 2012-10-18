@@ -167,6 +167,29 @@ class Model(object):
         return manager.run_map_reduce(mr, mapper)
 
     @classmethod
+    def by_index_count(cls, manager, **kw):
+        """Count objects by index.
+
+        :returns:
+            A count of items found.
+        """
+        kw_items = kw.items()
+        if len(kw_items) != 1:
+            raise ValueError("%s.by_index expects a key to search on." %
+                             cls.__name__)
+        key, value = kw_items[0]
+        descriptor = cls.field_descriptors[key]
+        if descriptor.index_name is None:
+            raise ValueError("%s.%s is not indexed" % (cls.__name__, key))
+        raw_value = descriptor.field.to_riak(value)
+
+        mr = manager.riak_map_reduce()
+        bucket = manager.bucket_name(cls)
+        mr.index(bucket, descriptor.index_name, unicode(raw_value))
+        mr = mr.reduce(function=["riak_kv_mapreduce", "reduce_count_inputs"])
+        return manager.run_map_reduce(mr)
+
+    @classmethod
     def search(cls, manager, return_keys=False, **kw):
         """Perform a solr search over this model.
 
@@ -368,6 +391,9 @@ class ModelProxy(object):
 
     def by_index(self, **kw):
         return self._modelcls.by_index(self._manager, **kw)
+
+    def by_index_count(self, **kw):
+        return self._modelcls.by_index_count(self._manager, **kw)
 
     def search(self, **kw):
         return self._modelcls.search(self._manager, **kw)

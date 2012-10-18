@@ -215,6 +215,16 @@ class MessageStore(object):
         events = yield message.backlinks.events()
         returnValue([e.event for e in events])
 
+    @Manager.calls_manager
+    def batch_inbound_count(self, batch_id):
+        [count] = yield self.inbound_messages.by_index_count(batch=batch_id)
+        returnValue(count)
+
+    @Manager.calls_manager
+    def batch_outbound_count(self, batch_id):
+        [count] = yield self.outbound_messages.by_index_count(batch=batch_id)
+        returnValue(count)
+
     # batch status is stored in Redis as a cache of batch progress
 
     def _batch_key(self, batch_id):
