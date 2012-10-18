@@ -209,6 +209,15 @@ class TestModelOnTxRiak(TestCase):
         self.assertEqual(obj.b, "two")
 
     @Manager.calls_manager
+    def test_by_index_count(self):
+        indexed_model = self.manager.proxy(IndexedModel)
+        yield indexed_model("foo1", a=1, b=u"one").save()
+        yield indexed_model("foo2", a=2, b=u"one").save()
+
+        self.assertEqual([1], (yield indexed_model.by_index_count(a=1)))
+        self.assertEqual([2], (yield indexed_model.by_index_count(b=u"one")))
+
+    @Manager.calls_manager
     def test_by_index_null(self):
         indexed_model = self.manager.proxy(IndexedModel)
         yield indexed_model("foo1", a=1, b=u"one").save()

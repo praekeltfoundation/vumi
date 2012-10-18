@@ -175,7 +175,7 @@ class Model(object):
         """
         kw_items = kw.items()
         if len(kw_items) != 1:
-            raise ValueError("%s.by_index expects a key to search on." %
+            raise ValueError("%s.by_index_count expects a key to search on." %
                              cls.__name__)
         key, value = kw_items[0]
         descriptor = cls.field_descriptors[key]
