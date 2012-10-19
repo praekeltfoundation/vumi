@@ -144,15 +144,8 @@ class Model(object):
         if len(kw_items) != 1:
             raise ValueError("%s.by_index expects a key to search on." %
                              cls.__name__)
-        key, value = kw_items[0]
-        descriptor = cls.field_descriptors[key]
-        if descriptor.index_name is None:
-            raise ValueError("%s.%s is not indexed" % (cls.__name__, key))
-        raw_value = descriptor.field.to_riak(value)
-
-        mr = manager.riak_map_reduce()
-        bucket = manager.bucket_name(cls)
-        return mr.index(bucket, descriptor.index_name, unicode(raw_value))
+        field_name, value = kw_items[0]
+        return manager.mr_from_field(cls, field_name, value)
 
     @classmethod
     def by_index(cls, manager, return_keys=False, **kw):
@@ -324,14 +317,41 @@ class Manager(object):
         """Run a map reduce instance and return the results mapped to
         objects by the map_function."""
         raise NotImplementedError("Sub-classes of Manager should implement"
-                                  " .riak_map_reduce(...)")
+                                  " .run_map_reduce(...)")
+
+    def mr_from_field(self, model, field_name, start_value, end_value=None):
+        descriptor = model.field_descriptors[field_name]
+        if descriptor.index_name is None:
+            raise ValueError("%s.%s is not indexed" % (
+                    model.__name__, field_name))
+
+        start_value = str(descriptor.field.to_riak(start_value))
+        if end_value is not None:
+            end_value = str(descriptor.field.to_riak(end_value))
+
+        return self.mr_from_index(
+            model, descriptor.index_name, start_value, end_value)
+
+    def mr_from_index(self, model, index_name, start_value, end_value=None):
+        return self.riak_map_reduce().index(
+            self.bucket_name(model), index_name, start_value, end_value)
+
+    def mr_from_search(self, model, query):
+        return self.riak_map_reduce().search(self.bucket_name(model), query)
+
+    def mr_from_keys(self, model, keys):
+        bucket_name = self.bucket_name(model)
+        mr = self.riak_map_reduce()
+        for key in keys:
+            mr.add_bucket_key_data(bucket_name, key, None)
+        return mr
 
     def riak_search(self, cls, query, return_keys=False):
         """Run a solr search over the bucket associated with cls and
         return the results as instances of cls (or as keys if return_keys is
         set to True)."""
-        bucket_name = self.bucket_name(cls)
-        mr = self.riak_map_reduce().search(bucket_name, query)
+        # TODO: Replace and deprecate?
+        mr = self.mr_from_search(cls, query)
         if not return_keys:
             mr = mr.map(function="""
                 function (v) {
@@ -349,8 +369,8 @@ class Manager(object):
         return self.run_map_reduce(mr, map_handler)
 
     def riak_search_count(self, cls, query):
-        bucket_name = self.bucket_name(cls)
-        mr = self.riak_map_reduce().search(bucket_name, query)
+        # TODO: Replace and deprecate?
+        mr = self.mr_from_search(cls, query)
         mr = mr.reduce(function=["riak_kv_mapreduce", "reduce_count_inputs"])
         return self.run_map_reduce(mr)
 
