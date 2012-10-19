@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
 
@@ -5,7 +6,6 @@ from vumi.persist.fake_redis import FakeRedis
 
 
 class FakeRedisTestCase(TestCase):
-    timeout = 1
 
     def setUp(self):
         self.redis = FakeRedis()
@@ -77,6 +77,29 @@ class FakeRedisTestCase(TestCase):
             'zrange', 'set', 0, -1, withscores=True, desc=True)
 
     @inlineCallbacks
+    def test_zrangebyscore(self):
+        yield self.redis.zadd('set', one=0.1, two=0.2, three=0.3, four=0.4,
+            five=0.5)
+        yield self.assert_redis_op(['two', 'three', 'four'], 'zrangebyscore',
+            'set', 0.2, 0.4)
+        yield self.assert_redis_op(['two', 'three'], 'zrangebyscore',
+            'set', 0.2, 0.4, 0, 2)
+        yield self.assert_redis_op(['three'], 'zrangebyscore',
+            'set', '(0.2', '(0.4')
+        yield self.assert_redis_op(['two', 'three', 'four', 'five'],
+            'zrangebyscore', 'set', '0.2', '+inf')
+        yield self.assert_redis_op(['one', 'two'],
+            'zrangebyscore', 'set', '-inf', '0.2')
+
+    @inlineCallbacks
+    def test_zrangebyscore_with_scores(self):
+        yield self.redis.zadd('set', one=0.1, two=0.2, three=0.3, four=0.4,
+            five=0.5)
+        yield self.assert_redis_op(
+            [('two', 0.2), ('three', 0.3), ('four', 0.4)],
+            'zrangebyscore', 'set', 0.2, 0.4, withscores=True)
+
+    @inlineCallbacks
     def test_zcard(self):
         yield self.assert_redis_op(0, 'zcard', 'set')
         yield self.redis.zadd('set', one=0.1, two=0.2)
@@ -91,6 +114,12 @@ class FakeRedisTestCase(TestCase):
         yield self.assert_redis_op(False, 'zrem', 'set', 'one')
         yield self.assert_redis_op(
             [('two', 0.2)], 'zrange', 'set', 0, -1, withscores=True)
+
+    @inlineCallbacks
+    def test_zscore(self):
+        yield self.redis.zadd('set', one=0.1, two=0.2)
+        yield self.assert_redis_op(0.1, 'zscore', 'set', 'one')
+        yield self.assert_redis_op(0.2, 'zscore', 'set', 'two')
 
     @inlineCallbacks
     def test_hgetall_returns_copy(self):
@@ -146,6 +175,30 @@ class FakeRedisTestCase(TestCase):
         yield self.assert_redis_op(set(['1']), 'sunion', 'set1')
         yield self.assert_redis_op(set(['1', '2']), 'sunion', 'set1', 'set2')
         yield self.assert_redis_op(set(), 'sunion', 'other')
+
+    @inlineCallbacks
+    def test_rpop(self):
+        yield self.redis.lpush('key', 1)
+        yield self.redis.lpush('key', 2)
+        yield self.redis.lpush('key', 3)
+        yield self.assert_redis_op(1, 'rpop', 'key')
+        yield self.assert_redis_op(2, 'rpop', 'key')
+        yield self.assert_redis_op(3, 'rpop', 'key')
+        yield self.assert_redis_op(None, 'rpop', 'key')
+
+    @inlineCallbacks
+    def test_rpoplpush(self):
+        yield self.redis.lpush('source', 1)
+        yield self.redis.lpush('source', 2)
+        yield self.redis.lpush('source', 3)
+        yield self.assert_redis_op(1, 'rpoplpush', 'source', 'destination')
+        yield self.assert_redis_op(2, 'rpoplpush', 'source', 'destination')
+        yield self.assert_redis_op(3, 'rpoplpush', 'source', 'destination')
+        yield self.assert_redis_op(None, 'rpop', 'source')
+        yield self.assert_redis_op(1, 'rpop', 'destination')
+        yield self.assert_redis_op(2, 'rpop', 'destination')
+        yield self.assert_redis_op(3, 'rpop', 'destination')
+        yield self.assert_redis_op(None, 'rpop', 'destination')
 
     @inlineCallbacks
     def test_lrem(self):
@@ -210,6 +263,45 @@ class FakeRedisTestCase(TestCase):
         yield self.redis.hset("hash_key", "a", 1.0)
         yield self.assert_redis_op('hash', 'type', 'hash_key')
 
+
+class FakeRedisCharsetHandlingTestCase(TestCase):
+
+    def setUp(self):
+        self._redises = []
+
+    def tearDown(self):
+        for redis in self._redises:
+            redis.teardown()
+
+    def get_redis(self, *args, **kwargs):
+        redis = FakeRedis(*args, **kwargs)
+        self._redises.append(redis)
+        return redis
+
+    def assert_redis_op(self, redis, expected, op, *args, **kw):
+        self.assertEqual(expected, getattr(redis, op)(*args, **kw))
+
+    @inlineCallbacks
+    def test_charset_encoding_default(self):
+        # Redis client assumes utf-8
+        redis = self.get_redis()
+        yield redis.set('name', u'Zoë Destroyer of Ascii')
+        yield self.assert_redis_op(redis, 'Zo\xc3\xab Destroyer of Ascii',
+            'get', 'name')
+
+    @inlineCallbacks
+    def test_charset_encoding_custom_replace(self):
+        redis = self.get_redis(charset='ascii', errors='replace')
+        yield redis.set('name', u'Zoë Destroyer of Ascii')
+        yield self.assert_redis_op(redis, 'Zo? Destroyer of Ascii',
+            'get', 'name')
+
+    @inlineCallbacks
+    def test_charset_encoding_custom_ignore(self):
+        redis = self.get_redis(charset='ascii', errors='ignore')
+        yield redis.set('name', u'Zoë Destroyer of Ascii')
+        yield self.assert_redis_op(redis, 'Zo Destroyer of Ascii',
+            'get', 'name')
 
 class FakeTxRedisTestCase(FakeRedisTestCase):
     def setUp(self):

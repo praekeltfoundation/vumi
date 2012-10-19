@@ -32,6 +32,13 @@ class TransportPresenceClientProtocol(PresenceClientProtocol):
     A custom presence protocol to automatically accept any subscription
     attempt.
     """
+    def __init__(self, initialized_callback, *args, **kwargs):
+        super(TransportPresenceClientProtocol, self).__init__(*args, **kwargs)
+        self.initialized_callback = initialized_callback
+
+    def connectionInitialized(self):
+        super(TransportPresenceClientProtocol, self).connectionInitialized()
+        self.initialized_callback()
 
     def subscribeReceived(self, entity):
         self.subscribe(entity)
@@ -153,9 +160,8 @@ class XMPPTransport(Transport):
         self.xmpp_client.logTraffic = self.debug
         self.xmpp_client.setServiceParent(self)
 
-        self.presence = TransportPresenceClientProtocol()
+        self.presence = TransportPresenceClientProtocol(self.announce_presence)
         self.presence.setHandlerParent(self.xmpp_client)
-        self.presence_call.start(self.presence_interval)
 
         self.pinger = PingClientProtocol()
         self.pinger.setHandlerParent(self.xmpp_client)
@@ -169,6 +175,10 @@ class XMPPTransport(Transport):
         self.xmpp_protocol.setHandlerParent(self.xmpp_client)
 
         log.msg("XMPPTransport %s started." % self.transport_name)
+
+    def announce_presence(self):
+        if not self.presence_call.running:
+            self.presence_call.start(self.presence_interval)
 
     @inlineCallbacks
     def send_ping(self):

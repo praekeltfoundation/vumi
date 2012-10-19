@@ -34,7 +34,8 @@ class TestMessageStore(ApplicationTestCase):
     def _create_outbound(self, tag=("pool", "tag"), by_batch=False):
         """Create and store an outbound message."""
         add_kw, batch_id = yield self._maybe_batch(tag, by_batch)
-        msg = self.mkmsg_out(content="outfoo")
+        msg = self.mkmsg_out(content="outfoo",
+                             message_id=TransportEvent.generate_id())
         msg_id = msg['message_id']
         yield self.store.add_outbound_message(msg, **add_kw)
         returnValue((msg_id, msg, batch_id))
@@ -44,7 +45,8 @@ class TestMessageStore(ApplicationTestCase):
         """Create and store an inbound message."""
         add_kw, batch_id = yield self._maybe_batch(tag, by_batch)
         msg = self.mkmsg_in(content="infoo", to_addr="+1234567810001",
-                            transport_type="sms")
+                            transport_type="sms",
+                            message_id=TransportEvent.generate_id())
         msg_id = msg['message_id']
         yield self.store.add_inbound_message(msg, **add_kw)
         returnValue((msg_id, msg, batch_id))
@@ -205,3 +207,19 @@ class TestMessageStore(ApplicationTestCase):
 
         self.assertEqual(stored_msg, msg)
         self.assertEqual(batch_replies, [msg])
+
+    @inlineCallbacks
+    def test_inbound_counts(self):
+        _msg_id, _msg, batch_id = yield self._create_inbound(by_batch=True)
+        self.assertEqual(1, (yield self.store.batch_inbound_count(batch_id)))
+        yield self.store.add_inbound_message(self.mkmsg_in(
+                message_id=TransportEvent.generate_id()), batch_id=batch_id)
+        self.assertEqual(2, (yield self.store.batch_inbound_count(batch_id)))
+
+    @inlineCallbacks
+    def test_outbound_counts(self):
+        _msg_id, _msg, batch_id = yield self._create_outbound(by_batch=True)
+        self.assertEqual(1, (yield self.store.batch_outbound_count(batch_id)))
+        yield self.store.add_outbound_message(self.mkmsg_out(
+                message_id=TransportEvent.generate_id()), batch_id=batch_id)
+        self.assertEqual(2, (yield self.store.batch_outbound_count(batch_id)))

@@ -87,6 +87,14 @@ class VumiRedis(txr.Redis):
                                              withscores=withscores,
                                              reverse=desc)
 
+    def zrangebyscore(self, key, min, max, start=None, num=None,
+                     withscores=False, score_cast_func=float):
+        d = super(VumiRedis, self).zrangebyscore(key, min, max,
+                        offset=start, count=num, withscores=withscores)
+        if withscores:
+            d.addCallback(lambda r: [(v, score_cast_func(s)) for v, s in r])
+        return d
+
 
 class VumiRedisClientFactory(txr.RedisClientFactory):
     protocol = VumiRedis

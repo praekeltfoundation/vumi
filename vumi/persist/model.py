@@ -90,7 +90,7 @@ class Model(object):
         if _riak_object is not None:
             self._riak_object = _riak_object
         else:
-            self._riak_object = manager.riak_object(self, key)
+            self._riak_object = manager.riak_object(type(self), key)
             for field_name, descriptor in self.field_descriptors.iteritems():
                 field = descriptor.field
                 if not field.initializable:
@@ -139,13 +139,7 @@ class Model(object):
         return manager.load(cls, key, result=result)
 
     @classmethod
-    def by_index(cls, manager, return_keys=False, **kw):
-        """Find objects by index.
-
-        :returns:
-            A list of model instances (or a list of keys if
-            return_keys is set to True).
-        """
+    def _from_index(cls, manager, **kw):
         kw_items = kw.items()
         if len(kw_items) != 1:
             raise ValueError("%s.by_index expects a key to search on." %
@@ -158,13 +152,34 @@ class Model(object):
 
         mr = manager.riak_map_reduce()
         bucket = manager.bucket_name(cls)
-        mr.index(bucket, descriptor.index_name, unicode(raw_value))
+        return mr.index(bucket, descriptor.index_name, unicode(raw_value))
+
+    @classmethod
+    def by_index(cls, manager, return_keys=False, **kw):
+        """Find objects by index.
+
+        :returns:
+            A list of model instances (or a list of keys if
+            return_keys is set to True).
+        """
+        mr = cls._from_index(manager, **kw)
         if return_keys:
             mapper = lambda manager, result: result.get_key()
         else:
             mapper = lambda manager, result: cls.load(manager,
                                                       result.get_key())
         return manager.run_map_reduce(mr, mapper)
+
+    @classmethod
+    def by_index_count(cls, manager, **kw):
+        """Count objects by index.
+
+        :returns:
+            A count of items found.
+        """
+        mr = cls._from_index(manager, **kw)
+        mr = mr.reduce(function=["riak_kv_mapreduce", "reduce_count_inputs"])
+        return manager.run_map_reduce(mr)
 
     @classmethod
     def search(cls, manager, return_keys=False, **kw):
@@ -181,7 +196,28 @@ class Model(object):
             value = value.replace("'", "\\'")
             kw[k] = value
         query = " AND ".join("%s:'%s'" % (k, v) for k, v in kw.iteritems())
-        return manager.riak_search(cls, query, return_keys=return_keys)
+        return cls.riak_search(manager, query, return_keys=return_keys)
+
+    @classmethod
+    def riak_search(cls, manager, query, return_keys=False):
+        """
+        Performs a raw riak search, does no inspection on the given query.
+
+        :returns:
+            A lit of model instances (or a list of keys if
+            return_keys is set to True)
+        """
+        return manager.riak_search(cls, query, return_keys)
+
+    @classmethod
+    def riak_search_count(cls, manager, query):
+        """
+        Performs a raw riak search, does no inspection on the given query.
+
+        :returns:
+            A count of the results
+        """
+        return manager.riak_search_count(cls, query)
 
     @classmethod
     def enable_search(cls, manager):
@@ -192,16 +228,10 @@ class Model(object):
 class Manager(object):
     """A wrapper around a Riak client."""
 
-    # By default we do not fetch the objects as part of a mapreduce call.
-    # This has the mapreduce return a list of keys which would require
-    # another set of calls to get the individual objects. For asynchronous
-    # managers this would be preferable, for synchronous managers one
-    # would likely want to fetch the objects as part of the mapreduce call.
-    fetch_objects = False
-
     def __init__(self, client, bucket_prefix):
         self.client = client
         self.bucket_prefix = bucket_prefix
+        self._bucket_cache = {}
 
     def proxy(self, modelcls):
         return ModelProxy(self, modelcls)
@@ -211,6 +241,15 @@ class Manager(object):
 
     def bucket_name(self, modelcls_or_obj):
         return self.bucket_prefix + modelcls_or_obj.bucket
+
+    def bucket_for_cls(self, cls):
+        cls_id = id(cls)
+        bucket = self._bucket_cache.get(cls_id)
+        if bucket is None:
+            bucket_name = self.bucket_name(cls)
+            bucket = self.client.bucket(bucket_name)
+            self._bucket_cache[cls_id] = bucket
+        return bucket
 
     @staticmethod
     def calls_manager(manager_attr):
@@ -291,8 +330,29 @@ class Manager(object):
         """Run a solr search over the bucket associated with cls and
         return the results as instances of cls (or as keys if return_keys is
         set to True)."""
-        raise NotImplementedError("Sub-classes of Manager should implement"
-                                  " .riak_search(...)")
+        bucket_name = self.bucket_name(cls)
+        mr = self.riak_map_reduce().search(bucket_name, query)
+        if not return_keys:
+            mr = mr.map(function="""
+                function (v) {
+                    return [[v.key, v.values[0]]]
+                }
+                """)
+
+        def map_handler(manager, key_and_result):
+            if return_keys:
+                return key_and_result.get_key()
+            else:
+                key, result = key_and_result
+                return cls.load(manager, key, result)
+
+        return self.run_map_reduce(mr, map_handler)
+
+    def riak_search_count(self, cls, query):
+        bucket_name = self.bucket_name(cls)
+        mr = self.riak_map_reduce().search(bucket_name, query)
+        mr = mr.reduce(function=["riak_kv_mapreduce", "reduce_count_inputs"])
+        return self.run_map_reduce(mr)
 
     def riak_enable_search(self, cls):
         """Enable solr searching indexing for the bucket associated with
@@ -324,8 +384,17 @@ class ModelProxy(object):
     def by_index(self, **kw):
         return self._modelcls.by_index(self._manager, **kw)
 
+    def by_index_count(self, **kw):
+        return self._modelcls.by_index_count(self._manager, **kw)
+
     def search(self, **kw):
         return self._modelcls.search(self._manager, **kw)
+
+    def riak_search(self, *args, **kw):
+        return self._modelcls.riak_search(self._manager, *args, **kw)
+
+    def riak_search_count(self, *args, **kw):
+        return self._modelcls.riak_search_count(self._manager, *args, **kw)
 
     def enable_search(self):
         return self._modelcls.enable_search(self._manager)

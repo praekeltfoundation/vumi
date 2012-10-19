@@ -94,6 +94,7 @@ class ApplicationWorker(Worker):
             consumer = self._consumers.pop()
             yield consumer.stop()
         yield self.teardown_application()
+        yield self.teardown_middleware()
 
     def _validate_config(self):
         if 'transport_name' not in self.config:
@@ -142,6 +143,15 @@ class ApplicationWorker(Worker):
         """
         middlewares = yield setup_middlewares_from_config(self, self.config)
         self._middlewares = MiddlewareStack(middlewares)
+
+    def teardown_middleware(self):
+        """
+        Middleware teardown happens here.
+
+        Subclasses should not override this unless they need to do nonstandard
+        middleware teardown.
+        """
+        return self._middlewares.teardown()
 
     def _dispatch_event_raw(self, event):
         event_type = event.get('event_type')
