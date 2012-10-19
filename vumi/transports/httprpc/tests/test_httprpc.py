@@ -1,13 +1,12 @@
 import json
 
-from twisted.internet.defer import inlineCallbacks, DeferredQueue
-from twisted.internet.base import DelayedCall
+from twisted.internet.defer import inlineCallbacks
+from twisted.internet.task import Clock
 
-from vumi.utils import http_request
+from vumi.utils import http_request, http_request_full
 from vumi.transports.tests.test_base import TransportTestCase
 from vumi.transports.httprpc import HttpRpcTransport
 from vumi.message import TransportUserMessage
-from vumi.tests.utils import MockHttpServer
 
 
 class OkTransport(HttpRpcTransport):
@@ -28,16 +27,22 @@ class OkTransport(HttpRpcTransport):
 
 class TestTransport(TransportTestCase):
 
+    timeout = 1
     transport_class = OkTransport
 
     @inlineCallbacks
     def setUp(self):
         yield super(TestTransport, self).setUp()
+        self.clock = Clock()
+        self.patch(OkTransport, 'get_clock', lambda _: self.clock)
         config = {
             'web_path': "foo",
             'web_port': 0,
             'username': 'testuser',
             'password': 'testpass',
+            'request_timeout': 10,
+            'request_timeout_status_code': 418,
+            'request_timeout_body': 'I am a teapot',
             }
         self.transport = yield self.get_transport(config)
         self.transport_url = self.transport.get_transport_url()
@@ -60,6 +65,15 @@ class TestTransport(TransportTestCase):
         yield self.dispatch(rep)
         response = yield d
         self.assertEqual(response, 'OK')
+
+    @inlineCallbacks
+    def test_timeout(self):
+        d = http_request_full(self.transport_url + "foo", '', method='GET')
+        msg, = yield self.wait_for_dispatched_messages(1)
+        self.clock.advance(10.1)  # .1 second after timeout
+        response = yield d
+        self.assertEqual(response.delivered_body, 'I am a teapot')
+        self.assertEqual(response.code, 418)
 
 
 class JSONTransport(HttpRpcTransport):
