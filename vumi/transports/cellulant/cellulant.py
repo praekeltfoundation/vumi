@@ -108,5 +108,5 @@ class CellulantTransport(HttpRpcTransport):
         if message.payload.get('in_reply_to') and 'content' in message.payload:
             self.finish_request(message['in_reply_to'],
                                 pack_ussd_message(message).encode('utf-8'))
-            yield self.publish_ack(user_message_id=message['message_id'],
+            return self.publish_ack(user_message_id=message['message_id'],
                 sent_message_id=message['message_id'])
