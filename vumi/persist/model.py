@@ -139,13 +139,7 @@ class Model(object):
         return manager.load(cls, key, result=result)
 
     @classmethod
-    def by_index(cls, manager, return_keys=False, **kw):
-        """Find objects by index.
-
-        :returns:
-            A list of model instances (or a list of keys if
-            return_keys is set to True).
-        """
+    def _from_index(cls, manager, **kw):
         kw_items = kw.items()
         if len(kw_items) != 1:
             raise ValueError("%s.by_index expects a key to search on." %
@@ -158,7 +152,17 @@ class Model(object):
 
         mr = manager.riak_map_reduce()
         bucket = manager.bucket_name(cls)
-        mr.index(bucket, descriptor.index_name, unicode(raw_value))
+        return mr.index(bucket, descriptor.index_name, unicode(raw_value))
+
+    @classmethod
+    def by_index(cls, manager, return_keys=False, **kw):
+        """Find objects by index.
+
+        :returns:
+            A list of model instances (or a list of keys if
+            return_keys is set to True).
+        """
+        mr = cls._from_index(manager, **kw)
         if return_keys:
             mapper = lambda manager, result: result.get_key()
         else:
@@ -173,19 +177,7 @@ class Model(object):
         :returns:
             A count of items found.
         """
-        kw_items = kw.items()
-        if len(kw_items) != 1:
-            raise ValueError("%s.by_index_count expects a key to search on." %
-                             cls.__name__)
-        key, value = kw_items[0]
-        descriptor = cls.field_descriptors[key]
-        if descriptor.index_name is None:
-            raise ValueError("%s.%s is not indexed" % (cls.__name__, key))
-        raw_value = descriptor.field.to_riak(value)
-
-        mr = manager.riak_map_reduce()
-        bucket = manager.bucket_name(cls)
-        mr.index(bucket, descriptor.index_name, unicode(raw_value))
+        mr = cls._from_index(manager, **kw)
         mr = mr.reduce(function=["riak_kv_mapreduce", "reduce_count_inputs"])
         return manager.run_map_reduce(mr)
 
