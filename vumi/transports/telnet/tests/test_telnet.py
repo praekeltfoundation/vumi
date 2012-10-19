@@ -9,7 +9,7 @@ from twisted.internet import reactor, protocol
 
 from vumi.message import TransportUserMessage
 from vumi.transports.telnet import TelnetServerTransport
-from vumi.transports.tests.test_base import TransportTestCase
+from vumi.transports.tests.utils import TransportTestCase
 
 
 class ClientProtocol(LineReceiver):

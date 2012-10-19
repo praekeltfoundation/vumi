@@ -7,7 +7,7 @@ from twisted.internet.defer import inlineCallbacks, DeferredQueue
 
 from vumi.utils import http_request, http_request_full
 from vumi.tests.utils import MockHttpServer
-from vumi.transports.tests.test_base import TransportTestCase
+from vumi.transports.tests.utils import TransportTestCase
 from vumi.transports.mediafonemc import MediafoneTransport
 
 

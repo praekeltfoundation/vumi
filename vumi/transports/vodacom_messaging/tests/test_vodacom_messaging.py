@@ -4,7 +4,7 @@ from urllib import urlencode
 
 from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
-from vumi.transports.tests.test_base import TransportTestCase
+from vumi.transports.tests.utils import TransportTestCase
 from vumi.utils import http_request
 from vumi.transports.vodacom_messaging import (VodacomMessagingResponse,
     VodacomMessagingTransport)

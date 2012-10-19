@@ -11,7 +11,7 @@ from vumi.tests.utils import LogCatcher
 from vumi.transports.failures import FailureMessage, TemporaryFailure
 from vumi.transports.irc.irc import IrcMessage, VumiBotProtocol
 from vumi.transports.irc import IrcTransport
-from vumi.transports.tests.test_base import TransportTestCase
+from vumi.transports.tests.utils import TransportTestCase
 
 
 class TestIrcMessage(unittest.TestCase):

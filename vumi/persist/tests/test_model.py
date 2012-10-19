@@ -1,7 +1,7 @@
 """Tests for vumi.persist.model."""
 
 from twisted.trial.unittest import TestCase
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import inlineCallbacks, maybeDeferred
 
 from vumi.persist.model import Model, Manager
 from vumi.persist.fields import (
@@ -65,7 +65,7 @@ class TestModelOnTxRiak(TestCase):
         try:
             from vumi.persist.txriak_manager import TxRiakManager
         except ImportError, e:
-            import_skip(e, 'riakasaurus.riak')
+            import_skip(e, 'riakasaurus', 'riakasaurus.riak')
         self.manager = TxRiakManager.from_config({'bucket_prefix': 'test.'})
         yield self.manager.purge_all()
 
@@ -143,12 +143,29 @@ class TestModelOnTxRiak(TestCase):
         [s2] = yield simple_model.riak_search('a:2 AND b:def')
         self.assertEqual(s2.key, "two")
 
-        [s1, s2] = yield simple_model.riak_search('b:abc OR b:def')
+        [s1, s2] = sorted((yield simple_model.riak_search('b:abc OR b:def')),
+                          key=lambda s: s.key)
         self.assertEqual(s1.key, "one")
         self.assertEqual(s2.key, "two")
 
         keys = yield simple_model.riak_search('a:2', return_keys=True)
         self.assertEqual(sorted(keys), ["three", "two"])
+
+    @Manager.calls_manager
+    def test_simple_riak_search_count(self):
+        simple_model = self.manager.proxy(SimpleModel)
+        yield simple_model.enable_search()
+        yield simple_model("one", a=1, b=u'abc').save()
+        yield simple_model("two", a=2, b=u'def').save()
+        yield simple_model("three", a=2, b=u'ghi').save()
+
+        def assert_count(expected, query):
+            d = maybeDeferred(simple_model.riak_search_count, query)
+            return d.addCallback(self.assertEqual, expected)
+
+        yield assert_count([1], 'a:1')
+        yield assert_count([1], 'a:2 AND b:def')
+        yield assert_count([2], 'b:abc OR b:def')
 
     @Manager.calls_manager
     def test_simple_instance(self):
@@ -190,6 +207,15 @@ class TestModelOnTxRiak(TestCase):
         [obj] = yield indexed_model.by_index(b="two")
         self.assertEqual(obj.key, "foo2")
         self.assertEqual(obj.b, "two")
+
+    @Manager.calls_manager
+    def test_by_index_count(self):
+        indexed_model = self.manager.proxy(IndexedModel)
+        yield indexed_model("foo1", a=1, b=u"one").save()
+        yield indexed_model("foo2", a=2, b=u"one").save()
+
+        self.assertEqual([1], (yield indexed_model.by_index_count(a=1)))
+        self.assertEqual([2], (yield indexed_model.by_index_count(b=u"one")))
 
     @Manager.calls_manager
     def test_by_index_null(self):

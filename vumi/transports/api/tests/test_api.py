@@ -5,7 +5,7 @@ from urllib import urlencode
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.utils import http_request, http_request_full
-from vumi.transports.tests.test_base import TransportTestCase
+from vumi.transports.tests.utils import TransportTestCase
 from vumi.transports.api import HttpApiTransport
 from vumi.message import TransportUserMessage
 

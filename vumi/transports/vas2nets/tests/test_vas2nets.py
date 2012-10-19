@@ -9,7 +9,7 @@ from twisted.python import log
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.utils import http_request_full
-from vumi.transports.tests.test_base import TransportTestCase
+from vumi.transports.tests.utils import TransportTestCase
 from vumi.tests.utils import get_stubbed_worker, TestResourceWorker
 from vumi.message import TransportMessage
 from vumi.transports.failures import TemporaryFailure, PermanentFailure

@@ -2,12 +2,9 @@
 
 """A manager implementation on top of txriak."""
 
-from riakasaurus.riak import RiakClient, RiakObject, RiakMapReduce, RiakLink
-import riakasaurus
+from riakasaurus.riak import RiakClient, RiakObject, RiakMapReduce
 from twisted.internet.defer import (
     inlineCallbacks, gatherResults, maybeDeferred, succeed)
-
-from distutils.version import LooseVersion
 
 from vumi.persist.model import Manager
 
@@ -24,15 +21,49 @@ class TxRiakManager(Manager):
         client = RiakClient(**config)
         return cls(client, bucket_prefix)
 
+    def _encode_indexes(self, iterable, encoding='utf-8'):
+        """
+        From Basho's docs:
+
+            When using the HTTP interface, multi-valued indexes are specified
+            by separating the values with a comma (,). For that reason,
+            your application should avoid using a comma as part of an
+            index value.
+
+        The index values we get can either be a single string value or can
+        be a tuple of multiple values that need to be set. If we get a tuple
+        then convert it to a comma separated string.
+        """
+        encoded = []
+        for key, value in iterable:
+            if not isinstance(value, (list, tuple)):
+                value = [value]
+
+            value = ", ".join([v.encode(encoding) for v in value])
+            key = key.encode(encoding)
+            encoded.append((key, value))
+
+        return encoded
+
     def riak_object(self, cls, key, result=None):
-        bucket_name = self.bucket_name(cls)
-        bucket = self.client.bucket(bucket_name)
+        bucket = self.bucket_for_cls(cls)
         riak_object = RiakObject(self.client, bucket, key)
         if result:
             metadata = result['metadata']
-            data = result['data']
-            riak_object.set_content_type(metadata['content-type'])
-            riak_object.set_indexes(metadata['index'].items())
+            indexes = metadata['index']
+            if hasattr(indexes, 'items'):
+                # TODO: I think this is a Riak bug. In some cases
+                #       (maybe when there are no indexes?) the index
+                #       comes back as a list, in others (maybe when
+                #       there are indexes?) it comes back as a dict.
+                indexes = indexes.items()
+
+            content_type = metadata['content-type'].encode('utf-8')
+            indexes = self._encode_indexes(indexes, 'utf-8')
+            data = result['data'].encode('utf-8')
+
+            riak_object.set_content_type(content_type)
+            riak_object.set_indexes(indexes)
             riak_object.set_encoded_data(data)
         else:
             riak_object.set_data({})
@@ -66,43 +97,21 @@ class TxRiakManager(Manager):
     def riak_map_reduce(self):
         return RiakMapReduce(self.client)
 
-    def riak_search(self, cls, query, return_keys=False):
-        bucket_name = self.bucket_name(cls)
-
-        def map_result_to_objects(result):
-            docs = result['response']['docs']
-            keys = [doc['id'] for doc in docs]
-            if return_keys:
-                return keys
-            return self.load_list(cls, keys)
-
-        d = self.client.solr().search(bucket_name, query)
-        d.addCallback(map_result_to_objects)
-        return d
-
     def riak_enable_search(self, cls):
         bucket_name = self.bucket_name(cls)
         bucket = self.client.bucket(bucket_name)
         return bucket.enable_search()
 
-    def run_map_reduce(self, mapreduce, mapper_func):
-        mapreduce_done = mapreduce.run()
-
+    def run_map_reduce(self, mapreduce, mapper_func=None):
         def map_results(raw_results):
             deferreds = []
-
-            if LooseVersion(riakasaurus.VERSION) >= LooseVersion("1.0.6"):
-                # Riakasaurus now provides links by default
-                for link in raw_results:
-                    deferreds.append(maybeDeferred(mapper_func, self, link))
-            else:
-                for row in raw_results:
-                    link = RiakLink(row[0], row[1])
-                    deferreds.append(maybeDeferred(mapper_func, self, link))
-
+            for row in raw_results:
+                deferreds.append(maybeDeferred(mapper_func, self, row))
             return gatherResults(deferreds)
 
-        mapreduce_done.addCallback(map_results)
+        mapreduce_done = mapreduce.run()
+        if mapper_func is not None:
+            mapreduce_done.addCallback(map_results)
         return mapreduce_done
 
     @inlineCallbacks

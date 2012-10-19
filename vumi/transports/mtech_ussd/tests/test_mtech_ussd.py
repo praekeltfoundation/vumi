@@ -1,7 +1,7 @@
 from twisted.internet.defer import inlineCallbacks
 from twisted.trial.unittest import TestCase
 
-from vumi.transports.tests.test_base import TransportTestCase
+from vumi.transports.tests.utils import TransportTestCase
 from vumi.utils import http_request_full
 from vumi.message import TransportUserMessage
 from vumi.transports.mtech_ussd import MtechUssdTransport
