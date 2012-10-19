@@ -207,3 +207,19 @@ class TestMessageStore(ApplicationTestCase):
 
         self.assertEqual(stored_msg, msg)
         self.assertEqual(batch_replies, [msg])
+
+    @inlineCallbacks
+    def test_inbound_counts(self):
+        _msg_id, _msg, batch_id = yield self._create_inbound(by_batch=True)
+        self.assertEqual(1, (yield self.store.batch_inbound_count(batch_id)))
+        yield self.store.add_inbound_message(self.mkmsg_in(
+                message_id=TransportEvent.generate_id()), batch_id=batch_id)
+        self.assertEqual(2, (yield self.store.batch_inbound_count(batch_id)))
+
+    @inlineCallbacks
+    def test_outbound_counts(self):
+        _msg_id, _msg, batch_id = yield self._create_outbound(by_batch=True)
+        self.assertEqual(1, (yield self.store.batch_outbound_count(batch_id)))
+        yield self.store.add_outbound_message(self.mkmsg_out(
+                message_id=TransportEvent.generate_id()), batch_id=batch_id)
+        self.assertEqual(2, (yield self.store.batch_outbound_count(batch_id)))
