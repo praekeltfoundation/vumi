@@ -325,7 +325,13 @@ class Manager(object):
             raise ValueError("%s.%s is not indexed" % (
                     model.__name__, field_name))
 
-        start_value = str(descriptor.field.to_riak(start_value))
+        # The Riak client library does silly things under the hood.
+        start_value = descriptor.field.to_riak(start_value)
+        if start_value is None:
+            start_value = ''
+        else:
+            start_value = str(start_value)
+
         if end_value is not None:
             end_value = str(descriptor.field.to_riak(end_value))
 

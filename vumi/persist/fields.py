@@ -35,13 +35,20 @@ class FieldDescriptor(object):
     def initialize(self, modelobj, value):
         self.__set__(modelobj, value)
 
+    def _add_index(self, modelobj, value):
+        # The underlying libraries call str() on whatever index values we
+        # provide, so we do this explicitly here and special-case None.
+        if value is None:
+            value = ''
+        modelobj._riak_object.add_index(self.index_name, str(value))
+
     def set_value(self, modelobj, value):
         """Set the value associated with this descriptor."""
         raw_value = self.field.to_riak(value)
         modelobj._riak_object._data[self.key] = raw_value
         if self.index_name is not None:
             modelobj._riak_object.remove_index(self.index_name)
-            modelobj._riak_object.add_index(self.index_name, raw_value)
+            self._add_index(modelobj, raw_value)
 
     def get_value(self, modelobj):
         """Get the value associated with this descriptor."""
@@ -558,7 +565,7 @@ class ForeignKeyDescriptor(FieldDescriptor):
     def set_foreign_key(self, modelobj, foreign_key):
         modelobj._riak_object.remove_index(self.index_name)
         if foreign_key is not None:
-            modelobj._riak_object.add_index(self.index_name, foreign_key)
+            self._add_index(modelobj, foreign_key)
 
     def get_foreign_object(self, modelobj, manager=None):
         key = self.get_foreign_key(modelobj)
@@ -582,7 +589,7 @@ class ForeignKeyDescriptor(FieldDescriptor):
         self.validate(otherobj)
         modelobj._riak_object.remove_index(self.index_name)
         if otherobj is not None:
-            modelobj._riak_object.add_index(self.index_name, otherobj.key)
+            self._add_index(modelobj, otherobj.key)
 
 
 class ForeignKeyProxy(object):
@@ -649,7 +656,7 @@ class ManyToManyDescriptor(ForeignKeyDescriptor):
         return indexes
 
     def add_foreign_key(self, modelobj, foreign_key):
-        modelobj._riak_object.add_index(self.index_name, foreign_key)
+        self._add_index(modelobj, foreign_key)
 
     def remove_foreign_key(self, modelobj, foreign_key):
         modelobj._riak_object.remove_index(self.index_name, foreign_key)
