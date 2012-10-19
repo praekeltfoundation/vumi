@@ -66,6 +66,9 @@ class HttpRpcTransport(Transport):
         The path to listen for requests on.
     :param int web_port:
         The port to listen for requests on, defaults to `0`.
+    :param str health_path:
+        The path to listen for downstream health checks on
+        (useful with HAProxy)
     :param int request_cleanup_interval:
         How often should we actively look for old connections that should
         manually be timed out. Anything less than `1` disables the request
@@ -84,15 +87,20 @@ class HttpRpcTransport(Transport):
     :param str request_timeout_body:
         What HTTP body should be returned when a timeout occurs.
         Defaults to ''.
+    :param bool noisy:
+        Defaults to `False` set to `True` to make this transport log
+        verbosely.
     """
     content_type = 'text/plain'
 
     def validate_config(self):
         self.web_path = self.config['web_path']
         self.web_port = int(self.config['web_port'])
+        self.health_path = self.config.get('health_path', 'health').lstrip('/')
         self.request_timeout = int(self.config.get('request_timeout', 60 * 4))
         self.request_timeout_status_code = int(
             self.config.get('request_timeout_status_code', 504))
+        self.noisy = bool(self.config.get('noisy', False))
         self.request_timeout_body = self.config.get('request_timeout_body', '')
 
         self.gc_requests_interval = int(
@@ -123,7 +131,7 @@ class HttpRpcTransport(Transport):
         self.web_resource = yield self.start_web_resources(
             [
                 (HttpRpcResource(self), self.web_path),
-                (HttpRpcHealthResource(self), 'health'),
+                (HttpRpcHealthResource(self), self.health_path),
             ],
             self.web_port)
 
@@ -145,6 +153,7 @@ class HttpRpcTransport(Transport):
                 self.close_request(request_id)
 
     def close_request(self, request_id):
+        self.emit('Timing out %s' % (request_id,))
         self.finish_request(request_id, self.request_timeout_body,
             self.request_timeout_status_code)
 
@@ -166,8 +175,12 @@ class HttpRpcTransport(Transport):
     def remove_request(self, request_id):
         del self._requests[request_id]
 
+    def emit(self, msg):
+        if self.noisy:
+            log.msg(msg)
+
     def handle_outbound_message(self, message):
-        log.msg("HttpRpcTransport consuming %s" % (message))
+        self.emit("HttpRpcTransport consuming %s" % (message))
         if message.payload.get('in_reply_to') and 'content' in message.payload:
             self.finish_request(
                     message.payload['in_reply_to'],
@@ -178,7 +191,7 @@ class HttpRpcTransport(Transport):
                                   " handle_raw_inbound_message.")
 
     def finish_request(self, request_id, data, code=200):
-        log.msg("HttpRpcTransport.finish_request with data:", repr(data))
+        self.emit("HttpRpcTransport.finish_request with data:", repr(data))
         request = self.get_request(request_id)
         if request:
             request.setResponseCode(code)
