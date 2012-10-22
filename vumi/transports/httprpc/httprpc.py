@@ -1,7 +1,6 @@
 # -*- test-case-name: vumi.transports.httprpc.tests.test_httprpc -*-
 
 import json
-import time
 
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet import reactor
@@ -119,9 +118,7 @@ class HttpRpcTransport(Transport):
 
     @inlineCallbacks
     def setup_transport(self):
-
         self._requests = {}
-
         self.request_gc = LoopingCall(self.manually_close_requests)
         self.clock = self.get_clock()
         self.request_gc.clock = self.clock
