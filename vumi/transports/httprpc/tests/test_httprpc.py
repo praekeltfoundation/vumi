@@ -57,7 +57,7 @@ class TestTransport(TransportTestCase):
     @inlineCallbacks
     def test_inbound(self):
         d = http_request(self.transport_url + "foo", '', method='GET')
-        msg, = yield self.wait_for_dispatched_messages(1)
+        [msg] = yield self.wait_for_dispatched_messages(1)
         payload = msg.payload
         tum = TransportUserMessage(**payload)
         rep = tum.reply("OK")
@@ -68,7 +68,7 @@ class TestTransport(TransportTestCase):
     @inlineCallbacks
     def test_timeout(self):
         d = http_request_full(self.transport_url + "foo", '', method='GET')
-        msg, = yield self.wait_for_dispatched_messages(1)
+        [msg] = yield self.wait_for_dispatched_messages(1)
         self.clock.advance(10.1)  # .1 second after timeout
         response = yield d
         self.assertEqual(response.delivered_body, 'I am a teapot')
@@ -116,7 +116,7 @@ class TestJSONTransport(TransportTestCase):
                 ' "from_addr": "some_msisdn"'
                 '}',
                 method='POST')
-        msg, = yield self.wait_for_dispatched_messages(1)
+        [msg] = yield self.wait_for_dispatched_messages(1)
         payload = msg.payload
         self.assertEqual(payload['content'], 'hello')
         self.assertEqual(payload['to_addr'], 'the_app')
