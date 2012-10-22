@@ -65,7 +65,7 @@ class TestCellulantTransportTestCase(TransportTestCase):
         })
 
         reply = TransportUserMessage(**msg.payload).reply("ussd message")
-        self.dispatch(reply)
+        yield self.dispatch(reply)
         response = yield deferred
         self.assertEqual(response, '1|ussd message|null|null|null|null')
 
