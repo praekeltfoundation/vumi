@@ -52,6 +52,8 @@ class MediafoneTransport(HttpRpcTransport):
         log.msg("Making HTTP request: %s" % (url,))
         response = yield http_request_full(url, '', method='GET')
         log.msg("Response: (%s) %r" % (response.code, response.delivered_body))
+        yield self.publish_ack(user_message_id=message['message_id'],
+            sent_message_id=message['message_id'])
 
     def get_field_values(self, request):
         values = {}
