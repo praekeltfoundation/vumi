@@ -27,7 +27,6 @@ class OkTransport(HttpRpcTransport):
 
 class TestTransport(TransportTestCase):
 
-    timeout = 1
     transport_class = OkTransport
 
     @inlineCallbacks
