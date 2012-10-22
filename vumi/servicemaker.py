@@ -13,6 +13,7 @@ from twisted.python import log
 from vumi.service import WorkerCreator
 from vumi.utils import load_class_by_string
 from vumi.errors import VumiError
+from vumi.sentry import setup_sentry
 
 
 def overlay_configs(*configs):
@@ -37,36 +38,6 @@ def read_yaml_config(config_file, optional=True):
     with file(config_file, 'r') as stream:
         # Assume we get a dict out of this.
         return yaml.safe_load(stream)
-
-
-def setup_sentry(dsn):
-    import raven
-    if not dsn.startswith("twisted+http:"):
-        raise ValueError("Invalid Sentry DSN. It must start with"
-                         " 'twisted+http:'.")
-    client = raven.Client(dsn=dsn)
-
-    SENTRY_CONTEXT = object()
-
-    def raw_log(event):
-        failure = event.get('failure')
-        if failure:
-            exc_info = (failure.type, failure.value, failure.stack)
-            log.callWithContext({SENTRY_CONTEXT: True},
-                                client.captureException,
-                                exc_info)
-        else:
-            for msg in event['message']:
-                client.captureMessage(msg)
-            else:
-                client.captureMessage("No message.")
-
-    def log_to_sentry(event):
-        if SENTRY_CONTEXT in event:
-            return
-        log.callWithContext({SENTRY_CONTEXT: True}, raw_log, event)
-
-    log.theLogPublisher.addObserver(log_to_sentry)
 
 
 class VumiOptions(usage.Options):
