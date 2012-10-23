@@ -679,7 +679,6 @@ class TestRedirectOutboundRouterForSMPP(DispatcherTestCase):
     overwritten.
     """
     dispatcher_class = BaseDispatchWorker
-    timeout = 1
 
     @inlineCallbacks
     def setUp(self):

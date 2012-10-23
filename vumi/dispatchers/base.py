@@ -570,15 +570,15 @@ class RedirectRouter(BaseDispatchRouter):
 
     def _dispatch_inbound(self, publish_function, vumi_message):
         transport_name = vumi_message['transport_name']
-        upstream = self.inbound_mappings[transport_name]
-        if not upstream:
+        redirect_to = self.inbound_mappings[transport_name]
+        if not redirect_to:
             raise ConfigError(
                 "No exposed name available for %s's inbound message: %s" % (
                 transport_name, vumi_message))
 
         msg_copy = vumi_message.copy()
-        msg_copy['transport_name'] = upstream
-        publish_function(upstream, msg_copy)
+        msg_copy['transport_name'] = redirect_to
+        publish_function(redirect_to, msg_copy)
 
     def dispatch_inbound_event(self, event):
         self._dispatch_inbound(self.dispatcher.publish_inbound_event, event)
