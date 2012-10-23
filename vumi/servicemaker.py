@@ -179,6 +179,7 @@ class VumiWorkerServiceMaker(object):
         worker = worker_creator.create_worker(options.worker_class,
                                               options.worker_config)
 
+        # TODO: UNHACK
         old_stop = worker.stopService
         def new_stop():
             remove_sentry()
