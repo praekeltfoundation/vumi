@@ -49,7 +49,7 @@ def vumi_raven_client(dsn, log_context_sentinel=None):
             remaining_deferreds.add(d)
             d.addBoth(self._untrack_deferred, d)
 
-        def _untrack_deferred(self, d, result):
+        def _untrack_deferred(self, result, d):
             # TODO: maybe also call client.state.success / fail here?
             remaining_deferreds.discard(d)
             return result
