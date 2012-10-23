@@ -43,6 +43,7 @@ def vumi_raven_client(dsn, log_context_sentinel=None):
             d = quiet_get_page(self._url, method='POST', postdata=data,
                                headers=headers)
             self._track_deferred(d)
+            self._track_client_state(d)
             return d
 
         def _track_deferred(self, d):
@@ -50,8 +51,18 @@ def vumi_raven_client(dsn, log_context_sentinel=None):
             d.addBoth(self._untrack_deferred, d)
 
         def _untrack_deferred(self, result, d):
-            # TODO: maybe also call client.state.success / fail here?
             remaining_deferreds.discard(d)
+            return result
+
+        def _track_client_state(self, d):
+            d.addCallbacks(self._set_client_success, self._set_client_fail)
+
+        def _set_client_success(self, result):
+            client.state.set_success()
+            return result
+
+        def _set_client_fail(self, result):
+            client.state.set_fail()
             return result
 
         def send(self, data, headers):
@@ -67,7 +78,8 @@ def vumi_raven_client(dsn, log_context_sentinel=None):
         def teardown(self):
             return DeferredList(remaining_deferreds)
 
-    return VumiRavenClient(dsn)
+    client = VumiRavenClient(dsn)
+    return client
 
 
 class SentryLogObserver(object):
