@@ -156,12 +156,9 @@ class Model(object):
             return_keys is set to True).
         """
         mr = cls._from_index(manager, **kw)
-        if return_keys:
-            mapper = lambda manager, result: result.get_key()
-        else:
-            mapper = lambda manager, result: cls.load(manager,
-                                                      result.get_key())
-        return manager.run_map_reduce(mr, mapper)
+        if not return_keys:
+            return mr.get_values(cls, make_riak_sad=True)
+        return mr.get_keys()
 
     @classmethod
     def by_index_count(cls, manager, **kw):
@@ -170,9 +167,7 @@ class Model(object):
         :returns:
             A count of items found.
         """
-        mr = cls._from_index(manager, **kw)
-        mr = mr.reduce(function=["riak_kv_mapreduce", "reduce_count_inputs"])
-        return manager.run_map_reduce(mr)
+        return cls._from_index(manager, **kw).get_count()
 
     @classmethod
     def search(cls, manager, return_keys=False, **kw):
@@ -216,6 +211,71 @@ class Model(object):
     def enable_search(cls, manager):
         """Enable solr indexing over for this model and manager."""
         return manager.riak_enable_search(cls)
+
+
+class VumiMapReduce(object):
+    def __init__(self, mgr, riak_mapreduce_obj):
+        self._manager = mgr
+        self._riak_mapreduce_obj = riak_mapreduce_obj
+
+    @classmethod
+    def from_field(cls, mgr, model, field_name, start_value, end_value=None):
+        descriptor = model.field_descriptors[field_name]
+        if descriptor.index_name is None:
+            raise ValueError("%s.%s is not indexed" % (
+                    model.__name__, field_name))
+
+        # The Riak client library does silly things under the hood.
+        start_value = descriptor.field.to_riak(start_value)
+        if start_value is None:
+            start_value = ''
+            # We still rely on this having the value "None" in places. :-(
+            start_value = 'None'
+        else:
+            start_value = str(start_value)
+
+        if end_value is not None:
+            end_value = str(descriptor.field.to_riak(end_value))
+
+        return cls.from_index(
+            mgr, model, descriptor.index_name, start_value, end_value)
+
+    @classmethod
+    def from_index(cls, mgr, model, index_name, start_value, end_value=None):
+        return cls(mgr, mgr.riak_map_reduce().index(
+                mgr.bucket_name(model), index_name, start_value, end_value))
+
+    @classmethod
+    def from_search(cls, mgr, model, query):
+        return cls(
+            mgr, mgr.riak_map_reduce().search(mgr.bucket_name(model), query))
+
+    @classmethod
+    def from_keys(cls, mgr, model, keys):
+        bucket_name = mgr.bucket_name(model)
+        mr = mgr.riak_map_reduce()
+        for key in keys:
+            mr.add_bucket_key_data(bucket_name, key, None)
+        return cls(mgr, mr)
+
+    def get_count(self):
+        self._riak_mapreduce_obj.reduce(
+            function=["riak_kv_mapreduce", "reduce_count_inputs"])
+        return self._manager.run_map_reduce(self._riak_mapreduce_obj)
+
+    def get_keys(self):
+        return self._manager.run_map_reduce(
+            self._riak_mapreduce_obj, lambda mgr, obj: obj.get_key())
+
+    def get_values(self, model, **kw):
+        assert kw.get('make_riak_sad', False)
+        self._riak_mapreduce_obj.map(function="""
+                function (v) {
+                    return [[v.key, v.values[0]]]
+                }
+                """)
+        return self._manager.run_map_reduce(
+            self._riak_mapreduce_obj, lambda mgr, obj: model.load(mgr, *obj))
 
 
 class Manager(object):
@@ -320,65 +380,33 @@ class Manager(object):
                                   " .run_map_reduce(...)")
 
     def mr_from_field(self, model, field_name, start_value, end_value=None):
-        descriptor = model.field_descriptors[field_name]
-        if descriptor.index_name is None:
-            raise ValueError("%s.%s is not indexed" % (
-                    model.__name__, field_name))
-
-        # The Riak client library does silly things under the hood.
-        start_value = descriptor.field.to_riak(start_value)
-        if start_value is None:
-            start_value = ''
-        else:
-            start_value = str(start_value)
-
-        if end_value is not None:
-            end_value = str(descriptor.field.to_riak(end_value))
-
-        return self.mr_from_index(
-            model, descriptor.index_name, start_value, end_value)
+        return VumiMapReduce.from_field(
+            self, model, field_name, start_value, end_value)
 
     def mr_from_index(self, model, index_name, start_value, end_value=None):
-        return self.riak_map_reduce().index(
-            self.bucket_name(model), index_name, start_value, end_value)
+        return VumiMapReduce.from_field(
+            self, model, index_name, start_value, end_value)
 
     def mr_from_search(self, model, query):
-        return self.riak_map_reduce().search(self.bucket_name(model), query)
+        return VumiMapReduce.from_search(self, model, query)
 
     def mr_from_keys(self, model, keys):
-        bucket_name = self.bucket_name(model)
-        mr = self.riak_map_reduce()
-        for key in keys:
-            mr.add_bucket_key_data(bucket_name, key, None)
-        return mr
+        return VumiMapReduce.from_keys(self, model, keys)
 
-    def riak_search(self, cls, query, return_keys=False):
+    def riak_search(self, model, query, return_keys=False):
         """Run a solr search over the bucket associated with cls and
         return the results as instances of cls (or as keys if return_keys is
         set to True)."""
         # TODO: Replace and deprecate?
-        mr = self.mr_from_search(cls, query)
+        mr = self.mr_from_search(model, query)
         if not return_keys:
-            mr = mr.map(function="""
-                function (v) {
-                    return [[v.key, v.values[0]]]
-                }
-                """)
+            # raise NotImplementedError()
+            return mr.get_values(model, make_riak_sad=True)
+        return mr.get_keys()
 
-        def map_handler(manager, key_and_result):
-            if return_keys:
-                return key_and_result.get_key()
-            else:
-                key, result = key_and_result
-                return cls.load(manager, key, result)
-
-        return self.run_map_reduce(mr, map_handler)
-
-    def riak_search_count(self, cls, query):
+    def riak_search_count(self, model, query):
         # TODO: Replace and deprecate?
-        mr = self.mr_from_search(cls, query)
-        mr = mr.reduce(function=["riak_kv_mapreduce", "reduce_count_inputs"])
-        return self.run_map_reduce(mr)
+        return self.mr_from_search(model, query).get_count()
 
     def riak_enable_search(self, cls):
         """Enable solr searching indexing for the bucket associated with

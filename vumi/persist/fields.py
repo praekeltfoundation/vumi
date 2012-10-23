@@ -40,6 +40,8 @@ class FieldDescriptor(object):
         # provide, so we do this explicitly here and special-case None.
         if value is None:
             value = ''
+            # We still rely on this having the value "None" in places. :-(
+            value = 'None'
         modelobj._riak_object.add_index(self.index_name, str(value))
 
     def set_value(self, modelobj, value):
