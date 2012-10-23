@@ -87,9 +87,8 @@ class SentryLogObserver(object):
         if level is not None:
             return level
         if event.get('isError'):
-            level = self.DEFAULT_ERROR_LEVEL
-        else:
-            level = self.DEFAULT_LOG_LEVEL
+            return self.DEFAULT_ERROR_LEVEL
+        return self.DEFAULT_LOG_LEVEL
 
     def logger_for_event(self, event):
         return event.get('system', 'unknown')
@@ -103,11 +102,9 @@ class SentryLogObserver(object):
         if failure:
             exc_info = (failure.type, failure.value, failure.tb)
             self.client.captureException(exc_info, data=data)
-        elif event['message']:
-            for msg in event['message']:
-                self.client.captureMessage(msg, data=data)
         else:
-            self.client.captureMessage("No message.", data=data)
+            msg = log.textFromEventDict(event)
+            self.client.captureMessage(msg, data=data)
 
     def __call__(self, event):
         if self.log_context_sentinel in event:
