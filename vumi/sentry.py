@@ -12,7 +12,6 @@ DEFAULT_LOG_CONTEXT_SENTINEL = "_SENTRY_CONTEXT_"
 
 class QuietHTTPClientFactory(HTTPClientFactory):
     """HTTP client factory that doesn't log starting and stopping."""
-
     noisy = False
 
 
