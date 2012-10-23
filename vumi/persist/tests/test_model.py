@@ -105,14 +105,12 @@ class TestModelOnTxRiak(TestCase):
         yield simple_model("three", a=2, b=u'ghi').save()
 
         [s1] = yield simple_model.search(a=1)
-        self.assertEqual(s1.key, "one")
-        self.assertEqual(s1.a, 1)
-        self.assertEqual(s1.b, u'abc')
+        self.assertEqual(s1, "one")
 
         [s2] = yield simple_model.search(a=2, b='def')
-        self.assertEqual(s2.key, "two")
+        self.assertEqual(s2, "two")
 
-        keys = yield simple_model.search(a=2, return_keys=True)
+        keys = yield simple_model.search(a=2)
         self.assertEqual(sorted(keys), ["three", "two"])
 
     @Manager.calls_manager
@@ -122,7 +120,7 @@ class TestModelOnTxRiak(TestCase):
         yield simple_model.enable_search()
         yield simple_model("one", a=1, b=u'a\'bc').save()
 
-        search = lambda **q: simple_model.search(return_keys=True, **q)
+        search = lambda **q: simple_model.search(**q)
         self.assertEqual((yield search(b=" OR a:1")), [])
         self.assertEqual((yield search(b="b' OR a:1 '")), [])
         self.assertEqual((yield search(b="a\'bc")), ["one"])
@@ -136,20 +134,27 @@ class TestModelOnTxRiak(TestCase):
         yield simple_model("three", a=2, b=u'ghi').save()
 
         [s1] = yield simple_model.riak_search('a:1')
-        self.assertEqual(s1.key, "one")
-        self.assertEqual(s1.a, 1)
-        self.assertEqual(s1.b, u'abc')
+        self.assertEqual(s1, "one")
 
         [s2] = yield simple_model.riak_search('a:2 AND b:def')
-        self.assertEqual(s2.key, "two")
+        self.assertEqual(s2, "two")
 
-        [s1, s2] = sorted((yield simple_model.riak_search('b:abc OR b:def')),
-                          key=lambda s: s.key)
-        self.assertEqual(s1.key, "one")
-        self.assertEqual(s2.key, "two")
+        [s1, s2] = sorted((yield simple_model.riak_search('b:abc OR b:def')))
+        self.assertEqual(s1, "one")
+        self.assertEqual(s2, "two")
 
-        keys = yield simple_model.riak_search('a:2', return_keys=True)
+        keys = yield simple_model.riak_search('a:2')
         self.assertEqual(sorted(keys), ["three", "two"])
+
+    @Manager.calls_manager
+    def test_load_from_keys(self):
+        simple_model = self.manager.proxy(SimpleModel)
+        yield simple_model("one", a=1, b=u'abc').save()
+        yield simple_model("two", a=2, b=u'def').save()
+        yield simple_model("three", a=2, b=u'ghi').save()
+
+        objs = yield simple_model.load_from_keys(['one', 'two', 'bad'])
+        self.assertEqual(["one", "two"], sorted(obj.key for obj in objs))
 
     @Manager.calls_manager
     def test_simple_riak_search_count(self):
@@ -201,12 +206,8 @@ class TestModelOnTxRiak(TestCase):
         yield indexed_model("foo1", a=1, b=u"one").save()
         yield indexed_model("foo2", a=2, b=u"two").save()
 
-        [key] = yield indexed_model.by_index(a=1, return_keys=True)
+        [key] = yield indexed_model.by_index(a=1)
         self.assertEqual(key, "foo1")
-
-        [obj] = yield indexed_model.by_index(b="two")
-        self.assertEqual(obj.key, "foo2")
-        self.assertEqual(obj.b, "two")
 
     @Manager.calls_manager
     def test_by_index_count(self):
@@ -223,7 +224,7 @@ class TestModelOnTxRiak(TestCase):
         yield indexed_model("foo1", a=1, b=u"one").save()
         yield indexed_model("foo2", a=2, b=None).save()
 
-        [key] = yield indexed_model.by_index(b=None, return_keys=True)
+        [key] = yield indexed_model.by_index(b=None)
         self.assertEqual(key, "foo2")
 
     @Manager.calls_manager

@@ -148,17 +148,12 @@ class Model(object):
         return manager.mr_from_field(cls, field_name, value)
 
     @classmethod
-    def by_index(cls, manager, return_keys=False, **kw):
+    def by_index(cls, manager, **kw):
         """Find objects by index.
 
-        :returns:
-            A list of model instances (or a list of keys if
-            return_keys is set to True).
+        :returns: A list of keys.
         """
-        mr = cls._from_index(manager, **kw)
-        if not return_keys:
-            return mr.get_values(cls, make_riak_sad=True)
-        return mr.get_keys()
+        return cls._from_index(manager, **kw).get_keys()
 
     @classmethod
     def by_index_count(cls, manager, **kw):
@@ -170,12 +165,10 @@ class Model(object):
         return cls._from_index(manager, **kw).get_count()
 
     @classmethod
-    def search(cls, manager, return_keys=False, **kw):
+    def search(cls, manager, **kw):
         """Perform a solr search over this model.
 
-        :returns:
-            A list of model instances (or a list of keys if
-            return_keys is set to True).
+        :returns: A list of keys.
         """
         # TODO: build the queries more intelligently
         for k, value in kw.iteritems():
@@ -184,18 +177,16 @@ class Model(object):
             value = value.replace("'", "\\'")
             kw[k] = value
         query = " AND ".join("%s:'%s'" % (k, v) for k, v in kw.iteritems())
-        return cls.riak_search(manager, query, return_keys=return_keys)
+        return cls.riak_search(manager, query)
 
     @classmethod
-    def riak_search(cls, manager, query, return_keys=False):
+    def riak_search(cls, manager, query):
         """
         Performs a raw riak search, does no inspection on the given query.
 
-        :returns:
-            A lit of model instances (or a list of keys if
-            return_keys is set to True)
+        :returns: A list of keys.
         """
-        return manager.riak_search(cls, query, return_keys)
+        return manager.riak_search(cls, query)
 
     @classmethod
     def riak_search_count(cls, manager, query):
@@ -206,6 +197,16 @@ class Model(object):
             A count of the results
         """
         return manager.riak_search_count(cls, query)
+
+    @classmethod
+    def load_from_keys(cls, manager, keys):
+        """
+        Load objects for the given list of keys.
+
+        :returns:
+            A list of model instances.
+        """
+        return manager.load_from_keys(cls, keys)
 
     @classmethod
     def enable_search(cls, manager):
@@ -266,16 +267,6 @@ class VumiMapReduce(object):
     def get_keys(self):
         return self._manager.run_map_reduce(
             self._riak_mapreduce_obj, lambda mgr, obj: obj.get_key())
-
-    def get_values(self, model, **kw):
-        assert kw.get('make_riak_sad', False)
-        self._riak_mapreduce_obj.map(function="""
-                function (v) {
-                    return [[v.key, v.values[0]]]
-                }
-                """)
-        return self._manager.run_map_reduce(
-            self._riak_mapreduce_obj, lambda mgr, obj: model.load(mgr, *obj))
 
 
 class Manager(object):
@@ -393,24 +384,34 @@ class Manager(object):
     def mr_from_keys(self, model, keys):
         return VumiMapReduce.from_keys(self, model, keys)
 
-    def riak_search(self, model, query, return_keys=False):
-        """Run a solr search over the bucket associated with cls and
-        return the results as instances of cls (or as keys if return_keys is
-        set to True)."""
+    def load_from_keys(self, model, keys):
+        """Load the model instances for a list of keys from Riak.
+
+        If a key doesn't exist, no object will be returned for it.
+        """
+        assert len(keys) <= 100
+        if not keys:
+            return []
+        mr = self.mr_from_keys(model, keys)
+        mr._riak_mapreduce_obj.map(function="""
+                function (v) {
+                    return [[v.key, v.values[0]]]
+                }
+                """).filter_not_found()
+        return self.run_map_reduce(
+            mr._riak_mapreduce_obj, lambda mgr, obj: model.load(mgr, *obj))
+
+    def riak_search(self, model, query):
+        """Find objects matching the search query in the model's bucket."""
         # TODO: Replace and deprecate?
-        mr = self.mr_from_search(model, query)
-        if not return_keys:
-            # raise NotImplementedError()
-            return mr.get_values(model, make_riak_sad=True)
-        return mr.get_keys()
+        return self.mr_from_search(model, query).get_keys()
 
     def riak_search_count(self, model, query):
         # TODO: Replace and deprecate?
         return self.mr_from_search(model, query).get_count()
 
-    def riak_enable_search(self, cls):
-        """Enable solr searching indexing for the bucket associated with
-        cls."""
+    def riak_enable_search(self, model):
+        """Enable search indexing for the model's bucket."""
         raise NotImplementedError("Sub-classes of Manager should implement"
                                   " .riak_enable_search(...)")
 
@@ -449,6 +450,9 @@ class ModelProxy(object):
 
     def riak_search_count(self, *args, **kw):
         return self._modelcls.riak_search_count(self._manager, *args, **kw)
+
+    def load_from_keys(self, *args, **kw):
+        return self._modelcls.load_from_keys(self._manager, *args, **kw)
 
     def enable_search(self):
         return self._modelcls.enable_search(self._manager)
