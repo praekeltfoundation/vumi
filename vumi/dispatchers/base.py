@@ -553,32 +553,32 @@ class ContentKeywordRouter(SimpleDispatchRouter):
             log.error("No transport for %s" % (msg['from_addr'],))
 
 
-class RedirectOutboundRouter(BaseDispatchRouter):
+class RedirectRouter(BaseDispatchRouter):
     """Router that dispatches outbound messages to a different transport.
 
     :param dict redirect_outbound:
         A dictionary where the key is the name of an exposed_name and
         the value is the name of a transport_name.
+    :param dict redirect_inbound:
+        A dictionary where the key is the value of a transport_name and
+        the value is the value of an exposed_name.
     """
 
     def setup_routing(self):
-        self.mappings = self.config.get('redirect_outbound', {})
-        self.inverse_mappings = defaultdict(list)
-        for app_name, transport_name in self.mappings.items():
-            self.inverse_mappings[transport_name].append(app_name)
+        self.outbound_mappings = self.config.get('redirect_outbound', {})
+        self.inbound_mappings = self.config.get('redirect_inbound', {})
 
     def _dispatch_inbound(self, publish_function, vumi_message):
         transport_name = vumi_message['transport_name']
-        mappings_for_message = self.inverse_mappings[transport_name]
-        if not mappings_for_message:
+        redirect_to = self.inbound_mappings[transport_name]
+        if not redirect_to:
             raise ConfigError(
                 "No exposed name available for %s's inbound message: %s" % (
                 transport_name, vumi_message))
 
-        for app_name in mappings_for_message:
-            msg_copy = vumi_message.copy()
-            msg_copy['transport_name'] = app_name
-            publish_function(app_name, msg_copy)
+        msg_copy = vumi_message.copy()
+        msg_copy['transport_name'] = redirect_to
+        publish_function(redirect_to, msg_copy)
 
     def dispatch_inbound_event(self, event):
         self._dispatch_inbound(self.dispatcher.publish_inbound_event, event)
@@ -588,9 +588,24 @@ class RedirectOutboundRouter(BaseDispatchRouter):
 
     def dispatch_outbound_message(self, msg):
         transport_name = msg['transport_name']
-        redirect_to = self.mappings.get(transport_name)
+        redirect_to = self.outbound_mappings.get(transport_name)
         if redirect_to:
             self.dispatcher.publish_outbound_message(redirect_to, msg)
         else:
             log.error('No redirect_outbound specified for %s' % (
                 transport_name,))
+
+
+class RedirectOutboundRouter(RedirectRouter):
+    """
+    Deprecated in favour of `RedirectRouter`.
+
+    RedirectRouter provides the same features while also allowing
+    inbound redirection to take place, which `RedirectOutboundRouter`
+    conveniently ignores.
+    """
+    def setup_routing(self, *args, **kwargs):
+        log.warning('RedirectOutboundRouter is deprecated, please use '
+            '`RedirectRouter` instead.')
+        return super(RedirectOutboundRouter, self).setup_routing(
+            *args, **kwargs)
