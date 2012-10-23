@@ -12,7 +12,7 @@ from twisted.plugin import IPlugin
 from vumi.service import WorkerCreator
 from vumi.utils import load_class_by_string
 from vumi.errors import VumiError
-from vumi.sentry import setup_sentry
+from vumi.sentry import SentryLoggerService
 
 
 def overlay_configs(*configs):
@@ -172,19 +172,14 @@ class VumiWorkerServiceMaker(object):
 
     def makeService(self, options):
         sentry_dsn = options.vumi_options.pop('sentry', None)
-        if sentry_dsn is not None:
-            remove_sentry = setup_sentry(sentry_dsn)
 
         worker_creator = WorkerCreator(options.vumi_options)
         worker = worker_creator.create_worker(options.worker_class,
                                               options.worker_config)
 
-        # TODO: UNHACK
-        old_stop = worker.stopService
-        def new_stop():
-            remove_sentry()
-            return old_stop()
-        worker.stopService = new_stop
+        if sentry_dsn is not None:
+            sentry_service = SentryLoggerService(sentry_dsn)
+            worker.addService(sentry_service)
 
         return worker
 

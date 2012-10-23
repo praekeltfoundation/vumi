@@ -5,6 +5,7 @@ import logging
 from twisted.python import log
 from twisted.web.client import HTTPClientFactory, _makeGetterFactory
 from twisted.internet.defer import DeferredList
+from twisted.application.service import Service
 
 
 DEFAULT_LOG_CONTEXT_SENTINEL = "_SENTRY_CONTEXT_"
@@ -112,13 +113,24 @@ class SentryLogObserver(object):
         log.callWithContext(self.log_context, self._log_to_sentry, event)
 
 
-def setup_sentry(dsn):
-    client = vumi_raven_client(dsn=dsn)
-    sentry_log_observer = SentryLogObserver(client)
+class SentryLoggerService(Service):
 
-    log.theLogPublisher.addObserver(sentry_log_observer)
+    def __init__(self, dsn, logger=None):
+        self.setName('Sentry Logger')
+        self.dsn = dsn
+        self.client = vumi_raven_client(dsn=dsn)
+        self.sentry_log_observer = SentryLogObserver(self.client)
+        self.logger = logger if logger is not None else log.theLogPublisher
 
-    def remove_sentry():
-        log.theLogPublisher.removeObserver(sentry_log_observer)
+    def startService(self):
+        self.logger.addObserver(self.sentry_log_observer)
+        return Service.startService(self)
 
-    return remove_sentry
+    def stopService(self):
+        if self.running:
+            self.logger.removeObserver(self.sentry_log_observer)
+            return self.client.teardown()
+        return Service.stopService(self)
+
+    def registered(self):
+        return self.sentry_log_observer in self.logger.observers
