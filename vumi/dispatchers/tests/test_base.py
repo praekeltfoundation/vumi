@@ -679,6 +679,7 @@ class TestRedirectOutboundRouterForSMPP(DispatcherTestCase):
     overwritten.
     """
     dispatcher_class = BaseDispatchWorker
+    timeout = 1
 
     @inlineCallbacks
     def setUp(self):
@@ -690,6 +691,10 @@ class TestRedirectOutboundRouterForSMPP(DispatcherTestCase):
             'exposed_names': ['upstream'],
             'redirect_outbound': {
                 'upstream': 'smpp_tx_transport',
+            },
+            'redirect_inbound': {
+                'smpp_tx_transport': 'upstream',
+                'smpp_rx_transport': 'upstream',
             },
         }
         self.dispatcher = yield self.get_dispatcher(self.config)
@@ -762,6 +767,10 @@ class TestRedirectOutboundRouter(DispatcherTestCase):
                 'app1': 'transport1',
                 'app2': 'transport2',
             },
+            'redirect_inbound': {
+                'transport1': 'app1',
+                'transport2': 'app2',
+            }
         }
         self.dispatcher = yield self.get_dispatcher(self.config)
         self.router = self.dispatcher._router
