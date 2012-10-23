@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-"""Tests for vumi.persist.message_store."""
+"""Tests for vumi.components.message_store."""
 
 from twisted.internet.defer import inlineCallbacks, returnValue
 
