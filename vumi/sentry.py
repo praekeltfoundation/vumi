@@ -26,6 +26,20 @@ def quiet_get_page(url, contextFactory=None, *args, **kwargs):
 
 
 def vumi_raven_client(dsn, log_context_sentinel=None):
+    """Construct a custom raven client and transport-set pair.
+
+    The raven client assumes that sends via transports return success or
+    failure immediate in a blocking fashion and doesn't provide transports
+    access to the client.
+
+    We circumvent this by constructing a once-off transport class and
+    raven client pair that work together. Instances of the transport feed
+    information back success and failure back to the client instance once
+    deferreds complete.
+
+    Pull-requests with better solutions welcomed.
+    """
+
     import raven
     from raven.transport.base import TwistedHTTPTransport
     from raven.transport.registry import TransportRegistry
