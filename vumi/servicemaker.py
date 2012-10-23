@@ -8,7 +8,6 @@ from zope.interface import implements
 from twisted.python import usage
 from twisted.application.service import IServiceMaker
 from twisted.plugin import IPlugin
-from twisted.python import log
 
 from vumi.service import WorkerCreator
 from vumi.utils import load_class_by_string
@@ -174,11 +173,18 @@ class VumiWorkerServiceMaker(object):
     def makeService(self, options):
         sentry_dsn = options.vumi_options.pop('sentry', None)
         if sentry_dsn is not None:
-            setup_sentry(sentry_dsn)
+            remove_sentry = setup_sentry(sentry_dsn)
 
         worker_creator = WorkerCreator(options.vumi_options)
         worker = worker_creator.create_worker(options.worker_class,
                                               options.worker_config)
+
+        old_stop = worker.stopService
+        def new_stop():
+            remove_sentry()
+            return old_stop()
+        worker.stopService = new_stop
+
         return worker
 
 
