@@ -192,7 +192,6 @@ class LogCatcher(object):
                 return False
         if self.message is not None:
             log_message = " ".join(event_dict.get('message', []))
-            print log_message
             if not self.message.search(log_message):
                 return False
         return True
