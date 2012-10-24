@@ -112,6 +112,7 @@ class MessageStoreCache(object):
         """
         Add a message key, weighted with the timestamp to the batch_id.
         """
+        yield self.increment_event_status(batch_id, 'sent')
         yield self.redis.zadd(self.outbound_key(batch_id), **{
             message_key: timestamp,
             })
