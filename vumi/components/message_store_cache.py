@@ -210,17 +210,19 @@ class MessageStoreCache(object):
         return self.redis.zcard(self.to_addr_key(batch_id))
 
     @Manager.calls_manager
-    def get_inbound_message_keys(self, batch_id):
+    def get_inbound_message_keys(self, batch_id, start=0, stop=-1):
         """
         Return a list of keys ordered according to their timestamps
         """
-        keys = yield self.redis.zrange(self.inbound_key(batch_id), 0, -1)
+        keys = yield self.redis.zrange(self.inbound_key(batch_id),
+                                        start, stop)
         returnValue(keys)
 
     @Manager.calls_manager
-    def get_outbound_message_keys(self, batch_id):
+    def get_outbound_message_keys(self, batch_id, start=0, stop=-1):
         """
         Return a list of keys ordered according to their timestamps.
         """
-        keys = yield self.redis.zrange(self.outbound_key(batch_id), 0, -1)
+        keys = yield self.redis.zrange(self.outbound_key(batch_id),
+                                        start, stop)
         returnValue(keys)

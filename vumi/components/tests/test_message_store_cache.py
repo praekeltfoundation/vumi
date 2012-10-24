@@ -67,6 +67,17 @@ class TestMessageStoreCache(ApplicationTestCase):
             [m['message_id'] for m in messages])))
 
     @inlineCallbacks
+    def test_paged_get_outbound_message_keys(self):
+        messages = yield self.add_messages(self.batch_id,
+            self.cache.add_outbound_message)
+        # make sure we get keys back ordered according to timestamp, which
+        # means the reverse of how we put them in.
+        keys = yield self.cache.get_outbound_message_keys(self.batch_id, 0, 4)
+        self.assertEqual(len(keys), 5)
+        self.assertEqual(keys, list(reversed(
+            [m['message_id'] for m in messages]))[0:5])
+
+    @inlineCallbacks
     def test_get_batch_ids(self):
         yield self.cache.batch_start('batch-1')
         yield self.cache.add_outbound_message('batch-1', self.mkmsg_out())
@@ -90,6 +101,15 @@ class TestMessageStoreCache(ApplicationTestCase):
         self.assertEqual(len(keys), 10)
         self.assertEqual(keys, list(reversed(
             [m['message_id'] for m in messages])))
+
+    @inlineCallbacks
+    def test_paged_get_inbound_message_keys(self):
+        messages = yield self.add_messages(self.batch_id,
+            self.cache.add_inbound_message)
+        keys = yield self.cache.get_inbound_message_keys(self.batch_id, 0, 4)
+        self.assertEqual(len(keys), 5)
+        self.assertEqual(keys, list(reversed(
+            [m['message_id'] for m in messages]))[0:5])
 
     @inlineCallbacks
     def test_get_from_addrs(self):
