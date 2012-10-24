@@ -59,6 +59,10 @@ class Mocking(object):
             self.args = args
             self.kwargs = kwargs
 
+        def __repr__(self):
+            return '<%r object at %r [args: %r, kw: %r]>' % (
+                self.__class__.__name__, id(self), self.args, self.kwargs)
+
     def __init__(self, function):
         """Mock a function"""
         self.function = function

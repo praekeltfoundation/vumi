@@ -670,6 +670,85 @@ class TestContentKeywordRouter(DispatcherTestCase):
         self.assertEqual(session['name'], 'app2')
 
 
+class TestRedirectOutboundRouterForSMPP(DispatcherTestCase):
+    """
+    This is a test to cover our use case when using SMPP 3.4 with
+    split Tx and Rx binds. The outbound traffic needs to go to the Tx, while
+    the Rx just should go through. Upstream everything should be seen
+    as arriving from the dispatcher and so the `transport_name` should be
+    overwritten.
+    """
+    dispatcher_class = BaseDispatchWorker
+
+    @inlineCallbacks
+    def setUp(self):
+        yield super(TestRedirectOutboundRouterForSMPP, self).setUp()
+        self.config = {
+            'dispatcher_name': 'redirect_outbound_dispatcher',
+            'router_class': 'vumi.dispatchers.base.RedirectOutboundRouter',
+            'transport_names': ['smpp_rx_transport', 'smpp_tx_transport'],
+            'exposed_names': ['upstream'],
+            'redirect_outbound': {
+                'upstream': 'smpp_tx_transport',
+            },
+            'redirect_inbound': {
+                'smpp_tx_transport': 'upstream',
+                'smpp_rx_transport': 'upstream',
+            },
+        }
+        self.dispatcher = yield self.get_dispatcher(self.config)
+        self.router = self.dispatcher._router
+
+    @inlineCallbacks
+    def test_outbound_message_via_tx(self):
+        msg = self.mkmsg_out(transport_name='upstream')
+        yield self.dispatch(msg, transport_name='upstream',
+            direction='outbound')
+        [outbound] = self.get_dispatched_messages('smpp_tx_transport',
+            direction='outbound')
+        self.assertEqual(outbound['message_id'], msg['message_id'])
+
+    @inlineCallbacks
+    def test_inbound_event_tx(self):
+        ack = self.mkmsg_ack(transport_name='smpp_tx_transport')
+        yield self.dispatch(ack, transport_name='smpp_tx_transport',
+                                    direction='event')
+        [event] = self.get_dispatched_messages('upstream',
+            direction='event')
+        self.assertEqual(event['transport_name'], 'upstream')
+        self.assertEqual(event['event_id'], ack['event_id'])
+
+    @inlineCallbacks
+    def test_inbound_event_rx(self):
+        ack = self.mkmsg_ack(transport_name='smpp_rx_transport')
+        yield self.dispatch(ack, transport_name='smpp_rx_transport',
+                                    direction='event')
+        [event] = self.get_dispatched_messages('upstream',
+            direction='event')
+        self.assertEqual(event['transport_name'], 'upstream')
+        self.assertEqual(event['event_id'], ack['event_id'])
+
+    @inlineCallbacks
+    def test_inbound_message_via_rx(self):
+        msg = self.mkmsg_in(transport_name='smpp_rx_transport')
+        yield self.dispatch(msg, transport_name='smpp_rx_transport',
+                                    direction='inbound')
+        [app_msg] = self.get_dispatched_messages('upstream',
+            direction='inbound')
+        self.assertEqual(app_msg['transport_name'], 'upstream')
+        self.assertEqual(app_msg['message_id'], msg['message_id'])
+
+    @inlineCallbacks
+    def test_error_logging_for_bad_app(self):
+        msgt1 = self.mkmsg_out(transport_name='foo')  # Does not exist
+        with LogCatcher() as log:
+            yield self.dispatch(msgt1, transport_name='upstream',
+                direction='outbound')
+            [err] = log.errors
+            self.assertTrue('No redirect_outbound specified for foo' in
+                                err['message'][0])
+
+
 class TestRedirectOutboundRouter(DispatcherTestCase):
 
     dispatcher_class = BaseDispatchWorker
@@ -687,6 +766,10 @@ class TestRedirectOutboundRouter(DispatcherTestCase):
                 'app1': 'transport1',
                 'app2': 'transport2',
             },
+            'redirect_inbound': {
+                'transport1': 'app1',
+                'transport2': 'app2',
+            }
         }
         self.dispatcher = yield self.get_dispatcher(self.config)
         self.router = self.dispatcher._router
