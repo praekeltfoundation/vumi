@@ -183,14 +183,15 @@ class LogCatcher(object):
         return [ev for ev in self.logs if ev["isError"]]
 
     def messages(self):
-        return [msg['message'][0] for msg in self.logs if not msg["isError"]]
+        return [" ".join(msg['message']) for msg in self.logs
+                if not msg["isError"]]
 
     def _keep_log(self, event_dict):
         if self.system is not None:
             if not self.system.search(event_dict.get('system', '-')):
                 return False
         if self.message is not None:
-            log_message = "\n".join(event_dict.get('message', []))
+            log_message = " ".join(event_dict.get('message', []))
             print log_message
             if not self.message.search(log_message):
                 return False
