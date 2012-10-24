@@ -30,6 +30,11 @@ class MessageStoreCache(object):
         """
         Reconcile the cache with the data in Riak. This is a heavy process.
         """
+        # TODO: idea here is to compare the counts in Redis with the counts
+        #       that the shiny new by_index_count stuff gives us. If it's
+        #       wildly off then we need to reconcile these two. We need to
+        #       do this from Twisted (not in Celery) since doing this
+        #       synchronous is going to be unacceptably slow.
         pass
 
     def key(self, *args):
