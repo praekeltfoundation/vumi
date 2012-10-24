@@ -31,6 +31,9 @@ class MessageStoreCache(object):
         Check if the cache needs to be reconciled with the data in Riak.
         This is a heavy process since we're doing index based counts
         in Riak and comparing them to the cached counts.
+
+        Returns a tuple (inbound_offset, outbound_offset) of the
+        message_store count minus the cached_count.
         """
         inbound_offset = yield self.calculate_inbound_offset(message_store,
             batch_id)
