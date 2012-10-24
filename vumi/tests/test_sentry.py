@@ -3,6 +3,8 @@
 import logging
 import base64
 import json
+import sys
+import traceback
 
 from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks, Deferred
@@ -80,6 +82,17 @@ class TestSentryLogObserver(TestCase):
             (((type(e), e, None),),
              {'data': {'level': 20, 'logger': 'test.log'}}),
         ])
+
+    def test_log_traceback(self):
+        try:
+            raise ValueError("foo")
+        except ValueError:
+            f = Failure(*sys.exc_info())
+        self.obs({'failure': f})
+        [call_args] = self.client.exceptions
+        exc_info = call_args[0][0]
+        tb = ''.join(traceback.format_exception(*exc_info))
+        self.assertTrue('raise ValueError("foo")' in tb)
 
     def test_log_message(self):
         self.obs({'message': ["a"], 'system': 'test.log'})
