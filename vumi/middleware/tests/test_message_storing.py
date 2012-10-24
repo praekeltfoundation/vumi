@@ -10,6 +10,8 @@ from vumi.tests.utils import PersistenceMixin
 
 class StoringMiddlewareTestCase(TestCase, PersistenceMixin):
 
+    use_riak = True
+
     DEFAULT_CONFIG = {
         }
 

@@ -12,6 +12,8 @@ from vumi.components import MessageStore
 class TestMessageStore(ApplicationTestCase):
     # inherits from ApplicationTestCase for .mkmsg_in and .mkmsg_out
 
+    use_riak = True
+
     @inlineCallbacks
     def setUp(self):
         yield super(TestMessageStore, self).setUp()
