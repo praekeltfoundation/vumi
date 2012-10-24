@@ -5,6 +5,7 @@ import time
 from twisted.internet.defer import returnValue
 
 from vumi.persist.redis_base import Manager
+from vumi.message import TransportEvent
 
 
 class MessageStoreCache(object):
@@ -12,16 +13,17 @@ class MessageStoreCache(object):
     A helper class to provide a view on information in the message store
     that is difficult to query straight from riak.
     """
-    BATCH_KEY = 'batch_id'
+    BATCH_KEY = 'batches'
     OUTBOUND_KEY = 'outbound'
     INBOUND_KEY = 'inbound'
     TO_ADDR_KEY = 'to_addr'
     FROM_ADDR_KEY = 'from_addr'
+    STATUS_KEY = 'status'
 
-    def __init__(self, redis):
-        # Also store as manager this the @Manager.calls_manager decorator
-        # expects it to be called as such.
-        self.redis = self.manager = redis
+    def __init__(self, message_store):
+        self.message_store = message_store
+        self.manager = self.message_store.manager
+        self.redis = self.message_store.redis
 
     def reconcile(self, message_store, batch_id):
         """
@@ -36,16 +38,47 @@ class MessageStoreCache(object):
         return self.key(self.BATCH_KEY, *args)
 
     def outbound_key(self, batch_id):
-        return self.batch_key(batch_id, self.OUTBOUND_KEY)
+        return self.batch_key(self.OUTBOUND_KEY, batch_id)
 
     def inbound_key(self, batch_id):
-        return self.batch_key(batch_id, self.INBOUND_KEY)
+        return self.batch_key(self.INBOUND_KEY, batch_id)
 
     def to_addr_key(self, batch_id):
-        return self.batch_key(batch_id, self.TO_ADDR_KEY)
+        return self.batch_key(self.TO_ADDR_KEY, batch_id)
 
     def from_addr_key(self, batch_id):
-        return self.batch_key(batch_id, self.FROM_ADDR_KEY)
+        return self.batch_key(self.FROM_ADDR_KEY, batch_id)
+
+    def status_key(self, batch_id):
+        return self.batch_key(self.STATUS_KEY, batch_id)
+
+    @Manager.calls_manager
+    def init_batch(self, batch_id):
+        """
+        Does various setup work in order to be able to accurately
+        store cached data for a batch_id.
+
+        A call to this isn't necessary but good for general house keeping.
+
+        This operation idempotent.
+        """
+        yield self.redis.sadd(self.batch_key(), batch_id)
+        yield self.init_status(batch_id)
+
+    @Manager.calls_manager
+    def init_status(self, batch_id):
+        """"
+        Setup the hash for event tracking on this batch, it primes the
+        hash to have the bare minimum of expected keys and their values
+        all set to 0. If there's already an existing value then it is
+        left untouched.
+        """
+        events = (TransportEvent.EVENT_TYPES.keys() +
+                  ['delivery_report.%s' % status
+                   for status in TransportEvent.DELIVERY_STATUSES] +
+                  ['sent'])
+        for event in events:
+            yield self.redis.hsetnx(self.status_key(batch_id), event, 0)
 
     @Manager.calls_manager
     def get_batch_ids(self):
@@ -54,6 +87,9 @@ class MessageStoreCache(object):
         """
         batch_ids = yield self.redis.smembers(self.batch_key())
         returnValue(batch_ids)
+
+    def batch_exists(self, batch_id):
+        return self.redis.sismember(self.batch_key(), batch_id)
 
     def get_timestamp(self, datetime):
         """
@@ -76,17 +112,34 @@ class MessageStoreCache(object):
         """
         Add a message key, weighted with the timestamp to the batch_id.
         """
-        yield self.redis.sadd(self.batch_key(), batch_id)
         yield self.redis.zadd(self.outbound_key(batch_id), **{
             message_key: timestamp,
             })
 
+    @Manager.calls_manager
     def add_event(self, batch_id, event):
         """
         Add an event to the cache for the given batch_id
         """
-        # TODO: figure out what we want to cache for events.
-        pass
+        event_type = event['event_type']
+        yield self.increment_event_status(batch_id, event_type)
+        if event_type == 'delivery_report':
+            yield self.increment_event_status(batch_id,
+                '%s.%s' % (event_type, event['delivery_status']))
+
+    def increment_event_status(self, batch_id, event_type):
+        """
+        Increment the status for the given event_type by 1 for the given
+        batch_id
+        """
+        return self.redis.hincrby(self.status_key(batch_id), event_type,  1)
+
+    def get_event_stats(self, batch_id):
+        """
+        Return a dictionary containing the latest event stats for the given
+        batch_id.
+        """
+        return self.redis.hgetall(self.status_key(batch_id))
 
     @Manager.calls_manager
     def add_inbound_message(self, batch_id, msg):
@@ -103,7 +156,6 @@ class MessageStoreCache(object):
         """
         Add a message key, weighted with the timestamp to the batch_id
         """
-        yield self.redis.sadd(self.batch_key(), batch_id)
         yield self.redis.zadd(self.inbound_key(batch_id), **{
             message_key: timestamp,
             })

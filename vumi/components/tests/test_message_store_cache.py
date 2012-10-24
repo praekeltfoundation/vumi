@@ -20,8 +20,9 @@ class TestMessageStoreCache(ApplicationTestCase):
         self.redis = yield self.get_redis_manager()
         self.manager = yield self.get_riak_manager()
         self.store = yield MessageStore(self.manager, self.redis)
-        self.cache = MessageStoreCache(self.redis)
+        self.cache = MessageStoreCache(self.store)
         self.batch_id = 'a-batch-id'
+        self.cache.init_batch(self.batch_id)
 
     def mkmsg_out(self, **kwargs):
         defaults = {
