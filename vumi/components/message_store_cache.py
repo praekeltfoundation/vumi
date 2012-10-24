@@ -25,16 +25,30 @@ class MessageStoreCache(object):
         # requires it to be named as such.
         self.redis = self.manager = redis
 
-    def need_reconciliation(self, message_store, batch_id):
+    @Manager.calls_manager
+    def calculate_offsets(self, message_store, batch_id):
         """
-        Reconcile the cache with the data in Riak. This is a heavy process.
+        Check if the cache needs to be reconciled with the data in Riak.
+        This is a heavy process since we're doing index based counts
+        in Riak and comparing them to the cached counts.
         """
-        # TODO: idea here is to compare the counts in Redis with the counts
-        #       that the shiny new by_index_count stuff gives us. If it's
-        #       wildly off then we need to reconcile these two. We need to
-        #       do this from Twisted (not in Celery) since doing this
-        #       synchronous is going to be unacceptably slow.
-        raise NotImplementedError('Not implemented yet')
+        inbound_offset = yield self.calculate_inbound_offset(message_store,
+            batch_id)
+        outbound_offset = yield self.calculate_outbound_offset(message_store,
+            batch_id)
+        returnValue((inbound_offset, outbound_offset))
+
+    @Manager.calls_manager
+    def calculate_inbound_offset(self, message_store, batch_id):
+        ms_count = yield message_store.batch_inbound_count(batch_id)
+        cache_count = yield self.count_inbound_message_keys(batch_id)
+        returnValue(ms_count - cache_count)
+
+    @Manager.calls_manager
+    def calculate_outbound_offset(self, message_store, batch_id):
+        ms_count = yield message_store.batch_outbound_count(batch_id)
+        cache_count = yield self.count_outbound_message_keys(batch_id)
+        returnValue(ms_count - cache_count)
 
     def key(self, *args):
         return ':'.join([unicode(a) for a in args])
@@ -181,7 +195,7 @@ class MessageStoreCache(object):
         """
         return self.redis.zrange(self.from_addr_key(batch_id), 0, -1)
 
-    def get_from_addrs_count(self, batch_id):
+    def count_from_addrs(self, batch_id):
         """
         Return the number of from_addrs for this batch_id
         """
@@ -203,7 +217,7 @@ class MessageStoreCache(object):
         """
         return self.redis.zrange(self.to_addr_key(batch_id), 0, -1)
 
-    def get_to_addrs_count(self, batch_id):
+    def count_to_addrs(self, batch_id):
         """
         Return count of the unique to_addrs in this batch.
         """
@@ -218,6 +232,12 @@ class MessageStoreCache(object):
                                         start, stop)
         returnValue(keys)
 
+    def count_inbound_message_keys(self, batch_id):
+        """
+        Return the count of the unique inbound message keys for this batch_id
+        """
+        return self.redis.zcard(self.inbound_key(batch_id))
+
     @Manager.calls_manager
     def get_outbound_message_keys(self, batch_id, start=0, stop=-1):
         """
@@ -226,3 +246,9 @@ class MessageStoreCache(object):
         keys = yield self.redis.zrange(self.outbound_key(batch_id),
                                         start, stop)
         returnValue(keys)
+
+    def count_outbound_message_keys(self, batch_id):
+        """
+        Return the count of the unique outbound message keys for this batch_id
+        """
+        return self.redis.zcard(self.outbound_key(batch_id))

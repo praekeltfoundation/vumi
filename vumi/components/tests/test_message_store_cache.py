@@ -67,6 +67,13 @@ class TestMessageStoreCache(ApplicationTestCase):
             [m['message_id'] for m in messages])))
 
     @inlineCallbacks
+    def test_count_outbound_message_keys(self):
+        yield self.add_messages(self.batch_id,
+            self.cache.add_outbound_message)
+        count = yield self.cache.count_outbound_message_keys(self.batch_id)
+        self.assertEqual(count, 10)
+
+    @inlineCallbacks
     def test_paged_get_outbound_message_keys(self):
         messages = yield self.add_messages(self.batch_id,
             self.cache.add_outbound_message)
@@ -103,6 +110,13 @@ class TestMessageStoreCache(ApplicationTestCase):
             [m['message_id'] for m in messages])))
 
     @inlineCallbacks
+    def test_count_inbound_message_keys(self):
+        yield self.add_messages(self.batch_id,
+            self.cache.add_inbound_message)
+        count = yield self.cache.count_inbound_message_keys(self.batch_id)
+        self.assertEqual(count, 10)
+
+    @inlineCallbacks
     def test_paged_get_inbound_message_keys(self):
         messages = yield self.add_messages(self.batch_id,
             self.cache.add_inbound_message)
@@ -120,10 +134,10 @@ class TestMessageStoreCache(ApplicationTestCase):
                                         reversed(range(10))])
 
     @inlineCallbacks
-    def test_get_from_addrs_count(self):
+    def test_count_from_addrs(self):
         yield self.add_messages(self.batch_id,
             self.cache.add_inbound_message)
-        count = yield self.cache.get_from_addrs_count(self.batch_id)
+        count = yield self.cache.count_from_addrs(self.batch_id)
         self.assertEqual(count, 10)
 
     @inlineCallbacks
@@ -135,10 +149,10 @@ class TestMessageStoreCache(ApplicationTestCase):
                                         reversed(range(10))])
 
     @inlineCallbacks
-    def test_get_to_addrs_count(self):
+    def test_count_to_addrs(self):
         yield self.add_messages(self.batch_id,
             self.cache.add_outbound_message)
-        count = yield self.cache.get_to_addrs_count(self.batch_id)
+        count = yield self.cache.count_to_addrs(self.batch_id)
         self.assertEqual(count, 10)
 
     @inlineCallbacks
@@ -159,3 +173,15 @@ class TestMessageStoreCache(ApplicationTestCase):
             'ack': '1',
             'sent': '1',
             })
+
+    @inlineCallbacks
+    def test_calculate_offsets(self):
+        msg1 = self.mkmsg_out()
+        msg2 = self.mkmsg_out()
+        yield self.store.add_outbound_message(msg1, batch_id=self.batch_id)
+        # the cache has one more than the message store
+        yield self.cache.add_outbound_message(self.batch_id, msg2)
+        offsets = yield self.cache.calculate_offsets(self.store, self.batch_id)
+        # inbounds should be the same, outbounds the message store should
+        # be one behind the cache (which is very unlikely)
+        self.assertEqual(offsets, (0, -1))
