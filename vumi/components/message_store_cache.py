@@ -61,12 +61,15 @@ class MessageStoreCache(object):
         """
         return time.mktime(datetime.timetuple())
 
+    @Manager.calls_manager
     def add_outbound_message(self, batch_id, msg):
         """
         Add an outbound message to the cache for the given batch_id
         """
-        return self.add_outbound_message_key(batch_id, msg['message_id'],
-            self.get_timestamp(msg['timestamp']))
+        timestamp = self.get_timestamp(msg['timestamp'])
+        yield self.add_outbound_message_key(batch_id, msg['message_id'],
+            timestamp)
+        yield self.add_to_addr(batch_id, msg['to_addr'], timestamp)
 
     @Manager.calls_manager
     def add_outbound_message_key(self, batch_id, message_key, timestamp):
@@ -139,13 +142,13 @@ class MessageStoreCache(object):
         Return a set of unique to_addrs addressed in this batch ordered
         by the most recent timestamp.
         """
-        pass
+        return self.redis.zrange(self.to_addr_key(batch_id), 0, -1)
 
     def get_to_addrs_count(self, batch_id):
         """
         Return count of the unique to_addrs in this batch.
         """
-        pass
+        return self.redis.zcard(self.to_addr_key(batch_id))
 
     @Manager.calls_manager
     def get_inbound_message_keys(self, batch_id):

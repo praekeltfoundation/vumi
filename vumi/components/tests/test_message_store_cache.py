@@ -41,7 +41,8 @@ class TestMessageStoreCache(ApplicationTestCase):
     def add_messages(self, batch_id, callback, count=10):
         messages = []
         for i in range(count):
-            msg = self.mkmsg_in(from_addr='from-%s' % (i,))
+            msg = self.mkmsg_in(from_addr='from-%s' % (i,),
+                to_addr='to-%s' % (i,))
             msg['timestamp'] = datetime.now() - timedelta(seconds=i)
             yield callback(batch_id, msg)
             messages.append(msg)
@@ -95,3 +96,25 @@ class TestMessageStoreCache(ApplicationTestCase):
         from_addrs = yield self.cache.get_from_addrs(self.batch_id)
         self.assertEqual(from_addrs, ['from-%s' % i for i in
                                         reversed(range(10))])
+
+    @inlineCallbacks
+    def test_get_from_addrs_count(self):
+        yield self.add_messages(self.batch_id,
+            self.cache.add_inbound_message)
+        count = yield self.cache.get_from_addrs_count(self.batch_id)
+        self.assertEqual(count, 10)
+
+    @inlineCallbacks
+    def test_get_to_addrs(self):
+        yield self.add_messages(self.batch_id,
+            self.cache.add_outbound_message)
+        to_addrs = yield self.cache.get_to_addrs(self.batch_id)
+        self.assertEqual(to_addrs, ['to-%s' % i for i in
+                                        reversed(range(10))])
+
+    @inlineCallbacks
+    def test_get_to_addrs_count(self):
+        yield self.add_messages(self.batch_id,
+            self.cache.add_outbound_message)
+        count = yield self.cache.get_to_addrs_count(self.batch_id)
+        self.assertEqual(count, 10)
