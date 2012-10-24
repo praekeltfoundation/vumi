@@ -92,9 +92,7 @@ class MessageStore(object):
         self.events = manager.proxy(Event)
         self.inbound_messages = manager.proxy(InboundMessage)
         self.current_tags = manager.proxy(CurrentTag)
-        # for batch status cache
-        self.redis = redis
-        self.cache = MessageStoreCache(self)
+        self.cache = MessageStoreCache(redis)
 
     @Manager.calls_manager
     def batch_start(self, tags, **metadata):

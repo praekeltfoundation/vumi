@@ -9,7 +9,6 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from vumi.message import TransportMessage
 from vumi.application.tests.test_base import ApplicationTestCase
 from vumi.components import MessageStore
-from vumi.components.message_store_cache import MessageStoreCache
 
 
 class TestMessageStoreCache(ApplicationTestCase):
@@ -20,7 +19,7 @@ class TestMessageStoreCache(ApplicationTestCase):
         self.redis = yield self.get_redis_manager()
         self.manager = yield self.get_riak_manager()
         self.store = yield MessageStore(self.manager, self.redis)
-        self.cache = MessageStoreCache(self.store)
+        self.cache = self.store.cache
         self.batch_id = 'a-batch-id'
         self.cache.batch_start(self.batch_id)
 

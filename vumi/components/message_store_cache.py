@@ -20,13 +20,12 @@ class MessageStoreCache(object):
     FROM_ADDR_KEY = 'from_addr'
     STATUS_KEY = 'status'
 
-    def __init__(self, message_store):
-        self.message_store = message_store
-        # Need to define a `manager` for @Manager.calls_manager to work.
-        self.manager = self.message_store.manager
-        self.redis = self.message_store.redis
+    def __init__(self, redis):
+        # Store redis as `manager` as well since @Manager.calls_manager
+        # requires it to be named as such.
+        self.redis = self.manager = redis
 
-    def reconcile(self, message_store, batch_id):
+    def need_reconciliation(self, message_store, batch_id):
         """
         Reconcile the cache with the data in Riak. This is a heavy process.
         """
@@ -35,7 +34,7 @@ class MessageStoreCache(object):
         #       wildly off then we need to reconcile these two. We need to
         #       do this from Twisted (not in Celery) since doing this
         #       synchronous is going to be unacceptably slow.
-        pass
+        raise NotImplementedError('Not implemented yet')
 
     def key(self, *args):
         return ':'.join([unicode(a) for a in args])
