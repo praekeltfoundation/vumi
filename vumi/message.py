@@ -291,6 +291,7 @@ class TransportEvent(TransportMessage):
     # map of event_types -> extra fields
     EVENT_TYPES = {
         'ack': {'sent_message_id': lambda v: v is not None},
+        'nack': {'sent_message_id': lambda v: v is not None},
         'delivery_report': {
             'delivery_status': lambda v: v in TransportEvent.DELIVERY_STATUSES,
             },
