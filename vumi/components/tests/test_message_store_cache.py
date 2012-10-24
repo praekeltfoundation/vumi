@@ -88,3 +88,16 @@ class TestMessageStoreCache(ApplicationTestCase):
         self.assertEqual(len(keys), 10)
         self.assertEqual(keys, list(reversed(
             [m['message_id'] for m in messages])))
+
+    @inlineCallbacks
+    def test_get_from_addrs(self):
+        messages = []
+        for i in range(10):
+            msg = self.mkmsg_in(from_addr='from-%s' % (i,))
+            msg['timestamp'] = datetime.now() - timedelta(seconds=i)
+            yield self.cache.add_inbound_message(self.batch_id, msg)
+            messages.append(msg)
+
+        from_addrs = yield self.cache.get_from_addrs(self.batch_id)
+        self.assertEqual(from_addrs, ['from-%s' % i for i in
+                                        reversed(range(10))])
