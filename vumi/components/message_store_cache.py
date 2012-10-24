@@ -85,6 +85,7 @@ class MessageStoreCache(object):
         """
         Add an event to the cache for the given batch_id
         """
+        # TODO: figure out what we want to cache for events.
         pass
 
     @Manager.calls_manager
