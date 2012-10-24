@@ -158,7 +158,20 @@ def FakeRedis():
 
 
 class LogCatcher(object):
-    """Gather logs."""
+    """Context manager for gathering logs in tests.
+
+    :param str system:
+        Only log events whose 'system' value contains the given
+        regular expression pattern will be gathered. Default: None
+        (i.e. keep all log events).
+
+    :param str message:
+        Only log events whose message contains the given regular
+        expression pattern will be gathered. The message is
+        constructed by joining the elements in the 'message' value
+        with a space (the same way Twisted does). Default: None
+        (i.e. keep all log events).
+    """
 
     def __init__(self, system=None, message=None):
         self.logs = []
