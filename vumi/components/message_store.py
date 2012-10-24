@@ -174,6 +174,7 @@ class MessageStore(object):
 
         if batch_id is not None:
             msg_record.batch.key = batch_id
+            self.cache.add_inbound_message(batch_id, msg)
 
         yield msg_record.save()
 
