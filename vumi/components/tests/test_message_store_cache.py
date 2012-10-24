@@ -4,7 +4,7 @@
 
 from datetime import datetime, timedelta
 
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.message import TransportMessage
 from vumi.application.tests.test_base import ApplicationTestCase
@@ -38,6 +38,16 @@ class TestMessageStoreCache(ApplicationTestCase):
         return super(TestMessageStoreCache, self).mkmsg_in(**defaults)
 
     @inlineCallbacks
+    def add_messages(self, batch_id, callback, count=10):
+        messages = []
+        for i in range(count):
+            msg = self.mkmsg_in(from_addr='from-%s' % (i,))
+            msg['timestamp'] = datetime.now() - timedelta(seconds=i)
+            yield callback(batch_id, msg)
+            messages.append(msg)
+        returnValue(messages)
+
+    @inlineCallbacks
     def test_add_outbound_message(self):
         msg = self.mkmsg_out()
         yield self.cache.add_outbound_message(self.batch_id, msg)
@@ -46,14 +56,8 @@ class TestMessageStoreCache(ApplicationTestCase):
 
     @inlineCallbacks
     def test_get_outbound_message_keys(self):
-        messages = []
-        for i in range(10):
-            msg = self.mkmsg_out()
-            # insert them with starting with newest first
-            msg['timestamp'] = datetime.now() - timedelta(seconds=i)
-            yield self.cache.add_outbound_message(self.batch_id, msg)
-            messages.append(msg)
-
+        messages = yield self.add_messages(self.batch_id,
+            self.cache.add_outbound_message)
         # make sure we get keys back ordered according to timestamp, which
         # means the reverse of how we put them in.
         keys = yield self.cache.get_outbound_message_keys(self.batch_id)
@@ -77,13 +81,8 @@ class TestMessageStoreCache(ApplicationTestCase):
 
     @inlineCallbacks
     def test_get_inbound_message_keys(self):
-        messages = []
-        for i in range(10):
-            msg = self.mkmsg_in()
-            msg['timestamp'] = datetime.now() - timedelta(seconds=i)
-            yield self.cache.add_inbound_message(self.batch_id, msg)
-            messages.append(msg)
-
+        messages = yield self.add_messages(self.batch_id,
+            self.cache.add_inbound_message)
         keys = yield self.cache.get_inbound_message_keys(self.batch_id)
         self.assertEqual(len(keys), 10)
         self.assertEqual(keys, list(reversed(
@@ -91,13 +90,8 @@ class TestMessageStoreCache(ApplicationTestCase):
 
     @inlineCallbacks
     def test_get_from_addrs(self):
-        messages = []
-        for i in range(10):
-            msg = self.mkmsg_in(from_addr='from-%s' % (i,))
-            msg['timestamp'] = datetime.now() - timedelta(seconds=i)
-            yield self.cache.add_inbound_message(self.batch_id, msg)
-            messages.append(msg)
-
+        yield self.add_messages(self.batch_id,
+            self.cache.add_inbound_message)
         from_addrs = yield self.cache.get_from_addrs(self.batch_id)
         self.assertEqual(from_addrs, ['from-%s' % i for i in
                                         reversed(range(10))])
