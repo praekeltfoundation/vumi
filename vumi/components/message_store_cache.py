@@ -14,6 +14,7 @@ class MessageStoreCache(object):
     """
     BATCH_KEY = 'batch_id'
     OUTBOUND_KEY = 'outbound'
+    INBOUND_KEY = 'inbound'
 
     def __init__(self, redis):
         # Also store as manager this the @Manager.calls_manager decorator
@@ -29,16 +30,22 @@ class MessageStoreCache(object):
     def key(self, *args):
         return ':'.join([unicode(a) for a in args])
 
-    def batch_key(self, batch_id, *args):
-        return self.key(self.BATCH_KEY, batch_id, *args)
+    def batch_key(self, *args):
+        return self.key(self.BATCH_KEY, *args)
 
     def outbound_key(self, batch_id):
         return self.batch_key(batch_id, self.OUTBOUND_KEY)
 
-    def list_batch_ids(self):
+    def inbound_key(self, batch_id):
+        return self.batch_key(batch_id, self.INBOUND_KEY)
+
+    @Manager.calls_manager
+    def get_batch_ids(self):
         """
         Return a list of known batch_ids
         """
+        batch_ids = yield self.redis.smembers(self.batch_key())
+        returnValue(batch_ids)
 
     def get_timestamp(self, datetime):
         """
@@ -58,10 +65,10 @@ class MessageStoreCache(object):
         """
         Add a message key, weighted with the timestamp to the batch_id.
         """
-        yield self.redis.sadd(self.batch_key(batch_id))
+        yield self.redis.sadd(self.batch_key(), batch_id)
         yield self.redis.zadd(self.outbound_key(batch_id), **{
             message_key: timestamp,
-        })
+            })
 
     def add_event(self, batch_id, event):
         """
@@ -73,10 +80,18 @@ class MessageStoreCache(object):
         """
         Add an inbound message to the cache for the given batch_id
         """
-        pass
+        return self.add_inbound_message_key(batch_id, msg['message_id'],
+            self.get_timestamp(msg['timestamp']))
 
+    @Manager.calls_manager
     def add_inbound_message_key(self, batch_id, message_key, timestamp):
-        pass
+        """
+        Add a message key, weighted with the timestamp to the batch_id
+        """
+        yield self.redis.sadd(self.batch_key(), batch_id)
+        yield self.redis.zadd(self.inbound_key(batch_id), **{
+            message_key: timestamp,
+            })
 
     def get_to_addrs(self, batch_id):
         """
@@ -91,11 +106,13 @@ class MessageStoreCache(object):
         """
         pass
 
+    @Manager.calls_manager
     def get_inbound_message_keys(self, batch_id):
         """
         Return a list of keys ordered according to their timestamps
         """
-        pass
+        keys = yield self.redis.zrange(self.inbound_key(batch_id), 0, -1)
+        returnValue(keys)
 
     @Manager.calls_manager
     def get_outbound_message_keys(self, batch_id):
