@@ -74,3 +74,17 @@ class TestMessageStoreCache(ApplicationTestCase):
         yield self.cache.add_inbound_message(self.batch_id, msg)
         [msg_key] = yield self.cache.get_inbound_message_keys(self.batch_id)
         self.assertEqual(msg_key, msg['message_id'])
+
+    @inlineCallbacks
+    def test_get_inbound_message_keys(self):
+        messages = []
+        for i in range(10):
+            msg = self.mkmsg_in()
+            msg['timestamp'] = datetime.now() - timedelta(seconds=i)
+            yield self.cache.add_inbound_message(self.batch_id, msg)
+            messages.append(msg)
+
+        keys = yield self.cache.get_inbound_message_keys(self.batch_id)
+        self.assertEqual(len(keys), 10)
+        self.assertEqual(keys, list(reversed(
+            [m['message_id'] for m in messages])))
