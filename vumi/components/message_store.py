@@ -11,6 +11,7 @@ from vumi.message import TransportEvent, TransportUserMessage
 from vumi.persist.model import Model, Manager
 from vumi.persist.fields import (VumiMessage, ForeignKey, ListOf, Tag, Dynamic,
                                  Unicode)
+from vumi.components.message_store_cache import MessageStoreCache
 
 
 class Batch(Model):
@@ -93,6 +94,7 @@ class MessageStore(object):
         self.current_tags = manager.proxy(CurrentTag)
         # for batch status cache
         self.redis = redis
+        self.cache = MessageStoreCache(self)
 
     @Manager.calls_manager
     def batch_start(self, tags, **metadata):
@@ -110,7 +112,7 @@ class MessageStore(object):
             tag_record.current_batch.set(batch)
             yield tag_record.save()
 
-        yield self._init_status(batch_id)
+        yield self.cache.batch_start(batch_id)
         returnValue(batch_id)
 
     @Manager.calls_manager
@@ -133,7 +135,7 @@ class MessageStore(object):
 
         if batch_id is not None:
             msg_record.batch.key = batch_id
-            yield self._inc_status(batch_id, 'sent')
+            yield self.cache.add_outbound_message(batch_id, msg)
 
         yield msg_record.save()
 
@@ -153,12 +155,7 @@ class MessageStore(object):
         if msg_record is not None:
             batch_id = msg_record.batch.key
             if batch_id is not None:
-                event_type = event['event_type']
-                yield self._inc_status(batch_id, event_type)
-                if event_type == 'delivery_report':
-                    yield self._inc_status(
-                        batch_id, '%s.%s' % (event_type,
-                                             event['delivery_status']))
+                yield self.cache.add_event(batch_id, event)
 
     @Manager.calls_manager
     def get_event(self, event_id):
@@ -195,7 +192,7 @@ class MessageStore(object):
         return tagmdl
 
     def batch_status(self, batch_id):
-        return self._get_status(batch_id)
+        return self.cache.get_event_status(batch_id)
 
     @Manager.calls_manager
     def batch_messages(self, batch_id):
@@ -224,30 +221,3 @@ class MessageStore(object):
     def batch_outbound_count(self, batch_id):
         [count] = yield self.outbound_messages.by_index_count(batch=batch_id)
         returnValue(count)
-
-    # batch status is stored in Redis as a cache of batch progress
-
-    def _batch_key(self, batch_id):
-        return ":".join(["batches", "status", batch_id])
-
-    @Manager.calls_manager
-    def _init_status(self, batch_id):
-        batch_key = self._batch_key(batch_id)
-        events = (TransportEvent.EVENT_TYPES.keys() +
-                  ['delivery_report.%s' % status
-                   for status in TransportEvent.DELIVERY_STATUSES] +
-                  ['sent'])
-        initial_status = dict((event, '0') for event in events)
-        yield self.redis.hmset(batch_key, initial_status)
-
-    @Manager.calls_manager
-    def _inc_status(self, batch_id, event):
-        batch_key = self._batch_key(batch_id)
-        yield self.redis.hincrby(batch_key, event, 1)
-
-    @Manager.calls_manager
-    def _get_status(self, batch_id):
-        batch_key = self._batch_key(batch_id)
-        raw_statuses = yield self.redis.hgetall(batch_key)
-        statuses = dict((k, int(v)) for k, v in raw_statuses.items())
-        returnValue(statuses)

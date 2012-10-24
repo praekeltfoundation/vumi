@@ -22,6 +22,7 @@ class MessageStoreCache(object):
 
     def __init__(self, message_store):
         self.message_store = message_store
+        # Need to define a `manager` for @Manager.calls_manager to work.
         self.manager = self.message_store.manager
         self.redis = self.message_store.redis
 
@@ -53,7 +54,7 @@ class MessageStoreCache(object):
         return self.batch_key(self.STATUS_KEY, batch_id)
 
     @Manager.calls_manager
-    def init_batch(self, batch_id):
+    def batch_start(self, batch_id):
         """
         Does various setup work in order to be able to accurately
         store cached data for a batch_id.
@@ -135,7 +136,7 @@ class MessageStoreCache(object):
         """
         return self.redis.hincrby(self.status_key(batch_id), event_type,  1)
 
-    def get_event_stats(self, batch_id):
+    def get_event_status(self, batch_id):
         """
         Return a dictionary containing the latest event stats for the given
         batch_id.

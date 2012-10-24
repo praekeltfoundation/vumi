@@ -53,11 +53,11 @@ class TestMessageStore(ApplicationTestCase):
 
     def _batch_status(self, ack=0, delivered=0, failed=0, pending=0, sent=0):
         return {
-            'ack': ack, 'sent': sent,
-            'delivery_report': sum([delivered, failed, pending]),
-            'delivery_report.delivered': delivered,
-            'delivery_report.failed': failed,
-            'delivery_report.pending': pending,
+            'ack': str(ack), 'sent': str(sent),
+            'delivery_report': str(sum([delivered, failed, pending])),
+            'delivery_report.delivered': str(delivered),
+            'delivery_report.failed': str(failed),
+            'delivery_report.pending': str(pending),
             }
 
     @inlineCallbacks

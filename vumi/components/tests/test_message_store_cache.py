@@ -22,7 +22,7 @@ class TestMessageStoreCache(ApplicationTestCase):
         self.store = yield MessageStore(self.manager, self.redis)
         self.cache = MessageStoreCache(self.store)
         self.batch_id = 'a-batch-id'
-        self.cache.init_batch(self.batch_id)
+        self.cache.batch_start(self.batch_id)
 
     def mkmsg_out(self, **kwargs):
         defaults = {
@@ -69,9 +69,9 @@ class TestMessageStoreCache(ApplicationTestCase):
 
     @inlineCallbacks
     def test_get_batch_ids(self):
-        yield self.cache.init_batch('batch-1')
+        yield self.cache.batch_start('batch-1')
         yield self.cache.add_outbound_message('batch-1', self.mkmsg_out())
-        yield self.cache.init_batch('batch-2')
+        yield self.cache.batch_start('batch-2')
         yield self.cache.add_outbound_message('batch-2', self.mkmsg_out())
         self.assertEqual((yield self.cache.get_batch_ids()), set([
             self.batch_id, 'batch-1', 'batch-2']))
@@ -131,7 +131,7 @@ class TestMessageStoreCache(ApplicationTestCase):
         delivery = self.mkmsg_delivery(user_message_id=msg['message_id'])
         yield self.cache.add_event(self.batch_id, ack)
         yield self.cache.add_event(self.batch_id, delivery)
-        stats = yield self.cache.get_event_stats(self.batch_id)
+        stats = yield self.cache.get_event_status(self.batch_id)
         self.assertEqual(stats, {
             'delivery_report': '1',
             'delivery_report.delivered': '1',
