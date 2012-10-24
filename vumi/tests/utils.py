@@ -16,7 +16,8 @@ from twisted.web.server import Site
 from twisted.internet.defer import DeferredQueue, inlineCallbacks, returnValue
 from twisted.python import log
 
-from vumi.utils import vumi_resource_path, import_module, flatten_generator
+from vumi.utils import (vumi_resource_path, import_module, flatten_generator,
+                        LogFilterSite)
 from vumi.service import get_spec, Worker, WorkerCreator
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.tests.fake_amqp import FakeAMQPBroker, FakeAMQClient
@@ -57,6 +58,10 @@ class Mocking(object):
         def __init__(self, args, kwargs):
             self.args = args
             self.kwargs = kwargs
+
+        def __repr__(self):
+            return '<%r object at %r [args: %r, kw: %r]>' % (
+                self.__class__.__name__, id(self), self.args, self.kwargs)
 
     def __init__(self, function):
         """Mock a function"""
@@ -206,7 +211,7 @@ class MockHttpServer(object):
     @inlineCallbacks
     def start(self):
         root = MockResource(self._handler)
-        site_factory = Site(root)
+        site_factory = LogFilterSite(root)
         self._webserver = yield reactor.listenTCP(0, site_factory)
         self.addr = self._webserver.getHost()
         self.url = "http://%s:%s/" % (self.addr.host, self.addr.port)
