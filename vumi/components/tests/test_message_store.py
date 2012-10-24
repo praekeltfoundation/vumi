@@ -51,9 +51,10 @@ class TestMessageStore(ApplicationTestCase):
         yield self.store.add_inbound_message(msg, **add_kw)
         returnValue((msg_id, msg, batch_id))
 
-    def _batch_status(self, ack=0, delivered=0, failed=0, pending=0, sent=0):
+    def _batch_status(self, ack=0, nack=0, delivered=0, failed=0, pending=0,
+                        sent=0):
         return {
-            'ack': ack, 'sent': sent,
+            'ack': ack, 'nack': nack, 'sent': sent,
             'delivery_report': sum([delivered, failed, pending]),
             'delivery_report.delivered': delivered,
             'delivery_report.failed': failed,
