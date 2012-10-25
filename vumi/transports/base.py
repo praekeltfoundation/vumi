@@ -219,6 +219,13 @@ class Transport(Worker):
                                   sent_message_id=sent_message_id,
                                   event_type='ack', **kw)
 
+    def publish_nack(self, user_message_id, **kw):
+        """
+        Helper method for publishing a ``nack`` event.
+        """
+        return self.publish_event(user_message_id=user_message_id,
+                                  event_type='nack', **kw)
+
     def publish_delivery_report(self, user_message_id, delivery_status, **kw):
         """
         Helper method for publishing a ``delivery_report`` event.

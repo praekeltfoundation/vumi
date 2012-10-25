@@ -24,6 +24,17 @@ class MessageMakerMixIn(object):
         event_kw.update(kw)
         return TransportEvent(**event_kw)
 
+    def mkmsg_nack(self, transport_name, **kw):
+        event_kw = dict(
+            event_type='nack',
+            user_message_id='1',
+            nack_reason='unknown',
+            transport_name=transport_name,
+            transport_metadata={},
+            )
+        event_kw.update(kw)
+        return TransportEvent(**event_kw)
+
     def mkmsg_in(self, transport_name, content='foo', **kw):
         msg_kw = dict(
             from_addr='+41791234567',
@@ -146,7 +157,7 @@ class TestBaseDispatchWorker(TestCase, MessageMakerMixIn):
                                 'app3.event')
 
     @inlineCallbacks
-    def test_inbound_event_routing(self):
+    def test_inbound_ack_routing(self):
         msg = self.mkmsg_ack('transport1')
         yield self.dispatch(msg, 'transport1.event')
         self.assert_messages(['transport1.event'], 'app1.event', [msg])
@@ -162,6 +173,29 @@ class TestBaseDispatchWorker(TestCase, MessageMakerMixIn):
 
         self.clear_dispatched()
         msg = self.mkmsg_ack('transport3')
+        yield self.dispatch(msg, 'transport3.event')
+        self.assert_messages(['transport3.event'], 'app1.event', [msg])
+        self.assert_messages(['transport3.event'], 'app3.event', [msg])
+        self.assert_no_messages('app1.inbound', 'app2.event', 'app2.inbound',
+                                'app3.inbound')
+
+    @inlineCallbacks
+    def test_inbound_nack_routing(self):
+        msg = self.mkmsg_nack('transport1')
+        yield self.dispatch(msg, 'transport1.event')
+        self.assert_messages(['transport1.event'], 'app1.event', [msg])
+        self.assert_no_messages('app1.inbound', 'app2.event', 'app2.inbound',
+                                'app3.event', 'app3.inbound')
+
+        self.clear_dispatched()
+        msg = self.mkmsg_nack('transport2')
+        yield self.dispatch(msg, 'transport2.event')
+        self.assert_messages(['transport2.event'], 'app2.event', [msg])
+        self.assert_no_messages('app1.event', 'app1.inbound', 'app2.inbound',
+                                'app3.event', 'app3.inbound')
+
+        self.clear_dispatched()
+        msg = self.mkmsg_nack('transport3')
         yield self.dispatch(msg, 'transport3.event')
         self.assert_messages(['transport3.event'], 'app1.event', [msg])
         self.assert_messages(['transport3.event'], 'app3.event', [msg])

@@ -23,6 +23,9 @@ class DummyApplicationWorker(ApplicationWorker):
     def consume_ack(self, event):
         self.record.append(('ack', event))
 
+    def consume_nack(self, event):
+        self.record.append(('nack', event))
+
     def consume_delivery_report(self, event):
         self.record.append(('delivery_report', event))
 
@@ -101,6 +104,9 @@ class TestApplicationWorker(TestCase):
             ('ack', TransportEvent(event_type='ack',
                                    sent_message_id='remote-id',
                                    user_message_id='ack-uuid')),
+            ('nack', TransportEvent(event_type='nack',
+                                   user_message_id='nack-uuid',
+                                   nack_reason='unknown')),
             ('delivery_report', TransportEvent(event_type='delivery_report',
                                                delivery_status='pending',
                                                user_message_id='dr-uuid')),
@@ -215,10 +221,14 @@ class TestApplicationWorker(TestCase):
         ack = TransportEvent(event_type='ack',
                              sent_message_id='remote-id',
                              user_message_id='ack-uuid')
+        nack = TransportEvent(event_type='nack',
+                             user_message_id='nack-uuid',
+                             nack_reason='unknown')
         dr = TransportEvent(event_type='delivery_report',
                             delivery_status='pending',
                             user_message_id='dr-uuid')
         worker.consume_ack(ack)
+        worker.consume_nack(nack)
         worker.consume_delivery_report(dr)
         worker.consume_unknown_event(FakeUserMessage())
         worker.consume_user_message(FakeUserMessage())

@@ -132,8 +132,10 @@ class SmppTransportTestCase(TransportTestCase):
         yield self.esme.handle_data(response.get_bin())
 
         self.assert_sent_contents(["message"])
-        # There should be no ack
-        self.assertEqual([], self.get_dispatched_events())
+        # There should be a nack
+        [nack] = yield self.wait_for_dispatched_events(1)
+        self.assertEqual(nack['user_message_id'], message['message_id'])
+        self.assertEqual(nack['nack_reason'], 'ESME_RSUBMITFAIL')
 
         comparison = self.mkmsg_fail(message.payload, 'ESME_RSUBMITFAIL')
         [actual] = yield self.get_dispatched_failures()

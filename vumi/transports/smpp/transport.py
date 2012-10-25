@@ -314,7 +314,9 @@ class SmppTransport(Transport):
                 sent_sms_id))
         else:
             yield self.r_delete_message(sent_sms_id)
-            self.failure_publisher.publish_message(FailureMessage(
+            yield self.publish_nack(user_message_id=sent_sms_id,
+                nack_reason=reason)
+            yield self.failure_publisher.publish_message(FailureMessage(
                     message=error_message.payload,
                     failure_code=None,
                     reason=reason))

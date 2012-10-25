@@ -145,10 +145,26 @@ class TestMessageStore(ApplicationTestCase):
         self.assertEqual(batch_status, self._batch_status(sent=1, ack=1))
 
     @inlineCallbacks
+    def test_add_nack_event(self):
+        msg_id, msg, batch_id = yield self._create_outbound()
+        nack = TransportEvent(user_message_id=msg_id, event_type='nack',
+                                nack_reason='unknown')
+        nack_id = nack['event_id']
+        yield self.store.add_event(nack)
+
+        stored_nack = yield self.store.get_event(nack_id)
+        message_events = yield self.store.message_events(msg_id)
+        batch_status = yield self.store.batch_status(batch_id)
+
+        self.assertEqual(stored_nack, nack)
+        self.assertEqual(message_events, [nack])
+        self.assertEqual(batch_status, self._batch_status(sent=1, nack=1))
+
+    @inlineCallbacks
     def test_add_ack_event_without_batch(self):
         msg_id, msg, _batch_id = yield self._create_outbound(tag=None)
         ack = TransportEvent(user_message_id=msg_id, event_type='ack',
-                             sent_message_id='xyz')
+                                sent_message_id='xyz')
         ack_id = ack['event_id']
         yield self.store.add_event(ack)
 
@@ -157,6 +173,20 @@ class TestMessageStore(ApplicationTestCase):
 
         self.assertEqual(stored_ack, ack)
         self.assertEqual(message_events, [ack])
+
+    @inlineCallbacks
+    def test_add_nack_event_without_batch(self):
+        msg_id, msg, _batch_id = yield self._create_outbound(tag=None)
+        nack = TransportEvent(user_message_id=msg_id, event_type='nack',
+                                nack_reason='unknown')
+        nack_id = nack['event_id']
+        yield self.store.add_event(nack)
+
+        stored_nack = yield self.store.get_event(nack_id)
+        message_events = yield self.store.message_events(msg_id)
+
+        self.assertEqual(stored_nack, nack)
+        self.assertEqual(message_events, [nack])
 
     @inlineCallbacks
     def test_add_delivery_report_events(self):
