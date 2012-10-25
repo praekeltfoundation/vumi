@@ -263,13 +263,11 @@ class OperaTransport(Transport):
             raise TemporaryFailure(failure)
         elif failure.check(ValueError):
             # If the HTTP protocol returns something other than 200
-            yield self.publish_nack(message['message_id'],
-                nack_reason=str(failure.value))
+            yield self.publish_nack(message['message_id'], str(failure.value))
             raise PermanentFailure(failure)
         else:
             # Unspecified
-            yield self.publish_nack(message['message_id'],
-                nack_reason=str(failure.value))
+            yield self.publish_nack(message['message_id'], str(failure.value))
             raise failure
 
     @inlineCallbacks

@@ -55,7 +55,7 @@ class DevNullTransport(Transport):
     def handle_outbound_message(self, message):
         if random.random() > self.ack_rate:
             yield self.publish_nack(message['message_id'],
-                nack_reason='Not accepted by network')
+                'Not accepted by network')
             return
 
         dr = ('failed' if random.random() < self.failure_rate

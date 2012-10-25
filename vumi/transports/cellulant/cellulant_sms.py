@@ -88,8 +88,7 @@ class CellulantSmsTransport(HttpRpcTransport):
         else:
             error = self.KNOWN_ERROR_RESPONSE_CODES.get(content,
                 'Unknown response code: %s' % (content,))
-            yield self.publish_nack(user_message_id=message['message_id'],
-                nack_reason=error)
+            yield self.publish_nack(message['message_id'], error)
 
     def get_field_values(self, request):
         values = {}
