@@ -1,8 +1,9 @@
 from twisted.trial.unittest import TestCase
 
 from vumi.service import Worker
-from vumi.tests.utils import get_stubbed_worker, Mocking
+from vumi.tests.utils import get_stubbed_worker, Mocking, LogCatcher
 from vumi.tests.fake_amqp import FakeAMQClient
+from vumi import log
 
 
 class ToyWorker(Worker):
@@ -34,3 +35,31 @@ class UtilsTestCase(TestCase):
         worker = get_stubbed_worker(ToyWorker, options)
         self.assertEqual({}, worker._amqp_client.vumi_options)
         self.assertEqual(options, worker.config)
+
+
+class LogCatcherTestCase(TestCase):
+    def test_simple_catching(self):
+        lc = LogCatcher()
+        with lc:
+            log.info("Test")
+        self.assertEqual(lc.messages(), ["Test"])
+
+    def test_system_filtering(self):
+        lc = LogCatcher(system="^ab")
+        with lc:
+            log.info("Test 1", system="abc")
+            log.info("Test 2", system="def")
+        self.assertEqual(lc.messages(), ["Test 1"])
+
+    def test_message_filtering(self):
+        lc = LogCatcher(message="^Keep")
+        with lc:
+            log.info("Keep this")
+            log.info("Discard this")
+        self.assertEqual(lc.messages(), ["Keep this"])
+
+    def test_message_concatenation(self):
+        lc = LogCatcher()
+        with lc:
+            log.info("Part 1", "Part 2")
+        self.assertEqual(lc.messages(), ["Part 1 Part 2"])
