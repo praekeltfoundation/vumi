@@ -54,11 +54,11 @@ class TestMessageStoreBase(ApplicationTestCase):
     def _batch_status(self, ack=0, nack=0, delivered=0, failed=0, pending=0,
                         sent=0):
         return {
-            'ack': str(ack), 'nack': str(nack), 'sent': str(sent),
-            'delivery_report': str(sum([delivered, failed, pending])),
-            'delivery_report.delivered': str(delivered),
-            'delivery_report.failed': str(failed),
-            'delivery_report.pending': str(pending),
+            'ack': ack, 'nack': nack, 'sent': sent,
+            'delivery_report': sum([delivered, failed, pending]),
+            'delivery_report.delivered': delivered,
+            'delivery_report.failed': failed,
+            'delivery_report.pending': pending,
             }
 
 
@@ -294,11 +294,11 @@ class TestMessageStoreCache(TestMessageStoreBase):
                              sent_message_id='xyz')
         yield self.store.add_event(ack)
         self.assertEqual((yield self.store.cache.get_event_status(batch_id)), {
-            'delivery_report': '0',
-            'delivery_report.delivered': '0',
-            'delivery_report.failed': '0',
-            'delivery_report.pending': '0',
-            'ack': '1',
-            'nack': '0',
-            'sent': '1'
+            'delivery_report': 0,
+            'delivery_report.delivered': 0,
+            'delivery_report.failed': 0,
+            'delivery_report.pending': 0,
+            'ack': 1,
+            'nack': 0,
+            'sent': 1,
         })
