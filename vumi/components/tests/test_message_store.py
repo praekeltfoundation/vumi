@@ -164,7 +164,7 @@ class TestMessageStore(ApplicationTestCase):
     def test_add_ack_event_without_batch(self):
         msg_id, msg, _batch_id = yield self._create_outbound(tag=None)
         ack = TransportEvent(user_message_id=msg_id, event_type='ack',
-                                sent_message_id='xyz')
+                             sent_message_id='xyz')
         ack_id = ack['event_id']
         yield self.store.add_event(ack)
 
