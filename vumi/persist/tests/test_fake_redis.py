@@ -149,6 +149,14 @@ class FakeRedisTestCase(TestCase):
         yield self.assert_redis_op(False, 'hexists', 'key', 'field')
 
     @inlineCallbacks
+    def test_hsetnx(self):
+        yield self.redis.hset('key', 'field', 1)
+        self.assert_redis_op(0, 'hsetnx', 'key', 'field', 2)
+        self.assertEqual((yield self.redis.hget('key', 'field')), '1')
+        self.assert_redis_op(1, 'hsetnx', 'key', 'other-field', 2)
+        self.assertEqual((yield self.redis.hget('key', 'other-field')), '2')
+
+    @inlineCallbacks
     def test_sadd(self):
         yield self.assert_redis_op(None, 'sadd', 'set', 1)
         yield self.assert_redis_op(None, 'sadd', 'set', 2, 3, 4)
