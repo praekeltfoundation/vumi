@@ -2,6 +2,7 @@ from twisted.trial.unittest import TestCase
 
 from vumi.servicemaker import (
     VumiOptions, StartWorkerOptions, VumiWorkerServiceMaker)
+from vumi import servicemaker
 
 
 class OptionsTestCase(TestCase):
@@ -123,6 +124,12 @@ class StartWorkerOptionsTestCase(OptionsTestCase):
 
 
 class VumiWorkerServiceMakerTestCase(OptionsTestCase):
+
+    def mk_dummy_service(self):
+        class DummyService(object):
+            name = "Dummy"
+        return DummyService()
+
     def test_make_worker(self):
         self.mk_config_file('worker', ["transport_name: sphex"])
         options = StartWorkerOptions()
@@ -132,3 +139,23 @@ class VumiWorkerServiceMakerTestCase(OptionsTestCase):
         maker = VumiWorkerServiceMaker()
         worker = maker.makeService(options)
         self.assertEqual({'transport_name': 'sphex'}, worker.config)
+
+    def test_make_worker_with_sentry(self):
+        services = []
+        dummy_service = self.mk_dummy_service()
+
+        def service(*a, **kw):
+            services.append((a, kw))
+            return dummy_service
+
+        self.patch(servicemaker, 'SentryLoggerService', service)
+        self.mk_config_file('worker', ["transport_name: spehx"])
+        options = StartWorkerOptions()
+        options.parseOptions(['--worker-class', 'vumi.demos.words.EchoWorker',
+                              '--config', self.config_file['worker'],
+                              '--sentry', 'http://1:2@example.com/2/',
+                              ])
+        maker = VumiWorkerServiceMaker()
+        worker = maker.makeService(options)
+        self.assertEqual(services, [(('http://1:2@example.com/2/', '.'), {})])
+        self.assertTrue(dummy_service in worker.services)
