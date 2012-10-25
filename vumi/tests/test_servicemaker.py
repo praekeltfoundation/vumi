@@ -157,5 +157,7 @@ class VumiWorkerServiceMakerTestCase(OptionsTestCase):
                               ])
         maker = VumiWorkerServiceMaker()
         worker = maker.makeService(options)
-        self.assertEqual(services, [(('http://1:2@example.com/2/', '.'), {})])
+        self.assertEqual(services, [
+                (('http://1:2@example.com/2/', 'echoworker'), {})
+        ])
         self.assertTrue(dummy_service in worker.services)
