@@ -229,6 +229,7 @@ class MessageTest(TestCase):
             )
         self.assertEqual('event', msg['message_type'])
         self.assertEqual('nack', msg['event_type'])
+        self.assertEqual('unknown', msg['nack_reason'])
         self.assertEqual('def', msg['event_id'])
         self.assertEqual('abc', msg['user_message_id'])
         self.assertEqual('20110921', msg['message_version'])
