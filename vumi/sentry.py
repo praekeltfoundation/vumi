@@ -101,6 +101,7 @@ class SentryLogObserver(object):
 
     DEFAULT_ERROR_LEVEL = logging.ERROR
     DEFAULT_LOG_LEVEL = logging.INFO
+    LOG_LEVEL_THRESHOLD = logging.WARN
 
     def __init__(self, client, log_context_sentinel=None):
         if log_context_sentinel is None:
@@ -121,9 +122,12 @@ class SentryLogObserver(object):
         return event.get('system', 'unknown')
 
     def _log_to_sentry(self, event):
+        level = self.level_for_event(event)
+        if level < self.LOG_LEVEL_THRESHOLD:
+            return
         data = {
             "logger": self.logger_for_event(event),
-            "level": self.level_for_event(event),
+            "level": level,
         }
         failure = event.get('failure')
         if failure:

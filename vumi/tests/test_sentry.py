@@ -77,10 +77,10 @@ class TestSentryLogObserver(TestCase):
     def test_log_failure(self):
         e = ValueError("foo error")
         f = Failure(e)
-        self.obs({'failure': f, 'system': 'test.log'})
+        self.obs({'failure': f, 'system': 'test.log', 'isError': 1})
         self.assertEqual(self.client.exceptions, [
             (((type(e), e, None),),
-             {'data': {'level': 20, 'logger': 'test.log'}}),
+             {'data': {'level': 40, 'logger': 'test.log'}}),
         ])
 
     def test_log_traceback(self):
@@ -88,18 +88,23 @@ class TestSentryLogObserver(TestCase):
             raise ValueError("foo")
         except ValueError:
             f = Failure(*sys.exc_info())
-        self.obs({'failure': f})
+        self.obs({'failure': f, 'isError': 1})
         [call_args] = self.client.exceptions
         exc_info = call_args[0][0]
         tb = ''.join(traceback.format_exception(*exc_info))
         self.assertTrue('raise ValueError("foo")' in tb)
 
-    def test_log_message(self):
-        self.obs({'message': ["a"], 'system': 'test.log'})
+    def test_log_warning(self):
+        self.obs({'message': ["a"], 'system': 'test.log',
+                  'logLevel': logging.WARN})
         self.assertEqual(self.client.messages, [
             (('a',),
-             {'data': {'level': 20, 'logger': 'test.log'}})
+             {'data': {'level': 30, 'logger': 'test.log'}})
         ])
+
+    def test_log_info(self):
+        self.obs({'message': ["a"], 'system': 'test.log'})
+        self.assertEqual(self.client.messages, [])  # should be filtered out
 
 
 class TestSentryLoggerSerivce(TestCase):
