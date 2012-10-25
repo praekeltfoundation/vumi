@@ -167,12 +167,13 @@ class TestMessageStoreCache(ApplicationTestCase):
         yield self.cache.add_event(self.batch_id, delivery)
         stats = yield self.cache.get_event_status(self.batch_id)
         self.assertEqual(stats, {
-            'delivery_report': '1',
-            'delivery_report.delivered': '1',
-            'delivery_report.failed': '0',
-            'delivery_report.pending': '0',
-            'ack': '1',
-            'sent': '1',
+            'delivery_report': 1,
+            'delivery_report.delivered': 1,
+            'delivery_report.failed': 0,
+            'delivery_report.pending': 0,
+            'ack': 1,
+            'nack': 0,
+            'sent': 1,
             })
 
     @inlineCallbacks

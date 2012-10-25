@@ -53,13 +53,14 @@ class TestMessageStoreBase(ApplicationTestCase):
         yield self.store.add_inbound_message(msg, **add_kw)
         returnValue((msg_id, msg, batch_id))
 
-    def _batch_status(self, ack=0, delivered=0, failed=0, pending=0, sent=0):
+    def _batch_status(self, ack=0, nack=0, delivered=0, failed=0, pending=0,
+                        sent=0):
         return {
-            'ack': str(ack), 'sent': str(sent),
-            'delivery_report': str(sum([delivered, failed, pending])),
-            'delivery_report.delivered': str(delivered),
-            'delivery_report.failed': str(failed),
-            'delivery_report.pending': str(pending),
+            'ack': ack, 'nack': nack, 'sent': sent,
+            'delivery_report': sum([delivered, failed, pending]),
+            'delivery_report.delivered': delivered,
+            'delivery_report.failed': failed,
+            'delivery_report.pending': pending,
             }
 
 
@@ -149,6 +150,22 @@ class TestMessageStore(TestMessageStoreBase):
         self.assertEqual(batch_status, self._batch_status(sent=1, ack=1))
 
     @inlineCallbacks
+    def test_add_nack_event(self):
+        msg_id, msg, batch_id = yield self._create_outbound()
+        nack = TransportEvent(user_message_id=msg_id, event_type='nack',
+                                nack_reason='unknown')
+        nack_id = nack['event_id']
+        yield self.store.add_event(nack)
+
+        stored_nack = yield self.store.get_event(nack_id)
+        message_events = yield self.store.message_events(msg_id)
+        batch_status = yield self.store.batch_status(batch_id)
+
+        self.assertEqual(stored_nack, nack)
+        self.assertEqual(message_events, [nack])
+        self.assertEqual(batch_status, self._batch_status(sent=1, nack=1))
+
+    @inlineCallbacks
     def test_add_ack_event_without_batch(self):
         msg_id, msg, _batch_id = yield self._create_outbound(tag=None)
         ack = TransportEvent(user_message_id=msg_id, event_type='ack',
@@ -161,6 +178,20 @@ class TestMessageStore(TestMessageStoreBase):
 
         self.assertEqual(stored_ack, ack)
         self.assertEqual(message_events, [ack])
+
+    @inlineCallbacks
+    def test_add_nack_event_without_batch(self):
+        msg_id, msg, _batch_id = yield self._create_outbound(tag=None)
+        nack = TransportEvent(user_message_id=msg_id, event_type='nack',
+                                nack_reason='unknown')
+        nack_id = nack['event_id']
+        yield self.store.add_event(nack)
+
+        stored_nack = yield self.store.get_event(nack_id)
+        message_events = yield self.store.message_events(msg_id)
+
+        self.assertEqual(stored_nack, nack)
+        self.assertEqual(message_events, [nack])
 
     @inlineCallbacks
     def test_add_delivery_report_events(self):
@@ -265,10 +296,11 @@ class TestMessageStoreCache(TestMessageStoreBase):
                              sent_message_id='xyz')
         yield self.store.add_event(ack)
         self.assertEqual((yield self.store.cache.get_event_status(batch_id)), {
-            'delivery_report': '0',
-            'delivery_report.delivered': '0',
-            'delivery_report.failed': '0',
-            'delivery_report.pending': '0',
-            'ack': '1',
-            'sent': '1'
+            'delivery_report': 0,
+            'delivery_report.delivered': 0,
+            'delivery_report.failed': 0,
+            'delivery_report.pending': 0,
+            'ack': 1,
+            'nack': 0,
+            'sent': 1,
         })

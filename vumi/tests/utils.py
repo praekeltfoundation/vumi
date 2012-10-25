@@ -458,6 +458,19 @@ class VumiWorkerTestCase(TestCase):
             transport_metadata=transport_metadata,
             )
 
+    def mkmsg_nack(self, user_message_id='1', transport_metadata=None,
+                    transport_name=None):
+        if transport_metadata is None:
+            transport_metadata = {}
+        if transport_name is None:
+            transport_name = self.transport_name
+        return TransportEvent(
+            event_type='nack',
+            user_message_id=user_message_id,
+            transport_name=transport_name,
+            transport_metadata=transport_metadata,
+            )
+
     def mkmsg_delivery(self, status='delivered', user_message_id='abc',
                        transport_metadata=None, transport_name=None):
         if transport_metadata is None:
