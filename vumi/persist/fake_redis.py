@@ -142,6 +142,12 @@ class FakeRedis(object):
         return int(new_field)
 
     @maybe_async
+    def hsetnx(self, key, field, value):
+        if self.hexists.sync(self, key, field):
+            return 0
+        return self.hset.sync(self, key, field, value)
+
+    @maybe_async
     def hget(self, key, field):
         value = self._data.get(key, {}).get(field)
         if value is not None:
