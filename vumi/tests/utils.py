@@ -246,7 +246,9 @@ class RiakDisabledForTest(object):
     """Placeholder object for a disabled riak config.
 
     This class exists to throw a meaningful error when trying to use Riak in
-    a test that disalows it.
+    a test that disalows it. We can't do this from inside the Riak setup
+    infrastructure, because that would be very invasive for something that
+    only really matters for tests.
     """
     def __getattr__(self, name):
         raise RuntimeError(
