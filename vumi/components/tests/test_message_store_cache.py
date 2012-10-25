@@ -171,6 +171,7 @@ class TestMessageStoreCache(ApplicationTestCase):
             'delivery_report.failed': '0',
             'delivery_report.pending': '0',
             'ack': '1',
+            'nack': '0',
             'sent': '1',
             })
 
