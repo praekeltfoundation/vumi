@@ -242,7 +242,15 @@ def maybe_async(sync_attr):
 
 
 class RiakDisabledForTest(object):
-    pass
+    """Placeholder object for a disabled riak config.
+
+    This class exists to throw a meaningful error when trying to use Riak in
+    a test that disalows it.
+    """
+    def __getattr__(self, name):
+        raise RuntimeError(
+            "Use of Riak has been disabled for this test. Please set "
+            "'use_riak = True' on the test class to enable it.")
 
 
 class PersistenceMixin(object):
