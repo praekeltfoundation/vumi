@@ -12,6 +12,7 @@ from vumi.components import MessageStore
 
 
 class TestMessageStoreCache(ApplicationTestCase):
+    use_riak = True
 
     @inlineCallbacks
     def setUp(self):
