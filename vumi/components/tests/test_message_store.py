@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-"""Tests for vumi.persist.message_store."""
+"""Tests for vumi.components.message_store."""
 
 from twisted.internet.defer import inlineCallbacks, returnValue
 
@@ -9,14 +9,14 @@ from vumi.application.tests.test_base import ApplicationTestCase
 from vumi.components import MessageStore
 
 
-class TestMessageStore(ApplicationTestCase):
+class TestMessageStoreBase(ApplicationTestCase):
     # inherits from ApplicationTestCase for .mkmsg_in and .mkmsg_out
 
     use_riak = True
 
     @inlineCallbacks
     def setUp(self):
-        yield super(TestMessageStore, self).setUp()
+        yield super(TestMessageStoreBase, self).setUp()
         self.redis = yield self.get_redis_manager()
         self.manager = self.get_riak_manager()
         self.store = MessageStore(self.manager, self.redis)
@@ -55,12 +55,15 @@ class TestMessageStore(ApplicationTestCase):
 
     def _batch_status(self, ack=0, delivered=0, failed=0, pending=0, sent=0):
         return {
-            'ack': ack, 'sent': sent,
-            'delivery_report': sum([delivered, failed, pending]),
-            'delivery_report.delivered': delivered,
-            'delivery_report.failed': failed,
-            'delivery_report.pending': pending,
+            'ack': str(ack), 'sent': str(sent),
+            'delivery_report': str(sum([delivered, failed, pending])),
+            'delivery_report.delivered': str(delivered),
+            'delivery_report.failed': str(failed),
+            'delivery_report.pending': str(pending),
             }
+
+
+class TestMessageStore(TestMessageStoreBase):
 
     @inlineCallbacks
     def test_batch_start(self):
@@ -225,3 +228,47 @@ class TestMessageStore(ApplicationTestCase):
         yield self.store.add_outbound_message(self.mkmsg_out(
                 message_id=TransportEvent.generate_id()), batch_id=batch_id)
         self.assertEqual(2, (yield self.store.batch_outbound_count(batch_id)))
+
+
+class TestMessageStoreCache(TestMessageStoreBase):
+
+    @inlineCallbacks
+    def test_cache_batch_start(self):
+        batch_id = yield self.store.batch_start([("poolA", "tag1")])
+        self.assertTrue((yield self.store.cache.batch_exists(batch_id)))
+        self.assertTrue(batch_id in (yield self.store.cache.get_batch_ids()))
+
+    @inlineCallbacks
+    def test_cache_add_outbound_message(self):
+        msg_id, msg, batch_id = yield self._create_outbound()
+        [cached_msg_id] = (yield
+            self.store.cache.get_outbound_message_keys(batch_id))
+        [cached_to_addr] = (yield
+            self.store.cache.get_to_addrs(batch_id))
+        self.assertEqual(msg_id, cached_msg_id)
+        self.assertEqual(msg['to_addr'], cached_to_addr)
+
+    @inlineCallbacks
+    def test_cache_add_inbound_message(self):
+        msg_id, msg, batch_id = yield self._create_inbound()
+        [cached_msg_id] = (yield
+            self.store.cache.get_inbound_message_keys(batch_id))
+        [cached_from_addr] = (yield
+            self.store.cache.get_from_addrs(batch_id))
+        self.assertEqual(msg_id, cached_msg_id)
+        self.assertEqual(msg['from_addr'], cached_from_addr)
+
+    @inlineCallbacks
+    def test_cache_add_event(self):
+        msg_id, msg, batch_id = yield self._create_outbound()
+        ack = TransportEvent(user_message_id=msg_id, event_type='ack',
+                             sent_message_id='xyz')
+        yield self.store.add_event(ack)
+        self.assertEqual((yield self.store.cache.get_event_status(batch_id)), {
+            'delivery_report': '0',
+            'delivery_report.delivered': '0',
+            'delivery_report.failed': '0',
+            'delivery_report.pending': '0',
+            'ack': '1',
+            'sent': '1'
+        })
