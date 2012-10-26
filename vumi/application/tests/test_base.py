@@ -1,5 +1,3 @@
-
-from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.errors import ConfigError
@@ -69,18 +67,6 @@ class TestApplicationWorker(ApplicationTestCase):
                 },
             }
         self.worker = yield self.get_application(self.config)
-
-    # @inlineCallbacks
-    # def send(self, msg, routing_suffix='inbound'):
-    #     yield self.dispatch(msg, direction=routing_suffix)
-
-    # @inlineCallbacks
-    # def send_event(self, event):
-    #     yield self.dispatch_event(event, 'event')
-
-    # def recv(self, routing_suffix='outbound'):
-    #     routing_key = "%s.%s" % (self.transport_name, routing_suffix)
-    #     return self.broker.get_messages("vumi", routing_key)
 
     def assert_msgs_match(self, msgs, expected_msgs):
         for key in ['timestamp', 'message_id']:
