@@ -134,8 +134,7 @@ class TestMessageStore(TestMessageStoreBase):
     @inlineCallbacks
     def test_add_ack_event(self):
         msg_id, msg, batch_id = yield self._create_outbound()
-        ack = TransportEvent(user_message_id=msg_id, event_type='ack',
-                             sent_message_id='xyz')
+        ack = self.mkmsg_ack(user_message_id=msg_id)
         ack_id = ack['event_id']
         yield self.store.add_event(ack)
 
@@ -150,8 +149,7 @@ class TestMessageStore(TestMessageStoreBase):
     @inlineCallbacks
     def test_add_nack_event(self):
         msg_id, msg, batch_id = yield self._create_outbound()
-        nack = TransportEvent(user_message_id=msg_id, event_type='nack',
-                                nack_reason='unknown')
+        nack = self.mkmsg_nack(user_message_id=msg_id)
         nack_id = nack['event_id']
         yield self.store.add_event(nack)
 
@@ -166,8 +164,7 @@ class TestMessageStore(TestMessageStoreBase):
     @inlineCallbacks
     def test_add_ack_event_without_batch(self):
         msg_id, msg, _batch_id = yield self._create_outbound(tag=None)
-        ack = TransportEvent(user_message_id=msg_id, event_type='ack',
-                             sent_message_id='xyz')
+        ack = self.mkmsg_ack(user_message_id=msg_id)
         ack_id = ack['event_id']
         yield self.store.add_event(ack)
 
@@ -180,8 +177,7 @@ class TestMessageStore(TestMessageStoreBase):
     @inlineCallbacks
     def test_add_nack_event_without_batch(self):
         msg_id, msg, _batch_id = yield self._create_outbound(tag=None)
-        nack = TransportEvent(user_message_id=msg_id, event_type='nack',
-                                nack_reason='unknown')
+        nack = self.mkmsg_nack(user_message_id=msg_id)
         nack_id = nack['event_id']
         yield self.store.add_event(nack)
 
@@ -197,10 +193,8 @@ class TestMessageStore(TestMessageStoreBase):
 
         drs = []
         for status in TransportEvent.DELIVERY_STATUSES:
-            dr = TransportEvent(user_message_id=msg_id,
-                                event_type='delivery_report',
-                                delivery_status=status,
-                                sent_message_id='xyz')
+            dr = self.mkmsg_delivery(user_message_id=msg_id,
+                                        status=status)
             dr_id = dr['event_id']
             drs.append(dr)
             yield self.store.add_event(dr)
