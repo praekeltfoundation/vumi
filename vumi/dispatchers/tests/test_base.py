@@ -1,63 +1,10 @@
-
-from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks, returnValue
 
-from vumi.message import TransportUserMessage, TransportEvent
 from vumi.dispatchers.base import (
     BaseDispatchWorker, ToAddrRouter, FromAddrMultiplexRouter)
 from vumi.middleware import MiddlewareStack
 from vumi.tests.utils import VumiWorkerTestCase, LogCatcher
 from vumi.dispatchers.tests.utils import DispatcherTestCase
-
-
-class MessageMakerMixIn(object):
-    """TestCase mixin for creating transport messages."""
-
-    def mkmsg_ack(self, transport_name, **kw):
-        event_kw = dict(
-            event_type='ack',
-            user_message_id='1',
-            sent_message_id='abc',
-            transport_name=transport_name,
-            transport_metadata={},
-            )
-        event_kw.update(kw)
-        return TransportEvent(**event_kw)
-
-    def mkmsg_nack(self, transport_name, **kw):
-        event_kw = dict(
-            event_type='nack',
-            user_message_id='1',
-            nack_reason='unknown',
-            transport_name=transport_name,
-            transport_metadata={},
-            )
-        event_kw.update(kw)
-        return TransportEvent(**event_kw)
-
-    def mkmsg_in(self, transport_name, content='foo', **kw):
-        msg_kw = dict(
-            from_addr='+41791234567',
-            to_addr='9292',
-            transport_name=transport_name,
-            transport_type='sms',
-            transport_metadata={},
-            content=content,
-            )
-        msg_kw.update(kw)
-        return TransportUserMessage(**msg_kw)
-
-    def mkmsg_out(self, transport_name, content='hello world', **kw):
-        msg_kw = dict(
-            to_addr='+41791234567',
-            from_addr='9292',
-            transport_name=transport_name,
-            transport_type='sms',
-            transport_metadata={},
-            content=content,
-            )
-        msg_kw.update(kw)
-        return TransportUserMessage(**msg_kw)
 
 
 class TestBaseDispatchWorker(VumiWorkerTestCase):
