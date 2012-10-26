@@ -9,8 +9,6 @@ from vumi.dispatchers.tests.utils import DispatcherTestCase
 
 class TestBaseDispatchWorker(VumiWorkerTestCase):
 
-    timeout = 1
-
     @inlineCallbacks
     def get_dispatcher(self, **config_extras):
         config = {
