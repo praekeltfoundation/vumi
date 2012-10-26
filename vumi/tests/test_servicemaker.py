@@ -149,7 +149,7 @@ class VumiWorkerServiceMakerTestCase(OptionsTestCase):
             return dummy_service
 
         self.patch(servicemaker, 'SentryLoggerService', service)
-        self.mk_config_file('worker', ["transport_name: spehx"])
+        self.mk_config_file('worker', ["transport_name: sphex"])
         options = StartWorkerOptions()
         options.parseOptions(['--worker-class', 'vumi.demos.words.EchoWorker',
                               '--config', self.config_file['worker'],
