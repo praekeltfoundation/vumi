@@ -269,8 +269,23 @@ def maybe_async(sync_attr):
     return redecorate
 
 
+class RiakDisabledForTest(object):
+    """Placeholder object for a disabled riak config.
+
+    This class exists to throw a meaningful error when trying to use Riak in
+    a test that disallows it. We can't do this from inside the Riak setup
+    infrastructure, because that would be very invasive for something that
+    only really matters for tests.
+    """
+    def __getattr__(self, name):
+        raise RuntimeError(
+            "Use of Riak has been disabled for this test. Please set "
+            "'use_riak = True' on the test class to enable it.")
+
+
 class PersistenceMixin(object):
     sync_persistence = False
+    use_riak = False
 
     sync_or_async = staticmethod(maybe_async('sync_persistence'))
 
@@ -286,6 +301,8 @@ class PersistenceMixin(object):
                 'bucket_prefix': type(self).__module__,
                 },
             }
+        if not self.use_riak:
+            self._persist_config['riak_manager'] = RiakDisabledForTest()
 
     def mk_config(self, config):
         return dict(self._persist_config, **config)
@@ -301,7 +318,8 @@ class PersistenceMixin(object):
         except (SkipTest, ConnectionRefusedError):
             pass
         try:
-            yield self.get_riak_manager()
+            if self.use_riak:
+                yield self.get_riak_manager()
         except SkipTest:
             pass
 
