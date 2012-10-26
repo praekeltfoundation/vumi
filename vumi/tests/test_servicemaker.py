@@ -123,12 +123,11 @@ class StartWorkerOptionsTestCase(OptionsTestCase):
         self.assertEqual({}, options.opts)
 
 
-class VumiWorkerServiceMakerTestCase(OptionsTestCase):
+class DummyService(object):
+    name = "Dummy"
 
-    def mk_dummy_service(self):
-        class DummyService(object):
-            name = "Dummy"
-        return DummyService()
+
+class VumiWorkerServiceMakerTestCase(OptionsTestCase):
 
     def test_make_worker(self):
         self.mk_config_file('worker', ["transport_name: sphex"])
@@ -142,7 +141,7 @@ class VumiWorkerServiceMakerTestCase(OptionsTestCase):
 
     def test_make_worker_with_sentry(self):
         services = []
-        dummy_service = self.mk_dummy_service()
+        dummy_service = DummyService()
 
         def service(*a, **kw):
             services.append((a, kw))
