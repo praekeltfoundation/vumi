@@ -114,7 +114,9 @@ class MtechUssdTransport(HttpRpcTransport):
             mur.add_freetext_option()
         response_body = unicode(mur).encode('utf-8')
         log.msg("Outbound message: %r" % (response_body,))
-        return self.finish_request(message['in_reply_to'], response_body)
+        self.finish_request(message['in_reply_to'], response_body)
+        return self.publish_ack(user_message_id=message['message_id'],
+            sent_message_id=message['message_id'])
 
 
 class MtechUssdResponse(object):

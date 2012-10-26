@@ -50,6 +50,8 @@ class OldSimpleHttpTransport(HttpRpcTransport):
 
     def handle_outbound_message(self, message):
         log.msg("OldSimpleHttpTransport consuming %s" % (message))
+        return self.publish_ack(user_message_id=message['message_id'],
+            sent_message_id=message['message_id'])
 
     def check_authorization(self, request):
         username, password = self.get_credentials(request)

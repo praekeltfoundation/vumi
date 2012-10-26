@@ -217,6 +217,7 @@ class Manager(object):
     # Hash operations
 
     hset = RedisCall(['key', 'field', 'value'])
+    hsetnx = RedisCall(['key', 'field', 'value'])
     hget = RedisCall(['key', 'field'])
     hdel = RedisCall(['key'], vararg='fields')
     hmset = RedisCall(['key', 'mapping'])

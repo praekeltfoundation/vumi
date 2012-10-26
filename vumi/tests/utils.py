@@ -16,7 +16,8 @@ from twisted.web.server import Site
 from twisted.internet.defer import DeferredQueue, inlineCallbacks, returnValue
 from twisted.python import log
 
-from vumi.utils import vumi_resource_path, import_module, flatten_generator
+from vumi.utils import (vumi_resource_path, import_module, flatten_generator,
+                        LogFilterSite)
 from vumi.service import get_spec, Worker, WorkerCreator
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.tests.fake_amqp import FakeAMQPBroker, FakeAMQClient
@@ -57,6 +58,10 @@ class Mocking(object):
         def __init__(self, args, kwargs):
             self.args = args
             self.kwargs = kwargs
+
+        def __repr__(self):
+            return '<%r object at %r [args: %r, kw: %r]>' % (
+                self.__class__.__name__, id(self), self.args, self.kwargs)
 
     def __init__(self, function):
         """Mock a function"""
@@ -154,20 +159,47 @@ def FakeRedis():
 
 
 class LogCatcher(object):
-    """Gather logs."""
+    """Context manager for gathering logs in tests.
 
-    def __init__(self):
+    :param str system:
+        Only log events whose 'system' value contains the given
+        regular expression pattern will be gathered. Default: None
+        (i.e. keep all log events).
+
+    :param str message:
+        Only log events whose message contains the given regular
+        expression pattern will be gathered. The message is
+        constructed by joining the elements in the 'message' value
+        with a space (the same way Twisted does). Default: None
+        (i.e. keep all log events).
+    """
+
+    def __init__(self, system=None, message=None):
         self.logs = []
+        self.system = re.compile(system) if system is not None else None
+        self.message = re.compile(message) if message is not None else None
 
     @property
     def errors(self):
         return [ev for ev in self.logs if ev["isError"]]
 
     def messages(self):
-        return [msg['message'][0] for msg in self.logs if not msg["isError"]]
+        return [" ".join(msg['message']) for msg in self.logs
+                if not msg["isError"]]
+
+    def _keep_log(self, event_dict):
+        if self.system is not None:
+            if not self.system.search(event_dict.get('system', '-')):
+                return False
+        if self.message is not None:
+            log_message = " ".join(event_dict.get('message', []))
+            if not self.message.search(log_message):
+                return False
+        return True
 
     def _gather_logs(self, event_dict):
-        self.logs.append(event_dict)
+        if self._keep_log(event_dict):
+            self.logs.append(event_dict)
 
     def __enter__(self):
         log.theLogPublisher.addObserver(self._gather_logs)
@@ -206,7 +238,7 @@ class MockHttpServer(object):
     @inlineCallbacks
     def start(self):
         root = MockResource(self._handler)
-        site_factory = Site(root)
+        site_factory = LogFilterSite(root)
         self._webserver = yield reactor.listenTCP(0, site_factory)
         self.addr = self._webserver.getHost()
         self.url = "http://%s:%s/" % (self.addr.host, self.addr.port)
@@ -237,8 +269,23 @@ def maybe_async(sync_attr):
     return redecorate
 
 
+class RiakDisabledForTest(object):
+    """Placeholder object for a disabled riak config.
+
+    This class exists to throw a meaningful error when trying to use Riak in
+    a test that disallows it. We can't do this from inside the Riak setup
+    infrastructure, because that would be very invasive for something that
+    only really matters for tests.
+    """
+    def __getattr__(self, name):
+        raise RuntimeError(
+            "Use of Riak has been disabled for this test. Please set "
+            "'use_riak = True' on the test class to enable it.")
+
+
 class PersistenceMixin(object):
     sync_persistence = False
+    use_riak = False
 
     sync_or_async = staticmethod(maybe_async('sync_persistence'))
 
@@ -254,6 +301,8 @@ class PersistenceMixin(object):
                 'bucket_prefix': type(self).__module__,
                 },
             }
+        if not self.use_riak:
+            self._persist_config['riak_manager'] = RiakDisabledForTest()
 
     def mk_config(self, config):
         return dict(self._persist_config, **config)
@@ -269,7 +318,8 @@ class PersistenceMixin(object):
         except (SkipTest, ConnectionRefusedError):
             pass
         try:
-            yield self.get_riak_manager()
+            if self.use_riak:
+                yield self.get_riak_manager()
         except SkipTest:
             pass
 
@@ -404,6 +454,20 @@ class VumiWorkerTestCase(TestCase):
             event_type='ack',
             user_message_id=user_message_id,
             sent_message_id=sent_message_id,
+            transport_name=transport_name,
+            transport_metadata=transport_metadata,
+            )
+
+    def mkmsg_nack(self, user_message_id='1', transport_metadata=None,
+                    transport_name=None, nack_reason='unknown'):
+        if transport_metadata is None:
+            transport_metadata = {}
+        if transport_name is None:
+            transport_name = self.transport_name
+        return TransportEvent(
+            event_type='nack',
+            nack_reason=nack_reason,
+            user_message_id=user_message_id,
             transport_name=transport_name,
             transport_metadata=transport_metadata,
             )
