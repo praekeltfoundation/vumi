@@ -1,5 +1,3 @@
-
-from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.errors import ConfigError
@@ -49,10 +47,13 @@ class FakeUserMessage(TransportUserMessage):
         super(FakeUserMessage, self).__init__(**kw)
 
 
-class TestApplicationWorker(TestCase):
+class TestApplicationWorker(ApplicationTestCase):
+
+    application_class = DummyApplicationWorker
 
     @inlineCallbacks
     def setUp(self):
+        yield super(TestApplicationWorker, self).setUp()
         self.transport_name = 'test'
         self.config = {
             'transport_name': self.transport_name,
@@ -65,28 +66,7 @@ class TestApplicationWorker(TestCase):
                     },
                 },
             }
-        self.worker = get_stubbed_worker(DummyApplicationWorker,
-                                         config=self.config)
-        self.broker = self.worker._amqp_client.broker
-        yield self.worker.startWorker()
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield self.worker.stopWorker()
-
-    @inlineCallbacks
-    def send(self, msg, routing_suffix='inbound'):
-        routing_key = "%s.%s" % (self.transport_name, routing_suffix)
-        self.broker.publish_message("vumi", routing_key, msg)
-        yield self.broker.kick_delivery()
-
-    @inlineCallbacks
-    def send_event(self, event):
-        yield self.send(event, 'event')
-
-    def recv(self, routing_suffix='outbound'):
-        routing_key = "%s.%s" % (self.transport_name, routing_suffix)
-        return self.broker.get_messages("vumi", routing_key)
+        self.worker = yield self.get_application(self.config)
 
     def assert_msgs_match(self, msgs, expected_msgs):
         for key in ['timestamp', 'message_id']:
@@ -101,18 +81,14 @@ class TestApplicationWorker(TestCase):
     @inlineCallbacks
     def test_event_dispatch(self):
         events = [
-            ('ack', TransportEvent(event_type='ack',
-                                   sent_message_id='remote-id',
+            ('ack', self.mkmsg_ack(sent_message_id='remote-id',
                                    user_message_id='ack-uuid')),
-            ('nack', TransportEvent(event_type='nack',
-                                   user_message_id='nack-uuid',
-                                   nack_reason='unknown')),
-            ('delivery_report', TransportEvent(event_type='delivery_report',
-                                               delivery_status='pending',
-                                               user_message_id='dr-uuid')),
+            ('nack', self.mkmsg_nack(user_message_id='nack-uuid')),
+            ('delivery_report', self.mkmsg_delivery(
+                                        user_message_id='dr-uuid')),
             ]
         for name, event in events:
-            yield self.send_event(event)
+            yield self.dispatch_event(event)
             self.assertEqual(self.worker.record, [(name, event)])
             del self.worker.record[:]
 
@@ -123,7 +99,7 @@ class TestApplicationWorker(TestCase):
         bad_event = TransportEvent(event_type='ack',
                                    sent_message_id='remote-id',
                                    user_message_id='bad-uuid')
-        yield self.send_event(bad_event)
+        yield self.dispatch_event(bad_event)
         self.assertEqual(self.worker.record, [('unknown_event', bad_event)])
 
     @inlineCallbacks
@@ -134,7 +110,7 @@ class TestApplicationWorker(TestCase):
             ('close_session', FakeUserMessage(session_event=SESSION_CLOSE)),
             ]
         for name, message in messages:
-            yield self.send(message)
+            yield self.dispatch(message)
             self.assertEqual(self.worker.record, [(name, message)])
             del self.worker.record[:]
 
@@ -143,7 +119,7 @@ class TestApplicationWorker(TestCase):
         msg = FakeUserMessage()
         yield self.worker.reply_to(msg, "More!")
         yield self.worker.reply_to(msg, "End!", False)
-        replies = self.recv()
+        replies = self.get_dispatched_messages()
         expecteds = [msg.reply("More!"), msg.reply("End!", False)]
         self.assert_msgs_match(replies, expecteds)
 
@@ -151,14 +127,14 @@ class TestApplicationWorker(TestCase):
     def test_reply_to_group(self):
         msg = FakeUserMessage()
         yield self.worker.reply_to_group(msg, "Group!")
-        replies = self.recv()
+        replies = self.get_dispatched_messages()
         expecteds = [msg.reply_group("Group!")]
         self.assert_msgs_match(replies, expecteds)
 
     @inlineCallbacks
     def test_send_to(self):
         sent_msg = yield self.worker.send_to('+12345', "Hi!")
-        sends = self.recv()
+        sends = self.get_dispatched_messages()
         expecteds = [TransportUserMessage.send('+12345', "Hi!",
                 transport_name='default_transport')]
         self.assert_msgs_match(sends, expecteds)
@@ -168,7 +144,7 @@ class TestApplicationWorker(TestCase):
     def test_send_to_with_options(self):
         sent_msg = yield self.worker.send_to('+12345', "Hi!",
                 transport_type=TransportUserMessage.TT_USSD)
-        sends = self.recv()
+        sends = self.get_dispatched_messages()
         expecteds = [TransportUserMessage.send('+12345', "Hi!",
                 transport_type=TransportUserMessage.TT_USSD,
                 transport_name='default_transport')]
@@ -179,7 +155,7 @@ class TestApplicationWorker(TestCase):
     def test_send_to_with_tag(self):
         sent_msg = yield self.worker.send_to('+12345', "Hi!", "outbound1",
                 transport_type=TransportUserMessage.TT_USSD)
-        sends = self.recv()
+        sends = self.get_dispatched_messages()
         expecteds = [TransportUserMessage.send('+12345', "Hi!",
                 transport_type=TransportUserMessage.TT_USSD,
                 transport_name='outbound1_transport')]
@@ -218,18 +194,9 @@ class TestApplicationWorker(TestCase):
     def test_subclassing_api(self):
         worker = get_stubbed_worker(ApplicationWorker,
                                     {'transport_name': 'test'})
-        ack = TransportEvent(event_type='ack',
-                             sent_message_id='remote-id',
-                             user_message_id='ack-uuid')
-        nack = TransportEvent(event_type='nack',
-                             user_message_id='nack-uuid',
-                             nack_reason='unknown')
-        dr = TransportEvent(event_type='delivery_report',
-                            delivery_status='pending',
-                            user_message_id='dr-uuid')
-        worker.consume_ack(ack)
-        worker.consume_nack(nack)
-        worker.consume_delivery_report(dr)
+        worker.consume_ack(self.mkmsg_ack())
+        worker.consume_nack(self.mkmsg_nack())
+        worker.consume_delivery_report(self.mkmsg_delivery())
         worker.consume_unknown_event(FakeUserMessage())
         worker.consume_user_message(FakeUserMessage())
         worker.new_session(FakeUserMessage())
