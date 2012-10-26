@@ -20,6 +20,10 @@ class DevNullTransport(Transport):
     :type transport_type: str
     :param transport_type:
         The transport type to emulate, defaults to sms.
+    :type ack_rate: float
+    :param ack_rate:
+        How many messages should be ack'd. The remainder will be nacked.
+        The `failure_rate` and `reply_rate` treat the `ack_rate` as 100%.
     :type failure_rate: float
     :param failure_rate:
         How many messages should be treated as failures.
@@ -36,6 +40,7 @@ class DevNullTransport(Transport):
 
     def validate_config(self):
         self.transport_type = self.config.get('transport_type', 'sms')
+        self.ack_rate = float(self.config['ack_rate'])
         self.failure_rate = float(self.config['failure_rate'])
         self.reply_rate = float(self.config['reply_rate'])
         self.reply_copy = self.config.get('reply_copy')
@@ -48,6 +53,11 @@ class DevNullTransport(Transport):
 
     @inlineCallbacks
     def handle_outbound_message(self, message):
+        if random.random() > self.ack_rate:
+            yield self.publish_nack(message['message_id'],
+                'Not accepted by network')
+            return
+
         dr = ('failed' if random.random() < self.failure_rate
                 else 'delivered')
         log.info('MT %(dr)s: %(from_addr)s -> %(to_addr)s: %(content)s' % {

@@ -136,7 +136,7 @@ class MessageStoreCache(object):
         """
         yield self.increment_event_status(batch_id, 'sent')
         yield self.redis.zadd(self.outbound_key(batch_id), **{
-            message_key: timestamp,
+            message_key.encode('utf-8'): timestamp,
             })
 
     @Manager.calls_manager
@@ -157,12 +157,14 @@ class MessageStoreCache(object):
         """
         return self.redis.hincrby(self.status_key(batch_id), event_type,  1)
 
+    @Manager.calls_manager
     def get_event_status(self, batch_id):
         """
         Return a dictionary containing the latest event stats for the given
         batch_id.
         """
-        return self.redis.hgetall(self.status_key(batch_id))
+        stats = yield self.redis.hgetall(self.status_key(batch_id))
+        returnValue(dict([(k, int(v)) for k, v in stats.iteritems()]))
 
     @Manager.calls_manager
     def add_inbound_message(self, batch_id, msg):
@@ -180,7 +182,7 @@ class MessageStoreCache(object):
         Add a message key, weighted with the timestamp to the batch_id
         """
         yield self.redis.zadd(self.inbound_key(batch_id), **{
-            message_key: timestamp,
+            message_key.encode('utf-8'): timestamp,
             })
 
     def add_from_addr(self, batch_id, from_addr, timestamp):
@@ -189,7 +191,7 @@ class MessageStoreCache(object):
         this information is retrieved when `add_inbound_message()` is called.
         """
         return self.redis.zadd(self.from_addr_key(batch_id), **{
-            from_addr: timestamp,
+            from_addr.encode('utf-8'): timestamp,
             })
 
     def get_from_addrs(self, batch_id):
@@ -210,7 +212,7 @@ class MessageStoreCache(object):
         this information is retrieved when `add_outbound_message()` is called.
         """
         return self.redis.zadd(self.to_addr_key(batch_id), **{
-            to_addr: timestamp,
+            to_addr.encode('utf-8'): timestamp,
             })
 
     def get_to_addrs(self, batch_id):

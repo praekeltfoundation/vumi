@@ -662,6 +662,9 @@ class Sandbox(ApplicationWorker):
     def consume_ack(self, event):
         return self.process_event_in_sandbox(event)
 
+    def consume_nack(self, event):
+        return self.process_event_in_sandbox(event)
+
     def consume_delivery_report(self, event):
         return self.process_event_in_sandbox(event)
 

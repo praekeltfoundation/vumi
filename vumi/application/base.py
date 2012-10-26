@@ -71,6 +71,7 @@ class ApplicationWorker(Worker):
 
         self._event_handlers = {
             'ack': self.consume_ack,
+            'nack': self.consume_nack,
             'delivery_report': self.consume_delivery_report,
             }
         self._session_handlers = {
@@ -171,6 +172,10 @@ class ApplicationWorker(Worker):
 
     def consume_ack(self, event):
         """Handle an ack message."""
+        pass
+
+    def consume_nack(self, event):
+        """Handle a nack message"""
         pass
 
     def consume_delivery_report(self, event):
