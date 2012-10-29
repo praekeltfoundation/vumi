@@ -72,9 +72,9 @@ class TestMessageStore(TestMessageStoreBase):
         batch_id = yield self.store.batch_start([tag1])
         batch = yield self.store.get_batch(batch_id)
         tag_info = yield self.store.get_tag_info(tag1)
-        batch_messages = yield self.store.batch_messages(batch_id)
+        outbound_keys = yield self.store.batch_outbound_keys(batch_id)
         batch_status = yield self.store.batch_status(batch_id)
-        self.assertEqual(batch_messages, [])
+        self.assertEqual(outbound_keys, [])
         self.assertEqual(list(batch.tags), [tag1])
         self.assertEqual(tag_info.current_batch.key, batch_id)
         self.assertEqual(batch_status, self._batch_status())
@@ -102,21 +102,21 @@ class TestMessageStore(TestMessageStoreBase):
 
         stored_msg = yield self.store.get_outbound_message(msg_id)
         self.assertEqual(stored_msg, msg)
-        events = yield self.store.message_events(msg_id)
-        self.assertEqual(events, [])
+        event_keys = yield self.store.message_event_keys(msg_id)
+        self.assertEqual(event_keys, [])
 
     @inlineCallbacks
     def test_add_outbound_message_with_batch_id(self):
         msg_id, msg, batch_id = yield self._create_outbound(by_batch=True)
 
         stored_msg = yield self.store.get_outbound_message(msg_id)
-        batch_messages = yield self.store.batch_messages(batch_id)
-        message_events = yield self.store.message_events(msg_id)
+        outbound_keys = yield self.store.batch_outbound_keys(batch_id)
+        event_keys = yield self.store.message_event_keys(msg_id)
         batch_status = yield self.store.batch_status(batch_id)
 
         self.assertEqual(stored_msg, msg)
-        self.assertEqual(batch_messages, [msg])
-        self.assertEqual(message_events, [])
+        self.assertEqual(outbound_keys, [msg_id])
+        self.assertEqual(event_keys, [])
         self.assertEqual(batch_status, self._batch_status(sent=1))
 
     @inlineCallbacks
@@ -124,13 +124,13 @@ class TestMessageStore(TestMessageStoreBase):
         msg_id, msg, batch_id = yield self._create_outbound()
 
         stored_msg = yield self.store.get_outbound_message(msg_id)
-        batch_messages = yield self.store.batch_messages(batch_id)
-        message_events = yield self.store.message_events(msg_id)
+        outbound_keys = yield self.store.batch_outbound_keys(batch_id)
+        event_keys = yield self.store.message_event_keys(msg_id)
         batch_status = yield self.store.batch_status(batch_id)
 
         self.assertEqual(stored_msg, msg)
-        self.assertEqual(batch_messages, [msg])
-        self.assertEqual(message_events, [])
+        self.assertEqual(outbound_keys, [msg_id])
+        self.assertEqual(event_keys, [])
         self.assertEqual(batch_status, self._batch_status(sent=1))
 
     @inlineCallbacks
@@ -141,11 +141,11 @@ class TestMessageStore(TestMessageStoreBase):
         yield self.store.add_event(ack)
 
         stored_ack = yield self.store.get_event(ack_id)
-        message_events = yield self.store.message_events(msg_id)
+        event_keys = yield self.store.message_event_keys(msg_id)
         batch_status = yield self.store.batch_status(batch_id)
 
         self.assertEqual(stored_ack, ack)
-        self.assertEqual(message_events, [ack])
+        self.assertEqual(event_keys, [ack_id])
         self.assertEqual(batch_status, self._batch_status(sent=1, ack=1))
 
     @inlineCallbacks
@@ -156,11 +156,11 @@ class TestMessageStore(TestMessageStoreBase):
         yield self.store.add_event(nack)
 
         stored_nack = yield self.store.get_event(nack_id)
-        message_events = yield self.store.message_events(msg_id)
+        event_keys = yield self.store.message_event_keys(msg_id)
         batch_status = yield self.store.batch_status(batch_id)
 
         self.assertEqual(stored_nack, nack)
-        self.assertEqual(message_events, [nack])
+        self.assertEqual(event_keys, [nack_id])
         self.assertEqual(batch_status, self._batch_status(sent=1, nack=1))
 
     @inlineCallbacks
@@ -171,10 +171,10 @@ class TestMessageStore(TestMessageStoreBase):
         yield self.store.add_event(ack)
 
         stored_ack = yield self.store.get_event(ack_id)
-        message_events = yield self.store.message_events(msg_id)
+        event_keys = yield self.store.message_event_keys(msg_id)
 
         self.assertEqual(stored_ack, ack)
-        self.assertEqual(message_events, [ack])
+        self.assertEqual(event_keys, [ack_id])
 
     @inlineCallbacks
     def test_add_nack_event_without_batch(self):
@@ -184,29 +184,27 @@ class TestMessageStore(TestMessageStoreBase):
         yield self.store.add_event(nack)
 
         stored_nack = yield self.store.get_event(nack_id)
-        message_events = yield self.store.message_events(msg_id)
+        event_keys = yield self.store.message_event_keys(msg_id)
 
         self.assertEqual(stored_nack, nack)
-        self.assertEqual(message_events, [nack])
+        self.assertEqual(event_keys, [nack_id])
 
     @inlineCallbacks
     def test_add_delivery_report_events(self):
         msg_id, msg, batch_id = yield self._create_outbound()
 
-        drs = []
+        dr_ids = []
         for status in TransportEvent.DELIVERY_STATUSES:
             dr = self.mkmsg_delivery(user_message_id=msg_id,
                                         status=status)
             dr_id = dr['event_id']
-            drs.append(dr)
+            dr_ids.append(dr_id)
             yield self.store.add_event(dr)
             stored_dr = yield self.store.get_event(dr_id)
             self.assertEqual(stored_dr, dr)
 
-        message_events = yield self.store.message_events(msg_id)
-        message_events.sort(key=lambda msg: msg['event_id'])
-        drs.sort(key=lambda msg: msg['event_id'])
-        self.assertEqual(message_events, drs)
+        event_keys = yield self.store.message_event_keys(msg_id)
+        self.assertEqual(sorted(event_keys), sorted(dr_ids))
         dr_counts = dict((status, 1)
                          for status in TransportEvent.DELIVERY_STATUSES)
         batch_status = yield self.store.batch_status(batch_id)
@@ -223,20 +221,20 @@ class TestMessageStore(TestMessageStoreBase):
         msg_id, msg, batch_id = yield self._create_inbound(by_batch=True)
 
         stored_msg = yield self.store.get_inbound_message(msg_id)
-        batch_replies = yield self.store.batch_replies(batch_id)
+        inbound_keys = yield self.store.batch_inbound_keys(batch_id)
 
         self.assertEqual(stored_msg, msg)
-        self.assertEqual(batch_replies, [msg])
+        self.assertEqual(inbound_keys, [msg_id])
 
     @inlineCallbacks
     def test_add_inbound_message_with_tag(self):
         msg_id, msg, batch_id = yield self._create_inbound()
 
         stored_msg = yield self.store.get_inbound_message(msg_id)
-        batch_replies = yield self.store.batch_replies(batch_id)
+        inbound_keys = yield self.store.batch_inbound_keys(batch_id)
 
         self.assertEqual(stored_msg, msg)
-        self.assertEqual(batch_replies, [msg])
+        self.assertEqual(inbound_keys, [msg_id])
 
     @inlineCallbacks
     def test_inbound_counts(self):

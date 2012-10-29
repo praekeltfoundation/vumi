@@ -259,14 +259,36 @@ class VumiMapReduce(object):
             mr.add_bucket_key_data(bucket_name, key, None)
         return cls(mgr, mr)
 
+    def filter_not_found(self):
+        self._riak_mapreduce_obj.map(function="""
+            function(v) {
+                values = v.values.filter(function(val) {
+                        return !val.metadata['X-Riak-Deleted']
+                    })
+                if (values) {
+                    return [v.key];
+                } else {
+                    return [];
+                }
+            }""")
+        self._riak_mapreduce_obj.filter_not_found()
+
     def get_count(self):
         self._riak_mapreduce_obj.reduce(
             function=["riak_kv_mapreduce", "reduce_count_inputs"])
         return self._manager.run_map_reduce(self._riak_mapreduce_obj)
 
+    def _results_to_keys(self, mgr, obj):
+        if isinstance(obj, basestring):
+            # Assume strings are keys.
+            return obj
+        else:
+            # If we haven't been given a string, we probably have a RiakLink.
+            return obj.get_key()
+
     def get_keys(self):
         return self._manager.run_map_reduce(
-            self._riak_mapreduce_obj, lambda mgr, obj: obj.get_key())
+            self._riak_mapreduce_obj, self._results_to_keys)
 
 
 class Manager(object):
@@ -375,7 +397,7 @@ class Manager(object):
             self, model, field_name, start_value, end_value)
 
     def mr_from_index(self, model, index_name, start_value, end_value=None):
-        return VumiMapReduce.from_field(
+        return VumiMapReduce.from_index(
             self, model, index_name, start_value, end_value)
 
     def mr_from_search(self, model, query):
@@ -429,6 +451,7 @@ class ModelProxy(object):
     def __init__(self, manager, modelcls):
         self._manager = manager
         self._modelcls = modelcls
+        self.bucket = modelcls.bucket
 
     def __call__(self, key, **data):
         return self._modelcls(self._manager, key, **data)

@@ -116,7 +116,9 @@ class MessageStore(object):
     @Manager.calls_manager
     def batch_done(self, batch_id):
         batch = yield self.batches.load(batch_id)
-        tags = yield batch.backlinks.currenttags()
+        tag_keys = yield batch.backlinks.currenttags()
+        # FIXME: This assumes no more than 100 tags per batch.
+        tags = yield self.manager.load_from_keys(CurrentTag, tag_keys)
         for tag in tags:
             tag.current_batch.set(None)
             yield tag.save()
@@ -193,23 +195,17 @@ class MessageStore(object):
     def batch_status(self, batch_id):
         return self.cache.get_event_status(batch_id)
 
-    @Manager.calls_manager
-    def batch_messages(self, batch_id):
-        batch = yield self.batches.load(batch_id)
-        messages = yield batch.backlinks.outboundmessages()
-        returnValue([m.msg for m in messages])
+    def batch_outbound_keys(self, batch_id):
+        mr = self.manager.mr_from_field(OutboundMessage, 'batch', batch_id)
+        return mr.get_keys()
 
-    @Manager.calls_manager
-    def batch_replies(self, batch_id):
-        batch = yield self.batches.load(batch_id)
-        messages = yield batch.backlinks.inboundmessages()
-        returnValue([m.msg for m in messages])
+    def batch_inbound_keys(self, batch_id):
+        mr = self.manager.mr_from_field(InboundMessage, 'batch', batch_id)
+        return mr.get_keys()
 
-    @Manager.calls_manager
-    def message_events(self, msg_id):
-        message = yield self.outbound_messages.load(msg_id)
-        events = yield message.backlinks.events()
-        returnValue([e.event for e in events])
+    def message_event_keys(self, msg_id):
+        mr = self.manager.mr_from_field(Event, 'message', msg_id)
+        return mr.get_keys()
 
     @Manager.calls_manager
     def batch_inbound_count(self, batch_id):

@@ -26,8 +26,8 @@ class FieldDescriptor(object):
         else:
             self.index_name = None
 
-    def setup(self, cls):
-        self.cls = cls
+    def setup(self, model_cls):
+        self.model_cls = model_cls
 
     def validate(self, value):
         self.field.validate(value)
@@ -216,8 +216,8 @@ class Json(Field):
 class VumiMessageDescriptor(FieldDescriptor):
     """Property for getting and setting fields."""
 
-    def setup(self, cls):
-        super(VumiMessageDescriptor, self).setup(cls)
+    def setup(self, model_cls):
+        super(VumiMessageDescriptor, self).setup(model_cls)
         if self.field.prefix is None:
             self.prefix = "%s." % self.key
         else:
@@ -314,8 +314,8 @@ class FieldWithSubtype(Field):
 
 class DynamicDescriptor(FieldDescriptor):
     """A field descriptor for dynamic fields."""
-    def setup(self, cls):
-        super(DynamicDescriptor, self).setup(cls)
+    def setup(self, model_cls):
+        super(DynamicDescriptor, self).setup(model_cls)
         if self.field.prefix is None:
             self.prefix = "%s." % self.key
         else:
@@ -521,38 +521,30 @@ class ListOf(FieldWithSubtype):
 
 
 class ForeignKeyDescriptor(FieldDescriptor):
-    def setup(self, cls):
-        super(ForeignKeyDescriptor, self).setup(cls)
-        self.othercls = self.field.othercls
+    def setup(self, model_cls):
+        super(ForeignKeyDescriptor, self).setup(model_cls)
+        self.other_model = self.field.other_model
         if self.field.index is None:
             self.index_name = "%s_bin" % self.key
         else:
             self.index_name = self.field.index
         if self.field.backlink is None:
-            self.backlink_name = cls.__name__.lower() + "s"
+            self.backlink_name = model_cls.__name__.lower() + "s"
         else:
             self.backlink_name = self.field.backlink
-        self.othercls.backlinks.declare_backlink(self.backlink_name,
-                                                 self.reverse_lookup)
+        self.other_model.backlinks.declare_backlink(self.backlink_name,
+                                                 self.reverse_lookup_keys)
 
-    def reverse_lookup(self, modelobj, manager=None):
+    def reverse_lookup_keys(self, modelobj, manager=None):
         if manager is None:
             manager = modelobj.manager
-        mr = manager.riak_map_reduce()
-        bucket = manager.bucket_prefix + self.cls.bucket
-        mr.index(bucket, self.index_name, modelobj.key)
-        # Return the key and the data for this object.
-        # Allows us to populate the objects coming back from a
-        # map reduce in one single call. This is especially important
-        # for synchronous calls.
-        mr = mr.map(function="""function(v) {
-            return [[v.key, v.values[0]]]
-        }""")
-        return manager.run_map_reduce(mr, self.map_lookup_result)
+        mr = manager.mr_from_index(
+            self.model_cls, self.index_name, modelobj.key)
+        return mr.get_keys()
 
     def map_lookup_result(self, manager, result_tuple):
         key, result = result_tuple
-        return self.cls.load(manager, key, result)
+        return self.model_cls.load(manager, key, result)
 
     def get_value(self, modelobj):
         return ForeignKeyProxy(self, modelobj)
@@ -575,7 +567,7 @@ class ForeignKeyDescriptor(FieldDescriptor):
             return None
         if manager is None:
             manager = modelobj.manager
-        return self.othercls.load(manager, key)
+        return self.other_model.load(manager, key)
 
     def initialize(self, modelobj, value):
         if isinstance(value, basestring):
@@ -619,29 +611,29 @@ class ForeignKey(Field):
 
     Additional parameters:
 
-    :param Model othercls:
+    :param Model other_model:
         The type of model linked to.
     :param string index:
         The name to use for the index. The default is the field name
         followed by _bin.
     :param string backlink:
-        The name to use for the backlink on :attr:`othercls.backlinks`.
+        The name to use for the backlink on :attr:`other_model.backlinks`.
         The default is the name of the class the field is on converted
         to lowercase and with 's' appended (e.g. 'FooModel' would result
-        in :attr:`othercls.backlinks.foomodels`).
+        in :attr:`other_model.backlinks.foomodels`).
     """
     descriptor_class = ForeignKeyDescriptor
 
-    def __init__(self, othercls, index=None, backlink=None, **kw):
+    def __init__(self, other_model, index=None, backlink=None, **kw):
         super(ForeignKey, self).__init__(**kw)
-        self.othercls = othercls
+        self.other_model = other_model
         self.index = index
         self.backlink = backlink
 
     def custom_validate(self, value):
-        if not isinstance(value, self.othercls):
+        if not isinstance(value, self.other_model):
             raise ValidationError("ForeignKey requires a %r instance" %
-                                  (self.othercls,))
+                                  (self.other_model,))
 
 
 class ManyToManyDescriptor(ForeignKeyDescriptor):
@@ -667,7 +659,7 @@ class ManyToManyDescriptor(ForeignKeyDescriptor):
         keys = self.get_foreign_keys(modelobj)
         if manager is None:
             manager = modelobj.manager
-        return manager.load_list(self.othercls, keys)
+        return manager.load_list(self.other_model, keys)
 
     def add_foreign_object(self, modelobj, otherobj):
         self.validate(otherobj)
@@ -711,19 +703,19 @@ class ManyToManyProxy(object):
 class ManyToMany(ForeignKey):
     """A field that links to multiple instances of another class.
 
-    :param Model othercls:
+    :param Model other_model:
         The type of model linked to.
     :param string index:
         The name to use for the index. The default is the field name
         followed by _bin.
     :param string backlink:
-        The name to use for the backlink on :attr:`othercls.backlinks`.
+        The name to use for the backlink on :attr:`other_model.backlinks`.
         The default is the name of the class the field is on converted
         to lowercase and with 's' appended (e.g. 'FooModel' would result
-        in :attr:`othercls.backlinks.foomodels`).
+        in :attr:`other_model.backlinks.foomodels`).
     """
     descriptor_class = ManyToManyDescriptor
     initializable = False
 
-    def __init__(self, othercls, index=None, backlink=None):
-        super(ManyToMany, self).__init__(othercls, index, backlink)
+    def __init__(self, other_model, index=None, backlink=None):
+        super(ManyToMany, self).__init__(other_model, index, backlink)

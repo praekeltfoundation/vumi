@@ -394,9 +394,7 @@ class TestModelOnTxRiak(TestCase):
 
         s2 = yield simple_model.load("foo")
         results = yield s2.backlinks.foreignkeymodels()
-        self.assertEqual(sorted(s.key for s in results), ["bar1", "bar2"])
-        self.assertEqual([s.__class__ for s in results],
-                         [ForeignKeyModel] * 2)
+        self.assertEqual(sorted(results), ["bar1", "bar2"])
 
     @Manager.calls_manager
     def test_manytomany_field(self):
@@ -466,13 +464,11 @@ class TestModelOnTxRiak(TestCase):
 
         s1 = yield simple_model.load("foo1")
         results = yield s1.backlinks.manytomanymodels()
-        self.assertEqual(sorted(s.key for s in results), ["bar1", "bar2"])
-        self.assertEqual([s.__class__ for s in results],
-                         [ManyToManyModel] * 2)
+        self.assertEqual(sorted(results), ["bar1", "bar2"])
 
         s2 = yield simple_model.load("foo2")
         results = yield s2.backlinks.manytomanymodels()
-        self.assertEqual(sorted(s.key for s in results), ["bar1"])
+        self.assertEqual(sorted(results), ["bar1"])
 
     @Manager.calls_manager
     def test_inherited_model(self):
