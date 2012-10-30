@@ -146,7 +146,7 @@ class MessageStore(object):
     def reconcile_event_cache(self, batch_id, message_id):
         events = yield self.message_events(message_id)
         for event in events:
-            yield self.cache.add_event(batch_id, event, reconcile=True)
+            yield self.cache.add_event(batch_id, event)
 
     @Manager.calls_manager
     def batch_start(self, tags, **metadata):
