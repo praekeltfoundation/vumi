@@ -1,6 +1,7 @@
 # -*- test-case-name: vumi.components.tests.test_message_store_cache -*-
 # -*- coding: utf-8 -*-
 import time
+from datetime import datetime
 
 from twisted.internet.defer import returnValue
 
@@ -19,39 +20,13 @@ class MessageStoreCache(object):
     TO_ADDR_KEY = 'to_addr'
     FROM_ADDR_KEY = 'from_addr'
     STATUS_KEY = 'status'
+    RECON_KEY = 'recon'
 
     def __init__(self, redis):
         # Store redis as `manager` as well since @Manager.calls_manager
         # requires it to be named as such.
         self.redis = self.manager = redis
-
-    @Manager.calls_manager
-    def calculate_offsets(self, message_store, batch_id):
-        """
-        Check if the cache needs to be reconciled with the data in Riak.
-        This is a heavy process since we're doing index based counts
-        in Riak and comparing them to the cached counts.
-
-        Returns a tuple (inbound_offset, outbound_offset) of the
-        message_store count minus the cached_count.
-        """
-        inbound_offset = yield self.calculate_inbound_offset(message_store,
-            batch_id)
-        outbound_offset = yield self.calculate_outbound_offset(message_store,
-            batch_id)
-        returnValue((inbound_offset, outbound_offset))
-
-    @Manager.calls_manager
-    def calculate_inbound_offset(self, message_store, batch_id):
-        ms_count = yield message_store.batch_inbound_count(batch_id)
-        cache_count = yield self.count_inbound_message_keys(batch_id)
-        returnValue(ms_count - cache_count)
-
-    @Manager.calls_manager
-    def calculate_outbound_offset(self, message_store, batch_id):
-        ms_count = yield message_store.batch_outbound_count(batch_id)
-        cache_count = yield self.count_outbound_message_keys(batch_id)
-        returnValue(ms_count - cache_count)
+        self._recon_timestamp = None
 
     def key(self, *args):
         return ':'.join([unicode(a) for a in args])
@@ -73,6 +48,9 @@ class MessageStoreCache(object):
 
     def status_key(self, batch_id):
         return self.batch_key(self.STATUS_KEY, batch_id)
+
+    def recon_key(self, batch_id):
+        return self.status_key(self.key(self.RECON_KEY, batch_id))
 
     @Manager.calls_manager
     def batch_start(self, batch_id):
@@ -140,15 +118,36 @@ class MessageStoreCache(object):
             })
 
     @Manager.calls_manager
-    def add_event(self, batch_id, event):
+    def add_event(self, batch_id, event, reconcile=False):
         """
         Add an event to the cache for the given batch_id
         """
+        # If we receive an event that occured after the reconciliation
+        # started or for which we're trying to reconcile the cache
+        # temporarily use the recon-key which'll be moved to the final
+        # key when `finish_reconciliation` is called.
+        if reconcile or (self._recon_timestamp and
+            event['timestamp'] > self._recon_timestamp):
+            batch_id = self.key(self.RECON_KEY, batch_id)
+
         event_type = event['event_type']
         yield self.increment_event_status(batch_id, event_type)
         if event_type == 'delivery_report':
             yield self.increment_event_status(batch_id,
                 '%s.%s' % (event_type, event['delivery_status']))
+
+    def start_reconciliation(self, batch_id):
+        self._recon_timestamp = datetime.utcnow()
+        return self.redis.delete(self.recon_key(batch_id))
+
+    def finish_reconciliation(self, batch_id):
+        """
+        Moves the temporary event status which was used for reconciliation
+        to the final destination which is then updated going forward.
+        """
+        self._recon_timestamp = None
+        return self.redis.rename(self.recon_key(batch_id),
+            self.status_key(batch_id))
 
     def increment_event_status(self, batch_id, event_type):
         """

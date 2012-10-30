@@ -95,6 +95,60 @@ class MessageStore(object):
         self.cache = MessageStoreCache(redis)
 
     @Manager.calls_manager
+    def needs_reconciliation(self, batch_id, delta=0.01):
+        """
+        Check if a batch_id's cache values need to be reconciled with
+        what's stored in the MessageStore.
+
+        :param float delta:
+            What an acceptable delta is for the cached values. Defaults to 0.01
+            If the cached values are off by the delta then this returns True.
+        """
+        inbound = float((yield self.batch_inbound_count(batch_id)))
+        cached_inbound = yield self.cache.count_inbound_message_keys(
+            batch_id)
+
+        if inbound and (abs(cached_inbound - inbound) / inbound) > delta:
+            returnValue(True)
+
+        outbound = float((yield self.batch_outbound_count(batch_id)))
+        cached_outbound = yield self.cache.count_outbound_message_keys(
+            batch_id)
+
+        if outbound and (abs(cached_outbound - outbound) / outbound) > delta:
+            returnValue(True)
+
+        returnValue(False)
+
+    @Manager.calls_manager
+    def reconcile_cache(self, batch_id):
+        yield self.reconcile_inbound_cache(batch_id)
+        yield self.reconcile_outbound_cache(batch_id)
+        yield self.reconcile_event_cache(batch_id)
+
+    @Manager.calls_manager
+    def reconcile_inbound_cache(self, batch_id):
+        batch = yield self.batches.load(batch_id)
+        inbound_messages = yield batch.backlinks.inboundmessages()
+        for inbound in inbound_messages:
+            yield self.cache.add_inbound_message(batch_id, inbound.msg)
+
+    @Manager.calls_manager
+    def reconcile_outbound_cache(self, batch_id):
+        batch = yield self.batches.load(batch_id)
+        outbound_messages = yield batch.backlinks.outboundmessages()
+        for outbound in outbound_messages:
+            yield self.cache.add_outbound_message(batch_id, outbound.msg)
+            yield self.reconcile_event_cache(batch_id,
+                outbound.msg['message_id'])
+
+    @Manager.calls_manager
+    def reconcile_event_cache(self, batch_id, message_id):
+        events = yield self.message_events(message_id)
+        for event in events:
+            yield self.cache.add_event(batch_id, event, reconcile=True)
+
+    @Manager.calls_manager
     def batch_start(self, tags, **metadata):
         batch_id = uuid4().get_hex()
         batch = self.batches(batch_id)
