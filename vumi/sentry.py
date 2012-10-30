@@ -101,11 +101,13 @@ class SentryLogObserver(object):
 
     DEFAULT_ERROR_LEVEL = logging.ERROR
     DEFAULT_LOG_LEVEL = logging.INFO
+    LOG_LEVEL_THRESHOLD = logging.WARN
 
-    def __init__(self, client, log_context_sentinel=None):
+    def __init__(self, client, logger_name, log_context_sentinel=None):
         if log_context_sentinel is None:
             log_context_sentinel = DEFAULT_LOG_CONTEXT_SENTINEL
         self.client = client
+        self.logger_name = logger_name
         self.log_context_sentinel = log_context_sentinel
         self.log_context = {self.log_context_sentinel: True}
 
@@ -118,12 +120,20 @@ class SentryLogObserver(object):
         return self.DEFAULT_LOG_LEVEL
 
     def logger_for_event(self, event):
-        return event.get('system', 'unknown')
+        system = event.get('system', '-')
+        parts = [self.logger_name]
+        if system != '-':
+            parts.extend(system.split(','))
+        logger = ".".join(parts)
+        return logger.lower()
 
     def _log_to_sentry(self, event):
+        level = self.level_for_event(event)
+        if level < self.LOG_LEVEL_THRESHOLD:
+            return
         data = {
             "logger": self.logger_for_event(event),
-            "level": self.level_for_event(event),
+            "level": level,
         }
         failure = event.get('failure')
         if failure:
@@ -141,11 +151,11 @@ class SentryLogObserver(object):
 
 class SentryLoggerService(Service):
 
-    def __init__(self, dsn, logger=None):
+    def __init__(self, dsn, logger_name, logger=None):
         self.setName('Sentry Logger')
         self.dsn = dsn
         self.client = vumi_raven_client(dsn=dsn)
-        self.sentry_log_observer = SentryLogObserver(self.client)
+        self.sentry_log_observer = SentryLogObserver(self.client, logger_name)
         self.logger = logger if logger is not None else log.theLogPublisher
 
     def startService(self):

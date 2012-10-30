@@ -1,7 +1,6 @@
 # -*- test-case-name: vumi.components.tests.test_message_store_cache -*-
 # -*- coding: utf-8 -*-
 import time
-from datetime import datetime
 
 from twisted.internet.defer import returnValue
 
@@ -19,14 +18,13 @@ class MessageStoreCache(object):
     INBOUND_KEY = 'inbound'
     TO_ADDR_KEY = 'to_addr'
     FROM_ADDR_KEY = 'from_addr'
+    EVENT_KEY = 'event'
     STATUS_KEY = 'status'
-    RECON_KEY = 'recon'
 
     def __init__(self, redis):
         # Store redis as `manager` as well since @Manager.calls_manager
         # requires it to be named as such.
         self.redis = self.manager = redis
-        self._recon_timestamp = None
 
     def key(self, *args):
         return ':'.join([unicode(a) for a in args])
@@ -49,8 +47,8 @@ class MessageStoreCache(object):
     def status_key(self, batch_id):
         return self.batch_key(self.STATUS_KEY, batch_id)
 
-    def recon_key(self, batch_id):
-        return self.status_key(self.key(self.RECON_KEY, batch_id))
+    def event_key(self, batch_id):
+        return self.batch_key(self.EVENT_KEY, batch_id)
 
     @Manager.calls_manager
     def batch_start(self, batch_id):
@@ -118,36 +116,26 @@ class MessageStoreCache(object):
             })
 
     @Manager.calls_manager
-    def add_event(self, batch_id, event, reconcile=False):
+    def add_event(self, batch_id, event):
         """
         Add an event to the cache for the given batch_id
         """
-        # If we receive an event that occured after the reconciliation
-        # started or for which we're trying to reconcile the cache
-        # temporarily use the recon-key which'll be moved to the final
-        # key when `finish_reconciliation` is called.
-        if reconcile or (self._recon_timestamp and
-            event['timestamp'] > self._recon_timestamp):
-            batch_id = self.key(self.RECON_KEY, batch_id)
 
-        event_type = event['event_type']
-        yield self.increment_event_status(batch_id, event_type)
-        if event_type == 'delivery_report':
-            yield self.increment_event_status(batch_id,
-                '%s.%s' % (event_type, event['delivery_status']))
+        event_id = event['event_id']
+        new_entry = yield self.add_event_key(batch_id, event_id)
+        if new_entry:
+            event_type = event['event_type']
+            yield self.increment_event_status(batch_id, event_type)
+            if event_type == 'delivery_report':
+                yield self.increment_event_status(batch_id,
+                    '%s.%s' % (event_type, event['delivery_status']))
 
-    def start_reconciliation(self, batch_id):
-        self._recon_timestamp = datetime.utcnow()
-        return self.redis.delete(self.recon_key(batch_id))
-
-    def finish_reconciliation(self, batch_id):
+    def add_event_key(self, batch_id, event_key):
         """
-        Moves the temporary event status which was used for reconciliation
-        to the final destination which is then updated going forward.
+        Add the event key to the set of known event keys.
+        Returns 0 if the key already exists in the set, 1 if it doesn't.
         """
-        self._recon_timestamp = None
-        return self.redis.rename(self.recon_key(batch_id),
-            self.status_key(batch_id))
+        return self.redis.sadd(self.event_key(batch_id), event_key)
 
     def increment_event_status(self, batch_id, event_type):
         """

@@ -10,6 +10,7 @@ from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks, Deferred
 from twisted.web import http
 from twisted.python.failure import Failure
+from twisted.python.log import LogPublisher
 
 from vumi.tests.utils import MockHttpServer, LogCatcher, import_skip, mocking
 from vumi.sentry import (quiet_get_page, SentryLogObserver, vumi_raven_client,
@@ -59,7 +60,7 @@ class DummySentryClient(object):
 class TestSentryLogObserver(TestCase):
     def setUp(self):
         self.client = DummySentryClient()
-        self.obs = SentryLogObserver(self.client)
+        self.obs = SentryLogObserver(self.client, 'test')
 
     def test_level_for_event(self):
         for expected_level, event in [
@@ -71,16 +72,16 @@ class TestSentryLogObserver(TestCase):
 
     def test_logger_for_event(self):
         self.assertEqual(self.obs.logger_for_event({'system': 'foo,bar'}),
-                         'foo,bar')
-        self.assertEqual(self.obs.logger_for_event({}), 'unknown')
+                         'test.foo.bar')
+        self.assertEqual(self.obs.logger_for_event({}), 'test')
 
     def test_log_failure(self):
         e = ValueError("foo error")
         f = Failure(e)
-        self.obs({'failure': f, 'system': 'test.log'})
+        self.obs({'failure': f, 'system': 'foo', 'isError': 1})
         self.assertEqual(self.client.exceptions, [
             (((type(e), e, None),),
-             {'data': {'level': 20, 'logger': 'test.log'}}),
+             {'data': {'level': 40, 'logger': 'test.foo'}}),
         ])
 
     def test_log_traceback(self):
@@ -88,18 +89,23 @@ class TestSentryLogObserver(TestCase):
             raise ValueError("foo")
         except ValueError:
             f = Failure(*sys.exc_info())
-        self.obs({'failure': f})
+        self.obs({'failure': f, 'isError': 1})
         [call_args] = self.client.exceptions
         exc_info = call_args[0][0]
         tb = ''.join(traceback.format_exception(*exc_info))
         self.assertTrue('raise ValueError("foo")' in tb)
 
-    def test_log_message(self):
-        self.obs({'message': ["a"], 'system': 'test.log'})
+    def test_log_warning(self):
+        self.obs({'message': ["a"], 'system': 'foo',
+                  'logLevel': logging.WARN})
         self.assertEqual(self.client.messages, [
             (('a',),
-             {'data': {'level': 20, 'logger': 'test.log'}})
+             {'data': {'level': 30, 'logger': 'test.foo'}})
         ])
+
+    def test_log_info(self):
+        self.obs({'message': ["a"], 'system': 'test.log'})
+        self.assertEqual(self.client.messages, [])  # should be filtered out
 
 
 class TestSentryLoggerSerivce(TestCase):
@@ -108,7 +114,21 @@ class TestSentryLoggerSerivce(TestCase):
         import vumi.sentry
         self.client = DummySentryClient()
         self.patch(vumi.sentry, 'vumi_raven_client', lambda dsn: self.client)
-        self.service = SentryLoggerService("http://example.com/")
+        self.logger = LogPublisher()
+        self.service = SentryLoggerService("http://example.com/",
+                                           "test.logger", logger=self.logger)
+
+    @inlineCallbacks
+    def test_logging(self):
+        yield self.service.startService()
+        self.logger.msg("Hello", logLevel=logging.WARN)
+        self.assertEqual(self.client.messages, [
+           (("Hello",), {'data': {'level': 30, 'logger': 'test.logger'}}),
+        ])
+        del self.client.messages[:]
+        yield self.service.stopService()
+        self.logger.msg("Foo", logLevel=logging.WARN)
+        self.assertEqual(self.client.messages, [])
 
     @inlineCallbacks
     def test_stop_not_running(self):
