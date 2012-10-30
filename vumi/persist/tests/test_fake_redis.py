@@ -158,15 +158,15 @@ class FakeRedisTestCase(TestCase):
 
     @inlineCallbacks
     def test_sadd(self):
-        yield self.assert_redis_op(None, 'sadd', 'set', 1)
-        yield self.assert_redis_op(None, 'sadd', 'set', 2, 3, 4)
+        yield self.assert_redis_op(1, 'sadd', 'set', 1)
+        yield self.assert_redis_op(3, 'sadd', 'set', 2, 3, 4)
         yield self.assert_redis_op(
             set(['1', '2', '3', '4']), 'smembers', 'set')
 
     @inlineCallbacks
     def test_smove(self):
-        yield self.assert_redis_op(None, 'sadd', 'set1', 1)
-        yield self.assert_redis_op(None, 'sadd', 'set2', 2)
+        yield self.assert_redis_op(1, 'sadd', 'set1', 1)
+        yield self.assert_redis_op(1, 'sadd', 'set2', 2)
         yield self.assert_redis_op(True, 'smove', 'set1', 'set2', '1')
         yield self.assert_redis_op(set(), 'smembers', 'set1')
         yield self.assert_redis_op(set(['1', '2']), 'smembers', 'set2')
@@ -178,8 +178,8 @@ class FakeRedisTestCase(TestCase):
 
     @inlineCallbacks
     def test_sunion(self):
-        yield self.assert_redis_op(None, 'sadd', 'set1', 1)
-        yield self.assert_redis_op(None, 'sadd', 'set2', 2)
+        yield self.assert_redis_op(1, 'sadd', 'set1', 1)
+        yield self.assert_redis_op(1, 'sadd', 'set2', 2)
         yield self.assert_redis_op(set(['1']), 'sunion', 'set1')
         yield self.assert_redis_op(set(['1', '2']), 'sunion', 'set1', 'set2')
         yield self.assert_redis_op(set(), 'sunion', 'other')
