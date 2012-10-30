@@ -75,8 +75,8 @@ class MessageStoreCache(object):
     def status_key(self, batch_id):
         return self.batch_key(self.STATUS_KEY, batch_id)
 
-    def event_key(self, batch_id, *args):
-        return self.batch_key(self.EVENT_KEY, batch_id, *args)
+    def event_key(self, batch_id):
+        return self.batch_key(self.EVENT_KEY, batch_id)
 
     @Manager.calls_manager
     def batch_start(self, batch_id):
