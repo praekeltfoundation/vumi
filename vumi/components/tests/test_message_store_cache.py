@@ -165,10 +165,32 @@ class TestMessageStoreCache(ApplicationTestCase):
         delivery = self.mkmsg_delivery(user_message_id=msg['message_id'])
         yield self.cache.add_event(self.batch_id, ack)
         yield self.cache.add_event(self.batch_id, delivery)
-        stats = yield self.cache.get_event_status(self.batch_id)
-        self.assertEqual(stats, {
+        status = yield self.cache.get_event_status(self.batch_id)
+        self.assertEqual(status, {
             'delivery_report': 1,
             'delivery_report.delivered': 1,
+            'delivery_report.failed': 0,
+            'delivery_report.pending': 0,
+            'ack': 1,
+            'nack': 0,
+            'sent': 1,
+            })
+
+    @inlineCallbacks
+    def test_add_event_idempotence(self):
+        msg = self.mkmsg_out()
+        self.cache.add_outbound_message(self.batch_id, msg)
+        acks = [self.mkmsg_ack(user_message_id=msg['message_id'],
+                                sent_message_id=msg['message_id'])
+                                for i in range(10)]
+        for ack in acks:
+            # send exact same event multiple times
+            ack['event_id'] = 'identical'
+            yield self.cache.add_event(self.batch_id, ack)
+        status = yield self.cache.get_event_status(self.batch_id)
+        self.assertEqual(status, {
+            'delivery_report': 0,
+            'delivery_report.delivered': 0,
             'delivery_report.failed': 0,
             'delivery_report.pending': 0,
             'ack': 1,
