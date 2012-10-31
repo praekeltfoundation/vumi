@@ -124,7 +124,6 @@ class MessageStore(object):
     def reconcile_cache(self, batch_id):
         yield self.reconcile_inbound_cache(batch_id)
         yield self.reconcile_outbound_cache(batch_id)
-        yield self.reconcile_event_cache(batch_id)
 
     @Manager.calls_manager
     def reconcile_inbound_cache(self, batch_id):

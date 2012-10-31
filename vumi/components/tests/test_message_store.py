@@ -257,11 +257,11 @@ class TestMessageStore(TestMessageStoreBase):
 
 class TestMessageStoreCache(TestMessageStoreBase):
 
-    def disable_cache(self, message_store):
-        message_store.cache.redis = self.redis.submanager('disabled')
-
-    def restore_cache(self, message_store):
-        message_store.cache.redis = self.redis
+    def clear_cache(self, message_store):
+        # FakeRedis provides a flushdb() function but TxRedisManager doesn't
+        # and I'm not sure what the intended behaviour of flushdb on a
+        # submanager is
+        message_store.cache.redis._client._data = {}
 
     @inlineCallbacks
     def test_cache_batch_start(self):
@@ -328,23 +328,20 @@ class TestMessageStoreCache(TestMessageStoreBase):
             yield self.store.needs_reconciliation(batch_id, delta=0.1)))
 
     @inlineCallbacks
-    def test_reconcile_inbound_cache(self):
-
-        batch_id = yield self.store.batch_start(("pool", "tag"))
-
-        self.disable_cache(self.store)
+    def test_reconcile_cache(self):
+        batch_id = yield self.store.batch_start([("pool", "tag")])
 
         # Store via message_store
         for i in range(10):
             msg = self.mkmsg_out(message_id=TransportEvent.generate_id())
             yield self.store.add_outbound_message(msg, batch_id=batch_id)
 
-        # Store one extra in the cache to throw off the allow threshold delta
-        recon_msg = self.mkmsg_out(message_id=TransportEvent.generate_id())
-        yield self.store.cache.add_outbound_message(batch_id, recon_msg)
-
+        self.clear_cache(self.store)
         # Default reconciliation delta should return True
         self.assertTrue((yield self.store.needs_reconciliation(batch_id)))
-        # More liberal reconciliation delta should return False
-        self.assertFalse((
-            yield self.store.needs_reconciliation(batch_id, delta=0.1)))
+        yield self.store.reconcile_cache(batch_id)
+        # Default reconciliation delta should return True
+        self.assertFalse((yield self.store.needs_reconciliation(batch_id)))
+        # Stricted possible reconciliation delta should return True
+        self.assertFalse((yield self.store.needs_reconciliation(batch_id,
+            delta=0)))
