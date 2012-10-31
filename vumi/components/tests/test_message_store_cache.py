@@ -197,15 +197,3 @@ class TestMessageStoreCache(ApplicationTestCase):
             'nack': 0,
             'sent': 1,
             })
-
-    @inlineCallbacks
-    def test_calculate_offsets(self):
-        msg1 = self.mkmsg_out()
-        msg2 = self.mkmsg_out()
-        yield self.store.add_outbound_message(msg1, batch_id=self.batch_id)
-        # the cache has one more than the message store
-        yield self.cache.add_outbound_message(self.batch_id, msg2)
-        offsets = yield self.cache.calculate_offsets(self.store, self.batch_id)
-        # inbounds should be the same, outbounds the message store should
-        # be one behind the cache (which is very unlikely)
-        self.assertEqual(offsets, (0, -1))
