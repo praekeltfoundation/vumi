@@ -199,6 +199,28 @@ class TestMessageStoreCache(ApplicationTestCase):
             })
 
     @inlineCallbacks
+    def test_add_outbound_message_idempotence(self):
+        for i in range(10):
+            msg = self.mkmsg_out()
+            msg['message_id'] = 'the-same-thing'
+            self.cache.add_outbound_message(self.batch_id, msg)
+        status = yield self.cache.get_event_status(self.batch_id)
+        self.assertEqual(status['sent'], 1)
+        self.assertEqual(
+            (yield self.cache.get_outbound_message_keys(self.batch_id)),
+            ['the-same-thing'])
+
+    @inlineCallbacks
+    def test_add_inbound_message_idempotence(self):
+        for i in range(10):
+            msg = self.mkmsg_in()
+            msg['message_id'] = 'the-same-thing'
+            self.cache.add_inbound_message(self.batch_id, msg)
+        self.assertEqual(
+            (yield self.cache.get_inbound_message_keys(self.batch_id)),
+            ['the-same-thing'])
+
+    @inlineCallbacks
     def test_clear_batch(self):
         msg_in = self.mkmsg_in()
         msg_out = self.mkmsg_out()
