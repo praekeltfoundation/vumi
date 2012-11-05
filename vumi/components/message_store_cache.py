@@ -18,6 +18,7 @@ class MessageStoreCache(object):
     INBOUND_KEY = 'inbound'
     TO_ADDR_KEY = 'to_addr'
     FROM_ADDR_KEY = 'from_addr'
+    EVENT_KEY = 'event'
     STATUS_KEY = 'status'
 
     def __init__(self, redis):
@@ -73,6 +74,9 @@ class MessageStoreCache(object):
 
     def status_key(self, batch_id):
         return self.batch_key(self.STATUS_KEY, batch_id)
+
+    def event_key(self, batch_id):
+        return self.batch_key(self.EVENT_KEY, batch_id)
 
     @Manager.calls_manager
     def batch_start(self, batch_id):
@@ -144,11 +148,22 @@ class MessageStoreCache(object):
         """
         Add an event to the cache for the given batch_id
         """
-        event_type = event['event_type']
-        yield self.increment_event_status(batch_id, event_type)
-        if event_type == 'delivery_report':
-            yield self.increment_event_status(batch_id,
-                '%s.%s' % (event_type, event['delivery_status']))
+
+        event_id = event['event_id']
+        new_entry = yield self.add_event_key(batch_id, event_id)
+        if new_entry:
+            event_type = event['event_type']
+            yield self.increment_event_status(batch_id, event_type)
+            if event_type == 'delivery_report':
+                yield self.increment_event_status(batch_id,
+                    '%s.%s' % (event_type, event['delivery_status']))
+
+    def add_event_key(self, batch_id, event_key):
+        """
+        Add the event key to the set of known event keys.
+        Returns 0 if the key already exists in the set, 1 if it doesn't.
+        """
+        return self.redis.sadd(self.event_key(batch_id), event_key)
 
     def increment_event_status(self, batch_id, event_type):
         """
