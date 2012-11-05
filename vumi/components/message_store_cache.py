@@ -201,11 +201,12 @@ class MessageStoreCache(object):
             from_addr.encode('utf-8'): timestamp,
             })
 
-    def get_from_addrs(self, batch_id):
+    def get_from_addrs(self, batch_id, asc=False):
         """
         Return a set of all known from_addrs sorted by timestamp.
         """
-        return self.redis.zrange(self.from_addr_key(batch_id), 0, -1)
+        return self.redis.zrange(self.from_addr_key(batch_id), 0, -1,
+            desc=not asc)
 
     def count_from_addrs(self, batch_id):
         """
@@ -222,12 +223,13 @@ class MessageStoreCache(object):
             to_addr.encode('utf-8'): timestamp,
             })
 
-    def get_to_addrs(self, batch_id):
+    def get_to_addrs(self, batch_id, asc=False):
         """
         Return a set of unique to_addrs addressed in this batch ordered
         by the most recent timestamp.
         """
-        return self.redis.zrange(self.to_addr_key(batch_id), 0, -1)
+        return self.redis.zrange(self.to_addr_key(batch_id), 0, -1,
+            desc=not asc)
 
     def count_to_addrs(self, batch_id):
         """
@@ -236,12 +238,12 @@ class MessageStoreCache(object):
         return self.redis.zcard(self.to_addr_key(batch_id))
 
     @Manager.calls_manager
-    def get_inbound_message_keys(self, batch_id, start=0, stop=-1):
+    def get_inbound_message_keys(self, batch_id, start=0, stop=-1, asc=False):
         """
         Return a list of keys ordered according to their timestamps
         """
         keys = yield self.redis.zrange(self.inbound_key(batch_id),
-                                        start, stop)
+                                        start, stop, desc=not asc)
         returnValue(keys)
 
     def count_inbound_message_keys(self, batch_id):
@@ -251,12 +253,13 @@ class MessageStoreCache(object):
         return self.redis.zcard(self.inbound_key(batch_id))
 
     @Manager.calls_manager
-    def get_outbound_message_keys(self, batch_id, start=0, stop=-1):
+    def get_outbound_message_keys(self, batch_id, start=0, stop=-1,
+        asc=False):
         """
         Return a list of keys ordered according to their timestamps.
         """
         keys = yield self.redis.zrange(self.outbound_key(batch_id),
-                                        start, stop)
+                                        start, stop, desc=not asc)
         returnValue(keys)
 
     def count_outbound_message_keys(self, batch_id):
