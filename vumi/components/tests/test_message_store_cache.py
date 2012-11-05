@@ -199,13 +199,47 @@ class TestMessageStoreCache(ApplicationTestCase):
             })
 
     @inlineCallbacks
-    def test_calculate_offsets(self):
-        msg1 = self.mkmsg_out()
-        msg2 = self.mkmsg_out()
-        yield self.store.add_outbound_message(msg1, batch_id=self.batch_id)
-        # the cache has one more than the message store
-        yield self.cache.add_outbound_message(self.batch_id, msg2)
-        offsets = yield self.cache.calculate_offsets(self.store, self.batch_id)
-        # inbounds should be the same, outbounds the message store should
-        # be one behind the cache (which is very unlikely)
-        self.assertEqual(offsets, (0, -1))
+    def test_clear_batch(self):
+        msg_in = self.mkmsg_in()
+        msg_out = self.mkmsg_out()
+        ack = self.mkmsg_ack(user_message_id=msg_out['message_id'],
+            sent_message_id=msg_out['message_id'])
+        dr = self.mkmsg_delivery(user_message_id=msg_out['message_id'],
+            status='delivered')
+        yield self.cache.add_inbound_message(self.batch_id, msg_in)
+        yield self.cache.add_outbound_message(self.batch_id, msg_out)
+        yield self.cache.add_event(self.batch_id, ack)
+        yield self.cache.add_event(self.batch_id, dr)
+
+        self.assertEqual(
+            (yield self.cache.get_event_status(self.batch_id)),
+            {
+                'ack': 1,
+                'delivery_report': 1,
+                'delivery_report.delivered': 1,
+                'delivery_report.failed': 0,
+                'delivery_report.pending': 0,
+                'nack': 0,
+                'sent': 1,
+            })
+        yield self.cache.clear_batch(self.batch_id)
+        yield self.cache.batch_start(self.batch_id)
+        self.assertEqual(
+            (yield self.cache.get_event_status(self.batch_id)),
+            {
+                'ack': 0,
+                'delivery_report': 0,
+                'delivery_report.delivered': 0,
+                'delivery_report.failed': 0,
+                'delivery_report.pending': 0,
+                'nack': 0,
+                'sent': 0,
+            })
+        self.assertEqual(
+            (yield self.cache.count_from_addrs(self.batch_id)), 0)
+        self.assertEqual(
+            (yield self.cache.count_to_addrs(self.batch_id)), 0)
+        self.assertEqual(
+            (yield self.cache.count_inbound_message_keys(self.batch_id)), 0)
+        self.assertEqual(
+            (yield self.cache.count_outbound_message_keys(self.batch_id)), 0)

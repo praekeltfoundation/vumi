@@ -26,34 +26,6 @@ class MessageStoreCache(object):
         # requires it to be named as such.
         self.redis = self.manager = redis
 
-    @Manager.calls_manager
-    def calculate_offsets(self, message_store, batch_id):
-        """
-        Check if the cache needs to be reconciled with the data in Riak.
-        This is a heavy process since we're doing index based counts
-        in Riak and comparing them to the cached counts.
-
-        Returns a tuple (inbound_offset, outbound_offset) of the
-        message_store count minus the cached_count.
-        """
-        inbound_offset = yield self.calculate_inbound_offset(message_store,
-            batch_id)
-        outbound_offset = yield self.calculate_outbound_offset(message_store,
-            batch_id)
-        returnValue((inbound_offset, outbound_offset))
-
-    @Manager.calls_manager
-    def calculate_inbound_offset(self, message_store, batch_id):
-        ms_count = yield message_store.batch_inbound_count(batch_id)
-        cache_count = yield self.count_inbound_message_keys(batch_id)
-        returnValue(ms_count - cache_count)
-
-    @Manager.calls_manager
-    def calculate_outbound_offset(self, message_store, batch_id):
-        ms_count = yield message_store.batch_outbound_count(batch_id)
-        cache_count = yield self.count_outbound_message_keys(batch_id)
-        returnValue(ms_count - cache_count)
-
     def key(self, *args):
         return ':'.join([unicode(a) for a in args])
 
@@ -116,6 +88,25 @@ class MessageStoreCache(object):
 
     def batch_exists(self, batch_id):
         return self.redis.sismember(self.batch_key(), batch_id)
+
+    @Manager.calls_manager
+    def clear_batch(self, batch_id):
+        """
+        Removes all cached values for the given batch_id, useful before
+        a reconciliation happens to ensure that we start from scratch.
+
+        NOTE:   This will reset all counters back to zero and will increment
+                them as messages are received. If your UI depends on your
+                cached values your UI values might be off while the
+                reconciliation is taking place.
+        """
+        yield self.redis.delete(self.inbound_key(batch_id))
+        yield self.redis.delete(self.outbound_key(batch_id))
+        yield self.redis.delete(self.event_key(batch_id))
+        yield self.redis.delete(self.status_key(batch_id))
+        yield self.redis.delete(self.to_addr_key(batch_id))
+        yield self.redis.delete(self.from_addr_key(batch_id))
+        yield self.redis.srem(self.batch_key(), batch_id)
 
     def get_timestamp(self, datetime):
         """
