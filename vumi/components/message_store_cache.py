@@ -106,7 +106,6 @@ class MessageStoreCache(object):
         yield self.redis.delete(self.status_key(batch_id))
         yield self.redis.delete(self.to_addr_key(batch_id))
         yield self.redis.delete(self.from_addr_key(batch_id))
-        yield self.redis.srem(self.batch_key(), batch_id)
         yield self.init_status(batch_id)
 
     def get_timestamp(self, datetime):
