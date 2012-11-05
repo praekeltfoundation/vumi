@@ -186,8 +186,13 @@ class Model(object):
         return manager.riak_enable_search(cls)
 
 
+class VumiMapReduceError(Exception):
+    pass
+
+
 class VumiMapReduce(object):
     def __init__(self, mgr, riak_mapreduce_obj):
+        self._has_run = False
         self._manager = mgr
         self._riak_mapreduce_obj = riak_mapreduce_obj
 
@@ -231,6 +236,11 @@ class VumiMapReduce(object):
             mr.add_bucket_key_data(bucket_name, key, None)
         return cls(mgr, mr)
 
+    def _assert_not_run(self):
+        if self._has_run:
+            raise VumiMapReduceError("This mapreduce has already run.")
+        self._has_run = True
+
     def filter_not_found(self):
         self._riak_mapreduce_obj.map(function="""
             function(v) {
@@ -246,6 +256,7 @@ class VumiMapReduce(object):
         self._riak_mapreduce_obj.filter_not_found()
 
     def get_count(self):
+        self._assert_not_run()
         self._riak_mapreduce_obj.reduce(
             function=["riak_kv_mapreduce", "reduce_count_inputs"])
         return self._manager.run_map_reduce(
@@ -260,6 +271,7 @@ class VumiMapReduce(object):
             return obj.get_key()
 
     def get_keys(self):
+        self._assert_not_run()
         return self._manager.run_map_reduce(
             self._riak_mapreduce_obj, self._results_to_keys)
 
