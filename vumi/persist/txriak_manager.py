@@ -102,7 +102,7 @@ class TxRiakManager(Manager):
         bucket = self.client.bucket(bucket_name)
         return bucket.enable_search()
 
-    def run_map_reduce(self, mapreduce, mapper_func=None):
+    def run_map_reduce(self, mapreduce, mapper_func=None, reducer_func=None):
         def map_results(raw_results):
             deferreds = []
             for row in raw_results:
@@ -112,6 +112,8 @@ class TxRiakManager(Manager):
         mapreduce_done = mapreduce.run()
         if mapper_func is not None:
             mapreduce_done.addCallback(map_results)
+        if reducer_func is not None:
+            mapreduce_done.addCallback(lambda r: reducer_func(self, r))
         return mapreduce_done
 
     @inlineCallbacks

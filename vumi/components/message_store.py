@@ -262,12 +262,10 @@ class MessageStore(object):
         mr = self.manager.mr_from_field(Event, 'message', msg_id)
         return mr.get_keys()
 
-    @Manager.calls_manager
     def batch_inbound_count(self, batch_id):
-        [count] = yield self.inbound_messages.by_index_count(batch=batch_id)
-        returnValue(count)
+        return self.inbound_messages.index_lookup(
+            'batch', batch_id).get_count()
 
-    @Manager.calls_manager
     def batch_outbound_count(self, batch_id):
-        [count] = yield self.outbound_messages.by_index_count(batch=batch_id)
-        returnValue(count)
+        return self.outbound_messages.index_lookup(
+            'batch', batch_id).get_count()

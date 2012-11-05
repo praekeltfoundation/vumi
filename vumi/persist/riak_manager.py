@@ -61,10 +61,12 @@ class RiakManager(Manager):
     def riak_map_reduce(self):
         return RiakMapReduce(self.client)
 
-    def run_map_reduce(self, mapreduce, mapper_func=None):
+    def run_map_reduce(self, mapreduce, mapper_func=None, reducer_func=None):
         results = mapreduce.run()
         if mapper_func is not None:
             results = [mapper_func(self, row) for row in results]
+        if reducer_func is not None:
+            results = reducer_func(self, results)
         return results
 
     def riak_enable_search(self, cls):

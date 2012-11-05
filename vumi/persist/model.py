@@ -139,36 +139,18 @@ class Model(object):
         return manager.load(cls, key, result=result)
 
     @classmethod
-    def _from_index(cls, manager, **kw):
-        kw_items = kw.items()
-        if len(kw_items) != 1:
-            raise ValueError("%s.by_index expects a key to search on." %
-                             cls.__name__)
-        field_name, value = kw_items[0]
+    def index_lookup(cls, manager, field_name, value):
+        """Find objects by index.
+
+        :returns: :class:`VumiMapReduce` instance based on the index param.
+        """
         return manager.mr_from_field(cls, field_name, value)
 
     @classmethod
-    def by_index(cls, manager, **kw):
-        """Find objects by index.
-
-        :returns: A list of keys.
-        """
-        return cls._from_index(manager, **kw).get_keys()
-
-    @classmethod
-    def by_index_count(cls, manager, **kw):
-        """Count objects by index.
-
-        :returns:
-            A count of items found.
-        """
-        return cls._from_index(manager, **kw).get_count()
-
-    @classmethod
     def search(cls, manager, **kw):
-        """Perform a solr search over this model.
+        """Search for instances of this model matching keys/values.
 
-        :returns: A list of keys.
+        :returns: :class:`VumiMapReduce` instance based on the search params.
         """
         # TODO: build the queries more intelligently
         for k, value in kw.iteritems():
@@ -177,26 +159,16 @@ class Model(object):
             value = value.replace("'", "\\'")
             kw[k] = value
         query = " AND ".join("%s:'%s'" % (k, v) for k, v in kw.iteritems())
-        return cls.riak_search(manager, query)
+        return cls.raw_search(manager, query)
 
     @classmethod
-    def riak_search(cls, manager, query):
+    def raw_search(cls, manager, query):
         """
         Performs a raw riak search, does no inspection on the given query.
 
-        :returns: A list of keys.
+        :returns: :class:`VumiMapReduce` instance based on the search params.
         """
-        return manager.riak_search(cls, query)
-
-    @classmethod
-    def riak_search_count(cls, manager, query):
-        """
-        Performs a raw riak search, does no inspection on the given query.
-
-        :returns:
-            A count of the results
-        """
-        return manager.riak_search_count(cls, query)
+        return manager.mr_from_search(cls, query)
 
     @classmethod
     def load_from_keys(cls, manager, keys):
@@ -276,7 +248,8 @@ class VumiMapReduce(object):
     def get_count(self):
         self._riak_mapreduce_obj.reduce(
             function=["riak_kv_mapreduce", "reduce_count_inputs"])
-        return self._manager.run_map_reduce(self._riak_mapreduce_obj)
+        return self._manager.run_map_reduce(
+            self._riak_mapreduce_obj, reducer_func=lambda mgr, obj: obj[0])
 
     def _results_to_keys(self, mgr, obj):
         if isinstance(obj, basestring):
@@ -386,7 +359,7 @@ class Manager(object):
         raise NotImplementedError("Sub-classes of Manager should implement"
                                   " .riak_map_reduce(...)")
 
-    def run_map_reduce(self, mapreduce, mapper_function):
+    def run_map_reduce(self, mapreduce, mapper_func=None, reducer_func=None):
         """Run a map reduce instance and return the results mapped to
         objects by the map_function."""
         raise NotImplementedError("Sub-classes of Manager should implement"
@@ -423,12 +396,12 @@ class Manager(object):
         return self.run_map_reduce(
             mr._riak_mapreduce_obj, lambda mgr, obj: model.load(mgr, *obj))
 
-    def riak_search(self, model, query):
+    def raw_search(self, model, query):
         """Find objects matching the search query in the model's bucket."""
         # TODO: Replace and deprecate?
         return self.mr_from_search(model, query).get_keys()
 
-    def riak_search_count(self, model, query):
+    def raw_search_count(self, model, query):
         # TODO: Replace and deprecate?
         return self.mr_from_search(model, query).get_count()
 
@@ -459,20 +432,14 @@ class ModelProxy(object):
     def load(self, key):
         return self._modelcls.load(self._manager, key)
 
-    def by_index(self, **kw):
-        return self._modelcls.by_index(self._manager, **kw)
-
-    def by_index_count(self, **kw):
-        return self._modelcls.by_index_count(self._manager, **kw)
+    def index_lookup(self, field_name, value):
+        return self._modelcls.index_lookup(self._manager, field_name, value)
 
     def search(self, **kw):
         return self._modelcls.search(self._manager, **kw)
 
-    def riak_search(self, *args, **kw):
-        return self._modelcls.riak_search(self._manager, *args, **kw)
-
-    def riak_search_count(self, *args, **kw):
-        return self._modelcls.riak_search_count(self._manager, *args, **kw)
+    def raw_search(self, query):
+        return self._modelcls.raw_search(self._manager, query)
 
     def load_from_keys(self, *args, **kw):
         return self._modelcls.load_from_keys(self._manager, *args, **kw)
