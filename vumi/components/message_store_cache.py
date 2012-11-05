@@ -89,6 +89,26 @@ class MessageStoreCache(object):
     def batch_exists(self, batch_id):
         return self.redis.sismember(self.batch_key(), batch_id)
 
+    @Manager.calls_manager
+    def reset_batch(self, batch_id):
+        """
+        Removes all cached values for the given batch_id, useful before
+        a reconciliation happens to ensure that we start from scratch.
+
+        NOTE:   This will reset all counters back to zero and will increment
+                them as messages are received. If your UI depends on your
+                cached values your UI values might be off while the
+                reconciliation is taking place.
+        """
+        yield self.redis.delete(self.inbound_key(batch_id))
+        yield self.redis.delete(self.outbound_key(batch_id))
+        yield self.redis.delete(self.event_key(batch_id))
+        yield self.redis.delete(self.status_key(batch_id))
+        yield self.redis.delete(self.to_addr_key(batch_id))
+        yield self.redis.delete(self.from_addr_key(batch_id))
+        yield self.redis.srem(self.batch_key(), batch_id)
+        yield self.init_status(batch_id)
+
     def get_timestamp(self, datetime):
         """
         Return a timestamp value for a datetime value.
