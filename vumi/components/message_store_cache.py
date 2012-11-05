@@ -90,7 +90,7 @@ class MessageStoreCache(object):
         return self.redis.sismember(self.batch_key(), batch_id)
 
     @Manager.calls_manager
-    def reset_batch(self, batch_id):
+    def clear_batch(self, batch_id):
         """
         Removes all cached values for the given batch_id, useful before
         a reconciliation happens to ensure that we start from scratch.
@@ -106,7 +106,6 @@ class MessageStoreCache(object):
         yield self.redis.delete(self.status_key(batch_id))
         yield self.redis.delete(self.to_addr_key(batch_id))
         yield self.redis.delete(self.from_addr_key(batch_id))
-        yield self.init_status(batch_id)
 
     def get_timestamp(self, datetime):
         """

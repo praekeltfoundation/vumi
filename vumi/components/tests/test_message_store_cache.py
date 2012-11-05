@@ -199,7 +199,7 @@ class TestMessageStoreCache(ApplicationTestCase):
             })
 
     @inlineCallbacks
-    def test_reset_batch(self):
+    def test_clear_batch(self):
         msg_in = self.mkmsg_in()
         msg_out = self.mkmsg_out()
         ack = self.mkmsg_ack(user_message_id=msg_out['message_id'],
@@ -222,7 +222,8 @@ class TestMessageStoreCache(ApplicationTestCase):
                 'nack': 0,
                 'sent': 1,
             })
-        yield self.cache.reset_batch(self.batch_id)
+        yield self.cache.clear_batch(self.batch_id)
+        yield self.cache.batch_start(self.batch_id)
         self.assertEqual(
             (yield self.cache.get_event_status(self.batch_id)),
             {
