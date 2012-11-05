@@ -78,13 +78,11 @@ class MessageStoreCache(object):
         for event in events:
             yield self.redis.hsetnx(self.status_key(batch_id), event, 0)
 
-    @Manager.calls_manager
     def get_batch_ids(self):
         """
         Return a list of known batch_ids
         """
-        batch_ids = yield self.redis.smembers(self.batch_key())
-        returnValue(batch_ids)
+        return self.redis.smembers(self.batch_key())
 
     def batch_exists(self, batch_id):
         return self.redis.sismember(self.batch_key(), batch_id)
@@ -183,12 +181,11 @@ class MessageStoreCache(object):
             timestamp)
         yield self.add_from_addr(batch_id, msg['from_addr'], timestamp)
 
-    @Manager.calls_manager
     def add_inbound_message_key(self, batch_id, message_key, timestamp):
         """
         Add a message key, weighted with the timestamp to the batch_id
         """
-        yield self.redis.zadd(self.inbound_key(batch_id), **{
+        return self.redis.zadd(self.inbound_key(batch_id), **{
             message_key.encode('utf-8'): timestamp,
             })
 
@@ -201,11 +198,12 @@ class MessageStoreCache(object):
             from_addr.encode('utf-8'): timestamp,
             })
 
-    def get_from_addrs(self, batch_id):
+    def get_from_addrs(self, batch_id, asc=False):
         """
         Return a set of all known from_addrs sorted by timestamp.
         """
-        return self.redis.zrange(self.from_addr_key(batch_id), 0, -1)
+        return self.redis.zrange(self.from_addr_key(batch_id), 0, -1,
+            desc=not asc)
 
     def count_from_addrs(self, batch_id):
         """
@@ -222,12 +220,13 @@ class MessageStoreCache(object):
             to_addr.encode('utf-8'): timestamp,
             })
 
-    def get_to_addrs(self, batch_id):
+    def get_to_addrs(self, batch_id, asc=False):
         """
         Return a set of unique to_addrs addressed in this batch ordered
         by the most recent timestamp.
         """
-        return self.redis.zrange(self.to_addr_key(batch_id), 0, -1)
+        return self.redis.zrange(self.to_addr_key(batch_id), 0, -1,
+            desc=not asc)
 
     def count_to_addrs(self, batch_id):
         """
@@ -235,14 +234,12 @@ class MessageStoreCache(object):
         """
         return self.redis.zcard(self.to_addr_key(batch_id))
 
-    @Manager.calls_manager
-    def get_inbound_message_keys(self, batch_id, start=0, stop=-1):
+    def get_inbound_message_keys(self, batch_id, start=0, stop=-1, asc=False):
         """
         Return a list of keys ordered according to their timestamps
         """
-        keys = yield self.redis.zrange(self.inbound_key(batch_id),
-                                        start, stop)
-        returnValue(keys)
+        return self.redis.zrange(self.inbound_key(batch_id),
+                                        start, stop, desc=not asc)
 
     def count_inbound_message_keys(self, batch_id):
         """
@@ -250,14 +247,13 @@ class MessageStoreCache(object):
         """
         return self.redis.zcard(self.inbound_key(batch_id))
 
-    @Manager.calls_manager
-    def get_outbound_message_keys(self, batch_id, start=0, stop=-1):
+    def get_outbound_message_keys(self, batch_id, start=0, stop=-1,
+        asc=False):
         """
         Return a list of keys ordered according to their timestamps.
         """
-        keys = yield self.redis.zrange(self.outbound_key(batch_id),
-                                        start, stop)
-        returnValue(keys)
+        return self.redis.zrange(self.outbound_key(batch_id),
+                                        start, stop, desc=not asc)
 
     def count_outbound_message_keys(self, batch_id):
         """
