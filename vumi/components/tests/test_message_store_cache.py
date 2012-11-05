@@ -236,17 +236,6 @@ class TestMessageStoreCache(ApplicationTestCase):
                 'sent': 0,
             })
         self.assertEqual(
-            (yield self.cache.get_event_status(self.batch_id)),
-            {
-                'ack': 0,
-                'delivery_report': 0,
-                'delivery_report.delivered': 0,
-                'delivery_report.failed': 0,
-                'delivery_report.pending': 0,
-                'nack': 0,
-                'sent': 0,
-            })
-        self.assertEqual(
             (yield self.cache.count_from_addrs(self.batch_id)), 0)
         self.assertEqual(
             (yield self.cache.count_to_addrs(self.batch_id)), 0)
