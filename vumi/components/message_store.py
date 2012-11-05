@@ -11,6 +11,7 @@ from vumi.message import TransportEvent, TransportUserMessage
 from vumi.persist.model import Model, Manager
 from vumi.persist.fields import (VumiMessage, ForeignKey, ListOf, Tag, Dynamic,
                                  Unicode)
+from vumi import log
 from vumi.components.message_store_cache import MessageStoreCache
 
 
@@ -129,19 +130,29 @@ class MessageStore(object):
 
     @Manager.calls_manager
     def reconcile_inbound_cache(self, batch_id):
-        batch = yield self.batches.load(batch_id)
-        inbound_messages = yield batch.backlinks.inboundmessages()
-        for inbound in inbound_messages:
-            yield self.cache.add_inbound_message(batch_id, inbound.msg)
+        inbound_keys = yield self.inbound_messages.by_index(
+            return_keys=True, batch=batch_id)
+        for key in inbound_keys:
+            try:
+                inbound = yield self.inbound_messages.load(key)
+                yield self.cache.add_inbound_message(batch_id, inbound.msg)
+            except Exception:
+                log.err('Unable to load inbound msg %s during recon of %s' % (
+                    key, batch_id))
 
     @Manager.calls_manager
     def reconcile_outbound_cache(self, batch_id):
-        batch = yield self.batches.load(batch_id)
-        outbound_messages = yield batch.backlinks.outboundmessages()
-        for outbound in outbound_messages:
-            yield self.cache.add_outbound_message(batch_id, outbound.msg)
-            yield self.reconcile_event_cache(batch_id,
-                outbound.msg['message_id'])
+        outbound_keys = yield self.outbound_messages.by_index(
+            return_keys=True, batch=batch_id)
+        for key in outbound_keys:
+            try:
+                outbound = yield self.outbound_messages.load(key)
+                yield self.cache.add_outbound_message(batch_id, outbound.msg)
+                yield self.reconcile_event_cache(batch_id,
+                    outbound.msg['message_id'])
+            except Exception:
+                log.err('Unable to load outbound msg %s during recon of %s' % (
+                    key, batch_id))
 
     @Manager.calls_manager
     def reconcile_event_cache(self, batch_id, message_id):
