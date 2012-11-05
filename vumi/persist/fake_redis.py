@@ -202,7 +202,9 @@ class FakeRedis(object):
     def sadd(self, key, *values):
         values = map(self._encode, values)
         sval = self._data.setdefault(key, set())
-        return len([sval.add(v) for v in values if v not in sval])
+        old_len = len(sval)
+        sval.update(map(self._encode, values))
+        return len(sval) - old_len
 
     @maybe_async
     def smembers(self, key):
