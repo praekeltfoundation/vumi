@@ -16,6 +16,10 @@ class DummyModel(object):
         self.key = key
         self._riak_object = _riak_object
 
+    @classmethod
+    def load(cls, manager, key, result=None):
+        return manager.load(cls, key, result=result)
+
     def set_riak(self, riak_object):
         self._riak_object = riak_object
 
@@ -53,7 +57,7 @@ class CommonRiakManagerTests(object):
         self.assertEqual(sub_manager.client, self.manager.client)
         self.assertEqual(sub_manager.bucket_prefix, 'test.foo.')
 
-    def test_bucket_name_on_cls(self):
+    def test_bucket_name_on_modelcls(self):
         dummy = self.mkdummy("bar")
         bucket_name = self.manager.bucket_name(type(dummy))
         self.assertEqual(bucket_name, "test.dummy_model")
@@ -63,10 +67,10 @@ class CommonRiakManagerTests(object):
         bucket_name = self.manager.bucket_name(dummy)
         self.assertEqual(bucket_name, "test.dummy_model")
 
-    def test_bucket_for_cls(self):
+    def test_bucket_for_modelcls(self):
         dummy_cls = type(self.mkdummy("foo"))
-        bucket1 = self.manager.bucket_for_cls(dummy_cls)
-        bucket2 = self.manager.bucket_for_cls(dummy_cls)
+        bucket1 = self.manager.bucket_for_modelcls(dummy_cls)
+        bucket2 = self.manager.bucket_for_modelcls(dummy_cls)
         self.assertEqual(id(bucket1), id(bucket2))
         self.assertEqual(bucket1.get_name(), "test.dummy_model")
 
@@ -106,16 +110,20 @@ class CommonRiakManagerTests(object):
         self.assertEqual(result, None)
 
     @Manager.calls_manager
-    def test_load_list(self):
+    def test_load_all_batches(self):
         yield self.manager.store(self.mkdummy("foo", {"a": 0}))
         yield self.manager.store(self.mkdummy("bar", {"a": 1}))
+        yield self.manager.store(self.mkdummy("baz", {"a": 2}))
+        self.manager.LOAD_BATCH_SIZE = 2
 
-        keys = ["foo", "bar", "unknown"]
+        keys = ["foo", "unknown", "bar", "baz"]
 
-        result = yield self.manager.load_list(DummyModel, keys)
-        result_data = [r.get_data() if r is not None else None for r in result]
-        result_data.sort(key=lambda d: d["a"] if d is not None else -1)
-        self.assertEqual(result_data, [None, {"a": 0}, {"a": 1}])
+        result_data = []
+        for result_batch in self.manager.load_all_batches(DummyModel, keys):
+            result_data.extend(result.get_data()
+                               for result in (yield result_batch))
+        result_data.sort(key=lambda d: d["a"])
+        self.assertEqual(result_data, [{"a": 0}, {"a": 1}, {"a": 2}])
 
     @Manager.calls_manager
     def test_run_riak_map_reduce(self):

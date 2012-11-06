@@ -139,6 +139,15 @@ class Model(object):
         return manager.load(cls, key, result=result)
 
     @classmethod
+    def load_all_batches(cls, manager, keys):
+        """Load batches of objects for the given list of keys.
+
+        :returns:
+            An iterator over (possibly deferred) lists of model instances.
+        """
+        return manager.load_all_batches(cls, keys)
+
+    @classmethod
     def index_lookup(cls, manager, field_name, value):
         """Find objects by index.
 
@@ -169,16 +178,6 @@ class Model(object):
         :returns: :class:`VumiMapReduce` instance based on the search params.
         """
         return manager.mr_from_search(cls, query)
-
-    @classmethod
-    def load_from_keys(cls, manager, keys):
-        """
-        Load objects for the given list of keys.
-
-        :returns:
-            A list of model instances.
-        """
-        return manager.load_from_keys(cls, keys)
 
     @classmethod
     def enable_search(cls, manager):
@@ -279,6 +278,8 @@ class VumiMapReduce(object):
 class Manager(object):
     """A wrapper around a Riak client."""
 
+    LOAD_BATCH_SIZE = 100
+
     def __init__(self, client, bucket_prefix):
         self.client = client
         self.bucket_prefix = bucket_prefix
@@ -293,13 +294,13 @@ class Manager(object):
     def bucket_name(self, modelcls_or_obj):
         return self.bucket_prefix + modelcls_or_obj.bucket
 
-    def bucket_for_cls(self, cls):
-        cls_id = id(cls)
-        bucket = self._bucket_cache.get(cls_id)
+    def bucket_for_modelcls(self, modelcls):
+        modelcls_id = id(modelcls)
+        bucket = self._bucket_cache.get(modelcls_id)
         if bucket is None:
-            bucket_name = self.bucket_name(cls)
+            bucket_name = self.bucket_name(modelcls)
             bucket = self.client.bucket(bucket_name)
-            self._bucket_cache[cls_id] = bucket
+            self._bucket_cache[modelcls_id] = bucket
         return bucket
 
     @staticmethod
@@ -355,16 +356,35 @@ class Manager(object):
         instead of an instance of cls.
         """
         raise NotImplementedError("Sub-classes of Manager should implement"
-                                  " .store(...)")
+                                  " .load(...)")
 
-    def load_list(self, cls, keys):
-        """Load the model instances for a list of keys from Riak.
+    def _load_batch(self, model, keys):
+        """Load the model instances for a batch of keys from Riak.
 
-        If a key doesn't exist, that key should be replaced by a None
-        (instead of an instance of cls) in the list returned.
+        If a key doesn't exist, no object will be returned for it.
         """
-        raise NotImplementedError("Sub-classes of Manager should implement"
-                                  " .store(...)")
+        assert len(keys) <= self.LOAD_BATCH_SIZE
+        if not keys:
+            return []
+        mr = self.mr_from_keys(model, keys)
+        mr._riak_mapreduce_obj.map(function="""
+                function (v) {
+                    return [[v.key, v.values[0]]]
+                }
+                """).filter_not_found()
+        return self.run_map_reduce(
+            mr._riak_mapreduce_obj, lambda mgr, obj: model.load(mgr, *obj))
+
+    def load_all_batches(self, model, keys):
+        """Load batches of model instances for a list of keys from Riak.
+
+        :returns:
+            An iterator over (possibly deferred) lists of model instances.
+        """
+        while keys:
+            batch_keys = keys[:self.LOAD_BATCH_SIZE]
+            keys = keys[self.LOAD_BATCH_SIZE:]
+            yield self._load_batch(model, batch_keys)
 
     def riak_map_reduce(self):
         """Construct a RiakMapReduce object for this client."""
@@ -390,23 +410,6 @@ class Manager(object):
 
     def mr_from_keys(self, model, keys):
         return VumiMapReduce.from_keys(self, model, keys)
-
-    def load_from_keys(self, model, keys):
-        """Load the model instances for a list of keys from Riak.
-
-        If a key doesn't exist, no object will be returned for it.
-        """
-        assert len(keys) <= 100
-        if not keys:
-            return []
-        mr = self.mr_from_keys(model, keys)
-        mr._riak_mapreduce_obj.map(function="""
-                function (v) {
-                    return [[v.key, v.values[0]]]
-                }
-                """).filter_not_found()
-        return self.run_map_reduce(
-            mr._riak_mapreduce_obj, lambda mgr, obj: model.load(mgr, *obj))
 
     def riak_enable_search(self, model):
         """Enable search indexing for the model's bucket."""
@@ -435,6 +438,9 @@ class ModelProxy(object):
     def load(self, key):
         return self._modelcls.load(self._manager, key)
 
+    def load_all_batches(self, *args, **kw):
+        return self._modelcls.load_all_batches(self._manager, *args, **kw)
+
     def index_lookup(self, field_name, value):
         return self._modelcls.index_lookup(self._manager, field_name, value)
 
@@ -443,9 +449,6 @@ class ModelProxy(object):
 
     def raw_search(self, query):
         return self._modelcls.raw_search(self._manager, query)
-
-    def load_from_keys(self, *args, **kw):
-        return self._modelcls.load_from_keys(self._manager, *args, **kw)
 
     def enable_search(self):
         return self._modelcls.enable_search(self._manager)

@@ -659,11 +659,11 @@ class ManyToManyDescriptor(ForeignKeyDescriptor):
     def remove_foreign_key(self, modelobj, foreign_key):
         modelobj._riak_object.remove_index(self.index_name, foreign_key)
 
-    def get_foreign_objects(self, modelobj, manager=None):
+    def load_foreign_objects(self, modelobj, manager=None):
         keys = self.get_foreign_keys(modelobj)
         if manager is None:
             manager = modelobj.manager
-        return manager.load_list(self.other_model, keys)
+        return manager.load_all_batches(self.other_model, keys)
 
     def add_foreign_object(self, modelobj, otherobj):
         self.validate(otherobj)
@@ -691,8 +691,8 @@ class ManyToManyProxy(object):
     def remove_key(self, foreign_key):
         self._descriptor.remove_foreign_key(self._modelobj, foreign_key)
 
-    def get_all(self, manager=None):
-        return self._descriptor.get_foreign_objects(self._modelobj, manager)
+    def load_all_batches(self, manager=None):
+        return self._descriptor.load_foreign_objects(self._modelobj, manager)
 
     def add(self, otherobj):
         self._descriptor.add_foreign_object(self._modelobj, otherobj)

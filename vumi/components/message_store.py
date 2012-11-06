@@ -181,11 +181,10 @@ class MessageStore(object):
     def batch_done(self, batch_id):
         batch = yield self.batches.load(batch_id)
         tag_keys = yield batch.backlinks.currenttags()
-        # FIXME: This assumes no more than 100 tags per batch.
-        tags = yield self.manager.load_from_keys(CurrentTag, tag_keys)
-        for tag in tags:
-            tag.current_batch.set(None)
-            yield tag.save()
+        for tags_batch in self.manager.load_all_batches(CurrentTag, tag_keys):
+            for tag in (yield tags_batch):
+                tag.current_batch.set(None)
+                yield tag.save()
 
     @Manager.calls_manager
     def add_outbound_message(self, msg, tag=None, batch_id=None):
