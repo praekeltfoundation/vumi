@@ -408,15 +408,6 @@ class Manager(object):
         return self.run_map_reduce(
             mr._riak_mapreduce_obj, lambda mgr, obj: model.load(mgr, *obj))
 
-    def raw_search(self, model, query):
-        """Find objects matching the search query in the model's bucket."""
-        # TODO: Replace and deprecate?
-        return self.mr_from_search(model, query).get_keys()
-
-    def raw_search_count(self, model, query):
-        # TODO: Replace and deprecate?
-        return self.mr_from_search(model, query).get_count()
-
     def riak_enable_search(self, model):
         """Enable search indexing for the model's bucket."""
         raise NotImplementedError("Sub-classes of Manager should implement"
