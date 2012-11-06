@@ -358,7 +358,7 @@ class Manager(object):
         raise NotImplementedError("Sub-classes of Manager should implement"
                                   " .load(...)")
 
-    def _load_batch(self, model, keys):
+    def _load_bunch(self, model, keys):
         """Load the model instances for a batch of keys from Riak.
 
         If a key doesn't exist, no object will be returned for it.
@@ -384,7 +384,7 @@ class Manager(object):
         while keys:
             batch_keys = keys[:self.LOAD_BUNCH_SIZE]
             keys = keys[self.LOAD_BUNCH_SIZE:]
-            yield self._load_batch(model, batch_keys)
+            yield self._load_bunch(model, batch_keys)
 
     def riak_map_reduce(self):
         """Construct a RiakMapReduce object for this client."""
