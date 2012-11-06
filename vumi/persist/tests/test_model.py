@@ -144,16 +144,16 @@ class TestModelOnTxRiak(TestCase):
         yield self.assert_mapreduce_results(["three", "two"], search, 'a:2')
 
     @Manager.calls_manager
-    def test_load_all_batches(self):
+    def test_load_all_bunches(self):
         simple_model = self.manager.proxy(SimpleModel)
         yield simple_model("one", a=1, b=u'abc').save()
         yield simple_model("two", a=2, b=u'def').save()
         yield simple_model("three", a=2, b=u'ghi').save()
 
-        objs_iter = simple_model.load_all_batches(['one', 'two', 'bad'])
+        objs_iter = simple_model.load_all_bunches(['one', 'two', 'bad'])
         objs = []
-        for obj_batch in objs_iter:
-            objs.extend((yield obj_batch))
+        for obj_bunch in objs_iter:
+            objs.extend((yield obj_bunch))
         self.assertEqual(["one", "two"], sorted(obj.key for obj in objs))
 
     @Manager.calls_manager
@@ -367,10 +367,10 @@ class TestModelOnTxRiak(TestCase):
         self.assertEqual(sorted(results), ["bar1", "bar2"])
 
     @Manager.calls_manager
-    def load_all_batches_flat(self, m2m_field):
+    def load_all_bunches_flat(self, m2m_field):
         results = []
-        for result_batch in m2m_field.load_all_batches():
-            results.extend((yield result_batch))
+        for result_bunch in m2m_field.load_all_bunches():
+            results.extend((yield result_bunch))
         returnValue(results)
 
     @Manager.calls_manager
@@ -385,22 +385,22 @@ class TestModelOnTxRiak(TestCase):
         yield m1.save()
 
         m2 = yield mm_model.load("bar")
-        [s2] = yield self.load_all_batches_flat(m2.simples)
+        [s2] = yield self.load_all_bunches_flat(m2.simples)
 
         self.assertEqual(m2.simples.keys(), ["foo"])
         self.assertEqual(s2.a, 5)
         self.assertEqual(s2.b, u"3")
 
         m2.simples.remove(s2)
-        simples = yield self.load_all_batches_flat(m2.simples)
+        simples = yield self.load_all_bunches_flat(m2.simples)
         self.assertEqual(simples, [])
 
         m2.simples.add_key("foo")
-        [s4] = yield self.load_all_batches_flat(m2.simples)
+        [s4] = yield self.load_all_bunches_flat(m2.simples)
         self.assertEqual(s4.key, "foo")
 
         m2.simples.remove_key("foo")
-        simples = yield self.load_all_batches_flat(m2.simples)
+        simples = yield self.load_all_bunches_flat(m2.simples)
         self.assertEqual(simples, [])
 
         self.assertRaises(ValidationError, m2.simples.add, object())
@@ -412,7 +412,7 @@ class TestModelOnTxRiak(TestCase):
         m2.simples.add(t2)
         yield t1.save()
         yield t2.save()
-        simples = yield self.load_all_batches_flat(m2.simples)
+        simples = yield self.load_all_bunches_flat(m2.simples)
         simples.sort(key=lambda s: s.key)
         self.assertEqual([s.key for s in simples], ["bar1", "bar2"])
         self.assertEqual(simples[0].a, 3)
@@ -420,7 +420,7 @@ class TestModelOnTxRiak(TestCase):
 
         m2.simples.clear()
         m2.simples.add_key("unknown")
-        self.assertEqual([], (yield self.load_all_batches_flat(m2.simples)))
+        self.assertEqual([], (yield self.load_all_bunches_flat(m2.simples)))
 
     @Manager.calls_manager
     def test_reverse_manytomany_fields(self):

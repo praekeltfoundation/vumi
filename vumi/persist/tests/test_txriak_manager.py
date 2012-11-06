@@ -110,18 +110,18 @@ class CommonRiakManagerTests(object):
         self.assertEqual(result, None)
 
     @Manager.calls_manager
-    def test_load_all_batches(self):
+    def test_load_all_bunches(self):
         yield self.manager.store(self.mkdummy("foo", {"a": 0}))
         yield self.manager.store(self.mkdummy("bar", {"a": 1}))
         yield self.manager.store(self.mkdummy("baz", {"a": 2}))
-        self.manager.LOAD_BATCH_SIZE = 2
+        self.manager.LOAD_BUNCH_SIZE = 2
 
         keys = ["foo", "unknown", "bar", "baz"]
 
         result_data = []
-        for result_batch in self.manager.load_all_batches(DummyModel, keys):
+        for result_bunch in self.manager.load_all_bunches(DummyModel, keys):
             result_data.extend(result.get_data()
-                               for result in (yield result_batch))
+                               for result in (yield result_bunch))
         result_data.sort(key=lambda d: d["a"])
         self.assertEqual(result_data, [{"a": 0}, {"a": 1}, {"a": 2}])
 

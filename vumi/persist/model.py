@@ -139,13 +139,13 @@ class Model(object):
         return manager.load(cls, key, result=result)
 
     @classmethod
-    def load_all_batches(cls, manager, keys):
+    def load_all_bunches(cls, manager, keys):
         """Load batches of objects for the given list of keys.
 
         :returns:
             An iterator over (possibly deferred) lists of model instances.
         """
-        return manager.load_all_batches(cls, keys)
+        return manager.load_all_bunches(cls, keys)
 
     @classmethod
     def index_lookup(cls, manager, field_name, value):
@@ -278,7 +278,7 @@ class VumiMapReduce(object):
 class Manager(object):
     """A wrapper around a Riak client."""
 
-    LOAD_BATCH_SIZE = 100
+    LOAD_BUNCH_SIZE = 100
 
     def __init__(self, client, bucket_prefix):
         self.client = client
@@ -363,7 +363,7 @@ class Manager(object):
 
         If a key doesn't exist, no object will be returned for it.
         """
-        assert len(keys) <= self.LOAD_BATCH_SIZE
+        assert len(keys) <= self.LOAD_BUNCH_SIZE
         if not keys:
             return []
         mr = self.mr_from_keys(model, keys)
@@ -375,15 +375,15 @@ class Manager(object):
         return self.run_map_reduce(
             mr._riak_mapreduce_obj, lambda mgr, obj: model.load(mgr, *obj))
 
-    def load_all_batches(self, model, keys):
+    def load_all_bunches(self, model, keys):
         """Load batches of model instances for a list of keys from Riak.
 
         :returns:
             An iterator over (possibly deferred) lists of model instances.
         """
         while keys:
-            batch_keys = keys[:self.LOAD_BATCH_SIZE]
-            keys = keys[self.LOAD_BATCH_SIZE:]
+            batch_keys = keys[:self.LOAD_BUNCH_SIZE]
+            keys = keys[self.LOAD_BUNCH_SIZE:]
             yield self._load_batch(model, batch_keys)
 
     def riak_map_reduce(self):
@@ -438,8 +438,8 @@ class ModelProxy(object):
     def load(self, key):
         return self._modelcls.load(self._manager, key)
 
-    def load_all_batches(self, *args, **kw):
-        return self._modelcls.load_all_batches(self._manager, *args, **kw)
+    def load_all_bunches(self, *args, **kw):
+        return self._modelcls.load_all_bunches(self._manager, *args, **kw)
 
     def index_lookup(self, field_name, value):
         return self._modelcls.index_lookup(self._manager, field_name, value)

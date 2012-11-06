@@ -663,7 +663,7 @@ class ManyToManyDescriptor(ForeignKeyDescriptor):
         keys = self.get_foreign_keys(modelobj)
         if manager is None:
             manager = modelobj.manager
-        return manager.load_all_batches(self.other_model, keys)
+        return manager.load_all_bunches(self.other_model, keys)
 
     def add_foreign_object(self, modelobj, otherobj):
         self.validate(otherobj)
@@ -691,7 +691,7 @@ class ManyToManyProxy(object):
     def remove_key(self, foreign_key):
         self._descriptor.remove_foreign_key(self._modelobj, foreign_key)
 
-    def load_all_batches(self, manager=None):
+    def load_all_bunches(self, manager=None):
         return self._descriptor.load_foreign_objects(self._modelobj, manager)
 
     def add(self, otherobj):
