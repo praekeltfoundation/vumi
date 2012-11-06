@@ -36,11 +36,19 @@ class FieldDescriptor(object):
         self.__set__(modelobj, value)
 
     def _add_index(self, modelobj, value):
-        # The underlying libraries call str() on whatever index values we
+        # XXX: The underlying libraries call str() on whatever index values we
         # provide, so we do this explicitly here and special-case None.
+        #
+        # Index values in Riak have to be non-empty, so a zero-length string
+        # counts as "no value". Since we still have legacy data that was
+        # inadvertantly indexed with "None" because of the str() call in the
+        # library and we still have legacy code that relies on an index search
+        # for a value of "None", fixing this properly here will break existing
+        # functionality. Once we have rewritten the offending code to not use
+        # "None" in the index, we can remove the hack below and be happier.
         if value is None:
             value = ''
-            # We still rely on this having the value "None" in places. :-(
+            # FIXME: We still rely on this being "None" in places. :-(
             value = 'None'
         modelobj._riak_object.add_index(self.index_name, str(value))
 
@@ -541,10 +549,6 @@ class ForeignKeyDescriptor(FieldDescriptor):
         mr = manager.mr_from_index(
             self.model_cls, self.index_name, modelobj.key)
         return mr.get_keys()
-
-    def map_lookup_result(self, manager, result_tuple):
-        key, result = result_tuple
-        return self.model_cls.load(manager, key, result)
 
     def get_value(self, modelobj):
         return ForeignKeyProxy(self, modelobj)
