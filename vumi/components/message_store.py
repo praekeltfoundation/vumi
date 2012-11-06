@@ -11,6 +11,7 @@ from vumi.message import TransportEvent, TransportUserMessage
 from vumi.persist.model import Model, Manager
 from vumi.persist.fields import (VumiMessage, ForeignKey, ListOf, Tag, Dynamic,
                                  Unicode)
+from vumi import log
 from vumi.components.message_store_cache import MessageStoreCache
 
 
@@ -132,16 +133,24 @@ class MessageStore(object):
         # FIXME: We're loading messages one at a time here, which is stupid.
         inbound_keys = yield self.batch_inbound_keys(batch_id)
         for key in inbound_keys:
-            msg = yield self.get_inbound_message(key)
-            yield self.cache.add_inbound_message(batch_id, msg)
+            try:
+                msg = yield self.get_inbound_message(key)
+                yield self.cache.add_inbound_message(batch_id, msg)
+            except Exception:
+                log.err('Unable to load inbound msg %s during recon of %s' % (
+                    key, batch_id))
 
     @Manager.calls_manager
     def reconcile_outbound_cache(self, batch_id):
         # FIXME: We're loading messages one at a time here, which is stupid.
         outbound_keys = yield self.batch_outbound_keys(batch_id)
         for key in outbound_keys:
-            msg = yield self.get_outbound_message(key)
-            yield self.cache.add_outbound_message(batch_id, msg)
+            try:
+                msg = yield self.get_outbound_message(key)
+                yield self.cache.add_outbound_message(batch_id, msg)
+            except Exception:
+                log.err('Unable to load outbound msg %s during recon of %s' % (
+                    key, batch_id))
 
     @Manager.calls_manager
     def reconcile_event_cache(self, batch_id, message_id):
