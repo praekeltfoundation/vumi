@@ -130,26 +130,24 @@ class MessageStore(object):
 
     @Manager.calls_manager
     def reconcile_inbound_cache(self, batch_id):
-        inbound_keys = yield self.inbound_messages.by_index(
-            return_keys=True, batch=batch_id)
+        # FIXME: We're loading messages one at a time here, which is stupid.
+        inbound_keys = yield self.batch_inbound_keys(batch_id)
         for key in inbound_keys:
             try:
-                inbound = yield self.inbound_messages.load(key)
-                yield self.cache.add_inbound_message(batch_id, inbound.msg)
+                msg = yield self.get_inbound_message(key)
+                yield self.cache.add_inbound_message(batch_id, msg)
             except Exception:
                 log.err('Unable to load inbound msg %s during recon of %s' % (
                     key, batch_id))
 
     @Manager.calls_manager
     def reconcile_outbound_cache(self, batch_id):
-        outbound_keys = yield self.outbound_messages.by_index(
-            return_keys=True, batch=batch_id)
+        # FIXME: We're loading messages one at a time here, which is stupid.
+        outbound_keys = yield self.batch_outbound_keys(batch_id)
         for key in outbound_keys:
             try:
-                outbound = yield self.outbound_messages.load(key)
-                yield self.cache.add_outbound_message(batch_id, outbound.msg)
-                yield self.reconcile_event_cache(batch_id,
-                    outbound.msg['message_id'])
+                msg = yield self.get_outbound_message(key)
+                yield self.cache.add_outbound_message(batch_id, msg)
             except Exception:
                 log.err('Unable to load outbound msg %s during recon of %s' % (
                     key, batch_id))
@@ -182,10 +180,11 @@ class MessageStore(object):
     @Manager.calls_manager
     def batch_done(self, batch_id):
         batch = yield self.batches.load(batch_id)
-        tags = yield batch.backlinks.currenttags()
-        for tag in tags:
-            tag.current_batch.set(None)
-            yield tag.save()
+        tag_keys = yield batch.backlinks.currenttags()
+        for tags_bunch in self.manager.load_all_bunches(CurrentTag, tag_keys):
+            for tag in (yield tags_bunch):
+                tag.current_batch.set(None)
+                yield tag.save()
 
     @Manager.calls_manager
     def add_outbound_message(self, msg, tag=None, batch_id=None):
@@ -259,30 +258,22 @@ class MessageStore(object):
     def batch_status(self, batch_id):
         return self.cache.get_event_status(batch_id)
 
-    @Manager.calls_manager
-    def batch_messages(self, batch_id):
-        batch = yield self.batches.load(batch_id)
-        messages = yield batch.backlinks.outboundmessages()
-        returnValue([m.msg for m in messages])
+    def batch_outbound_keys(self, batch_id):
+        mr = self.manager.mr_from_field(OutboundMessage, 'batch', batch_id)
+        return mr.get_keys()
 
-    @Manager.calls_manager
-    def batch_replies(self, batch_id):
-        batch = yield self.batches.load(batch_id)
-        messages = yield batch.backlinks.inboundmessages()
-        returnValue([m.msg for m in messages])
+    def batch_inbound_keys(self, batch_id):
+        mr = self.manager.mr_from_field(InboundMessage, 'batch', batch_id)
+        return mr.get_keys()
 
-    @Manager.calls_manager
-    def message_events(self, msg_id):
-        message = yield self.outbound_messages.load(msg_id)
-        events = yield message.backlinks.events()
-        returnValue([e.event for e in events])
+    def message_event_keys(self, msg_id):
+        mr = self.manager.mr_from_field(Event, 'message', msg_id)
+        return mr.get_keys()
 
-    @Manager.calls_manager
     def batch_inbound_count(self, batch_id):
-        [count] = yield self.inbound_messages.by_index_count(batch=batch_id)
-        returnValue(count)
+        return self.inbound_messages.index_lookup(
+            'batch', batch_id).get_count()
 
-    @Manager.calls_manager
     def batch_outbound_count(self, batch_id):
-        [count] = yield self.outbound_messages.by_index_count(batch=batch_id)
-        returnValue(count)
+        return self.outbound_messages.index_lookup(
+            'batch', batch_id).get_count()

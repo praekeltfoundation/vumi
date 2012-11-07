@@ -18,8 +18,10 @@ class TxRiakManager(Manager):
     def from_config(cls, config):
         config = config.copy()
         bucket_prefix = config.pop('bucket_prefix')
+        load_bunch_size = config.pop('load_bunch_size',
+                                     cls.DEFAULT_LOAD_BUNCH_SIZE)
         client = RiakClient(**config)
-        return cls(client, bucket_prefix)
+        return cls(client, bucket_prefix, load_bunch_size=load_bunch_size)
 
     def _encode_indexes(self, iterable, encoding='utf-8'):
         """
@@ -45,8 +47,8 @@ class TxRiakManager(Manager):
 
         return encoded
 
-    def riak_object(self, cls, key, result=None):
-        bucket = self.bucket_for_cls(cls)
+    def riak_object(self, modelcls, key, result=None):
+        bucket = self.bucket_for_modelcls(modelcls)
         riak_object = RiakObject(self.client, bucket, key)
         if result:
             metadata = result['metadata']
@@ -78,31 +80,26 @@ class TxRiakManager(Manager):
     def delete(self, modelobj):
         return modelobj._riak_object.delete()
 
-    def load(self, cls, key, result=None):
-        riak_object = self.riak_object(cls, key, result)
+    def load(self, modelcls, key, result=None):
+        riak_object = self.riak_object(modelcls, key, result)
         if result:
-            return succeed(cls(self, key, _riak_object=riak_object))
+            return succeed(modelcls(self, key, _riak_object=riak_object))
         else:
             d = riak_object.reload()
-            d.addCallback(lambda result: cls(self, key, _riak_object=result)
-                            if result.get_data() is not None else None)
+            d.addCallback(
+                lambda result: (modelcls(self, key, _riak_object=result)
+                                if result.get_data() is not None else None))
             return d
-
-    def load_list(self, cls, keys):
-        deferreds = []
-        for key in keys:
-            deferreds.append(self.load(cls, key))
-        return gatherResults(deferreds)
 
     def riak_map_reduce(self):
         return RiakMapReduce(self.client)
 
-    def riak_enable_search(self, cls):
-        bucket_name = self.bucket_name(cls)
+    def riak_enable_search(self, modelcls):
+        bucket_name = self.bucket_name(modelcls)
         bucket = self.client.bucket(bucket_name)
         return bucket.enable_search()
 
-    def run_map_reduce(self, mapreduce, mapper_func=None):
+    def run_map_reduce(self, mapreduce, mapper_func=None, reducer_func=None):
         def map_results(raw_results):
             deferreds = []
             for row in raw_results:
@@ -112,6 +109,8 @@ class TxRiakManager(Manager):
         mapreduce_done = mapreduce.run()
         if mapper_func is not None:
             mapreduce_done.addCallback(map_results)
+        if reducer_func is not None:
+            mapreduce_done.addCallback(lambda r: reducer_func(self, r))
         return mapreduce_done
 
     @inlineCallbacks

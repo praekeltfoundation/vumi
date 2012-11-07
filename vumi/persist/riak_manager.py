@@ -17,11 +17,13 @@ class RiakManager(Manager):
     def from_config(cls, config):
         config = config.copy()
         bucket_prefix = config.pop('bucket_prefix')
+        load_bunch_size = config.pop('load_bunch_size',
+                                     cls.DEFAULT_LOAD_BUNCH_SIZE)
         client = RiakClient(**config)
-        return cls(client, bucket_prefix)
+        return cls(client, bucket_prefix, load_bunch_size=load_bunch_size)
 
-    def riak_object(self, cls, key, result=None):
-        bucket = self.bucket_for_cls(cls)
+    def riak_object(self, modelcls, key, result=None):
+        bucket = self.bucket_for_modelcls(modelcls)
         riak_object = RiakObject(self.client, bucket, key)
         if result:
             metadata = result['metadata']
@@ -48,27 +50,26 @@ class RiakManager(Manager):
     def delete(self, modelobj):
         modelobj._riak_object.delete()
 
-    def load(self, cls, key, result=None):
-        riak_object = self.riak_object(cls, key, result)
+    def load(self, modelcls, key, result=None):
+        riak_object = self.riak_object(modelcls, key, result)
         if not result:
             riak_object.reload()
-        return (cls(self, key, _riak_object=riak_object)
+        return (modelcls(self, key, _riak_object=riak_object)
                 if riak_object.get_data() is not None else None)
-
-    def load_list(self, cls, keys):
-        return [self.load(cls, key) for key in keys]
 
     def riak_map_reduce(self):
         return RiakMapReduce(self.client)
 
-    def run_map_reduce(self, mapreduce, mapper_func=None):
+    def run_map_reduce(self, mapreduce, mapper_func=None, reducer_func=None):
         results = mapreduce.run()
         if mapper_func is not None:
             results = [mapper_func(self, row) for row in results]
+        if reducer_func is not None:
+            results = reducer_func(self, results)
         return results
 
-    def riak_enable_search(self, cls):
-        bucket_name = self.bucket_name(cls)
+    def riak_enable_search(self, modelcls):
+        bucket_name = self.bucket_name(modelcls)
         bucket = self.client.bucket(bucket_name)
         return bucket.enable_search()
 
