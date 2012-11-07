@@ -248,6 +248,7 @@ class Manager(object):
     zrangebyscore = RedisCall(['key', 'min', 'max', 'start', 'num',
         'withscores'], defaults=['-inf', '+inf', None, None, False])
     zscore = RedisCall(['key', 'value'])
+    zcount = RedisCall(['key', 'min', 'max'])
 
     # List operations
 

@@ -260,3 +260,37 @@ class MessageStoreCache(object):
         Return the count of the unique outbound message keys for this batch_id
         """
         return self.redis.zcard(self.outbound_key(batch_id))
+
+    @Manager.calls_manager
+    def count_inbound_throughput(self, batch_id, sample_time=300):
+        """
+        Calculate the number of messages seen in the last `sample_time` amount
+        of seconds.
+
+        :param int sample_time:
+            How far to look back to calculate the throughput.
+            Defaults to 300 seconds (5 minutes)
+        """
+        [(latest, timestamp)] = yield self.redis.zrange(
+                            self.inbound_key(batch_id), 0, 0, desc=True,
+                            withscores=True)
+        count = yield self.redis.zcount(self.inbound_key(batch_id),
+            timestamp, timestamp + sample_time)
+        returnValue(int(count))
+
+    @Manager.calls_manager
+    def count_outbound_throughput(self, batch_id, sample_time=300):
+        """
+        Calculate the number of messages seen in the last `sample_time` amount
+        of seconds.
+
+        :param int sample_time:
+            How far to look back to calculate the throughput.
+            Defaults to 300 seconds (5 minutes)
+        """
+        [(latest, timestamp)] = yield self.redis.zrange(
+                            self.outbound_key(batch_id), 0, 0, desc=True,
+                            withscores=True)
+        count = yield self.redis.zcount(self.outbound_key(batch_id),
+            timestamp, timestamp + sample_time)
+        returnValue(int(count))

@@ -287,6 +287,10 @@ class FakeRedis(object):
             return [v for v, k in results]
 
     @maybe_async
+    def zcount(self, key, min, max):
+        return str(len(self.zrangebyscore.sync(self, key, min, max)))
+
+    @maybe_async
     def zscore(self, key, value):
         zval = self._data.get(key, Zset())
         return zval.zscore(value)
