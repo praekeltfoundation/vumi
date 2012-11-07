@@ -259,3 +259,35 @@ class TestMessageStoreCache(ApplicationTestCase):
             (yield self.cache.count_inbound_message_keys(self.batch_id)), 0)
         self.assertEqual(
             (yield self.cache.count_outbound_message_keys(self.batch_id)), 0)
+
+    @inlineCallbacks
+    def test_count_inbound_throughput(self):
+        for i in range(10):
+            msg_in = self.mkmsg_in()
+            msg_in['timestamp'] = datetime.now() - timedelta(seconds=i * 10)
+            yield self.cache.add_inbound_message(self.batch_id, msg_in)
+
+        self.assertEqual(
+            (yield self.cache.count_inbound_throughput(self.batch_id)), 10)
+        self.assertEqual(
+            (yield self.cache.count_inbound_throughput(self.batch_id,
+                sample_time=1)), 1)
+        self.assertEqual(
+            (yield self.cache.count_inbound_throughput(self.batch_id,
+                sample_time=10)), 2)
+
+    @inlineCallbacks
+    def test_count_outbound_throughput(self):
+        for i in range(10):
+            msg_out = self.mkmsg_out()
+            msg_out['timestamp'] = datetime.now() - timedelta(seconds=i * 10)
+            yield self.cache.add_outbound_message(self.batch_id, msg_out)
+
+        self.assertEqual(
+            (yield self.cache.count_outbound_throughput(self.batch_id)), 10)
+        self.assertEqual(
+            (yield self.cache.count_outbound_throughput(self.batch_id,
+                sample_time=1)), 1)
+        self.assertEqual(
+            (yield self.cache.count_outbound_throughput(self.batch_id,
+                sample_time=10)), 2)
