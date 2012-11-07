@@ -36,7 +36,8 @@ class TwitterTransport(Transport):
         token = oauth.OAuthToken(self.access_token, self.access_token_secret)
         self.twitter = self._twitter_class(consumer=consumer, token=token)
         yield self.start_tracking_terms()
-        self.start_checking_for_replies()
+        if self.check_replies_interval > 0:
+            self.start_checking_for_replies()
 
     @inlineCallbacks
     def start_tracking_terms(self):
@@ -98,9 +99,9 @@ class TwitterTransport(Transport):
         conversation.
         """
         self.publish_message(
-            message_id=status.id,
+            message_id=unicode(status.id),
             content=status.text,
-            to_addr=status.in_reply_to_screen_name,
+            to_addr=status.in_reply_to_screen_name or '',
             from_addr=status.user.screen_name,
             session_event=TransportUserMessage.SESSION_NONE,
             transport_type=self.transport_type,
