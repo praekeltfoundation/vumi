@@ -17,8 +17,10 @@ class RiakManager(Manager):
     def from_config(cls, config):
         config = config.copy()
         bucket_prefix = config.pop('bucket_prefix')
+        load_bunch_size = config.pop('load_bunch_size',
+                                     cls.DEFAULT_LOAD_BUNCH_SIZE)
         client = RiakClient(**config)
-        return cls(client, bucket_prefix)
+        return cls(client, bucket_prefix, load_bunch_size=load_bunch_size)
 
     def riak_object(self, modelcls, key, result=None):
         bucket = self.bucket_for_modelcls(modelcls)

@@ -278,11 +278,12 @@ class VumiMapReduce(object):
 class Manager(object):
     """A wrapper around a Riak client."""
 
-    LOAD_BUNCH_SIZE = 100
+    DEFAULT_LOAD_BUNCH_SIZE = 100
 
-    def __init__(self, client, bucket_prefix):
+    def __init__(self, client, bucket_prefix, load_bunch_size=None):
         self.client = client
         self.bucket_prefix = bucket_prefix
+        self.load_bunch_size = load_bunch_size or self.DEFAULT_LOAD_BUNCH_SIZE
         self._bucket_cache = {}
 
     def proxy(self, modelcls):
@@ -363,7 +364,7 @@ class Manager(object):
 
         If a key doesn't exist, no object will be returned for it.
         """
-        assert len(keys) <= self.LOAD_BUNCH_SIZE
+        assert len(keys) <= self.load_bunch_size
         if not keys:
             return []
         mr = self.mr_from_keys(model, keys)
@@ -382,8 +383,8 @@ class Manager(object):
             An iterator over (possibly deferred) lists of model instances.
         """
         while keys:
-            batch_keys = keys[:self.LOAD_BUNCH_SIZE]
-            keys = keys[self.LOAD_BUNCH_SIZE:]
+            batch_keys = keys[:self.load_bunch_size]
+            keys = keys[self.load_bunch_size:]
             yield self._load_bunch(model, batch_keys)
 
     def riak_map_reduce(self):

@@ -51,6 +51,15 @@ class CommonRiakManagerTests(object):
         manager_cls = self.manager.__class__
         manager = manager_cls.from_config({'bucket_prefix': 'test.'})
         self.assertEqual(manager.__class__, manager_cls)
+        self.assertEqual(manager.load_bunch_size,
+                         manager.DEFAULT_LOAD_BUNCH_SIZE)
+
+    def test_from_config_with_bunch_size(self):
+        manager_cls = self.manager.__class__
+        manager = manager_cls.from_config({'bucket_prefix': 'test.',
+                                           'load_bunch_size': 10,
+                                           })
+        self.assertEqual(manager.load_bunch_size, 10)
 
     def test_sub_manager(self):
         sub_manager = self.manager.sub_manager("foo.")
@@ -114,14 +123,15 @@ class CommonRiakManagerTests(object):
         yield self.manager.store(self.mkdummy("foo", {"a": 0}))
         yield self.manager.store(self.mkdummy("bar", {"a": 1}))
         yield self.manager.store(self.mkdummy("baz", {"a": 2}))
-        self.manager.LOAD_BUNCH_SIZE = 2
+        self.manager.load_bunch_size = load_bunch_size = 2
 
         keys = ["foo", "unknown", "bar", "baz"]
 
         result_data = []
         for result_bunch in self.manager.load_all_bunches(DummyModel, keys):
-            result_data.extend(result.get_data()
-                               for result in (yield result_bunch))
+            bunch = yield result_bunch
+            self.assertTrue(len(bunch) <= load_bunch_size)
+            result_data.extend(result.get_data() for result in bunch)
         result_data.sort(key=lambda d: d["a"])
         self.assertEqual(result_data, [{"a": 0}, {"a": 1}, {"a": 2}])
 
