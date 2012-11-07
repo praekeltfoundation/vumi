@@ -99,6 +99,6 @@ class TwitterTransportTestCase(TransportTestCase):
         self.assertEqual(msg['from_addr'], '@screen_name')
         self.assertEqual(msg['to_addr'], '@reply_to')
         self.assertEqual(msg['content'], 'text')
-        self.assertEqual(msg['message_id'], 1)
+        self.assertEqual(msg['message_id'], '1')
         self.assertEqual(msg['session_event'],
                          TransportUserMessage.SESSION_NONE)
