@@ -81,7 +81,7 @@ class TestMessageStoreCache(ApplicationTestCase):
         # means the reverse of how we put them in.
         keys = yield self.cache.get_outbound_message_keys(self.batch_id, 0, 4)
         self.assertEqual(len(keys), 5)
-        self.assertEqual(keys, list([m['message_id'] for m in messages])[-5:])
+        self.assertEqual(keys, list([m['message_id'] for m in messages])[:5])
 
     @inlineCallbacks
     def test_get_batch_ids(self):
@@ -120,7 +120,7 @@ class TestMessageStoreCache(ApplicationTestCase):
             self.cache.add_inbound_message)
         keys = yield self.cache.get_inbound_message_keys(self.batch_id, 0, 4)
         self.assertEqual(len(keys), 5)
-        self.assertEqual(keys, list([m['message_id'] for m in messages])[-5:])
+        self.assertEqual(keys, list([m['message_id'] for m in messages])[:5])
 
     @inlineCallbacks
     def test_get_from_addrs(self):
@@ -197,7 +197,7 @@ class TestMessageStoreCache(ApplicationTestCase):
         for i in range(10):
             msg = self.mkmsg_out()
             msg['message_id'] = 'the-same-thing'
-            self.cache.add_outbound_message(self.batch_id, msg)
+            yield self.cache.add_outbound_message(self.batch_id, msg)
         status = yield self.cache.get_event_status(self.batch_id)
         self.assertEqual(status['sent'], 1)
         self.assertEqual(

@@ -275,7 +275,7 @@ class MessageStoreCache(object):
                             self.inbound_key(batch_id), 0, 0, desc=True,
                             withscores=True)
         count = yield self.redis.zcount(self.inbound_key(batch_id),
-            timestamp, timestamp + sample_time)
+            timestamp - sample_time, timestamp)
         returnValue(int(count))
 
     @Manager.calls_manager
@@ -292,5 +292,5 @@ class MessageStoreCache(object):
                             self.outbound_key(batch_id), 0, 0, desc=True,
                             withscores=True)
         count = yield self.redis.zcount(self.outbound_key(batch_id),
-            timestamp, timestamp + sample_time)
+            timestamp - sample_time, timestamp)
         returnValue(int(count))

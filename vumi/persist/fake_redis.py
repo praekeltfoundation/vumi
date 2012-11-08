@@ -409,9 +409,12 @@ class Zset(object):
         stop += 1  # redis start/stop are element indexes
         if stop == 0:
             stop = None
-        results = [(score_cast_func(k), v) for k, v in self._zval[start:stop]]
-        if desc:
-            results.reverse()
+
+        # copy temporarily
+        zval = self._zval[:]
+        zval.sort(reverse=desc)
+
+        results = [(score_cast_func(k), v) for k, v in zval[start:stop]]
         return [(v, k) for k, v in results]
 
     def zrangebyscore(self, min='-inf', max='+inf', start=0, num=None,

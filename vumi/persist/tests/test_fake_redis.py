@@ -75,6 +75,8 @@ class FakeRedisTestCase(TestCase):
         yield self.assert_redis_op(
             [('three', 0.3), ('two', 0.2), ('one', 0.1)],
             'zrange', 'set', 0, -1, withscores=True, desc=True)
+        yield self.assert_redis_op([('three', 0.3)],
+            'zrange', 'set', 0, 0, withscores=True, desc=True)
 
     @inlineCallbacks
     def test_zrangebyscore(self):
