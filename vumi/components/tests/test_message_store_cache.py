@@ -263,6 +263,10 @@ class TestMessageStoreCache(ApplicationTestCase):
 
     @inlineCallbacks
     def test_count_inbound_throughput(self):
+        # test for empty batches.
+        self.assertEqual(
+            (yield self.cache.count_outbound_throughput(self.batch_id)), 0)
+
         now = datetime.now()
         for i in range(10):
             msg_in = self.mkmsg_in()
@@ -280,6 +284,10 @@ class TestMessageStoreCache(ApplicationTestCase):
 
     @inlineCallbacks
     def test_count_outbound_throughput(self):
+        # test for empty batches.
+        self.assertEqual(
+            (yield self.cache.count_outbound_throughput(self.batch_id)), 0)
+
         now = datetime.now()
         for i in range(10):
             msg_out = self.mkmsg_out()
