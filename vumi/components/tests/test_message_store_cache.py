@@ -41,10 +41,11 @@ class TestMessageStoreCache(ApplicationTestCase):
     @inlineCallbacks
     def add_messages(self, batch_id, callback, count=10):
         messages = []
+        now = datetime.now()
         for i in range(count):
             msg = self.mkmsg_in(from_addr='from-%s' % (i,),
                 to_addr='to-%s' % (i,))
-            msg['timestamp'] = datetime.now() - timedelta(seconds=i)
+            msg['timestamp'] = now - timedelta(seconds=i)
             yield callback(batch_id, msg)
             messages.append(msg)
         returnValue(messages)
