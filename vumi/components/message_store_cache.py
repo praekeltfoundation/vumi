@@ -271,9 +271,13 @@ class MessageStoreCache(object):
             How far to look back to calculate the throughput.
             Defaults to 300 seconds (5 minutes)
         """
-        [(latest, timestamp)] = yield self.redis.zrange(
+        last_seen = yield self.redis.zrange(
                             self.inbound_key(batch_id), 0, 0, desc=True,
                             withscores=True)
+        if not last_seen:
+            returnValue(0)
+
+        [(latest, timestamp)] = last_seen
         count = yield self.redis.zcount(self.inbound_key(batch_id),
             timestamp - sample_time, timestamp)
         returnValue(int(count))
@@ -288,9 +292,13 @@ class MessageStoreCache(object):
             How far to look back to calculate the throughput.
             Defaults to 300 seconds (5 minutes)
         """
-        [(latest, timestamp)] = yield self.redis.zrange(
+        last_seen = yield self.redis.zrange(
                             self.outbound_key(batch_id), 0, 0, desc=True,
                             withscores=True)
+        if not last_seen:
+            returnValue(0)
+
+        [(latest, timestamp)] = last_seen
         count = yield self.redis.zcount(self.outbound_key(batch_id),
             timestamp - sample_time, timestamp)
         returnValue(int(count))
