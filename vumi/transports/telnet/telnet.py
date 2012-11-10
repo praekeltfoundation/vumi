@@ -104,19 +104,19 @@ class TelnetServerTransport(Transport):
     def handle_outbound_message(self, message):
         text = message['content']
         if text is None:
-            text = ''
-        else:
-            text = text.encode("UTF-8")
-        text = "\n".join(text.splitlines())
+            text = u''
+        text = u"\n".join(text.splitlines())
 
         client_addr = message['to_addr']
         client = self._clients.get(client_addr)
         if client is None:
             # unknown addr, deliver to all
             clients = self._clients.values()
-            text = "UNKNOWN ADDR [%s]: %s" % (client_addr, text)
+            text = u"UNKNOWN ADDR [%s]: %s" % (client_addr, text)
         else:
             clients = [client]
+
+        text = text.encode('utf-8')
 
         for client in clients:
             client.transport.write("%s\n" % text)
