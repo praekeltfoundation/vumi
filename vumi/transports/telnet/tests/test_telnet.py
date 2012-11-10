@@ -1,5 +1,3 @@
-# -*- encoding: utf-8 -*-
-
 """Tests for vumi.transports.telnet.transport."""
 
 from twisted.internet.defer import (inlineCallbacks, DeferredQueue,
@@ -10,6 +8,9 @@ from twisted.internet import reactor, protocol
 from vumi.message import TransportUserMessage
 from vumi.transports.telnet import TelnetServerTransport
 from vumi.transports.tests.utils import TransportTestCase
+
+
+NON_ASCII = u"\u00f6\u00e6\u0142"
 
 
 class ClientProtocol(LineReceiver):
@@ -86,10 +87,10 @@ class TelnetServerTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_handle_non_ascii_input(self):
-        self.client.transport.write(u"öæł".encode("utf-8"))
+        self.client.transport.write(NON_ASCII.encode("utf-8"))
         yield self._amqp.wait_messages('vumi', 'test.inbound', 2)
         [reg, msg] = self.get_messages('test.inbound')
-        self.assertEqual(msg['content'], u"öæł")
+        self.assertEqual(msg['content'], NON_ASCII)
         self.assertEqual(msg['session_event'],
                          TransportUserMessage.SESSION_RESUME)
 
@@ -100,6 +101,26 @@ class TelnetServerTransportTestCase(TransportTestCase):
         yield self.dispatch(reply)
         line = yield self.client.transport.protocol.queue.get()
         self.assertEqual(line, "reply_foo")
+        self.assertTrue(self.client.transport.connected)
+
+    @inlineCallbacks
+    def test_non_ascii_outbound_reply(self):
+        [reg] = self.get_messages('test.inbound')
+        reply = reg.reply(content=NON_ASCII, continue_session=False)
+        yield self.dispatch(reply)
+        line = yield self.client.transport.protocol.queue.get()
+        self.assertEqual(line, NON_ASCII.encode('utf-8'))
+        self.assertTrue(self.client.transport.connected)
+
+    @inlineCallbacks
+    def test_non_ascii_outbound_unknown_address(self):
+        [reg] = self.get_messages('test.inbound')
+        reply = reg.reply(content=NON_ASCII, continue_session=False)
+        reply['to_addr'] = 'nowhere'
+        yield self.dispatch(reply)
+        line = yield self.client.transport.protocol.queue.get()
+        self.assertEqual(line,
+            (u"UNKNOWN ADDR [nowhere]: %s" % (NON_ASCII,)).encode('utf-8'))
         self.assertTrue(self.client.transport.connected)
 
     @inlineCallbacks
