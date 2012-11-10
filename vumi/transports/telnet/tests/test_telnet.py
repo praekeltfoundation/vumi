@@ -1,3 +1,5 @@
+# coding: utf-8
+
 """Tests for vumi.transports.telnet.transport."""
 
 from twisted.internet.defer import (inlineCallbacks, DeferredQueue,
@@ -10,7 +12,7 @@ from vumi.transports.telnet import TelnetServerTransport
 from vumi.transports.tests.utils import TransportTestCase
 
 
-NON_ASCII = u"\u00f6\u00e6\u0142"
+NON_ASCII = u"öæł"
 
 
 class ClientProtocol(LineReceiver):
