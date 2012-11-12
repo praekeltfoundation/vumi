@@ -238,22 +238,28 @@ class ApplicationWorker(Worker):
         return self._publish_message(msg)
 
     @inlineCallbacks
+    def setup_transport_connection(self, endpoint_name, transport_name,
+                                   message_consumer, event_consumer):
+        consumer = yield self.consume(
+            '%s.inbound' % (transport_name,), message_consumer,
+            message_class=TransportUserMessage, paused=True)
+        event_consumer = yield self.consume(
+            '%s.event' % (transport_name,), event_consumer,
+            message_class=TransportEvent, paused=True)
+        publisher = yield self.publish_to('%s.outbound' % (transport_name,))
+
+        self._consumers.extend([consumer, event_consumer])
+        setattr(self, '%s_publisher' % (endpoint_name,), publisher)
+        setattr(self, '%s_consumer' % (endpoint_name,), consumer)
+        setattr(self, '%s_event_consumer' % (endpoint_name,), event_consumer)
+
     def _setup_transport_publisher(self):
-        self.transport_publisher = yield self.publish_to(
-            '%(transport_name)s.outbound' % self.config)
+        return self.setup_transport_connection(
+            'transport', self.config['transport_name'],
+            self.dispatch_user_message, self.dispatch_event)
 
-    @inlineCallbacks
     def _setup_transport_consumer(self):
-        self.transport_consumer = yield self.consume(
-            '%(transport_name)s.inbound' % self.config,
-            self.dispatch_user_message,
-            message_class=TransportUserMessage)
-        self._consumers.append(self.transport_consumer)
+        return self.transport_consumer.unpause()
 
-    @inlineCallbacks
     def _setup_event_consumer(self):
-        self.transport_event_consumer = yield self.consume(
-            '%(transport_name)s.event' % self.config,
-            self.dispatch_event,
-            message_class=TransportEvent)
-        self._consumers.append(self.transport_event_consumer)
+        return self.transport_event_consumer.unpause()

@@ -183,7 +183,7 @@ class SmppTransport(Transport):
         log.msg("ESME Connected, adding handlers")
         self.esme_client = client
         # Start the consumer
-        return self._setup_message_consumer()
+        return self.message_consumer.unpause()
 
     @inlineCallbacks
     def handle_outbound_message(self, message):
@@ -201,7 +201,7 @@ class SmppTransport(Transport):
 
     def esme_disconnected(self):
         log.msg("ESME Disconnected")
-        return self._teardown_message_consumer()
+        return self.message_consumer.pause()
 
     # Redis message storing methods
 
@@ -261,14 +261,14 @@ class SmppTransport(Transport):
             return
         log.err("Throttling outbound messages.")
         self.throttled = True
-        return self._teardown_message_consumer()
+        return self.message_consumer.pause()
 
     def _stop_throttling(self):
         if not self.throttled:
             return
         log.err("No longer throttling outbound messages.")
         self.throttled = False
-        return self._setup_message_consumer()
+        return self.message_consumer.unpause()
 
     @inlineCallbacks
     def submit_sm_resp(self, *args, **kwargs):
