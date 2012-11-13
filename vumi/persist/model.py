@@ -262,7 +262,7 @@ class VumiMapReduce(object):
     def from_index_match(cls, mgr, model, query, index_name, start_value,
                             end_value=None):
         """
-        Do a regex search across the keys found in a secondary index.
+        Do a regex OR search across the keys found in a secondary index.
 
         :param Manager mgr:
             The manager to use.
@@ -294,10 +294,6 @@ class VumiMapReduce(object):
                     var values = value.values.filter(function(val) {
                         return !val.metadata['X-Riak-Deleted'];
                     });
-                    /*
-                        loop over known values and perform a match for query
-                        against the stored object.
-                    */
                     if(values.length) {
                         var data = JSON.parse(values[0].data);
                         for (j in arg) {
