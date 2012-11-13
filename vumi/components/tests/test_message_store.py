@@ -33,20 +33,22 @@ class TestMessageStoreBase(ApplicationTestCase):
         returnValue((add_kw, batch_id))
 
     @inlineCallbacks
-    def _create_outbound(self, tag=("pool", "tag"), by_batch=False):
+    def _create_outbound(self, tag=("pool", "tag"), by_batch=False,
+                            content='outbound foo'):
         """Create and store an outbound message."""
         add_kw, batch_id = yield self._maybe_batch(tag, by_batch)
-        msg = self.mkmsg_out(content="outfoo",
+        msg = self.mkmsg_out(content=content,
                              message_id=TransportEvent.generate_id())
         msg_id = msg['message_id']
         yield self.store.add_outbound_message(msg, **add_kw)
         returnValue((msg_id, msg, batch_id))
 
     @inlineCallbacks
-    def _create_inbound(self, tag=("pool", "tag"), by_batch=False):
+    def _create_inbound(self, tag=("pool", "tag"), by_batch=False,
+                            content='inbound foo'):
         """Create and store an inbound message."""
         add_kw, batch_id = yield self._maybe_batch(tag, by_batch)
-        msg = self.mkmsg_in(content="infoo", to_addr="+1234567810001",
+        msg = self.mkmsg_in(content=content, to_addr="+1234567810001",
                             transport_type="sms",
                             message_id=TransportEvent.generate_id())
         msg_id = msg['message_id']
@@ -251,6 +253,67 @@ class TestMessageStore(TestMessageStoreBase):
         yield self.store.add_outbound_message(self.mkmsg_out(
                 message_id=TransportEvent.generate_id()), batch_id=batch_id)
         self.assertEqual(2, (yield self.store.batch_outbound_count(batch_id)))
+
+    @inlineCallbacks
+    def test_inbound_keys_matching(self):
+        msg_id, msg, batch_id = yield self._create_inbound(content='hello')
+        self.assertEqual([msg_id],
+            (yield self.store.batch_inbound_keys_matching(batch_id, query=[{
+            'key': 'msg.content',
+            'pattern': 'hell.+',
+            'flags': 'i',
+            }])))
+        # test case sensitivity
+        self.assertEqual([],
+            (yield self.store.batch_inbound_keys_matching(batch_id, query=[{
+            'key': 'msg.content',
+            'pattern': 'HELLO',
+            'flags': '',
+            }])))
+        # the inbound from_addr has a leading +, it needs to be escaped
+        self.assertEqual([msg_id],
+            (yield self.store.batch_inbound_keys_matching(batch_id, query=[{
+            'key': 'msg.from_addr',
+            'pattern': "\%s" % (msg.payload['from_addr'],),
+            'flags': 'i',
+            }])))
+        # the outbound to_addr has a leading +, it needs to be escaped
+        self.assertEqual([msg_id],
+            (yield self.store.batch_inbound_keys_matching(batch_id, query=[{
+            'key': 'msg.to_addr',
+            'pattern': "\%s" % (msg.payload['to_addr'],),
+            'flags': 'i',
+            }])))
+
+    @inlineCallbacks
+    def test_outbound_keys_matching(self):
+        msg_id, msg, batch_id = yield self._create_outbound(content='hello')
+        self.assertEqual([msg_id],
+            (yield self.store.batch_outbound_keys_matching(batch_id, query=[{
+            'key': 'msg.content',
+            'pattern': 'hell.+',
+            'flags': 'i',
+            }])))
+        # test case sensitivity
+        self.assertEqual([],
+            (yield self.store.batch_outbound_keys_matching(batch_id, query=[{
+            'key': 'msg.content',
+            'pattern': 'HELLO',
+            'flags': '',
+            }])))
+        self.assertEqual([msg_id],
+            (yield self.store.batch_outbound_keys_matching(batch_id, query=[{
+            'key': 'msg.from_addr',
+            'pattern': msg.payload['from_addr'],
+            'flags': 'i',
+            }])))
+        # the outbound to_addr has a leading +, it needs to be escaped
+        self.assertEqual([msg_id],
+            (yield self.store.batch_outbound_keys_matching(batch_id, query=[{
+            'key': 'msg.to_addr',
+            'pattern': "\%s" % (msg.payload['to_addr'],),
+            'flags': 'i',
+            }])))
 
 
 class TestMessageStoreCache(TestMessageStoreBase):
