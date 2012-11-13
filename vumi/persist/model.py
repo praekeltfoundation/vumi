@@ -298,13 +298,15 @@ class VumiMapReduce(object):
                         loop over known values and perform a match for query
                         against the stored object.
                     */
-                    var data = JSON.parse(values[0].data);
-                    for (j in arg) {
-                        var query = arg[j];
-                        var content = data[query.key];
-                        var regex = RegExp(query.pattern, query.flags)
-                        if(content && regex.test(content)) {
-                            return [value.key];
+                    if(values.length) {
+                        var data = JSON.parse(values[0].data);
+                        for (j in arg) {
+                            var query = arg[j];
+                            var content = data[query.key];
+                            var regex = RegExp(query.pattern, query.flags)
+                            if(content && regex.test(content)) {
+                                return [value.key];
+                            }
                         }
                     }
                     return [];
