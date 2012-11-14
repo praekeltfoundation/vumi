@@ -101,7 +101,10 @@ class TruteqTransport(Transport):
                               sms_callback=self.sms_callback,
                               errback=self.ssmi_errback)
         self.ssmi_client = ssmi_client
-        ssmi_d.callback(None)
+        if not ssmi_d.called:
+            # the setup gets called again if
+            # the ssmi_client reconnects
+            ssmi_d.callback(None)
 
     @inlineCallbacks
     def teardown_transport(self):
