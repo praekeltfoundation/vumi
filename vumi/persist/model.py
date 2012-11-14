@@ -156,6 +156,26 @@ class Model(object):
         return manager.mr_from_field(cls, field_name, value)
 
     @classmethod
+    def index_match(cls, manager, query, field_name, value):
+        """
+        Finds objects in the index that match the regex patterns in query
+
+        :param list query:
+            A list of dictionaries with query information. Each dictionary
+            should have the follow structure:
+
+            {
+                "key": "the key to use to lookup the value in the JSON doc",
+                "pattern": "the regex to match the value with",
+                "flags": "the flags to set on the RegExp object",
+            }
+
+        :returns: class:`VumiMapReduce` instance based on the index param
+                    with and a map phase for matching against the query.
+        """
+        return manager.mr_from_field_match(cls, query, field_name, value)
+
+    @classmethod
     def search(cls, manager, **kw):
         """Search for instances of this model matching keys/values.
 
@@ -196,7 +216,7 @@ class VumiMapReduce(object):
         self._riak_mapreduce_obj = riak_mapreduce_obj
 
     @classmethod
-    def from_field(cls, mgr, model, field_name, start_value, end_value=None):
+    def _index_vals_for_field(clr, model, field_name, start_value, end_value):
         descriptor = model.field_descriptors[field_name]
         if descriptor.index_name is None:
             raise ValueError("%s.%s is not indexed" % (
@@ -213,9 +233,13 @@ class VumiMapReduce(object):
 
         if end_value is not None:
             end_value = str(descriptor.field.to_riak(end_value))
+        return descriptor.index_name, start_value, end_value
 
-        return cls.from_index(
-            mgr, model, descriptor.index_name, start_value, end_value)
+    @classmethod
+    def from_field(cls, mgr, model, field_name, start_value, end_value=None):
+        index_name, sv, ev = cls._index_vals_for_field(model, field_name,
+                                                        start_value, end_value)
+        return cls.from_index(mgr, model, index_name, sv, ev)
 
     @classmethod
     def from_index(cls, mgr, model, index_name, start_value, end_value=None):
@@ -226,6 +250,67 @@ class VumiMapReduce(object):
     def from_search(cls, mgr, model, query):
         return cls(
             mgr, mgr.riak_map_reduce().search(mgr.bucket_name(model), query))
+
+    @classmethod
+    def from_field_match(cls, mgr, model, query, field_name, start_value,
+                            end_value=None):
+        index_name, sv, ev = cls._index_vals_for_field(model, field_name,
+                                                        start_value, end_value)
+        return cls.from_index_match(mgr, model, query, index_name, sv, ev)
+
+    @classmethod
+    def from_index_match(cls, mgr, model, query, index_name, start_value,
+                            end_value=None):
+        """
+        Do a regex OR search across the keys found in a secondary index.
+
+        :param Manager mgr:
+            The manager to use.
+        :param Model model:
+            The model to use.
+        :param query:
+            A list of dictionaries to use to search with. The dictionary is
+            in the following format:
+
+            {
+                "key": "the key to lookup value for in the JSON dictionary",
+                "pattern": "the regex pattern the value of `key` should match",
+                "flags": "the modifier flags to give to the RegExp object",
+            }
+        :param str index_name:
+            The name of the index
+        :param str start_value:
+            The start value to search the 2i on
+        :param str end_value:
+            The end value to search on. Defaults to `None`.
+        """
+        mr = mgr.riak_map_reduce(
+            ).index(mgr.bucket_name(model), index_name, start_value, end_value
+            ).map("""
+                function(value, keyData, arg) {
+                    /*
+                        skip deleted values, might show up during a test
+                    */
+                    var values = value.values.filter(function(val) {
+                        return !val.metadata['X-Riak-Deleted'];
+                    });
+                    if(values.length) {
+                        var data = JSON.parse(values[0].data);
+                        for (j in arg) {
+                            var query = arg[j];
+                            var content = data[query.key];
+                            var regex = RegExp(query.pattern, query.flags)
+                            if(content && regex.test(content)) {
+                                return [value.key];
+                            }
+                        }
+                    }
+                    return [];
+                }
+            """, {
+                'arg': query,  # Client lib turns this to JSON for us.
+            })
+        return cls(mgr, mr)
 
     @classmethod
     def from_keys(cls, mgr, model, keys):
@@ -409,6 +494,16 @@ class Manager(object):
     def mr_from_search(self, model, query):
         return VumiMapReduce.from_search(self, model, query)
 
+    def mr_from_index_match(self, model, query, index_name, start_value,
+                            end_value=None):
+        return VumiMapReduce.from_index_match(self, model, query, index_name,
+                                                start_value, end_value)
+
+    def mr_from_field_match(self, model, query, field_name, start_value,
+                            end_value=None):
+        return VumiMapReduce.from_field_match(self, model, query, field_name,
+                                                start_value, end_value)
+
     def mr_from_keys(self, model, keys):
         return VumiMapReduce.from_keys(self, model, keys)
 
@@ -444,6 +539,10 @@ class ModelProxy(object):
 
     def index_lookup(self, field_name, value):
         return self._modelcls.index_lookup(self._manager, field_name, value)
+
+    def index_match(self, query, field_name, value):
+        return self._modelcls.index_match(self._manager, query, field_name,
+                                            value)
 
     def search(self, **kw):
         return self._modelcls.search(self._manager, **kw)
