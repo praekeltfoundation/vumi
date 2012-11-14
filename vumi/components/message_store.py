@@ -262,8 +262,16 @@ class MessageStore(object):
         mr = self.manager.mr_from_field(OutboundMessage, 'batch', batch_id)
         return mr.get_keys()
 
+    def batch_outbound_keys_matching(self, batch_id, query):
+        mr = self.outbound_messages.index_match(query, 'batch', batch_id)
+        return mr.get_keys()
+
     def batch_inbound_keys(self, batch_id):
         mr = self.manager.mr_from_field(InboundMessage, 'batch', batch_id)
+        return mr.get_keys()
+
+    def batch_inbound_keys_matching(self, batch_id, query):
+        mr = self.inbound_messages.index_match(query, 'batch', batch_id)
         return mr.get_keys()
 
     def message_event_keys(self, msg_id):

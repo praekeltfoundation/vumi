@@ -41,10 +41,11 @@ class TestMessageStoreCache(ApplicationTestCase):
     @inlineCallbacks
     def add_messages(self, batch_id, callback, count=10):
         messages = []
+        now = datetime.now()
         for i in range(count):
             msg = self.mkmsg_in(from_addr='from-%s' % (i,),
                 to_addr='to-%s' % (i,))
-            msg['timestamp'] = datetime.now() - timedelta(seconds=i)
+            msg['timestamp'] = now - timedelta(seconds=i)
             yield callback(batch_id, msg)
             messages.append(msg)
         returnValue(messages)
@@ -81,7 +82,7 @@ class TestMessageStoreCache(ApplicationTestCase):
         # means the reverse of how we put them in.
         keys = yield self.cache.get_outbound_message_keys(self.batch_id, 0, 4)
         self.assertEqual(len(keys), 5)
-        self.assertEqual(keys, list([m['message_id'] for m in messages])[-5:])
+        self.assertEqual(keys, list([m['message_id'] for m in messages])[:5])
 
     @inlineCallbacks
     def test_get_batch_ids(self):
@@ -120,7 +121,7 @@ class TestMessageStoreCache(ApplicationTestCase):
             self.cache.add_inbound_message)
         keys = yield self.cache.get_inbound_message_keys(self.batch_id, 0, 4)
         self.assertEqual(len(keys), 5)
-        self.assertEqual(keys, list([m['message_id'] for m in messages])[-5:])
+        self.assertEqual(keys, list([m['message_id'] for m in messages])[:5])
 
     @inlineCallbacks
     def test_get_from_addrs(self):
@@ -197,7 +198,7 @@ class TestMessageStoreCache(ApplicationTestCase):
         for i in range(10):
             msg = self.mkmsg_out()
             msg['message_id'] = 'the-same-thing'
-            self.cache.add_outbound_message(self.batch_id, msg)
+            yield self.cache.add_outbound_message(self.batch_id, msg)
         status = yield self.cache.get_event_status(self.batch_id)
         self.assertEqual(status['sent'], 1)
         self.assertEqual(
@@ -262,6 +263,10 @@ class TestMessageStoreCache(ApplicationTestCase):
 
     @inlineCallbacks
     def test_count_inbound_throughput(self):
+        # test for empty batches.
+        self.assertEqual(
+            (yield self.cache.count_inbound_throughput(self.batch_id)), 0)
+
         now = datetime.now()
         for i in range(10):
             msg_in = self.mkmsg_in()
@@ -279,6 +284,10 @@ class TestMessageStoreCache(ApplicationTestCase):
 
     @inlineCallbacks
     def test_count_outbound_throughput(self):
+        # test for empty batches.
+        self.assertEqual(
+            (yield self.cache.count_outbound_throughput(self.batch_id)), 0)
+
         now = datetime.now()
         for i in range(10):
             msg_out = self.mkmsg_out()

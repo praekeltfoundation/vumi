@@ -80,7 +80,10 @@ class VumiRedis(txr.Redis):
         pieces.extend(kwargs.iteritems())
         orig_zadd = super(VumiRedis, self).zadd
         deferreds = [orig_zadd(key, member, score) for member, score in pieces]
-        return DeferredList(deferreds)
+        d = DeferredList(deferreds, fireOnOneErrback=True)
+        d.addCallback(lambda results: sum([result for success, result
+                                            in results if success]))
+        return d
 
     def zrange(self, key, start, end, desc=False, withscores=False):
         return super(VumiRedis, self).zrange(key, start, end,
