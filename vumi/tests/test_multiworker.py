@@ -53,8 +53,6 @@ def mkmsg(content):
 
 class MultiWorkerTestCase(VumiWorkerTestCase):
 
-    timeout = 3
-
     base_config = {
         'workers': {
             'worker1': "%s.ToyWorker" % (__name__,),
