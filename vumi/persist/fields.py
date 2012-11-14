@@ -26,8 +26,8 @@ class FieldDescriptor(object):
         else:
             self.index_name = None
 
-    def setup(self, cls):
-        self.cls = cls
+    def setup(self, model_cls):
+        self.model_cls = model_cls
 
     def validate(self, value):
         self.field.validate(value)
@@ -35,13 +35,30 @@ class FieldDescriptor(object):
     def initialize(self, modelobj, value):
         self.__set__(modelobj, value)
 
+    def _add_index(self, modelobj, value):
+        # XXX: The underlying libraries call str() on whatever index values we
+        # provide, so we do this explicitly here and special-case None.
+        #
+        # Index values in Riak have to be non-empty, so a zero-length string
+        # counts as "no value". Since we still have legacy data that was
+        # inadvertantly indexed with "None" because of the str() call in the
+        # library and we still have legacy code that relies on an index search
+        # for a value of "None", fixing this properly here will break existing
+        # functionality. Once we have rewritten the offending code to not use
+        # "None" in the index, we can remove the hack below and be happier.
+        if value is None:
+            value = ''
+            # FIXME: We still rely on this being "None" in places. :-(
+            value = 'None'
+        modelobj._riak_object.add_index(self.index_name, str(value))
+
     def set_value(self, modelobj, value):
         """Set the value associated with this descriptor."""
         raw_value = self.field.to_riak(value)
         modelobj._riak_object._data[self.key] = raw_value
         if self.index_name is not None:
             modelobj._riak_object.remove_index(self.index_name)
-            modelobj._riak_object.add_index(self.index_name, raw_value)
+            self._add_index(modelobj, raw_value)
 
     def get_value(self, modelobj):
         """Get the value associated with this descriptor."""
@@ -207,8 +224,8 @@ class Json(Field):
 class VumiMessageDescriptor(FieldDescriptor):
     """Property for getting and setting fields."""
 
-    def setup(self, cls):
-        super(VumiMessageDescriptor, self).setup(cls)
+    def setup(self, model_cls):
+        super(VumiMessageDescriptor, self).setup(model_cls)
         if self.field.prefix is None:
             self.prefix = "%s." % self.key
         else:
@@ -305,8 +322,8 @@ class FieldWithSubtype(Field):
 
 class DynamicDescriptor(FieldDescriptor):
     """A field descriptor for dynamic fields."""
-    def setup(self, cls):
-        super(DynamicDescriptor, self).setup(cls)
+    def setup(self, model_cls):
+        super(DynamicDescriptor, self).setup(model_cls)
         if self.field.prefix is None:
             self.prefix = "%s." % self.key
         else:
@@ -512,42 +529,26 @@ class ListOf(FieldWithSubtype):
 
 
 class ForeignKeyDescriptor(FieldDescriptor):
-    def setup(self, cls):
-        super(ForeignKeyDescriptor, self).setup(cls)
-        self.othercls = self.field.othercls
+    def setup(self, model_cls):
+        super(ForeignKeyDescriptor, self).setup(model_cls)
+        self.other_model = self.field.other_model
         if self.field.index is None:
             self.index_name = "%s_bin" % self.key
         else:
             self.index_name = self.field.index
         if self.field.backlink is None:
-            self.backlink_name = cls.__name__.lower() + "s"
+            self.backlink_name = model_cls.__name__.lower() + "s"
         else:
             self.backlink_name = self.field.backlink
-        self.othercls.backlinks.declare_backlink(self.backlink_name,
-                                                 self.reverse_lookup)
+        self.other_model.backlinks.declare_backlink(self.backlink_name,
+                                                 self.reverse_lookup_keys)
 
-    def reverse_lookup(self, modelobj, manager=None):
+    def reverse_lookup_keys(self, modelobj, manager=None):
         if manager is None:
             manager = modelobj.manager
-        mr = manager.riak_map_reduce()
-        bucket = manager.bucket_prefix + self.cls.bucket
-        mr.index(bucket, self.index_name, modelobj.key)
-        if manager.fetch_objects:
-            # Return the key and the data for this object.
-            # Allows us to populate the objects coming back from a
-            # map reduce in one single call. This is especially important
-            # for synchronous calls.
-            mr = mr.map(function="""function(v) {
-                return [[v.key, v.values[0]]]
-            }""")
-        return manager.run_map_reduce(mr, self.map_lookup_result)
-
-    def map_lookup_result(self, manager, link_or_result_tuple):
-        try:
-            key, result = link_or_result_tuple
-        except TypeError:
-            key, result = link_or_result_tuple.get_key(), None
-        return self.cls.load(manager, key, result)
+        mr = manager.mr_from_index(
+            self.model_cls, self.index_name, modelobj.key)
+        return mr.get_keys()
 
     def get_value(self, modelobj):
         return ForeignKeyProxy(self, modelobj)
@@ -562,7 +563,7 @@ class ForeignKeyDescriptor(FieldDescriptor):
     def set_foreign_key(self, modelobj, foreign_key):
         modelobj._riak_object.remove_index(self.index_name)
         if foreign_key is not None:
-            modelobj._riak_object.add_index(self.index_name, foreign_key)
+            self._add_index(modelobj, foreign_key)
 
     def get_foreign_object(self, modelobj, manager=None):
         key = self.get_foreign_key(modelobj)
@@ -570,7 +571,7 @@ class ForeignKeyDescriptor(FieldDescriptor):
             return None
         if manager is None:
             manager = modelobj.manager
-        return self.othercls.load(manager, key)
+        return self.other_model.load(manager, key)
 
     def initialize(self, modelobj, value):
         if isinstance(value, basestring):
@@ -586,7 +587,7 @@ class ForeignKeyDescriptor(FieldDescriptor):
         self.validate(otherobj)
         modelobj._riak_object.remove_index(self.index_name)
         if otherobj is not None:
-            modelobj._riak_object.add_index(self.index_name, otherobj.key)
+            self._add_index(modelobj, otherobj.key)
 
 
 class ForeignKeyProxy(object):
@@ -614,29 +615,29 @@ class ForeignKey(Field):
 
     Additional parameters:
 
-    :param Model othercls:
+    :param Model other_model:
         The type of model linked to.
     :param string index:
         The name to use for the index. The default is the field name
         followed by _bin.
     :param string backlink:
-        The name to use for the backlink on :attr:`othercls.backlinks`.
+        The name to use for the backlink on :attr:`other_model.backlinks`.
         The default is the name of the class the field is on converted
         to lowercase and with 's' appended (e.g. 'FooModel' would result
-        in :attr:`othercls.backlinks.foomodels`).
+        in :attr:`other_model.backlinks.foomodels`).
     """
     descriptor_class = ForeignKeyDescriptor
 
-    def __init__(self, othercls, index=None, backlink=None, **kw):
+    def __init__(self, other_model, index=None, backlink=None, **kw):
         super(ForeignKey, self).__init__(**kw)
-        self.othercls = othercls
+        self.other_model = other_model
         self.index = index
         self.backlink = backlink
 
     def custom_validate(self, value):
-        if not isinstance(value, self.othercls):
+        if not isinstance(value, self.other_model):
             raise ValidationError("ForeignKey requires a %r instance" %
-                                  (self.othercls,))
+                                  (self.other_model,))
 
 
 class ManyToManyDescriptor(ForeignKeyDescriptor):
@@ -653,16 +654,16 @@ class ManyToManyDescriptor(ForeignKeyDescriptor):
         return indexes
 
     def add_foreign_key(self, modelobj, foreign_key):
-        modelobj._riak_object.add_index(self.index_name, foreign_key)
+        self._add_index(modelobj, foreign_key)
 
     def remove_foreign_key(self, modelobj, foreign_key):
         modelobj._riak_object.remove_index(self.index_name, foreign_key)
 
-    def get_foreign_objects(self, modelobj, manager=None):
+    def load_foreign_objects(self, modelobj, manager=None):
         keys = self.get_foreign_keys(modelobj)
         if manager is None:
             manager = modelobj.manager
-        return manager.load_list(self.othercls, keys)
+        return manager.load_all_bunches(self.other_model, keys)
 
     def add_foreign_object(self, modelobj, otherobj):
         self.validate(otherobj)
@@ -690,8 +691,8 @@ class ManyToManyProxy(object):
     def remove_key(self, foreign_key):
         self._descriptor.remove_foreign_key(self._modelobj, foreign_key)
 
-    def get_all(self, manager=None):
-        return self._descriptor.get_foreign_objects(self._modelobj, manager)
+    def load_all_bunches(self, manager=None):
+        return self._descriptor.load_foreign_objects(self._modelobj, manager)
 
     def add(self, otherobj):
         self._descriptor.add_foreign_object(self._modelobj, otherobj)
@@ -706,19 +707,19 @@ class ManyToManyProxy(object):
 class ManyToMany(ForeignKey):
     """A field that links to multiple instances of another class.
 
-    :param Model othercls:
+    :param Model other_model:
         The type of model linked to.
     :param string index:
         The name to use for the index. The default is the field name
         followed by _bin.
     :param string backlink:
-        The name to use for the backlink on :attr:`othercls.backlinks`.
+        The name to use for the backlink on :attr:`other_model.backlinks`.
         The default is the name of the class the field is on converted
         to lowercase and with 's' appended (e.g. 'FooModel' would result
-        in :attr:`othercls.backlinks.foomodels`).
+        in :attr:`other_model.backlinks.foomodels`).
     """
     descriptor_class = ManyToManyDescriptor
     initializable = False
 
-    def __init__(self, othercls, index=None, backlink=None):
-        super(ManyToMany, self).__init__(othercls, index, backlink)
+    def __init__(self, other_model, index=None, backlink=None):
+        super(ManyToMany, self).__init__(other_model, index, backlink)

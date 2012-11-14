@@ -1,6 +1,6 @@
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.web import http
-from vumi.application.tests.test_base import ApplicationTestCase
+from vumi.application.tests.utils import ApplicationTestCase
 from vumi.tests.utils import TestResourceWorker, get_stubbed_worker
 from vumi.application.tests.test_http_relay_stubs import TestResource
 from vumi.application.http_relay import HTTPRelayApplication

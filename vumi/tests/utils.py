@@ -4,38 +4,23 @@ import re
 import json
 from datetime import datetime, timedelta
 from collections import namedtuple
-from contextlib import contextmanager
 import warnings
 from functools import wraps
 
 import pytz
-from twisted.trial.unittest import SkipTest
+from twisted.trial.unittest import TestCase, SkipTest
 from twisted.internet import defer, reactor
 from twisted.internet.error import ConnectionRefusedError
 from twisted.web.resource import Resource
 from twisted.web.server import Site
-from twisted.internet.defer import DeferredQueue, inlineCallbacks
+from twisted.internet.defer import DeferredQueue, inlineCallbacks, returnValue
 from twisted.python import log
 
-from vumi.utils import vumi_resource_path, import_module, flatten_generator
+from vumi.utils import (vumi_resource_path, import_module, flatten_generator,
+                        LogFilterSite)
 from vumi.service import get_spec, Worker, WorkerCreator
-from vumi.tests.fake_amqp import FakeAMQClient
-
-
-def setup_django_test_database():
-    from django.test.simple import DjangoTestSuiteRunner
-    from django.test.utils import setup_test_environment
-    from south.management.commands import patch_for_test_db_setup
-    runner = DjangoTestSuiteRunner(verbosity=0, failfast=False)
-    patch_for_test_db_setup()
-    setup_test_environment()
-    return runner, runner.setup_databases()
-
-
-def teardown_django_test_database(runner, config):
-    from django.test.utils import teardown_test_environment
-    runner.teardown_databases(config)
-    teardown_test_environment()
+from vumi.message import TransportUserMessage, TransportEvent
+from vumi.tests.fake_amqp import FakeAMQPBroker, FakeAMQClient
 
 
 def import_skip(exc, *expected):
@@ -74,6 +59,10 @@ class Mocking(object):
             self.args = args
             self.kwargs = kwargs
 
+        def __repr__(self):
+            return '<%r object at %r [args: %r, kw: %r]>' % (
+                self.__class__.__name__, id(self), self.args, self.kwargs)
+
     def __init__(self, function):
         """Mock a function"""
         self.function = function
@@ -111,24 +100,6 @@ def mocking(fn):
     return Mocking(fn)
 
 
-class TestPublisher(object):
-    """
-    A test publisher that caches outbound messages in an internal queue
-    for testing, instead of publishing over AMQP.
-
-    Useful for testing consumers
-    """
-    def __init__(self):
-        self.queue = []
-
-    @contextmanager
-    def transaction(self):
-        yield
-
-    def publish_message(self, message, **kwargs):
-        self.queue.append((message, kwargs))
-
-
 def fake_amq_message(dictionary, delivery_tag='delivery_tag'):
     Content = namedtuple('Content', ['body'])
     Message = namedtuple('Message', ['content', 'delivery_tag'])
@@ -136,76 +107,14 @@ def fake_amq_message(dictionary, delivery_tag='delivery_tag'):
                    content=Content(body=json.dumps(dictionary)))
 
 
-class TestQueue(object):
-    """
-    A test queue that mimicks txAMQP's queue behaviour (DEPRECATED)
-    """
-    def __init__(self, queue, fake_broker=None):
-        self.queue = queue
-        self.fake_broker = fake_broker
-        # TODO: Hook this up.
-
-    def push(self, item):
-        self.queue.append(item)
-
-    def get(self):
-        d = defer.Deferred()
-        if self.queue:
-            d.callback(self.queue.pop())
-        return d
-
-
-class TestChannel(object):
-    "(DEPRECATED)"
-
-    def __init__(self, channel_id=None, fake_broker=None):
-        self.channel_id = channel_id
-        self.fake_broker = fake_broker
-        self.ack_log = []
-        self.publish_log = []
-        self.publish_message_log = self.publish_log  # TODO: Nuke
-
-    def basic_ack(self, tag, multiple=False):
-        self.ack_log.append((tag, multiple))
-
-    def channel_close(self, *args, **kwargs):
-        return defer.succeed(None)
-
-    def channel_open(self, *args, **kwargs):
-        return defer.succeed(None)
-
-    def basic_publish(self, *args, **kwargs):
-        self.publish_log.append(kwargs)
-        if self.fake_broker:
-            self.fake_broker.publish(**kwargs)
-
-    def basic_qos(self, *args, **kwargs):
-        return defer.succeed(None)
-
-    def exchange_declare(self, *args, **kwargs):
-        if self.fake_broker:
-            self.fake_broker.exchange_declare(*args, **kwargs)
-
-    def queue_declare(self, *args, **kwargs):
-        if self.fake_broker:
-            self.fake_broker.queue_declare(*args, **kwargs)
-
-    def queue_bind(self, *args, **kwargs):
-        if self.fake_broker:
-            self.fake_broker.queue_bind(*args, **kwargs)
-
-    def basic_consume(self, queue, **kwargs):
-        return namedtuple('Reply', ['consumer_tag'])(consumer_tag=queue)
-
-    def close(self, *args, **kwargs):
-        return True
+def get_fake_amq_client(broker=None):
+    spec = get_spec(vumi_resource_path("amqp-spec-0-8.xml"))
+    return FakeAMQClient(spec, {}, broker)
 
 
 def get_stubbed_worker(worker_class, config=None, broker=None):
-    spec = get_spec(vumi_resource_path("amqp-spec-0-8.xml"))
-    amq_client = FakeAMQClient(spec, {}, broker)
     worker = worker_class({}, config)
-    worker._amqp_client = amq_client
+    worker._amqp_client = get_fake_amq_client(broker)
     return worker
 
 
@@ -213,8 +122,7 @@ class StubbedWorkerCreator(WorkerCreator):
     broker = None
 
     def _connect(self, worker, timeout, bindAddress):
-        spec = get_spec(vumi_resource_path("amqp-spec-0-8.xml"))
-        amq_client = FakeAMQClient(spec, self.options, self.broker)
+        amq_client = get_fake_amq_client(self.broker)
         self.broker = amq_client.broker  # So we use the same broker for all.
         reactor.callLater(0, worker._amqp_connected, amq_client)
 
@@ -251,20 +159,47 @@ def FakeRedis():
 
 
 class LogCatcher(object):
-    """Gather logs."""
+    """Context manager for gathering logs in tests.
 
-    def __init__(self):
+    :param str system:
+        Only log events whose 'system' value contains the given
+        regular expression pattern will be gathered. Default: None
+        (i.e. keep all log events).
+
+    :param str message:
+        Only log events whose message contains the given regular
+        expression pattern will be gathered. The message is
+        constructed by joining the elements in the 'message' value
+        with a space (the same way Twisted does). Default: None
+        (i.e. keep all log events).
+    """
+
+    def __init__(self, system=None, message=None):
         self.logs = []
+        self.system = re.compile(system) if system is not None else None
+        self.message = re.compile(message) if message is not None else None
 
     @property
     def errors(self):
         return [ev for ev in self.logs if ev["isError"]]
 
     def messages(self):
-        return [msg['message'][0] for msg in self.logs if not msg["isError"]]
+        return [" ".join(msg['message']) for msg in self.logs
+                if not msg["isError"]]
+
+    def _keep_log(self, event_dict):
+        if self.system is not None:
+            if not self.system.search(event_dict.get('system', '-')):
+                return False
+        if self.message is not None:
+            log_message = " ".join(event_dict.get('message', []))
+            if not self.message.search(log_message):
+                return False
+        return True
 
     def _gather_logs(self, event_dict):
-        self.logs.append(event_dict)
+        if self._keep_log(event_dict):
+            self.logs.append(event_dict)
 
     def __enter__(self):
         log.theLogPublisher.addObserver(self._gather_logs)
@@ -303,7 +238,7 @@ class MockHttpServer(object):
     @inlineCallbacks
     def start(self):
         root = MockResource(self._handler)
-        site_factory = Site(root)
+        site_factory = LogFilterSite(root)
         self._webserver = yield reactor.listenTCP(0, site_factory)
         self.addr = self._webserver.getHost()
         self.url = "http://%s:%s/" % (self.addr.host, self.addr.port)
@@ -334,8 +269,23 @@ def maybe_async(sync_attr):
     return redecorate
 
 
+class RiakDisabledForTest(object):
+    """Placeholder object for a disabled riak config.
+
+    This class exists to throw a meaningful error when trying to use Riak in
+    a test that disallows it. We can't do this from inside the Riak setup
+    infrastructure, because that would be very invasive for something that
+    only really matters for tests.
+    """
+    def __getattr__(self, name):
+        raise RuntimeError(
+            "Use of Riak has been disabled for this test. Please set "
+            "'use_riak = True' on the test class to enable it.")
+
+
 class PersistenceMixin(object):
     sync_persistence = False
+    use_riak = False
 
     sync_or_async = staticmethod(maybe_async('sync_persistence'))
 
@@ -351,6 +301,8 @@ class PersistenceMixin(object):
                 'bucket_prefix': type(self).__module__,
                 },
             }
+        if not self.use_riak:
+            self._persist_config['riak_manager'] = RiakDisabledForTest()
 
     def mk_config(self, config):
         return dict(self._persist_config, **config)
@@ -366,7 +318,8 @@ class PersistenceMixin(object):
         except (SkipTest, ConnectionRefusedError):
             pass
         try:
-            yield self.get_riak_manager()
+            if self.use_riak:
+                yield self.get_riak_manager()
         except SkipTest:
             pass
 
@@ -405,7 +358,7 @@ class PersistenceMixin(object):
         try:
             from vumi.persist.txriak_manager import TxRiakManager
         except ImportError, e:
-            import_skip(e, 'riakasaurus.riak')
+            import_skip(e, 'riakasaurus', 'riakasaurus.riak')
 
         riak_manager = TxRiakManager.from_config(config)
         self._persist_riak_managers.append(riak_manager)
@@ -449,3 +402,210 @@ class PersistenceMixin(object):
         redis_manager = RedisManager.from_config(config)
         self._persist_redis_managers.append(redis_manager)
         return redis_manager
+
+
+class VumiWorkerTestCase(TestCase):
+    """Base test class for vumi workers.
+
+    This (or a subclass of this) should be the starting point for any test
+    cases that involve vumi workers.
+    """
+    timeout = 5
+
+    transport_name = "sphex"
+    transport_type = None
+
+    MSG_ID_MATCHER = RegexMatcher(r'^[0-9a-fA-F]{32}$')
+
+    def setUp(self):
+        self._workers = []
+        self._amqp = FakeAMQPBroker()
+
+    @inlineCallbacks
+    def tearDown(self):
+        for worker in self._workers:
+            yield worker.stopWorker()
+
+    def rkey(self, name):
+        return "%s.%s" % (self.transport_name, name)
+
+    @inlineCallbacks
+    def get_worker(self, config, cls, start=True):
+        """Create and return an instance of a vumi worker.
+
+        :param config: Config dict.
+        :param cls: The worker class to instantiate.
+        :param start: True to start the worker (default), False otherwise.
+        """
+
+        worker = get_stubbed_worker(cls, config, self._amqp)
+        self._workers.append(worker)
+        if start:
+            yield worker.startWorker()
+        returnValue(worker)
+
+    def mkmsg_ack(self, user_message_id='1', sent_message_id='abc',
+                  transport_metadata=None, transport_name=None):
+        if transport_metadata is None:
+            transport_metadata = {}
+        if transport_name is None:
+            transport_name = self.transport_name
+        return TransportEvent(
+            event_type='ack',
+            user_message_id=user_message_id,
+            sent_message_id=sent_message_id,
+            transport_name=transport_name,
+            transport_metadata=transport_metadata,
+            )
+
+    def mkmsg_nack(self, user_message_id='1', transport_metadata=None,
+                    transport_name=None, nack_reason='unknown'):
+        if transport_metadata is None:
+            transport_metadata = {}
+        if transport_name is None:
+            transport_name = self.transport_name
+        return TransportEvent(
+            event_type='nack',
+            nack_reason=nack_reason,
+            user_message_id=user_message_id,
+            transport_name=transport_name,
+            transport_metadata=transport_metadata,
+            )
+
+    def mkmsg_delivery(self, status='delivered', user_message_id='abc',
+                       transport_metadata=None, transport_name=None):
+        if transport_metadata is None:
+            transport_metadata = {}
+        if transport_name is None:
+            transport_name = self.transport_name
+        return TransportEvent(
+            event_type='delivery_report',
+            transport_name=transport_name,
+            user_message_id=user_message_id,
+            delivery_status=status,
+            to_addr='+41791234567',
+            transport_metadata=transport_metadata,
+            )
+
+    def mkmsg_in(self, content='hello world', message_id='abc',
+                 to_addr='9292', from_addr='+41791234567', group=None,
+                 session_event=None, transport_type=None,
+                 helper_metadata=None, transport_metadata=None,
+                 transport_name=None):
+        if transport_type is None:
+            transport_type = self.transport_type
+        if helper_metadata is None:
+            helper_metadata = {}
+        if transport_metadata is None:
+            transport_metadata = {}
+        if transport_name is None:
+            transport_name = self.transport_name
+        return TransportUserMessage(
+            from_addr=from_addr,
+            to_addr=to_addr,
+            group=group,
+            message_id=message_id,
+            transport_name=transport_name,
+            transport_type=transport_type,
+            transport_metadata=transport_metadata,
+            helper_metadata=helper_metadata,
+            content=content,
+            session_event=session_event,
+            timestamp=datetime.now(),
+            )
+
+    def mkmsg_out(self, content='hello world', message_id='1',
+                  to_addr='+41791234567', from_addr='9292', group=None,
+                  session_event=None, in_reply_to=None,
+                  transport_type=None, transport_metadata=None,
+                  transport_name=None, helper_metadata=None,
+                  ):
+        if transport_type is None:
+            transport_type = self.transport_type
+        if transport_metadata is None:
+            transport_metadata = {}
+        if transport_name is None:
+            transport_name = self.transport_name
+        if helper_metadata is None:
+            helper_metadata = {}
+        params = dict(
+            to_addr=to_addr,
+            from_addr=from_addr,
+            group=group,
+            message_id=message_id,
+            transport_name=transport_name,
+            transport_type=transport_type,
+            transport_metadata=transport_metadata,
+            content=content,
+            session_event=session_event,
+            in_reply_to=in_reply_to,
+            helper_metadata=helper_metadata,
+            )
+        return TransportUserMessage(**params)
+
+    def _make_matcher(self, msg, *id_fields):
+        msg['timestamp'] = UTCNearNow()
+        for field in id_fields:
+            msg[field] = self.MSG_ID_MATCHER
+        return msg
+
+    def _get_dispatched(self, name):
+        return self._amqp.get_messages('vumi', self.rkey(name))
+
+    def _wait_for_dispatched(self, name, amount):
+        return self._amqp.wait_messages('vumi', self.rkey(name), amount)
+
+    def _clear_dispatched(self, name):
+        return self._amqp.clear_messages('vumi', self.rkey(name))
+
+    def get_dispatched_events(self):
+        return self._get_dispatched('event')
+
+    def get_dispatched_inbound(self):
+        return self._get_dispatched('inbound')
+
+    def get_dispatched_outbound(self):
+        return self._get_dispatched('outbound')
+
+    def get_dispatched_failures(self):
+        return self._get_dispatched('failures')
+
+    def wait_for_dispatched_events(self, amount):
+        return self._wait_for_dispatched('event', amount)
+
+    def wait_for_dispatched_inbound(self, amount):
+        return self._wait_for_dispatched('inbound', amount)
+
+    def wait_for_dispatched_outbound(self, amount):
+        return self._wait_for_dispatched('outbound', amount)
+
+    def wait_for_dispatched_failures(self, amount):
+        return self._wait_for_dispatched('failures', amount)
+
+    def clear_dispatched_events(self):
+        return self._clear_dispatched('event')
+
+    def clear_dispatched_inbound(self):
+        return self._clear_dispatched('inbound')
+
+    def clear_dispatched_outbound(self):
+        return self._clear_dispatched('outbound')
+
+    def clear_dispatched_failures(self):
+        return self._clear_dispatched('failures')
+
+    def _dispatch(self, message, rkey, exchange='vumi'):
+        self._amqp.publish_message(exchange, rkey, message)
+        return self._amqp.kick_delivery()
+
+    def dispatch_inbound(self, message):
+        return self._dispatch(message, self.rkey('inbound'))
+
+    def dispatch_outbound(self, message):
+        return self._dispatch(message, self.rkey('outbound'))
+
+    def dispatch_event(self, message):
+        return self._dispatch(message, self.rkey('event'))
+
+    def dispatch_failure(self, message):
+        return self._dispatch(message, self.rkey('failure'))

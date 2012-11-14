@@ -10,7 +10,7 @@ from vumi.demos.decisiontree import (DecisionTreeWorker, TemplatedDecisionTree,
                                      PopulatedDecisionTree,
                                      TraversedDecisionTree)
 from vumi.message import TransportUserMessage
-from vumi.application.tests.test_base import ApplicationTestCase
+from vumi.application.tests.utils import ApplicationTestCase
 
 
 class TemplatedDecisionTreeTestCase(TestCase):

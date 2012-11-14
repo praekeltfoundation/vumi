@@ -239,7 +239,7 @@ class OperaTransport(Transport):
 
         d = self.proxy.callRemote('EAPIGateway.SendSMS',
             xmlrpc_payload)
-        d.addErrback(self.handle_outbound_message_failure)
+        d.addErrback(self.handle_outbound_message_failure, message)
 
         proxy_response = yield d
 
@@ -253,7 +253,8 @@ class OperaTransport(Transport):
                 user_message_id=message['message_id'],
                 sent_message_id=transport_message_id)
 
-    def handle_outbound_message_failure(self, failure):
+    @inlineCallbacks
+    def handle_outbound_message_failure(self, failure, message):
         """
         Decide what to do on certain failure cases.
         """
@@ -262,9 +263,11 @@ class OperaTransport(Transport):
             raise TemporaryFailure(failure)
         elif failure.check(ValueError):
             # If the HTTP protocol returns something other than 200
+            yield self.publish_nack(message['message_id'], str(failure.value))
             raise PermanentFailure(failure)
         else:
             # Unspecified
+            yield self.publish_nack(message['message_id'], str(failure.value))
             raise failure
 
     @inlineCallbacks

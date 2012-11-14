@@ -1,7 +1,7 @@
 """Tests for vumi.persist.model."""
 
 from twisted.trial.unittest import TestCase
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.persist.model import (
     Model, Manager, ModelMigrator, ModelMigrationError)
@@ -101,7 +101,7 @@ class TestModelOnTxRiak(TestCase):
         try:
             from vumi.persist.txriak_manager import TxRiakManager
         except ImportError, e:
-            import_skip(e, 'riakasaurus.riak')
+            import_skip(e, 'riakasaurus', 'riakasaurus.riak')
         self.manager = TxRiakManager.from_config({'bucket_prefix': 'test.'})
         yield self.manager.purge_all()
 
@@ -132,6 +132,13 @@ class TestModelOnTxRiak(TestCase):
         self.assertTrue(callable(t.backlinks.foo))
         self.assertRaises(AttributeError, getattr, t.backlinks, 'bar')
 
+    @inlineCallbacks
+    def assert_mapreduce_results(self, expected_keys, mr_func, *args, **kw):
+        keys = yield mr_func(*args, **kw).get_keys()
+        count = yield mr_func(*args, **kw).get_count()
+        self.assertEqual(expected_keys, sorted(keys))
+        self.assertEqual(len(expected_keys), count)
+
     @Manager.calls_manager
     def test_simple_search(self):
         simple_model = self.manager.proxy(SimpleModel)
@@ -140,16 +147,10 @@ class TestModelOnTxRiak(TestCase):
         yield simple_model("two", a=2, b=u'def').save()
         yield simple_model("three", a=2, b=u'ghi').save()
 
-        [s1] = yield simple_model.search(a=1)
-        self.assertEqual(s1.key, "one")
-        self.assertEqual(s1.a, 1)
-        self.assertEqual(s1.b, u'abc')
-
-        [s2] = yield simple_model.search(a=2, b='def')
-        self.assertEqual(s2.key, "two")
-
-        keys = yield simple_model.search(a=2, return_keys=True)
-        self.assertEqual(sorted(keys), ["three", "two"])
+        search = simple_model.search
+        yield self.assert_mapreduce_results(["one"], search, a=1)
+        yield self.assert_mapreduce_results(["two"], search, a=2, b='def')
+        yield self.assert_mapreduce_results(["three", "two"], search, a=2)
 
     @Manager.calls_manager
     def test_simple_search_escaping(self):
@@ -158,34 +159,38 @@ class TestModelOnTxRiak(TestCase):
         yield simple_model.enable_search()
         yield simple_model("one", a=1, b=u'a\'bc').save()
 
-        search = lambda **q: simple_model.search(return_keys=True, **q)
-        self.assertEqual((yield search(b=" OR a:1")), [])
-        self.assertEqual((yield search(b="b' OR a:1 '")), [])
-        self.assertEqual((yield search(b="a\'bc")), ["one"])
+        search = simple_model.search
+        yield self.assert_mapreduce_results([], search, b=" OR a:1")
+        yield self.assert_mapreduce_results([], search, b="b' OR a:1 '")
+        yield self.assert_mapreduce_results(["one"], search, b="a\'bc")
 
     @Manager.calls_manager
-    def test_simple_riak_search(self):
+    def test_simple_raw_search(self):
         simple_model = self.manager.proxy(SimpleModel)
         yield simple_model.enable_search()
         yield simple_model("one", a=1, b=u'abc').save()
         yield simple_model("two", a=2, b=u'def').save()
         yield simple_model("three", a=2, b=u'ghi').save()
 
-        [s1] = yield simple_model.riak_search('a:1')
-        self.assertEqual(s1.key, "one")
-        self.assertEqual(s1.a, 1)
-        self.assertEqual(s1.b, u'abc')
+        search = simple_model.raw_search
+        yield self.assert_mapreduce_results(["one"], search, 'a:1')
+        yield self.assert_mapreduce_results(["two"], search, 'a:2 AND b:def')
+        yield self.assert_mapreduce_results(
+            ["one", "two"], search, 'b:abc OR b:def')
+        yield self.assert_mapreduce_results(["three", "two"], search, 'a:2')
 
-        [s2] = yield simple_model.riak_search('a:2 AND b:def')
-        self.assertEqual(s2.key, "two")
+    @Manager.calls_manager
+    def test_load_all_bunches(self):
+        simple_model = self.manager.proxy(SimpleModel)
+        yield simple_model("one", a=1, b=u'abc').save()
+        yield simple_model("two", a=2, b=u'def').save()
+        yield simple_model("three", a=2, b=u'ghi').save()
 
-        [s1, s2] = sorted((yield simple_model.riak_search('b:abc OR b:def')),
-                          key=lambda s: s.key)
-        self.assertEqual(s1.key, "one")
-        self.assertEqual(s2.key, "two")
-
-        keys = yield simple_model.riak_search('a:2', return_keys=True)
-        self.assertEqual(sorted(keys), ["three", "two"])
+        objs_iter = simple_model.load_all_bunches(['one', 'two', 'bad'])
+        objs = []
+        for obj_bunch in objs_iter:
+            objs.extend((yield obj_bunch))
+        self.assertEqual(["one", "two"], sorted(obj.key for obj in objs))
 
     @Manager.calls_manager
     def test_simple_instance(self):
@@ -216,26 +221,40 @@ class TestModelOnTxRiak(TestCase):
         self.assertEqual(s, None)
 
     @Manager.calls_manager
-    def test_by_index(self):
+    def test_index_lookup(self):
         indexed_model = self.manager.proxy(IndexedModel)
         yield indexed_model("foo1", a=1, b=u"one").save()
-        yield indexed_model("foo2", a=2, b=u"two").save()
+        yield indexed_model("foo2", a=2, b=u"one").save()
+        yield indexed_model("foo3", a=2, b=None).save()
 
-        [key] = yield indexed_model.by_index(a=1, return_keys=True)
-        self.assertEqual(key, "foo1")
-
-        [obj] = yield indexed_model.by_index(b="two")
-        self.assertEqual(obj.key, "foo2")
-        self.assertEqual(obj.b, "two")
+        lookup = indexed_model.index_lookup
+        yield self.assert_mapreduce_results(["foo1"], lookup, 'a', 1)
+        yield self.assert_mapreduce_results(
+            ["foo1", "foo2"], lookup, 'b', u"one")
+        yield self.assert_mapreduce_results(["foo3"], lookup, 'b', None)
 
     @Manager.calls_manager
-    def test_by_index_null(self):
+    def test_index_match(self):
         indexed_model = self.manager.proxy(IndexedModel)
         yield indexed_model("foo1", a=1, b=u"one").save()
-        yield indexed_model("foo2", a=2, b=None).save()
+        yield indexed_model("foo2", a=2, b=u"one").save()
+        yield indexed_model("foo3", a=2, b=None).save()
 
-        [key] = yield indexed_model.by_index(b=None, return_keys=True)
-        self.assertEqual(key, "foo2")
+        match = indexed_model.index_match
+        yield self.assert_mapreduce_results(["foo1"], match,
+            [{'key': 'b', 'pattern': 'one', 'flags': 'i'}], 'a', 1)
+        yield self.assert_mapreduce_results(["foo1", "foo2"], match,
+            [{'key': 'b', 'pattern': 'one', 'flags': 'i'}], 'b', u"one")
+        yield self.assert_mapreduce_results(["foo3"], match,
+            [{'key': 'a', 'pattern': '2', 'flags': 'i'}], 'b', None)
+        # test with non-existent key
+        yield self.assert_mapreduce_results([], match,
+            [{'key': 'foo', 'pattern': 'one', 'flags': 'i'}], 'a', 1)
+        # test case sensitivity
+        yield self.assert_mapreduce_results(['foo1'], match,
+            [{'key': 'b', 'pattern': 'ONE', 'flags': 'i'}], 'a', 1)
+        yield self.assert_mapreduce_results([], match,
+            [{'key': 'b', 'pattern': 'ONE', 'flags': ''}], 'a', 1)
 
     @Manager.calls_manager
     def test_vumimessage_field(self):
@@ -404,9 +423,14 @@ class TestModelOnTxRiak(TestCase):
 
         s2 = yield simple_model.load("foo")
         results = yield s2.backlinks.foreignkeymodels()
-        self.assertEqual(sorted(s.key for s in results), ["bar1", "bar2"])
-        self.assertEqual([s.__class__ for s in results],
-                         [ForeignKeyModel] * 2)
+        self.assertEqual(sorted(results), ["bar1", "bar2"])
+
+    @Manager.calls_manager
+    def load_all_bunches_flat(self, m2m_field):
+        results = []
+        for result_bunch in m2m_field.load_all_bunches():
+            results.extend((yield result_bunch))
+        returnValue(results)
 
     @Manager.calls_manager
     def test_manytomany_field(self):
@@ -420,22 +444,22 @@ class TestModelOnTxRiak(TestCase):
         yield m1.save()
 
         m2 = yield mm_model.load("bar")
-        [s2] = yield m2.simples.get_all()
+        [s2] = yield self.load_all_bunches_flat(m2.simples)
 
         self.assertEqual(m2.simples.keys(), ["foo"])
         self.assertEqual(s2.a, 5)
         self.assertEqual(s2.b, u"3")
 
         m2.simples.remove(s2)
-        simples = yield m2.simples.get_all()
+        simples = yield self.load_all_bunches_flat(m2.simples)
         self.assertEqual(simples, [])
 
         m2.simples.add_key("foo")
-        [s4] = yield m2.simples.get_all()
+        [s4] = yield self.load_all_bunches_flat(m2.simples)
         self.assertEqual(s4.key, "foo")
 
         m2.simples.remove_key("foo")
-        simples = yield m2.simples.get_all()
+        simples = yield self.load_all_bunches_flat(m2.simples)
         self.assertEqual(simples, [])
 
         self.assertRaises(ValidationError, m2.simples.add, object())
@@ -447,7 +471,7 @@ class TestModelOnTxRiak(TestCase):
         m2.simples.add(t2)
         yield t1.save()
         yield t2.save()
-        simples = yield m2.simples.get_all()
+        simples = yield self.load_all_bunches_flat(m2.simples)
         simples.sort(key=lambda s: s.key)
         self.assertEqual([s.key for s in simples], ["bar1", "bar2"])
         self.assertEqual(simples[0].a, 3)
@@ -455,8 +479,7 @@ class TestModelOnTxRiak(TestCase):
 
         m2.simples.clear()
         m2.simples.add_key("unknown")
-        [s5] = yield m2.simples.get_all()
-        self.assertEqual(s5, None)
+        self.assertEqual([], (yield self.load_all_bunches_flat(m2.simples)))
 
     @Manager.calls_manager
     def test_reverse_manytomany_fields(self):
@@ -476,13 +499,11 @@ class TestModelOnTxRiak(TestCase):
 
         s1 = yield simple_model.load("foo1")
         results = yield s1.backlinks.manytomanymodels()
-        self.assertEqual(sorted(s.key for s in results), ["bar1", "bar2"])
-        self.assertEqual([s.__class__ for s in results],
-                         [ManyToManyModel] * 2)
+        self.assertEqual(sorted(results), ["bar1", "bar2"])
 
         s2 = yield simple_model.load("foo2")
         results = yield s2.backlinks.manytomanymodels()
-        self.assertEqual(sorted(s.key for s in results), ["bar1"])
+        self.assertEqual(sorted(results), ["bar1"])
 
     @Manager.calls_manager
     def test_inherited_model(self):

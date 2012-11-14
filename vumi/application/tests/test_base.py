@@ -1,13 +1,10 @@
-from datetime import datetime
-
-from twisted.trial.unittest import TestCase
-from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.defer import inlineCallbacks
 
 from vumi.errors import ConfigError
 from vumi.application.base import ApplicationWorker, SESSION_NEW, SESSION_CLOSE
 from vumi.message import TransportUserMessage, TransportEvent
-from vumi.tests.fake_amqp import FakeAMQPBroker
-from vumi.tests.utils import get_stubbed_worker, PersistenceMixin
+from vumi.tests.utils import get_stubbed_worker
+from vumi.application.tests.utils import ApplicationTestCase
 
 
 class DummyApplicationWorker(ApplicationWorker):
@@ -23,6 +20,9 @@ class DummyApplicationWorker(ApplicationWorker):
 
     def consume_ack(self, event):
         self.record.append(('ack', event))
+
+    def consume_nack(self, event):
+        self.record.append(('nack', event))
 
     def consume_delivery_report(self, event):
         self.record.append(('delivery_report', event))
@@ -47,10 +47,13 @@ class FakeUserMessage(TransportUserMessage):
         super(FakeUserMessage, self).__init__(**kw)
 
 
-class TestApplicationWorker(TestCase):
+class TestApplicationWorker(ApplicationTestCase):
+
+    application_class = DummyApplicationWorker
 
     @inlineCallbacks
     def setUp(self):
+        yield super(TestApplicationWorker, self).setUp()
         self.transport_name = 'test'
         self.config = {
             'transport_name': self.transport_name,
@@ -63,28 +66,7 @@ class TestApplicationWorker(TestCase):
                     },
                 },
             }
-        self.worker = get_stubbed_worker(DummyApplicationWorker,
-                                         config=self.config)
-        self.broker = self.worker._amqp_client.broker
-        yield self.worker.startWorker()
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield self.worker.stopWorker()
-
-    @inlineCallbacks
-    def send(self, msg, routing_suffix='inbound'):
-        routing_key = "%s.%s" % (self.transport_name, routing_suffix)
-        self.broker.publish_message("vumi", routing_key, msg)
-        yield self.broker.kick_delivery()
-
-    @inlineCallbacks
-    def send_event(self, event):
-        yield self.send(event, 'event')
-
-    def recv(self, routing_suffix='outbound'):
-        routing_key = "%s.%s" % (self.transport_name, routing_suffix)
-        return self.broker.get_messages("vumi", routing_key)
+        self.worker = yield self.get_application(self.config)
 
     def assert_msgs_match(self, msgs, expected_msgs):
         for key in ['timestamp', 'message_id']:
@@ -99,15 +81,14 @@ class TestApplicationWorker(TestCase):
     @inlineCallbacks
     def test_event_dispatch(self):
         events = [
-            ('ack', TransportEvent(event_type='ack',
-                                   sent_message_id='remote-id',
+            ('ack', self.mkmsg_ack(sent_message_id='remote-id',
                                    user_message_id='ack-uuid')),
-            ('delivery_report', TransportEvent(event_type='delivery_report',
-                                               delivery_status='pending',
-                                               user_message_id='dr-uuid')),
+            ('nack', self.mkmsg_nack(user_message_id='nack-uuid')),
+            ('delivery_report', self.mkmsg_delivery(
+                                        user_message_id='dr-uuid')),
             ]
         for name, event in events:
-            yield self.send_event(event)
+            yield self.dispatch_event(event)
             self.assertEqual(self.worker.record, [(name, event)])
             del self.worker.record[:]
 
@@ -118,7 +99,7 @@ class TestApplicationWorker(TestCase):
         bad_event = TransportEvent(event_type='ack',
                                    sent_message_id='remote-id',
                                    user_message_id='bad-uuid')
-        yield self.send_event(bad_event)
+        yield self.dispatch_event(bad_event)
         self.assertEqual(self.worker.record, [('unknown_event', bad_event)])
 
     @inlineCallbacks
@@ -129,7 +110,7 @@ class TestApplicationWorker(TestCase):
             ('close_session', FakeUserMessage(session_event=SESSION_CLOSE)),
             ]
         for name, message in messages:
-            yield self.send(message)
+            yield self.dispatch(message)
             self.assertEqual(self.worker.record, [(name, message)])
             del self.worker.record[:]
 
@@ -138,7 +119,7 @@ class TestApplicationWorker(TestCase):
         msg = FakeUserMessage()
         yield self.worker.reply_to(msg, "More!")
         yield self.worker.reply_to(msg, "End!", False)
-        replies = self.recv()
+        replies = self.get_dispatched_messages()
         expecteds = [msg.reply("More!"), msg.reply("End!", False)]
         self.assert_msgs_match(replies, expecteds)
 
@@ -146,14 +127,14 @@ class TestApplicationWorker(TestCase):
     def test_reply_to_group(self):
         msg = FakeUserMessage()
         yield self.worker.reply_to_group(msg, "Group!")
-        replies = self.recv()
+        replies = self.get_dispatched_messages()
         expecteds = [msg.reply_group("Group!")]
         self.assert_msgs_match(replies, expecteds)
 
     @inlineCallbacks
     def test_send_to(self):
         sent_msg = yield self.worker.send_to('+12345', "Hi!")
-        sends = self.recv()
+        sends = self.get_dispatched_messages()
         expecteds = [TransportUserMessage.send('+12345', "Hi!",
                 transport_name='default_transport')]
         self.assert_msgs_match(sends, expecteds)
@@ -163,7 +144,7 @@ class TestApplicationWorker(TestCase):
     def test_send_to_with_options(self):
         sent_msg = yield self.worker.send_to('+12345', "Hi!",
                 transport_type=TransportUserMessage.TT_USSD)
-        sends = self.recv()
+        sends = self.get_dispatched_messages()
         expecteds = [TransportUserMessage.send('+12345', "Hi!",
                 transport_type=TransportUserMessage.TT_USSD,
                 transport_name='default_transport')]
@@ -174,7 +155,7 @@ class TestApplicationWorker(TestCase):
     def test_send_to_with_tag(self):
         sent_msg = yield self.worker.send_to('+12345', "Hi!", "outbound1",
                 transport_type=TransportUserMessage.TT_USSD)
-        sends = self.recv()
+        sends = self.get_dispatched_messages()
         expecteds = [TransportUserMessage.send('+12345', "Hi!",
                 transport_type=TransportUserMessage.TT_USSD,
                 transport_name='outbound1_transport')]
@@ -213,165 +194,13 @@ class TestApplicationWorker(TestCase):
     def test_subclassing_api(self):
         worker = get_stubbed_worker(ApplicationWorker,
                                     {'transport_name': 'test'})
-        ack = TransportEvent(event_type='ack',
-                             sent_message_id='remote-id',
-                             user_message_id='ack-uuid')
-        dr = TransportEvent(event_type='delivery_report',
-                            delivery_status='pending',
-                            user_message_id='dr-uuid')
-        worker.consume_ack(ack)
-        worker.consume_delivery_report(dr)
+        worker.consume_ack(self.mkmsg_ack())
+        worker.consume_nack(self.mkmsg_nack())
+        worker.consume_delivery_report(self.mkmsg_delivery())
         worker.consume_unknown_event(FakeUserMessage())
         worker.consume_user_message(FakeUserMessage())
         worker.new_session(FakeUserMessage())
         worker.close_session(FakeUserMessage())
-
-
-class ApplicationTestCase(TestCase, PersistenceMixin):
-
-    """
-    This is a base class for testing application workers.
-
-    """
-
-    # base timeout of 5s for all application tests
-    timeout = 5
-
-    transport_name = "sphex"
-    transport_type = None
-    application_class = None
-
-    def setUp(self):
-        self._workers = []
-        self._amqp = FakeAMQPBroker()
-        self._persist_setUp()
-
-    @inlineCallbacks
-    def tearDown(self):
-        for worker in self._workers:
-            yield worker.stopWorker()
-        yield self._persist_tearDown()
-
-    def rkey(self, name):
-        return "%s.%s" % (self.transport_name, name)
-
-    @inlineCallbacks
-    def get_application(self, config, cls=None, start=True):
-        """
-        Get an instance of a worker class.
-
-        :param config: Config dict.
-        :param cls: The Application class to instantiate.
-                    Defaults to :attr:`application_class`
-        :param start: True to start the application (default), False otherwise.
-
-        Some default config values are helpfully provided in the
-        interests of reducing boilerplate:
-
-        * ``transport_name`` defaults to :attr:`self.transport_name`
-        * ``send_to`` defaults to a dictionary with config for each tag
-          defined in worker's SEND_TO_TAGS attribute. Each tag's config
-          contains a transport_name set to ``<tag>_outbound``.
-        """
-
-        if cls is None:
-            cls = self.application_class
-        config = self.mk_config(config)
-        config.setdefault('transport_name', self.transport_name)
-        if 'send_to' not in config and cls.SEND_TO_TAGS:
-            config['send_to'] = {}
-            for tag in cls.SEND_TO_TAGS:
-                config['send_to'][tag] = {
-                    'transport_name': '%s_outbound' % tag}
-        worker = get_stubbed_worker(cls, config, self._amqp)
-        self._workers.append(worker)
-        if start:
-            yield worker.startWorker()
-        returnValue(worker)
-
-    def mkmsg_in(self, content='hello world', message_id='abc',
-                 to_addr='9292', from_addr='+41791234567', group=None,
-                 session_event=None, transport_type=None,
-                 helper_metadata=None, transport_metadata=None):
-        if transport_type is None:
-            transport_type = self.transport_type
-        if helper_metadata is None:
-            helper_metadata = {}
-        if transport_metadata is None:
-            transport_metadata = {}
-        return TransportUserMessage(
-            from_addr=from_addr,
-            to_addr=to_addr,
-            group=group,
-            message_id=message_id,
-            transport_name=self.transport_name,
-            transport_type=transport_type,
-            transport_metadata=transport_metadata,
-            helper_metadata=helper_metadata,
-            content=content,
-            session_event=session_event,
-            timestamp=datetime.now(),
-            )
-
-    def mkmsg_out(self, content='hello world', message_id='1',
-                  to_addr='+41791234567', from_addr='9292', group=None,
-                  session_event=None, in_reply_to=None,
-                  transport_type=None, transport_metadata=None,
-                  ):
-        if transport_type is None:
-            transport_type = self.transport_type
-        if transport_metadata is None:
-            transport_metadata = {}
-        params = dict(
-            to_addr=to_addr,
-            from_addr=from_addr,
-            group=group,
-            message_id=message_id,
-            transport_name=self.transport_name,
-            transport_type=transport_type,
-            transport_metadata=transport_metadata,
-            content=content,
-            session_event=session_event,
-            in_reply_to=in_reply_to,
-            )
-        return TransportUserMessage(**params)
-
-    def mkmsg_ack(self, user_message_id='1', sent_message_id='abc',
-                  transport_metadata=None):
-        if transport_metadata is None:
-            transport_metadata = {}
-        return TransportEvent(
-            event_type='ack',
-            user_message_id=user_message_id,
-            sent_message_id=sent_message_id,
-            transport_name=self.transport_name,
-            transport_metadata=transport_metadata,
-            )
-
-    def mkmsg_delivery(self, status='delivered', user_message_id='abc',
-                       transport_metadata=None):
-        if transport_metadata is None:
-            transport_metadata = {}
-        return TransportEvent(
-            event_type='delivery_report',
-            transport_name=self.transport_name,
-            user_message_id=user_message_id,
-            delivery_status=status,
-            to_addr='+41791234567',
-            transport_metadata=transport_metadata,
-            )
-
-    def get_dispatched_messages(self):
-        return self._amqp.get_messages('vumi', self.rkey('outbound'))
-
-    def wait_for_dispatched_messages(self, amount):
-        return self._amqp.wait_messages('vumi', self.rkey('outbound'), amount)
-
-    def dispatch(self, message, rkey=None, exchange='vumi'):
-        if rkey is None:
-            rkey = self.rkey('inbound')
-        self._amqp.publish_message(exchange, rkey, message)
-        return self._amqp.kick_delivery()
 
 
 class TestApplicationMiddlewareHooks(ApplicationTestCase):

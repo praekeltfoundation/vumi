@@ -12,6 +12,7 @@ from twisted.plugin import IPlugin
 from vumi.service import WorkerCreator
 from vumi.utils import load_class_by_string
 from vumi.errors import VumiError
+from vumi.sentry import SentryLoggerService
 
 
 def overlay_configs(*configs):
@@ -49,6 +50,7 @@ class VumiOptions(usage.Options):
         ["password", None, None, "AMQP password (*)"],
         ["vhost", None, None, "AMQP virtual host (*)"],
         ["specfile", None, None, "AMQP spec file (*)"],
+        ["sentry", None, None, "Sentry DSN (*)"],
         ["vumi-config", None, None,
          "YAML config file for setting core vumi options (any command-line"
          " parameter marked with an asterisk)"],
@@ -61,6 +63,7 @@ class VumiOptions(usage.Options):
         "password": "vumi",
         "vhost": "/develop",
         "specfile": "amqp-spec-0-8.xml",
+        "sentry": None,
         }
 
     def get_vumi_options(self):
@@ -168,9 +171,18 @@ class VumiWorkerServiceMaker(object):
     options = StartWorkerOptions
 
     def makeService(self, options):
+        sentry_dsn = options.vumi_options.pop('sentry', None)
+        class_name = options.worker_class.rpartition('.')[2].lower()
+        logger_name = options.worker_config.get('worker_name', class_name)
+
         worker_creator = WorkerCreator(options.vumi_options)
         worker = worker_creator.create_worker(options.worker_class,
                                               options.worker_config)
+
+        if sentry_dsn is not None:
+            sentry_service = SentryLoggerService(sentry_dsn, logger_name)
+            worker.addService(sentry_service)
+
         return worker
 
 

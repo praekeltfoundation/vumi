@@ -142,6 +142,12 @@ class FakeRedis(object):
         return int(new_field)
 
     @maybe_async
+    def hsetnx(self, key, field, value):
+        if self.hexists.sync(self, key, field):
+            return 0
+        return self.hset.sync(self, key, field, value)
+
+    @maybe_async
     def hget(self, key, field):
         value = self._data.get(key, {}).get(field)
         if value is not None:
@@ -195,7 +201,9 @@ class FakeRedis(object):
     @maybe_async
     def sadd(self, key, *values):
         sval = self._data.setdefault(key, set())
+        old_len = len(sval)
         sval.update(map(self._encode, values))
+        return len(sval) - old_len
 
     @maybe_async
     def smembers(self, key):
@@ -277,6 +285,10 @@ class FakeRedis(object):
             return results
         else:
             return [v for v, k in results]
+
+    @maybe_async
+    def zcount(self, key, min, max):
+        return str(len(self.zrangebyscore.sync(self, key, min, max)))
 
     @maybe_async
     def zscore(self, key, value):
@@ -397,10 +409,12 @@ class Zset(object):
         stop += 1  # redis start/stop are element indexes
         if stop == 0:
             stop = None
-        results = [(score_cast_func(k), v) for k, v in self._zval[start:stop]]
-        if desc:
-            results.reverse()
-        return [(v, k) for k, v in results]
+
+        # copy before changing in place
+        zval = self._zval[:]
+        zval.sort(reverse=desc)
+
+        return [(v, score_cast_func(k)) for k, v in zval[start:stop]]
 
     def zrangebyscore(self, min='-inf', max='+inf', start=0, num=None,
         score_cast_func=float):

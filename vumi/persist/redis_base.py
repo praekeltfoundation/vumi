@@ -217,6 +217,7 @@ class Manager(object):
     # Hash operations
 
     hset = RedisCall(['key', 'field', 'value'])
+    hsetnx = RedisCall(['key', 'field', 'value'])
     hget = RedisCall(['key', 'field'])
     hdel = RedisCall(['key'], vararg='fields')
     hmset = RedisCall(['key', 'mapping'])
@@ -247,6 +248,7 @@ class Manager(object):
     zrangebyscore = RedisCall(['key', 'min', 'max', 'start', 'num',
         'withscores'], defaults=['-inf', '+inf', None, None, False])
     zscore = RedisCall(['key', 'value'])
+    zcount = RedisCall(['key', 'min', 'max'])
 
     # List operations
 

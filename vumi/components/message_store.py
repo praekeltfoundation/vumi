@@ -11,6 +11,8 @@ from vumi.message import TransportEvent, TransportUserMessage
 from vumi.persist.model import Model, Manager
 from vumi.persist.fields import (VumiMessage, ForeignKey, ListOf, Tag, Dynamic,
                                  Unicode)
+from vumi import log
+from vumi.components.message_store_cache import MessageStoreCache
 
 
 class Batch(Model):
@@ -91,8 +93,70 @@ class MessageStore(object):
         self.events = manager.proxy(Event)
         self.inbound_messages = manager.proxy(InboundMessage)
         self.current_tags = manager.proxy(CurrentTag)
-        # for batch status cache
-        self.redis = redis
+        self.cache = MessageStoreCache(redis)
+
+    @Manager.calls_manager
+    def needs_reconciliation(self, batch_id, delta=0.01):
+        """
+        Check if a batch_id's cache values need to be reconciled with
+        what's stored in the MessageStore.
+
+        :param float delta:
+            What an acceptable delta is for the cached values. Defaults to 0.01
+            If the cached values are off by the delta then this returns True.
+        """
+        inbound = float((yield self.batch_inbound_count(batch_id)))
+        cached_inbound = yield self.cache.count_inbound_message_keys(
+            batch_id)
+
+        if inbound and (abs(cached_inbound - inbound) / inbound) > delta:
+            returnValue(True)
+
+        outbound = float((yield self.batch_outbound_count(batch_id)))
+        cached_outbound = yield self.cache.count_outbound_message_keys(
+            batch_id)
+
+        if outbound and (abs(cached_outbound - outbound) / outbound) > delta:
+            returnValue(True)
+
+        returnValue(False)
+
+    @Manager.calls_manager
+    def reconcile_cache(self, batch_id):
+        yield self.cache.clear_batch(batch_id)
+        yield self.cache.batch_start(batch_id)
+        yield self.reconcile_inbound_cache(batch_id)
+        yield self.reconcile_outbound_cache(batch_id)
+
+    @Manager.calls_manager
+    def reconcile_inbound_cache(self, batch_id):
+        # FIXME: We're loading messages one at a time here, which is stupid.
+        inbound_keys = yield self.batch_inbound_keys(batch_id)
+        for key in inbound_keys:
+            try:
+                msg = yield self.get_inbound_message(key)
+                yield self.cache.add_inbound_message(batch_id, msg)
+            except Exception:
+                log.err('Unable to load inbound msg %s during recon of %s' % (
+                    key, batch_id))
+
+    @Manager.calls_manager
+    def reconcile_outbound_cache(self, batch_id):
+        # FIXME: We're loading messages one at a time here, which is stupid.
+        outbound_keys = yield self.batch_outbound_keys(batch_id)
+        for key in outbound_keys:
+            try:
+                msg = yield self.get_outbound_message(key)
+                yield self.cache.add_outbound_message(batch_id, msg)
+            except Exception:
+                log.err('Unable to load outbound msg %s during recon of %s' % (
+                    key, batch_id))
+
+    @Manager.calls_manager
+    def reconcile_event_cache(self, batch_id, message_id):
+        events = yield self.message_events(message_id)
+        for event in events:
+            yield self.cache.add_event(batch_id, event)
 
     @Manager.calls_manager
     def batch_start(self, tags, **metadata):
@@ -110,16 +174,17 @@ class MessageStore(object):
             tag_record.current_batch.set(batch)
             yield tag_record.save()
 
-        yield self._init_status(batch_id)
+        yield self.cache.batch_start(batch_id)
         returnValue(batch_id)
 
     @Manager.calls_manager
     def batch_done(self, batch_id):
         batch = yield self.batches.load(batch_id)
-        tags = yield batch.backlinks.currenttags()
-        for tag in tags:
-            tag.current_batch.set(None)
-            yield tag.save()
+        tag_keys = yield batch.backlinks.currenttags()
+        for tags_bunch in self.manager.load_all_bunches(CurrentTag, tag_keys):
+            for tag in (yield tags_bunch):
+                tag.current_batch.set(None)
+                yield tag.save()
 
     @Manager.calls_manager
     def add_outbound_message(self, msg, tag=None, batch_id=None):
@@ -133,7 +198,7 @@ class MessageStore(object):
 
         if batch_id is not None:
             msg_record.batch.key = batch_id
-            yield self._inc_status(batch_id, 'sent')
+            yield self.cache.add_outbound_message(batch_id, msg)
 
         yield msg_record.save()
 
@@ -153,12 +218,7 @@ class MessageStore(object):
         if msg_record is not None:
             batch_id = msg_record.batch.key
             if batch_id is not None:
-                event_type = event['event_type']
-                yield self._inc_status(batch_id, event_type)
-                if event_type == 'delivery_report':
-                    yield self._inc_status(
-                        batch_id, '%s.%s' % (event_type,
-                                             event['delivery_status']))
+                yield self.cache.add_event(batch_id, event)
 
     @Manager.calls_manager
     def get_event(self, event_id):
@@ -177,6 +237,7 @@ class MessageStore(object):
 
         if batch_id is not None:
             msg_record.batch.key = batch_id
+            self.cache.add_inbound_message(batch_id, msg)
 
         yield msg_record.save()
 
@@ -195,49 +256,32 @@ class MessageStore(object):
         return tagmdl
 
     def batch_status(self, batch_id):
-        return self._get_status(batch_id)
+        return self.cache.get_event_status(batch_id)
 
-    @Manager.calls_manager
-    def batch_messages(self, batch_id):
-        batch = yield self.batches.load(batch_id)
-        messages = yield batch.backlinks.outboundmessages()
-        returnValue([m.msg for m in messages])
+    def batch_outbound_keys(self, batch_id):
+        mr = self.manager.mr_from_field(OutboundMessage, 'batch', batch_id)
+        return mr.get_keys()
 
-    @Manager.calls_manager
-    def batch_replies(self, batch_id):
-        batch = yield self.batches.load(batch_id)
-        messages = yield batch.backlinks.inboundmessages()
-        returnValue([m.msg for m in messages])
+    def batch_outbound_keys_matching(self, batch_id, query):
+        mr = self.outbound_messages.index_match(query, 'batch', batch_id)
+        return mr.get_keys()
 
-    @Manager.calls_manager
-    def message_events(self, msg_id):
-        message = yield self.outbound_messages.load(msg_id)
-        events = yield message.backlinks.events()
-        returnValue([e.event for e in events])
+    def batch_inbound_keys(self, batch_id):
+        mr = self.manager.mr_from_field(InboundMessage, 'batch', batch_id)
+        return mr.get_keys()
 
-    # batch status is stored in Redis as a cache of batch progress
+    def batch_inbound_keys_matching(self, batch_id, query):
+        mr = self.inbound_messages.index_match(query, 'batch', batch_id)
+        return mr.get_keys()
 
-    def _batch_key(self, batch_id):
-        return ":".join(["batches", "status", batch_id])
+    def message_event_keys(self, msg_id):
+        mr = self.manager.mr_from_field(Event, 'message', msg_id)
+        return mr.get_keys()
 
-    @Manager.calls_manager
-    def _init_status(self, batch_id):
-        batch_key = self._batch_key(batch_id)
-        events = (TransportEvent.EVENT_TYPES.keys() +
-                  ['delivery_report.%s' % status
-                   for status in TransportEvent.DELIVERY_STATUSES] +
-                  ['sent'])
-        initial_status = dict((event, '0') for event in events)
-        yield self.redis.hmset(batch_key, initial_status)
+    def batch_inbound_count(self, batch_id):
+        return self.inbound_messages.index_lookup(
+            'batch', batch_id).get_count()
 
-    @Manager.calls_manager
-    def _inc_status(self, batch_id, event):
-        batch_key = self._batch_key(batch_id)
-        yield self.redis.hincrby(batch_key, event, 1)
-
-    @Manager.calls_manager
-    def _get_status(self, batch_id):
-        batch_key = self._batch_key(batch_id)
-        raw_statuses = yield self.redis.hgetall(batch_key)
-        statuses = dict((k, int(v)) for k, v in raw_statuses.items())
-        returnValue(statuses)
+    def batch_outbound_count(self, batch_id):
+        return self.outbound_messages.index_lookup(
+            'batch', batch_id).get_count()

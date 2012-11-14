@@ -11,7 +11,7 @@ from twisted.internet.error import ProcessTerminated
 from twisted.trial.unittest import TestCase, SkipTest
 
 from vumi.message import TransportUserMessage, TransportEvent
-from vumi.application.tests.test_base import ApplicationTestCase
+from vumi.application.tests.utils import ApplicationTestCase
 from vumi.application.sandbox import (Sandbox, SandboxCommand, SandboxError,
                                       RedisResource, OutboundResource,
                                       JsSandboxResource, LoggingResource)
@@ -35,10 +35,27 @@ class SandboxTestCaseBase(ApplicationTestCase):
             config.update(extra_config)
         return self.get_application(config)
 
-    def mk_event(self, **kw):
+    def mk_ack(self, **kw):
         msg_kw = {
             'event_type': 'ack', 'user_message_id': '1',
             'sent_message_id': '1', 'sandbox_id': 'sandbox1',
+        }
+        msg_kw.update(kw)
+        return TransportEvent(**msg_kw)
+
+    def mk_nack(self, **kw):
+        msg_kw = {
+            'event_type': 'nack', 'user_message_id': '1',
+            'sandbox_id': 'sandbox1', 'nack_reason': 'unknown',
+        }
+        msg_kw.update(kw)
+        return TransportEvent(**msg_kw)
+
+    def mk_delivery_report(self, **kw):
+        msg_kw = {
+            'event_type': 'delivery_report', 'user_message_id': '1',
+            'sent_message_id': '1', 'sandbox_id': 'sandbox1',
+            'delivery_status': 'delivered',
         }
         msg_kw.update(kw)
         return TransportEvent(**msg_kw)
@@ -68,7 +85,7 @@ class SandboxTestCase(SandboxTestCaseBase):
             "sys.stdout.flush()\n"
             "time.sleep(5)\n"
         )
-        status = yield app.process_event_in_sandbox(self.mk_event())
+        status = yield app.process_event_in_sandbox(self.mk_ack())
         [sandbox_err] = self.flushLoggedErrors(SandboxError)
         self.assertEqual(str(sandbox_err.value).split(' [')[0],
                          "Resource fallback: unknown command 'unknown'"
@@ -83,7 +100,7 @@ class SandboxTestCase(SandboxTestCaseBase):
             "import sys\n"
             "sys.stderr.write('err\\n')\n"
         )
-        status = yield app.process_event_in_sandbox(self.mk_event())
+        status = yield app.process_event_in_sandbox(self.mk_ack())
         self.assertEqual(status, 0)
         [sandbox_err] = self.flushLoggedErrors(SandboxError)
         self.assertEqual(str(sandbox_err.value).split(' [')[0], "err")
@@ -105,7 +122,7 @@ class SandboxTestCase(SandboxTestCaseBase):
                     },
                 },
             }})
-        status = yield app.process_event_in_sandbox(self.mk_event())
+        status = yield app.process_event_in_sandbox(self.mk_ack())
         self.assertEqual(status, 0)
         self.assertEqual(sorted((yield r_server.keys())),
                          ['count#sandbox1',
@@ -141,13 +158,57 @@ class SandboxTestCase(SandboxTestCaseBase):
             "import sys, time\n"
             "sys.stderr.write(%r)\n"
             "sys.stdout.write('\\n')\n"
+            "sys.stdout.flush()\n"
             "time.sleep(5)\n"
-            % ("a" * (recv_limit - 1) + "\\n"),
+            % ("a" * (recv_limit - 1) + "\n"),
             {'recv_limit': str(recv_limit)})
         status = yield app.process_message_in_sandbox(self.mk_msg())
         self.assertEqual(status, None)
+        [stderr_err] = self.flushLoggedErrors(SandboxError)
         [kill_err] = self.flushLoggedErrors(ProcessTerminated)
         self.assertTrue('process ended by signal' in str(kill_err.value))
+
+    @inlineCallbacks
+    def test_python_path_set(self):
+        app = yield self.setup_app(
+            "import sys, json\n"
+            "path = ':'.join(sys.path)\n"
+            "log = {'cmd': 'log.info', 'cmd_id': '1',\n"
+            "       'reply': False, 'msg': path}\n"
+            "sys.stdout.write(json.dumps(log) + '\\n')\n",
+            {'env': {'PYTHONPATH': '/pp1:/pp2'},
+             'sandbox': {
+                'log': {'cls': 'vumi.application.sandbox.LoggingResource'},
+            }},
+        )
+        with LogCatcher() as lc:
+            status = yield app.process_message_in_sandbox(self.mk_msg())
+            [path_str] = lc.messages()
+        self.assertEqual(status, 0)
+        path = path_str.split(':')
+        self.assertTrue('/pp1' in path)
+        self.assertTrue('/pp2' in path)
+
+    @inlineCallbacks
+    def test_python_path_unset(self):
+        app = yield self.setup_app(
+            "import sys, json\n"
+            "path = ':'.join(sys.path)\n"
+            "log = {'cmd': 'log.info', 'cmd_id': '1',\n"
+            "       'reply': False, 'msg': path}\n"
+            "sys.stdout.write(json.dumps(log) + '\\n')\n",
+            {'env': {},
+             'sandbox': {
+                'log': {'cls': 'vumi.application.sandbox.LoggingResource'},
+            }},
+        )
+        with LogCatcher() as lc:
+            status = yield app.process_message_in_sandbox(self.mk_msg())
+            [path_str] = lc.messages()
+        self.assertEqual(status, 0)
+        path = path_str.split(':')
+        self.assertTrue('/pp1' not in path)
+        self.assertTrue('/pp2' not in path)
 
     @inlineCallbacks
     def echo_check(self, handler_name, msg, expected_cmd):
@@ -180,12 +241,16 @@ class SandboxTestCase(SandboxTestCaseBase):
                                'inbound-message')
 
     def test_consume_ack(self):
-        return self.echo_check('consume_ack', self.mk_event(),
+        return self.echo_check('consume_ack', self.mk_ack(),
+                               'inbound-event')
+
+    def test_consume_nack(self):
+        return self.echo_check('consume_nack', self.mk_nack(),
                                'inbound-event')
 
     def test_consume_delivery_report(self):
-        return self.echo_check('consume_delivery_report', self.mk_event(),
-                               'inbound-event')
+        return self.echo_check('consume_delivery_report',
+            self.mk_delivery_report(), 'inbound-event')
 
 
 class NodeJsSandboxTestCase(SandboxTestCaseBase):
