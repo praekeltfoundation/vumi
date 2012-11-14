@@ -96,12 +96,19 @@ class TruteqTransport(Transport):
         yield ssmi_d
 
     def _setup_ssmi_client(self, ssmi_client, ssmi_d):
+        # TODO: Unpause the message consumer when the SSMI client connects.
+        #       This requires the SSMI client to call this setup method on
+        #       connectionMade (instead of on buildProtocol as it does now)
+        #       and to have another callback for when a connection is lost.
         ssmi_client.app_setup(self.username, self.password,
                               ussd_callback=self.ussd_callback,
                               sms_callback=self.sms_callback,
                               errback=self.ssmi_errback)
         self.ssmi_client = ssmi_client
-        ssmi_d.callback(None)
+        if not ssmi_d.called:
+            # the setup gets called again if
+            # the ssmi_client reconnects
+            ssmi_d.callback(None)
 
     @inlineCallbacks
     def teardown_transport(self):
