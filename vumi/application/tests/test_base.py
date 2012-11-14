@@ -134,7 +134,8 @@ class TestApplicationWorker(ApplicationTestCase):
         yield self.worker.stopWorker()
         self._workers.remove(self.worker)
 
-        # Stick a message on the queue for processing.
+        # Stick a message on the queue before starting the worker so it will be
+        # received as soon as the message consumer starts consuming.
         msg = FakeUserMessage(content="Hello!")
         yield self.dispatch(msg)
 
