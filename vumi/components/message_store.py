@@ -355,3 +355,12 @@ class MessageStore(object):
         if wait:
             yield deferred
         returnValue(token)
+
+    def get_keys_for_token(self, batch_id, token, start=0, stop=-1, asc=False):
+        """
+        Returns the resulting keys of a search.
+
+        :param str token:
+            The token returned by `find_inbound_keys_matching()`
+        """
+        return self.cache.get_query_results(batch_id, token, start, stop, asc)

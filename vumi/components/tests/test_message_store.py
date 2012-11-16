@@ -427,11 +427,11 @@ class TestMessageStoreCache(TestMessageStoreBase):
                 'flags': 'i',
             }], wait=True)
 
-        results = yield self.store.cache.get_query_results(batch_id, token)
+        keys = yield self.store.get_keys_for_token(batch_id, token)
         in_progress = yield self.store.cache.is_query_in_progress(batch_id,
                                                                     token)
-        self.assertEqual(len(results), 10)
-        self.assertEqual(results, [msg['message_id'] for msg in messages])
+        self.assertEqual(len(keys), 10)
+        self.assertEqual(keys, [msg['message_id'] for msg in messages])
         self.assertFalse(in_progress)
 
     @inlineCallbacks
@@ -453,9 +453,9 @@ class TestMessageStoreCache(TestMessageStoreBase):
                 'flags': 'i',
             }], wait=True)
 
-        results = yield self.store.cache.get_query_results(batch_id, token)
+        keys = yield self.store.get_keys_for_token(batch_id, token)
         in_progress = yield self.store.cache.is_query_in_progress(batch_id,
                                                                     token)
-        self.assertEqual(len(results), 10)
-        self.assertEqual(results, [msg['message_id'] for msg in messages])
+        self.assertEqual(len(keys), 10)
+        self.assertEqual(keys, [msg['message_id'] for msg in messages])
         self.assertFalse(in_progress)
