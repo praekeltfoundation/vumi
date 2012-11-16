@@ -8,10 +8,10 @@ from twisted.internet.defer import inlineCallbacks
 from vumi.components.message_store_api import MessageStoreAPI
 from vumi.components.message_store import MessageStore
 from vumi.utils import http_request_full
-from vumi.tests.utils import PersistenceMixin
+from vumi.tests.utils import PersistenceMixin, MessageMakerMixin
 
 
-class MessageStoreAPITestCase(TestCase, PersistenceMixin):
+class MessageStoreAPITestCase(TestCase, MessageMakerMixin, PersistenceMixin):
 
     use_riak = True
 
@@ -22,11 +22,25 @@ class MessageStoreAPITestCase(TestCase, PersistenceMixin):
         self.riak = yield self.get_riak_manager()
         self.redis = yield self.get_redis_manager()
         self.store = MessageStore(self.riak, self.redis)
+        self.tag = ("pool", "tag")
+        self.batch_id = yield self.store.batch_start([self.tag])
 
         factory = server.Site(MessageStoreAPI(self.store))
         self.webserver = yield reactor.listenTCP(0, factory)
         self.addr = self.webserver.getHost()
         self.url = 'http://%s:%s/' % (self.addr.host, self.addr.port)
+
+    @inlineCallbacks
+    def create_inbound(self, batch_id, count, content_template):
+        for i in range(count):
+            msg = self.mkmsg_in(content=content_template.format(i))
+            yield self.add_inbound_message(msg, batch_id=batch_id)
+
+    @inlineCallbacks
+    def create_outbound(self, batch_id, count, content_template):
+        for i in range(count):
+            msg = self.mkmsg_out(content=content_template.format(i))
+            yield self.add_outbound_message(msg, batch_id=batch_id)
 
     @inlineCallbacks
     def tearDown(self):
@@ -51,13 +65,13 @@ class MessageStoreAPITestCase(TestCase, PersistenceMixin):
 
     @inlineCallbacks
     def test_batch_resource(self):
-        response = yield self.do_get('batch/some-batch-id/')
-        self.assertEqual(response.delivered_body, 'some-batch-id')
+        response = yield self.do_get('batch/%s/' % (self.batch_id))
+        self.assertEqual(response.delivered_body, self.batch_id)
         self.assertEqual(response.code, 200)
 
     @inlineCallbacks
     def test_batch_search_resource(self):
-        response = yield self.do_post('batch/some-batch-id/search/', [
+        response = yield self.do_post('batch/%s/search/' % (self.batch_id,), [
             {'key': 'msg.content', 'pattern': '.*', 'flags': ''}])
-        self.assertEqual(response.delivered_body, 'some-batch-id')
+        self.assertEqual(response.delivered_body, self.batch_id)
         self.assertEqual(response.code, 200)

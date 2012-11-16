@@ -404,45 +404,7 @@ class PersistenceMixin(object):
         return redis_manager
 
 
-class VumiWorkerTestCase(TestCase):
-    """Base test class for vumi workers.
-
-    This (or a subclass of this) should be the starting point for any test
-    cases that involve vumi workers.
-    """
-    timeout = 5
-
-    transport_name = "sphex"
-    transport_type = None
-
-    MSG_ID_MATCHER = RegexMatcher(r'^[0-9a-fA-F]{32}$')
-
-    def setUp(self):
-        self._workers = []
-        self._amqp = FakeAMQPBroker()
-
-    @inlineCallbacks
-    def tearDown(self):
-        for worker in self._workers:
-            yield worker.stopWorker()
-
-    def rkey(self, name):
-        return "%s.%s" % (self.transport_name, name)
-
-    @inlineCallbacks
-    def get_worker(self, config, cls, start=True):
-        """Create and return an instance of a vumi worker.
-
-        :param config: Config dict.
-        :param cls: The worker class to instantiate.
-        :param start: True to start the worker (default), False otherwise.
-        """
-
-        worker = get_stubbed_worker(cls, config, self._amqp)
-        self._workers.append(worker)
-        if start:
-            yield worker.startWorker()
-        returnValue(worker)
+class MessageMakerMixin(object):
 
     def mkmsg_ack(self, user_message_id='1', sent_message_id='abc',
                   transport_metadata=None, transport_name=None):
@@ -542,6 +504,46 @@ class VumiWorkerTestCase(TestCase):
             helper_metadata=helper_metadata,
             )
         return TransportUserMessage(**params)
+
+class VumiWorkerTestCase(TestCase, MessageMakerMixin):
+    """Base test class for vumi workers.
+
+    This (or a subclass of this) should be the starting point for any test
+    cases that involve vumi workers.
+    """
+    timeout = 5
+
+    transport_name = "sphex"
+    transport_type = None
+
+    MSG_ID_MATCHER = RegexMatcher(r'^[0-9a-fA-F]{32}$')
+
+    def setUp(self):
+        self._workers = []
+        self._amqp = FakeAMQPBroker()
+
+    @inlineCallbacks
+    def tearDown(self):
+        for worker in self._workers:
+            yield worker.stopWorker()
+
+    def rkey(self, name):
+        return "%s.%s" % (self.transport_name, name)
+
+    @inlineCallbacks
+    def get_worker(self, config, cls, start=True):
+        """Create and return an instance of a vumi worker.
+
+        :param config: Config dict.
+        :param cls: The worker class to instantiate.
+        :param start: True to start the worker (default), False otherwise.
+        """
+
+        worker = get_stubbed_worker(cls, config, self._amqp)
+        self._workers.append(worker)
+        if start:
+            yield worker.startWorker()
+        returnValue(worker)
 
     def _make_matcher(self, msg, *id_fields):
         msg['timestamp'] = UTCNearNow()

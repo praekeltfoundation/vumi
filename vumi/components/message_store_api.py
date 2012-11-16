@@ -10,6 +10,7 @@ class BatchSearchResource(resource.Resource):
         self.batch_id = batch_id
 
     def render_POST(self, request):
+        print request.data
         return self.batch_id
 
     def getChild(self, name, request):
