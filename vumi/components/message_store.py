@@ -2,10 +2,12 @@
 # -*- coding: utf-8 -*-
 
 """Message store."""
+import hashlib
+import json
 
 from uuid import uuid4
 
-from twisted.internet.defer import returnValue
+from twisted.internet.defer import returnValue, inlineCallbacks
 
 from vumi.message import TransportEvent, TransportUserMessage
 from vumi.persist.model import Model, Manager
@@ -72,6 +74,10 @@ class InboundMessage(Model):
     # key is message_id
     msg = VumiMessage(TransportUserMessage)
     batch = ForeignKey(Batch, null=True)
+
+
+class MessageStoreException(Exception):
+    pass
 
 
 class MessageStore(object):
@@ -285,3 +291,69 @@ class MessageStore(object):
     def batch_outbound_count(self, batch_id):
         return self.outbound_messages.index_lookup(
             'batch', batch_id).get_count()
+
+    @inlineCallbacks
+    def find_inbound_keys_matching(self, batch_id, query, ttl=None,
+                                    wait=False):
+        """
+        Has the message search issue a `batch_inbound_keys_matching()`
+        query and stores the resulting keys in the cache ordered by
+        descending timestamp.
+
+        :param str batch_id:
+            The batch to search across
+        :param list query:
+            The list of dictionaries with query information.
+        :param int ttl:
+            How long to store the results for.
+        :param bool wait:
+            Only return the token after the matching, storing & ordering
+            of keys has completed. Useful for testing.
+
+        Returns a token with which the results can be fetched.
+
+        NOTE:   This function can only be called from inside Twisted as
+                it depends on Deferreds being fired that aren't returned
+                by the function itself.
+        """
+        token = yield self.cache.start_query(batch_id, 'inbound', query)
+        deferred = self.batch_inbound_keys_matching(batch_id, query)
+        deferred.addCallback(
+            lambda keys: self.cache.store_query_results(batch_id, token, keys,
+                                                        'inbound', ttl))
+        if wait:
+            yield deferred
+        returnValue(token)
+
+    @inlineCallbacks
+    def find_outbound_keys_matching(self, batch_id, query, ttl=None,
+                                    wait=False):
+        """
+        Has the message search issue a `batch_outbound_keys_matching()`
+        query and stores the resulting keys in the cache ordered by
+        descending timestamp.
+
+        :param str batch_id:
+            The batch to search across
+        :param list query:
+            The list of dictionaries with query information.
+        :param int ttl:
+            How long to store the results for.
+        :param bool wait:
+            Only return the token after the matching, storing & ordering
+            of keys has completed. Useful for testing.
+
+        Returns a token with which the results can be fetched.
+
+        NOTE:   This function can only be called from inside Twisted as
+                it depends on Deferreds being fired that aren't returned
+                by the function itself.
+        """
+        token = yield self.cache.start_query(batch_id, 'outbound', query)
+        deferred = self.batch_outbound_keys_matching(batch_id, query)
+        deferred.addCallback(
+            lambda keys: self.cache.store_query_results(batch_id, token, keys,
+                                                        'outbound', ttl))
+        if wait:
+            yield deferred
+        returnValue(token)

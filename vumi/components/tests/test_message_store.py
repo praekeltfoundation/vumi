@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 """Tests for vumi.components.message_store."""
+from datetime import datetime, timedelta
 
 from twisted.internet.defer import inlineCallbacks, returnValue
 
@@ -406,3 +407,55 @@ class TestMessageStoreCache(TestMessageStoreBase):
         # Stricted possible reconciliation delta should return True
         self.assertFalse((yield self.store.needs_reconciliation(batch_id,
             delta=0)))
+
+    @inlineCallbacks
+    def test_find_inbound_keys_matching(self):
+        batch_id = yield self.store.batch_start([("pool", "tag")])
+
+        # Store via message_store
+        now = datetime.now()
+        messages = []
+        for i in range(10):
+            msg = self.mkmsg_in(message_id=TransportEvent.generate_id())
+            msg['timestamp'] = now - timedelta(i * 10)
+            yield self.store.add_inbound_message(msg, batch_id=batch_id)
+            messages.append(msg)
+
+        token = yield self.store.find_inbound_keys_matching(batch_id, [{
+                'key': 'msg.content',
+                'pattern': '.*',
+                'flags': 'i',
+            }], wait=True)
+
+        results = yield self.store.cache.get_query_results(batch_id, token)
+        in_progress = yield self.store.cache.is_query_in_progress(batch_id,
+                                                                    token)
+        self.assertEqual(len(results), 10)
+        self.assertEqual(results, [msg['message_id'] for msg in messages])
+        self.assertFalse(in_progress)
+
+    @inlineCallbacks
+    def test_find_outbound_keys_matching(self):
+        batch_id = yield self.store.batch_start([("pool", "tag")])
+
+        # Store via message_store
+        now = datetime.now()
+        messages = []
+        for i in range(10):
+            msg = self.mkmsg_out(message_id=TransportEvent.generate_id())
+            msg['timestamp'] = now - timedelta(i * 10)
+            yield self.store.add_outbound_message(msg, batch_id=batch_id)
+            messages.append(msg)
+
+        token = yield self.store.find_outbound_keys_matching(batch_id, [{
+                'key': 'msg.content',
+                'pattern': '.*',
+                'flags': 'i',
+            }], wait=True)
+
+        results = yield self.store.cache.get_query_results(batch_id, token)
+        in_progress = yield self.store.cache.is_query_in_progress(batch_id,
+                                                                    token)
+        self.assertEqual(len(results), 10)
+        self.assertEqual(results, [msg['message_id'] for msg in messages])
+        self.assertFalse(in_progress)
