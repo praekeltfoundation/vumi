@@ -8,7 +8,7 @@ supervisor
 pyOpenSSL
 # restore to PyPI python-ssmi once python-ssmi 0.0.5 is released
 # python-ssmi
-https://github.com/praekelt/python-ssmi/tarball/master#egg=ssmi-0.0.5a
+https://github.com/praekelt/python-ssmi/tarball/develop#egg=ssmi-0.0.5a
 wokkel
 redis
 txredis
