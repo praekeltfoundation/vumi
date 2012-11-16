@@ -8,9 +8,10 @@ from twisted.internet.defer import returnValue
 
 from vumi.persist.redis_base import Manager
 from vumi.message import TransportEvent
+from vumi.errors import VumiError
 
 
-class MessageStoreCacheException(Exception):
+class MessageStoreCacheException(VumiError):
     pass
 
 
