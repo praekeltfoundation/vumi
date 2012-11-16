@@ -364,3 +364,9 @@ class MessageStore(object):
             The token returned by `find_inbound_keys_matching()`
         """
         return self.cache.get_query_results(batch_id, token, start, stop, asc)
+
+    def count_keys_for_token(self, batch_id, token):
+        """
+        Count the number of keys in the token's result set.
+        """
+        return self.cache.count_query_results(batch_id, token)

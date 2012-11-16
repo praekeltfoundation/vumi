@@ -431,6 +431,8 @@ class TestMessageStoreCache(TestMessageStoreBase):
         in_progress = yield self.store.cache.is_query_in_progress(batch_id,
                                                                     token)
         self.assertEqual(len(keys), 10)
+        self.assertEqual(10,
+            (yield self.store.count_keys_for_token(batch_id, token)))
         self.assertEqual(keys, [msg['message_id'] for msg in messages])
         self.assertFalse(in_progress)
 
@@ -457,5 +459,7 @@ class TestMessageStoreCache(TestMessageStoreBase):
         in_progress = yield self.store.cache.is_query_in_progress(batch_id,
                                                                     token)
         self.assertEqual(len(keys), 10)
+        self.assertEqual(10,
+            (yield self.store.count_keys_for_token(batch_id, token)))
         self.assertEqual(keys, [msg['message_id'] for msg in messages])
         self.assertFalse(in_progress)
