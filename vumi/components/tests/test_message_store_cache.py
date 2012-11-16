@@ -339,3 +339,6 @@ class TestMessageStoreCache(ApplicationTestCase):
         self.assertEqual(
             (yield self.cache.get_query_results(self.batch_id, token)),
             list(reversed(message_ids)))
+        self.assertEqual(
+            (yield self.cache.count_query_results(self.batch_id, token)),
+            10)

@@ -408,3 +408,10 @@ class MessageStoreCache(object):
         """
         result_key = self.search_result_key(batch_id, token)
         return self.redis.zrange(result_key, start, stop, desc=not asc)
+
+    def count_query_results(self, batch_id, token):
+        """
+        Return the number of results for the query token.
+        """
+        result_key = self.search_result_key(batch_id, token)
+        return self.redis.zcard(result_key)

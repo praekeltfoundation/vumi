@@ -2,8 +2,6 @@
 # -*- coding: utf-8 -*-
 
 """Message store."""
-import hashlib
-import json
 
 from uuid import uuid4
 
