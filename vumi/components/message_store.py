@@ -74,10 +74,6 @@ class InboundMessage(Model):
     batch = ForeignKey(Batch, null=True)
 
 
-class MessageStoreException(Exception):
-    pass
-
-
 class MessageStore(object):
     """Vumi message store.
 
