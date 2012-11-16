@@ -87,12 +87,33 @@ class ModelMigrator(object):
         migration_method_name = 'migrate_from_%s' % str(self.data_version)
         self.migration_method = getattr(self, migration_method_name, None)
 
-    def __call__(self, data):
+    def __call__(self, riak_object):
         if self.migration_method is None:
             raise ModelMigrationError(
                 'No migrators defined for %s version %s' % (
                     self.model_class.__name__, self.data_version))
-        return self.migration_method(data)
+        return self.migration_method(MigrationData(riak_object))
+
+
+class MigrationData(object):
+    def __init__(self, riak_object):
+        self.riak_object = riak_object
+        self.data = riak_object.get_data()
+        self.index = {}
+        for riak_index in riak_object.get_metadata()['index']:
+            field = riak_index.get_field()
+            self.index.setdefault(field, [])
+            self.index[field].append(riak_index.get_value())
+
+    def get_riak_object(self):
+        self.riak_object.set_data(self.data)
+        metadata = self.riak_object.get_metadata()
+        metadata['index'] = []
+        self.riak_object.set_metadata(metadata)
+        for field, values in self.index.iteritems():
+            for value in values:
+                self.riak_object.add_index(field, value)
+        return self.riak_object
 
 
 class Model(object):
@@ -459,9 +480,9 @@ class Manager(object):
         raise NotImplementedError("Sub-classes of Manager should implement"
                                   " .delete(...)")
 
-    def migrate_object(self, cls, data, data_version):
+    def migrate_object(self, cls, riak_object, data_version):
         migrator = cls.MIGRATOR(cls, self, data_version)
-        return migrator(data)
+        return migrator(riak_object)
 
     def load(self, cls, key):
         """Load a model instance for the key from Riak.

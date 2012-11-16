@@ -85,16 +85,16 @@ class TxRiakManager(Manager):
         d = succeed(riak_object) if result else riak_object.reload()
 
         def build_model_object(riak_object):
-            data = riak_object.get_data()
-            if data is None:
+            if riak_object.get_data() is None:
                 return None
-            data_version = data.get('VERSION')
+
+            data_version = riak_object.get_data().get('VERSION', None)
             if data_version == modelcls.VERSION:
                 return modelcls(self, key, _riak_object=riak_object)
             md = maybeDeferred(
-                self.migrate_object, modelcls, data, data_version)
-            md.addCallback(lambda data: riak_object.set_data(data))
-            md.addCallback(lambda _: riak_object)
+                self.migrate_object, modelcls, riak_object, data_version)
+
+            md.addCallback(lambda mdata: mdata.get_riak_object())
             return md.addCallback(build_model_object)
 
         return d.addCallback(build_model_object)

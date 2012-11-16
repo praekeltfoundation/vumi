@@ -54,13 +54,14 @@ class RiakManager(Manager):
         riak_object = self.riak_object(modelcls, key, result)
         if not result:
             riak_object.reload()
-        data = riak_object.get_data()
-        while data is not None:
-            data_version = data.get('VERSION')
+
+        # Run migrators until we have the correct version of the data.
+        while riak_object.get_data() is not None:
+            data_version = riak_object.get_data().get('VERSION', None)
             if data_version == modelcls.VERSION:
-                riak_object.set_data(data)
                 return modelcls(self, key, _riak_object=riak_object)
-            data = self.migrate_object(modelcls, data, data_version)
+            mdata = self.migrate_object(modelcls, riak_object, data_version)
+            riak_object = mdata.get_riak_object()
         return None
 
     def riak_map_reduce(self):

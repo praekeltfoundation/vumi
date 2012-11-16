@@ -52,21 +52,23 @@ class OverriddenModel(InheritedModel):
 
 
 class VersionedModelMigrator(ModelMigrator):
-    def migrate_from_None(self, data):
+    def migrate_from_None(self, migration_data):
         # Migrator assertions
         assert self.data_version is None
         assert self.model_class is VersionedModel
         assert isinstance(self.manager, Manager)
 
         # Data assertions
-        assert set(data.keys()) == set(['VERSION', 'a'])
-        assert data['VERSION'] is None
+        assert set(migration_data.data.keys()) == set(['VERSION', 'a'])
+        assert migration_data.data['VERSION'] is None
+        assert migration_data.index == {}
 
         # Actual migration
-        return {
+        migration_data.data = {
             'VERSION': 1,
-            'b': data['a'],
+            'b': migration_data.data['a'],
             }
+        return migration_data
 
 
 class OldVersionedModel(Model):
