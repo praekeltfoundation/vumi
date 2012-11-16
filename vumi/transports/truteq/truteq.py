@@ -38,6 +38,10 @@ class TruteqTransport(Transport):
     :type port: int
     :param port:
         Port of the TruTeq SSMI server.
+    :type link_check_period: int
+    :param link_check_period:
+        Number of seconds between link checks sent to the server.
+        Default is 60.
     :ussd_session_lifetime: int
     :param ussd_session_lifetime:
         Maximum number of seconds to retain USSD session information.
@@ -61,6 +65,9 @@ class TruteqTransport(Transport):
     # default maximum lifetime of USSD sessions (in seconds)
     DEFAULT_USSD_SESSION_LIFETIME = 5 * 60
 
+    # default period between link checks (in seconds)
+    DEFAULT_LINK_CHECK_PERIOD = client.LINKCHECK_PERIOD
+
     # TODO: Check that UTF-8 is in fact what TruTeq use to encode their
     #       messages
     SSMI_ENCODING = "UTF-8"
@@ -75,6 +82,8 @@ class TruteqTransport(Transport):
         self.port = int(self.config['port'])
         self.ussd_session_lifetime = self.config.get(
                 'ussd_session_lifetime', self.DEFAULT_USSD_SESSION_LIFETIME)
+        self.link_check_period = self.config.get(
+            'link_check_period', self.DEFAULT_LINK_CHECK_PERIOD)
         self.transport_type = self.config.get('transport_type', 'ussd')
         self.r_config = self.config.get('redis_manager', {})
         self.r_prefix = "%(transport_name)s:ussd_codes" % self.config
@@ -103,7 +112,8 @@ class TruteqTransport(Transport):
         ssmi_client.app_setup(self.username, self.password,
                               ussd_callback=self.ussd_callback,
                               sms_callback=self.sms_callback,
-                              errback=self.ssmi_errback)
+                              errback=self.ssmi_errback,
+                              link_check_period=self.link_check_period)
         self.ssmi_client = ssmi_client
         if not ssmi_d.called:
             # the setup gets called again if
