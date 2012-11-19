@@ -13,10 +13,20 @@ class MatchResource(resource.Resource):
     operation on the MessageStore.
     """
 
-    TTL_HEADER = 'X-VMS-Match-TTL'
-    RESULT_COUNT_HEADER = 'X-VMS-Result-Count'
+    REQ_TTL_HEADER = 'X-VMS-Match-TTL'
+    REQ_WAIT_HEADER = 'X-VMS-Wait-Result'
+    RESP_COUNT_HEADER = 'X-VMS-Result-Count'
 
     def __init__(self, direction, message_store, batch_id):
+        """
+        :param str direction:
+            Either 'inbound' or 'oubound', this is used to figure out which
+            function needs to be called on the MessageStore.
+        :param MessageStore message_store:
+            Instance of the MessageStore.
+        :param str batch_id:
+            The batch_id to use to query on.
+        """
         resource.Resource.__init__(self)
         self._match_cb = functools.partial(getattr(message_store,
             "find_%s_keys_matching" % (direction,)), batch_id)
@@ -26,13 +36,30 @@ class MatchResource(resource.Resource):
             message_store.count_keys_for_token, batch_id)
 
     def _render_token(self, token, request):
+        # TODO: this probably should be an HTTP header
         request.write(token)
         request.finish()
 
     def render_POST(self, request):
-        ttl = int(request.headers.get(self.TTL_HEADER, 0))
+        """
+        Start a match operation. Expects the query to be POSTed
+        as the raw HTTP POST data.
+
+        The query is a list of dictionaries. A dictionary should have the
+        structure as defined in `vumi.persist.model.Model.index_match`
+
+        The results of the query are stored fo limited time. It defaults
+        to `MessageStoreCache.DEFAULT_SEARCH_RESUL_TTL` but can be overriden
+        by specifying the TTL in seconds using the header key as specified
+        in `REQ_TTL_HEADER`.
+
+        If the request has the `REQ_WAIT_HEADER` set then it will only return
+        with a response when the keys are actually available for collecting.
+        """
+        ttl = int(request.headers.get(self.REQ_TTL_HEADER, 0))
         query = json.loads(request.content.read())
-        deferred = self._match_cb(query, ttl=(ttl or None))
+        deferred = self._match_cb(query, ttl=(ttl or None), wait=(
+            request.requestHeaders.hasHeader(self.REQ_WAIT_HEADER)))
         deferred.addCallback(self._render_token, request)
         return NOT_DONE_YET
 
@@ -40,16 +67,16 @@ class MatchResource(resource.Resource):
     def _render_keys(self, request, token, start, stop, asc):
         count = yield self._count_cb(token)
         keys = yield self._results_cb(start, stop, asc)
-        request.responseHeaders.addRawHeader(self.RESULT_COUNT_HEADER, count)
+        request.responseHeaders.addRawHeader(self.RESP_COUNT_HEADER, count)
         request.write(json.dumps(keys))
         request.finish()
 
     def render_GET(self, request):
         token = request.args['token'][0]
-        start = (request.args['start'][0] if 'start' in request.args else 0)
-        stop = (request.args['stop'][0] if 'stop' in request.args else 20)
+        start = int(request.args['start'][0] if 'start' in request.args else 0)
+        stop = int(request.args['stop'][0] if 'stop' in request.args else 20)
         asc = (True if 'asc' in request.args else False)
-        self._render_keys(request, token, int(start), int(stop), asc)
+        self._render_keys(request, token, start, stop, asc)
         return NOT_DONE_YET
 
     def getChild(self, name, request):

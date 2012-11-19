@@ -75,7 +75,7 @@ class MessageStoreAPITestCase(TestCase, MessageMakerMixin, PersistenceMixin):
 
     def assertResultCount(self, response, count):
         self.assertEqual(
-            response.headers.getRawHeaders(MatchResource.RESULT_COUNT_HEADER),
+            response.headers.getRawHeaders(MatchResource.RESP_COUNT_HEADER),
             [str(count)])
 
     @inlineCallbacks
