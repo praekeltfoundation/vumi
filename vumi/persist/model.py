@@ -98,22 +98,45 @@ class ModelMigrator(object):
 class MigrationData(object):
     def __init__(self, riak_object):
         self.riak_object = riak_object
-        self.data = riak_object.get_data()
-        self.index = {}
+        self.old_data = riak_object.get_data()
+        self.new_data = {}
+        self.old_index = {}
+        self.new_index = {}
         for riak_index in riak_object.get_metadata()['index']:
             field = riak_index.get_field()
-            self.index.setdefault(field, [])
-            self.index[field].append(riak_index.get_value())
+            self.old_index.setdefault(field, [])
+            self.old_index[field].append(riak_index.get_value())
 
     def get_riak_object(self):
-        self.riak_object.set_data(self.data)
+        self.riak_object.set_data(self.new_data)
         metadata = self.riak_object.get_metadata()
         metadata['index'] = []
         self.riak_object.set_metadata(metadata)
-        for field, values in self.index.iteritems():
+        for field, values in self.new_index.iteritems():
             for value in values:
                 self.riak_object.add_index(field, value)
         return self.riak_object
+
+    def copy_values(self, *fields):
+        for field in fields:
+            self.new_data[field] = self.data[field]
+
+    def copy_indexes(self, *indexes):
+        for index in indexes:
+            self.new_index[index] = self.old_index[index][:]
+
+    def add_index(self, index, value):
+        self.new_index.setdefault(index, []).append(value)
+
+    def clear_index(self, index):
+        del self.new_index[index]
+
+    def set_value(self, field, value, index=None, index_value=None):
+        self.new_data[field] = value
+        if index is not None:
+            if index_value is None:
+                index_value = value
+            self.add_index(index, index_value)
 
 
 class Model(object):
