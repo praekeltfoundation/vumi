@@ -6,6 +6,12 @@ from twisted.web import resource
 from twisted.web.server import NOT_DONE_YET
 from twisted.internet.defer import inlineCallbacks
 
+from vumi.service import Worker
+from vumi.transports.httprpc import httprpc
+from vumi.components.message_store import MessageStore
+from vumi.persist.txriak_manager import TxRiakManager
+from vumi.persist.txredis_manager import TxRedisManager
+
 
 class MatchResource(resource.Resource):
     """
@@ -144,3 +150,42 @@ class MessageStoreAPI(resource.Resource):
     def __init__(self, message_store):
         resource.Resource.__init__(self)
         self.putChild('batch', BatchIndexResource(message_store))
+
+
+class MessageStoreAPIWorker(Worker):
+    """
+    Worker that starts the MessageStoreAPI. It has some ability to connect to
+    AMQP but to doesn't do anything with it yet.
+
+    :param str web_path:
+        What is the base path this API should listen on?
+    :param int web_port:
+        On what port should it be listening?
+    :param str health_path:
+        Which path should respond to HAProxy health checks?
+    :param dict riak_manager:
+        The configuration parameters for TxRiakManager
+    :param dict redis_manager:
+        The configuration parameters for TxRedisManager
+    """
+    @inlineCallbacks
+    def startWorker(self):
+        web_path = self.config['web_path']
+        web_port = int(self.config['web_port'])
+        health_path = self.config['health_path']
+
+        riak = yield TxRiakManager.from_config(self.config['riak_manager'])
+        redis = yield TxRedisManager.from_config(self.config['redis_manager'])
+        self.store = MessageStore(riak, redis)
+
+        self.webserver = self.start_web_resources([
+            (MessageStoreAPI(self.store), web_path),
+            (httprpc.HttpRpcHealthResource(self), health_path),
+            ], web_port)
+
+    def stopWorker(self):
+        self.webserver.loseConnection()
+
+    def get_health_response(self):
+        """Called by the HttpRpcHealthResource"""
+        return 'ok'

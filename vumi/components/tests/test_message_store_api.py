@@ -1,19 +1,17 @@
 import json
 from datetime import datetime, timedelta
 
-from twisted.trial.unittest import TestCase
-from twisted.web import server
 from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
 
-from vumi.components.message_store_api import MessageStoreAPI, MatchResource
-from vumi.components.message_store import MessageStore
+from vumi.components.message_store_api import (MatchResource,
+                                                MessageStoreAPIWorker)
 from vumi.utils import http_request_full
-from vumi.tests.utils import PersistenceMixin, MessageMakerMixin
+from vumi.tests.utils import PersistenceMixin, VumiWorkerTestCase
 from vumi.message import TransportUserMessage
 
 
-class MessageStoreAPITestCase(TestCase, MessageMakerMixin, PersistenceMixin):
+class MessageStoreAPITestCase(VumiWorkerTestCase, PersistenceMixin):
 
     use_riak = True
     timeout = 5
@@ -23,18 +21,21 @@ class MessageStoreAPITestCase(TestCase, MessageMakerMixin, PersistenceMixin):
 
     @inlineCallbacks
     def setUp(self):
+        yield super(MessageStoreAPITestCase, self).setUp()
         self._persist_setUp()
+        self.base_path = '/api/v1/'
+        self.worker = yield self.get_worker(self.mk_config({
+                'web_path': self.base_path,
+                'web_port': 0,
+                'health_path': '/health/',
+            }), MessageStoreAPIWorker)
+        self.store = self.worker.store
+        self.addr = self.worker.webserver.getHost()
+        self.url = 'http://%s:%s%s' % (self.addr.host, self.addr.port,
+                                        self.base_path)
 
-        self.riak = yield self.get_riak_manager()
-        self.redis = yield self.get_redis_manager()
-        self.store = MessageStore(self.riak, self.redis)
         self.tag = ("pool", "tag")
         self.batch_id = yield self.store.batch_start([self.tag])
-
-        factory = server.Site(MessageStoreAPI(self.store))
-        self.webserver = yield reactor.listenTCP(0, factory)
-        self.addr = self.webserver.getHost()
-        self.url = 'http://%s:%s/' % (self.addr.host, self.addr.port)
 
     @inlineCallbacks
     def create_inbound(self, batch_id, count, content_template):
@@ -62,8 +63,8 @@ class MessageStoreAPITestCase(TestCase, MessageMakerMixin, PersistenceMixin):
 
     @inlineCallbacks
     def tearDown(self):
+        yield super(MessageStoreAPITestCase, self).tearDown()
         yield self._persist_tearDown()
-        self.webserver.loseConnection()
 
     def do_get(self, path, headers={}):
         url = '%s%s' % (self.url, path)
