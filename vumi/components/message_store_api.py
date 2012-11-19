@@ -13,11 +13,14 @@ class MatchResource(resource.Resource):
     operation on the MessageStore.
     """
 
+    DEFAULT_RESULT_SIZE = 20
+
     REQ_TTL_HEADER = 'X-VMS-Match-TTL'
-    REQ_WAIT_HEADER = 'X-VMS-Wait-Result'
+    REQ_WAIT_HEADER = 'X-VMS-Match-Wait'
 
     RESP_COUNT_HEADER = 'X-VMS-Result-Count'
     RESP_TOKEN_HEADER = 'X-VMS-Result-Token'
+    RESP_IN_PROGRESS_HEADER = 'X-VMS-Match-In-Progress'
 
     def __init__(self, direction, message_store, batch_id):
         """
@@ -36,6 +39,8 @@ class MatchResource(resource.Resource):
             message_store.get_keys_for_token, batch_id)
         self._count_cb = functools.partial(
             message_store.count_keys_for_token, batch_id)
+        self._in_progress_cb = functools.partial(
+            message_store.is_query_in_progress, batch_id)
 
     def _render_token(self, token, request):
         request.responseHeaders.addRawHeader(self.RESP_TOKEN_HEADER, token)
@@ -54,20 +59,28 @@ class MatchResource(resource.Resource):
         by specifying the TTL in seconds using the header key as specified
         in `REQ_TTL_HEADER`.
 
-        If the request has the `REQ_WAIT_HEADER` set then it will only return
-        with a response when the keys are actually available for collecting.
+        If the request has the `REQ_WAIT_HEADER` value equals `1` (int)
+        then it will only return with a response when the keys are actually
+        available for collecting.
         """
         ttl = int(request.headers.get(self.REQ_TTL_HEADER, 0))
         query = json.loads(request.content.read())
-        deferred = self._match_cb(query, ttl=(ttl or None), wait=(
-            request.requestHeaders.hasHeader(self.REQ_WAIT_HEADER)))
+        headers = request.requestHeaders
+        if headers.hasHeader(self.REQ_WAIT_HEADER):
+            wait = bool(int(headers.getRawHeaders(self.REQ_WAIT_HEADER)[0]))
+        else:
+            wait = False
+        deferred = self._match_cb(query, ttl=(ttl or None), wait=wait)
         deferred.addCallback(self._render_token, request)
         return NOT_DONE_YET
 
     @inlineCallbacks
     def _render_keys(self, request, token, start, stop, asc):
+        in_progress = yield self._in_progress_cb(token)
         count = yield self._count_cb(token)
-        keys = yield self._results_cb(start, stop, asc)
+        keys = yield self._results_cb(token, start, stop - 1, asc)
+        request.responseHeaders.addRawHeader(self.RESP_IN_PROGRESS_HEADER,
+            int(in_progress))
         request.responseHeaders.addRawHeader(self.RESP_COUNT_HEADER, count)
         request.write(json.dumps(keys))
         request.finish()
@@ -75,8 +88,10 @@ class MatchResource(resource.Resource):
     def render_GET(self, request):
         token = request.args['token'][0]
         start = int(request.args['start'][0] if 'start' in request.args else 0)
-        stop = int(request.args['stop'][0] if 'stop' in request.args else 20)
-        asc = (True if 'asc' in request.args else False)
+        stop = int(request.args['stop'][0] if 'stop' in request.args
+                    else self.DEFAULT_RESULT_SIZE)
+        asc = bool(int(request.args['asc'][0]) if 'asc' in request.args
+                    else False)
         self._render_keys(request, token, start, stop, asc)
         return NOT_DONE_YET
 

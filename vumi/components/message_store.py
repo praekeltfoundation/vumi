@@ -366,3 +366,10 @@ class MessageStore(object):
         Count the number of keys in the token's result set.
         """
         return self.cache.count_query_results(batch_id, token)
+
+    def is_query_in_progress(self, batch_id, token):
+        """
+        Return True or False depending on whether or not the query is
+        still running
+        """
+        return self.cache.is_query_in_progress(batch_id, token)
