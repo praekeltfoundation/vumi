@@ -444,12 +444,6 @@ class VumiWorkerTestCase(TestCase):
             yield worker.startWorker()
         returnValue(worker)
 
-    def _make_matcher(self, msg, *id_fields):
-        msg['timestamp'] = UTCNearNow()
-        for field in id_fields:
-            msg[field] = self.MSG_ID_MATCHER
-        return msg
-
     def mkmsg_ack(self, user_message_id='1', sent_message_id='abc',
                   transport_metadata=None, transport_name=None):
         if transport_metadata is None:
@@ -548,6 +542,12 @@ class VumiWorkerTestCase(TestCase):
             helper_metadata=helper_metadata,
             )
         return TransportUserMessage(**params)
+
+    def _make_matcher(self, msg, *id_fields):
+        msg['timestamp'] = UTCNearNow()
+        for field in id_fields:
+            msg[field] = self.MSG_ID_MATCHER
+        return msg
 
     def _get_dispatched(self, name):
         return self._amqp.get_messages('vumi', self.rkey(name))
