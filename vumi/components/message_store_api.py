@@ -15,7 +15,9 @@ class MatchResource(resource.Resource):
 
     REQ_TTL_HEADER = 'X-VMS-Match-TTL'
     REQ_WAIT_HEADER = 'X-VMS-Wait-Result'
+
     RESP_COUNT_HEADER = 'X-VMS-Result-Count'
+    RESP_TOKEN_HEADER = 'X-VMS-Result-Token'
 
     def __init__(self, direction, message_store, batch_id):
         """
@@ -36,8 +38,7 @@ class MatchResource(resource.Resource):
             message_store.count_keys_for_token, batch_id)
 
     def _render_token(self, token, request):
-        # TODO: this probably should be an HTTP header
-        request.write(token)
+        request.responseHeaders.addRawHeader(self.RESP_TOKEN_HEADER, token)
         request.finish()
 
     def render_POST(self, request):
@@ -49,7 +50,7 @@ class MatchResource(resource.Resource):
         structure as defined in `vumi.persist.model.Model.index_match`
 
         The results of the query are stored fo limited time. It defaults
-        to `MessageStoreCache.DEFAULT_SEARCH_RESUL_TTL` but can be overriden
+        to `MessageStoreCache.DEFAULT_SEARCH_RESULT_TTL` but can be overriden
         by specifying the TTL in seconds using the header key as specified
         in `REQ_TTL_HEADER`.
 

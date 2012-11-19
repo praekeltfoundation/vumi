@@ -69,9 +69,11 @@ class MessageStoreAPITestCase(TestCase, MessageMakerMixin, PersistenceMixin):
         expected_token = self.store.cache.get_query_token(direction, query)
         response = yield self.do_post('batch/%s/%s/match/' % (
             self.batch_id, direction), query)
-        self.assertEqual(response.delivered_body, expected_token)
+        [token] = response.headers.getRawHeaders(
+                                            MatchResource.RESP_TOKEN_HEADER)
+        self.assertEqual(token, expected_token)
         self.assertEqual(response.code, 200)
-        returnValue(expected_token)
+        returnValue(token)
 
     def assertResultCount(self, response, count):
         self.assertEqual(
