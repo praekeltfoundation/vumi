@@ -119,13 +119,17 @@ class MigrationData(object):
 
     def copy_values(self, *fields):
         for field in fields:
-            self.new_data[field] = self.data[field]
+            self.new_data[field] = self.old_data[field]
 
     def copy_indexes(self, *indexes):
         for index in indexes:
-            self.new_index[index] = self.old_index[index][:]
+            self.new_index[index] = self.old_index.get(index, [])[:]
 
     def add_index(self, index, value):
+        if index is None:
+            index = ''
+        else:
+            index = str(index)
         self.new_index.setdefault(index, []).append(value)
 
     def clear_index(self, index):
