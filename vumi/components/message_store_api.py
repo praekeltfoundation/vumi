@@ -36,9 +36,6 @@ class MatchResource(resource.Resource):
         deferred.addCallback(self._render_token, request)
         return NOT_DONE_YET
 
-    def _add_count_header(self, count, token, request):
-        return token
-
     @inlineCallbacks
     def _render_keys(self, request, token, start, stop, asc):
         count = yield self._count_cb(token)
