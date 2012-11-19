@@ -4,6 +4,7 @@ import functools
 
 from twisted.web import resource
 from twisted.web.server import NOT_DONE_YET
+from twisted.internet.defer import inlineCallbacks
 
 
 class MatchResource(resource.Resource):
@@ -36,10 +37,13 @@ class MatchResource(resource.Resource):
         return NOT_DONE_YET
 
     def _add_count_header(self, count, token, request):
-        request.responseHeaders.addRawHeader(self.RESULT_COUNT_HEADER, count)
         return token
 
-    def _render_keys(self, keys, request):
+    @inlineCallbacks
+    def _render_keys(self, request, token, start, stop, asc):
+        count = yield self._count_cb(token)
+        keys = yield self._results_cb(start, stop, asc)
+        request.responseHeaders.addRawHeader(self.RESULT_COUNT_HEADER, count)
         request.write(json.dumps(keys))
         request.finish()
 
@@ -48,10 +52,7 @@ class MatchResource(resource.Resource):
         start = (request.args['start'][0] if 'start' in request.args else 0)
         stop = (request.args['stop'][0] if 'stop' in request.args else 20)
         asc = (True if 'asc' in request.args else False)
-        deferred = self._count_cb(token)
-        deferred.addCallback(self._add_count_header, token, request)
-        deferred.addCallback(self._results_cb, int(start), int(stop), asc)
-        deferred.addCallback(self._render_keys, request)
+        self._render_keys(request, token, int(start), int(stop), asc)
         return NOT_DONE_YET
 
     def getChild(self, name, request):
