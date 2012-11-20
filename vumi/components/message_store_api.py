@@ -7,6 +7,7 @@ from twisted.web.server import NOT_DONE_YET
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.service import Worker
+from vumi.message import JSONMessageEncoder
 from vumi.transports.httprpc import httprpc
 from vumi.components.message_store import MessageStore
 from vumi.persist.txriak_manager import TxRiakManager
@@ -39,14 +40,21 @@ class MatchResource(resource.Resource):
             The batch_id to use to query on.
         """
         resource.Resource.__init__(self)
-        self._match_cb = functools.partial(getattr(message_store,
-            "find_%s_keys_matching" % (direction,)), batch_id)
+
+        self._match_cb = functools.partial({
+            'inbound': message_store.find_inbound_keys_matching,
+            'outbound': message_store.find_outbound_keys_matching,
+        }.get(direction), batch_id)
         self._results_cb = functools.partial(
             message_store.get_keys_for_token, batch_id)
         self._count_cb = functools.partial(
             message_store.count_keys_for_token, batch_id)
         self._in_progress_cb = functools.partial(
             message_store.is_query_in_progress, batch_id)
+        self._load_bunches_cb = {
+            'inbound': message_store.inbound_messages.load_all_bunches,
+            'outbound': message_store.outbound_messages.load_all_bunches,
+        }.get(direction)
 
     def _render_token(self, token, request):
         request.responseHeaders.addRawHeader(self.RESP_TOKEN_HEADER, token)
@@ -81,14 +89,27 @@ class MatchResource(resource.Resource):
         return NOT_DONE_YET
 
     @inlineCallbacks
-    def _render_keys(self, request, token, start, stop, asc):
+    def _render_results(self, request, token, start, stop, keys_only, asc):
         in_progress = yield self._in_progress_cb(token)
         count = yield self._count_cb(token)
         keys = yield self._results_cb(token, start, stop - 1, asc)
         request.responseHeaders.addRawHeader(self.RESP_IN_PROGRESS_HEADER,
             int(in_progress))
         request.responseHeaders.addRawHeader(self.RESP_COUNT_HEADER, count)
-        request.write(json.dumps(keys))
+        if keys_only:
+            request.write(json.dumps(keys))
+        else:
+            messages = []
+            for bunch in self._load_bunches_cb(keys):
+                # inbound & outbound messages have a `.msg` attribute which
+                # is the actual message stored, they share the same message_id
+                # as the key.
+                messages.extend([msg.msg.payload for msg in (yield bunch)
+                                    if msg.msg])
+
+            # sort the results in the order that the keys specified
+            messages.sort(key=lambda msg: keys.index(msg['message_id']))
+            request.write(json.dumps(messages, cls=JSONMessageEncoder))
         request.finish()
 
     def render_GET(self, request):
@@ -98,7 +119,9 @@ class MatchResource(resource.Resource):
                     else self.DEFAULT_RESULT_SIZE)
         asc = bool(int(request.args['asc'][0]) if 'asc' in request.args
                     else False)
-        self._render_keys(request, token, start, stop, asc)
+        keys_only = bool(int(request.args['keys'][0]) if 'keys' in request.args
+                            else False)
+        self._render_results(request, token, start, stop, keys_only, asc)
         return NOT_DONE_YET
 
     def getChild(self, name, request):

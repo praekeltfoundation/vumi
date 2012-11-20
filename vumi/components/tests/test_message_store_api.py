@@ -124,6 +124,18 @@ class MessageStoreAPITestCase(VumiWorkerTestCase, PersistenceMixin):
             response.headers.getRawHeaders(MatchResource.RESP_COUNT_HEADER),
             [str(count)])
 
+    def assertJSONResultEqual(self, json_blob, messages):
+        """
+        Asserts that the JSON response we're getting back is the same as
+        the list of messages provided.
+
+        There are easier ways to do this by comparing bigger JSON blogs
+        but then debugging the huge strings would be a pain.
+        """
+        for dictionary, message in zip(json.loads(json_blob), messages):
+            self.assertEqual(message.payload,
+                TransportUserMessage.from_json(json.dumps(dictionary)).payload)
+
     @inlineCallbacks
     def test_batch_index_resource(self):
         response = yield self.do_get('batch/')
@@ -146,6 +158,20 @@ class MessageStoreAPITestCase(VumiWorkerTestCase, PersistenceMixin):
             self.batch_id, token))
         self.assertResultCount(response, 22)
         current_page = messages[:MatchResource.DEFAULT_RESULT_SIZE]
+        self.assertJSONResultEqual(response.delivered_body, current_page)
+        self.assertEqual(response.code, 200)
+
+    @inlineCallbacks
+    def test_keys_inbound_match_resource(self):
+        messages = yield self.create_inbound(self.batch_id, 22,
+                                                'hello world {0}')
+        token = yield self.do_query('inbound', self.batch_id, '.*',
+                                                wait=True)
+        response = yield self.do_get(
+            'batch/%s/inbound/match/?token=%s&keys=1' % (
+                self.batch_id, token))
+        self.assertResultCount(response, 22)
+        current_page = messages[:MatchResource.DEFAULT_RESULT_SIZE]
         self.assertEqual(json.loads(response.delivered_body),
             [msg['message_id'] for msg in current_page])
         self.assertEqual(response.code, 200)
@@ -159,8 +185,7 @@ class MessageStoreAPITestCase(VumiWorkerTestCase, PersistenceMixin):
         response = yield self.wait_for_results('inbound', self.batch_id, token)
         self.assertResultCount(response, 22)
         page = messages[:20]
-        self.assertEqual(json.loads(response.delivered_body),
-            [msg['message_id'] for msg in page])
+        self.assertJSONResultEqual(response.delivered_body, page)
         self.assertEqual(response.code, 200)
 
     @inlineCallbacks
@@ -182,6 +207,20 @@ class MessageStoreAPITestCase(VumiWorkerTestCase, PersistenceMixin):
             self.batch_id, token))
         self.assertResultCount(response, 22)
         current_page = messages[:MatchResource.DEFAULT_RESULT_SIZE]
+        self.assertJSONResultEqual(response.delivered_body, current_page)
+        self.assertEqual(response.code, 200)
+
+    @inlineCallbacks
+    def test_keys_outbound_match_resource(self):
+        messages = yield self.create_outbound(self.batch_id, 22,
+                                                'hello world {0}')
+        token = yield self.do_query('outbound', self.batch_id, '.*',
+                                                wait=True)
+        response = yield self.do_get(
+            'batch/%s/outbound/match/?token=%s&keys=1' % (
+                self.batch_id, token))
+        self.assertResultCount(response, 22)
+        current_page = messages[:MatchResource.DEFAULT_RESULT_SIZE]
         self.assertEqual(json.loads(response.delivered_body),
             [msg['message_id'] for msg in current_page])
         self.assertEqual(response.code, 200)
@@ -196,8 +235,7 @@ class MessageStoreAPITestCase(VumiWorkerTestCase, PersistenceMixin):
                                                 token)
         self.assertResultCount(response, 22)
         page = messages[:20]
-        self.assertEqual(json.loads(response.delivered_body),
-            [msg['message_id'] for msg in page])
+        self.assertJSONResultEqual(response.delivered_body, page)
         self.assertEqual(response.code, 200)
 
     @inlineCallbacks
