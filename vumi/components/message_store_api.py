@@ -92,7 +92,7 @@ class MatchResource(resource.Resource):
     def _render_results(self, request, token, start, stop, keys_only, asc):
         in_progress = yield self._in_progress_cb(token)
         count = yield self._count_cb(token)
-        keys = yield self._results_cb(token, start, stop - 1, asc)
+        keys = yield self._results_cb(token, start, stop, asc)
         request.responseHeaders.addRawHeader(self.RESP_IN_PROGRESS_HEADER,
             int(in_progress))
         request.responseHeaders.addRawHeader(self.RESP_COUNT_HEADER, count)
@@ -116,7 +116,7 @@ class MatchResource(resource.Resource):
         token = request.args['token'][0]
         start = int(request.args['start'][0] if 'start' in request.args else 0)
         stop = int(request.args['stop'][0] if 'stop' in request.args
-                    else self.DEFAULT_RESULT_SIZE)
+                    else (start + self.DEFAULT_RESULT_SIZE - 1))
         asc = bool(int(request.args['asc'][0]) if 'asc' in request.args
                     else False)
         keys_only = bool(int(request.args['keys'][0]) if 'keys' in request.args
