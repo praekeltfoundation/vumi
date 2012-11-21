@@ -80,11 +80,29 @@ class BackLinkProxy(object):
 
 
 class ModelMigrator(object):
+    """Migration handler for old Model versions.
+
+    Subclasses of this should implement ``migrate_from_<version>()`` methods
+    for each previous version of the model being migrated. This method will
+    be called with a :class:`MigrationData` instance and must return a
+    :class:`MigrationData` instance. (This will likely be the same instance,
+    but may be different.)
+
+    The ``migrate_from_<version>()`` is allowed to do whatever other operations
+    may be required (for example, modifying related objects). However, care
+    should be taken to avoid lenthly delays, race conditions, etc.
+
+    There is a special-case ``migrate_from_unversioned()`` method that is
+    called for objects that do not contain a model version.
+    """
     def __init__(self, model_class, manager, data_version):
         self.model_class = model_class
         self.manager = manager
         self.data_version = data_version
-        migration_method_name = 'migrate_from_%s' % str(self.data_version)
+        if data_version is not None:
+            migration_method_name = 'migrate_from_%s' % str(data_version)
+        else:
+            migration_method_name = 'migrate_from_unversioned'
         self.migration_method = getattr(self, migration_method_name, None)
 
     def __call__(self, riak_object):
