@@ -60,8 +60,8 @@ class RiakManager(Manager):
             data_version = riak_object.get_data().get('VERSION', None)
             if data_version == modelcls.VERSION:
                 return modelcls(self, key, _riak_object=riak_object)
-            mdata = self.migrate_object(modelcls, riak_object, data_version)
-            riak_object = mdata.get_riak_object()
+            migrator = modelcls.MIGRATOR(modelcls, self, data_version)
+            riak_object = migrator(riak_object).get_riak_object()
         return None
 
     def riak_map_reduce(self):

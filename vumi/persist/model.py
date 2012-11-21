@@ -525,10 +525,6 @@ class Manager(object):
         raise NotImplementedError("Sub-classes of Manager should implement"
                                   " .delete(...)")
 
-    def migrate_object(self, cls, riak_object, data_version):
-        migrator = cls.MIGRATOR(cls, self, data_version)
-        return migrator(riak_object)
-
     def load(self, cls, key):
         """Load a model instance for the key from Riak.
 

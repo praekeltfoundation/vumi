@@ -91,9 +91,9 @@ class TxRiakManager(Manager):
             data_version = riak_object.get_data().get('VERSION', None)
             if data_version == modelcls.VERSION:
                 return modelcls(self, key, _riak_object=riak_object)
-            md = maybeDeferred(
-                self.migrate_object, modelcls, riak_object, data_version)
 
+            migrator = modelcls.MIGRATOR(modelcls, self, data_version)
+            md = maybeDeferred(migrator, riak_object)
             md.addCallback(lambda mdata: mdata.get_riak_object())
             return md.addCallback(build_model_object)
 
