@@ -136,14 +136,17 @@ class MigrationData(object):
         return self.riak_object
 
     def copy_values(self, *fields):
+        """Copy field values from old data to new data."""
         for field in fields:
             self.new_data[field] = self.old_data[field]
 
     def copy_indexes(self, *indexes):
+        """Copy indexes from old data to new data."""
         for index in indexes:
             self.new_index[index] = self.old_index.get(index, [])[:]
 
     def add_index(self, index, value):
+        """Add a new index value to new data."""
         if index is None:
             index = ''
         else:
@@ -151,9 +154,16 @@ class MigrationData(object):
         self.new_index.setdefault(index, []).append(value)
 
     def clear_index(self, index):
+        """Remove all values for a given index from new data."""
         del self.new_index[index]
 
     def set_value(self, field, value, index=None, index_value=None):
+        """Set the value (and optionally the index) for a field.
+
+        Indexes are usually set by :class:`FieldDescriptor` objects. Since we
+        don't have those here, we need to explicitly set the index values for
+        fields that are indexed.
+        """
         self.new_data[field] = value
         if index is not None:
             if index_value is None:
