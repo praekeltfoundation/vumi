@@ -643,21 +643,25 @@ class Sandbox(ApplicationWorker):
         d.addCallbacks(on_start, log.error)
         return d
 
+    @inlineCallbacks
     def process_message_in_sandbox(self, msg):
-        sandbox_protocol = self.sandbox_protocol_for_message(msg)
+        sandbox_protocol = yield self.sandbox_protocol_for_message(msg)
 
         def sandbox_init():
             sandbox_protocol.api.sandbox_inbound_message(msg)
 
-        return self._process_in_sandbox(sandbox_protocol, sandbox_init)
+        status = yield self._process_in_sandbox(sandbox_protocol, sandbox_init)
+        returnValue(status)
 
+    @inlineCallbacks
     def process_event_in_sandbox(self, event):
-        sandbox_protocol = self.sandbox_protocol_for_message(event)
+        sandbox_protocol = yield self.sandbox_protocol_for_message(event)
 
         def sandbox_init():
             sandbox_protocol.api.sandbox_inbound_event(event)
 
-        return self._process_in_sandbox(sandbox_protocol, sandbox_init)
+        status = yield self._process_in_sandbox(sandbox_protocol, sandbox_init)
+        returnValue(status)
 
     def consume_user_message(self, msg):
         return self.process_message_in_sandbox(msg)
