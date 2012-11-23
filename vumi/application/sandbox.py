@@ -609,6 +609,9 @@ class Sandbox(ApplicationWorker):
         return SandboxProtocol(sandbox_id, api, self.executable, spawn_kwargs,
                                self.rlimits, self.timeout, self.recv_limit)
 
+    def create_sandbox_api(self, resources):
+        return SandboxApi(resources)
+
     def sandbox_id_for_message(self, msg_or_event):
         """Return a sandbox id for a message or event.
 
@@ -622,7 +625,7 @@ class Sandbox(ApplicationWorker):
         Sub-classes may override this to retrieve an appropriate protocol.
         """
         sandbox_id = self.sandbox_id_for_message(msg_or_event)
-        api = SandboxApi(self.resources)
+        api = self.create_sandbox_api(self.resources)
         protocol = self.create_sandbox_protocol(sandbox_id, api)
         return protocol
 
