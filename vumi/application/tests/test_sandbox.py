@@ -257,7 +257,9 @@ class NodeJsSandboxTestCase(SandboxTestCaseBase):
 
     possible_nodejs_executables = [
         '/usr/local/bin/node',
+        '/usr/local/bin/nodejs',
         '/usr/bin/node',
+        '/usr/bin/nodejs',
     ]
 
     def setUp(self):
