@@ -604,29 +604,34 @@ class Sandbox(ApplicationWorker):
     def create_sandbox_resources(self, config):
         return SandboxResources(self, config)
 
-    def create_sandbox_api(self):
-        return SandboxApi(self.resources)
-
     def create_sandbox_protocol(self, sandbox_id, api):
         spawn_kwargs = dict(args=self.args, env=self.env, path=self.path)
         return SandboxProtocol(sandbox_id, api, self.executable, spawn_kwargs,
                                self.rlimits, self.timeout, self.recv_limit)
 
-    def sandbox_id_for_message(self, msg):
-        """Sub-classes should override this to retrieve an appropriate id."""
-        return msg['sandbox_id']
+    def sandbox_id_for_message(self, msg_or_event):
+        """Return a sandbox id for a message or event.
 
-    def sandbox_id_for_event(self, event):
-        """Sub-classes should override this to retrieve an appropriate id."""
-        return event['sandbox_id']
+        Sub-classes may override this to retrieve an appropriate id.
+        """
+        return msg_or_event['sandbox_id']
 
-    def _process_in_sandbox(self, sandbox_id, api, api_callback):
-        sandbox_protocol = self.create_sandbox_protocol(sandbox_id, api)
+    def sandbox_protocol_for_message(self, msg_or_event):
+        """Return a sandbox protocol for a message or event.
+
+        Sub-classes may override this to retrieve an appropriate protocol.
+        """
+        sandbox_id = self.sandbox_id_for_message(msg_or_event)
+        api = SandboxApi(self.resources)
+        protocol = self.create_sandbox_protocol(sandbox_id, api)
+        return protocol
+
+    def _process_in_sandbox(self, sandbox_protocol, api_callback):
         sandbox_protocol.spawn()
 
         def on_start(_result):
-            api.sandbox_init()
-            api_callback(sandbox_protocol)
+            sandbox_protocol.api.sandbox_init()
+            api_callback()
             d = sandbox_protocol.done()
             d.addErrback(log.error)
             return d
@@ -636,22 +641,20 @@ class Sandbox(ApplicationWorker):
         return d
 
     def process_message_in_sandbox(self, msg):
-        sandbox_id = self.sandbox_id_for_message(msg)
-        api = self.create_sandbox_api()
+        sandbox_protocol = self.sandbox_protocol_for_message(msg)
 
-        def sandbox_init(sandbox):
-            api.sandbox_inbound_message(msg)
+        def sandbox_init():
+            sandbox_protocol.api.sandbox_inbound_message(msg)
 
-        return self._process_in_sandbox(sandbox_id, api, sandbox_init)
+        return self._process_in_sandbox(sandbox_protocol, sandbox_init)
 
     def process_event_in_sandbox(self, event):
-        sandbox_id = self.sandbox_id_for_event(event)
-        api = self.create_sandbox_api()
+        sandbox_protocol = self.sandbox_protocol_for_message(event)
 
-        def sandbox_init(sandbox):
-            api.sandbox_inbound_event(event)
+        def sandbox_init():
+            sandbox_protocol.api.sandbox_inbound_event(event)
 
-        return self._process_in_sandbox(sandbox_id, api, sandbox_init)
+        return self._process_in_sandbox(sandbox_protocol, sandbox_init)
 
     def consume_user_message(self, msg):
         return self.process_message_in_sandbox(msg)
