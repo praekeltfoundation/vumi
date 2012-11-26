@@ -14,7 +14,8 @@ from vumi.message import TransportUserMessage, TransportEvent
 from vumi.application.tests.utils import ApplicationTestCase
 from vumi.application.sandbox import (Sandbox, SandboxCommand, SandboxError,
                                       RedisResource, OutboundResource,
-                                      JsSandboxResource, LoggingResource)
+                                      JsSandboxResource, LoggingResource,
+                                      JsSandbox)
 from vumi.tests.utils import LogCatcher, PersistenceMixin
 
 
@@ -22,15 +23,17 @@ class SandboxTestCaseBase(ApplicationTestCase):
 
     application_class = Sandbox
 
-    def setup_app(self, executable, args, extra_config=None):
+    def setup_app(self, executable=None, args=None, extra_config=None):
         tmp_path = self.mktemp()
         os.mkdir(tmp_path)
         config = {
-            'executable': executable,
-            'args': args,
             'path': tmp_path,
             'timeout': '10',
         }
+        if executable is not None:
+            config['executable'] = executable
+        if args is not None:
+            config['args'] = args
         if extra_config is not None:
             config.update(extra_config)
         return self.get_application(config)
@@ -253,40 +256,21 @@ class SandboxTestCase(SandboxTestCaseBase):
             self.mk_delivery_report(), 'inbound-event')
 
 
-class NodeJsSandboxTestCase(SandboxTestCaseBase):
+class JsSandboxTestCase(SandboxTestCaseBase):
 
-    possible_nodejs_executables = [
-        '/usr/local/bin/node',
-        '/usr/local/bin/nodejs',
-        '/usr/bin/node',
-        '/usr/bin/nodejs',
-    ]
+    application_class = JsSandbox
 
     def setUp(self):
-        super(NodeJsSandboxTestCase, self).setUp()
-        for path in self.possible_nodejs_executables:
-            if os.path.isfile(path):
-                self.nodejs_executable = path
-                break
-        else:
+        super(JsSandboxTestCase, self).setUp()
+        if JsSandbox.find_nodejs() is None:
             raise SkipTest("No node.js executable found.")
-        self.sandboxer_js = pkg_resources.resource_filename('vumi.application',
-                                                            'sandboxer.js')
 
     def setup_app(self, javascript_code, extra_config=None):
         extra_config = extra_config or {}
-        sandbox_config = extra_config.setdefault('sandbox', {})
-        sandbox_config.update({
-            'log': {
-                'cls': 'vumi.application.sandbox.LoggingResource',
-            },
-            'js': {
-                'cls': 'vumi.application.sandbox.JsSandboxResource',
-                'javascript': javascript_code,
-            },
+        extra_config.update({
+            'javascript': javascript_code,
         })
-        return super(NodeJsSandboxTestCase, self).setup_app(
-            self.nodejs_executable, [self.sandboxer_js],
+        return super(JsSandboxTestCase, self).setup_app(
             extra_config=extra_config)
 
     @inlineCallbacks
@@ -470,16 +454,21 @@ class TestOutboundResource(ResourceTestCaseBase):
                          [(('1234', 'hello'), {'tag': 'default'})])
 
 
+class JsDummyAppWorker(DummyAppWorker):
+    def javascript_for_api(self, api):
+        return 'testscript'
+
+
 class TestJsSandboxResource(ResourceTestCaseBase):
 
     resource_cls = JsSandboxResource
 
+    app_worker_cls = JsDummyAppWorker
+
     @inlineCallbacks
     def setUp(self):
         super(TestJsSandboxResource, self).setUp()
-        yield self.create_resource({
-            'javascript': 'testscript',
-        })
+        yield self.create_resource({})
 
     def test_sandbox_init(self):
         msgs = []

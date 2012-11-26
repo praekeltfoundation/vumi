@@ -7,6 +7,7 @@ import resource
 import os
 import signal
 import json
+import pkg_resources
 from uuid import uuid4
 
 from twisted.internet import reactor
@@ -431,17 +432,12 @@ class JsSandboxResource(SandboxResource):
     Typically used alongside vumi/applicaiton/sandboxer.js which is
     a simple node.js based Javascript sandbox.
 
-    Configuration options:
-
-    :param str javascript:
-        Javascript to execute inside the sandbox.
+    Requires the worker to have a `javascript_for_api` method.
     """
-    def setup(self):
-        self.javascript = self.config.get('javascript')
-
     def sandbox_init(self, api):
+        javascript = self.app_worker.javascript_for_api(api)
         api.sandbox_send(SandboxCommand(cmd="initialize",
-                                        javascript=self.javascript))
+                                        javascript=javascript))
 
 
 class LoggingResource(SandboxResource):
@@ -677,6 +673,62 @@ class Sandbox(ApplicationWorker):
 
     def consume_delivery_report(self, event):
         return self.process_event_in_sandbox(event)
+
+
+class JsSandbox(Sandbox):
+    """
+    Configuration options:
+
+    As for :class:`Sandbox` except:
+
+    * `executable` defaults to searching for a `node.js` binary.
+    * `args` defaults to the JS sandbox script in :module:`vumi.application`.
+    * An instance of :class:`JsSandboxResource` is added to the sandbox
+      resources under the name `js` if no `js` resource exists.
+    * An instance of :class:`LoggingResource` is added to the sandbox
+      resources under the name `log` if no `log` resource exists.
+    * An extra 'javascript' parameter specifies the javascript to execute.
+    """
+
+    POSSIBLE_NODEJS_EXECUTABLES = [
+        '/usr/local/bin/node',
+        '/usr/local/bin/nodejs',
+        '/usr/bin/node',
+        '/usr/bin/nodejs',
+    ]
+
+    @classmethod
+    def find_nodejs(cls):
+        for path in cls.POSSIBLE_NODEJS_EXECUTABLES:
+            if os.path.isfile(path):
+                return path
+        return None
+
+    @classmethod
+    def find_sandbox_js(cls):
+        return pkg_resources.resource_filename('vumi.application',
+                                               'sandboxer.js')
+
+    def get_js_resource(self):
+        return JsSandboxResource('js', self, {})
+
+    def get_log_resource(self):
+        return LoggingResource('log', self, {})
+
+    def javascript_for_api(self, api):
+        """Called by JsSandboxResource."""
+        return self.config.get('javascript', None)
+
+    def validate_config(self):
+        super(JsSandbox, self).validate_config()
+        if self.config.get("executable") is None:
+            self.executable = self.find_nodejs()
+        if self.config.get("args") is None:
+            self.args = [self.executable] + [self.find_sandbox_js()]
+        if 'js' not in self.resources.resources:
+            self.resources.add_resource('js', self.get_js_resource())
+        if 'log' not in self.resources.resources:
+            self.resources.add_resource('log', self.get_log_resource())
 
 
 if __name__ == "__main__":
