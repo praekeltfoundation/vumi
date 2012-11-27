@@ -396,8 +396,13 @@ class TestMessageStoreCache(TestMessageStoreBase):
         for i in range(10):
             msg = self.mkmsg_out(message_id=TransportEvent.generate_id())
             yield self.store.add_outbound_message(msg, batch_id=batch_id)
+            ack = self.mkmsg_ack(user_message_id=msg['message_id'],
+                sent_message_id=msg['message_id'])
+            yield self.store.add_event(ack)
 
         self.clear_cache(self.store)
+        batch_status = yield self.store.batch_status(batch_id)
+        self.assertEqual(batch_status, {})
         # Default reconciliation delta should return True
         self.assertTrue((yield self.store.needs_reconciliation(batch_id)))
         yield self.store.reconcile_cache(batch_id)
@@ -406,3 +411,6 @@ class TestMessageStoreCache(TestMessageStoreBase):
         # Stricted possible reconciliation delta should return True
         self.assertFalse((yield self.store.needs_reconciliation(batch_id,
             delta=0)))
+        batch_status = yield self.store.batch_status(batch_id)
+        self.assertEqual(batch_status['ack'], 10)
+        self.assertEqual(batch_status['sent'], 10)

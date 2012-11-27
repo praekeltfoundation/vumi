@@ -137,8 +137,7 @@ class MessageStore(object):
                 msg = yield self.get_inbound_message(key)
                 yield self.cache.add_inbound_message(batch_id, msg)
             except Exception:
-                log.err('Unable to load inbound msg %s during recon of %s' % (
-                    key, batch_id))
+                log.err()
 
     @Manager.calls_manager
     def reconcile_outbound_cache(self, batch_id):
@@ -148,14 +147,15 @@ class MessageStore(object):
             try:
                 msg = yield self.get_outbound_message(key)
                 yield self.cache.add_outbound_message(batch_id, msg)
+                yield self.reconcile_event_cache(batch_id, key)
             except Exception:
-                log.err('Unable to load outbound msg %s during recon of %s' % (
-                    key, batch_id))
+                log.err()
 
     @Manager.calls_manager
     def reconcile_event_cache(self, batch_id, message_id):
-        events = yield self.message_events(message_id)
-        for event in events:
+        event_keys = yield self.message_event_keys(message_id)
+        for event_key in event_keys:
+            event = yield self.get_event(event_key)
             yield self.cache.add_event(batch_id, event)
 
     @Manager.calls_manager
