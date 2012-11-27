@@ -132,9 +132,17 @@ class MessageStoreAPITestCase(VumiWorkerTestCase, PersistenceMixin):
         There are easier ways to do this by comparing bigger JSON blogs
         but then debugging the huge strings would be a pain.
         """
-        for dictionary, message in zip(json.loads(json_blob), messages):
-            self.assertEqual(message.payload,
-                TransportUserMessage.from_json(json.dumps(dictionary)).payload)
+        dictionaries = json.loads(json_blob)
+        self.assertEqual(len(dictionaries), len(messages),
+            'Unequal amount of dictionaries and messages')
+        for dictionary, message in zip(dictionaries, messages):
+            # The json dumping & reloading happening here is required to have
+            # the timestamp fields be parsed properly. This is an unfortunate
+            # side effect of how how timestamps are currently stored as
+            # datetime() instances in the payload instead of plain strings.
+            self.assertEqual(
+                TransportUserMessage(_process_fields=False, **message.payload),
+                TransportUserMessage.from_json(json.dumps(dictionary)))
 
     @inlineCallbacks
     def test_batch_index_resource(self):
