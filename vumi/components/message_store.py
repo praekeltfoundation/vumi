@@ -5,12 +5,13 @@
 
 from uuid import uuid4
 
-from twisted.internet.defer import returnValue
+from twisted.internet.defer import returnValue, inlineCallbacks
 
 from vumi.message import TransportEvent, TransportUserMessage
 from vumi.persist.model import Model, Manager
 from vumi.persist.fields import (VumiMessage, ForeignKey, ListOf, Tag, Dynamic,
                                  Unicode)
+from vumi.persist.txriak_manager import TxRiakManager
 from vumi import log
 from vumi.components.message_store_cache import MessageStoreCache
 
@@ -285,3 +286,93 @@ class MessageStore(object):
     def batch_outbound_count(self, batch_id):
         return self.outbound_messages.index_lookup(
             'batch', batch_id).get_count()
+
+    @inlineCallbacks
+    def find_inbound_keys_matching(self, batch_id, query, ttl=None,
+                                    wait=False):
+        """
+        Has the message search issue a `batch_inbound_keys_matching()`
+        query and stores the resulting keys in the cache ordered by
+        descending timestamp.
+
+        :param str batch_id:
+            The batch to search across
+        :param list query:
+            The list of dictionaries with query information.
+        :param int ttl:
+            How long to store the results for.
+        :param bool wait:
+            Only return the token after the matching, storing & ordering
+            of keys has completed. Useful for testing.
+
+        Returns a token with which the results can be fetched.
+
+        NOTE:   This function can only be called from inside Twisted as
+                it assumes that the result of `batch_inbound_keys_matching`
+                is a Deferred.
+        """
+        assert isinstance(self.manager, TxRiakManager), (
+            "manager is not an instance of TxRiakManager")
+        token = yield self.cache.start_query(batch_id, 'inbound', query)
+        deferred = self.batch_inbound_keys_matching(batch_id, query)
+        deferred.addCallback(
+            lambda keys: self.cache.store_query_results(batch_id, token, keys,
+                                                        'inbound', ttl))
+        if wait:
+            yield deferred
+        returnValue(token)
+
+    @inlineCallbacks
+    def find_outbound_keys_matching(self, batch_id, query, ttl=None,
+                                    wait=False):
+        """
+        Has the message search issue a `batch_outbound_keys_matching()`
+        query and stores the resulting keys in the cache ordered by
+        descending timestamp.
+
+        :param str batch_id:
+            The batch to search across
+        :param list query:
+            The list of dictionaries with query information.
+        :param int ttl:
+            How long to store the results for.
+        :param bool wait:
+            Only return the token after the matching, storing & ordering
+            of keys has completed. Useful for testing.
+
+        Returns a token with which the results can be fetched.
+
+        NOTE:   This function can only be called from inside Twisted as
+                it depends on Deferreds being fired that aren't returned
+                by the function itself.
+        """
+        token = yield self.cache.start_query(batch_id, 'outbound', query)
+        deferred = self.batch_outbound_keys_matching(batch_id, query)
+        deferred.addCallback(
+            lambda keys: self.cache.store_query_results(batch_id, token, keys,
+                                                        'outbound', ttl))
+        if wait:
+            yield deferred
+        returnValue(token)
+
+    def get_keys_for_token(self, batch_id, token, start=0, stop=-1, asc=False):
+        """
+        Returns the resulting keys of a search.
+
+        :param str token:
+            The token returned by `find_inbound_keys_matching()`
+        """
+        return self.cache.get_query_results(batch_id, token, start, stop, asc)
+
+    def count_keys_for_token(self, batch_id, token):
+        """
+        Count the number of keys in the token's result set.
+        """
+        return self.cache.count_query_results(batch_id, token)
+
+    def is_query_in_progress(self, batch_id, token):
+        """
+        Return True or False depending on whether or not the query is
+        still running
+        """
+        return self.cache.is_query_in_progress(batch_id, token)
