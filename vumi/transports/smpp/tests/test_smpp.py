@@ -13,6 +13,7 @@ from vumi.transports.smpp.clientserver.config import ClientConfig
 from vumi.transports.smpp.clientserver.client import unpacked_pdu_opts
 from vumi.transports.smpp.clientserver.tests.utils import SmscTestServer
 from vumi.transports.tests.utils import TransportTestCase
+from vumi.tests.utils import LogCatcher
 
 
 class SmppTransportTestCase(TransportTestCase):
@@ -46,7 +47,8 @@ class SmppTransportTestCase(TransportTestCase):
         self.esme_callbacks = EsmeCallbacks(
             connect=lambda: None, disconnect=lambda: None,
             submit_sm_resp=self.transport.submit_sm_resp,
-            delivery_report=lambda: None, deliver_sm=lambda: None)
+            delivery_report=self.transport.delivery_report,
+            deliver_sm=lambda: None)
         self.esme = EsmeTransceiver(
             self.clientConfig, self.transport.redis, self.esme_callbacks)
         self.esme.sent_pdus = []
@@ -140,6 +142,18 @@ class SmppTransportTestCase(TransportTestCase):
         comparison = self.mkmsg_fail(message.payload, 'ESME_RSUBMITFAIL')
         [actual] = yield self.get_dispatched_failures()
         self.assertEqual(actual, comparison)
+
+    @inlineCallbacks
+    def test_delivery_report_for_unknown_message(self):
+        dr = ("id:123 sub:... dlvrd:... submit date:200101010030"
+              " done date:200101020030 stat:DELIVRD err:... text:Meep")
+        deliver = DeliverSM(1, short_message=dr)
+        with LogCatcher() as lc:
+            yield self.esme.handle_data(deliver.get_bin())
+            [err] = lc.errors
+            self.assertEqual(err['message'],
+                             ("'Failed to retrieve message id for delivery "
+                              "report. Delivery report discarded.'",))
 
     @inlineCallbacks
     def test_throttled_submit(self):
@@ -650,29 +664,25 @@ class EsmeToSmscTestCase(TransportTestCase):
                 rkey='%s.outbound' % self.transport_name,
                 timestamp='0',
                 )
-        yield self.dispatch(msg)
 
         # We need the user_message_id to check the ack
         user_message_id = msg["message_id"]
 
-        [ack, delv] = yield self.wait_for_dispatched_events(2)
+        lc = LogCatcher()
+        with lc:
+            yield self.dispatch(msg)
+            [ack] = yield self.wait_for_dispatched_events(1)
 
         self.assertEqual(ack['message_type'], 'event')
         self.assertEqual(ack['event_type'], 'ack')
         self.assertEqual(ack['transport_name'], self.transport_name)
         self.assertEqual(ack['user_message_id'], user_message_id)
 
-        # We need the sent_message_id to check the delivery_report
-        sent_message_id = ack['sent_message_id']
-
-        self.assertEqual(delv['message_type'], 'event')
-        self.assertEqual(delv['event_type'], 'delivery_report')
-        self.assertEqual(delv['transport_name'], self.transport_name)
-        self.assertEqual(delv['user_message_id'], None)
-        self.assertEqual(delv['transport_metadata']['message']['id'],
-                                                    sent_message_id)
-        self.assertEqual(delv['delivery_status'],
-                         self.expected_delivery_status)
+        # check that failure to send delivery report was logged
+        [err] = lc.errors
+        self.assertEqual(err['message'],
+                         ("'Failed to retrieve message id for delivery "
+                          "report. Delivery report discarded.'",))
 
 
 class EsmeToSmscTestCaseDeliveryYo(EsmeToSmscTestCase):
