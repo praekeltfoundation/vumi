@@ -11,6 +11,7 @@ from vumi.message import TransportEvent, TransportUserMessage
 from vumi.persist.model import Model, Manager
 from vumi.persist.fields import (VumiMessage, ForeignKey, ListOf, Tag, Dynamic,
                                  Unicode)
+from vumi.persist.txriak_manager import TxRiakManager
 from vumi import log
 from vumi.components.message_store_cache import MessageStoreCache
 
@@ -307,9 +308,11 @@ class MessageStore(object):
         Returns a token with which the results can be fetched.
 
         NOTE:   This function can only be called from inside Twisted as
-                it depends on Deferreds being fired that aren't returned
-                by the function itself.
+                it assumes that the result of `batch_inbound_keys_matching`
+                is a Deferred.
         """
+        assert isinstance(self.manager, TxRiakManager), (
+            "manager is not an instance of TxRiakManager")
         token = yield self.cache.start_query(batch_id, 'inbound', query)
         deferred = self.batch_inbound_keys_matching(batch_id, query)
         deferred.addCallback(
