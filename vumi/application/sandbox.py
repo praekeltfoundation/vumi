@@ -692,6 +692,23 @@ class JsSandbox(Sandbox):
     * An extra 'javascript' parameter specifies the javascript to execute.
     * An extra optional 'app_context' parameter specifying a custom
       context for the 'javascript' application to execute with.
+
+    Example 'javascript' that logs information via the sandbox API
+    (provided as 'this' to 'on_inbound_message') and checks that logging
+    was successful::
+
+        api.on_inbound_message = function(command) {
+            this.log_info("From command: inbound-message", function (reply) {
+                this.log_info("Log successful: " + reply.success);
+                this.done();
+            });
+        }
+
+    Example 'app_context' that makes the Node.js 'path' module
+    available under the name 'path' in the context that the sandboxed
+    javascript executes in::
+
+        {path: require('path')}
     """
 
     POSSIBLE_NODEJS_EXECUTABLES = [
