@@ -153,7 +153,8 @@ class SmppTransportTestCase(TransportTestCase):
             [err] = lc.errors
             self.assertEqual(err['message'],
                              ("'Failed to retrieve message id for delivery "
-                              "report. Delivery report discarded.'",))
+                              "report. Delivery report from sphex "
+                              "discarded.'",))
 
     @inlineCallbacks
     def test_throttled_submit(self):
@@ -682,7 +683,8 @@ class EsmeToSmscTestCase(TransportTestCase):
         [err] = lc.errors
         self.assertEqual(err['message'],
                          ("'Failed to retrieve message id for delivery "
-                          "report. Delivery report discarded.'",))
+                          "report. Delivery report from "
+                          "esme_testing_transport discarded.'",))
 
 
 class EsmeToSmscTestCaseDeliveryYo(EsmeToSmscTestCase):
