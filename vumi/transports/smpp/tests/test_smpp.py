@@ -148,13 +148,13 @@ class SmppTransportTestCase(TransportTestCase):
         dr = ("id:123 sub:... dlvrd:... submit date:200101010030"
               " done date:200101020030 stat:DELIVRD err:... text:Meep")
         deliver = DeliverSM(1, short_message=dr)
-        with LogCatcher() as lc:
+        with LogCatcher(message="Failed to retrieve message id") as lc:
             yield self.esme.handle_data(deliver.get_bin())
-            [err] = lc.errors
-            self.assertEqual(err['message'],
-                             ("'Failed to retrieve message id for delivery "
+            [warning] = lc.logs
+            self.assertEqual(warning['message'],
+                             ("Failed to retrieve message id for delivery "
                               "report. Delivery report from sphex "
-                              "discarded.'",))
+                              "discarded.",))
 
     @inlineCallbacks
     def test_throttled_submit(self):
@@ -669,7 +669,7 @@ class EsmeToSmscTestCase(TransportTestCase):
         # We need the user_message_id to check the ack
         user_message_id = msg["message_id"]
 
-        lc = LogCatcher()
+        lc = LogCatcher(message="Failed to retrieve message id")
         with lc:
             yield self.dispatch(msg)
             [ack] = yield self.wait_for_dispatched_events(1)
@@ -680,11 +680,11 @@ class EsmeToSmscTestCase(TransportTestCase):
         self.assertEqual(ack['user_message_id'], user_message_id)
 
         # check that failure to send delivery report was logged
-        [err] = lc.errors
-        self.assertEqual(err['message'],
-                         ("'Failed to retrieve message id for delivery "
+        [warning] = lc.logs
+        self.assertEqual(warning['message'],
+                         ("Failed to retrieve message id for delivery "
                           "report. Delivery report from "
-                          "esme_testing_transport discarded.'",))
+                          "esme_testing_transport discarded.",))
 
 
 class EsmeToSmscTestCaseDeliveryYo(EsmeToSmscTestCase):

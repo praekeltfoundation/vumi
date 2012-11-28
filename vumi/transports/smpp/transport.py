@@ -354,9 +354,9 @@ class SmppTransport(Transport):
         message_id = yield self.r_get_id_for_third_party_id(
             kwargs['delivery_report']['id'])
         if message_id is None:
-            log.err("Failed to retrieve message id for delivery report."
-                    " Delivery report from %s discarded."
-                    % self.transport_name)
+            log.warning("Failed to retrieve message id for delivery report."
+                        " Delivery report from %s discarded."
+                        % self.transport_name)
             return
         log.msg("PUBLISHING DELIV REPORT: %s %s" % (message_id,
                                                     delivery_status))
