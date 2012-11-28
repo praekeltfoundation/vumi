@@ -458,6 +458,9 @@ class JsDummyAppWorker(DummyAppWorker):
     def javascript_for_api(self, api):
         return 'testscript'
 
+    def app_context_for_api(self, api):
+        return 'appcontext'
+
 
 class TestJsSandboxResource(ResourceTestCaseBase):
 
@@ -477,7 +480,7 @@ class TestJsSandboxResource(ResourceTestCaseBase):
         self.assertEqual(msgs, [SandboxCommand(cmd='initialize',
                                                cmd_id=msgs[0]['cmd_id'],
                                                javascript='testscript',
-                                               app_context=None)])
+                                               app_context='appcontext')])
 
 
 class TestLoggingResource(ResourceTestCaseBase):
