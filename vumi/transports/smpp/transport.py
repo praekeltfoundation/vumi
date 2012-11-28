@@ -187,7 +187,7 @@ class SmppTransport(Transport):
 
     @inlineCallbacks
     def handle_outbound_message(self, message):
-        log.debug("Consumed outgoing message", message)
+        log.debug("Consumed outgoing message %r" % (message,))
         log.debug("Unacknowledged message count: %s" % (
                 (yield self.esme_client.get_unacked_count()),))
         yield self.r_set_message(message)
