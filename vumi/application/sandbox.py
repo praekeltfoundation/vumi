@@ -436,8 +436,10 @@ class JsSandboxResource(SandboxResource):
     """
     def sandbox_init(self, api):
         javascript = self.app_worker.javascript_for_api(api)
+        app_context = self.app_worker.app_context_for_api(api)
         api.sandbox_send(SandboxCommand(cmd="initialize",
-                                        javascript=javascript))
+                                        javascript=javascript,
+                                        app_context=app_context))
 
 
 class LoggingResource(SandboxResource):
@@ -716,8 +718,20 @@ class JsSandbox(Sandbox):
         return LoggingResource('log', self, {})
 
     def javascript_for_api(self, api):
-        """Called by JsSandboxResource."""
+        """Called by JsSandboxResource.
+
+        :returns: String containing Javascript for the app to run.
+        """
         return self.config.get('javascript', None)
+
+    def app_context_for_api(self, api):
+        """Called by JsSandboxResource
+
+        :returns: String containing Javascript expression that returns
+        addition context for the namespace the app is being run
+        in. This Javascript is expected to be trusted code.
+        """
+        return self.config.get('app_context', None)
 
     def validate_config(self):
         super(JsSandbox, self).validate_config()

@@ -476,7 +476,8 @@ class TestJsSandboxResource(ResourceTestCaseBase):
         self.resource.sandbox_init(self.api)
         self.assertEqual(msgs, [SandboxCommand(cmd='initialize',
                                                cmd_id=msgs[0]['cmd_id'],
-                                               javascript='testscript')])
+                                               javascript='testscript',
+                                               app_context=None)])
 
 
 class TestLoggingResource(ResourceTestCaseBase):
