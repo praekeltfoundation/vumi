@@ -690,6 +690,8 @@ class JsSandbox(Sandbox):
     * An instance of :class:`LoggingResource` is added to the sandbox
       resources under the name `log` if no `log` resource exists.
     * An extra 'javascript' parameter specifies the javascript to execute.
+    * An extra optional 'app_context' parameter specifying a custom
+      context for the 'javascript' application to execute with.
     """
 
     POSSIBLE_NODEJS_EXECUTABLES = [
