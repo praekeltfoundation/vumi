@@ -447,7 +447,7 @@ class LoggingResource(SandboxResource):
     logging framework.
     """
     def handle_info(self, api, command):
-        log.info(command['msg'])
+        log.info(str(command['msg']))
         return self.reply(command, success=True)
 
 
