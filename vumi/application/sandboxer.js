@@ -92,7 +92,7 @@ var SandboxRunner = function (api) {
         var ctxt;
         var loaded_module = vm.createScript(command['javascript']);
         if (command['app_context']) {
-            ctxt = vm.runInThisContext(command['app_context']);
+            eval("ctxt = " + command['app_context'] + ";");
         } else {
             ctxt = {};
         }
