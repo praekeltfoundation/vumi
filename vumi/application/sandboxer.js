@@ -10,7 +10,7 @@ var SandboxApi = function () {
 
     self.next_id = function () {
         self.id += 1;
-        return self.id;
+        return self.id.toString();
     }
 
     self.populate_command = function (command, msg) {
@@ -76,7 +76,7 @@ var SandboxRunner = function (api) {
     });
 
     self.emitter.on('reply', function (reply) {
-        var handler = self.pending_requests[reply.msg_id];
+        var handler = self.pending_requests[reply.cmd_id];
         if (handler && handler.callback) {
             handler.callback.call(self.api, reply);
             self.process_requests(api.pop_requests());
@@ -114,7 +114,7 @@ var SandboxRunner = function (api) {
                 self.emitter.emit('exit');
             }
             if (callback) {
-                self.pending_requests[msg.msg_id] = {'callback': callback};
+                self.pending_requests[msg.cmd_id] = {'callback': callback};
             }
         });
     }
@@ -130,13 +130,13 @@ var SandboxRunner = function (api) {
     }
 
     self.data_from_stdin = function (data) {
-        parts = data.split("\n");
+        var parts = data.split("\n");
         parts[0] = self.chunk + parts[0];
         for (i = 0; i < parts.length - 1; i++) {
             if (!parts[i]) {
                 continue;
             }
-            msg = JSON.parse(parts[i]);
+            var msg = JSON.parse(parts[i]);
             if (!self.loaded) {
                 if (msg.cmd == 'initialize') {
                     self.load_code(msg);
