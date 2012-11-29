@@ -295,6 +295,29 @@ class JsSandboxTestCase(SandboxTestCaseBase):
             'Done.',
         ])
 
+    @inlineCallbacks
+    def test_js_sandboxer_with_app_context(self):
+        app_js = pkg_resources.resource_filename('vumi.application.tests',
+                                                 'app_requires_path.js')
+        javascript = file(app_js).read()
+        app = yield self.setup_app(javascript, extra_config={
+            "app_context": "{path: require('path')}",
+        })
+
+        with LogCatcher() as lc:
+            status = yield app.process_message_in_sandbox(self.mk_msg())
+            failures = [log['failure'].value for log in lc.errors]
+            msgs = lc.messages()
+        self.assertEqual(failures, [])
+        self.assertEqual(status, 0)
+        self.assertEqual(msgs, [
+            'Starting sandbox ...',
+            'Loading sandboxed code ...',
+            'From init!',
+            'We have access to path!',
+            'Done.',
+        ])
+
 
 class DummyAppWorker(object):
 
@@ -458,6 +481,9 @@ class JsDummyAppWorker(DummyAppWorker):
     def javascript_for_api(self, api):
         return 'testscript'
 
+    def app_context_for_api(self, api):
+        return 'appcontext'
+
 
 class TestJsSandboxResource(ResourceTestCaseBase):
 
@@ -476,7 +502,8 @@ class TestJsSandboxResource(ResourceTestCaseBase):
         self.resource.sandbox_init(self.api)
         self.assertEqual(msgs, [SandboxCommand(cmd='initialize',
                                                cmd_id=msgs[0]['cmd_id'],
-                                               javascript='testscript')])
+                                               javascript='testscript',
+                                               app_context='appcontext')])
 
 
 class TestLoggingResource(ResourceTestCaseBase):

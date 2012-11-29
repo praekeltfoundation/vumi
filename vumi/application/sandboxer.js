@@ -53,13 +53,11 @@ var SandboxApi = function () {
     self.on_unknown_command = function(command) {}
 }
 
-var SandboxRunner = function (api, ctx) {
+var SandboxRunner = function (api) {
     // Runner for a sandboxed app
     var self = this;
 
     self.api = api;
-    self.ctx = ctx;
-    self.ctx.api = api;
     self.emitter = new events.EventEmitter();
     self.chunk = "";
     self.pending_requests = {};
@@ -91,8 +89,15 @@ var SandboxRunner = function (api, ctx) {
 
     self.load_code = function (command) {
         self.log("Loading sandboxed code ...");
+        var ctxt;
         var loaded_module = vm.createScript(command['javascript']);
-        loaded_module.runInNewContext(self.ctx);
+        if (command['app_context']) {
+            eval("ctxt = " + command['app_context'] + ";");
+        } else {
+            ctxt = {};
+        }
+        ctxt.api = self.api;
+        loaded_module.runInNewContext(ctxt);
         self.loaded = true;
         // process any requests created when the app module was loaded.
         self.process_requests(api.pop_requests());
@@ -157,8 +162,7 @@ var SandboxRunner = function (api, ctx) {
 
 
 var api = new SandboxApi();
-var ctx = {};
-var runner = new SandboxRunner(api, ctx);
+var runner = new SandboxRunner(api);
 
 runner.run();
 runner.log("Starting sandbox ...");

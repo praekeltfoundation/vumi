@@ -436,8 +436,10 @@ class JsSandboxResource(SandboxResource):
     """
     def sandbox_init(self, api):
         javascript = self.app_worker.javascript_for_api(api)
+        app_context = self.app_worker.app_context_for_api(api)
         api.sandbox_send(SandboxCommand(cmd="initialize",
-                                        javascript=javascript))
+                                        javascript=javascript,
+                                        app_context=app_context))
 
 
 class LoggingResource(SandboxResource):
@@ -445,7 +447,7 @@ class LoggingResource(SandboxResource):
     logging framework.
     """
     def handle_info(self, api, command):
-        log.info(command['msg'])
+        log.info(str(command['msg']))
         return self.reply(command, success=True)
 
 
@@ -688,6 +690,25 @@ class JsSandbox(Sandbox):
     * An instance of :class:`LoggingResource` is added to the sandbox
       resources under the name `log` if no `log` resource exists.
     * An extra 'javascript' parameter specifies the javascript to execute.
+    * An extra optional 'app_context' parameter specifying a custom
+      context for the 'javascript' application to execute with.
+
+    Example 'javascript' that logs information via the sandbox API
+    (provided as 'this' to 'on_inbound_message') and checks that logging
+    was successful::
+
+        api.on_inbound_message = function(command) {
+            this.log_info("From command: inbound-message", function (reply) {
+                this.log_info("Log successful: " + reply.success);
+                this.done();
+            });
+        }
+
+    Example 'app_context' that makes the Node.js 'path' module
+    available under the name 'path' in the context that the sandboxed
+    javascript executes in::
+
+        {path: require('path')}
     """
 
     POSSIBLE_NODEJS_EXECUTABLES = [
@@ -716,8 +737,20 @@ class JsSandbox(Sandbox):
         return LoggingResource('log', self, {})
 
     def javascript_for_api(self, api):
-        """Called by JsSandboxResource."""
+        """Called by JsSandboxResource.
+
+        :returns: String containing Javascript for the app to run.
+        """
         return self.config.get('javascript', None)
+
+    def app_context_for_api(self, api):
+        """Called by JsSandboxResource
+
+        :returns: String containing Javascript expression that returns
+        addition context for the namespace the app is being run
+        in. This Javascript is expected to be trusted code.
+        """
+        return self.config.get('app_context', None)
 
     def validate_config(self):
         super(JsSandbox, self).validate_config()
