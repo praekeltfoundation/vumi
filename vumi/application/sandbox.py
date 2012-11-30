@@ -387,8 +387,9 @@ class RedisResource(SandboxResource):
     def handle_get(self, api, command):
         key = self._sandboxed_key(api.sandbox_id, command.get('key'))
         raw_value = yield self.redis.get(key)
+        value = json.loads(raw_value) if raw_value is not None else None
         returnValue(self.reply(command, success=True,
-                               value=json.loads(raw_value)))
+                               value=value))
 
     @inlineCallbacks
     def handle_delete(self, api, command):
