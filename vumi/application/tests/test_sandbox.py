@@ -425,6 +425,12 @@ class TestRedisResource(ResourceTestCaseBase, PersistenceMixin):
         self.assertEqual(reply['value'], 'bar')
 
     @inlineCallbacks
+    def test_handle_get_for_unknown_key(self):
+        reply = yield self.dispatch_command('get', key='foo')
+        self.assertEqual(reply['success'], True)
+        self.assertEqual(reply['value'], None)
+
+    @inlineCallbacks
     def test_handle_delete(self):
         yield self.r_server.set('sandboxes#test_id#foo',
                                 json.dumps('bar'))
