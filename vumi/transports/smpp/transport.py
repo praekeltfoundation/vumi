@@ -187,7 +187,7 @@ class SmppTransport(Transport):
 
     @inlineCallbacks
     def handle_outbound_message(self, message):
-        log.debug("Consumed outgoing message", message)
+        log.debug("Consumed outgoing message %r" % (message,))
         log.debug("Unacknowledged message count: %s" % (
                 (yield self.esme_client.get_unacked_count()),))
         yield self.r_set_message(message)
@@ -353,6 +353,11 @@ class SmppTransport(Transport):
             kwargs['delivery_report']['stat'])
         message_id = yield self.r_get_id_for_third_party_id(
             kwargs['delivery_report']['id'])
+        if message_id is None:
+            log.warning("Failed to retrieve message id for delivery report."
+                        " Delivery report from %s discarded."
+                        % self.transport_name)
+            return
         log.msg("PUBLISHING DELIV REPORT: %s %s" % (message_id,
                                                     delivery_status))
         returnValue((yield self.publish_delivery_report(

@@ -302,3 +302,43 @@ class TestMessageStoreCache(ApplicationTestCase):
         self.assertEqual(
             (yield self.cache.count_outbound_throughput(self.batch_id,
                 sample_time=10)), 2)
+
+    def test_get_query_token(self):
+        cache = self.store.cache
+        # different ordering in the dict should result in the same token.
+        token1 = cache.get_query_token('inbound', [{'a': 'b', 'c': 'd'}])
+        token2 = cache.get_query_token('inbound', [{'c': 'd', 'a': 'b'}])
+        self.assertEqual(token1, token2)
+
+    @inlineCallbacks
+    def test_start_query(self):
+        token = yield self.cache.start_query(self.batch_id, 'inbound', [
+            {'key': 'key', 'pattern': 'pattern', 'flags': 'flags'}])
+        self.assertTrue(
+            (yield self.cache.is_query_in_progress(self.batch_id, token)))
+
+    @inlineCallbacks
+    def test_store_query_results(self):
+        now = datetime.now()
+        message_ids = []
+        # NOTE: we're writing these messages oldest first so we can check
+        #       that the cache is returning them in the correct order
+        #       when we pull out the search results.
+        for i in range(10):
+            msg_in = self.mkmsg_in(content='hello-%s' % (i,))
+            msg_in['timestamp'] = now + timedelta(seconds=i * 10)
+            yield self.cache.add_inbound_message(self.batch_id, msg_in)
+            message_ids.append(msg_in['message_id'])
+
+        token = yield self.cache.start_query(self.batch_id, 'inbound', [
+            {'key': 'msg.content', 'pattern': 'hello', 'flags': ''}])
+        yield self.cache.store_query_results(self.batch_id, token, message_ids,
+            'inbound', 120)
+        self.assertFalse(
+            (yield self.cache.is_query_in_progress(self.batch_id, token)))
+        self.assertEqual(
+            (yield self.cache.get_query_results(self.batch_id, token)),
+            list(reversed(message_ids)))
+        self.assertEqual(
+            (yield self.cache.count_query_results(self.batch_id, token)),
+            10)

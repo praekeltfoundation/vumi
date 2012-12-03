@@ -6,7 +6,7 @@ PyYAML
 iso8601
 supervisor
 pyOpenSSL
-python-ssmi
+python-ssmi>=0.0.5
 wokkel
 redis
 txredis

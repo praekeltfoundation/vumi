@@ -14,7 +14,8 @@ from vumi.message import TransportUserMessage, TransportEvent
 from vumi.application.tests.utils import ApplicationTestCase
 from vumi.application.sandbox import (Sandbox, SandboxCommand, SandboxError,
                                       RedisResource, OutboundResource,
-                                      JsSandboxResource, LoggingResource)
+                                      JsSandboxResource, LoggingResource,
+                                      JsSandbox)
 from vumi.tests.utils import LogCatcher, PersistenceMixin
 
 
@@ -22,15 +23,17 @@ class SandboxTestCaseBase(ApplicationTestCase):
 
     application_class = Sandbox
 
-    def setup_app(self, executable, args, extra_config=None):
+    def setup_app(self, executable=None, args=None, extra_config=None):
         tmp_path = self.mktemp()
         os.mkdir(tmp_path)
         config = {
-            'executable': executable,
-            'args': args,
             'path': tmp_path,
             'timeout': '10',
         }
+        if executable is not None:
+            config['executable'] = executable
+        if args is not None:
+            config['args'] = args
         if extra_config is not None:
             config.update(extra_config)
         return self.get_application(config)
@@ -253,38 +256,21 @@ class SandboxTestCase(SandboxTestCaseBase):
             self.mk_delivery_report(), 'inbound-event')
 
 
-class NodeJsSandboxTestCase(SandboxTestCaseBase):
+class JsSandboxTestCase(SandboxTestCaseBase):
 
-    possible_nodejs_executables = [
-        '/usr/local/bin/node',
-        '/usr/bin/node',
-    ]
+    application_class = JsSandbox
 
     def setUp(self):
-        super(NodeJsSandboxTestCase, self).setUp()
-        for path in self.possible_nodejs_executables:
-            if os.path.isfile(path):
-                self.nodejs_executable = path
-                break
-        else:
+        super(JsSandboxTestCase, self).setUp()
+        if JsSandbox.find_nodejs() is None:
             raise SkipTest("No node.js executable found.")
-        self.sandboxer_js = pkg_resources.resource_filename('vumi.application',
-                                                            'sandboxer.js')
 
     def setup_app(self, javascript_code, extra_config=None):
         extra_config = extra_config or {}
-        sandbox_config = extra_config.setdefault('sandbox', {})
-        sandbox_config.update({
-            'log': {
-                'cls': 'vumi.application.sandbox.LoggingResource',
-            },
-            'js': {
-                'cls': 'vumi.application.sandbox.JsSandboxResource',
-                'javascript': javascript_code,
-            },
+        extra_config.update({
+            'javascript': javascript_code,
         })
-        return super(NodeJsSandboxTestCase, self).setup_app(
-            self.nodejs_executable, [self.sandboxer_js],
+        return super(JsSandboxTestCase, self).setup_app(
             extra_config=extra_config)
 
     @inlineCallbacks
@@ -306,6 +292,29 @@ class NodeJsSandboxTestCase(SandboxTestCaseBase):
             'From init!',
             'From command: inbound-message',
             'Log successful: true',
+            'Done.',
+        ])
+
+    @inlineCallbacks
+    def test_js_sandboxer_with_app_context(self):
+        app_js = pkg_resources.resource_filename('vumi.application.tests',
+                                                 'app_requires_path.js')
+        javascript = file(app_js).read()
+        app = yield self.setup_app(javascript, extra_config={
+            "app_context": "{path: require('path')}",
+        })
+
+        with LogCatcher() as lc:
+            status = yield app.process_message_in_sandbox(self.mk_msg())
+            failures = [log['failure'].value for log in lc.errors]
+            msgs = lc.messages()
+        self.assertEqual(failures, [])
+        self.assertEqual(status, 0)
+        self.assertEqual(msgs, [
+            'Starting sandbox ...',
+            'Loading sandboxed code ...',
+            'From init!',
+            'We have access to path!',
             'Done.',
         ])
 
@@ -416,6 +425,12 @@ class TestRedisResource(ResourceTestCaseBase, PersistenceMixin):
         self.assertEqual(reply['value'], 'bar')
 
     @inlineCallbacks
+    def test_handle_get_for_unknown_key(self):
+        reply = yield self.dispatch_command('get', key='foo')
+        self.assertEqual(reply['success'], True)
+        self.assertEqual(reply['value'], None)
+
+    @inlineCallbacks
     def test_handle_delete(self):
         yield self.r_server.set('sandboxes#test_id#foo',
                                 json.dumps('bar'))
@@ -468,16 +483,24 @@ class TestOutboundResource(ResourceTestCaseBase):
                          [(('1234', 'hello'), {'tag': 'default'})])
 
 
+class JsDummyAppWorker(DummyAppWorker):
+    def javascript_for_api(self, api):
+        return 'testscript'
+
+    def app_context_for_api(self, api):
+        return 'appcontext'
+
+
 class TestJsSandboxResource(ResourceTestCaseBase):
 
     resource_cls = JsSandboxResource
 
+    app_worker_cls = JsDummyAppWorker
+
     @inlineCallbacks
     def setUp(self):
         super(TestJsSandboxResource, self).setUp()
-        yield self.create_resource({
-            'javascript': 'testscript',
-        })
+        yield self.create_resource({})
 
     def test_sandbox_init(self):
         msgs = []
@@ -485,7 +508,8 @@ class TestJsSandboxResource(ResourceTestCaseBase):
         self.resource.sandbox_init(self.api)
         self.assertEqual(msgs, [SandboxCommand(cmd='initialize',
                                                cmd_id=msgs[0]['cmd_id'],
-                                               javascript='testscript')])
+                                               javascript='testscript',
+                                               app_context='appcontext')])
 
 
 class TestLoggingResource(ResourceTestCaseBase):

@@ -1,11 +1,18 @@
 # -*- test-case-name: vumi.components.tests.test_message_store_cache -*-
 # -*- coding: utf-8 -*-
 import time
+import hashlib
+import json
 
 from twisted.internet.defer import returnValue
 
 from vumi.persist.redis_base import Manager
 from vumi.message import TransportEvent
+from vumi.errors import VumiError
+
+
+class MessageStoreCacheException(VumiError):
+    pass
 
 
 class MessageStoreCache(object):
@@ -20,6 +27,11 @@ class MessageStoreCache(object):
     FROM_ADDR_KEY = 'from_addr'
     EVENT_KEY = 'event'
     STATUS_KEY = 'status'
+    SEARCH_TOKEN_KEY = 'search_token'
+    SEARCH_RESULT_KEY = 'search_result'
+
+    # Cache search results for 24 hrs
+    DEFAULT_SEARCH_RESULT_TTL = 60 * 60 * 24
 
     def __init__(self, redis):
         # Store redis as `manager` as well since @Manager.calls_manager
@@ -49,6 +61,12 @@ class MessageStoreCache(object):
 
     def event_key(self, batch_id):
         return self.batch_key(self.EVENT_KEY, batch_id)
+
+    def search_token_key(self, batch_id):
+        return self.batch_key(self.SEARCH_TOKEN_KEY, batch_id)
+
+    def search_result_key(self, batch_id, token):
+        return self.batch_key(self.SEARCH_RESULT_KEY, batch_id, token)
 
     @Manager.calls_manager
     def batch_start(self, batch_id):
@@ -302,3 +320,98 @@ class MessageStoreCache(object):
         count = yield self.redis.zcount(self.outbound_key(batch_id),
             timestamp - sample_time, timestamp)
         returnValue(int(count))
+
+    def get_query_token(self, direction, query):
+        """
+        Return a token for the query.
+
+        The query is a list of dictionaries, to ensure consistent keys
+        we want to make sure the input is always ordered the same before
+        creating a cache key.
+
+        :param str direction:
+            Namespace to store this query under.
+            Generally 'inbound' or 'outbound'.
+        :param list query:
+            A list of dictionaries with query information.
+
+        """
+        ordered_query = sorted([sorted(part.items()) for part in query])
+        # TODO: figure out if JSON is necessary here or if something like str()
+        #       will work just as well.
+        return '%s-%s' % (direction,
+            hashlib.md5(json.dumps(ordered_query)).hexdigest())
+
+    @Manager.calls_manager
+    def start_query(self, batch_id, direction, query):
+        """
+        Start a query operation on the inbound messages for the given batch_id.
+        Returns a token with which the results of the query can be fetched
+        as soon as they arrive.
+        """
+        token = self.get_query_token(direction, query)
+        yield self.redis.sadd(self.search_token_key(batch_id), token)
+        returnValue(token)
+
+    @Manager.calls_manager
+    def store_query_results(self, batch_id, token, keys, direction,
+                            ttl=None):
+        """
+        Store the inbound query results for a query that was started with
+        `start_inbound_query`. Internally this grabs the timestamps from
+        the cache (there is an assumption that it has already been reconciled)
+        and orders the results accordingly.
+
+        :param str token:
+            The token to store the results under.
+        :param list keys:
+            The list of keys to store.
+        :param str direction:
+            Which messages to search, either inbound or outbound.
+        :param int ttl:
+            How long to store the results for.
+            Defaults to DEFAULT_SEARCH_RESULT_TTL.
+        """
+        ttl = ttl or self.DEFAULT_SEARCH_RESULT_TTL
+        result_key = self.search_result_key(batch_id, token)
+        if direction == 'inbound':
+            score_set_key = self.inbound_key(batch_id)
+        elif direction == 'outbound':
+            score_set_key = self.outbound_key(batch_id)
+        else:
+            raise MessageStoreCacheException('Invalid direction')
+
+        # populate the results set weighted according to the timestamps
+        # that are already known in the cache.
+        for key in keys:
+            timestamp = yield self.redis.zscore(score_set_key, key)
+            yield self.redis.zadd(result_key, **{
+                key.encode('utf-8'): timestamp,
+                })
+
+        # Auto expire after TTL
+        yield self.redis.expire(result_key, ttl)
+        # Remove from the list of in progress search operations.
+        yield self.redis.srem(self.search_token_key(batch_id), token)
+
+    def is_query_in_progress(self, batch_id, token):
+        """
+        Check whether a search is still in progress for the given token.
+        """
+        return self.redis.sismember(self.search_token_key(batch_id), token)
+
+    def get_query_results(self, batch_id, token, start=0, stop=-1,
+                                    asc=False):
+        """
+        Return the results for the query token. Will return an empty list
+        of no results are available.
+        """
+        result_key = self.search_result_key(batch_id, token)
+        return self.redis.zrange(result_key, start, stop, desc=not asc)
+
+    def count_query_results(self, batch_id, token):
+        """
+        Return the number of results for the query token.
+        """
+        result_key = self.search_result_key(batch_id, token)
+        return self.redis.zcard(result_key)
