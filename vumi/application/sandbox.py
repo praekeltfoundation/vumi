@@ -7,6 +7,7 @@ import resource
 import os
 import signal
 import json
+import pkg_resources
 from uuid import uuid4
 
 from twisted.internet import reactor
@@ -386,8 +387,9 @@ class RedisResource(SandboxResource):
     def handle_get(self, api, command):
         key = self._sandboxed_key(api.sandbox_id, command.get('key'))
         raw_value = yield self.redis.get(key)
+        value = json.loads(raw_value) if raw_value is not None else None
         returnValue(self.reply(command, success=True,
-                               value=json.loads(raw_value)))
+                               value=value))
 
     @inlineCallbacks
     def handle_delete(self, api, command):
@@ -431,17 +433,14 @@ class JsSandboxResource(SandboxResource):
     Typically used alongside vumi/applicaiton/sandboxer.js which is
     a simple node.js based Javascript sandbox.
 
-    Configuration options:
-
-    :param str javascript:
-        Javascript to execute inside the sandbox.
+    Requires the worker to have a `javascript_for_api` method.
     """
-    def setup(self):
-        self.javascript = self.config.get('javascript')
-
     def sandbox_init(self, api):
+        javascript = self.app_worker.javascript_for_api(api)
+        app_context = self.app_worker.app_context_for_api(api)
         api.sandbox_send(SandboxCommand(cmd="initialize",
-                                        javascript=self.javascript))
+                                        javascript=javascript,
+                                        app_context=app_context))
 
 
 class LoggingResource(SandboxResource):
@@ -449,7 +448,7 @@ class LoggingResource(SandboxResource):
     logging framework.
     """
     def handle_info(self, api, command):
-        log.info(command['msg'])
+        log.info(str(command['msg']))
         return self.reply(command, success=True)
 
 
@@ -570,7 +569,7 @@ class Sandbox(ApplicationWorker):
         resource.RLIMIT_RSS: (10 * MB, 10 * MB),
         resource.RLIMIT_NOFILE: (10, 10),
         resource.RLIMIT_MEMLOCK: (64 * KB, 64 * KB),
-        resource.RLIMIT_AS: (64 * MB, 64 * MB),
+        resource.RLIMIT_AS: (196 * MB, 196 * MB),
     }
 
     def validate_config(self):
@@ -604,29 +603,37 @@ class Sandbox(ApplicationWorker):
     def create_sandbox_resources(self, config):
         return SandboxResources(self, config)
 
-    def create_sandbox_api(self):
-        return SandboxApi(self.resources)
-
     def create_sandbox_protocol(self, sandbox_id, api):
         spawn_kwargs = dict(args=self.args, env=self.env, path=self.path)
         return SandboxProtocol(sandbox_id, api, self.executable, spawn_kwargs,
                                self.rlimits, self.timeout, self.recv_limit)
 
-    def sandbox_id_for_message(self, msg):
-        """Sub-classes should override this to retrieve an appropriate id."""
-        return msg['sandbox_id']
+    def create_sandbox_api(self, resources):
+        return SandboxApi(resources)
 
-    def sandbox_id_for_event(self, event):
-        """Sub-classes should override this to retrieve an appropriate id."""
-        return event['sandbox_id']
+    def sandbox_id_for_message(self, msg_or_event):
+        """Return a sandbox id for a message or event.
 
-    def _process_in_sandbox(self, sandbox_id, api, api_callback):
-        sandbox_protocol = self.create_sandbox_protocol(sandbox_id, api)
+        Sub-classes may override this to retrieve an appropriate id.
+        """
+        return msg_or_event['sandbox_id']
+
+    def sandbox_protocol_for_message(self, msg_or_event):
+        """Return a sandbox protocol for a message or event.
+
+        Sub-classes may override this to retrieve an appropriate protocol.
+        """
+        sandbox_id = self.sandbox_id_for_message(msg_or_event)
+        api = self.create_sandbox_api(self.resources)
+        protocol = self.create_sandbox_protocol(sandbox_id, api)
+        return protocol
+
+    def _process_in_sandbox(self, sandbox_protocol, api_callback):
         sandbox_protocol.spawn()
 
         def on_start(_result):
-            api.sandbox_init()
-            api_callback(sandbox_protocol)
+            sandbox_protocol.api.sandbox_init()
+            api_callback()
             d = sandbox_protocol.done()
             d.addErrback(log.error)
             return d
@@ -635,23 +642,25 @@ class Sandbox(ApplicationWorker):
         d.addCallbacks(on_start, log.error)
         return d
 
+    @inlineCallbacks
     def process_message_in_sandbox(self, msg):
-        sandbox_id = self.sandbox_id_for_message(msg)
-        api = self.create_sandbox_api()
+        sandbox_protocol = yield self.sandbox_protocol_for_message(msg)
 
-        def sandbox_init(sandbox):
-            api.sandbox_inbound_message(msg)
+        def sandbox_init():
+            sandbox_protocol.api.sandbox_inbound_message(msg)
 
-        return self._process_in_sandbox(sandbox_id, api, sandbox_init)
+        status = yield self._process_in_sandbox(sandbox_protocol, sandbox_init)
+        returnValue(status)
 
+    @inlineCallbacks
     def process_event_in_sandbox(self, event):
-        sandbox_id = self.sandbox_id_for_event(event)
-        api = self.create_sandbox_api()
+        sandbox_protocol = yield self.sandbox_protocol_for_message(event)
 
-        def sandbox_init(sandbox):
-            api.sandbox_inbound_event(event)
+        def sandbox_init():
+            sandbox_protocol.api.sandbox_inbound_event(event)
 
-        return self._process_in_sandbox(sandbox_id, api, sandbox_init)
+        status = yield self._process_in_sandbox(sandbox_protocol, sandbox_init)
+        returnValue(status)
 
     def consume_user_message(self, msg):
         return self.process_message_in_sandbox(msg)
@@ -667,6 +676,93 @@ class Sandbox(ApplicationWorker):
 
     def consume_delivery_report(self, event):
         return self.process_event_in_sandbox(event)
+
+
+class JsSandbox(Sandbox):
+    """
+    Configuration options:
+
+    As for :class:`Sandbox` except:
+
+    * `executable` defaults to searching for a `node.js` binary.
+    * `args` defaults to the JS sandbox script in :module:`vumi.application`.
+    * An instance of :class:`JsSandboxResource` is added to the sandbox
+      resources under the name `js` if no `js` resource exists.
+    * An instance of :class:`LoggingResource` is added to the sandbox
+      resources under the name `log` if no `log` resource exists.
+    * An extra 'javascript' parameter specifies the javascript to execute.
+    * An extra optional 'app_context' parameter specifying a custom
+      context for the 'javascript' application to execute with.
+
+    Example 'javascript' that logs information via the sandbox API
+    (provided as 'this' to 'on_inbound_message') and checks that logging
+    was successful::
+
+        api.on_inbound_message = function(command) {
+            this.log_info("From command: inbound-message", function (reply) {
+                this.log_info("Log successful: " + reply.success);
+                this.done();
+            });
+        }
+
+    Example 'app_context' that makes the Node.js 'path' module
+    available under the name 'path' in the context that the sandboxed
+    javascript executes in::
+
+        {path: require('path')}
+    """
+
+    POSSIBLE_NODEJS_EXECUTABLES = [
+        '/usr/local/bin/node',
+        '/usr/local/bin/nodejs',
+        '/usr/bin/node',
+        '/usr/bin/nodejs',
+    ]
+
+    @classmethod
+    def find_nodejs(cls):
+        for path in cls.POSSIBLE_NODEJS_EXECUTABLES:
+            if os.path.isfile(path):
+                return path
+        return None
+
+    @classmethod
+    def find_sandbox_js(cls):
+        return pkg_resources.resource_filename('vumi.application',
+                                               'sandboxer.js')
+
+    def get_js_resource(self):
+        return JsSandboxResource('js', self, {})
+
+    def get_log_resource(self):
+        return LoggingResource('log', self, {})
+
+    def javascript_for_api(self, api):
+        """Called by JsSandboxResource.
+
+        :returns: String containing Javascript for the app to run.
+        """
+        return self.config.get('javascript', None)
+
+    def app_context_for_api(self, api):
+        """Called by JsSandboxResource
+
+        :returns: String containing Javascript expression that returns
+        addition context for the namespace the app is being run
+        in. This Javascript is expected to be trusted code.
+        """
+        return self.config.get('app_context', None)
+
+    def validate_config(self):
+        super(JsSandbox, self).validate_config()
+        if self.config.get("executable") is None:
+            self.executable = self.find_nodejs()
+        if self.config.get("args") is None:
+            self.args = [self.executable] + [self.find_sandbox_js()]
+        if 'js' not in self.resources.resources:
+            self.resources.add_resource('js', self.get_js_resource())
+        if 'log' not in self.resources.resources:
+            self.resources.add_resource('log', self.get_log_resource())
 
 
 if __name__ == "__main__":

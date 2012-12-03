@@ -10,7 +10,7 @@ var SandboxApi = function () {
 
     self.next_id = function () {
         self.id += 1;
-        return self.id;
+        return self.id.toString();
     }
 
     self.populate_command = function (command, msg) {
@@ -53,13 +53,11 @@ var SandboxApi = function () {
     self.on_unknown_command = function(command) {}
 }
 
-var SandboxRunner = function (api, ctx) {
+var SandboxRunner = function (api) {
     // Runner for a sandboxed app
     var self = this;
 
     self.api = api;
-    self.ctx = ctx;
-    self.ctx.api = api;
     self.emitter = new events.EventEmitter();
     self.chunk = "";
     self.pending_requests = {};
@@ -78,7 +76,7 @@ var SandboxRunner = function (api, ctx) {
     });
 
     self.emitter.on('reply', function (reply) {
-        var handler = self.pending_requests[reply.msg_id];
+        var handler = self.pending_requests[reply.cmd_id];
         if (handler && handler.callback) {
             handler.callback.call(self.api, reply);
             self.process_requests(api.pop_requests());
@@ -91,8 +89,15 @@ var SandboxRunner = function (api, ctx) {
 
     self.load_code = function (command) {
         self.log("Loading sandboxed code ...");
+        var ctxt;
         var loaded_module = vm.createScript(command['javascript']);
-        loaded_module.runInNewContext(self.ctx);
+        if (command['app_context']) {
+            eval("ctxt = " + command['app_context'] + ";");
+        } else {
+            ctxt = {};
+        }
+        ctxt.api = self.api;
+        loaded_module.runInNewContext(ctxt);
         self.loaded = true;
         // process any requests created when the app module was loaded.
         self.process_requests(api.pop_requests());
@@ -109,7 +114,7 @@ var SandboxRunner = function (api, ctx) {
                 self.emitter.emit('exit');
             }
             if (callback) {
-                self.pending_requests[msg.msg_id] = {'callback': callback};
+                self.pending_requests[msg.cmd_id] = {'callback': callback};
             }
         });
     }
@@ -125,13 +130,13 @@ var SandboxRunner = function (api, ctx) {
     }
 
     self.data_from_stdin = function (data) {
-        parts = data.split("\n");
+        var parts = data.split("\n");
         parts[0] = self.chunk + parts[0];
         for (i = 0; i < parts.length - 1; i++) {
             if (!parts[i]) {
                 continue;
             }
-            msg = JSON.parse(parts[i]);
+            var msg = JSON.parse(parts[i]);
             if (!self.loaded) {
                 if (msg.cmd == 'initialize') {
                     self.load_code(msg);
@@ -157,8 +162,7 @@ var SandboxRunner = function (api, ctx) {
 
 
 var api = new SandboxApi();
-var ctx = {};
-var runner = new SandboxRunner(api, ctx);
+var runner = new SandboxRunner(api);
 
 runner.run();
 runner.log("Starting sandbox ...");

@@ -6,9 +6,7 @@ PyYAML
 iso8601
 supervisor
 pyOpenSSL
-# restore to PyPI python-ssmi once python-ssmi 0.0.5 is released
-# python-ssmi
-https://github.com/praekelt/python-ssmi/tarball/develop#egg=ssmi-0.0.5a
+python-ssmi>=0.0.5
 wokkel
 redis
 txredis

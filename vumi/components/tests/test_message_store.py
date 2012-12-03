@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 """Tests for vumi.components.message_store."""
+from datetime import datetime, timedelta
 
 from twisted.internet.defer import inlineCallbacks, returnValue
 
@@ -396,8 +397,13 @@ class TestMessageStoreCache(TestMessageStoreBase):
         for i in range(10):
             msg = self.mkmsg_out(message_id=TransportEvent.generate_id())
             yield self.store.add_outbound_message(msg, batch_id=batch_id)
+            ack = self.mkmsg_ack(user_message_id=msg['message_id'],
+                sent_message_id=msg['message_id'])
+            yield self.store.add_event(ack)
 
         self.clear_cache(self.store)
+        batch_status = yield self.store.batch_status(batch_id)
+        self.assertEqual(batch_status, {})
         # Default reconciliation delta should return True
         self.assertTrue((yield self.store.needs_reconciliation(batch_id)))
         yield self.store.reconcile_cache(batch_id)
@@ -406,3 +412,62 @@ class TestMessageStoreCache(TestMessageStoreBase):
         # Stricted possible reconciliation delta should return True
         self.assertFalse((yield self.store.needs_reconciliation(batch_id,
             delta=0)))
+        batch_status = yield self.store.batch_status(batch_id)
+        self.assertEqual(batch_status['ack'], 10)
+        self.assertEqual(batch_status['sent'], 10)
+
+    @inlineCallbacks
+    def test_find_inbound_keys_matching(self):
+        batch_id = yield self.store.batch_start([("pool", "tag")])
+
+        # Store via message_store
+        now = datetime.now()
+        messages = []
+        for i in range(10):
+            msg = self.mkmsg_in(message_id=TransportEvent.generate_id())
+            msg['timestamp'] = now - timedelta(i * 10)
+            yield self.store.add_inbound_message(msg, batch_id=batch_id)
+            messages.append(msg)
+
+        token = yield self.store.find_inbound_keys_matching(batch_id, [{
+                'key': 'msg.content',
+                'pattern': '.*',
+                'flags': 'i',
+            }], wait=True)
+
+        keys = yield self.store.get_keys_for_token(batch_id, token)
+        in_progress = yield self.store.cache.is_query_in_progress(batch_id,
+                                                                    token)
+        self.assertEqual(len(keys), 10)
+        self.assertEqual(10,
+            (yield self.store.count_keys_for_token(batch_id, token)))
+        self.assertEqual(keys, [msg['message_id'] for msg in messages])
+        self.assertFalse(in_progress)
+
+    @inlineCallbacks
+    def test_find_outbound_keys_matching(self):
+        batch_id = yield self.store.batch_start([("pool", "tag")])
+
+        # Store via message_store
+        now = datetime.now()
+        messages = []
+        for i in range(10):
+            msg = self.mkmsg_out(message_id=TransportEvent.generate_id())
+            msg['timestamp'] = now - timedelta(i * 10)
+            yield self.store.add_outbound_message(msg, batch_id=batch_id)
+            messages.append(msg)
+
+        token = yield self.store.find_outbound_keys_matching(batch_id, [{
+                'key': 'msg.content',
+                'pattern': '.*',
+                'flags': 'i',
+            }], wait=True)
+
+        keys = yield self.store.get_keys_for_token(batch_id, token)
+        in_progress = yield self.store.cache.is_query_in_progress(batch_id,
+                                                                    token)
+        self.assertEqual(len(keys), 10)
+        self.assertEqual(10,
+            (yield self.store.count_keys_for_token(batch_id, token)))
+        self.assertEqual(keys, [msg['message_id'] for msg in messages])
+        self.assertFalse(in_progress)
