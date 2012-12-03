@@ -540,6 +540,8 @@ class Sandbox(ApplicationWorker):
         the path of the executable itself).
     :param str path:
         Current working directory to run the executable in.
+    :param dict env:
+        Custom environment variables for the sandboxed process.
     :param int timeout:
         Length of time the subprocess is given to process
         a message.
