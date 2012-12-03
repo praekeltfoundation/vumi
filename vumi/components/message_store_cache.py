@@ -386,7 +386,7 @@ class MessageStoreCache(object):
         for key in keys:
             timestamp = yield self.redis.zscore(score_set_key, key)
             yield self.redis.zadd(result_key, **{
-                key: timestamp,
+                key.encode('utf-8'): timestamp,
                 })
 
         # Auto expire after TTL
