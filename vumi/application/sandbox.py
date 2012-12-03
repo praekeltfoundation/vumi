@@ -757,8 +757,10 @@ class JsSandbox(Sandbox):
         super(JsSandbox, self).validate_config()
         if self.config.get("executable") is None:
             self.executable = self.find_nodejs()
-        if self.config.get("args") is None:
-            self.args = [self.executable] + [self.find_sandbox_js()]
+        # We have to reset this even if we already have args from the config
+        # because self.executable may have changed.
+        self.args = [self.executable] + self.config.get(
+            "args", [self.find_sandbox_js()])
         if 'js' not in self.resources.resources:
             self.resources.add_resource('js', self.get_js_resource())
         if 'log' not in self.resources.resources:
