@@ -1,4 +1,4 @@
-# -*- test-case-name: vumi.application.tests.test_window_manager -*-
+# -*- test-case-name: vumi.components.tests.test_window_manager -*-
 import json
 import uuid
 
