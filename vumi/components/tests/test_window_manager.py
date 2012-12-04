@@ -2,7 +2,7 @@ from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet.task import Clock
 
-from vumi.application.window_manager import WindowManager, WindowException
+from vumi.components.window_manager import WindowManager, WindowException
 from vumi.tests.utils import PersistenceMixin
 
 
