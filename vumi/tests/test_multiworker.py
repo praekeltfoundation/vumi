@@ -1,8 +1,7 @@
-from twisted.trial.unittest import TestCase
 from twisted.internet.defer import (Deferred, DeferredList, inlineCallbacks,
                                     returnValue)
 
-from vumi.tests.utils import StubbedWorkerCreator, get_stubbed_worker
+from vumi.tests.utils import StubbedWorkerCreator, VumiWorkerTestCase
 from vumi.service import Worker
 from vumi.message import TransportUserMessage
 from vumi.multiworker import MultiWorker
@@ -13,14 +12,14 @@ class ToyWorker(Worker):
 
     def startService(self):
         self._d = Deferred()
-        super(ToyWorker, self).startService()
+        return super(ToyWorker, self).startService()
 
     @inlineCallbacks
     def startWorker(self):
         self.events.append("START: %s" % self.name)
         self.pub = yield self.publish_to("%s.out" % self.name)
-        self.consume("%s.in" % self.name, self.process_message,
-                     message_class=TransportUserMessage)
+        yield self.consume("%s.in" % self.name, self.process_message,
+                           message_class=TransportUserMessage)
         self._d.callback(None)
 
     def stopWorker(self):
@@ -52,9 +51,7 @@ def mkmsg(content):
         )
 
 
-class MultiWorkerTestCase(TestCase):
-
-    timeout = 3
+class MultiWorkerTestCase(VumiWorkerTestCase):
 
     base_config = {
         'workers': {
@@ -68,28 +65,28 @@ class MultiWorkerTestCase(TestCase):
         }
 
     def setUp(self):
+        super(MultiWorkerTestCase, self).setUp()
         ToyWorker.events[:] = []
 
     @inlineCallbacks
     def tearDown(self):
-        yield self.worker.stopService()
+        yield super(MultiWorkerTestCase, self).tearDown()
         ToyWorker.events[:] = []
 
     @inlineCallbacks
     def get_multiworker(self, config):
-        self.worker = get_stubbed_worker(StubbedMultiWorker, config)
-        self.worker.startService()
-        self.broker = self.worker._amqp_client.broker
+        self.worker = yield self.get_worker(
+            config, StubbedMultiWorker, start=False)
+        yield self.worker.startService()
         yield self.worker.wait_for_workers()
         returnValue(self.worker)
 
     def dispatch(self, message, worker_name):
         rkey = "%s.in" % (worker_name,)
-        self.broker.publish_message('vumi', rkey, message)
-        return self.broker.kick_delivery()
+        return self._dispatch(message, rkey)
 
     def get_replies(self, worker_name):
-        msgs = self.broker.get_messages('vumi', "%s.out" % (worker_name,))
+        msgs = self._amqp.get_messages('vumi', "%s.out" % (worker_name,))
         return [m['content'] for m in msgs]
 
     @inlineCallbacks

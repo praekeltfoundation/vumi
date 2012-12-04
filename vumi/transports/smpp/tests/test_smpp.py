@@ -195,35 +195,36 @@ class SmppTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_reconnect(self):
-        connected_chan_count = len(self._amqp.channels)
-        disconnected_chan_count = connected_chan_count - 1
-
+        self.assertFalse(self.transport.message_consumer.paused)
         yield self.transport.esme_disconnected()
-        self.assertEqual(disconnected_chan_count, len(self._amqp.channels))
+        self.assertTrue(self.transport.message_consumer.paused)
         yield self.transport.esme_disconnected()
-        self.assertEqual(disconnected_chan_count, len(self._amqp.channels))
+        self.assertTrue(self.transport.message_consumer.paused)
 
         yield self.transport.esme_connected(self.esme)
-        self.assertEqual(connected_chan_count, len(self._amqp.channels))
+        self.assertFalse(self.transport.message_consumer.paused)
         yield self.transport.esme_connected(self.esme)
-        self.assertEqual(connected_chan_count, len(self._amqp.channels))
+        self.assertFalse(self.transport.message_consumer.paused)
 
 
 class MockSmppTransport(SmppTransport):
-    def _setup_message_consumer(self):
-        super(MockSmppTransport, self)._setup_message_consumer()
+    @inlineCallbacks
+    def esme_connected(self, client):
+        yield super(MockSmppTransport, self).esme_connected(client)
         self._block_till_bind.callback(None)
 
 
 class MockSmppTxTransport(SmppTxTransport):
-    def _setup_message_consumer(self):
-        super(MockSmppTxTransport, self)._setup_message_consumer()
+    @inlineCallbacks
+    def esme_connected(self, client):
+        yield super(MockSmppTxTransport, self).esme_connected(client)
         self._block_till_bind.callback(None)
 
 
 class MockSmppRxTransport(SmppRxTransport):
-    def _setup_message_consumer(self):
-        super(MockSmppRxTransport, self)._setup_message_consumer()
+    @inlineCallbacks
+    def esme_connected(self, client):
+        yield super(MockSmppRxTransport, self).esme_connected(client)
         self._block_till_bind.callback(None)
 
 

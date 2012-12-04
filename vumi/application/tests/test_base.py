@@ -37,6 +37,11 @@ class DummyApplicationWorker(ApplicationWorker):
         self.record.append(('close_session', message))
 
 
+class EchoApplicationWorker(ApplicationWorker):
+    def consume_user_message(self, message):
+        self.reply_to(message, message['content'])
+
+
 class FakeUserMessage(TransportUserMessage):
     def __init__(self, **kw):
         kw['to_addr'] = 'to'
@@ -121,6 +126,26 @@ class TestApplicationWorker(ApplicationTestCase):
         yield self.worker.reply_to(msg, "End!", False)
         replies = self.get_dispatched_messages()
         expecteds = [msg.reply("More!"), msg.reply("End!", False)]
+        self.assert_msgs_match(replies, expecteds)
+
+    @inlineCallbacks
+    def test_waiting_message(self):
+        # Get rid of the old worker.
+        yield self.worker.stopWorker()
+        self._workers.remove(self.worker)
+
+        # Stick a message on the queue before starting the worker so it will be
+        # received as soon as the message consumer starts consuming.
+        msg = FakeUserMessage(content="Hello!")
+        yield self.dispatch(msg)
+
+        # Start the app and process stuff.
+        self.application_class = EchoApplicationWorker
+        self.worker = yield self.get_application(self.config)
+
+        replies = yield self.wait_for_dispatched_messages(1)
+
+        expecteds = [msg.reply("Hello!")]
         self.assert_msgs_match(replies, expecteds)
 
     @inlineCallbacks

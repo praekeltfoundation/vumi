@@ -37,11 +37,11 @@ class XMPPTransportTestCase(TransportTestCase):
     @inlineCallbacks
     def test_outbound_message(self):
         transport = yield self.mk_transport()
-        yield self.dispatch(TransportUserMessage(
+        msg = TransportUserMessage(
             to_addr='user@xmpp.domain.com', from_addr='test@case.com',
             content='hello world', transport_name='test_xmpp',
-            transport_type='xmpp', transport_metadata={}),
-            rkey='test_xmpp.outbound')
+            transport_type='xmpp', transport_metadata={})
+        yield self.dispatch(msg, rkey='test_xmpp.outbound')
 
         xmlstream = transport.xmpp_protocol.xmlstream
         self.assertEqual(len(xmlstream.outbox), 1)
