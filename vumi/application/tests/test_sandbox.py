@@ -172,6 +172,25 @@ class SandboxTestCase(SandboxTestCaseBase):
         self.assertTrue('process ended by signal' in str(kill_err.value))
 
     @inlineCallbacks
+    def test_env_variable(self):
+        app = yield self.setup_app(
+            "import sys, os, json\n"
+            "test_value = os.environ['TEST_VAR']\n"
+            "log = {'cmd': 'log.info', 'cmd_id': '1',\n"
+            "       'reply': False, 'msg': test_value}\n"
+            "sys.stdout.write(json.dumps(log) + '\\n')\n",
+            {'env': {'TEST_VAR': 'success'},
+             'sandbox': {
+                 'log': {'cls': 'vumi.application.sandbox.LoggingResource'},
+             }},
+        )
+        with LogCatcher() as lc:
+            status = yield app.process_message_in_sandbox(self.mk_msg())
+            [value_str] = lc.messages()
+        self.assertEqual(status, 0)
+        self.assertEqual(value_str, "success")
+
+    @inlineCallbacks
     def test_python_path_set(self):
         app = yield self.setup_app(
             "import sys, json\n"

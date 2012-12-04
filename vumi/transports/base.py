@@ -50,17 +50,12 @@ class Transport(Worker):
         self.transport_name = self.config['transport_name']
         self.concurrent_sends = self.config.get('concurrent_sends')
 
-        yield self._setup_failure_publisher()
-        yield self._setup_message_publisher()
-        yield self._setup_event_publisher()
-
+        yield self.setup_transport_connection()
         yield self.setup_middleware()
-
         yield self.setup_transport()
 
-        self.message_consumer = None
         if self.start_message_consumer:
-            yield self._setup_message_consumer()
+            yield self.message_consumer.unpause()
 
     @inlineCallbacks
     def stopWorker(self):
@@ -124,18 +119,10 @@ class Transport(Worker):
         return self._middlewares.teardown()
 
     @inlineCallbacks
-    def _setup_message_publisher(self):
-        self.message_publisher = yield self.publish_rkey('inbound')
-
-    @inlineCallbacks
-    def _setup_message_consumer(self):
-        if self.message_consumer is not None:
-            log.msg("Consumer already exists, not restarting.")
-            return
-
+    def setup_transport_connection(self):
         self.message_consumer = yield self.consume(
             self.get_rkey('outbound'), self._process_message,
-            message_class=TransportUserMessage)
+            message_class=TransportUserMessage, paused=True)
         self._consumers.append(self.message_consumer)
 
         # Apply concurrency throttling if we need to.
@@ -143,21 +130,9 @@ class Transport(Worker):
             yield self.message_consumer.channel.basic_qos(
                 0, int(self.concurrent_sends), False)
 
-    def _teardown_message_consumer(self):
-        if self.message_consumer is None:
-            log.msg("Consumer does not exist, not stopping.")
-            return
-        if self.message_consumer in self._consumers:
-            self._consumers.remove(self.message_consumer)
-        consumer, self.message_consumer = self.message_consumer, None
-        return consumer.stop()
-
-    @inlineCallbacks
-    def _setup_event_publisher(self):
+        # Set up publishers
+        self.message_publisher = yield self.publish_rkey('inbound')
         self.event_publisher = yield self.publish_rkey('event')
-
-    @inlineCallbacks
-    def _setup_failure_publisher(self):
         self.failure_publisher = yield self.publish_rkey('failures')
 
     def send_failure(self, message, exception, traceback):
