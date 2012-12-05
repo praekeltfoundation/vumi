@@ -6,6 +6,30 @@ from vumi import log
 
 
 class ScheduleManager(object):
+    """Utility for determining whether a scheduled event is due.
+
+    :class:`ScheduleManager` basically answers the question "are we there yet?"
+    given a schedule definition, the last time the question was asked and the
+    current time. It is designed to be used as part of a larger system that
+    periodically checks for scheduled events.
+
+    The schedule definition is a `dict` containing a mandatory `recurring`
+    field which specifies the type of recurring schedule and other fields
+    depending on the value of the `recurring` field.
+
+    Currently, the following are supported:
+
+     * `daily`
+       The `time` field is required and specifies the (approximate) time of day
+       the event is scheduled for in "HH:MM:SS" format.
+
+     * `day_of_month`
+       The `time` field is required and specifies the (approximate) time of day
+       the event is scheduled for in "HH:MM:SS" format.
+       The `days` field is required and specifies the days of the month the
+       event is scheduled for as a list of comma/whitespace-separated integers.
+    """
+
     def __init__(self, schedule_definition):
         self.schedule_definition = schedule_definition
 
