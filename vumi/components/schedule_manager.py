@@ -46,13 +46,19 @@ class ScheduleManager(object):
         return (next_dt <= now_dt)
 
     def get_next(self, since_dt):
-        recurring_type = self.schedule_definition['recurring']
-        if recurring_type == 'daily':
-            return self.get_next_daily(since_dt)
-        elif recurring_type == 'day_of_month':
-            return self.get_next_day_of_month(since_dt)
-        else:
-            log.warn("Invalid value for 'recurring': %r" % (recurring_type,))
+        try:
+            recurring_type = self.schedule_definition['recurring']
+            if recurring_type == 'daily':
+                return self.get_next_daily(since_dt)
+            elif recurring_type == 'day_of_month':
+                return self.get_next_day_of_month(since_dt)
+            elif recurring_type == 'day_of_week':
+                return self.get_next_day_of_week(since_dt)
+            else:
+                raise ValueError(
+                    "Invalid value for 'recurring': %r" % (recurring_type,))
+        except Exception, e:
+            log.error("Error processing schedule.", e)
 
     def get_next_daily(self, since_dt):
         timeofday = datetime.strptime(
@@ -64,14 +70,35 @@ class ScheduleManager(object):
 
         return next_dt
 
+    def _parse_days(self, minval, maxval):
+        dstr = self.schedule_definition.get('days')
+        try:
+            days = set([int(day) for day in dstr.replace(',', ' ').split()])
+            for day in days:
+                assert minval <= day <= maxval
+            return days
+        except:
+            raise ValueError("Invalid value for 'days': %r" % (dstr,))
+
     def get_next_day_of_month(self, since_dt):
         timeofday = datetime.strptime(
             self.schedule_definition['time'], '%H:%M:%S').time()
-        days_str = self.schedule_definition['days'].replace(',', ' ')
-        days_of_month = set([int(day) for day in days_str.split()])
+        days_of_month = self._parse_days(1, 31)
 
         next_dt = datetime.combine(since_dt.date(), timeofday)
         while (next_dt.day not in days_of_month) or (next_dt <= since_dt):
+            next_dt += timedelta(days=1)
+
+        return next_dt
+
+    def get_next_day_of_week(self, since_dt):
+        timeofday = datetime.strptime(
+            self.schedule_definition['time'], '%H:%M:%S').time()
+        days_of_week = self._parse_days(1, 7)
+
+        next_dt = datetime.combine(since_dt.date(), timeofday)
+        while ((next_dt.isoweekday() not in days_of_week)
+               or (next_dt <= since_dt)):
             next_dt += timedelta(days=1)
 
         return next_dt
