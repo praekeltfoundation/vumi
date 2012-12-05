@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 """Tests for vumi.components.message_store."""
+import time
 from datetime import datetime, timedelta
 
 from twisted.internet.defer import inlineCallbacks, returnValue
@@ -55,6 +56,32 @@ class TestMessageStoreBase(ApplicationTestCase):
         msg_id = msg['message_id']
         yield self.store.add_inbound_message(msg, **add_kw)
         returnValue((msg_id, msg, batch_id))
+
+    @inlineCallbacks
+    def create_outbound_messages(self, batch_id, count, start_timestamp=None,
+                                    time_multiplier=10):
+        # Store via message_store
+        now = start_timestamp or datetime.now()
+        messages = []
+        for i in range(count):
+            msg = self.mkmsg_out(message_id=TransportEvent.generate_id())
+            msg['timestamp'] = now - timedelta(i * time_multiplier)
+            yield self.store.add_outbound_message(msg, batch_id=batch_id)
+            messages.append(msg)
+        returnValue(messages)
+
+    @inlineCallbacks
+    def create_inbound_messages(self, batch_id, count, start_timestamp=None,
+                                    time_multiplier=10):
+        # Store via message_store
+        now = start_timestamp or datetime.now()
+        messages = []
+        for i in range(count):
+            msg = self.mkmsg_in(message_id=TransportEvent.generate_id())
+            msg['timestamp'] = now - timedelta(i * time_multiplier)
+            yield self.store.add_inbound_message(msg, batch_id=batch_id)
+            messages.append(msg)
+        returnValue(messages)
 
     def _batch_status(self, ack=0, nack=0, delivered=0, failed=0, pending=0,
                         sent=0):
@@ -375,9 +402,7 @@ class TestMessageStoreCache(TestMessageStoreBase):
         msg_id, msg, batch_id = yield self._create_outbound()
 
         # Store via message_store
-        for i in range(10):
-            msg = self.mkmsg_out(message_id=TransportEvent.generate_id())
-            yield self.store.add_outbound_message(msg, batch_id=batch_id)
+        yield self.create_outbound_messages(batch_id, 10)
 
         # Store one extra in the cache to throw off the allow threshold delta
         recon_msg = self.mkmsg_out(message_id=TransportEvent.generate_id())
@@ -394,9 +419,8 @@ class TestMessageStoreCache(TestMessageStoreBase):
         batch_id = yield self.store.batch_start([("pool", "tag")])
 
         # Store via message_store
-        for i in range(10):
-            msg = self.mkmsg_out(message_id=TransportEvent.generate_id())
-            yield self.store.add_outbound_message(msg, batch_id=batch_id)
+        messages = yield self.create_outbound_messages(batch_id, 10)
+        for msg in messages:
             ack = self.mkmsg_ack(user_message_id=msg['message_id'],
                 sent_message_id=msg['message_id'])
             yield self.store.add_event(ack)
@@ -421,13 +445,7 @@ class TestMessageStoreCache(TestMessageStoreBase):
         batch_id = yield self.store.batch_start([("pool", "tag")])
 
         # Store via message_store
-        now = datetime.now()
-        messages = []
-        for i in range(10):
-            msg = self.mkmsg_in(message_id=TransportEvent.generate_id())
-            msg['timestamp'] = now - timedelta(i * 10)
-            yield self.store.add_inbound_message(msg, batch_id=batch_id)
-            messages.append(msg)
+        messages = yield self.create_inbound_messages(batch_id, 10)
 
         token = yield self.store.find_inbound_keys_matching(batch_id, [{
                 'key': 'msg.content',
@@ -449,13 +467,7 @@ class TestMessageStoreCache(TestMessageStoreBase):
         batch_id = yield self.store.batch_start([("pool", "tag")])
 
         # Store via message_store
-        now = datetime.now()
-        messages = []
-        for i in range(10):
-            msg = self.mkmsg_out(message_id=TransportEvent.generate_id())
-            msg['timestamp'] = now - timedelta(i * 10)
-            yield self.store.add_outbound_message(msg, batch_id=batch_id)
-            messages.append(msg)
+        messages = yield self.create_outbound_messages(batch_id, 10)
 
         token = yield self.store.find_outbound_keys_matching(batch_id, [{
                 'key': 'msg.content',
@@ -471,3 +483,43 @@ class TestMessageStoreCache(TestMessageStoreBase):
             (yield self.store.count_keys_for_token(batch_id, token)))
         self.assertEqual(keys, [msg['message_id'] for msg in messages])
         self.assertFalse(in_progress)
+
+    @inlineCallbacks
+    def test_get_inbound_message_keys(self):
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+        messages = yield self.create_inbound_messages(batch_id, 10)
+
+        keys = yield self.store.get_inbound_message_keys(batch_id)
+        self.assertEqual(keys, [msg['message_id'] for msg in messages])
+
+    @inlineCallbacks
+    def test_get_inbound_message_keys_with_timestamp(self):
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+        messages = yield self.create_inbound_messages(batch_id, 10)
+
+        results = dict((yield self.store.get_inbound_message_keys(
+                                batch_id, with_timestamp=True)))
+        for msg in messages:
+            found = results[msg['message_id']]
+            expected = time.mktime(msg['timestamp'].timetuple())
+            self.assertAlmostEqual(found, expected)
+
+    @inlineCallbacks
+    def test_get_outbound_message_keys(self):
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+        messages = yield self.create_outbound_messages(batch_id, 10)
+
+        keys = yield self.store.get_outbound_message_keys(batch_id)
+        self.assertEqual(keys, [msg['message_id'] for msg in messages])
+
+    @inlineCallbacks
+    def test_get_outbound_message_keys_with_timestamp(self):
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+        messages = yield self.create_outbound_messages(batch_id, 10)
+
+        results = dict((yield self.store.get_outbound_message_keys(
+                                batch_id, with_timestamp=True)))
+        for msg in messages:
+            found = results[msg['message_id']]
+            expected = time.mktime(msg['timestamp'].timetuple())
+            self.assertAlmostEqual(found, expected)

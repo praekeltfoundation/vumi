@@ -252,12 +252,14 @@ class MessageStoreCache(object):
         """
         return self.redis.zcard(self.to_addr_key(batch_id))
 
-    def get_inbound_message_keys(self, batch_id, start=0, stop=-1, asc=False):
+    def get_inbound_message_keys(self, batch_id, start=0, stop=-1, asc=False,
+                                    with_timestamp=False):
         """
         Return a list of keys ordered according to their timestamps
         """
         return self.redis.zrange(self.inbound_key(batch_id),
-                                        start, stop, desc=not asc)
+                                    start, stop, desc=not asc,
+                                    withscores=with_timestamp)
 
     def count_inbound_message_keys(self, batch_id):
         """
@@ -265,13 +267,14 @@ class MessageStoreCache(object):
         """
         return self.redis.zcard(self.inbound_key(batch_id))
 
-    def get_outbound_message_keys(self, batch_id, start=0, stop=-1,
-        asc=False):
+    def get_outbound_message_keys(self, batch_id, start=0, stop=-1, asc=False,
+                                    with_timestamp=False):
         """
         Return a list of keys ordered according to their timestamps.
         """
         return self.redis.zrange(self.outbound_key(batch_id),
-                                        start, stop, desc=not asc)
+                                        start, stop, desc=not asc,
+                                        withscores=with_timestamp)
 
     def count_outbound_message_keys(self, batch_id):
         """
