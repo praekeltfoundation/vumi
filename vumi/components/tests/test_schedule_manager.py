@@ -53,3 +53,33 @@ class ScheduleManagerTestCase(TestCase):
             {'recurring': 'day_of_month', 'time': '12:00:00', 'days': '1 15'},
             datetime(2012, 12, 20, 13, 0, 0),
             datetime(2013, 1, 1, 12, 0, 0))
+
+    def test_day_of_week_same_day(self):
+        self.assert_schedule_next(
+            {'recurring': 'day_of_week', 'time': '12:00:00', 'days': '2 4'},
+            datetime(2012, 11, 20, 11, 0, 0),
+            datetime(2012, 11, 20, 12, 0, 0))
+        self.assert_schedule_next(
+            {'recurring': 'day_of_week', 'time': '12:00:00', 'days': '2 4'},
+            datetime(2012, 11, 20, 11, 0, 0),
+            datetime(2012, 11, 20, 12, 0, 0))
+
+    def test_day_of_week_same_week(self):
+        self.assert_schedule_next(
+            {'recurring': 'day_of_week', 'time': '12:00:00', 'days': '2 4'},
+            datetime(2012, 11, 20, 13, 0, 0),
+            datetime(2012, 11, 22, 12, 0, 0))
+        self.assert_schedule_next(
+            {'recurring': 'day_of_week', 'time': '12:00:00', 'days': '6 7'},
+            datetime(2012, 11, 20, 13, 0, 0),
+            datetime(2012, 11, 24, 12, 0, 0))
+
+    def test_day_of_week_next_week(self):
+        self.assert_schedule_next(
+            {'recurring': 'day_of_week', 'time': '12:00:00', 'days': '1'},
+            datetime(2012, 11, 20, 13, 0, 0),
+            datetime(2012, 11, 26, 12, 0, 0))
+        self.assert_schedule_next(
+            {'recurring': 'day_of_week', 'time': '12:00:00', 'days': '1'},
+            datetime(2012, 12, 20, 13, 0, 0),
+            datetime(2012, 12, 24, 12, 0, 0))

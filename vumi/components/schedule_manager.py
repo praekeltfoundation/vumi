@@ -51,8 +51,11 @@ class ScheduleManager(object):
             return self.get_next_daily(since_dt)
         elif recurring_type == 'day_of_month':
             return self.get_next_day_of_month(since_dt)
+        elif recurring_type == 'day_of_week':
+            return self.get_next_day_of_week(since_dt)
         else:
-            log.warn("Invalid value for 'recurring': %r" % (recurring_type,))
+            log.warning(
+                "Invalid value for 'recurring': %r" % (recurring_type,))
 
     def get_next_daily(self, since_dt):
         timeofday = datetime.strptime(
@@ -72,6 +75,19 @@ class ScheduleManager(object):
 
         next_dt = datetime.combine(since_dt.date(), timeofday)
         while (next_dt.day not in days_of_month) or (next_dt <= since_dt):
+            next_dt += timedelta(days=1)
+
+        return next_dt
+
+    def get_next_day_of_week(self, since_dt):
+        timeofday = datetime.strptime(
+            self.schedule_definition['time'], '%H:%M:%S').time()
+        days_str = self.schedule_definition['days'].replace(',', ' ')
+        days_of_week = set([int(day) for day in days_str.split()])
+
+        next_dt = datetime.combine(since_dt.date(), timeofday)
+        while ((next_dt.isoweekday() not in days_of_week)
+               or (next_dt <= since_dt)):
             next_dt += timedelta(days=1)
 
         return next_dt
