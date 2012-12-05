@@ -376,3 +376,39 @@ class MessageStore(object):
         still running
         """
         return self.cache.is_query_in_progress(batch_id, token)
+
+    def get_inbound_message_keys(self, batch_id, start=0, stop=-1,
+                                    with_timestamp=False):
+        """
+        Return the keys ordered by descending timestamp.
+
+        :param str batch_id:
+            The batch_id to fetch keys for
+        :param int start:
+            Where to start from, defaults to 0 which is the first key.
+        :param int stop:
+            How many to fetch, defaults to -1 which is the last key.
+        :param bool with_timestamp:
+            Whether or not to return a list of (key, timestamp) tuples
+            instead of only the list of keys.
+        """
+        return self.cache.get_inbound_message_keys(batch_id, start, stop,
+            with_timestamp=with_timestamp)
+
+    def get_outbound_message_keys(self, batch_id, start=0, stop=-1,
+                                    with_timestamp=False):
+        """
+        Return the keys ordered by descending timestamp.
+
+        :param str batch_id:
+            The batch_id to fetch keys for
+        :param int start:
+            Where to start from, defaults to 0 which is the first key.
+        :param int stop:
+            How many to fetch, defaults to -1 which is the last key.
+        :param bool with_timestamp:
+            Whether or not to return a list of (key, timestamp) tuples
+            instead of only the list of keys.
+        """
+        return self.cache.get_outbound_message_keys(batch_id, start, stop,
+            with_timestamp=with_timestamp)
