@@ -39,7 +39,7 @@ class RiakManager(Manager):
             riak_object.set_indexes(indexes)
             riak_object.set_encoded_data(data)
         else:
-            riak_object.set_data({'VERSION': modelcls.VERSION})
+            riak_object.set_data({'$VERSION': modelcls.VERSION})
             riak_object.set_content_type("application/json")
         return riak_object
 
@@ -57,7 +57,7 @@ class RiakManager(Manager):
 
         # Run migrators until we have the correct version of the data.
         while riak_object.get_data() is not None:
-            data_version = riak_object.get_data().get('VERSION', None)
+            data_version = riak_object.get_data().get('$VERSION', None)
             if data_version == modelcls.VERSION:
                 return modelcls(self, key, _riak_object=riak_object)
             migrator = modelcls.MIGRATOR(modelcls, self, data_version)

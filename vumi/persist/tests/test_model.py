@@ -59,12 +59,12 @@ class VersionedModelMigrator(ModelMigrator):
         assert isinstance(self.manager, Manager)
 
         # Data assertions
-        assert set(migration_data.old_data.keys()) == set(['VERSION', 'a'])
-        assert migration_data.old_data['VERSION'] is None
+        assert set(migration_data.old_data.keys()) == set(['$VERSION', 'a'])
+        assert migration_data.old_data['$VERSION'] is None
         assert migration_data.old_index == {}
 
         # Actual migration
-        migration_data.set_value('VERSION', 1)
+        migration_data.set_value('$VERSION', 1)
         migration_data.set_value('b', migration_data.old_data['a'])
         return migration_data
 
@@ -75,12 +75,12 @@ class VersionedModelMigrator(ModelMigrator):
         assert isinstance(self.manager, Manager)
 
         # Data assertions
-        assert set(migration_data.old_data.keys()) == set(['VERSION', 'b'])
-        assert migration_data.old_data['VERSION'] == 1
+        assert set(migration_data.old_data.keys()) == set(['$VERSION', 'b'])
+        assert migration_data.old_data['$VERSION'] == 1
         assert migration_data.old_index == {}
 
         # Actual migration
-        migration_data.set_value('VERSION', 2)
+        migration_data.set_value('$VERSION', 2)
         migration_data.set_value('c', migration_data.old_data['b'])
         return migration_data
 

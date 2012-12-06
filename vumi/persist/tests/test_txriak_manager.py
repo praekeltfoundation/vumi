@@ -89,7 +89,7 @@ class CommonRiakManagerTests(object):
     def test_riak_object(self):
         dummy = DummyModel(self.manager, "foo")
         riak_object = self.manager.riak_object(dummy, "foo")
-        self.assertEqual(riak_object.get_data(), {'VERSION': None})
+        self.assertEqual(riak_object.get_data(), {'$VERSION': None})
         self.assertEqual(riak_object.get_content_type(), "application/json")
         self.assertEqual(riak_object.get_bucket().get_name(),
                          "test.dummy_model")
