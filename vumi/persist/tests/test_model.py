@@ -408,6 +408,7 @@ class TestModelOnTxRiak(TestCase):
         f1.simple.set(s1)
         yield s1.save()
         yield f1.save()
+        self.assertEqual(f1._riak_object._data['simple'], s1.key)
 
         f2 = yield fk_model.load("bar")
         s2 = yield f2.simple.get()
@@ -464,6 +465,7 @@ class TestModelOnTxRiak(TestCase):
         m1.simples.add(s1)
         yield s1.save()
         yield m1.save()
+        self.assertEqual(m1._riak_object._data['simples'], [s1.key])
 
         m2 = yield mm_model.load("bar")
         [s2] = yield self.load_all_bunches_flat(m2.simples)
