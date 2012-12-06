@@ -3,7 +3,8 @@
 from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks, returnValue
 
-from vumi.persist.model import Model, Manager
+from vumi.persist.model import (
+    Model, Manager, ModelMigrator, ModelMigrationError)
 from vumi.persist.fields import (
     ValidationError, Integer, Unicode, VumiMessage, Dynamic, ListOf,
     ForeignKey, ManyToMany)
@@ -48,6 +49,63 @@ class InheritedModel(SimpleModel):
 
 class OverriddenModel(InheritedModel):
     c = Integer(min=0, max=5)
+
+
+class VersionedModelMigrator(ModelMigrator):
+    def migrate_from_unversioned(self, migration_data):
+        # Migrator assertions
+        assert self.data_version is None
+        assert self.model_class is VersionedModel
+        assert isinstance(self.manager, Manager)
+
+        # Data assertions
+        assert set(migration_data.old_data.keys()) == set(['$VERSION', 'a'])
+        assert migration_data.old_data['$VERSION'] is None
+        assert migration_data.old_index == {}
+
+        # Actual migration
+        migration_data.set_value('$VERSION', 1)
+        migration_data.set_value('b', migration_data.old_data['a'])
+        return migration_data
+
+    def migrate_from_1(self, migration_data):
+        # Migrator assertions
+        assert self.data_version == 1
+        assert self.model_class is VersionedModel
+        assert isinstance(self.manager, Manager)
+
+        # Data assertions
+        assert set(migration_data.old_data.keys()) == set(['$VERSION', 'b'])
+        assert migration_data.old_data['$VERSION'] == 1
+        assert migration_data.old_index == {}
+
+        # Actual migration
+        migration_data.set_value('$VERSION', 2)
+        migration_data.set_value('c', migration_data.old_data['b'])
+        return migration_data
+
+
+class UnversionedModel(Model):
+    bucket = 'versionedmodel'
+    a = Integer()
+
+
+class OldVersionedModel(Model):
+    VERSION = 1
+    bucket = 'versionedmodel'
+    b = Integer()
+
+
+class VersionedModel(Model):
+    VERSION = 2
+    MIGRATOR = VersionedModelMigrator
+    c = Integer()
+
+
+class UnknownVersionedModel(Model):
+    VERSION = 3
+    bucket = 'versionedmodel'
+    d = Integer()
 
 
 class TestModelOnTxRiak(TestCase):
@@ -494,6 +552,40 @@ class TestModelOnTxRiak(TestCase):
         overridden_model("foo", a=1, b=u"2", c=3)
         self.assertRaises(ValidationError, overridden_model, "foo",
                           a=1, b=u"2", c=-1)
+
+    @Manager.calls_manager
+    def test_unversioned_migration(self):
+        old_model = self.manager.proxy(UnversionedModel)
+        new_model = self.manager.proxy(VersionedModel)
+        foo_old = old_model("foo", a=1)
+        yield foo_old.save()
+
+        foo_new = yield new_model.load("foo")
+        self.assertEqual(foo_new.c, 1)
+
+    @Manager.calls_manager
+    def test_version_migration(self):
+        old_model = self.manager.proxy(OldVersionedModel)
+        new_model = self.manager.proxy(VersionedModel)
+        foo_old = old_model("foo", b=1)
+        yield foo_old.save()
+
+        foo_new = yield new_model.load("foo")
+        self.assertEqual(foo_new.c, 1)
+
+    @Manager.calls_manager
+    def test_version_migration_failure(self):
+        odd_model = self.manager.proxy(UnknownVersionedModel)
+        new_model = self.manager.proxy(VersionedModel)
+        foo_odd = odd_model("foo", d=1)
+        yield foo_odd.save()
+
+        try:
+            yield new_model.load("foo")
+            self.fail('Expected ModelMigrationError.')
+        except ModelMigrationError, e:
+            self.assertEqual(
+                e.args[0], 'No migrators defined for VersionedModel version 3')
 
 
 class TestModelOnRiak(TestModelOnTxRiak):

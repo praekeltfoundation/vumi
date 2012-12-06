@@ -68,7 +68,7 @@ class TxRiakManager(Manager):
             riak_object.set_indexes(indexes)
             riak_object.set_encoded_data(data)
         else:
-            riak_object.set_data({})
+            riak_object.set_data({'$VERSION': modelcls.VERSION})
             riak_object.set_content_type("application/json")
         return riak_object
 
@@ -82,14 +82,22 @@ class TxRiakManager(Manager):
 
     def load(self, modelcls, key, result=None):
         riak_object = self.riak_object(modelcls, key, result)
-        if result:
-            return succeed(modelcls(self, key, _riak_object=riak_object))
-        else:
-            d = riak_object.reload()
-            d.addCallback(
-                lambda result: (modelcls(self, key, _riak_object=result)
-                                if result.get_data() is not None else None))
-            return d
+        d = succeed(riak_object) if result else riak_object.reload()
+
+        def build_model_object(riak_object):
+            if riak_object.get_data() is None:
+                return None
+
+            data_version = riak_object.get_data().get('$VERSION', None)
+            if data_version == modelcls.VERSION:
+                return modelcls(self, key, _riak_object=riak_object)
+
+            migrator = modelcls.MIGRATOR(modelcls, self, data_version)
+            md = maybeDeferred(migrator, riak_object)
+            md.addCallback(lambda mdata: mdata.get_riak_object())
+            return md.addCallback(build_model_object)
+
+        return d.addCallback(build_model_object)
 
     def riak_map_reduce(self):
         return RiakMapReduce(self.client)

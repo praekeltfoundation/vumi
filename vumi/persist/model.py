@@ -4,7 +4,12 @@
 
 from functools import wraps
 
+from vumi.errors import VumiError
 from vumi.persist.fields import Field, FieldDescriptor, ValidationError
+
+
+class ModelMigrationError(VumiError):
+    pass
 
 
 class ModelMetaClass(type):
@@ -74,10 +79,105 @@ class BackLinkProxy(object):
         return wrapped_backlink
 
 
+class ModelMigrator(object):
+    """Migration handler for old Model versions.
+
+    Subclasses of this should implement ``migrate_from_<version>()`` methods
+    for each previous version of the model being migrated. This method will
+    be called with a :class:`MigrationData` instance and must return a
+    :class:`MigrationData` instance. (This will likely be the same instance,
+    but may be different.)
+
+    The ``migrate_from_<version>()`` is allowed to do whatever other operations
+    may be required (for example, modifying related objects). However, care
+    should be taken to avoid lenthly delays, race conditions, etc.
+
+    There is a special-case ``migrate_from_unversioned()`` method that is
+    called for objects that do not contain a model version.
+    """
+    def __init__(self, model_class, manager, data_version):
+        self.model_class = model_class
+        self.manager = manager
+        self.data_version = data_version
+        if data_version is not None:
+            migration_method_name = 'migrate_from_%s' % str(data_version)
+        else:
+            migration_method_name = 'migrate_from_unversioned'
+        self.migration_method = getattr(self, migration_method_name, None)
+
+    def __call__(self, riak_object):
+        if self.migration_method is None:
+            raise ModelMigrationError(
+                'No migrators defined for %s version %s' % (
+                    self.model_class.__name__, self.data_version))
+        return self.migration_method(MigrationData(riak_object))
+
+
+class MigrationData(object):
+    def __init__(self, riak_object):
+        self.riak_object = riak_object
+        self.old_data = riak_object.get_data()
+        self.new_data = {}
+        self.old_index = {}
+        self.new_index = {}
+        for riak_index in riak_object.get_metadata()['index']:
+            field = riak_index.get_field()
+            self.old_index.setdefault(field, [])
+            self.old_index[field].append(riak_index.get_value())
+
+    def get_riak_object(self):
+        self.riak_object.set_data(self.new_data)
+        metadata = self.riak_object.get_metadata()
+        metadata['index'] = []
+        self.riak_object.set_metadata(metadata)
+        for field, values in self.new_index.iteritems():
+            for value in values:
+                self.riak_object.add_index(field, value)
+        return self.riak_object
+
+    def copy_values(self, *fields):
+        """Copy field values from old data to new data."""
+        for field in fields:
+            self.new_data[field] = self.old_data[field]
+
+    def copy_indexes(self, *indexes):
+        """Copy indexes from old data to new data."""
+        for index in indexes:
+            self.new_index[index] = self.old_index.get(index, [])[:]
+
+    def add_index(self, index, value):
+        """Add a new index value to new data."""
+        if index is None:
+            index = ''
+        else:
+            index = str(index)
+        self.new_index.setdefault(index, []).append(value)
+
+    def clear_index(self, index):
+        """Remove all values for a given index from new data."""
+        del self.new_index[index]
+
+    def set_value(self, field, value, index=None, index_value=None):
+        """Set the value (and optionally the index) for a field.
+
+        Indexes are usually set by :class:`FieldDescriptor` objects. Since we
+        don't have those here, we need to explicitly set the index values for
+        fields that are indexed.
+        """
+        self.new_data[field] = value
+        if index is not None:
+            if index_value is None:
+                index_value = value
+            self.add_index(index, index_value)
+
+
 class Model(object):
     """A model is a description of an entity persisted in a data store."""
 
     __metaclass__ = ModelMetaClass
+
+    VERSION = None
+    MIGRATOR = ModelMigrator
 
     bucket = None
 
