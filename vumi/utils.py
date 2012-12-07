@@ -12,6 +12,7 @@ from zope.interface import implements
 from twisted.internet import defer
 from twisted.internet import reactor, protocol
 from twisted.internet.defer import succeed
+from twisted.python.failure import Failure
 from twisted.web.client import Agent, ResponseDone
 from twisted.web.server import Site
 from twisted.web.http_headers import Headers
@@ -40,10 +41,16 @@ def to_kwargs(kwargs):
     return dict((k.encode('utf8'), v) for k, v in kwargs.iteritems())
 
 
+class TooMuchDataError(Exception):
+    """Returned by http_request_full if too much data is returned."""
+
+
 class SimplishReceiver(protocol.Protocol):
-    def __init__(self, response):
+    def __init__(self, response, data_limit=None):
         self.deferred = defer.Deferred()
         self.response = response
+        self.data_limit = data_limit
+        self.data_recvd = 0
         self.response.delivered_body = ''
         if response.code == 204:
             self.deferred.callback(self.response)
@@ -51,10 +58,17 @@ class SimplishReceiver(protocol.Protocol):
             response.deliverBody(self)
 
     def dataReceived(self, data):
+        self.data_recvd += len(data)
+        if self.data_limit and self.data_recvd > self.data_limit:
+            self.transport.stopProducing()
+            return
         self.response.delivered_body += data
 
     def connectionLost(self, reason):
-        if reason.check(ResponseDone):
+        if self.data_limit and self.data_recvd > self.data_limit:
+            self.deferred.errback(Failure(TooMuchDataError(
+                "More than %d bytes received" % (self.data_limit,))))
+        elif reason.check(ResponseDone):
             self.deferred.callback(self.response)
         elif reason.check(PotentialDataLoss):
             # This is only (and always!) raised if we have an HTTP 1.0 request
@@ -69,7 +83,8 @@ class SimplishReceiver(protocol.Protocol):
             self.deferred.errback(reason)
 
 
-def http_request_full(url, data=None, headers={}, method='POST'):
+def http_request_full(url, data=None, headers={}, method='POST',
+                      timeout=None, data_limit=None):
     agent = Agent(reactor)
     d = agent.request(method,
                       url,
@@ -77,9 +92,16 @@ def http_request_full(url, data=None, headers={}, method='POST'):
                       StringProducer(data) if data else None)
 
     def handle_response(response):
-        return SimplishReceiver(response).deferred
+        return SimplishReceiver(response, data_limit).deferred
 
     d.addCallback(handle_response)
+
+    if timeout is not None:
+        def cancel_request():
+            if not d.fired:
+                d.cancel()
+        reactor.callLater(timeout, cancel_request)
+
     return d
 
 
