@@ -206,3 +206,18 @@ class HttpUtilsTestCase(TestCase):
 
         data = yield http_request(self.url, '')
         self.assertEqual(data, "Yay")
+
+    @inlineCallbacks
+    def test_http_request_full_data_limit(self):
+        self.set_render(lambda r: "Four")
+
+        d = http_request_full(self.url, '', data_limit=3)
+
+        def check_response(reason):
+            self.assertTrue(reason.check('vumi.utils.TooMuchDataError'))
+            self.assertEqual(reason.getErrorMessage(),
+                             "More than 3 bytes received")
+            return None
+
+        d.addBoth(check_response)
+        yield d
