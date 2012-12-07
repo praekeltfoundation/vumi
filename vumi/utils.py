@@ -97,10 +97,7 @@ def http_request_full(url, data=None, headers={}, method='POST',
     d.addCallback(handle_response)
 
     if timeout is not None:
-        def cancel_request():
-            if not d.fired:
-                d.cancel()
-        reactor.callLater(timeout, cancel_request)
+        reactor.callLater(timeout, d.cancel)
 
     return d
 

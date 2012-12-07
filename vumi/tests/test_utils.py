@@ -217,7 +217,39 @@ class HttpUtilsTestCase(TestCase):
             self.assertTrue(reason.check('vumi.utils.TooMuchDataError'))
             self.assertEqual(reason.getErrorMessage(),
                              "More than 3 bytes received")
-            return None
 
         d.addBoth(check_response)
         yield d
+
+    @inlineCallbacks
+    def test_http_request_full_timeout_before_connect(self):
+        # don't need to call .set_render because the request
+        # will never make it to the server
+        d = http_request_full(self.url, '', timeout=0)
+
+        def check_response(reason):
+            self.assertTrue(reason.check('twisted.internet.error'
+                                         '.ConnectingCancelledError'))
+
+        d.addBoth(check_response)
+        yield d
+
+    @inlineCallbacks
+    def test_http_request_full_timeout_after_connect(self):
+        def interrupt(r):
+            raise self.InterruptHttp
+        got_request = Deferred()
+        self.set_render(interrupt, got_request)
+
+        # TODO: manipulate clock instead of using timeout=1
+        d = http_request_full(self.url, '', timeout=1)
+
+        def check_response(reason):
+            self.assertTrue(reason.check('twisted.internet.defer'
+                                         '.CancelledError'))
+
+        d.addBoth(check_response)
+        yield d
+
+        request = yield got_request
+        request.transport.loseConnection()
