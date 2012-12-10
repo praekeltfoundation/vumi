@@ -3,6 +3,7 @@ import os.path
 from twisted.trial.unittest import TestCase
 from twisted.internet import reactor
 from twisted.internet.defer import Deferred, inlineCallbacks
+from twisted.internet.task import Clock
 from twisted.web.server import Site, NOT_DONE_YET
 from twisted.web.resource import Resource
 from twisted.web import http
@@ -241,8 +242,7 @@ class HttpUtilsTestCase(TestCase):
         got_request = Deferred()
         self.set_render(interrupt, got_request)
 
-        # TODO: manipulate clock instead of using timeout=1
-        d = http_request_full(self.url, '', timeout=1)
+        d = http_request_full(self.url, '', timeout=0.1)
 
         def check_response(reason):
             self.assertTrue(reason.check('twisted.internet.defer'
