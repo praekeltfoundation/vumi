@@ -57,15 +57,19 @@ class SimplishReceiver(protocol.Protocol):
         else:
             response.deliverBody(self)
 
+    def data_limit_exceeded(self):
+        return (self.data_limit is not None and
+                self.data_recvd_len > self.data_limit)
+
     def dataReceived(self, data):
         self.data_recvd_len += len(data)
-        if self.data_limit and self.data_recvd_len > self.data_limit:
+        if self.data_limit_exceeded():
             self.transport.stopProducing()
             return
         self.response.delivered_body += data
 
     def connectionLost(self, reason):
-        if self.data_limit and self.data_recvd_len > self.data_limit:
+        if self.data_limit_exceeded():
             self.deferred.errback(Failure(TooMuchDataError(
                 "More than %d bytes received" % (self.data_limit,))))
         elif reason.check(ResponseDone):
