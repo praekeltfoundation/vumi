@@ -7,7 +7,7 @@ from vumi.message import TransportUserMessage
 from vumi.persist.txredis_manager import TxRedisManager
 
 from vumi.components.window_manager import WindowManager
-
+from vumi.middleware.base import StopPropagation
 
 class WindowManagerMiddleware(BaseMiddleware):
 
@@ -46,11 +46,12 @@ class WindowManagerMiddleware(BaseMiddleware):
     @inlineCallbacks
     def handle_outbound(self, msg, endpoint):
         yield self.wm.add(self.transport_name, msg.to_json(), msg["message_id"])
-        #TODO: should be replaced by a StopPropagation mechanism
-        returnValue(None)
+        raise StopPropagation()
 
     @inlineCallbacks
     def send_outbound(self, window_id, key):
         data = yield self.wm.get_data(window_id, key)
         msg = TransportUserMessage.from_json(data)
+        # TODO store the endpoint in the stored data
+        self.resume_handling('outbound', msg, self.transport_name)
         self.worker.handle_outbound_message(msg)

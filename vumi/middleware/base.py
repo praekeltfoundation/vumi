@@ -103,6 +103,10 @@ class BaseMiddleware(object):
         """
         return failure
 
+    def resume_handling(self, handle_name, message, endpoint):
+        return self.worker._middlewares.resume_handling(
+            self, handle_name, message, endpoint)
+
 
 class TransportMiddleware(BaseMiddleware):
     """Message processor middleware for Transports.
@@ -121,10 +125,22 @@ class MiddlewareStack(object):
     def __init__(self, middlewares):
         self.middlewares = middlewares
 
+    def _get_middleware_index(self, middleware):
+        return self.middlewares.index(middleware)
+
     @inlineCallbacks
-    def _handle(self, middlewares, handler_name, message, endpoint):
+    def resume_handling(self, mw, handle_name, message, endpoint):
+        mw_index = self._get_middleware_index(mw)
+        #In case there are no other middleware after this one
+        if mw_index + 1 == len(self.middlewares):
+            returnValue(message)
+        message = yield self._handle(self.middlewares, handle_name, message, endpoint, mw_index + 1)
+        returnValue(message)
+
+    @inlineCallbacks
+    def _handle(self, middlewares, handler_name, message, endpoint, from_index=0):
         method_name = 'handle_%s' % (handler_name,)
-        for index, middleware in enumerate(middlewares):            
+        for index, middleware in enumerate(middlewares[from_index:]):            
             handler = getattr(middleware, method_name)
             message = yield self._handle_middleware(handler, message, endpoint, index)
             if message is None:
