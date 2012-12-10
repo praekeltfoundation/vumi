@@ -616,3 +616,9 @@ class TestHttpClientResource(ResourceTestCaseBase):
         self.assertFalse(reply['success'])
         self.assertEqual(reply['reason'], "HTTP request failed")
         self.assert_http_request('http://www.example.com', method='GET')
+
+    @inlineCallbacks
+    def test_null_url(self):
+        reply = yield self.dispatch_command('get')
+        self.assertFalse(reply['success'])
+        self.assertEqual(reply['reason'], "No URL given")

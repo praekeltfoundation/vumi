@@ -14,7 +14,7 @@ from twisted.internet import reactor
 from twisted.internet.protocol import ProcessProtocol
 from twisted.internet.defer import (Deferred, inlineCallbacks,
                                     maybeDeferred, returnValue,
-                                    DeferredList)
+                                    DeferredList, succeed)
 from twisted.internet.error import ProcessDone
 from twisted.python.failure import Failure
 
@@ -465,6 +465,9 @@ class HttpClientResource(SandboxResource):
 
     def _make_request_from_command(self, method, command):
         url = command.get('url', None)
+        if not isinstance(url, basestring):
+            return succeed(self.reply(command, success=False,
+                                      reason="No URL given"))
         headers = command.get('headers', {})
         data = command.get('data', None)
         d = http_request_full(url, data=data, headers=headers,
