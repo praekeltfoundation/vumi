@@ -608,3 +608,12 @@ class TestHttpClientResource(ResourceTestCaseBase):
         self.assertTrue(reply['success'])
         self.assertEqual(reply['body'], "foo")
         self.assert_http_request('http://www.example.com', method='POST')
+
+    @inlineCallbacks
+    def test_failed_get(self):
+        self.http_request_fail(ValueError("HTTP request failed"))
+        reply = yield self.dispatch_command('get',
+                                            url='http://www.example.com')
+        self.assertFalse(reply['success'])
+        self.assertEqual(reply['reason'], "HTTP request failed")
+        self.assert_http_request('http://www.example.com', method='GET')
