@@ -453,7 +453,7 @@ class LoggingResource(SandboxResource):
 
 
 class HttpClientResource(SandboxResource):
-    """Resoruce that allows making HTTP calls to outside services."""
+    """Resource that allows making HTTP calls to outside services."""
 
     DEFAULT_TIMEOUT = 30  # seconds
     DEFAULT_DATA_LIMIT = 128 * 1024  # 128 KB
