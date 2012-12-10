@@ -10,6 +10,14 @@ class MiddlewareError(VumiError):
     pass
 
 
+class MiddlewareControlFlag():
+    pass
+
+
+class StopPropagation(MiddlewareControlFlag):
+    pass
+
+
 class BaseMiddleware(object):
     """Common middleware base class.
 
@@ -132,6 +140,14 @@ class MiddlewareStack(object):
         return self._handle(
             reversed(self.middlewares), handler_name, message, endpoint)
 
+    def control_flag(self, f):
+        if not isinstance(f.value, MiddlewareControlFlag):
+            raise f
+        if isinstance(f.value, StopPropagation):
+            return None
+        raise MiddlewareError('Unknown Middleware Control Flag: %s'
+                              % (f.value,))
+        
     @inlineCallbacks
     def teardown(self):
         for mw in reversed(self.middlewares):

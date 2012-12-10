@@ -3,6 +3,14 @@ from twisted.internet.defer import inlineCallbacks
 from vumi.transports.tests.utils import TransportTestCase
 from vumi.transports.base import Transport
 
+from vumi.middleware.base import BaseMiddleware, StopPropagation
+
+
+class StopPropagationMiddleware(BaseMiddleware):
+    
+    def handle_outbound(self, message, endpoint):
+        raise StopPropagation()
+
 
 class BaseTransportTestCase(TransportTestCase):
     """
@@ -84,3 +92,19 @@ class BaseTransportTestCase(TransportTestCase):
             ('mw1', 'outbound', self.transport_name),
             ('mw2', 'outbound', self.transport_name),
             ])
+
+    @inlineCallbacks
+    def test_middleware_for_outbound_messages_control_flag_stop_propagation(self):
+        transport = yield self.get_transport({
+            "middleware": [
+                {"mw1": "vumi.middleware.tests.utils.RecordingMiddleware"},
+                {"mw2": "vumi.transports.tests.test_base.StopPropagationMiddleware"},
+                {"mw3": "vumi.middleware.tests.utils.RecordingMiddleware"},
+                ],
+        })
+        msgs = []
+        transport.handle_outbound_message = msgs.append
+        orig_msg = self.mkmsg_out()
+        orig_msg['timestamp'] = 0
+        yield self.dispatch(orig_msg)
+        self.assertEqual(0, len(msgs))

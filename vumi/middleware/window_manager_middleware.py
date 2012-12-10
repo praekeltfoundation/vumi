@@ -21,12 +21,12 @@ class WindowManagerMiddleware(BaseMiddleware):
 
         self.wm = WindowManager(
             redis,
-            window_size=self.config['window_size'],
-            flight_lifetime=self.config['flight_lifetime'])
+            window_size=self.config.get('window_size', 10),
+            flight_lifetime=self.config.get('flight_lifetime', 1))
 
         self.wm.monitor(
             self.send_outbound,
-            self.config['monitor_loop'],
+            self.config.get('monitor_loop', 1),
             False)
 
         if not (yield self.wm.window_exists(self.transport_name)):
