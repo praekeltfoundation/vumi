@@ -23,7 +23,7 @@ from vumi.application.base import ApplicationWorker
 from vumi.message import Message
 from vumi.errors import ConfigError
 from vumi.persist.txredis_manager import TxRedisManager
-from vumi.utils import load_class_by_string
+from vumi.utils import load_class_by_string, http_request_full
 from vumi import log
 
 
@@ -450,6 +450,44 @@ class LoggingResource(SandboxResource):
     def handle_info(self, api, command):
         log.info(str(command['msg']))
         return self.reply(command, success=True)
+
+
+class HttpClientResource(SandboxResource):
+    """Resoruce that allows making HTTP calls to outside services."""
+
+    DEFAULT_TIMEOUT = 30  # seconds
+    DEFAULT_DATA_LIMIT = 128 * 1024  # 128 KB
+
+    def setup(self):
+        self.timeout = self.config.get('timeout', self.DEFAULT_TIMEOUT)
+        self.data_limit = self.config.get('data_limit',
+                                          self.DEFAULT_DATA_LIMIT)
+
+    def _make_request_from_command(self, method, command):
+        url = command.get('url', None)
+        headers = command.get('headers', {})
+        data = command.get('data', None)
+        d = http_request_full(url, data=data, headers=headers,
+                              method=method, timeout=self.timeout,
+                              data_limit=self.data_limit)
+        d.addCallback(self._make_success_reply, command)
+        d.addErrback(self._make_failure_reply, command)
+        return d
+
+    def _make_success_reply(self, response, command):
+        return self.reply(command, success=True,
+                          body=response.delivered_body,
+                          code=response.code)
+
+    def _make_failure_reply(self, failure, command):
+        return self.reply(command, success=False,
+                          reason=failure.getErrorMessage())
+
+    def handle_get(self, api, command):
+        return self._make_request_from_command('GET', command)
+
+    def handle_post(self, api, command):
+        return self._make_request_from_command('POST', command)
 
 
 class SandboxApi(object):
