@@ -50,7 +50,7 @@ class SimplishReceiver(protocol.Protocol):
         self.deferred = defer.Deferred()
         self.response = response
         self.data_limit = data_limit
-        self.data_recvd = 0
+        self.data_recvd_len = 0
         self.response.delivered_body = ''
         if response.code == 204:
             self.deferred.callback(self.response)
@@ -58,14 +58,14 @@ class SimplishReceiver(protocol.Protocol):
             response.deliverBody(self)
 
     def dataReceived(self, data):
-        self.data_recvd += len(data)
-        if self.data_limit and self.data_recvd > self.data_limit:
+        self.data_recvd_len += len(data)
+        if self.data_limit and self.data_recvd_len > self.data_limit:
             self.transport.stopProducing()
             return
         self.response.delivered_body += data
 
     def connectionLost(self, reason):
-        if self.data_limit and self.data_recvd > self.data_limit:
+        if self.data_limit and self.data_recvd_len > self.data_limit:
             self.deferred.errback(Failure(TooMuchDataError(
                 "More than %d bytes received" % (self.data_limit,))))
         elif reason.check(ResponseDone):
