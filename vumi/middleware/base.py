@@ -1,6 +1,6 @@
 # -*- test-case-name: vumi.middleware.tests.test_base -*-
 
-from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.defer import inlineCallbacks, returnValue, maybeDeferred
 
 from vumi.utils import load_class_by_string
 from vumi.errors import ConfigError, VumiError
@@ -124,13 +124,31 @@ class MiddlewareStack(object):
     @inlineCallbacks
     def _handle(self, middlewares, handler_name, message, endpoint):
         method_name = 'handle_%s' % (handler_name,)
-        for middleware in middlewares:
+        for index, middleware in enumerate(middlewares):            
             handler = getattr(middleware, method_name)
-            message = yield handler(message, endpoint)
+            message = yield self._handle_middleware(handler, message, endpoint, index)
             if message is None:
                 raise MiddlewareError('Returned value of %s.%s should never ' \
                                 'be None' % (middleware, method_name,))
         returnValue(message)
+
+    def _handle_middleware(self, handler, message, endpoint, index):        
+        def _handle_control_flag(f):
+            if not isinstance(f.value, MiddlewareControlFlag):
+                raise f
+            if isinstance(f.value, StopPropagation):
+                raise f
+            raise MiddlewareError('Unknown Middleware Control Flag: %s'
+                                  % (f.value,))                
+        
+        d = maybeDeferred(handler, message, endpoint)
+        d.addErrback(_handle_control_flag)
+        return d
+     
+    def process_control_flag(self, f):
+        f.trap(StopPropagation)
+        if isinstance(f.value, StopPropagation):
+            return None
 
     def apply_consume(self, handler_name, message, endpoint):
         return self._handle(
@@ -140,14 +158,6 @@ class MiddlewareStack(object):
         return self._handle(
             reversed(self.middlewares), handler_name, message, endpoint)
 
-    def control_flag(self, f):
-        if not isinstance(f.value, MiddlewareControlFlag):
-            raise f
-        if isinstance(f.value, StopPropagation):
-            return None
-        raise MiddlewareError('Unknown Middleware Control Flag: %s'
-                              % (f.value,))
-        
     @inlineCallbacks
     def teardown(self):
         for mw in reversed(self.middlewares):

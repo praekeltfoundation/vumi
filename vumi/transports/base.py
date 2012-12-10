@@ -220,7 +220,7 @@ class Transport(Worker):
         d = self._middlewares.apply_consume("outbound", message,
                                             self.transport_name)
         d.addCallback(self.handle_outbound_message)
-        d.addErrback(self._middlewares.control_flag)
+        d.addErrback(self._middlewares.process_control_flag)
         d.addErrback(_send_failure)
         return d
 
