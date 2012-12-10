@@ -3,7 +3,6 @@ import os.path
 from twisted.trial.unittest import TestCase
 from twisted.internet import reactor
 from twisted.internet.defer import Deferred, inlineCallbacks
-from twisted.internet.task import Clock
 from twisted.web.server import Site, NOT_DONE_YET
 from twisted.web.resource import Resource
 from twisted.web import http
