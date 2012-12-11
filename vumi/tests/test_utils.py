@@ -223,6 +223,9 @@ class HttpUtilsTestCase(TestCase):
 
     @inlineCallbacks
     def test_http_request_full_timeout_before_connect(self):
+        # This tests the case where the client times out before
+        # successfully connecting to the server.
+
         # don't need to call .set_render because the request
         # will never make it to the server
         d = http_request_full(self.url, '', timeout=0)
@@ -236,19 +239,52 @@ class HttpUtilsTestCase(TestCase):
 
     @inlineCallbacks
     def test_http_request_full_timeout_after_connect(self):
+        # This tests the case where the client connects but then
+        # times out before the server sends any data.
+
         def interrupt(r):
             raise self.InterruptHttp
-        got_request = Deferred()
-        self.set_render(interrupt, got_request)
+        request_started = Deferred()
+        self.set_render(interrupt, request_started)
 
-        d = http_request_full(self.url, '', timeout=0.1)
+        client_done = http_request_full(self.url, '', timeout=0.1)
 
         def check_response(reason):
             self.assertTrue(reason.check('twisted.internet.defer'
                                          '.CancelledError'))
 
-        d.addBoth(check_response)
-        yield d
+        client_done.addBoth(check_response)
+        yield client_done
 
-        request = yield got_request
+        request = yield request_started
         request.transport.loseConnection()
+
+    @inlineCallbacks
+    def test_http_request_full_timeout_after_first_receive(self):
+        # This tests the case where the client connects, receives
+        # some data and creates its receiver but then times out
+        # because the server takes too long to finish sending the data.
+
+        def interrupt(r):
+            raise self.InterruptHttp
+        request_started = Deferred()
+        self.set_render(interrupt, request_started)
+
+        client_done = http_request_full(self.url, '', timeout=0.1)
+
+        request = yield request_started
+        request.write("some data")
+
+        def check_server_response(reason):
+            self.assertTrue(reason.check('twisted.internet.error'
+                                         '.ConnectionDone'))
+
+        request_done = request.notifyFinish()
+        request_done.addBoth(check_server_response)
+        yield request_done
+
+        def check_client_response(reason):
+            self.assertTrue(reason.check('twisted.internet.defer'
+                                         '.CancelledError'))
+        client_done.addBoth(check_client_response)
+        yield client_done

@@ -47,7 +47,7 @@ class TooMuchDataError(Exception):
 
 class SimplishReceiver(protocol.Protocol):
     def __init__(self, response, data_limit=None):
-        self.deferred = defer.Deferred()
+        self.deferred = defer.Deferred(canceller=self.cancel_receiving)
         self.response = response
         self.data_limit = data_limit
         self.data_recvd_len = 0
@@ -57,6 +57,9 @@ class SimplishReceiver(protocol.Protocol):
         else:
             response.deliverBody(self)
 
+    def cancel_receiving(self, d):
+        self.transport.stopProducing()
+
     def data_limit_exceeded(self):
         return (self.data_limit is not None and
                 self.data_recvd_len > self.data_limit)
@@ -64,11 +67,15 @@ class SimplishReceiver(protocol.Protocol):
     def dataReceived(self, data):
         self.data_recvd_len += len(data)
         if self.data_limit_exceeded():
-            self.transport.stopProducing()
+            self.cancel_receiving()
             return
         self.response.delivered_body += data
 
     def connectionLost(self, reason):
+        if self.deferred.called:
+            # this happens when the deferred is cancelled and this
+            # triggers connection closing
+            return
         if self.data_limit_exceeded():
             self.deferred.errback(Failure(TooMuchDataError(
                 "More than %d bytes received" % (self.data_limit,))))
