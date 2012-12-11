@@ -231,12 +231,7 @@ class HttpUtilsTestCase(TestCase):
         d = http_request_full(self.url, '', timeout=0)
 
         def check_response(reason):
-            # twisted.internet.defer.CancelledError is raised
-            # by Twisted 11.1 (and possibly older versions)
-            self.assertTrue(reason.check('twisted.internet.error'
-                                         '.ConnectingCancelledError') or
-                            reason.check('twisted.internet.defer'
-                                         '.CancelledError'))
+            self.assertTrue(reason.check('vumi.utils.HttpTimeoutError'))
 
         d.addBoth(check_response)
         yield d
@@ -254,8 +249,7 @@ class HttpUtilsTestCase(TestCase):
         client_done = http_request_full(self.url, '', timeout=0.1)
 
         def check_response(reason):
-            self.assertTrue(reason.check('twisted.internet.defer'
-                                         '.CancelledError'))
+            self.assertTrue(reason.check('vumi.utils.HttpTimeoutError'))
 
         client_done.addBoth(check_response)
         yield client_done
