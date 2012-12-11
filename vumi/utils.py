@@ -12,11 +12,14 @@ from zope.interface import implements
 from twisted.internet import defer
 from twisted.internet import reactor, protocol
 from twisted.internet.defer import succeed
+from twisted.python.failure import Failure
 from twisted.web.client import Agent, ResponseDone
 from twisted.web.server import Site
 from twisted.web.http_headers import Headers
 from twisted.web.iweb import IBodyProducer
 from twisted.web.http import PotentialDataLoss
+
+from vumi.errors import VumiError
 
 
 def import_module(name):
@@ -40,20 +43,60 @@ def to_kwargs(kwargs):
     return dict((k.encode('utf8'), v) for k, v in kwargs.iteritems())
 
 
+class HttpError(VumiError):
+    """Base class for errors raised by http_request_full."""
+
+
+class HttpDataLimitError(VumiError):
+    """Returned by http_request_full if too much data is returned."""
+
+
+class HttpTimeoutError(VumiError):
+    """Returned by http_request_full if the request times out."""
+
+
 class SimplishReceiver(protocol.Protocol):
-    def __init__(self, response):
-        self.deferred = defer.Deferred()
+    def __init__(self, response, data_limit=None):
+        self.deferred = defer.Deferred(canceller=self.cancel_on_timeout)
         self.response = response
+        self.data_limit = data_limit
+        self.data_recvd_len = 0
         self.response.delivered_body = ''
         if response.code == 204:
             self.deferred.callback(self.response)
         else:
             response.deliverBody(self)
 
+    def cancel_on_timeout(self, d):
+        self.cancel_receiving(
+            HttpTimeoutError("Timeout while receiving data")
+        )
+
+    def cancel_on_data_limit(self):
+        self.cancel_receiving(
+            HttpDataLimitError("More than %d bytes received"
+                               % (self.data_limit,))
+        )
+
+    def cancel_receiving(self, err):
+        self.transport.stopProducing()
+        self.deferred.errback(err)
+
+    def data_limit_exceeded(self):
+        return (self.data_limit is not None and
+                self.data_recvd_len > self.data_limit)
+
     def dataReceived(self, data):
+        self.data_recvd_len += len(data)
+        if self.data_limit_exceeded():
+            self.cancel_on_data_limit()
         self.response.delivered_body += data
 
     def connectionLost(self, reason):
+        if self.deferred.called:
+            # this happens when the deferred is cancelled and this
+            # triggers connection closing
+            return
         if reason.check(ResponseDone):
             self.deferred.callback(self.response)
         elif reason.check(PotentialDataLoss):
@@ -69,7 +112,8 @@ class SimplishReceiver(protocol.Protocol):
             self.deferred.errback(reason)
 
 
-def http_request_full(url, data=None, headers={}, method='POST'):
+def http_request_full(url, data=None, headers={}, method='POST',
+                      timeout=None, data_limit=None):
     agent = Agent(reactor)
     d = agent.request(method,
                       url,
@@ -77,9 +121,25 @@ def http_request_full(url, data=None, headers={}, method='POST'):
                       StringProducer(data) if data else None)
 
     def handle_response(response):
-        return SimplishReceiver(response).deferred
+        return SimplishReceiver(response, data_limit).deferred
 
     d.addCallback(handle_response)
+
+    if timeout is not None:
+        cancelling_on_timeout = [False]
+
+        def raise_timeout(reason):
+            if not cancelling_on_timeout[0]:
+                return reason
+            return Failure(HttpTimeoutError("Timeout while connecting"))
+
+        def cancel_on_timeout():
+            cancelling_on_timeout[0] = True
+            d.cancel()
+
+        d.addErrback(raise_timeout)
+        reactor.callLater(timeout, cancel_on_timeout)
+
     return d
 
 

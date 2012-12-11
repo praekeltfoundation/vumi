@@ -6,16 +6,15 @@ import json
 import pkg_resources
 from collections import defaultdict
 
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import inlineCallbacks, fail, succeed
 from twisted.internet.error import ProcessTerminated
 from twisted.trial.unittest import TestCase, SkipTest
 
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.application.tests.utils import ApplicationTestCase
-from vumi.application.sandbox import (Sandbox, SandboxCommand, SandboxError,
-                                      RedisResource, OutboundResource,
-                                      JsSandboxResource, LoggingResource,
-                                      JsSandbox)
+from vumi.application.sandbox import (
+    Sandbox, SandboxCommand, SandboxError, RedisResource, OutboundResource,
+    JsSandboxResource, LoggingResource, HttpClientResource, JsSandbox)
 from vumi.tests.utils import LogCatcher, PersistenceMixin
 
 
@@ -547,3 +546,79 @@ class TestLoggingResource(ResourceTestCaseBase):
             msgs = lc.messages()
         self.assertEqual(reply['success'], True)
         self.assertEqual(msgs, ['foo'])
+
+
+class TestHttpClientResource(ResourceTestCaseBase):
+
+    resource_cls = HttpClientResource
+
+    class DummyResponse(object):
+        pass
+
+    @inlineCallbacks
+    def setUp(self):
+        super(TestHttpClientResource, self).setUp()
+        yield self.create_resource({})
+        import vumi.application.sandbox
+        self.patch(vumi.application.sandbox,
+                   'http_request_full', self.dummy_http_request)
+        self._next_http_request_result = None
+        self._http_requests = []
+
+    def dummy_http_request(self, *args, **kw):
+        self._http_requests.append((args, kw))
+        return self._next_http_request_result
+
+    def http_request_fail(self, error):
+        self._next_http_request_result = fail(error)
+
+    def http_request_succeed(self, body, code=200):
+        response = self.DummyResponse()
+        response.delivered_body = body
+        response.code = code
+        self._next_http_request_result = succeed(response)
+
+    def assert_http_request(self, url, method='GET', headers={}, data=None,
+                            timeout=None, data_limit=None):
+        timeout = (timeout if timeout is not None
+                   else self.resource.timeout)
+        data_limit = (data_limit if data_limit is not None
+                      else self.resource.data_limit)
+        args = (url,)
+        kw = dict(method=method, headers=headers, data=data,
+                  timeout=timeout, data_limit=data_limit)
+        [(actual_args, actual_kw)] = self._http_requests
+        self.assertEqual((actual_args, actual_kw), (args, kw))
+
+    @inlineCallbacks
+    def test_handle_get(self):
+        self.http_request_succeed("foo")
+        reply = yield self.dispatch_command('get',
+                                            url='http://www.example.com')
+        self.assertTrue(reply['success'])
+        self.assertEqual(reply['body'], "foo")
+        self.assert_http_request('http://www.example.com', method='GET')
+
+    @inlineCallbacks
+    def test_handle_post(self):
+        self.http_request_succeed("foo")
+        reply = yield self.dispatch_command('post',
+                                            url='http://www.example.com')
+        self.assertTrue(reply['success'])
+        self.assertEqual(reply['body'], "foo")
+        self.assert_http_request('http://www.example.com', method='POST')
+
+    @inlineCallbacks
+    def test_failed_get(self):
+        self.http_request_fail(ValueError("HTTP request failed"))
+        reply = yield self.dispatch_command('get',
+                                            url='http://www.example.com')
+        self.assertFalse(reply['success'])
+        self.assertEqual(reply['reason'], "HTTP request failed")
+        self.assert_http_request('http://www.example.com', method='GET')
+
+    @inlineCallbacks
+    def test_null_url(self):
+        reply = yield self.dispatch_command('get')
+        self.assertFalse(reply['success'])
+        self.assertEqual(reply['reason'], "No URL given")
