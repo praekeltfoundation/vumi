@@ -231,8 +231,12 @@ class HttpUtilsTestCase(TestCase):
         d = http_request_full(self.url, '', timeout=0)
 
         def check_response(reason):
+            # twisted.internet.defer.CancelledError is raised
+            # by Twisted 11.1 (and possibly older versions)
             self.assertTrue(reason.check('twisted.internet.error'
-                                         '.ConnectingCancelledError'))
+                                         '.ConnectingCancelledError') or
+                            reason.check('twisted.internet.defer'
+                                         '.CancelledError'))
 
         d.addBoth(check_response)
         yield d
