@@ -214,7 +214,7 @@ class HttpUtilsTestCase(TestCase):
         d = http_request_full(self.url, '', data_limit=3)
 
         def check_response(reason):
-            self.assertTrue(reason.check('vumi.utils.TooMuchDataError'))
+            self.assertTrue(reason.check('vumi.utils.HttpDataLimitError'))
             self.assertEqual(reason.getErrorMessage(),
                              "More than 3 bytes received")
 
@@ -288,7 +288,6 @@ class HttpUtilsTestCase(TestCase):
         yield request_done
 
         def check_client_response(reason):
-            self.assertTrue(reason.check('twisted.internet.defer'
-                                         '.CancelledError'))
+            self.assertTrue(reason.check('vumi.utils.HttpTimeoutError'))
         client_done.addBoth(check_client_response)
         yield client_done

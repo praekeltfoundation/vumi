@@ -19,6 +19,8 @@ from twisted.web.http_headers import Headers
 from twisted.web.iweb import IBodyProducer
 from twisted.web.http import PotentialDataLoss
 
+from vumi.errors import VumiError
+
 
 def import_module(name):
     """
@@ -41,13 +43,21 @@ def to_kwargs(kwargs):
     return dict((k.encode('utf8'), v) for k, v in kwargs.iteritems())
 
 
-class TooMuchDataError(Exception):
+class HttpError(VumiError):
+    """Base class for errors raised by http_request_full."""
+
+
+class HttpDataLimitError(VumiError):
     """Returned by http_request_full if too much data is returned."""
+
+
+class HttpTimeoutError(VumiError):
+    """Returned by http_request_full if the request times out."""
 
 
 class SimplishReceiver(protocol.Protocol):
     def __init__(self, response, data_limit=None):
-        self.deferred = defer.Deferred(canceller=self.cancel_receiving)
+        self.deferred = defer.Deferred(canceller=self.cancel_on_timeout)
         self.response = response
         self.data_limit = data_limit
         self.data_recvd_len = 0
@@ -57,8 +67,20 @@ class SimplishReceiver(protocol.Protocol):
         else:
             response.deliverBody(self)
 
-    def cancel_receiving(self, d):
+    def cancel_on_timeout(self, d):
+        self.cancel_receiving(
+            HttpTimeoutError("Timeout while receiving data")
+        )
+
+    def cancel_on_data_limit(self):
+        self.cancel_receiving(
+            HttpDataLimitError("More than %d bytes received"
+                               % (self.data_limit,))
+        )
+
+    def cancel_receiving(self, err):
         self.transport.stopProducing()
+        self.deferred.errback(err)
 
     def data_limit_exceeded(self):
         return (self.data_limit is not None and
@@ -67,8 +89,7 @@ class SimplishReceiver(protocol.Protocol):
     def dataReceived(self, data):
         self.data_recvd_len += len(data)
         if self.data_limit_exceeded():
-            self.cancel_receiving()
-            return
+            self.cancel_on_data_limit()
         self.response.delivered_body += data
 
     def connectionLost(self, reason):
@@ -76,10 +97,7 @@ class SimplishReceiver(protocol.Protocol):
             # this happens when the deferred is cancelled and this
             # triggers connection closing
             return
-        if self.data_limit_exceeded():
-            self.deferred.errback(Failure(TooMuchDataError(
-                "More than %d bytes received" % (self.data_limit,))))
-        elif reason.check(ResponseDone):
+        if reason.check(ResponseDone):
             self.deferred.callback(self.response)
         elif reason.check(PotentialDataLoss):
             # This is only (and always!) raised if we have an HTTP 1.0 request
