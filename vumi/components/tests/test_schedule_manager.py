@@ -133,3 +133,9 @@ class ScheduleManagerTestCase(TestCase):
         self.assert_config_error(
             {'recurring': 'day_of_week', 'time': '12:00:00', 'days': '8'},
             "Invalid value for 'days': '8'")
+
+    def test_never(self):
+        self.assert_schedule_next(
+            {'recurring': 'never'},
+            datetime(2012, 11, 20, 13, 0, 0),
+            None)
