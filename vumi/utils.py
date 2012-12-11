@@ -126,7 +126,19 @@ def http_request_full(url, data=None, headers={}, method='POST',
     d.addCallback(handle_response)
 
     if timeout is not None:
-        reactor.callLater(timeout, d.cancel)
+        cancelling_on_timeout = [False]
+
+        def raise_timeout(reason):
+            if not cancelling_on_timeout[0]:
+                return reason
+            return Failure(HttpTimeoutError("Timeout while connecting"))
+
+        def cancel_on_timeout():
+            cancelling_on_timeout[0] = True
+            d.cancel()
+
+        d.addErrback(raise_timeout)
+        reactor.callLater(timeout, cancel_on_timeout)
 
     return d
 
