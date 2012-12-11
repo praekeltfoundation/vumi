@@ -12,9 +12,9 @@ from uuid import uuid4
 
 from twisted.internet import reactor
 from twisted.internet.protocol import ProcessProtocol
-from twisted.internet.defer import (Deferred, inlineCallbacks,
-                                    maybeDeferred, returnValue,
-                                    DeferredList, succeed)
+from twisted.internet.defer import (
+    Deferred, inlineCallbacks, maybeDeferred, returnValue, DeferredList,
+    succeed)
 from twisted.internet.error import ProcessDone
 from twisted.python.failure import Failure
 
