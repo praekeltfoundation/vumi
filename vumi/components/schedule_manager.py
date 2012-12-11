@@ -28,6 +28,16 @@ class ScheduleManager(object):
        the event is scheduled for in "HH:MM:SS" format.
        The `days` field is required and specifies the days of the month the
        event is scheduled for as a list of comma/whitespace-separated integers.
+
+     * `day_of_week`
+       The `time` field is required and specifies the (approximate) time of day
+       the event is scheduled for in "HH:MM:SS" format.
+       The `days` field is required and specifies the days of the week the
+       event is scheduled for as a list of comma/whitespace-separated integers,
+       1 for Monday through 7 for Sunday.
+
+     * `never`
+       No extra fields are required and the event is never scheduled.
     """
 
     def __init__(self, schedule_definition):
@@ -40,7 +50,7 @@ class ScheduleManager(object):
         next_dt = self.get_next(then_dt)
 
         if next_dt is None:
-            # We have an invalid schedule definition.
+            # We have an invalid schedule definition or nothing scheduled.
             return False
 
         return (next_dt <= now_dt)
@@ -54,6 +64,8 @@ class ScheduleManager(object):
                 return self.get_next_day_of_month(since_dt)
             elif recurring_type == 'day_of_week':
                 return self.get_next_day_of_week(since_dt)
+            elif recurring_type == 'never':
+                return None
             else:
                 raise ValueError(
                     "Invalid value for 'recurring': %r" % (recurring_type,))
