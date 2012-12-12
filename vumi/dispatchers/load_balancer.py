@@ -30,7 +30,7 @@ class LoadBalancingRouter(BaseDispatchRouter):
                               (type(self).__name__,))
         [self.exposed_name] = self.dispatcher.exposed_names
         if not self.dispatcher.transport_names:
-            raise ConfigError("At least on transport name is needed for %s" %
+            raise ConfigError("At least one transport name is needed for %s" %
                               (type(self).__name__,))
         self.transport_name_cycle = itertools.cycle(
             self.dispatcher.transport_names)
