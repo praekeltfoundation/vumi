@@ -2,7 +2,7 @@
 
 from twisted.internet.defer import inlineCallbacks
 
-from vumi.tests.utils import VumiWorkerTestCase
+from vumi.tests.utils import VumiWorkerTestCase, LogCatcher
 from vumi.dispatchers.tests.utils import DummyDispatcher
 from vumi.dispatchers.load_balancer import LoadBalancingRouter
 
@@ -88,13 +88,28 @@ class TestLoadBalancingWithReplyAffinity(BaseLoadBalancingTestCase):
         self.assertEqual(publishers['round_robin'].msgs, [msg1, msg2])
 
     def test_outbound_message_routing(self):
-        msg1 = self.mkmsg_out(content='msg 1')
+        msg1 = self.mkmsg_out(content='msg 1', in_reply_to='msg X')
         self.router.push_transport_name(msg1, 'transport_1')
         self.router.dispatch_outbound_message(msg1)
-        msg2 = self.mkmsg_out(content='msg 2')
+        msg2 = self.mkmsg_out(content='msg 2', in_reply_to='msg X')
         self.router.push_transport_name(msg2, 'transport_1')
         self.router.dispatch_outbound_message(msg2)
+        msg3 = self.mkmsg_out(content='msg 3', in_reply_to='msg X')
+        self.router.push_transport_name(msg3, 'transport_2')
+        self.router.dispatch_outbound_message(msg3)
         publishers = self.dispatcher.transport_publisher
         self.assertEqual(publishers['transport_1'].msgs, [msg1, msg2])
-        self.assertEqual(publishers['transport_2'].msgs, [])
-1
+        self.assertEqual(publishers['transport_2'].msgs, [msg3])
+
+    def test_outbound_message_with_unknown_transport_name(self):
+        # we expect unknown outbound transport_names to be
+        # round-robinned and logged.
+        msg1 = self.mkmsg_out(content='msg 1', in_reply_to='msg X')
+        self.router.push_transport_name(msg1, 'transport_unknown')
+        with LogCatcher() as lc:
+            self.router.dispatch_outbound_message(msg1)
+            [errmsg] = lc.messages()
+            self.assertTrue("unknown load balancer endpoint "
+                            "'transport_unknown' was was received" in errmsg)
+        publishers = self.dispatcher.transport_publisher
+        self.assertEqual(publishers['transport_1'].msgs, [msg1])

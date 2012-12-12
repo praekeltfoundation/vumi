@@ -4,6 +4,7 @@
 
 import itertools
 
+from vumi import log
 from vumi.errors import ConfigError
 from vumi.dispatchers.base import BaseDispatchRouter
 
@@ -31,7 +32,9 @@ class LoadBalancingRouter(BaseDispatchRouter):
         if not self.dispatcher.transport_names:
             raise ConfigError("At least on transport name is needed for %s" %
                               (type(self).__name__,))
-        self.transport_names = itertools.cycle(self.dispatcher.transport_names)
+        self.transport_name_cycle = itertools.cycle(
+            self.dispatcher.transport_names)
+        self.transport_name_set = set(self.dispatcher.transport_names)
 
     def push_transport_name(self, msg, transport_name):
         hm = msg['helper_metadata']
@@ -58,9 +61,14 @@ class LoadBalancingRouter(BaseDispatchRouter):
         self.dispatcher.publish_inbound_event(self.exposed_name, msg)
 
     def dispatch_outbound_message(self, msg):
-        transport_name = None
-        if self.reply_affinity:
+        if self.reply_affinity and msg['in_reply_to']:
             transport_name = self.pop_transport_name(msg)
-        if not transport_name:
-            transport_name = self.transport_names.next()
+            if transport_name not in self.transport_name_set:
+                log.warning("LoadBalancer is configured for reply affinity but"
+                            " reply for unknown load balancer endpoint %r was"
+                            " was received. Using round-robin routing instead."
+                            % (transport_name,))
+                transport_name = self.transport_name_cycle.next()
+        else:
+            transport_name = self.transport_name_cycle.next()
         self.dispatcher.publish_outbound_message(transport_name, msg)
