@@ -4,7 +4,6 @@
 
 import re
 import functools
-from collections import defaultdict
 
 from twisted.internet.defer import inlineCallbacks, returnValue, maybeDeferred
 
