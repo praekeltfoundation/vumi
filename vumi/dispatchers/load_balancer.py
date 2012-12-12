@@ -21,10 +21,15 @@ class LoadBalancingRouter(BaseDispatchRouter):
         If set to true, replies are sent back to the same transport
         they were sent from. If false, replies are round-robinned in
         the same way other outbound messages are. Default: true.
+    :param bool rewrite_transport_name:
+        If set to true, rewrites message `transport_names` in both
+        directions. Default: true.
     """
 
     def setup_routing(self):
         self.reply_affinity = self.config.get('reply_affinity', True)
+        self.rewrite_transport_names = self.config.get(
+            'rewrite_transport_names', True)
         if len(self.dispatcher.exposed_names) != 1:
             raise ConfigError("Only one exposed name allowed for %s." %
                               (type(self).__name__,))
@@ -55,9 +60,13 @@ class LoadBalancingRouter(BaseDispatchRouter):
             # TODO: we should really be pushing the endpoint name
             #       but it isn't available here
             self.push_transport_name(msg, msg['transport_name'])
+        if self.rewrite_transport_names:
+            msg['transport_name'] = self.exposed_name
         self.dispatcher.publish_inbound_message(self.exposed_name, msg)
 
     def dispatch_inbound_event(self, msg):
+        if self.rewrite_transport_names:
+            msg['transport_name'] = self.exposed_name
         self.dispatcher.publish_inbound_event(self.exposed_name, msg)
 
     def dispatch_outbound_message(self, msg):
@@ -71,4 +80,6 @@ class LoadBalancingRouter(BaseDispatchRouter):
                 transport_name = self.transport_name_cycle.next()
         else:
             transport_name = self.transport_name_cycle.next()
+        if self.rewrite_transport_names:
+            msg['transport_name'] = transport_name
         self.dispatcher.publish_outbound_message(transport_name, msg)
