@@ -181,11 +181,13 @@ class DummyDispatcher(BaseDispatchWorker):
 
     def __init__(self, config):
         self.transport_publisher = {}
-        for transport in config['transport_names']:
+        self.transport_names = config.get('transport_names', [])
+        for transport in self.transport_names:
             self.transport_publisher[transport] = self.DummyPublisher()
         self.exposed_publisher = {}
         self.exposed_event_publisher = {}
-        for exposed in config['exposed_names']:
+        self.exposed_names = config.get('exposed_names', [])
+        for exposed in self.exposed_names:
             self.exposed_publisher[exposed] = self.DummyPublisher()
             self.exposed_event_publisher[exposed] = self.DummyPublisher()
         self._middlewares = MiddlewareStack([])
