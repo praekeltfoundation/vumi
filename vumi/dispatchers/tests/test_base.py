@@ -2,9 +2,8 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.dispatchers.base import (
     BaseDispatchWorker, ToAddrRouter, FromAddrMultiplexRouter)
-from vumi.middleware import MiddlewareStack
 from vumi.tests.utils import VumiWorkerTestCase, LogCatcher
-from vumi.dispatchers.tests.utils import DispatcherTestCase
+from vumi.dispatchers.tests.utils import DispatcherTestCase, DummyDispatcher
 
 
 class TestBaseDispatchWorker(VumiWorkerTestCase):
@@ -165,30 +164,6 @@ class TestBaseDispatchWorker(VumiWorkerTestCase):
             yield self.dispatch(msg, app)
         self.assert_messages(apps, 'transport2.outbound', msgs)
         self.assert_no_messages('transport1.outbound', 'transport3.outbound')
-
-
-class DummyDispatcher(BaseDispatchWorker):
-
-    class DummyPublisher(object):
-        def __init__(self):
-            self.msgs = []
-
-        def publish_message(self, msg):
-            self.msgs.append(msg)
-
-        def clear(self):
-            self.msgs[:] = []
-
-    def __init__(self, config):
-        self.transport_publisher = {}
-        for transport in config['transport_names']:
-            self.transport_publisher[transport] = self.DummyPublisher()
-        self.exposed_publisher = {}
-        self.exposed_event_publisher = {}
-        for exposed in config['exposed_names']:
-            self.exposed_publisher[exposed] = self.DummyPublisher()
-            self.exposed_event_publisher[exposed] = self.DummyPublisher()
-        self._middlewares = MiddlewareStack([])
 
 
 class TestToAddrRouter(VumiWorkerTestCase):
