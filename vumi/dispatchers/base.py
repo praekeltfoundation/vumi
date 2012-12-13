@@ -4,7 +4,6 @@
 
 import re
 import functools
-from collections import defaultdict
 
 from twisted.internet.defer import inlineCallbacks, returnValue, maybeDeferred
 
@@ -42,8 +41,8 @@ class BaseDispatchWorker(Worker):
         yield self.teardown_middleware()
 
     def setup_endpoints(self):
-        self._transport_names = self.config.get('transport_names', [])
-        self._exposed_names = self.config.get('exposed_names', [])
+        self.transport_names = self.config.get('transport_names', [])
+        self.exposed_names = self.config.get('exposed_names', [])
 
     @inlineCallbacks
     def setup_middleware(self):
@@ -64,7 +63,7 @@ class BaseDispatchWorker(Worker):
     @inlineCallbacks
     def setup_transport_publishers(self):
         self.transport_publisher = {}
-        for transport_name in self._transport_names:
+        for transport_name in self.transport_names:
             self.transport_publisher[transport_name] = yield self.publish_to(
                 '%s.outbound' % (transport_name,))
 
@@ -72,13 +71,13 @@ class BaseDispatchWorker(Worker):
     def setup_transport_consumers(self):
         self.transport_consumer = {}
         self.transport_event_consumer = {}
-        for transport_name in self._transport_names:
+        for transport_name in self.transport_names:
             self.transport_consumer[transport_name] = yield self.consume(
                 '%s.inbound' % (transport_name,),
                 functools.partial(self.dispatch_inbound_message,
                                   transport_name),
                 message_class=TransportUserMessage)
-        for transport_name in self._transport_names:
+        for transport_name in self.transport_names:
             self.transport_event_consumer[transport_name] = yield self.consume(
                 '%s.event' % (transport_name,),
                 functools.partial(self.dispatch_inbound_event, transport_name),
@@ -88,17 +87,17 @@ class BaseDispatchWorker(Worker):
     def setup_exposed_publishers(self):
         self.exposed_publisher = {}
         self.exposed_event_publisher = {}
-        for exposed_name in self._exposed_names:
+        for exposed_name in self.exposed_names:
             self.exposed_publisher[exposed_name] = yield self.publish_to(
                 '%s.inbound' % (exposed_name,))
-        for exposed_name in self._exposed_names:
+        for exposed_name in self.exposed_names:
             self.exposed_event_publisher[exposed_name] = yield self.publish_to(
                 '%s.event' % (exposed_name,))
 
     @inlineCallbacks
     def setup_exposed_consumers(self):
         self.exposed_consumer = {}
-        for exposed_name in self._exposed_names:
+        for exposed_name in self.exposed_names:
             self.exposed_consumer[exposed_name] = yield self.consume(
                 '%s.outbound' % (exposed_name,),
                 functools.partial(self.dispatch_outbound_message,
@@ -337,10 +336,10 @@ class FromAddrMultiplexRouter(BaseDispatchRouter):
     """
 
     def setup_routing(self):
-        if len(self.config['exposed_names']) != 1:
+        if len(self.dispatcher.exposed_names) != 1:
             raise ConfigError("Only one exposed name allowed for %s." % (
                     type(self).__name__,))
-        [self.exposed_name] = self.config['exposed_names']
+        [self.exposed_name] = self.dispatcher.exposed_names
 
     def dispatch_inbound_message(self, msg):
         msg['transport_name'] = self.exposed_name
