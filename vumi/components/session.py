@@ -16,7 +16,10 @@ class SessionManager(object):
     :param int max_session_length:
         Time before a session expires. Default is None (never expire).
     :param float gc_period:
-        Time in seconds between checking for session expiry.
+        Time in seconds between checking for session expiry. Set to zero to
+        disable the garbage collection at regular intervals. This will result
+        in the garbage collection being done purely lazy when `active_sessions`
+        is called.
     """
 
     def __init__(self, redis, max_session_length=None, gc_period=1.0):
@@ -25,7 +28,8 @@ class SessionManager(object):
 
         self._session_created = True  # Start True so that GC runs at startup.
         self.gc = task.LoopingCall(self._active_session_gc)
-        self.gc_done = self.gc.start(gc_period)
+        if gc_period:
+            self.gc_done = self.gc.start(gc_period)
 
     @inlineCallbacks
     def stop(self, stop_redis=True):

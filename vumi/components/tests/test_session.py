@@ -43,6 +43,13 @@ class SessionManagerTestCase(TestCase, PersistenceMixin):
         self.assertTrue(s1[1]['created_at'] < s2[1]['created_at'])
 
     @inlineCallbacks
+    def test_disable_active_sessions(self):
+        self.assertTrue(self.sm.gc.running)
+        yield self.sm.stop()
+        sm = SessionManager(self.manager, gc_period=0)
+        self.assertFalse(sm.gc.running)
+
+    @inlineCallbacks
     def test_schedule_session_expiry(self):
         self.sm.max_session_length = 60.0
         yield self.sm.create_session("u1")
