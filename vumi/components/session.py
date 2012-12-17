@@ -18,17 +18,23 @@ class SessionManager(object):
     :param float gc_period:
         Time in seconds between checking for session expiry. Set to zero to
         disable the garbage collection at regular intervals. This will result
-        in the garbage collection being done purely lazy when `active_sessions`
-        is called.
+        in the garbage collection being done purely lazy when
+        :meth:`active_sessions` is called. (WARNING: If nothing calls
+        :meth:`active_sessions`, the active session set in Redis will grow
+        without bound.)
+    :param bool track_active_sessions:
+        Set to ``False`` to disable active session tracking.
     """
 
-    def __init__(self, redis, max_session_length=None, gc_period=1.0):
+    def __init__(self, redis, max_session_length=None, gc_period=1.0,
+                 track_active_sessions=True):
         self.max_session_length = max_session_length
         self.redis = redis
+        self._track_active_sessions = track_active_sessions
 
         self._session_created = True  # Start True so that GC runs at startup.
         self.gc = task.LoopingCall(self._active_session_gc)
-        if gc_period:
+        if self._track_active_sessions and gc_period:
             self.gc_done = self.gc.start(gc_period)
 
     @inlineCallbacks
@@ -143,6 +149,7 @@ class SessionManager(object):
         ukey = "%s:%s" % ('session', user_id)
         for s_key, s_value in session.items():
             yield self.redis.hset(ukey, s_key, s_value)
-        skey = 'active_sessions'
-        yield self.redis.sadd(skey, user_id)
+        if self._track_active_sessions:
+            skey = 'active_sessions'
+            yield self.redis.sadd(skey, user_id)
         returnValue(session)
