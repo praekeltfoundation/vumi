@@ -23,7 +23,8 @@ class SessionManager(object):
         self.max_session_length = max_session_length
         self.redis = redis
 
-        self.gc = task.LoopingCall(lambda: self.active_sessions())
+        self._session_created = True  # Start True so that GC runs at startup.
+        self.gc = task.LoopingCall(self._active_session_gc)
         self.gc_done = self.gc.start(gc_period)
 
     @inlineCallbacks
@@ -44,6 +45,17 @@ class SessionManager(object):
         if key_prefix is not None:
             d.addCallback(lambda m: m.sub_manager(key_prefix))
         return d.addCallback(lambda m: cls(m, max_session_length, gc_period))
+
+    def _active_session_gc(self):
+        """
+        Garbage-collect expired sessions in the active session set.
+
+        This checks the value of :attr:`_session_created` and only runs the
+        garbage collection if it is ``False``.
+        """
+        if self._session_created:
+            self._session_created = False
+            return self.active_sessions()
 
     @inlineCallbacks
     def active_sessions(self):
@@ -103,6 +115,7 @@ class SessionManager(object):
         if self.max_session_length:
             yield self.schedule_session_expiry(user_id,
                                                int(self.max_session_length))
+        self._session_created = True
         returnValue((yield self.load_session(user_id)))
 
     def clear_session(self, user_id):
