@@ -8,18 +8,33 @@ from uuid import uuid4
 from twisted.internet.defer import returnValue, inlineCallbacks
 
 from vumi.message import TransportEvent, TransportUserMessage
-from vumi.persist.model import Model, Manager
+from vumi.persist.model import Model, Manager, ModelMigrator
 from vumi.persist.fields import (VumiMessage, ForeignKey, ListOf, Tag, Dynamic,
-                                 Unicode)
+                                 Unicode, Timestamp)
 from vumi.persist.txriak_manager import TxRiakManager
 from vumi import log
 from vumi.components.message_store_cache import MessageStoreCache
 
 
+class BatchMigrator(ModelMigrator):
+
+    def migrate_from_unversioned(self, migration_data):
+        # 1. get message store using `self.manager`
+        # 2. get Redis using ... ?
+        # 3. get cached keys for this batch id, look at the oldest value,
+        #    grab its timestamp and use that for this batch_id's `created_at`
+        migration_data.set_value('$VERSION', 1)
+        migration_data.set_value('created_at', ...)
+
+
 class Batch(Model):
+
+    MIGRATOR = BatchMigrator
+
     # key is batch_id
     tags = ListOf(Tag())
     metadata = Dynamic(Unicode())
+    created_at = Timestamp()
 
 
 class CurrentTag(Model):
