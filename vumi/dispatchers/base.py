@@ -34,9 +34,9 @@ class BaseDispatchWorker(Worker):
         yield self.setup_exposed_publishers()
         yield self.setup_transport_consumers()
         yield self.setup_exposed_consumers()
-        self.prefetch_count = self.config.get('prefetch_count', 20)
-        if self.prefetch_count is not None:
-            yield self.setup_prefetch_counts()
+        self.amqp_prefetch_count = self.config.get('amqp_prefetch_count', 20)
+        if self.amqp_prefetch_count is not None:
+            yield self.setup_amqp_qos()
 
     @inlineCallbacks
     def stopWorker(self):
@@ -108,13 +108,13 @@ class BaseDispatchWorker(Worker):
                 message_class=TransportUserMessage)
 
     @inlineCallbacks
-    def setup_prefetch_counts(self):
+    def setup_amqp_qos(self):
         consumers = (self.transport_consumer.values() +
                         self.transport_event_consumer.values() +
                         self.exposed_consumer.values())
         for consumer in consumers:
             yield consumer.channel.basic_qos(
-                0, int(self.prefetch_count), False)
+                0, int(self.amqp_prefetch_count), False)
 
     def dispatch_inbound_message(self, endpoint, msg):
         d = self._middlewares.apply_consume("inbound", msg, endpoint)

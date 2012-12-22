@@ -179,14 +179,14 @@ class TestBaseDispatchWorker(VumiWorkerTestCase):
 
     @inlineCallbacks
     def test_consumer_prefetch_count_custom(self):
-        dp = yield self.get_dispatcher(prefetch_count=10)
+        dp = yield self.get_dispatcher(amqp_prefetch_count=10)
         consumers = self.get_dispatcher_consumers(dp)
         for consumer in consumers:
             self.assertEqual(consumer.channel.qos_prefetch_count, 10)
 
     @inlineCallbacks
     def test_consumer_prefetch_count_none(self):
-        dp = yield self.get_dispatcher(prefetch_count=None)
+        dp = yield self.get_dispatcher(amqp_prefetch_count=None)
         consumers = self.get_dispatcher_consumers(dp)
         for consumer in consumers:
             self.assertFalse(consumer.channel.qos_prefetch_count)
