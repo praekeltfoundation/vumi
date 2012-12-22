@@ -48,11 +48,21 @@ class Transport(Worker):
             self.config.setdefault('transport_name',
                                    self.config['TRANSPORT_NAME'])
         self.transport_name = self.config['transport_name']
-        self.concurrent_sends = self.config.get('concurrent_sends')
+
+        if 'concurrent_sends' in self.config:
+            log.msg("NOTE: 'concurrent_sends' in config is deprecated. "
+                    "use 'amqp_prefetch_count' instead.")
+            self.config.setdefault('amqp_prefetch_count',
+                                    self.config['concurrent_sends'])
+        self.amqp_prefetch_count = self.config.get('amqp_prefetch_count')
 
         yield self.setup_transport_connection()
         yield self.setup_middleware()
         yield self.setup_transport()
+
+        # Apply concurrency throttling if we need to.
+        if self.amqp_prefetch_count is not None:
+            yield self.setup_amqp_qos()
 
         if self.start_message_consumer:
             yield self.message_consumer.unpause()
@@ -92,6 +102,12 @@ class Transport(Worker):
         """
         pass
 
+    @inlineCallbacks
+    def setup_amqp_qos(self):
+        for consumer in self._consumers:
+            yield consumer.channel.basic_qos(0, int(self.amqp_prefetch_count),
+                                                False)
+
     def teardown_transport(self):
         """
         Clean-up of setup done in setup_transport should happen here.
@@ -124,11 +140,6 @@ class Transport(Worker):
             self.get_rkey('outbound'), self._process_message,
             message_class=TransportUserMessage, paused=True)
         self._consumers.append(self.message_consumer)
-
-        # Apply concurrency throttling if we need to.
-        if self.concurrent_sends is not None:
-            yield self.message_consumer.channel.basic_qos(
-                0, int(self.concurrent_sends), False)
 
         # Set up publishers
         self.message_publisher = yield self.publish_rkey('inbound')
