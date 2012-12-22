@@ -231,7 +231,7 @@ class TestApplicationWorker(ApplicationTestCase):
     def test_application_prefetch_count_custom(self):
         app = yield self.get_application({
             'transport_name': 'test',
-            'prefetch_count': 10,
+            'amqp_prefetch_count': 10,
             })
         for consumer in app._consumers:
             self.assertEqual(consumer.channel.qos_prefetch_count, 10)
@@ -248,10 +248,11 @@ class TestApplicationWorker(ApplicationTestCase):
     def test_application_prefetch_count_none(self):
         app = yield self.get_application({
             'transport_name': 'test',
-            'prefetch_count': None,
+            'amqp_prefetch_count': None,
             })
         for consumer in app._consumers:
             self.assertFalse(consumer.channel.qos_prefetch_count)
+
 
 class TestApplicationMiddlewareHooks(ApplicationTestCase):
 
