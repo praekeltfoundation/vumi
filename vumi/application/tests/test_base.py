@@ -227,6 +227,32 @@ class TestApplicationWorker(ApplicationTestCase):
         worker.new_session(FakeUserMessage())
         worker.close_session(FakeUserMessage())
 
+    @inlineCallbacks
+    def test_application_prefetch_count_custom(self):
+        app = yield self.get_application({
+            'transport_name': 'test',
+            'amqp_prefetch_count': 10,
+            })
+        for consumer in app._consumers:
+            self.assertEqual(consumer.channel.qos_prefetch_count, 10)
+
+    @inlineCallbacks
+    def test_application_prefetch_count_default(self):
+        app = yield self.get_application({
+            'transport_name': 'test',
+            })
+        for consumer in app._consumers:
+            self.assertEqual(consumer.channel.qos_prefetch_count, 20)
+
+    @inlineCallbacks
+    def test_application_prefetch_count_none(self):
+        app = yield self.get_application({
+            'transport_name': 'test',
+            'amqp_prefetch_count': None,
+            })
+        for consumer in app._consumers:
+            self.assertFalse(consumer.channel.qos_prefetch_count)
+
 
 class TestApplicationMiddlewareHooks(ApplicationTestCase):
 
