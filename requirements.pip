@@ -12,8 +12,6 @@ redis
 txredis
 python-smpp
 pytz
-# Pulling 1.0.8 from GH until it's been pushed to Pypi
-# riakasaurus>=1.0.6
--e git+git://github.com/calston/riakasaurus.git@eea88b9#egg=riakasaurus
+riakasaurus>=1.0.9
 riak
 https://github.com/dustin/twitty-twister/tarball/master#egg=twittytwister-0.1.1
