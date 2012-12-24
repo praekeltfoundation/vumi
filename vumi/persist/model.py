@@ -208,8 +208,7 @@ class Model(object):
 
     def __repr__(self):
         str_items = ["%s=%r" % item for item in iter(self)]
-        return "<%s key=%s %s>" % (self.__class__.__name__, self.key,
-                                   " ".join(str_items))
+        return "<%s %s>" % (self.__class__.__name__, " ".join(str_items))
 
     def __iter__(self):
         return iter(self.get_items())
@@ -237,7 +236,8 @@ class Model(object):
             value_func = GET_VALUE_MAP.get(type(value), lambda value: value)
             return value_func(value)
 
-        return [(field, get_value(field)) for field in fields]
+        return [('key', self.key)] + [
+                    (field, get_value(field)) for field in fields]
 
     def save(self):
         """Save the object to Riak.
