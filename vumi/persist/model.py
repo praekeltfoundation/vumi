@@ -5,7 +5,9 @@
 from functools import wraps
 
 from vumi.errors import VumiError
-from vumi.persist.fields import Field, FieldDescriptor, ValidationError
+from vumi.persist.fields import (Field, FieldDescriptor, ValidationError,
+                                    ForeignKeyProxy, ManyToManyProxy,
+                                    ListProxy, DynamicProxy)
 
 
 class ModelMigrationError(VumiError):
@@ -205,11 +207,37 @@ class Model(object):
                                                     self.__class__))
 
     def __repr__(self):
+        str_items = ["%s=%r" % item for item in iter(self)]
+        return "<%s key=%s %s>" % (self.__class__.__name__, self.key,
+                                   " ".join(str_items))
+
+    def __iter__(self):
+        return iter(self.get_items())
+
+    def get_items(self):
+        """
+        Returns a list of (key, value) tuples for all known field descriptors.
+        Useful for when needing to represent a model instance as a dictionary.
+
+        :returns:
+            A list of (key, value) tuples.
+        """
         fields = self.field_descriptors.keys()
         fields.sort()
-        items = ["%s=%r" % (field, getattr(self, field)) for field in fields]
-        return "<%s key=%s %s>" % (self.__class__.__name__, self.key,
-                                   " ".join(items))
+
+        GET_VALUE_MAP = {
+            ForeignKeyProxy: lambda value: value.key,
+            DynamicProxy: lambda value: sorted(value.items()),
+            ListProxy: lambda value: list(value),
+            ManyToManyProxy: lambda value: sorted(value.keys()),
+        }
+
+        def get_value(field):
+            value = getattr(self, field)
+            value_func = GET_VALUE_MAP.get(type(value), lambda value: value)
+            return value_func(value)
+
+        return [(field, get_value(field)) for field in fields]
 
     def save(self):
         """Save the object to Riak.
