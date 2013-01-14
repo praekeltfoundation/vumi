@@ -583,7 +583,7 @@ class TestHttpClientResource(ResourceTestCaseBase):
         self._next_http_request_result = succeed(response)
 
     def assert_not_unicode(self, arg):
-        self.assertTrue(not isinstance(arg, unicode))
+        self.assertFalse(isinstance(arg, unicode))
 
     def assert_http_request(self, url, method='GET', headers={}, data=None,
                             timeout=None, data_limit=None):
