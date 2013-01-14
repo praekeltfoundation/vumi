@@ -468,8 +468,13 @@ class HttpClientResource(SandboxResource):
         if not isinstance(url, basestring):
             return succeed(self.reply(command, success=False,
                                       reason="No URL given"))
+        url = url.encode("utf-8")
         headers = command.get('headers', {})
+        headers = dict((k.encode("utf-8"), [x.encode("utf-8") for x in v])
+                       for k, v in headers.items())
         data = command.get('data', None)
+        if data is not None:
+            data = data.encode("utf-8")
         d = http_request_full(url, data=data, headers=headers,
                               method=method, timeout=self.timeout,
                               data_limit=self.data_limit)
