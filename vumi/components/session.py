@@ -61,7 +61,7 @@ class SessionManager(object):
         Garbage-collect expired sessions in the active session set.
 
         This checks the value of :attr:`_session_created` and only runs the
-        garbage collection if it is ``False``.
+        garbage collection if it is ``True``.
         """
         if self._session_created:
             self._session_created = False
@@ -74,6 +74,11 @@ class SessionManager(object):
         known active_sessions, some of which might have auto expired.
         Implements lazy garbage collection, for each entry it checks if
         the user's session still exists, if not it is removed from the set.
+
+        There is a potential race condition that can result in a session being
+        removed from the active_sessions set if it was recreated between the
+        existence check and the removal. The only impact of this is that it
+        won't be listed in active_sessions. The session itself will remain.
         """
         skey = 'active_sessions'
         sessions = []
