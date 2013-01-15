@@ -91,7 +91,6 @@ class SessionManager(object):
         if self.max_session_length:
             yield self.schedule_session_expiry(user_id,
                                                int(self.max_session_length))
-        self._session_created = True
         returnValue((yield self.load_session(user_id)))
 
     def clear_session(self, user_id):
