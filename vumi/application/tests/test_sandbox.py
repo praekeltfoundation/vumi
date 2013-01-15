@@ -403,6 +403,10 @@ class ResourceTestCaseBase(TestCase):
             raise ValueError("Create a resource before"
                              " calling dispatch_command")
         msg = SandboxCommand(cmd=cmd, **kwargs)
+        # round-trip message to get something more similar
+        # to what would be returned by a real sandbox when
+        # msgs are loaded from JSON.
+        msg = SandboxCommand.from_json(msg.to_json())
         return self.resource.dispatch_request(self.api, msg)
 
 
@@ -578,6 +582,9 @@ class TestHttpClientResource(ResourceTestCaseBase):
         response.code = code
         self._next_http_request_result = succeed(response)
 
+    def assert_not_unicode(self, arg):
+        self.assertFalse(isinstance(arg, unicode))
+
     def assert_http_request(self, url, method='GET', headers={}, data=None,
                             timeout=None, data_limit=None):
         timeout = (timeout if timeout is not None
@@ -589,6 +596,13 @@ class TestHttpClientResource(ResourceTestCaseBase):
                   timeout=timeout, data_limit=data_limit)
         [(actual_args, actual_kw)] = self._http_requests
         self.assertEqual((actual_args, actual_kw), (args, kw))
+
+        self.assert_not_unicode(actual_args[0])
+        self.assert_not_unicode(actual_kw.get('data'))
+        for key, values in actual_kw.get('headers', {}).items():
+            self.assert_not_unicode(key)
+            for value in values:
+                self.assert_not_unicode(value)
 
     @inlineCallbacks
     def test_handle_get(self):

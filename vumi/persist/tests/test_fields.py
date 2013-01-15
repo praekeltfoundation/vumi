@@ -8,7 +8,7 @@ from twisted.trial.unittest import TestCase
 
 from vumi.persist.fields import (
     ValidationError, Field, Integer, Unicode, Tag, Timestamp, Json,
-    Dynamic, FieldWithSubtype)
+    Dynamic, FieldWithSubtype, Boolean)
 
 
 class TestBaseField(TestCase):
@@ -60,6 +60,18 @@ class TestInteger(TestCase):
         i.validate(5)
         i.validate(4)
         self.assertRaises(ValidationError, i.validate, 6)
+
+
+class TestBoolean(TestCase):
+
+    def test_validate(self):
+        b = Boolean()
+        b.validate(True)
+        b.validate(False)
+        self.assertRaises(ValidationError, b.validate, 'True')
+        self.assertRaises(ValidationError, b.validate, 'False')
+        self.assertRaises(ValidationError, b.validate, 1)
+        self.assertRaises(ValidationError, b.validate, 0)
 
 
 class TestUnicode(TestCase):

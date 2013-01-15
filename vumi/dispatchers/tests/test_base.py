@@ -165,6 +165,32 @@ class TestBaseDispatchWorker(VumiWorkerTestCase):
         self.assert_messages(apps, 'transport2.outbound', msgs)
         self.assert_no_messages('transport1.outbound', 'transport3.outbound')
 
+    def get_dispatcher_consumers(self, dispatcher):
+        return (dispatcher.transport_consumer.values() +
+                dispatcher.transport_event_consumer.values() +
+                dispatcher.exposed_consumer.values())
+
+    @inlineCallbacks
+    def test_consumer_prefetch_count_default(self):
+        dp = yield self.get_dispatcher()
+        consumers = self.get_dispatcher_consumers(dp)
+        for consumer in consumers:
+            self.assertEqual(consumer.channel.qos_prefetch_count, 20)
+
+    @inlineCallbacks
+    def test_consumer_prefetch_count_custom(self):
+        dp = yield self.get_dispatcher(amqp_prefetch_count=10)
+        consumers = self.get_dispatcher_consumers(dp)
+        for consumer in consumers:
+            self.assertEqual(consumer.channel.qos_prefetch_count, 10)
+
+    @inlineCallbacks
+    def test_consumer_prefetch_count_none(self):
+        dp = yield self.get_dispatcher(amqp_prefetch_count=None)
+        consumers = self.get_dispatcher_consumers(dp)
+        for consumer in consumers:
+            self.assertFalse(consumer.channel.qos_prefetch_count)
+
 
 class TestToAddrRouter(VumiWorkerTestCase):
 
