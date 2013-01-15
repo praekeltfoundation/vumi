@@ -4,8 +4,9 @@
 
 import time
 
-from twisted.internet import task
 from twisted.internet.defer import inlineCallbacks, returnValue
+
+from vumi import log
 
 
 class SessionManager(object):
@@ -16,32 +17,17 @@ class SessionManager(object):
     :param int max_session_length:
         Time before a session expires. Default is None (never expire).
     :param float gc_period:
-        Time in seconds between checking for session expiry. Set to zero to
-        disable the garbage collection at regular intervals. This will result
-        in the garbage collection being done purely lazy when
-        :meth:`active_sessions` is called. (WARNING: If nothing calls
-        :meth:`active_sessions`, the active session set in Redis will grow
-        without bound.)
-    :param bool track_active_sessions:
-        Set to ``False`` to disable active session tracking.
+        Deprecated and ignored.
     """
 
-    def __init__(self, redis, max_session_length=None, gc_period=1.0,
-                 track_active_sessions=True):
+    def __init__(self, redis, max_session_length=None, gc_period=None):
         self.max_session_length = max_session_length
         self.redis = redis
-        self._track_active_sessions = track_active_sessions
-
-        self._session_created = True  # Start True so that GC runs at startup.
-        self.gc = task.LoopingCall(self._active_session_gc)
-        if self._track_active_sessions and gc_period:
-            self.gc_done = self.gc.start(gc_period)
+        if gc_period is not None:
+            log.warning("SessionManager 'gc_period' parameter is deprecated.")
 
     @inlineCallbacks
     def stop(self, stop_redis=True):
-        if self.gc.running:
-            self.gc.stop()
-            yield self.gc_done
         if stop_redis:
             yield self.redis._close()
 
@@ -56,43 +42,18 @@ class SessionManager(object):
             d.addCallback(lambda m: m.sub_manager(key_prefix))
         return d.addCallback(lambda m: cls(m, max_session_length, gc_period))
 
-    def _active_session_gc(self):
-        """
-        Garbage-collect expired sessions in the active session set.
-
-        This checks the value of :attr:`_session_created` and only runs the
-        garbage collection if it is ``True``.
-        """
-        if self._session_created:
-            self._session_created = False
-            return self.active_sessions()
-
     @inlineCallbacks
     def active_sessions(self):
-        """
-        Return a list of active user_ids and associated sessions. Loops over
-        known active_sessions, some of which might have auto expired.
-        Implements lazy garbage collection, for each entry it checks if
-        the user's session still exists, if not it is removed from the set.
+        """Return a list of active user_ids and associated sessions.
 
-        There is a potential race condition that can result in a session being
-        removed from the active_sessions set if it was recreated between the
-        existence check and the removal. The only impact of this is that it
-        won't be listed in active_sessions. The session itself will remain.
+        Queries redis for keys starting with the session key prefix. This is
+        O(n) over the total number of keys in redis, but this is still pretty
+        quick even for millions of keys. Try not to hit this too often, though.
         """
-        skey = 'active_sessions'
+        keys = yield self.redis.keys('session:*')
         sessions = []
-        sessions_to_expire = []
-        for user_id in (yield self.redis.smembers(skey)):
-            ukey = "%s:%s" % ('session', user_id)
-            if (yield self.redis.exists(ukey)):
-                sessions.append((user_id, (yield self.load_session(user_id))))
-            else:
-                sessions_to_expire.append(user_id)
-
-        # clear empty ones
-        for user_ids in sessions_to_expire:
-            yield self.redis.srem(skey, user_id)
+        for user_id in [key.split(':', 1)[1] for key in keys]:
+            sessions.append((user_id, (yield self.load_session(user_id))))
 
         returnValue(sessions)
 
@@ -154,7 +115,4 @@ class SessionManager(object):
         ukey = "%s:%s" % ('session', user_id)
         for s_key, s_value in session.items():
             yield self.redis.hset(ukey, s_key, s_value)
-        if self._track_active_sessions:
-            skey = 'active_sessions'
-            yield self.redis.sadd(skey, user_id)
         returnValue(session)

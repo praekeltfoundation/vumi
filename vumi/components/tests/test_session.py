@@ -43,22 +43,6 @@ class SessionManagerTestCase(TestCase, PersistenceMixin):
         self.assertTrue(s1[1]['created_at'] < s2[1]['created_at'])
 
     @inlineCallbacks
-    def test_disable_active_sessions_gc(self):
-        self.assertTrue(self.sm.gc.running)
-        yield self.sm.stop()
-        sm = SessionManager(self.manager, gc_period=0)
-        self.assertFalse(sm.gc.running)
-
-    @inlineCallbacks
-    def test_disable_active_session_tracking(self):
-        self.assertTrue(self.sm.gc.running)
-        yield self.sm.stop()
-        sm = SessionManager(self.manager, track_active_sessions=False)
-        self.assertFalse(sm.gc.running)
-        yield sm.create_session("u1")
-        self.assertEqual([], (yield sm.active_sessions()))
-
-    @inlineCallbacks
     def test_schedule_session_expiry(self):
         self.sm.max_session_length = 60.0
         yield self.sm.create_session("u1")
@@ -81,8 +65,3 @@ class SessionManagerTestCase(TestCase, PersistenceMixin):
         # Redis saves & returns all session values as strings
         self.assertEqual(session, dict([map(str, kvs) for kvs
                                         in test_session.items()]))
-
-    @inlineCallbacks
-    def test_lazy_clearing(self):
-        yield self.sm.save_session('user_id', {})
-        self.assertEqual(list((yield self.sm.active_sessions())), [])
