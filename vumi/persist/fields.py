@@ -168,6 +168,15 @@ class Integer(Field):
                                   % (value, self.max))
 
 
+class Boolean(Field):
+    """Field that is either True or False.
+    """
+
+    def custom_validate(self, value):
+        if not isinstance(value, bool):
+            raise ValidationError('Value %r is not a boolean.' % (value,))
+
+
 class Unicode(Field):
     """Field that accepts unicode strings.
 

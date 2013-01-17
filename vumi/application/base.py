@@ -67,6 +67,7 @@ class ApplicationWorker(Worker):
         self._consumers = []
         self._validate_config()
         self.transport_name = self.config['transport_name']
+        self.amqp_prefetch_count = self.config.get('amqp_prefetch_count', 20)
         self.send_to_options = self.config.get('send_to', {})
 
         self._event_handlers = {
@@ -84,6 +85,10 @@ class ApplicationWorker(Worker):
         yield self.setup_middleware()
 
         yield self.setup_application()
+
+        # Apply pre-fetch limits if we need to.
+        if self.amqp_prefetch_count is not None:
+            yield self._setup_amqp_qos()
 
         if self.start_message_consumer:
             yield self._setup_transport_consumer()
@@ -263,3 +268,9 @@ class ApplicationWorker(Worker):
 
     def _setup_event_consumer(self):
         return self.transport_event_consumer.unpause()
+
+    @inlineCallbacks
+    def _setup_amqp_qos(self):
+        for consumer in self._consumers:
+            yield consumer.channel.basic_qos(
+                0, int(self.amqp_prefetch_count), False)

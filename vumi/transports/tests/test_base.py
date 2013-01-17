@@ -84,3 +84,19 @@ class BaseTransportTestCase(TransportTestCase):
             ('mw1', 'outbound', self.transport_name),
             ('mw2', 'outbound', self.transport_name),
             ])
+
+    @inlineCallbacks
+    def test_transport_prefetch_count_custom(self):
+        transport = yield self.get_transport({
+            'amqp_prefetch_count': 1,
+            })
+        self.assertTrue(transport._consumers)
+        for consumer in transport._consumers:
+            self.assertEqual(consumer.channel.qos_prefetch_count, 1)
+
+    @inlineCallbacks
+    def test_transport_prefetch_count_default(self):
+        transport = yield self.get_transport({})
+        self.assertTrue(transport._consumers)
+        for consumer in transport._consumers:
+            self.assertFalse(consumer.channel.qos_prefetch_count)
