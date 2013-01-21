@@ -432,6 +432,40 @@ class TestModelOnTxRiak(TestCase):
         self.assertRaises(ValidationError, f2.simple.set, object())
 
     @Manager.calls_manager
+    def test_old_foreignkey_fields(self):
+        fk_model = self.manager.proxy(ForeignKeyModel)
+        simple_model = self.manager.proxy(SimpleModel)
+        s1 = simple_model("foo", a=5, b=u'3')
+        f1 = fk_model("bar")
+        # Create index directly and remove data field to simulate old-style
+        # index-only implementation
+        f1._riak_object.add_index('simple_bin', s1.key)
+        f1._riak_object._data.pop('simple')
+        yield s1.save()
+        yield f1.save()
+
+        f2 = yield fk_model.load("bar")
+        s2 = yield f2.simple.get()
+
+        self.assertEqual(f2.simple.key, "foo")
+        self.assertEqual(s2.a, 5)
+        self.assertEqual(s2.b, u"3")
+
+        f2.simple.set(None)
+        s3 = yield f2.simple.get()
+        self.assertEqual(s3, None)
+
+        f2.simple.key = "foo"
+        s4 = yield f2.simple.get()
+        self.assertEqual(s4.key, "foo")
+
+        f2.simple.key = None
+        s5 = yield f2.simple.get()
+        self.assertEqual(s5, None)
+
+        self.assertRaises(ValidationError, f2.simple.set, object())
+
+    @Manager.calls_manager
     def test_reverse_foreignkey_fields(self):
         fk_model = self.manager.proxy(ForeignKeyModel)
         simple_model = self.manager.proxy(SimpleModel)
@@ -466,6 +500,56 @@ class TestModelOnTxRiak(TestCase):
         yield s1.save()
         yield m1.save()
         self.assertEqual(m1._riak_object._data['simples'], [s1.key])
+
+        m2 = yield mm_model.load("bar")
+        [s2] = yield self.load_all_bunches_flat(m2.simples)
+
+        self.assertEqual(m2.simples.keys(), ["foo"])
+        self.assertEqual(s2.a, 5)
+        self.assertEqual(s2.b, u"3")
+
+        m2.simples.remove(s2)
+        simples = yield self.load_all_bunches_flat(m2.simples)
+        self.assertEqual(simples, [])
+
+        m2.simples.add_key("foo")
+        [s4] = yield self.load_all_bunches_flat(m2.simples)
+        self.assertEqual(s4.key, "foo")
+
+        m2.simples.remove_key("foo")
+        simples = yield self.load_all_bunches_flat(m2.simples)
+        self.assertEqual(simples, [])
+
+        self.assertRaises(ValidationError, m2.simples.add, object())
+        self.assertRaises(ValidationError, m2.simples.remove, object())
+
+        t1 = simple_model("bar1", a=3, b=u'4')
+        t2 = simple_model("bar2", a=4, b=u'4')
+        m2.simples.add(t1)
+        m2.simples.add(t2)
+        yield t1.save()
+        yield t2.save()
+        simples = yield self.load_all_bunches_flat(m2.simples)
+        simples.sort(key=lambda s: s.key)
+        self.assertEqual([s.key for s in simples], ["bar1", "bar2"])
+        self.assertEqual(simples[0].a, 3)
+        self.assertEqual(simples[1].a, 4)
+
+        m2.simples.clear()
+        m2.simples.add_key("unknown")
+        self.assertEqual([], (yield self.load_all_bunches_flat(m2.simples)))
+
+    @Manager.calls_manager
+    def test_old_manytomany_field(self):
+        mm_model = self.manager.proxy(ManyToManyModel)
+        simple_model = self.manager.proxy(SimpleModel)
+
+        s1 = simple_model("foo", a=5, b=u'3')
+        m1 = mm_model("bar")
+        # Create index directly to simulate old-style index-only implementation
+        m1._riak_object.add_index('simples_bin', s1.key)
+        yield s1.save()
+        yield m1.save()
 
         m2 = yield mm_model.load("bar")
         [s2] = yield self.load_all_bunches_flat(m2.simples)
