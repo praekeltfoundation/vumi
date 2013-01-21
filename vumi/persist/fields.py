@@ -567,11 +567,10 @@ class ForeignKeyDescriptor(FieldDescriptor):
             # We might have an old-style index-only version of the data.
             indexes = modelobj._riak_object.get_indexes(self.index_name)
             modelobj._riak_object._data[self.key] = (indexes or [None])[0]
-        return self.field.from_riak(modelobj._riak_object._data.get(self.key))
+        return modelobj._riak_object._data.get(self.key)
 
     def set_foreign_key(self, modelobj, foreign_key):
-        raw_value = self.field.to_riak(foreign_key)
-        modelobj._riak_object._data[self.key] = raw_value
+        modelobj._riak_object._data[self.key] = foreign_key
         modelobj._riak_object.remove_index(self.index_name)
         if foreign_key is not None:
             self._add_index(modelobj, foreign_key)
@@ -596,7 +595,7 @@ class ForeignKeyDescriptor(FieldDescriptor):
 
     def set_foreign_object(self, modelobj, otherobj):
         self.validate(otherobj)
-        foreign_key = otherobj.key if otherobj is not None else otherobj
+        foreign_key = otherobj.key if otherobj is not None else None
         self.set_foreign_key(modelobj, foreign_key)
 
 
