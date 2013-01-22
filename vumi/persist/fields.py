@@ -563,13 +563,14 @@ class ForeignKeyDescriptor(FieldDescriptor):
         return ForeignKeyProxy(self, modelobj)
 
     def get_foreign_key(self, modelobj):
-        indexes = modelobj._riak_object.get_indexes(self.index_name)
-        if not indexes:
-            return None
-        key = indexes[0]
-        return key
+        if self.key not in modelobj._riak_object._data:
+            # We might have an old-style index-only version of the data.
+            indexes = modelobj._riak_object.get_indexes(self.index_name)
+            modelobj._riak_object._data[self.key] = (indexes or [None])[0]
+        return modelobj._riak_object._data.get(self.key)
 
     def set_foreign_key(self, modelobj, foreign_key):
+        modelobj._riak_object._data[self.key] = foreign_key
         modelobj._riak_object.remove_index(self.index_name)
         if foreign_key is not None:
             self._add_index(modelobj, foreign_key)
@@ -594,9 +595,8 @@ class ForeignKeyDescriptor(FieldDescriptor):
 
     def set_foreign_object(self, modelobj, otherobj):
         self.validate(otherobj)
-        modelobj._riak_object.remove_index(self.index_name)
-        if otherobj is not None:
-            self._add_index(modelobj, otherobj.key)
+        foreign_key = otherobj.key if otherobj is not None else None
+        self.set_foreign_key(modelobj, foreign_key)
 
 
 class ForeignKeyProxy(object):
@@ -659,13 +659,20 @@ class ManyToManyDescriptor(ForeignKeyDescriptor):
                            " to.")
 
     def get_foreign_keys(self, modelobj):
-        indexes = modelobj._riak_object.get_indexes(self.index_name)
-        return indexes
+        if self.key not in modelobj._riak_object._data:
+            # We might have an old-style index-only version of the data.
+            indexes = modelobj._riak_object.get_indexes(self.index_name)
+            modelobj._riak_object._data[self.key] = indexes[:]
+        return modelobj._riak_object._data[self.key][:]
 
     def add_foreign_key(self, modelobj, foreign_key):
+        if foreign_key not in self.get_foreign_keys(modelobj):
+            modelobj._riak_object._data[self.key].append(foreign_key)
         self._add_index(modelobj, foreign_key)
 
     def remove_foreign_key(self, modelobj, foreign_key):
+        if foreign_key in self.get_foreign_keys(modelobj):
+            modelobj._riak_object._data[self.key].remove(foreign_key)
         modelobj._riak_object.remove_index(self.index_name, foreign_key)
 
     def load_foreign_objects(self, modelobj, manager=None):
@@ -683,6 +690,7 @@ class ManyToManyDescriptor(ForeignKeyDescriptor):
         self.remove_foreign_key(modelobj, otherobj.key)
 
     def clear_keys(self, modelobj):
+        modelobj._riak_object._data[self.key] = []
         modelobj._riak_object.remove_index(self.index_name)
 
 
