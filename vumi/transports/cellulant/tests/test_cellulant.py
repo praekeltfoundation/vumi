@@ -2,7 +2,7 @@ from urllib import urlencode
 
 from twisted.internet.defer import inlineCallbacks
 
-from vumi.transports.tests.test_base import TransportTestCase
+from vumi.transports.tests.utils import TransportTestCase
 from vumi.transports.cellulant import CellulantTransport
 from vumi.message import TransportUserMessage
 from vumi.utils import http_request
@@ -65,7 +65,7 @@ class TestCellulantTransportTestCase(TransportTestCase):
         })
 
         reply = TransportUserMessage(**msg.payload).reply("ussd message")
-        self.dispatch(reply)
+        yield self.dispatch(reply)
         response = yield deferred
         self.assertEqual(response, '1|ussd message|null|null|null|null')
 

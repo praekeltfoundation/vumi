@@ -10,6 +10,8 @@ from vumi.tests.utils import PersistenceMixin
 
 class StoringMiddlewareTestCase(TestCase, PersistenceMixin):
 
+    use_riak = True
+
     DEFAULT_CONFIG = {
         }
 
@@ -31,7 +33,7 @@ class StoringMiddlewareTestCase(TestCase, PersistenceMixin):
         yield self.mw.setup_middleware()
         self.store = self.mw.store
         yield self.store.manager.purge_all()
-        yield self.store.redis._purge_all()  # just in case
+        yield self.store.cache.redis._purge_all()  # just in case
 
     @inlineCallbacks
     def tearDown(self):
@@ -51,64 +53,63 @@ class StoringMiddlewareTestCase(TestCase, PersistenceMixin):
         return ack
 
     @inlineCallbacks
+    def assert_batch_keys(self, batch_id, outbound=[], inbound=[]):
+        outbound_keys = yield self.store.batch_outbound_keys(batch_id)
+        self.assertEqual(outbound_keys, outbound)
+        inbound_keys = yield self.store.batch_inbound_keys(batch_id)
+        self.assertEqual(inbound_keys, inbound)
+
+    @inlineCallbacks
+    def assert_outbound_stored(self, msg, batch_id=None, events=[]):
+        msg_id = msg['message_id']
+        stored_msg = yield self.store.get_outbound_message(msg_id)
+        self.assertEqual(stored_msg, msg)
+
+        event_keys = yield self.store.message_event_keys(msg_id)
+        self.assertEqual(event_keys, events)
+        if batch_id is not None:
+            yield self.assert_batch_keys(batch_id, outbound=[msg_id])
+
+    @inlineCallbacks
+    def assert_inbound_stored(self, msg, batch_id=None):
+        msg_id = msg['message_id']
+        stored_msg = yield self.store.get_inbound_message(msg_id)
+        self.assertEqual(stored_msg, msg)
+
+        if batch_id is not None:
+            yield self.assert_batch_keys(batch_id, inbound=[msg_id])
+
+    @inlineCallbacks
     def test_handle_outbound(self):
         msg = self.mk_msg()
-        msg_id = msg['message_id']
         response = yield self.mw.handle_outbound(msg, "dummy_endpoint")
         self.assertTrue(isinstance(response, TransportUserMessage))
-
-        stored_msg = yield self.store.get_outbound_message(msg_id)
-        message_events = yield self.store.message_events(msg_id)
-
-        self.assertEqual(stored_msg, msg)
-        self.assertEqual(message_events, [])
+        yield self.assert_outbound_stored(msg)
 
     @inlineCallbacks
     def test_handle_outbound_with_tag(self):
         batch_id = yield self.store.batch_start([("pool", "tag")])
         msg = self.mk_msg()
-        msg_id = msg['message_id']
         TaggingMiddleware.add_tag_to_msg(msg, ["pool", "tag"])
         response = yield self.mw.handle_outbound(msg, "dummy_endpoint")
         self.assertTrue(isinstance(response, TransportUserMessage))
-
-        stored_msg = yield self.store.get_outbound_message(msg_id)
-        message_events = yield self.store.message_events(msg_id)
-        batch_messages = yield self.store.batch_messages(batch_id)
-        batch_replies = yield self.store.batch_replies(batch_id)
-
-        self.assertEqual(stored_msg, msg)
-        self.assertEqual(message_events, [])
-        self.assertEqual(batch_messages, [msg])
-        self.assertEqual(batch_replies, [])
+        yield self.assert_outbound_stored(msg, batch_id)
 
     @inlineCallbacks
     def test_handle_inbound(self):
         msg = self.mk_msg()
-        msg_id = msg['message_id']
         response = yield self.mw.handle_inbound(msg, "dummy_endpoint")
         self.assertTrue(isinstance(response, TransportUserMessage))
-
-        stored_msg = yield self.store.get_inbound_message(msg_id)
-
-        self.assertEqual(stored_msg, msg)
+        yield self.assert_inbound_stored(msg)
 
     @inlineCallbacks
     def test_handle_inbound_with_tag(self):
         batch_id = yield self.store.batch_start([("pool", "tag")])
         msg = self.mk_msg()
-        msg_id = msg['message_id']
         TaggingMiddleware.add_tag_to_msg(msg, ["pool", "tag"])
         response = yield self.mw.handle_inbound(msg, "dummy_endpoint")
         self.assertTrue(isinstance(response, TransportUserMessage))
-
-        stored_msg = yield self.store.get_inbound_message(msg_id)
-        batch_messages = yield self.store.batch_messages(batch_id)
-        batch_replies = yield self.store.batch_replies(batch_id)
-
-        self.assertEqual(stored_msg, msg)
-        self.assertEqual(batch_messages, [])
-        self.assertEqual(batch_replies, [msg])
+        yield self.assert_inbound_stored(msg, batch_id)
 
     @inlineCallbacks
     def test_handle_event(self):
@@ -120,9 +121,4 @@ class StoringMiddlewareTestCase(TestCase, PersistenceMixin):
         event_id = ack['event_id']
         response = yield self.mw.handle_event(ack, "dummy_endpoint")
         self.assertTrue(isinstance(response, TransportEvent))
-
-        stored_event = yield self.store.get_event(event_id)
-        message_events = yield self.store.message_events(msg_id)
-
-        self.assertEqual(stored_event, ack)
-        self.assertEqual(message_events, [ack])
+        yield self.assert_outbound_stored(msg, events=[event_id])

@@ -61,10 +61,14 @@ class Manager(object):
 
     def __init__(self, client, key_prefix, key_separator=None):
         if key_separator is None:
-            key_separator = '#'
+            key_separator = ':'
         self._client = client
         self._key_prefix = key_prefix
         self._key_separator = key_separator
+
+    def get_key_prefix(self):
+        """This is only intended for use in testing, not production."""
+        return self._key_prefix
 
     def sub_manager(self, sub_prefix):
         key_prefix = self._key(sub_prefix)
@@ -106,7 +110,7 @@ class Manager(object):
         # So we can mangle it
         config = config.copy()
         key_prefix = config.pop('key_prefix', None)
-        key_separator = config.pop('key_separator', '#')
+        key_separator = config.pop('key_separator', ':')
         fake_redis = config.pop('FAKE_REDIS', None)
         if 'VUMITEST_REDIS_DB' in os.environ:
             fake_redis = None
@@ -193,6 +197,7 @@ class Manager(object):
 
     # Global operations
 
+    type = RedisCall(['key'])
     exists = RedisCall(['key'])
     keys = RedisCall(['pattern'], defaults=['*'], key_args=['pattern'],
                      filter_func='_unkeys')
@@ -212,6 +217,7 @@ class Manager(object):
     # Hash operations
 
     hset = RedisCall(['key', 'field', 'value'])
+    hsetnx = RedisCall(['key', 'field', 'value'])
     hget = RedisCall(['key', 'field'])
     hdel = RedisCall(['key'], vararg='fields')
     hmset = RedisCall(['key', 'mapping'])
@@ -239,6 +245,10 @@ class Manager(object):
     zcard = RedisCall(['key'])
     zrange = RedisCall(['key', 'start', 'stop', 'desc', 'withscores'],
                        defaults=[False, False])
+    zrangebyscore = RedisCall(['key', 'min', 'max', 'start', 'num',
+        'withscores'], defaults=['-inf', '+inf', None, None, False])
+    zscore = RedisCall(['key', 'value'])
+    zcount = RedisCall(['key', 'min', 'max'])
 
     # List operations
 
@@ -248,6 +258,8 @@ class Manager(object):
     rpush = RedisCall(['key', 'obj'])
     lrange = RedisCall(['key', 'start', 'end'])
     lrem = RedisCall(['key', 'value', 'num'], defaults=[0])
+    rpoplpush = RedisCall(['source'], vararg='destination',
+        key_args=['source', 'destination'])
 
     # Expiry operations
 

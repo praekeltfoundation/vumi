@@ -2,7 +2,7 @@
 
 """Test for vumi.transport.truteq.truteq."""
 
-from twisted.internet.defer import inlineCallbacks, DeferredQueue
+from twisted.internet.defer import inlineCallbacks, DeferredQueue, Deferred
 from twisted.internet import reactor
 from twisted.protocols.basic import LineReceiver
 from twisted.internet.protocol import ServerFactory
@@ -10,7 +10,7 @@ from twisted.internet.protocol import ServerFactory
 from ssmi import client
 
 from vumi.message import TransportUserMessage
-from vumi.transports.tests.test_base import TransportTestCase
+from vumi.transports.tests.utils import TransportTestCase
 from vumi.transports.truteq.truteq import TruteqTransport
 from vumi.tests.utils import LogCatcher
 
@@ -210,3 +210,10 @@ class TestTruteqTransport(TransportTestCase):
     def test_ussd_addr_retains_asterisks_and_hashes(self):
         yield self._incoming_ussd(ussd_type=SSMI_NEW, message="+6*7*8#")
         yield self._check_msg(to_addr="+6*7*8#", session_event=SESSION_NEW)
+
+    def test_ssmi_reconnect(self):
+        d_fired = Deferred()
+        d_fired.callback(None)
+        new_client = client.SSMIClient()
+        self.transport._setup_ssmi_client(new_client, d_fired)
+        self.assertEqual(self.transport.ssmi_client, new_client)

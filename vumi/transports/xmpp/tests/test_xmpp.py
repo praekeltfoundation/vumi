@@ -2,7 +2,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet.task import Clock
 from twisted.words.xish import domish
 
-from vumi.transports.tests.test_base import TransportTestCase
+from vumi.transports.tests.utils import TransportTestCase
 from vumi.message import TransportUserMessage, from_json
 from vumi.transports.xmpp.xmpp import XMPPTransport
 from vumi.transports.xmpp.tests import test_xmpp_stubs
@@ -37,11 +37,11 @@ class XMPPTransportTestCase(TransportTestCase):
     @inlineCallbacks
     def test_outbound_message(self):
         transport = yield self.mk_transport()
-        yield self.dispatch(TransportUserMessage(
+        msg = TransportUserMessage(
             to_addr='user@xmpp.domain.com', from_addr='test@case.com',
             content='hello world', transport_name='test_xmpp',
-            transport_type='xmpp', transport_metadata={}),
-            rkey='test_xmpp.outbound')
+            transport_type='xmpp', transport_metadata={})
+        yield self.dispatch(msg, rkey='test_xmpp.outbound')
 
         xmlstream = transport.xmpp_protocol.xmlstream
         self.assertEqual(len(xmlstream.outbox), 1)
@@ -128,11 +128,7 @@ class XMPPTransportTestCase(TransportTestCase):
         transport = yield self.mk_transport()
         self.assertEqual(transport.presence_interval, 60)
         # The LoopingCall should be configured and started.
-        self.assertEqual(transport.presence_call.f, transport.send_presence)
-        self.assertEqual(transport.presence_call.a, ())
-        self.assertEqual(transport.presence_call.kw, {})
-        self.assertEqual(transport.presence_call.interval, 60)
-        self.assertTrue(transport.presence_call.running)
+        self.assertFalse(transport.presence_call.running)
 
         # Stub output stream
         xmlstream = test_xmpp_stubs.TestXMLStream()
@@ -140,11 +136,16 @@ class XMPPTransportTestCase(TransportTestCase):
         transport.xmpp_client._initialized = True
         transport.presence.xmlstream = xmlstream
 
-        # Send presence
-        transport.presence_call.clock.advance(59)
         self.assertEqual(xmlstream.outbox, [])
-        transport.presence_call.clock.advance(2)
+        transport.presence.connectionInitialized()
+        transport.presence_call.clock.advance(1)
         self.assertEqual(len(xmlstream.outbox), 1, repr(xmlstream.outbox))
+
+        self.assertEqual(transport.presence_call.f, transport.send_presence)
+        self.assertEqual(transport.presence_call.a, ())
+        self.assertEqual(transport.presence_call.kw, {})
+        self.assertEqual(transport.presence_call.interval, 60)
+        self.assertTrue(transport.presence_call.running)
 
         [presence] = xmlstream.outbox
         self.assertEqual(presence.toXml(),

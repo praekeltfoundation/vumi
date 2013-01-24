@@ -47,6 +47,15 @@ class BaseMiddleware(object):
         """
         pass
 
+    def teardown_middleware(self):
+        """"Any custom teardown may be done here
+
+        :rtype: Deferred or None
+        :returns: May return a Deferred that is called when teardown is
+                    complete
+        """
+        pass
+
     def handle_inbound(self, message, endpoint):
         """Called when an inbound transport user message is published
         or consumed.
@@ -122,6 +131,11 @@ class MiddlewareStack(object):
     def apply_publish(self, handler_name, message, endpoint):
         return self._handle(
             reversed(self.middlewares), handler_name, message, endpoint)
+
+    @inlineCallbacks
+    def teardown(self):
+        for mw in reversed(self.middlewares):
+            yield mw.teardown_middleware()
 
 
 def create_middlewares_from_config(worker, config):

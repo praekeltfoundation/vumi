@@ -117,7 +117,7 @@ class TaggingMiddleware(TransportMiddleware):
         """Convenience method for retrieving a tag that was added
         to a message by this middleware.
         """
-        tag = msg['helper_metadata'].get('tag', {}).get('tag')
+        tag = msg.get('helper_metadata', {}).get('tag', {}).get('tag')
         if tag is not None:
             # convert JSON list to a proper tag tuple
             return tuple(tag)

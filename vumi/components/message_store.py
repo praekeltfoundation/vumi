@@ -5,12 +5,15 @@
 
 from uuid import uuid4
 
-from twisted.internet.defer import returnValue
+from twisted.internet.defer import returnValue, inlineCallbacks
 
 from vumi.message import TransportEvent, TransportUserMessage
 from vumi.persist.model import Model, Manager
 from vumi.persist.fields import (VumiMessage, ForeignKey, ListOf, Tag, Dynamic,
                                  Unicode)
+from vumi.persist.txriak_manager import TxRiakManager
+from vumi import log
+from vumi.components.message_store_cache import MessageStoreCache
 
 
 class Batch(Model):
@@ -91,8 +94,70 @@ class MessageStore(object):
         self.events = manager.proxy(Event)
         self.inbound_messages = manager.proxy(InboundMessage)
         self.current_tags = manager.proxy(CurrentTag)
-        # for batch status cache
-        self.redis = redis
+        self.cache = MessageStoreCache(redis)
+
+    @Manager.calls_manager
+    def needs_reconciliation(self, batch_id, delta=0.01):
+        """
+        Check if a batch_id's cache values need to be reconciled with
+        what's stored in the MessageStore.
+
+        :param float delta:
+            What an acceptable delta is for the cached values. Defaults to 0.01
+            If the cached values are off by the delta then this returns True.
+        """
+        inbound = float((yield self.batch_inbound_count(batch_id)))
+        cached_inbound = yield self.cache.count_inbound_message_keys(
+            batch_id)
+
+        if inbound and (abs(cached_inbound - inbound) / inbound) > delta:
+            returnValue(True)
+
+        outbound = float((yield self.batch_outbound_count(batch_id)))
+        cached_outbound = yield self.cache.count_outbound_message_keys(
+            batch_id)
+
+        if outbound and (abs(cached_outbound - outbound) / outbound) > delta:
+            returnValue(True)
+
+        returnValue(False)
+
+    @Manager.calls_manager
+    def reconcile_cache(self, batch_id):
+        yield self.cache.clear_batch(batch_id)
+        yield self.cache.batch_start(batch_id)
+        yield self.reconcile_inbound_cache(batch_id)
+        yield self.reconcile_outbound_cache(batch_id)
+
+    @Manager.calls_manager
+    def reconcile_inbound_cache(self, batch_id):
+        # FIXME: We're loading messages one at a time here, which is stupid.
+        inbound_keys = yield self.batch_inbound_keys(batch_id)
+        for key in inbound_keys:
+            try:
+                msg = yield self.get_inbound_message(key)
+                yield self.cache.add_inbound_message(batch_id, msg)
+            except Exception:
+                log.err()
+
+    @Manager.calls_manager
+    def reconcile_outbound_cache(self, batch_id):
+        # FIXME: We're loading messages one at a time here, which is stupid.
+        outbound_keys = yield self.batch_outbound_keys(batch_id)
+        for key in outbound_keys:
+            try:
+                msg = yield self.get_outbound_message(key)
+                yield self.cache.add_outbound_message(batch_id, msg)
+                yield self.reconcile_event_cache(batch_id, key)
+            except Exception:
+                log.err()
+
+    @Manager.calls_manager
+    def reconcile_event_cache(self, batch_id, message_id):
+        event_keys = yield self.message_event_keys(message_id)
+        for event_key in event_keys:
+            event = yield self.get_event(event_key)
+            yield self.cache.add_event(batch_id, event)
 
     @Manager.calls_manager
     def batch_start(self, tags, **metadata):
@@ -110,16 +175,17 @@ class MessageStore(object):
             tag_record.current_batch.set(batch)
             yield tag_record.save()
 
-        yield self._init_status(batch_id)
+        yield self.cache.batch_start(batch_id)
         returnValue(batch_id)
 
     @Manager.calls_manager
     def batch_done(self, batch_id):
         batch = yield self.batches.load(batch_id)
-        tags = yield batch.backlinks.currenttags()
-        for tag in tags:
-            tag.current_batch.set(None)
-            yield tag.save()
+        tag_keys = yield batch.backlinks.currenttags()
+        for tags_bunch in self.manager.load_all_bunches(CurrentTag, tag_keys):
+            for tag in (yield tags_bunch):
+                tag.current_batch.set(None)
+                yield tag.save()
 
     @Manager.calls_manager
     def add_outbound_message(self, msg, tag=None, batch_id=None):
@@ -133,7 +199,7 @@ class MessageStore(object):
 
         if batch_id is not None:
             msg_record.batch.key = batch_id
-            yield self._inc_status(batch_id, 'sent')
+            yield self.cache.add_outbound_message(batch_id, msg)
 
         yield msg_record.save()
 
@@ -153,12 +219,7 @@ class MessageStore(object):
         if msg_record is not None:
             batch_id = msg_record.batch.key
             if batch_id is not None:
-                event_type = event['event_type']
-                yield self._inc_status(batch_id, event_type)
-                if event_type == 'delivery_report':
-                    yield self._inc_status(
-                        batch_id, '%s.%s' % (event_type,
-                                             event['delivery_status']))
+                yield self.cache.add_event(batch_id, event)
 
     @Manager.calls_manager
     def get_event(self, event_id):
@@ -177,6 +238,7 @@ class MessageStore(object):
 
         if batch_id is not None:
             msg_record.batch.key = batch_id
+            self.cache.add_inbound_message(batch_id, msg)
 
         yield msg_record.save()
 
@@ -195,49 +257,158 @@ class MessageStore(object):
         return tagmdl
 
     def batch_status(self, batch_id):
-        return self._get_status(batch_id)
+        return self.cache.get_event_status(batch_id)
 
-    @Manager.calls_manager
-    def batch_messages(self, batch_id):
-        batch = yield self.batches.load(batch_id)
-        messages = yield batch.backlinks.outboundmessages()
-        returnValue([m.msg for m in messages])
+    def batch_outbound_keys(self, batch_id):
+        mr = self.manager.mr_from_field(OutboundMessage, 'batch', batch_id)
+        return mr.get_keys()
 
-    @Manager.calls_manager
-    def batch_replies(self, batch_id):
-        batch = yield self.batches.load(batch_id)
-        messages = yield batch.backlinks.inboundmessages()
-        returnValue([m.msg for m in messages])
+    def batch_outbound_keys_matching(self, batch_id, query):
+        mr = self.outbound_messages.index_match(query, 'batch', batch_id)
+        return mr.get_keys()
 
-    @Manager.calls_manager
-    def message_events(self, msg_id):
-        message = yield self.outbound_messages.load(msg_id)
-        events = yield message.backlinks.events()
-        returnValue([e.event for e in events])
+    def batch_inbound_keys(self, batch_id):
+        mr = self.manager.mr_from_field(InboundMessage, 'batch', batch_id)
+        return mr.get_keys()
 
-    # batch status is stored in Redis as a cache of batch progress
+    def batch_inbound_keys_matching(self, batch_id, query):
+        mr = self.inbound_messages.index_match(query, 'batch', batch_id)
+        return mr.get_keys()
 
-    def _batch_key(self, batch_id):
-        return ":".join(["batches", "status", batch_id])
+    def message_event_keys(self, msg_id):
+        mr = self.manager.mr_from_field(Event, 'message', msg_id)
+        return mr.get_keys()
 
-    @Manager.calls_manager
-    def _init_status(self, batch_id):
-        batch_key = self._batch_key(batch_id)
-        events = (TransportEvent.EVENT_TYPES.keys() +
-                  ['delivery_report.%s' % status
-                   for status in TransportEvent.DELIVERY_STATUSES] +
-                  ['sent'])
-        initial_status = dict((event, '0') for event in events)
-        yield self.redis.hmset(batch_key, initial_status)
+    def batch_inbound_count(self, batch_id):
+        return self.inbound_messages.index_lookup(
+            'batch', batch_id).get_count()
 
-    @Manager.calls_manager
-    def _inc_status(self, batch_id, event):
-        batch_key = self._batch_key(batch_id)
-        yield self.redis.hincrby(batch_key, event, 1)
+    def batch_outbound_count(self, batch_id):
+        return self.outbound_messages.index_lookup(
+            'batch', batch_id).get_count()
 
-    @Manager.calls_manager
-    def _get_status(self, batch_id):
-        batch_key = self._batch_key(batch_id)
-        raw_statuses = yield self.redis.hgetall(batch_key)
-        statuses = dict((k, int(v)) for k, v in raw_statuses.items())
-        returnValue(statuses)
+    @inlineCallbacks
+    def find_inbound_keys_matching(self, batch_id, query, ttl=None,
+                                    wait=False):
+        """
+        Has the message search issue a `batch_inbound_keys_matching()`
+        query and stores the resulting keys in the cache ordered by
+        descending timestamp.
+
+        :param str batch_id:
+            The batch to search across
+        :param list query:
+            The list of dictionaries with query information.
+        :param int ttl:
+            How long to store the results for.
+        :param bool wait:
+            Only return the token after the matching, storing & ordering
+            of keys has completed. Useful for testing.
+
+        Returns a token with which the results can be fetched.
+
+        NOTE:   This function can only be called from inside Twisted as
+                it assumes that the result of `batch_inbound_keys_matching`
+                is a Deferred.
+        """
+        assert isinstance(self.manager, TxRiakManager), (
+            "manager is not an instance of TxRiakManager")
+        token = yield self.cache.start_query(batch_id, 'inbound', query)
+        deferred = self.batch_inbound_keys_matching(batch_id, query)
+        deferred.addCallback(
+            lambda keys: self.cache.store_query_results(batch_id, token, keys,
+                                                        'inbound', ttl))
+        if wait:
+            yield deferred
+        returnValue(token)
+
+    @inlineCallbacks
+    def find_outbound_keys_matching(self, batch_id, query, ttl=None,
+                                    wait=False):
+        """
+        Has the message search issue a `batch_outbound_keys_matching()`
+        query and stores the resulting keys in the cache ordered by
+        descending timestamp.
+
+        :param str batch_id:
+            The batch to search across
+        :param list query:
+            The list of dictionaries with query information.
+        :param int ttl:
+            How long to store the results for.
+        :param bool wait:
+            Only return the token after the matching, storing & ordering
+            of keys has completed. Useful for testing.
+
+        Returns a token with which the results can be fetched.
+
+        NOTE:   This function can only be called from inside Twisted as
+                it depends on Deferreds being fired that aren't returned
+                by the function itself.
+        """
+        token = yield self.cache.start_query(batch_id, 'outbound', query)
+        deferred = self.batch_outbound_keys_matching(batch_id, query)
+        deferred.addCallback(
+            lambda keys: self.cache.store_query_results(batch_id, token, keys,
+                                                        'outbound', ttl))
+        if wait:
+            yield deferred
+        returnValue(token)
+
+    def get_keys_for_token(self, batch_id, token, start=0, stop=-1, asc=False):
+        """
+        Returns the resulting keys of a search.
+
+        :param str token:
+            The token returned by `find_inbound_keys_matching()`
+        """
+        return self.cache.get_query_results(batch_id, token, start, stop, asc)
+
+    def count_keys_for_token(self, batch_id, token):
+        """
+        Count the number of keys in the token's result set.
+        """
+        return self.cache.count_query_results(batch_id, token)
+
+    def is_query_in_progress(self, batch_id, token):
+        """
+        Return True or False depending on whether or not the query is
+        still running
+        """
+        return self.cache.is_query_in_progress(batch_id, token)
+
+    def get_inbound_message_keys(self, batch_id, start=0, stop=-1,
+                                    with_timestamp=False):
+        """
+        Return the keys ordered by descending timestamp.
+
+        :param str batch_id:
+            The batch_id to fetch keys for
+        :param int start:
+            Where to start from, defaults to 0 which is the first key.
+        :param int stop:
+            How many to fetch, defaults to -1 which is the last key.
+        :param bool with_timestamp:
+            Whether or not to return a list of (key, timestamp) tuples
+            instead of only the list of keys.
+        """
+        return self.cache.get_inbound_message_keys(batch_id, start, stop,
+            with_timestamp=with_timestamp)
+
+    def get_outbound_message_keys(self, batch_id, start=0, stop=-1,
+                                    with_timestamp=False):
+        """
+        Return the keys ordered by descending timestamp.
+
+        :param str batch_id:
+            The batch_id to fetch keys for
+        :param int start:
+            Where to start from, defaults to 0 which is the first key.
+        :param int stop:
+            How many to fetch, defaults to -1 which is the last key.
+        :param bool with_timestamp:
+            Whether or not to return a list of (key, timestamp) tuples
+            instead of only the list of keys.
+        """
+        return self.cache.get_outbound_message_keys(batch_id, start, stop,
+            with_timestamp=with_timestamp)

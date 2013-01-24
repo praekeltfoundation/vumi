@@ -206,3 +206,82 @@ class HttpUtilsTestCase(TestCase):
 
         data = yield http_request(self.url, '')
         self.assertEqual(data, "Yay")
+
+    @inlineCallbacks
+    def test_http_request_full_data_limit(self):
+        self.set_render(lambda r: "Four")
+
+        d = http_request_full(self.url, '', data_limit=3)
+
+        def check_response(reason):
+            self.assertTrue(reason.check('vumi.utils.HttpDataLimitError'))
+            self.assertEqual(reason.getErrorMessage(),
+                             "More than 3 bytes received")
+
+        d.addBoth(check_response)
+        yield d
+
+    @inlineCallbacks
+    def test_http_request_full_timeout_before_connect(self):
+        # This tests the case where the client times out before
+        # successfully connecting to the server.
+
+        # don't need to call .set_render because the request
+        # will never make it to the server
+        d = http_request_full(self.url, '', timeout=0)
+
+        def check_response(reason):
+            self.assertTrue(reason.check('vumi.utils.HttpTimeoutError'))
+
+        d.addBoth(check_response)
+        yield d
+
+    @inlineCallbacks
+    def test_http_request_full_timeout_after_connect(self):
+        # This tests the case where the client connects but then
+        # times out before the server sends any data.
+
+        def interrupt(r):
+            raise self.InterruptHttp
+        request_started = Deferred()
+        self.set_render(interrupt, request_started)
+
+        client_done = http_request_full(self.url, '', timeout=0.1)
+
+        def check_response(reason):
+            self.assertTrue(reason.check('vumi.utils.HttpTimeoutError'))
+
+        client_done.addBoth(check_response)
+        yield client_done
+
+        request = yield request_started
+        request.transport.loseConnection()
+
+    @inlineCallbacks
+    def test_http_request_full_timeout_after_first_receive(self):
+        # This tests the case where the client connects, receives
+        # some data and creates its receiver but then times out
+        # because the server takes too long to finish sending the data.
+
+        def interrupt(r):
+            raise self.InterruptHttp
+        request_started = Deferred()
+        self.set_render(interrupt, request_started)
+
+        client_done = http_request_full(self.url, '', timeout=0.1)
+
+        request = yield request_started
+        request.write("some data")
+
+        def check_server_response(reason):
+            self.assertTrue(reason.check('twisted.internet.error'
+                                         '.ConnectionDone'))
+
+        request_done = request.notifyFinish()
+        request_done.addBoth(check_server_response)
+        yield request_done
+
+        def check_client_response(reason):
+            self.assertTrue(reason.check('vumi.utils.HttpTimeoutError'))
+        client_done.addBoth(check_client_response)
+        yield client_done

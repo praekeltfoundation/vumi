@@ -48,19 +48,24 @@ class Transport(Worker):
             self.config.setdefault('transport_name',
                                    self.config['TRANSPORT_NAME'])
         self.transport_name = self.config['transport_name']
-        self.concurrent_sends = self.config.get('concurrent_sends')
 
-        yield self._setup_failure_publisher()
-        yield self._setup_message_publisher()
-        yield self._setup_event_publisher()
+        if 'concurrent_sends' in self.config:
+            log.msg("NOTE: 'concurrent_sends' in config is deprecated. "
+                    "use 'amqp_prefetch_count' instead.")
+            self.config.setdefault('amqp_prefetch_count',
+                                    self.config['concurrent_sends'])
+        self.amqp_prefetch_count = self.config.get('amqp_prefetch_count')
 
+        yield self.setup_transport_connection()
         yield self.setup_middleware()
-
         yield self.setup_transport()
 
-        self.message_consumer = None
+        # Apply concurrency throttling if we need to.
+        if self.amqp_prefetch_count is not None:
+            yield self.setup_amqp_qos()
+
         if self.start_message_consumer:
-            yield self._setup_message_consumer()
+            yield self.message_consumer.unpause()
 
     @inlineCallbacks
     def stopWorker(self):
@@ -68,6 +73,7 @@ class Transport(Worker):
             consumer = self._consumers.pop()
             yield consumer.stop()
         yield self.teardown_transport()
+        yield self.teardown_middleware()
 
     def get_rkey(self, mtype):
         return '%s.%s' % (self.transport_name, mtype)
@@ -96,6 +102,12 @@ class Transport(Worker):
         """
         pass
 
+    @inlineCallbacks
+    def setup_amqp_qos(self):
+        for consumer in self._consumers:
+            yield consumer.channel.basic_qos(0, int(self.amqp_prefetch_count),
+                                                False)
+
     def teardown_transport(self):
         """
         Clean-up of setup done in setup_transport should happen here.
@@ -113,41 +125,25 @@ class Transport(Worker):
         middlewares = yield setup_middlewares_from_config(self, self.config)
         self._middlewares = MiddlewareStack(middlewares)
 
-    @inlineCallbacks
-    def _setup_message_publisher(self):
-        self.message_publisher = yield self.publish_rkey('inbound')
+    def teardown_middleware(self):
+        """
+        Middleware teardown happens here.
+
+        Subclasses should not override this unless they need to do nonstandard
+        middleware teardown.
+        """
+        return self._middlewares.teardown()
 
     @inlineCallbacks
-    def _setup_message_consumer(self):
-        if self.message_consumer is not None:
-            log.msg("Consumer already exists, not restarting.")
-            return
-
+    def setup_transport_connection(self):
         self.message_consumer = yield self.consume(
             self.get_rkey('outbound'), self._process_message,
-            message_class=TransportUserMessage)
+            message_class=TransportUserMessage, paused=True)
         self._consumers.append(self.message_consumer)
 
-        # Apply concurrency throttling if we need to.
-        if self.concurrent_sends is not None:
-            yield self.message_consumer.channel.basic_qos(
-                0, int(self.concurrent_sends), False)
-
-    def _teardown_message_consumer(self):
-        if self.message_consumer is None:
-            log.msg("Consumer does not exist, not stopping.")
-            return
-        if self.message_consumer in self._consumers:
-            self._consumers.remove(self.message_consumer)
-        consumer, self.message_consumer = self.message_consumer, None
-        return consumer.stop()
-
-    @inlineCallbacks
-    def _setup_event_publisher(self):
+        # Set up publishers
+        self.message_publisher = yield self.publish_rkey('inbound')
         self.event_publisher = yield self.publish_rkey('event')
-
-    @inlineCallbacks
-    def _setup_failure_publisher(self):
         self.failure_publisher = yield self.publish_rkey('failures')
 
     def send_failure(self, message, exception, traceback):
@@ -208,6 +204,13 @@ class Transport(Worker):
         return self.publish_event(user_message_id=user_message_id,
                                   sent_message_id=sent_message_id,
                                   event_type='ack', **kw)
+
+    def publish_nack(self, user_message_id, reason, **kw):
+        """
+        Helper method for publishing a ``nack`` event.
+        """
+        return self.publish_event(user_message_id=user_message_id,
+                                  nack_reason=reason, event_type='nack', **kw)
 
     def publish_delivery_report(self, user_message_id, delivery_status, **kw):
         """

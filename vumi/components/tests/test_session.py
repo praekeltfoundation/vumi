@@ -65,8 +65,3 @@ class SessionManagerTestCase(TestCase, PersistenceMixin):
         # Redis saves & returns all session values as strings
         self.assertEqual(session, dict([map(str, kvs) for kvs
                                         in test_session.items()]))
-
-    @inlineCallbacks
-    def test_lazy_clearing(self):
-        yield self.sm.save_session('user_id', {})
-        self.assertEqual(list((yield self.sm.active_sessions())), [])

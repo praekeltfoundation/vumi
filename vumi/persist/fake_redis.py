@@ -2,6 +2,7 @@
 
 import fnmatch
 from functools import wraps
+from itertools import takewhile, dropwhile
 
 from twisted.internet.defer import Deferred
 from twisted.internet.task import Clock
@@ -36,22 +37,51 @@ class FakeRedis(object):
       types raised by the real Python redis module.
     """
 
-    def __init__(self, async=False):
+    def __init__(self, charset='utf-8', errors='strict', async=False):
         self._data = {}
         self._expiries = {}
         self._is_async = async
         self.clock = Clock()
+        self._charset = charset
+        self._charset_errors = errors
 
     def teardown(self):
         self._clean_up_expires()
 
+    def _encode(self, value):
+        # Replicated from
+        # redis-py's redis/connection.py
+        if isinstance(value, str):
+            return value
+        if not isinstance(value, unicode):
+            value = str(value)
+        if isinstance(value, unicode):
+            value = value.encode(self._charset, self._charset_errors)
+        return value
+
     def _clean_up_expires(self):
         for key in self._expiries.keys():
             delayed = self._expiries.pop(key)
-            if not delayed.cancelled:
+            if not (delayed.cancelled or delayed.called):
                 delayed.cancel()
 
     # Global operations
+
+    @maybe_async
+    def type(self, key):
+        value = self._data.get(key)
+        if value is None:
+            return 'none'
+        if isinstance(value, basestring):
+            return 'string'
+        if isinstance(value, list):
+            return 'list'
+        if isinstance(value, set):
+            return 'set'
+        if isinstance(value, Zset):
+            return 'zset'
+        if isinstance(value, dict):
+            return 'hash'
 
     @maybe_async
     def exists(self, key):
@@ -73,12 +103,12 @@ class FakeRedis(object):
 
     @maybe_async
     def set(self, key, value):
-        value = str(value)  # set() sets string value
+        value = self._encode(value)  # set() sets string value
         self._data[key] = value
 
     @maybe_async
     def setnx(self, key, value):
-        value = str(value)  # set() sets string value
+        value = self._encode(value)  # set() sets string value
         if key not in self._data:
             self._data[key] = value
             return 1
@@ -108,12 +138,20 @@ class FakeRedis(object):
     def hset(self, key, field, value):
         mapping = self._data.setdefault(key, {})
         new_field = field not in mapping
-        mapping[field] = unicode(value)
+        mapping[field] = value
         return int(new_field)
 
     @maybe_async
+    def hsetnx(self, key, field, value):
+        if self.hexists.sync(self, key, field):
+            return 0
+        return self.hset.sync(self, key, field, value)
+
+    @maybe_async
     def hget(self, key, field):
-        return self._data.get(key, {}).get(field)
+        value = self._data.get(key, {}).get(field)
+        if value is not None:
+            return self._encode(value)
 
     @maybe_async
     def hdel(self, key, *fields):
@@ -130,12 +168,13 @@ class FakeRedis(object):
     @maybe_async
     def hmset(self, key, mapping):
         hval = self._data.setdefault(key, {})
-        hval.update(dict([(key, unicode(value))
+        hval.update(dict([(key, value)
             for key, value in mapping.items()]))
 
     @maybe_async
     def hgetall(self, key):
-        return self._data.get(key, {}).copy()
+        return dict((self._encode(k), self._encode(v)) for k, v in
+            self._data.get(key, {}).items())
 
     @maybe_async
     def hlen(self, key):
@@ -143,7 +182,7 @@ class FakeRedis(object):
 
     @maybe_async
     def hvals(self, key):
-        return self._data.get(key, {}).values()
+        return map(self._encode, self._data.get(key, {}).values())
 
     @maybe_async
     def hincrby(self, key, field, amount=1):
@@ -162,7 +201,9 @@ class FakeRedis(object):
     @maybe_async
     def sadd(self, key, *values):
         sval = self._data.setdefault(key, set())
-        sval.update(map(unicode, values))
+        old_len = len(sval)
+        sval.update(map(self._encode, values))
+        return len(sval) - old_len
 
     @maybe_async
     def smembers(self, key):
@@ -210,38 +251,49 @@ class FakeRedis(object):
 
     @maybe_async
     def zadd(self, key, **valscores):
-        zval = self._data.setdefault(key, [])
-        new_zval = [val for val in zval if val[1] not in valscores]
-        for value, score in valscores.items():
-            new_zval.append((score, value))
-        new_zval.sort()
-        self._data[key] = new_zval
+        zval = self._data.setdefault(key, Zset())
+        return zval.zadd(**valscores)
 
     @maybe_async
     def zrem(self, key, value):
-        zval = self._data.setdefault(key, [])
-        new_zval = [val for val in zval if val[1] != value]
-        self._data[key] = new_zval
+        zval = self._data.setdefault(key, Zset())
+        return zval.zrem(value)
 
     @maybe_async
     def zcard(self, key):
-        return len(self._data.get(key, []))
+        zval = self._data.get(key, Zset())
+        return zval.zcard()
 
     @maybe_async
     def zrange(self, key, start, stop, desc=False, withscores=False,
-                score_cast_func=float):
-        zval = self._data.get(key, [])
-        stop += 1  # redis start/stop are element indexes
-        if stop == 0:
-            stop = None
-        results = sorted(zval[start:stop],
-                    key=lambda (score, _): score_cast_func(score))
-        if desc:
-            results.reverse()
+               score_cast_func=float):
+        zval = self._data.get(key, Zset())
+        results = zval.zrange(start, stop, desc=desc,
+                              score_cast_func=score_cast_func)
         if withscores:
             return results
         else:
-            return [v for k, v in results]
+            return [v for v, k in results]
+
+    @maybe_async
+    def zrangebyscore(self, key, min='-inf', max='+inf', start=0, num=None,
+                withscores=False, score_cast_func=float):
+        zval = self._data.get(key, Zset())
+        results = zval.zrangebyscore(min, max, start, num,
+                              score_cast_func=score_cast_func)
+        if withscores:
+            return results
+        else:
+            return [v for v, k in results]
+
+    @maybe_async
+    def zcount(self, key, min, max):
+        return str(len(self.zrangebyscore.sync(self, key, min, max)))
+
+    @maybe_async
+    def zscore(self, key, value):
+        zval = self._data.get(key, Zset())
+        return zval.zscore(value)
 
     # List operations
     @maybe_async
@@ -252,6 +304,11 @@ class FakeRedis(object):
     def lpop(self, key):
         if self.llen.sync(self, key):
             return self._data[key].pop(0)
+
+    @maybe_async
+    def rpop(self, key):
+        if self.llen.sync(self, key):
+            return self._data[key].pop(-1)
 
     @maybe_async
     def lpush(self, key, obj):
@@ -291,6 +348,13 @@ class FakeRedis(object):
         self._data[key] = lval
         return removed[0]
 
+    @maybe_async
+    def rpoplpush(self, source, destination):
+        value = self.rpop.sync(self, source)
+        if value:
+            self.lpush.sync(self, destination, value)
+            return value
+
     # Expiry operations
 
     @maybe_async
@@ -307,7 +371,7 @@ class FakeRedis(object):
         delayed = self._expiries.get(key)
         if delayed is not None and delayed.active():
             return int(delayed.getTime() - self.clock.seconds())
-        return -1
+        return None
 
     @maybe_async
     def persist(self, key):
@@ -316,3 +380,75 @@ class FakeRedis(object):
             delayed.cancel()
             return 1
         return 0
+
+
+class Zset(object):
+    """A Redis-like ordered set implementation."""
+
+    def __init__(self):
+        self._zval = []
+
+    def zadd(self, **valscores):
+        new_zval = [val for val in self._zval if val[1] not in valscores]
+        new_zval.extend((score, value) for value, score in valscores.items())
+        new_zval.sort()
+        added = len(new_zval) - len(self._zval)
+        self._zval = new_zval
+        return added
+
+    def zrem(self, value):
+        new_zval = [val for val in self._zval if val[1] != value]
+        existed = len(new_zval) != len(self._zval)
+        self._zval = new_zval
+        return existed
+
+    def zcard(self):
+        return len(self._zval)
+
+    def zrange(self, start, stop, desc=False, score_cast_func=float):
+        stop += 1  # redis start/stop are element indexes
+        if stop == 0:
+            stop = None
+
+        # copy before changing in place
+        zval = self._zval[:]
+        zval.sort(reverse=desc)
+
+        return [(v, score_cast_func(k)) for k, v in zval[start:stop]]
+
+    def zrangebyscore(self, min='-inf', max='+inf', start=0, num=None,
+        score_cast_func=float):
+        results = self.zrange(0, -1, score_cast_func=score_cast_func)
+        results.sort(key=lambda val: val[1])
+
+        def mkcheck(spec, is_upper_bound):
+            spec = str(spec)
+            # Handling infinities are easy, so get them out the way first.
+            if spec.endswith('-inf'):
+                return lambda val: False
+            if spec.endswith('+inf'):
+                return lambda val: True
+
+            is_exclusive = False
+            if spec.startswith('('):
+                is_exclusive = True
+                spec = spec[1:]
+            spec = score_cast_func(spec)
+
+            # For the lower bound, exclusive means drop less than or equal to.
+            # For the upper bound, exclusive means take less than.
+            if is_exclusive == is_upper_bound:
+                return lambda val: val[1] < spec
+            return lambda val: val[1] <= spec
+
+        results = dropwhile(mkcheck(min, False), results)
+        results = takewhile(mkcheck(max, True), results)
+        results = list(results)[start:]
+        if num is not None:
+            results = results[:num]
+        return list(results)
+
+    def zscore(self, val):
+        for score, value in self._zval:
+            if value == val:
+                return score

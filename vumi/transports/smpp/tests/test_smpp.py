@@ -1,4 +1,5 @@
 from twisted.internet.defer import Deferred, inlineCallbacks, succeed
+from twisted.internet.task import Clock
 from smpp.pdu_builder import SubmitSMResp, DeliverSM
 
 from vumi.message import TransportUserMessage
@@ -11,36 +12,18 @@ from vumi.transports.smpp.service import SmppService
 from vumi.transports.smpp.clientserver.config import ClientConfig
 from vumi.transports.smpp.clientserver.client import unpacked_pdu_opts
 from vumi.transports.smpp.clientserver.tests.utils import SmscTestServer
-from vumi.transports.tests.test_base import TransportTestCase
+from vumi.transports.tests.utils import TransportTestCase
+from vumi.tests.utils import LogCatcher
 
 
-class RedisTestEsmeTransceiver(EsmeTransceiver):
-
-    def send_pdu(self, pdu):
-        pass  # don't actually send anything
-
-
-class RedisTestSmppTransport(SmppTransport):
-
-    def send_smpp(self, message):
-        to_addr = message['to_addr']
-        text = message['content']
-        return self.esme_client.submit_sm(
-                short_message=text.encode('utf-8'),
-                destination_addr=str(to_addr),
-                source_addr="1234567890",
-                )
-
-
-class FakeRedisRespTestCase(TransportTestCase):
-    transport_name = "redis_testing_transport"
-    transport_class = RedisTestSmppTransport
+class SmppTransportTestCase(TransportTestCase):
+    transport_class = SmppTransport
 
     @inlineCallbacks
     def setUp(self):
-        super(FakeRedisRespTestCase, self).setUp()
+        super(SmppTransportTestCase, self).setUp()
         self.config = {
-                "transport_name": "redis_testing_transport",
+                "transport_name": self.transport_name,
                 "system_id": "vumitest-vumitest-vumitest",
                 "host": "host",
                 "port": "port",
@@ -49,9 +32,6 @@ class FakeRedisRespTestCase(TransportTestCase):
                 "smpp_enquire_link_interval": 123,
                 "third_party_id_expiry": 3600,  # just 1 hour
                 }
-        self.vumi_options = {
-                "vhost": "develop",
-                }
         self.clientConfig = ClientConfig.from_config(self.config)
 
         # hack a lot of transport setup
@@ -59,16 +39,26 @@ class FakeRedisRespTestCase(TransportTestCase):
         self.transport.esme_client = None
         yield self.transport.startWorker()
 
+        self._make_esme()
+        self.transport.esme_client = self.esme
+        self.transport.esme_connected(self.esme)
+
+    def _make_esme(self):
         self.esme_callbacks = EsmeCallbacks(
             connect=lambda: None, disconnect=lambda: None,
             submit_sm_resp=self.transport.submit_sm_resp,
-            delivery_report=lambda: None, deliver_sm=lambda: None)
-        self.esme = RedisTestEsmeTransceiver(
+            delivery_report=self.transport.delivery_report,
+            deliver_sm=lambda: None)
+        self.esme = EsmeTransceiver(
             self.clientConfig, self.transport.redis, self.esme_callbacks)
+        self.esme.sent_pdus = []
+        self.esme.send_pdu = self.esme.sent_pdus.append
         self.esme.state = 'BOUND_TRX'
-        self.transport.esme_client = self.esme
 
-        self.transport.esme_connected(self.esme)
+    def assert_sent_contents(self, expected):
+        pdu_contents = [p.obj['body']['mandatory_parameters']['short_message']
+                        for p in self.esme.sent_pdus]
+        self.assertEqual(expected, pdu_contents)
 
     def test_bind_and_enquire_config(self):
         self.assertEqual(12, self.transport.client_config.smpp_bind_timeout)
@@ -78,7 +68,7 @@ class FakeRedisRespTestCase(TransportTestCase):
                 repr(self.transport.client_config.smpp_enquire_link_interval))
 
     @inlineCallbacks
-    def test_redis_message_persistence(self):
+    def test_message_persistence(self):
         # A simple test of set -> get -> delete for redis message persistence
         message1 = self.mkmsg_out(
             message_id='1234567890abcdefg',
@@ -115,22 +105,17 @@ class FakeRedisRespTestCase(TransportTestCase):
                 yield self.transport.r_get_id_for_third_party_id(their_id)))
 
     @inlineCallbacks
-    def test_match_resp(self):
+    def test_out_of_order_responses(self):
         # Sequence numbers are hardcoded, assuming we start fresh from 0.
-        message1 = self.mkmsg_out(
-            message_id='444',
-            content="hello world",
-            to_addr="1111111111")
+        message1 = self.mkmsg_out("message 1", message_id='444')
         response1 = SubmitSMResp(1, "3rd_party_id_1")
         yield self.dispatch(message1)
 
-        message2 = self.mkmsg_out(
-            message_id='445',
-            content="hello world",
-            to_addr="1111111111")
+        message2 = self.mkmsg_out("message 2", message_id='445')
         response2 = SubmitSMResp(2, "3rd_party_id_2")
         yield self.dispatch(message2)
 
+        self.assert_sent_contents(["message 1", "message 2"])
         # respond out of order - just to keep things interesting
         yield self.esme.handle_data(response2.get_bin())
         yield self.esme.handle_data(response1.get_bin())
@@ -140,67 +125,106 @@ class FakeRedisRespTestCase(TransportTestCase):
                 self.mkmsg_ack('444', '3rd_party_id_1'),
                 ], self.get_dispatched_events())
 
-        message3 = self.mkmsg_out(
-            message_id='446',
-            content="hello world",
-            to_addr="1111111111")
-        response3 = SubmitSMResp(3, "3rd_party_id_3",
-                command_status="ESME_RSUBMITFAIL")
-        yield self.dispatch(message3)
-        yield self.esme.handle_data(response3.get_bin())
-        # There should be no ack
-        self.assertEqual([], self.get_dispatched_events()[2:])
+    @inlineCallbacks
+    def test_failed_submit(self):
+        message = self.mkmsg_out("message", message_id='446')
+        response = SubmitSMResp(1, "3rd_party_id_3",
+                                command_status="ESME_RSUBMITFAIL")
+        yield self.dispatch(message)
+        yield self.esme.handle_data(response.get_bin())
 
-        comparison = self.mkmsg_fail(message3.payload, 'ESME_RSUBMITFAIL')
+        self.assert_sent_contents(["message"])
+        # There should be a nack
+        [nack] = yield self.wait_for_dispatched_events(1)
+        self.assertEqual(nack['user_message_id'], message['message_id'])
+        self.assertEqual(nack['nack_reason'], 'ESME_RSUBMITFAIL')
+
+        comparison = self.mkmsg_fail(message.payload, 'ESME_RSUBMITFAIL')
         [actual] = yield self.get_dispatched_failures()
         self.assertEqual(actual, comparison)
 
-        message4 = self.mkmsg_out(
-            message_id=447,
-            content="hello world",
-            to_addr="1111111111")
-        response4 = SubmitSMResp(4, "3rd_party_id_4",
-                command_status="ESME_RTHROTTLED")
-        yield self.dispatch(message4)
-        yield self.esme.handle_data(response4.get_bin())
-        # There should be no ack
-        self.assertEqual([], self.get_dispatched_events()[3:])
+    @inlineCallbacks
+    def test_delivery_report_for_unknown_message(self):
+        dr = ("id:123 sub:... dlvrd:... submit date:200101010030"
+              " done date:200101020030 stat:DELIVRD err:... text:Meep")
+        deliver = DeliverSM(1, short_message=dr)
+        with LogCatcher(message="Failed to retrieve message id") as lc:
+            yield self.esme.handle_data(deliver.get_bin())
+            [warning] = lc.logs
+            self.assertEqual(warning['message'],
+                             ("Failed to retrieve message id for delivery "
+                              "report. Delivery report from sphex "
+                              "discarded.",))
 
-        comparison = self.mkmsg_fail(message4.payload, 'ESME_RTHROTTLED')
-        actual = self.get_dispatched_failures()[1]
-        self.assertEqual(actual, comparison)
+    @inlineCallbacks
+    def test_throttled_submit(self):
+        clock = Clock()
+        self.transport.callLater = clock.callLater
+
+        def assert_throttled_status(throttled, messages, acks):
+            self.assertEqual(self.transport.throttled, throttled)
+            self.assert_sent_contents(messages)
+            self.assertEqual(acks, self.get_dispatched_events())
+            self.assertEqual([], self.get_dispatched_failures())
+
+        assert_throttled_status(False, [], [])
+
+        message = self.mkmsg_out("Heimlich", message_id="447")
+        response = SubmitSMResp(1, "3rd_party_id_4",
+                                command_status="ESME_RTHROTTLED")
+        yield self.dispatch(message)
+        yield self.esme.handle_data(response.get_bin())
+
+        assert_throttled_status(True, ["Heimlich"], [])
+        # Still waiting to resend
+        clock.advance(0.05)
+        assert_throttled_status(True, ["Heimlich"], [])
+        message2 = self.mkmsg_out("Other", message_id="448")
+        yield self.dispatch(message2)
+        assert_throttled_status(True, ["Heimlich"], [])
+        # Resent
+        clock.advance(0.05)
+        assert_throttled_status(True, ["Heimlich", "Heimlich"], [])
+        # And acknowledged by the other side
+        yield self.esme.handle_data(SubmitSMResp(2, "3rd_party_5").get_bin())
+        yield self._amqp.kick_delivery()
+        yield self.esme.handle_data(SubmitSMResp(3, "3rd_party_6").get_bin())
+        assert_throttled_status(False, ["Heimlich", "Heimlich", "Other"],
+                                [self.mkmsg_ack('447', '3rd_party_5'),
+                                 self.mkmsg_ack('448', '3rd_party_6')])
 
     @inlineCallbacks
     def test_reconnect(self):
-        connected_chan_count = len(self._amqp.channels)
-        disconnected_chan_count = connected_chan_count - 1
-
+        self.assertFalse(self.transport.message_consumer.paused)
         yield self.transport.esme_disconnected()
-        self.assertEqual(disconnected_chan_count, len(self._amqp.channels))
+        self.assertTrue(self.transport.message_consumer.paused)
         yield self.transport.esme_disconnected()
-        self.assertEqual(disconnected_chan_count, len(self._amqp.channels))
+        self.assertTrue(self.transport.message_consumer.paused)
 
         yield self.transport.esme_connected(self.esme)
-        self.assertEqual(connected_chan_count, len(self._amqp.channels))
+        self.assertFalse(self.transport.message_consumer.paused)
         yield self.transport.esme_connected(self.esme)
-        self.assertEqual(connected_chan_count, len(self._amqp.channels))
+        self.assertFalse(self.transport.message_consumer.paused)
 
 
 class MockSmppTransport(SmppTransport):
-    def _setup_message_consumer(self):
-        super(MockSmppTransport, self)._setup_message_consumer()
+    @inlineCallbacks
+    def esme_connected(self, client):
+        yield super(MockSmppTransport, self).esme_connected(client)
         self._block_till_bind.callback(None)
 
 
 class MockSmppTxTransport(SmppTxTransport):
-    def _setup_message_consumer(self):
-        super(MockSmppTxTransport, self)._setup_message_consumer()
+    @inlineCallbacks
+    def esme_connected(self, client):
+        yield super(MockSmppTxTransport, self).esme_connected(client)
         self._block_till_bind.callback(None)
 
 
 class MockSmppRxTransport(SmppRxTransport):
-    def _setup_message_consumer(self):
-        super(MockSmppRxTransport, self)._setup_message_consumer()
+    @inlineCallbacks
+    def esme_connected(self, client):
+        yield super(MockSmppRxTransport, self).esme_connected(client)
         self._block_till_bind.callback(None)
 
 
@@ -642,29 +666,26 @@ class EsmeToSmscTestCase(TransportTestCase):
                 rkey='%s.outbound' % self.transport_name,
                 timestamp='0',
                 )
-        yield self.dispatch(msg)
 
         # We need the user_message_id to check the ack
         user_message_id = msg["message_id"]
 
-        [ack, delv] = yield self.wait_for_dispatched_events(2)
+        lc = LogCatcher(message="Failed to retrieve message id")
+        with lc:
+            yield self.dispatch(msg)
+            [ack] = yield self.wait_for_dispatched_events(1)
 
         self.assertEqual(ack['message_type'], 'event')
         self.assertEqual(ack['event_type'], 'ack')
         self.assertEqual(ack['transport_name'], self.transport_name)
         self.assertEqual(ack['user_message_id'], user_message_id)
 
-        # We need the sent_message_id to check the delivery_report
-        sent_message_id = ack['sent_message_id']
-
-        self.assertEqual(delv['message_type'], 'event')
-        self.assertEqual(delv['event_type'], 'delivery_report')
-        self.assertEqual(delv['transport_name'], self.transport_name)
-        self.assertEqual(delv['user_message_id'], None)
-        self.assertEqual(delv['transport_metadata']['message']['id'],
-                                                    sent_message_id)
-        self.assertEqual(delv['delivery_status'],
-                         self.expected_delivery_status)
+        # check that failure to send delivery report was logged
+        [warning] = lc.logs
+        self.assertEqual(warning['message'],
+                         ("Failed to retrieve message id for delivery "
+                          "report. Delivery report from "
+                          "esme_testing_transport discarded.",))
 
 
 class EsmeToSmscTestCaseDeliveryYo(EsmeToSmscTestCase):
@@ -865,6 +886,46 @@ class RxEsmeToSmscTestCase(TransportTestCase):
 
         dispatched_failures = self.get_dispatched_failures()
         self.assertEqual(dispatched_failures, [])
+
+    @inlineCallbacks
+    def test_deliver_bad_encoding(self):
+
+        self._block_till_bind = Deferred()
+
+        # Startup
+        yield self.startTransport()
+        yield self.transport._block_till_bind
+        # The Server delivers a SMS to the Client
+
+        bad_pdu = DeliverSM(555,
+                short_message="SMS from server containing \xa7",
+                destination_addr="2772222222",
+                source_addr="2772000000",
+                )
+
+        good_pdu = DeliverSM(555,
+                short_message="Next message",
+                destination_addr="2772222222",
+                source_addr="2772000000",
+                )
+
+        self.service.factory.smsc.send_pdu(bad_pdu)
+        self.service.factory.smsc.send_pdu(good_pdu)
+        [mess] = yield self.wait_for_dispatched_messages(1)
+
+        self.assertEqual(mess['message_type'], 'user_message')
+        self.assertEqual(mess['transport_name'], self.transport_name)
+        self.assertEqual(mess['content'], "Next message")
+
+        dispatched_failures = self.get_dispatched_failures()
+        self.assertEqual(dispatched_failures, [])
+
+        [failure] = self.flushLoggedErrors(UnicodeDecodeError)
+        message = failure.getErrorMessage()
+        codec, rest = message.split(' ', 1)
+        self.assertTrue(codec in ("'utf8'", "'utf-8'"))
+        self.assertTrue(rest.startswith(
+                "codec can't decode byte 0xa7 in position 27"))
 
     @inlineCallbacks
     def test_deliver_ussd_start(self):

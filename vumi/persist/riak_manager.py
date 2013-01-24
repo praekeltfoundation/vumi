@@ -12,21 +12,18 @@ class RiakManager(Manager):
     """A persistence manager for the riak Python package."""
 
     call_decorator = staticmethod(flatten_generator)
-    # Since this is a synchronous manager we want to fetch objects
-    # as part of the mapreduce call. Async managers might prefer
-    # to request the objects in parallel as this could be more efficient.
-    fetch_objects = True
 
     @classmethod
     def from_config(cls, config):
         config = config.copy()
         bucket_prefix = config.pop('bucket_prefix')
+        load_bunch_size = config.pop('load_bunch_size',
+                                     cls.DEFAULT_LOAD_BUNCH_SIZE)
         client = RiakClient(**config)
-        return cls(client, bucket_prefix)
+        return cls(client, bucket_prefix, load_bunch_size=load_bunch_size)
 
-    def riak_object(self, cls, key, result=None):
-        bucket_name = self.bucket_name(cls)
-        bucket = self.client.bucket(bucket_name)
+    def riak_object(self, modelcls, key, result=None):
+        bucket = self.bucket_for_modelcls(modelcls)
         riak_object = RiakObject(self.client, bucket, key)
         if result:
             metadata = result['metadata']
@@ -42,7 +39,7 @@ class RiakManager(Manager):
             riak_object.set_indexes(indexes)
             riak_object.set_encoded_data(data)
         else:
-            riak_object.set_data({})
+            riak_object.set_data({'$VERSION': modelcls.VERSION})
             riak_object.set_content_type("application/json")
         return riak_object
 
@@ -53,45 +50,33 @@ class RiakManager(Manager):
     def delete(self, modelobj):
         modelobj._riak_object.delete()
 
-    def load(self, cls, key, result=None):
-        riak_object = self.riak_object(cls, key, result)
+    def load(self, modelcls, key, result=None):
+        riak_object = self.riak_object(modelcls, key, result)
         if not result:
             riak_object.reload()
-        return (cls(self, key, _riak_object=riak_object)
-                if riak_object.get_data() is not None else None)
 
-    def load_list(self, cls, keys):
-        return [self.load(cls, key) for key in keys]
+        # Run migrators until we have the correct version of the data.
+        while riak_object.get_data() is not None:
+            data_version = riak_object.get_data().get('$VERSION', None)
+            if data_version == modelcls.VERSION:
+                return modelcls(self, key, _riak_object=riak_object)
+            migrator = modelcls.MIGRATOR(modelcls, self, data_version)
+            riak_object = migrator(riak_object).get_riak_object()
+        return None
 
     def riak_map_reduce(self):
         return RiakMapReduce(self.client)
 
-    def run_map_reduce(self, mapreduce, mapper_func):
-        raw_results = mapreduce.run()
-        results = [mapper_func(self, row) for row in raw_results]
+    def run_map_reduce(self, mapreduce, mapper_func=None, reducer_func=None):
+        results = mapreduce.run()
+        if mapper_func is not None:
+            results = [mapper_func(self, row) for row in results]
+        if reducer_func is not None:
+            results = reducer_func(self, results)
         return results
 
-    def riak_search(self, cls, query, return_keys=False):
-        bucket_name = self.bucket_name(cls)
-        mr = self.riak_map_reduce().search(bucket_name, query)
-        if not return_keys:
-            mr = mr.map(function="""
-                function (v) {
-                    return [[v.key, v.values[0]]]
-                }
-                """)
-
-        def map_handler(manager, key_and_result):
-            if return_keys:
-                return key_and_result.get_key()
-            else:
-                key, result = key_and_result
-                return cls.load(manager, key, result)
-
-        return self.run_map_reduce(mr, map_handler)
-
-    def riak_enable_search(self, cls):
-        bucket_name = self.bucket_name(cls)
+    def riak_enable_search(self, modelcls):
+        bucket_name = self.bucket_name(modelcls)
         bucket = self.client.bucket(bucket_name)
         return bucket.enable_search()
 

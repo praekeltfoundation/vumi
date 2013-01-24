@@ -211,7 +211,6 @@ class MessageTest(TestCase):
             event_id='def',
             event_type='ack',
             user_message_id='abc',
-            # transport_name='sphex',
             sent_message_id='ghi',
             )
         self.assertEqual('event', msg['message_type'])
@@ -219,8 +218,21 @@ class MessageTest(TestCase):
         self.assertEqual('def', msg['event_id'])
         self.assertEqual('abc', msg['user_message_id'])
         self.assertEqual('20110921', msg['message_version'])
-        # self.assertEqual('sphex', msg['transport_name'])
         self.assertEqual('ghi', msg['sent_message_id'])
+
+    def test_transport_event_nack(self):
+        msg = TransportEvent(
+            event_id='def',
+            event_type='nack',
+            user_message_id='abc',
+            nack_reason='unknown',
+            )
+        self.assertEqual('event', msg['message_type'])
+        self.assertEqual('nack', msg['event_type'])
+        self.assertEqual('unknown', msg['nack_reason'])
+        self.assertEqual('def', msg['event_id'])
+        self.assertEqual('abc', msg['user_message_id'])
+        self.assertEqual('20110921', msg['message_version'])
 
     def test_transport_event_delivery_report(self):
         msg = TransportEvent(

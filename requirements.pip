@@ -6,12 +6,12 @@ PyYAML
 iso8601
 supervisor
 pyOpenSSL
-python-ssmi
+python-ssmi>=0.0.5
 wokkel
 redis
 txredis
 python-smpp
 pytz
-riakasaurus
+riakasaurus>=1.0.9
 riak
 https://github.com/dustin/twitty-twister/tarball/master#egg=twittytwister-0.1.1

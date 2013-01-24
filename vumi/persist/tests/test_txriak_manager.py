@@ -11,10 +11,17 @@ class DummyModel(object):
 
     bucket = "dummy_model"
 
+    VERSION = None
+    MIGRATORS = None
+
     def __init__(self, manager, key, _riak_object=None):
         self.manager = manager
         self.key = key
         self._riak_object = _riak_object
+
+    @classmethod
+    def load(cls, manager, key, result=None):
+        return manager.load(cls, key, result=result)
 
     def set_riak(self, riak_object):
         self._riak_object = riak_object
@@ -47,16 +54,42 @@ class CommonRiakManagerTests(object):
         manager_cls = self.manager.__class__
         manager = manager_cls.from_config({'bucket_prefix': 'test.'})
         self.assertEqual(manager.__class__, manager_cls)
+        self.assertEqual(manager.load_bunch_size,
+                         manager.DEFAULT_LOAD_BUNCH_SIZE)
+
+    def test_from_config_with_bunch_size(self):
+        manager_cls = self.manager.__class__
+        manager = manager_cls.from_config({'bucket_prefix': 'test.',
+                                           'load_bunch_size': 10,
+                                           })
+        self.assertEqual(manager.load_bunch_size, 10)
 
     def test_sub_manager(self):
         sub_manager = self.manager.sub_manager("foo.")
         self.assertEqual(sub_manager.client, self.manager.client)
         self.assertEqual(sub_manager.bucket_prefix, 'test.foo.')
 
+    def test_bucket_name_on_modelcls(self):
+        dummy = self.mkdummy("bar")
+        bucket_name = self.manager.bucket_name(type(dummy))
+        self.assertEqual(bucket_name, "test.dummy_model")
+
+    def test_bucket_name_on_instance(self):
+        dummy = self.mkdummy("bar")
+        bucket_name = self.manager.bucket_name(dummy)
+        self.assertEqual(bucket_name, "test.dummy_model")
+
+    def test_bucket_for_modelcls(self):
+        dummy_cls = type(self.mkdummy("foo"))
+        bucket1 = self.manager.bucket_for_modelcls(dummy_cls)
+        bucket2 = self.manager.bucket_for_modelcls(dummy_cls)
+        self.assertEqual(id(bucket1), id(bucket2))
+        self.assertEqual(bucket1.get_name(), "test.dummy_model")
+
     def test_riak_object(self):
         dummy = DummyModel(self.manager, "foo")
         riak_object = self.manager.riak_object(dummy, "foo")
-        self.assertEqual(riak_object.get_data(), {})
+        self.assertEqual(riak_object.get_data(), {'$VERSION': None})
         self.assertEqual(riak_object.get_content_type(), "application/json")
         self.assertEqual(riak_object.get_bucket().get_name(),
                          "test.dummy_model")
@@ -89,16 +122,21 @@ class CommonRiakManagerTests(object):
         self.assertEqual(result, None)
 
     @Manager.calls_manager
-    def test_load_list(self):
+    def test_load_all_bunches(self):
         yield self.manager.store(self.mkdummy("foo", {"a": 0}))
         yield self.manager.store(self.mkdummy("bar", {"a": 1}))
+        yield self.manager.store(self.mkdummy("baz", {"a": 2}))
+        self.manager.load_bunch_size = load_bunch_size = 2
 
-        keys = ["foo", "bar", "unknown"]
+        keys = ["foo", "unknown", "bar", "baz"]
 
-        result = yield self.manager.load_list(DummyModel, keys)
-        result_data = [r.get_data() if r is not None else None for r in result]
-        result_data.sort(key=lambda d: d["a"] if d is not None else -1)
-        self.assertEqual(result_data, [None, {"a": 0}, {"a": 1}])
+        result_data = []
+        for result_bunch in self.manager.load_all_bunches(DummyModel, keys):
+            bunch = yield result_bunch
+            self.assertTrue(len(bunch) <= load_bunch_size)
+            result_data.extend(result.get_data() for result in bunch)
+        result_data.sort(key=lambda d: d["a"])
+        self.assertEqual(result_data, [{"a": 0}, {"a": 1}, {"a": 2}])
 
     @Manager.calls_manager
     def test_run_riak_map_reduce(self):
@@ -141,7 +179,7 @@ class TestTxRiakManager(CommonRiakManagerTests, TestCase):
         try:
             from vumi.persist.txriak_manager import TxRiakManager
         except ImportError, e:
-            import_skip(e, 'riakasaurus.riak')
+            import_skip(e, 'riakasaurus', 'riakasaurus.riak')
         self.manager = TxRiakManager.from_config({'bucket_prefix': 'test.'})
         yield self.manager.purge_all()
 

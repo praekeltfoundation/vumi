@@ -141,8 +141,9 @@ class FakeAMQPBroker(object):
 
     def basic_consume(self, queue, tag):
         self._get_queue(queue).add_consumer(tag)
-        self.kick_delivery()
-        return Message(mkMethod("consume-ok", 21), [("consumer_tag", tag)])
+        d = self.kick_delivery()
+        return d.addCallback(lambda _: Message(
+            mkMethod("consume-ok", 21), [("consumer_tag", tag)]))
 
     def basic_cancel(self, tag, queue):
         if queue in self.queues:

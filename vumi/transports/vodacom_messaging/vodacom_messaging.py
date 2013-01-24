@@ -41,6 +41,8 @@ class VodacomMessagingTransport(HttpRpcTransport):
                 vmr.accept_freetext()
             self.finish_request(message['in_reply_to'],
                                 unicode(vmr).encode('utf-8'))
+        return self.publish_ack(user_message_id=message['message_id'],
+            sent_message_id=message['message_id'])
 
 
 class VodacomMessagingResponse(object):

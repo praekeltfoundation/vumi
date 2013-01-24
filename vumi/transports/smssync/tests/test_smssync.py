@@ -11,7 +11,7 @@ from twisted.internet.task import Clock
 
 from vumi.message import TransportUserMessage
 from vumi.utils import http_request
-from vumi.transports.tests.test_base import TransportTestCase
+from vumi.transports.tests.utils import TransportTestCase
 from vumi.transports.smssync import SingleSmsSync, MultiSmsSync
 from vumi.transports.smssync.smssync import SmsSyncMsgInfo
 

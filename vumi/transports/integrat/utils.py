@@ -1,6 +1,6 @@
 # -*- test-case-name: vumi.transports.integrat.tests.test_utils -*-
 
-from  xml.etree import ElementTree
+from xml.etree import ElementTree
 
 
 def safetext(element):

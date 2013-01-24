@@ -136,3 +136,5 @@ class IntegratTransport(Transport):
         }), headers={
             'Content-Type': ['text/xml; charset=utf-8']
         })
+        yield self.publish_ack(user_message_id=message['message_id'],
+                sent_message_id=message['message_id'])

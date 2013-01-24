@@ -1,9 +1,10 @@
 """Tests for vumi.persist.model."""
 
 from twisted.trial.unittest import TestCase
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import inlineCallbacks, returnValue
 
-from vumi.persist.model import Model, Manager
+from vumi.persist.model import (
+    Model, Manager, ModelMigrator, ModelMigrationError)
 from vumi.persist.fields import (
     ValidationError, Integer, Unicode, VumiMessage, Dynamic, ListOf,
     ForeignKey, ManyToMany)
@@ -50,6 +51,63 @@ class OverriddenModel(InheritedModel):
     c = Integer(min=0, max=5)
 
 
+class VersionedModelMigrator(ModelMigrator):
+    def migrate_from_unversioned(self, migration_data):
+        # Migrator assertions
+        assert self.data_version is None
+        assert self.model_class is VersionedModel
+        assert isinstance(self.manager, Manager)
+
+        # Data assertions
+        assert set(migration_data.old_data.keys()) == set(['$VERSION', 'a'])
+        assert migration_data.old_data['$VERSION'] is None
+        assert migration_data.old_index == {}
+
+        # Actual migration
+        migration_data.set_value('$VERSION', 1)
+        migration_data.set_value('b', migration_data.old_data['a'])
+        return migration_data
+
+    def migrate_from_1(self, migration_data):
+        # Migrator assertions
+        assert self.data_version == 1
+        assert self.model_class is VersionedModel
+        assert isinstance(self.manager, Manager)
+
+        # Data assertions
+        assert set(migration_data.old_data.keys()) == set(['$VERSION', 'b'])
+        assert migration_data.old_data['$VERSION'] == 1
+        assert migration_data.old_index == {}
+
+        # Actual migration
+        migration_data.set_value('$VERSION', 2)
+        migration_data.set_value('c', migration_data.old_data['b'])
+        return migration_data
+
+
+class UnversionedModel(Model):
+    bucket = 'versionedmodel'
+    a = Integer()
+
+
+class OldVersionedModel(Model):
+    VERSION = 1
+    bucket = 'versionedmodel'
+    b = Integer()
+
+
+class VersionedModel(Model):
+    VERSION = 2
+    MIGRATOR = VersionedModelMigrator
+    c = Integer()
+
+
+class UnknownVersionedModel(Model):
+    VERSION = 3
+    bucket = 'versionedmodel'
+    d = Integer()
+
+
 class TestModelOnTxRiak(TestCase):
 
     # TODO: all copies of mkmsg must be unified!
@@ -65,7 +123,7 @@ class TestModelOnTxRiak(TestCase):
         try:
             from vumi.persist.txriak_manager import TxRiakManager
         except ImportError, e:
-            import_skip(e, 'riakasaurus.riak')
+            import_skip(e, 'riakasaurus', 'riakasaurus.riak')
         self.manager = TxRiakManager.from_config({'bucket_prefix': 'test.'})
         yield self.manager.purge_all()
 
@@ -96,6 +154,13 @@ class TestModelOnTxRiak(TestCase):
         self.assertTrue(callable(t.backlinks.foo))
         self.assertRaises(AttributeError, getattr, t.backlinks, 'bar')
 
+    @inlineCallbacks
+    def assert_mapreduce_results(self, expected_keys, mr_func, *args, **kw):
+        keys = yield mr_func(*args, **kw).get_keys()
+        count = yield mr_func(*args, **kw).get_count()
+        self.assertEqual(expected_keys, sorted(keys))
+        self.assertEqual(len(expected_keys), count)
+
     @Manager.calls_manager
     def test_simple_search(self):
         simple_model = self.manager.proxy(SimpleModel)
@@ -104,16 +169,10 @@ class TestModelOnTxRiak(TestCase):
         yield simple_model("two", a=2, b=u'def').save()
         yield simple_model("three", a=2, b=u'ghi').save()
 
-        [s1] = yield simple_model.search(a=1)
-        self.assertEqual(s1.key, "one")
-        self.assertEqual(s1.a, 1)
-        self.assertEqual(s1.b, u'abc')
-
-        [s2] = yield simple_model.search(a=2, b='def')
-        self.assertEqual(s2.key, "two")
-
-        keys = yield simple_model.search(a=2, return_keys=True)
-        self.assertEqual(sorted(keys), ["three", "two"])
+        search = simple_model.search
+        yield self.assert_mapreduce_results(["one"], search, a=1)
+        yield self.assert_mapreduce_results(["two"], search, a=2, b='def')
+        yield self.assert_mapreduce_results(["three", "two"], search, a=2)
 
     @Manager.calls_manager
     def test_simple_search_escaping(self):
@@ -122,10 +181,38 @@ class TestModelOnTxRiak(TestCase):
         yield simple_model.enable_search()
         yield simple_model("one", a=1, b=u'a\'bc').save()
 
-        search = lambda **q: simple_model.search(return_keys=True, **q)
-        self.assertEqual((yield search(b=" OR a:1")), [])
-        self.assertEqual((yield search(b="b' OR a:1 '")), [])
-        self.assertEqual((yield search(b="a\'bc")), ["one"])
+        search = simple_model.search
+        yield self.assert_mapreduce_results([], search, b=" OR a:1")
+        yield self.assert_mapreduce_results([], search, b="b' OR a:1 '")
+        yield self.assert_mapreduce_results(["one"], search, b="a\'bc")
+
+    @Manager.calls_manager
+    def test_simple_raw_search(self):
+        simple_model = self.manager.proxy(SimpleModel)
+        yield simple_model.enable_search()
+        yield simple_model("one", a=1, b=u'abc').save()
+        yield simple_model("two", a=2, b=u'def').save()
+        yield simple_model("three", a=2, b=u'ghi').save()
+
+        search = simple_model.raw_search
+        yield self.assert_mapreduce_results(["one"], search, 'a:1')
+        yield self.assert_mapreduce_results(["two"], search, 'a:2 AND b:def')
+        yield self.assert_mapreduce_results(
+            ["one", "two"], search, 'b:abc OR b:def')
+        yield self.assert_mapreduce_results(["three", "two"], search, 'a:2')
+
+    @Manager.calls_manager
+    def test_load_all_bunches(self):
+        simple_model = self.manager.proxy(SimpleModel)
+        yield simple_model("one", a=1, b=u'abc').save()
+        yield simple_model("two", a=2, b=u'def').save()
+        yield simple_model("three", a=2, b=u'ghi').save()
+
+        objs_iter = simple_model.load_all_bunches(['one', 'two', 'bad'])
+        objs = []
+        for obj_bunch in objs_iter:
+            objs.extend((yield obj_bunch))
+        self.assertEqual(["one", "two"], sorted(obj.key for obj in objs))
 
     @Manager.calls_manager
     def test_simple_instance(self):
@@ -156,26 +243,40 @@ class TestModelOnTxRiak(TestCase):
         self.assertEqual(s, None)
 
     @Manager.calls_manager
-    def test_by_index(self):
+    def test_index_lookup(self):
         indexed_model = self.manager.proxy(IndexedModel)
         yield indexed_model("foo1", a=1, b=u"one").save()
-        yield indexed_model("foo2", a=2, b=u"two").save()
+        yield indexed_model("foo2", a=2, b=u"one").save()
+        yield indexed_model("foo3", a=2, b=None).save()
 
-        [key] = yield indexed_model.by_index(a=1, return_keys=True)
-        self.assertEqual(key, "foo1")
-
-        [obj] = yield indexed_model.by_index(b="two")
-        self.assertEqual(obj.key, "foo2")
-        self.assertEqual(obj.b, "two")
+        lookup = indexed_model.index_lookup
+        yield self.assert_mapreduce_results(["foo1"], lookup, 'a', 1)
+        yield self.assert_mapreduce_results(
+            ["foo1", "foo2"], lookup, 'b', u"one")
+        yield self.assert_mapreduce_results(["foo3"], lookup, 'b', None)
 
     @Manager.calls_manager
-    def test_by_index_null(self):
+    def test_index_match(self):
         indexed_model = self.manager.proxy(IndexedModel)
         yield indexed_model("foo1", a=1, b=u"one").save()
-        yield indexed_model("foo2", a=2, b=None).save()
+        yield indexed_model("foo2", a=2, b=u"one").save()
+        yield indexed_model("foo3", a=2, b=None).save()
 
-        [key] = yield indexed_model.by_index(b=None, return_keys=True)
-        self.assertEqual(key, "foo2")
+        match = indexed_model.index_match
+        yield self.assert_mapreduce_results(["foo1"], match,
+            [{'key': 'b', 'pattern': 'one', 'flags': 'i'}], 'a', 1)
+        yield self.assert_mapreduce_results(["foo1", "foo2"], match,
+            [{'key': 'b', 'pattern': 'one', 'flags': 'i'}], 'b', u"one")
+        yield self.assert_mapreduce_results(["foo3"], match,
+            [{'key': 'a', 'pattern': '2', 'flags': 'i'}], 'b', None)
+        # test with non-existent key
+        yield self.assert_mapreduce_results([], match,
+            [{'key': 'foo', 'pattern': 'one', 'flags': 'i'}], 'a', 1)
+        # test case sensitivity
+        yield self.assert_mapreduce_results(['foo1'], match,
+            [{'key': 'b', 'pattern': 'ONE', 'flags': 'i'}], 'a', 1)
+        yield self.assert_mapreduce_results([], match,
+            [{'key': 'b', 'pattern': 'ONE', 'flags': ''}], 'a', 1)
 
     @Manager.calls_manager
     def test_vumimessage_field(self):
@@ -307,6 +408,41 @@ class TestModelOnTxRiak(TestCase):
         f1.simple.set(s1)
         yield s1.save()
         yield f1.save()
+        self.assertEqual(f1._riak_object._data['simple'], s1.key)
+
+        f2 = yield fk_model.load("bar")
+        s2 = yield f2.simple.get()
+
+        self.assertEqual(f2.simple.key, "foo")
+        self.assertEqual(s2.a, 5)
+        self.assertEqual(s2.b, u"3")
+
+        f2.simple.set(None)
+        s3 = yield f2.simple.get()
+        self.assertEqual(s3, None)
+
+        f2.simple.key = "foo"
+        s4 = yield f2.simple.get()
+        self.assertEqual(s4.key, "foo")
+
+        f2.simple.key = None
+        s5 = yield f2.simple.get()
+        self.assertEqual(s5, None)
+
+        self.assertRaises(ValidationError, f2.simple.set, object())
+
+    @Manager.calls_manager
+    def test_old_foreignkey_fields(self):
+        fk_model = self.manager.proxy(ForeignKeyModel)
+        simple_model = self.manager.proxy(SimpleModel)
+        s1 = simple_model("foo", a=5, b=u'3')
+        f1 = fk_model("bar")
+        # Create index directly and remove data field to simulate old-style
+        # index-only implementation
+        f1._riak_object.add_index('simple_bin', s1.key)
+        f1._riak_object._data.pop('simple')
+        yield s1.save()
+        yield f1.save()
 
         f2 = yield fk_model.load("bar")
         s2 = yield f2.simple.get()
@@ -344,9 +480,14 @@ class TestModelOnTxRiak(TestCase):
 
         s2 = yield simple_model.load("foo")
         results = yield s2.backlinks.foreignkeymodels()
-        self.assertEqual(sorted(s.key for s in results), ["bar1", "bar2"])
-        self.assertEqual([s.__class__ for s in results],
-                         [ForeignKeyModel] * 2)
+        self.assertEqual(sorted(results), ["bar1", "bar2"])
+
+    @Manager.calls_manager
+    def load_all_bunches_flat(self, m2m_field):
+        results = []
+        for result_bunch in m2m_field.load_all_bunches():
+            results.extend((yield result_bunch))
+        returnValue(results)
 
     @Manager.calls_manager
     def test_manytomany_field(self):
@@ -358,24 +499,25 @@ class TestModelOnTxRiak(TestCase):
         m1.simples.add(s1)
         yield s1.save()
         yield m1.save()
+        self.assertEqual(m1._riak_object._data['simples'], [s1.key])
 
         m2 = yield mm_model.load("bar")
-        [s2] = yield m2.simples.get_all()
+        [s2] = yield self.load_all_bunches_flat(m2.simples)
 
         self.assertEqual(m2.simples.keys(), ["foo"])
         self.assertEqual(s2.a, 5)
         self.assertEqual(s2.b, u"3")
 
         m2.simples.remove(s2)
-        simples = yield m2.simples.get_all()
+        simples = yield self.load_all_bunches_flat(m2.simples)
         self.assertEqual(simples, [])
 
         m2.simples.add_key("foo")
-        [s4] = yield m2.simples.get_all()
+        [s4] = yield self.load_all_bunches_flat(m2.simples)
         self.assertEqual(s4.key, "foo")
 
         m2.simples.remove_key("foo")
-        simples = yield m2.simples.get_all()
+        simples = yield self.load_all_bunches_flat(m2.simples)
         self.assertEqual(simples, [])
 
         self.assertRaises(ValidationError, m2.simples.add, object())
@@ -387,7 +529,7 @@ class TestModelOnTxRiak(TestCase):
         m2.simples.add(t2)
         yield t1.save()
         yield t2.save()
-        simples = yield m2.simples.get_all()
+        simples = yield self.load_all_bunches_flat(m2.simples)
         simples.sort(key=lambda s: s.key)
         self.assertEqual([s.key for s in simples], ["bar1", "bar2"])
         self.assertEqual(simples[0].a, 3)
@@ -395,8 +537,57 @@ class TestModelOnTxRiak(TestCase):
 
         m2.simples.clear()
         m2.simples.add_key("unknown")
-        [s5] = yield m2.simples.get_all()
-        self.assertEqual(s5, None)
+        self.assertEqual([], (yield self.load_all_bunches_flat(m2.simples)))
+
+    @Manager.calls_manager
+    def test_old_manytomany_field(self):
+        mm_model = self.manager.proxy(ManyToManyModel)
+        simple_model = self.manager.proxy(SimpleModel)
+
+        s1 = simple_model("foo", a=5, b=u'3')
+        m1 = mm_model("bar")
+        # Create index directly to simulate old-style index-only implementation
+        m1._riak_object.add_index('simples_bin', s1.key)
+        yield s1.save()
+        yield m1.save()
+
+        m2 = yield mm_model.load("bar")
+        [s2] = yield self.load_all_bunches_flat(m2.simples)
+
+        self.assertEqual(m2.simples.keys(), ["foo"])
+        self.assertEqual(s2.a, 5)
+        self.assertEqual(s2.b, u"3")
+
+        m2.simples.remove(s2)
+        simples = yield self.load_all_bunches_flat(m2.simples)
+        self.assertEqual(simples, [])
+
+        m2.simples.add_key("foo")
+        [s4] = yield self.load_all_bunches_flat(m2.simples)
+        self.assertEqual(s4.key, "foo")
+
+        m2.simples.remove_key("foo")
+        simples = yield self.load_all_bunches_flat(m2.simples)
+        self.assertEqual(simples, [])
+
+        self.assertRaises(ValidationError, m2.simples.add, object())
+        self.assertRaises(ValidationError, m2.simples.remove, object())
+
+        t1 = simple_model("bar1", a=3, b=u'4')
+        t2 = simple_model("bar2", a=4, b=u'4')
+        m2.simples.add(t1)
+        m2.simples.add(t2)
+        yield t1.save()
+        yield t2.save()
+        simples = yield self.load_all_bunches_flat(m2.simples)
+        simples.sort(key=lambda s: s.key)
+        self.assertEqual([s.key for s in simples], ["bar1", "bar2"])
+        self.assertEqual(simples[0].a, 3)
+        self.assertEqual(simples[1].a, 4)
+
+        m2.simples.clear()
+        m2.simples.add_key("unknown")
+        self.assertEqual([], (yield self.load_all_bunches_flat(m2.simples)))
 
     @Manager.calls_manager
     def test_reverse_manytomany_fields(self):
@@ -416,13 +607,11 @@ class TestModelOnTxRiak(TestCase):
 
         s1 = yield simple_model.load("foo1")
         results = yield s1.backlinks.manytomanymodels()
-        self.assertEqual(sorted(s.key for s in results), ["bar1", "bar2"])
-        self.assertEqual([s.__class__ for s in results],
-                         [ManyToManyModel] * 2)
+        self.assertEqual(sorted(results), ["bar1", "bar2"])
 
         s2 = yield simple_model.load("foo2")
         results = yield s2.backlinks.manytomanymodels()
-        self.assertEqual(sorted(s.key for s in results), ["bar1"])
+        self.assertEqual(sorted(results), ["bar1"])
 
     @Manager.calls_manager
     def test_inherited_model(self):
@@ -449,6 +638,40 @@ class TestModelOnTxRiak(TestCase):
         overridden_model("foo", a=1, b=u"2", c=3)
         self.assertRaises(ValidationError, overridden_model, "foo",
                           a=1, b=u"2", c=-1)
+
+    @Manager.calls_manager
+    def test_unversioned_migration(self):
+        old_model = self.manager.proxy(UnversionedModel)
+        new_model = self.manager.proxy(VersionedModel)
+        foo_old = old_model("foo", a=1)
+        yield foo_old.save()
+
+        foo_new = yield new_model.load("foo")
+        self.assertEqual(foo_new.c, 1)
+
+    @Manager.calls_manager
+    def test_version_migration(self):
+        old_model = self.manager.proxy(OldVersionedModel)
+        new_model = self.manager.proxy(VersionedModel)
+        foo_old = old_model("foo", b=1)
+        yield foo_old.save()
+
+        foo_new = yield new_model.load("foo")
+        self.assertEqual(foo_new.c, 1)
+
+    @Manager.calls_manager
+    def test_version_migration_failure(self):
+        odd_model = self.manager.proxy(UnknownVersionedModel)
+        new_model = self.manager.proxy(VersionedModel)
+        foo_odd = odd_model("foo", d=1)
+        yield foo_odd.save()
+
+        try:
+            yield new_model.load("foo")
+            self.fail('Expected ModelMigrationError.')
+        except ModelMigrationError, e:
+            self.assertEqual(
+                e.args[0], 'No migrators defined for VersionedModel version 3')
 
 
 class TestModelOnRiak(TestModelOnTxRiak):

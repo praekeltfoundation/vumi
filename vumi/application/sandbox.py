@@ -7,20 +7,23 @@ import resource
 import os
 import signal
 import json
+import pkg_resources
 from uuid import uuid4
 
 from twisted.internet import reactor
 from twisted.internet.protocol import ProcessProtocol
-from twisted.internet.defer import (Deferred, inlineCallbacks,
-                                    maybeDeferred, returnValue)
+from twisted.internet.defer import (
+    Deferred, inlineCallbacks, maybeDeferred, returnValue, DeferredList,
+    succeed)
 from twisted.internet.error import ProcessDone
 from twisted.python.failure import Failure
 
+import vumi
 from vumi.application.base import ApplicationWorker
 from vumi.message import Message
 from vumi.errors import ConfigError
 from vumi.persist.txredis_manager import TxRedisManager
-from vumi.utils import load_class_by_string
+from vumi.utils import load_class_by_string, http_request_full
 from vumi import log
 
 
@@ -72,7 +75,7 @@ class SandboxRlimiter(object):
         self._env = env
 
     def _apply_rlimits(self):
-        data = sys.stdin.readline()
+        data = os.environ[self._SANDBOX_RLIMITS_]
         rlimits = json.loads(data) if data.strip() else {}
         for rlimit, (soft, hard) in rlimits.iteritems():
             resource.setrlimit(int(rlimit), (soft, hard))
@@ -89,31 +92,43 @@ class SandboxRlimiter(object):
         os.closerange(3, maxfds)
 
     def execute(self):
-        self._restore_python_path(os.environ)
         self._apply_rlimits()
+        self._restore_child_env(os.environ)
         self._sanitize_fds()
         self._reset_signals()
         os.execvpe(self._executable, self._args, self._env)
 
     _SANDBOXED_PYTHONPATH_ = "_SANDBOXED_PYTHONPATH_"
+    _SANDBOX_RLIMITS_ = "_SANDBOX_RLIMITS_"
 
     @classmethod
-    def _override_python_path(cls, env):
-        """Override PYTHONPATH so that SandboxRlimiter can be found."""
+    def _override_child_env(cls, env, rlimits):
+        """Put RLIMIT config and a suitable PYTHONPATH in the env.
+
+        The PYTHONPATH needs to be set appropriately for the child process to
+        find this module.
+        """
+        # First, add the place(s) where vumi can be found to the path.
+        python_path = [os.path.dirname(p) for p in vumi.__path__]
+        # Next, add anything from the PYTHONPATH envvar.
+        python_path.extend(os.environ.get('PYTHONPATH', '').split(os.pathsep))
+
         if 'PYTHONPATH' in env:
             env[cls._SANDBOXED_PYTHONPATH_] = env['PYTHONPATH']
-        env['PYTHONPATH'] = ':'.join(sys.path)
+        env['PYTHONPATH'] = os.pathsep.join(python_path)
+        env[cls._SANDBOX_RLIMITS_] = json.dumps(rlimits)
 
     @classmethod
-    def _restore_python_path(cls, env):
-        """Remove PYTHONPATH override."""
+    def _restore_child_env(cls, env):
+        """Remove PYTHONPATH override and RLIMIT config."""
+        del env[cls._SANDBOX_RLIMITS_]
         if 'PYTHONPATH' in env:
             del env['PYTHONPATH']
         if cls._SANDBOXED_PYTHONPATH_ in env:
             env['PYTHONPATH'] = env.pop(cls._SANDBOXED_PYTHONPATH_)
 
     @classmethod
-    def spawn(cls, protocol, executable, **kwargs):
+    def spawn(cls, protocol, executable, rlimits, **kwargs):
         # spawns a SandboxRlimiter, connectionMade then passes the rlimits
         # through to stdin and the SandboxRlimiter applies them
         args = kwargs.pop('args', [])
@@ -122,7 +137,7 @@ class SandboxRlimiter(object):
         # gone)
         args = [sys.executable, '-u', '-m', __name__, '--'] + args
         env = kwargs.pop('env', {})
-        cls._override_python_path(env)
+        cls._override_child_env(env, rlimits)
         reactor.spawnProcess(protocol, sys.executable, args=args, env=env,
                              **kwargs)
 
@@ -154,6 +169,7 @@ class SandboxProtocol(ProcessProtocol):
         self.rlimits = rlimits
         self._started = MultiDeferred()
         self._done = MultiDeferred()
+        self._pending_requests = []
         self.exit_reason = None
         self.timeout_task = reactor.callLater(timeout, self.kill)
         self.recv_limit = recv_limit
@@ -167,7 +183,8 @@ class SandboxProtocol(ProcessProtocol):
         return SandboxRlimiter(args, env)
 
     def spawn(self):
-        SandboxRlimiter.spawn(self, self.executable, **self.spawn_kwargs)
+        SandboxRlimiter.spawn(
+            self, self.executable, self.rlimits, **self.spawn_kwargs)
 
     def done(self):
         """Returns a deferred that will be called when the process ends."""
@@ -195,12 +212,7 @@ class SandboxProtocol(ProcessProtocol):
             self.kill()
             return False
 
-    def _send_rlimits(self):
-        self.transport.write(json.dumps(self.rlimits))
-        self.transport.write("\n")
-
     def connectionMade(self):
-        self._send_rlimits()
         self._started.callback(self)
 
     def _process_data(self, chunk, data):
@@ -219,15 +231,15 @@ class SandboxProtocol(ProcessProtocol):
     def outReceived(self, data):
         lines = self._process_data(self.chunk, data)
         for i in range(len(lines) - 1):
-            # dispatch_request() calls are async (i.e. return deferreds)
-            self.api.dispatch_request(self._parse_command(lines[i]))
+            d = self.api.dispatch_request(self._parse_command(lines[i]))
+            self._pending_requests.append(d)
         self.chunk = lines[-1]
 
     def outConnectionLost(self):
         if self.chunk:
             line, self.chunk = self.chunk, ""
-            # dispatch_request() calls are async (i.e. return deferreds)
-            self.api.dispatch_request(self._parse_command(line))
+            d = self.api.dispatch_request(self._parse_command(line))
+            self._pending_requests.append(d)
 
     def errReceived(self, data):
         lines = self._process_data(self.error_chunk, data)
@@ -240,6 +252,11 @@ class SandboxProtocol(ProcessProtocol):
             log.error(Failure(SandboxError(self.error_chunk)))
             self.error_chunk = ""
 
+    def _process_request_results(self, results):
+        for success, result in results:
+            if not success:
+                log.error(result)
+
     def processEnded(self, reason):
         if self.timeout_task.active():
             self.timeout_task.cancel()
@@ -250,7 +267,9 @@ class SandboxProtocol(ProcessProtocol):
         if not self._started.fired():
             self._started.callback(Failure(
                 SandboxError("Process failed to start.")))
-        self._done.callback(result)
+        requests_done = DeferredList(self._pending_requests)
+        requests_done.addCallback(self._process_request_results)
+        requests_done.addCallback(lambda _r: self._done.callback(result))
 
 
 class SandboxResources(object):
@@ -336,6 +355,9 @@ class RedisResource(SandboxResource):
         self.keys_per_user = self.config.get('keys_per_user', 100)
         self.redis = yield TxRedisManager.from_config(self.r_config)
 
+    def teardown(self):
+        return self.redis.close_manager()
+
     def _count_key(self, sandbox_id):
         return "#".join(["count", sandbox_id])
 
@@ -365,8 +387,9 @@ class RedisResource(SandboxResource):
     def handle_get(self, api, command):
         key = self._sandboxed_key(api.sandbox_id, command.get('key'))
         raw_value = yield self.redis.get(key)
+        value = json.loads(raw_value) if raw_value is not None else None
         returnValue(self.reply(command, success=True,
-                               value=json.loads(raw_value)))
+                               value=value))
 
     @inlineCallbacks
     def handle_delete(self, api, command):
@@ -410,17 +433,14 @@ class JsSandboxResource(SandboxResource):
     Typically used alongside vumi/applicaiton/sandboxer.js which is
     a simple node.js based Javascript sandbox.
 
-    Configuration options:
-
-    :param str javascript:
-        Javascript to execute inside the sandbox.
+    Requires the worker to have a `javascript_for_api` method.
     """
-    def setup(self):
-        self.javascript = self.config.get('javascript')
-
     def sandbox_init(self, api):
+        javascript = self.app_worker.javascript_for_api(api)
+        app_context = self.app_worker.app_context_for_api(api)
         api.sandbox_send(SandboxCommand(cmd="initialize",
-                                        javascript=self.javascript))
+                                        javascript=javascript,
+                                        app_context=app_context))
 
 
 class LoggingResource(SandboxResource):
@@ -428,8 +448,54 @@ class LoggingResource(SandboxResource):
     logging framework.
     """
     def handle_info(self, api, command):
-        log.info(command['msg'])
+        log.info(str(command['msg']))
         return self.reply(command, success=True)
+
+
+class HttpClientResource(SandboxResource):
+    """Resource that allows making HTTP calls to outside services."""
+
+    DEFAULT_TIMEOUT = 30  # seconds
+    DEFAULT_DATA_LIMIT = 128 * 1024  # 128 KB
+
+    def setup(self):
+        self.timeout = self.config.get('timeout', self.DEFAULT_TIMEOUT)
+        self.data_limit = self.config.get('data_limit',
+                                          self.DEFAULT_DATA_LIMIT)
+
+    def _make_request_from_command(self, method, command):
+        url = command.get('url', None)
+        if not isinstance(url, basestring):
+            return succeed(self.reply(command, success=False,
+                                      reason="No URL given"))
+        url = url.encode("utf-8")
+        headers = command.get('headers', {})
+        headers = dict((k.encode("utf-8"), [x.encode("utf-8") for x in v])
+                       for k, v in headers.items())
+        data = command.get('data', None)
+        if data is not None:
+            data = data.encode("utf-8")
+        d = http_request_full(url, data=data, headers=headers,
+                              method=method, timeout=self.timeout,
+                              data_limit=self.data_limit)
+        d.addCallback(self._make_success_reply, command)
+        d.addErrback(self._make_failure_reply, command)
+        return d
+
+    def _make_success_reply(self, response, command):
+        return self.reply(command, success=True,
+                          body=response.delivered_body,
+                          code=response.code)
+
+    def _make_failure_reply(self, failure, command):
+        return self.reply(command, success=False,
+                          reason=failure.getErrorMessage())
+
+    def handle_get(self, api, command):
+        return self._make_request_from_command('GET', command)
+
+    def handle_post(self, api, command):
+        return self._make_request_from_command('POST', command)
 
 
 class SandboxApi(object):
@@ -520,6 +586,8 @@ class Sandbox(ApplicationWorker):
         the path of the executable itself).
     :param str path:
         Current working directory to run the executable in.
+    :param dict env:
+        Custom environment variables for the sandboxed process.
     :param int timeout:
         Length of time the subprocess is given to process
         a message.
@@ -544,18 +612,19 @@ class Sandbox(ApplicationWorker):
         resource.RLIMIT_CORE: (1 * MB, 1 * MB),
         resource.RLIMIT_CPU: (60, 60),
         resource.RLIMIT_FSIZE: (1 * MB, 1 * MB),
-        resource.RLIMIT_DATA: (10 * MB, 10 * MB),
+        resource.RLIMIT_DATA: (32 * MB, 32 * MB),
         resource.RLIMIT_STACK: (1 * MB, 1 * MB),
         resource.RLIMIT_RSS: (10 * MB, 10 * MB),
         resource.RLIMIT_NOFILE: (10, 10),
         resource.RLIMIT_MEMLOCK: (64 * KB, 64 * KB),
-        resource.RLIMIT_AS: (64 * MB, 64 * MB),
+        resource.RLIMIT_AS: (196 * MB, 196 * MB),
     }
 
     def validate_config(self):
         self.executable = self.config.get("executable")
         self.args = [self.executable] + self.config.get("args", [])
         self.path = self.config.get("path", None)
+        self.env = self.config.get("env", {})
         self.timeout = int(self.config.get("timeout", "60"))
         self.recv_limit = int(self.config.get("recv_limit", 1024 * 1024))
         self.resources = self.create_sandbox_resources(
@@ -582,29 +651,37 @@ class Sandbox(ApplicationWorker):
     def create_sandbox_resources(self, config):
         return SandboxResources(self, config)
 
-    def create_sandbox_api(self):
-        return SandboxApi(self.resources)
-
     def create_sandbox_protocol(self, sandbox_id, api):
-        spawn_kwargs = dict(args=self.args, env={}, path=self.path)
+        spawn_kwargs = dict(args=self.args, env=self.env, path=self.path)
         return SandboxProtocol(sandbox_id, api, self.executable, spawn_kwargs,
                                self.rlimits, self.timeout, self.recv_limit)
 
-    def sandbox_id_for_message(self, msg):
-        """Sub-classes should override this to retrieve an appropriate id."""
-        return msg['sandbox_id']
+    def create_sandbox_api(self, resources):
+        return SandboxApi(resources)
 
-    def sandbox_id_for_event(self, event):
-        """Sub-classes should override this to retrieve an appropriate id."""
-        return event['sandbox_id']
+    def sandbox_id_for_message(self, msg_or_event):
+        """Return a sandbox id for a message or event.
 
-    def _process_in_sandbox(self, sandbox_id, api, api_callback):
-        sandbox_protocol = self.create_sandbox_protocol(sandbox_id, api)
+        Sub-classes may override this to retrieve an appropriate id.
+        """
+        return msg_or_event['sandbox_id']
+
+    def sandbox_protocol_for_message(self, msg_or_event):
+        """Return a sandbox protocol for a message or event.
+
+        Sub-classes may override this to retrieve an appropriate protocol.
+        """
+        sandbox_id = self.sandbox_id_for_message(msg_or_event)
+        api = self.create_sandbox_api(self.resources)
+        protocol = self.create_sandbox_protocol(sandbox_id, api)
+        return protocol
+
+    def _process_in_sandbox(self, sandbox_protocol, api_callback):
         sandbox_protocol.spawn()
 
         def on_start(_result):
-            api.sandbox_init()
-            api_callback(sandbox_protocol)
+            sandbox_protocol.api.sandbox_init()
+            api_callback()
             d = sandbox_protocol.done()
             d.addErrback(log.error)
             return d
@@ -613,23 +690,25 @@ class Sandbox(ApplicationWorker):
         d.addCallbacks(on_start, log.error)
         return d
 
+    @inlineCallbacks
     def process_message_in_sandbox(self, msg):
-        sandbox_id = self.sandbox_id_for_message(msg)
-        api = self.create_sandbox_api()
+        sandbox_protocol = yield self.sandbox_protocol_for_message(msg)
 
-        def sandbox_init(sandbox):
-            api.sandbox_inbound_message(msg)
+        def sandbox_init():
+            sandbox_protocol.api.sandbox_inbound_message(msg)
 
-        return self._process_in_sandbox(sandbox_id, api, sandbox_init)
+        status = yield self._process_in_sandbox(sandbox_protocol, sandbox_init)
+        returnValue(status)
 
+    @inlineCallbacks
     def process_event_in_sandbox(self, event):
-        sandbox_id = self.sandbox_id_for_event(event)
-        api = self.create_sandbox_api()
+        sandbox_protocol = yield self.sandbox_protocol_for_message(event)
 
-        def sandbox_init(sandbox):
-            api.sandbox_inbound_event(event)
+        def sandbox_init():
+            sandbox_protocol.api.sandbox_inbound_event(event)
 
-        return self._process_in_sandbox(sandbox_id, api, sandbox_init)
+        status = yield self._process_in_sandbox(sandbox_protocol, sandbox_init)
+        returnValue(status)
 
     def consume_user_message(self, msg):
         return self.process_message_in_sandbox(msg)
@@ -640,8 +719,100 @@ class Sandbox(ApplicationWorker):
     def consume_ack(self, event):
         return self.process_event_in_sandbox(event)
 
+    def consume_nack(self, event):
+        return self.process_event_in_sandbox(event)
+
     def consume_delivery_report(self, event):
         return self.process_event_in_sandbox(event)
+
+
+class JsSandbox(Sandbox):
+    """
+    Configuration options:
+
+    As for :class:`Sandbox` except:
+
+    * `executable` defaults to searching for a `node.js` binary.
+    * `args` defaults to the JS sandbox script in :module:`vumi.application`.
+    * An instance of :class:`JsSandboxResource` is added to the sandbox
+      resources under the name `js` if no `js` resource exists.
+    * An instance of :class:`LoggingResource` is added to the sandbox
+      resources under the name `log` if no `log` resource exists.
+    * An extra 'javascript' parameter specifies the javascript to execute.
+    * An extra optional 'app_context' parameter specifying a custom
+      context for the 'javascript' application to execute with.
+
+    Example 'javascript' that logs information via the sandbox API
+    (provided as 'this' to 'on_inbound_message') and checks that logging
+    was successful::
+
+        api.on_inbound_message = function(command) {
+            this.log_info("From command: inbound-message", function (reply) {
+                this.log_info("Log successful: " + reply.success);
+                this.done();
+            });
+        }
+
+    Example 'app_context' that makes the Node.js 'path' module
+    available under the name 'path' in the context that the sandboxed
+    javascript executes in::
+
+        {path: require('path')}
+    """
+
+    POSSIBLE_NODEJS_EXECUTABLES = [
+        '/usr/local/bin/node',
+        '/usr/local/bin/nodejs',
+        '/usr/bin/node',
+        '/usr/bin/nodejs',
+    ]
+
+    @classmethod
+    def find_nodejs(cls):
+        for path in cls.POSSIBLE_NODEJS_EXECUTABLES:
+            if os.path.isfile(path):
+                return path
+        return None
+
+    @classmethod
+    def find_sandbox_js(cls):
+        return pkg_resources.resource_filename('vumi.application',
+                                               'sandboxer.js')
+
+    def get_js_resource(self):
+        return JsSandboxResource('js', self, {})
+
+    def get_log_resource(self):
+        return LoggingResource('log', self, {})
+
+    def javascript_for_api(self, api):
+        """Called by JsSandboxResource.
+
+        :returns: String containing Javascript for the app to run.
+        """
+        return self.config.get('javascript', None)
+
+    def app_context_for_api(self, api):
+        """Called by JsSandboxResource
+
+        :returns: String containing Javascript expression that returns
+        addition context for the namespace the app is being run
+        in. This Javascript is expected to be trusted code.
+        """
+        return self.config.get('app_context', None)
+
+    def validate_config(self):
+        super(JsSandbox, self).validate_config()
+        if self.config.get("executable") is None:
+            self.executable = self.find_nodejs()
+        # We have to reset this even if we already have args from the config
+        # because self.executable may have changed.
+        self.args = [self.executable] + self.config.get(
+            "args", [self.find_sandbox_js()])
+        if 'js' not in self.resources.resources:
+            self.resources.add_resource('js', self.get_js_resource())
+        if 'log' not in self.resources.resources:
+            self.resources.add_resource('log', self.get_log_resource())
 
 
 if __name__ == "__main__":

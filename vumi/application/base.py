@@ -67,10 +67,12 @@ class ApplicationWorker(Worker):
         self._consumers = []
         self._validate_config()
         self.transport_name = self.config['transport_name']
+        self.amqp_prefetch_count = self.config.get('amqp_prefetch_count', 20)
         self.send_to_options = self.config.get('send_to', {})
 
         self._event_handlers = {
             'ack': self.consume_ack,
+            'nack': self.consume_nack,
             'delivery_report': self.consume_delivery_report,
             }
         self._session_handlers = {
@@ -84,6 +86,10 @@ class ApplicationWorker(Worker):
 
         yield self.setup_application()
 
+        # Apply pre-fetch limits if we need to.
+        if self.amqp_prefetch_count is not None:
+            yield self._setup_amqp_qos()
+
         if self.start_message_consumer:
             yield self._setup_transport_consumer()
             yield self._setup_event_consumer()
@@ -94,6 +100,7 @@ class ApplicationWorker(Worker):
             consumer = self._consumers.pop()
             yield consumer.stop()
         yield self.teardown_application()
+        yield self.teardown_middleware()
 
     def _validate_config(self):
         if 'transport_name' not in self.config:
@@ -143,6 +150,15 @@ class ApplicationWorker(Worker):
         middlewares = yield setup_middlewares_from_config(self, self.config)
         self._middlewares = MiddlewareStack(middlewares)
 
+    def teardown_middleware(self):
+        """
+        Middleware teardown happens here.
+
+        Subclasses should not override this unless they need to do nonstandard
+        middleware teardown.
+        """
+        return self._middlewares.teardown()
+
     def _dispatch_event_raw(self, event):
         event_type = event.get('event_type')
         handler = self._event_handlers.get(event_type,
@@ -161,6 +177,10 @@ class ApplicationWorker(Worker):
 
     def consume_ack(self, event):
         """Handle an ack message."""
+        pass
+
+    def consume_nack(self, event):
+        """Handle a nack message"""
         pass
 
     def consume_delivery_report(self, event):
@@ -223,22 +243,34 @@ class ApplicationWorker(Worker):
         return self._publish_message(msg)
 
     @inlineCallbacks
+    def setup_transport_connection(self, endpoint_name, transport_name,
+                                   message_consumer, event_consumer):
+        consumer = yield self.consume(
+            '%s.inbound' % (transport_name,), message_consumer,
+            message_class=TransportUserMessage, paused=True)
+        event_consumer = yield self.consume(
+            '%s.event' % (transport_name,), event_consumer,
+            message_class=TransportEvent, paused=True)
+        publisher = yield self.publish_to('%s.outbound' % (transport_name,))
+
+        self._consumers.extend([consumer, event_consumer])
+        setattr(self, '%s_publisher' % (endpoint_name,), publisher)
+        setattr(self, '%s_consumer' % (endpoint_name,), consumer)
+        setattr(self, '%s_event_consumer' % (endpoint_name,), event_consumer)
+
     def _setup_transport_publisher(self):
-        self.transport_publisher = yield self.publish_to(
-            '%(transport_name)s.outbound' % self.config)
+        return self.setup_transport_connection(
+            'transport', self.config['transport_name'],
+            self.dispatch_user_message, self.dispatch_event)
 
-    @inlineCallbacks
     def _setup_transport_consumer(self):
-        self.transport_consumer = yield self.consume(
-            '%(transport_name)s.inbound' % self.config,
-            self.dispatch_user_message,
-            message_class=TransportUserMessage)
-        self._consumers.append(self.transport_consumer)
+        return self.transport_consumer.unpause()
+
+    def _setup_event_consumer(self):
+        return self.transport_event_consumer.unpause()
 
     @inlineCallbacks
-    def _setup_event_consumer(self):
-        self.transport_event_consumer = yield self.consume(
-            '%(transport_name)s.event' % self.config,
-            self.dispatch_event,
-            message_class=TransportEvent)
-        self._consumers.append(self.transport_event_consumer)
+    def _setup_amqp_qos(self):
+        for consumer in self._consumers:
+            yield consumer.channel.basic_qos(
+                0, int(self.amqp_prefetch_count), False)

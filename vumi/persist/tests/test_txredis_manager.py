@@ -20,12 +20,12 @@ class RedisManagerTestCase(TestCase):
         yield self.manager._close()
 
     def test_key_unkey(self):
-        self.assertEqual('redistest#foo', self.manager._key('foo'))
-        self.assertEqual('foo', self.manager._unkey('redistest#foo'))
-        self.assertEqual('redistest#redistest#foo',
-                         self.manager._key('redistest#foo'))
-        self.assertEqual('redistest#foo',
-                         self.manager._unkey('redistest#redistest#foo'))
+        self.assertEqual('redistest:foo', self.manager._key('foo'))
+        self.assertEqual('foo', self.manager._unkey('redistest:foo'))
+        self.assertEqual('redistest:redistest:foo',
+                         self.manager._key('redistest:foo'))
+        self.assertEqual('redistest:foo',
+                         self.manager._unkey('redistest:redistest:foo'))
 
     @inlineCallbacks
     def test_set_get_keys(self):
