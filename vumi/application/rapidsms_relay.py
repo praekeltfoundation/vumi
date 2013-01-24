@@ -1,4 +1,5 @@
 # -*- test-case-name: vumi.application.tests.test_rapidsms_relay -*-
+import json
 from urllib import urlencode
 from base64 import b64encode
 
@@ -125,22 +126,19 @@ class RapidSMSRelay(ApplicationWorker):
         # TODO: handle username and password?
         # user=my_username
         # password=my_password
-        to_addr = request.args['id'][0].decode('utf-8')
-        content = request.args['text'][0].decode('utf-8')
-        return self.send_to(to_addr, content)
+        # TODO: handle case of sending to many recipients,
+        #       e.g. data['to_addr'] contains > 1 addr
+        # TODO: if RapidSMS sends back 'in_reply_to', will that help Vumi?
+        data = json.loads(request.content.read())
+        return self.send_to(data['to_addr'][0], data['content'])
 
     def _call_rapidsms(self, message):
         headers = self.get_auth_headers()
-        params = {
-            'text': message['content'] or '',
-            'id': message['from_addr'],
-        }
-        params = dict((k, v.encode('utf-8')) for k, v in params.iteritems())
-        url = "%s?%s" % (self.rapidsms_url, urlencode(params))
-        d = http_request_full(url, headers=headers)
-        d.addCallback(lambda response: log.info(response.code))
-        d.addErrback(lambda failure: log.err(failure))
-        return d
+        response = http_request_full(self.rapidsms_url,
+                            message.to_json(), headers, self.http_method)
+        response.addCallback(lambda response: log.info(response.code))
+        response.addErrback(lambda failure: log.err(failure))
+        return response
 
     def consume_user_message(self, message):
         return self._call_rapidsms(message)
