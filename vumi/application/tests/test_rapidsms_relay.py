@@ -88,14 +88,12 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
     @inlineCallbacks
     def test_rapidsms_relay_with_basic_auth(self):
         def cb(request):
-            headers = request.requestHeaders
-            auth = headers.getRawHeaders('Authorization')[0]
-            creds = auth.split(' ')[-1]
-            username, password = b64decode(creds).split(':')
-            self.assertEqual(username, 'username')
-            self.assertEqual(password, 'password')
-            self.assertEqual(request.args['text'], ['hello world'])
-            self.assertEqual(request.args['id'], ['+41791234567'])
+            self.assertEqual(request.getUser(), 'username')
+            self.assertEqual(request.getPassword(), 'password')
+            msg = TransportUserMessage.from_json(request.content.read())
+            self.assertEqual(msg['message_id'], 'abc')
+            self.assertEqual(msg['content'], 'hello world')
+            self.assertEqual(msg['from_addr'], '+41791234567')
             return 'OK'
 
         yield self.setup_resource(cb)
