@@ -66,8 +66,9 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
     @inlineCallbacks
     def test_rapidsms_relay_success(self):
         def cb(request):
-            self.assertEqual(request.args['text'], ['hello world'])
-            self.assertEqual(request.args['id'], ['+41791234567'])
+            msg = TransportUserMessage.from_json(request.content.read())
+            self.assertEqual(msg['content'], 'hello world')
+            self.assertEqual(msg['from_addr'], '+41791234567')
             return 'OK'
 
         yield self.setup_resource(cb)
