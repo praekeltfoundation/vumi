@@ -1,6 +1,6 @@
 """Tests for vumi.application.rapidsms_relay."""
 
-from base64 import b64decode
+import json
 from urllib import urlencode
 
 from twisted.internet.defer import inlineCallbacks, returnValue
@@ -127,12 +127,10 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
             ])
         self.assertEqual([], self.get_dispatched_messages())
 
-    def _call_relay(self, **params):
+    def _call_relay(self, data):
         host = self.app.web_resource.getHost()
         send_url = "http://localhost:%d/send" % (host.port,)
-        params = dict((k, v.encode('utf-8')) for k, v in params.iteritems())
-        send_url = "%s?%s" % (send_url, urlencode(params))
-        return http_request_full(send_url)
+        return http_request_full(send_url, data)
 
     @inlineCallbacks
     def test_rapidsms_relay_outbound(self):
@@ -141,7 +139,11 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
                       " RapidSMS")
 
         yield self.setup_resource(cb)
-        response = yield self._call_relay(id='+123456', text='foo')
+        rapidsms_msg = {
+            'to_addr': ['+123456'],
+            'content': 'foo',
+        }
+        response = yield self._call_relay(json.dumps(rapidsms_msg))
         msg = TransportUserMessage.from_json(response.delivered_body)
         self.assertEqual([msg], self.get_dispatched_messages())
         self.assertEqual(msg['to_addr'], '+123456')
@@ -154,7 +156,11 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
                       " RapidSMS")
 
         yield self.setup_resource(cb)
-        response = yield self._call_relay(id='+123456', text=u'f\xc6r')
+        rapidsms_msg = {
+            'to_addr': ['+123456'],
+            'content': u'f\xc6r',
+        }
+        response = yield self._call_relay(json.dumps(rapidsms_msg))
         msg = TransportUserMessage.from_json(response.delivered_body)
         self.assertEqual([msg], self.get_dispatched_messages())
         self.assertEqual(msg['to_addr'], '+123456')
