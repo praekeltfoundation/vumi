@@ -1,6 +1,5 @@
 # -*- test-case-name: vumi.application.tests.test_rapidsms_relay -*-
 import json
-from urllib import urlencode
 from base64 import b64encode
 
 from twisted.internet.defer import inlineCallbacks
@@ -134,8 +133,8 @@ class RapidSMSRelay(ApplicationWorker):
 
     def _call_rapidsms(self, message):
         headers = self.get_auth_headers()
-        response = http_request_full(self.rapidsms_url,
-                            message.to_json(), headers, self.http_method)
+        response = http_request_full(self.rapidsms_url, message.to_json(),
+                                     headers, self.http_method)
         response.addCallback(lambda response: log.info(response.code))
         response.addErrback(lambda failure: log.err(failure))
         return response
