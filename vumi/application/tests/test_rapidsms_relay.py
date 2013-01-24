@@ -77,8 +77,8 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
     @inlineCallbacks
     def test_rapidsms_relay_unicode(self):
         def cb(request):
-            self.assertEqual(request.args['text'],
-                             [u'h\xc6llo'.encode('utf-8')])
+            msg = TransportUserMessage.from_json(request.content.read())
+            self.assertEqual(msg['content'], u'h\xc6llo')
             return 'OK'
 
         yield self.setup_resource(cb)
