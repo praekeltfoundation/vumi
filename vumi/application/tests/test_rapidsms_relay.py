@@ -1,7 +1,6 @@
 """Tests for vumi.application.rapidsms_relay."""
 
 import json
-from urllib import urlencode
 
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.web import http
@@ -11,7 +10,7 @@ from vumi.application.tests.test_base import ApplicationTestCase
 from vumi.tests.utils import TestResourceWorker, LogCatcher, get_stubbed_worker
 from vumi.application.rapidsms_relay import RapidSMSRelay
 from vumi.utils import http_request_full
-from vumi.message import TransportUserMessage
+from vumi.message import TransportUserMessage, from_json
 
 
 class TestResource(Resource):
@@ -62,6 +61,11 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
         self._workers.append(w)
         yield w.startWorker()
         returnValue(w)
+
+    def get_response_msgs(self, response):
+        payloads = from_json(response.delivered_body)
+        return [TransportUserMessage(_process_fields=False, **payload)
+                for payload in payloads]
 
     @inlineCallbacks
     def test_rapidsms_relay_success(self):
@@ -144,7 +148,7 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
             'content': 'foo',
         }
         response = yield self._call_relay(json.dumps(rapidsms_msg))
-        msg = TransportUserMessage.from_json(response.delivered_body)
+        [msg] = self.get_response_msgs(response)
         self.assertEqual([msg], self.get_dispatched_messages())
         self.assertEqual(msg['to_addr'], '+123456')
         self.assertEqual(msg['content'], 'foo')
@@ -161,7 +165,28 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
             'content': u'f\xc6r',
         }
         response = yield self._call_relay(json.dumps(rapidsms_msg))
-        msg = TransportUserMessage.from_json(response.delivered_body)
+        [msg] = self.get_response_msgs(response)
         self.assertEqual([msg], self.get_dispatched_messages())
         self.assertEqual(msg['to_addr'], '+123456')
         self.assertEqual(msg['content'], u'f\xc6r')
+
+    @inlineCallbacks
+    def test_rapidsms_relay_multiple_outbound(self):
+        def cb(request):
+            self.fail("RapidSMS relay should not send outbound messages to"
+                      " RapidSMS")
+
+        yield self.setup_resource(cb)
+        addresses = ['+123456', '+678901']
+        rapidsms_msg = {
+            'to_addr': addresses,
+            'content': 'foo',
+        }
+        response = yield self._call_relay(json.dumps(rapidsms_msg))
+        response_msgs = self.get_response_msgs(response)
+        msgs = self.get_dispatched_messages()
+        for msg, response_msg, to_addr in zip(msgs, response_msgs, addresses):
+            self.assertEqual(msg, response_msg)
+            self.assertEqual(msg['to_addr'], to_addr)
+            self.assertEqual(msg['content'], 'foo')
+        self.assertEqual(len(msgs), 2)

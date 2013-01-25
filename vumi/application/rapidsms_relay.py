@@ -2,12 +2,13 @@
 import json
 from base64 import b64encode
 
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import inlineCallbacks, DeferredList
 from twisted.web import http
 from twisted.web.resource import Resource
 from twisted.web.server import NOT_DONE_YET
 
 from vumi.application.base import ApplicationWorker
+from vumi.message import to_json
 from vumi.utils import http_request_full
 from vumi.errors import ConfigError
 from vumi import log
@@ -29,16 +30,16 @@ class SendResource(Resource):
         self.application = application
         Resource.__init__(self)
 
-    def finish_request(self, request, msg):
+    def finish_request(self, request, msgs):
         request.setResponseCode(http.OK)
-        request.write(msg.to_json())
+        request.write(to_json([msg.payload for msg in msgs]))
         request.finish()
 
     def render_(self, request):
         log.msg("Send request: %s" % (request,))
         request.setHeader("content-type", "application/json")
         d = self.application.handle_raw_outbound_message(request)
-        d.addCallback(lambda msg: self.finish_request(request, msg))
+        d.addCallback(lambda msgs: self.finish_request(request, msgs))
         return NOT_DONE_YET
 
     def render_PUT(self, request):
@@ -125,11 +126,15 @@ class RapidSMSRelay(ApplicationWorker):
         # TODO: handle username and password?
         # user=my_username
         # password=my_password
-        # TODO: handle case of sending to many recipients,
-        #       e.g. data['to_addr'] contains > 1 addr
         # TODO: if RapidSMS sends back 'in_reply_to', will that help Vumi?
         data = json.loads(request.content.read())
-        return self.send_to(data['to_addr'][0], data['content'])
+        content = data['content']
+        sends = []
+        for to_addr in data['to_addr']:
+            sends.append(self.send_to(to_addr, content))
+        d = DeferredList(sends, consumeErrors=True)
+        d.addCallback(lambda msgs: [msg[1] for msg in msgs if msg[0]])
+        return d
 
     def _call_rapidsms(self, message):
         headers = self.get_auth_headers()
