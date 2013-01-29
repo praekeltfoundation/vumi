@@ -401,6 +401,15 @@ class RedisResource(SandboxResource):
         returnValue(self.reply(command, success=True,
                                existed=existed))
 
+    @inlineCallbacks
+    def handle_incr(self, api, command):
+        key = self._sandboxed_key(api.sandbox_id, command.get('key'))
+        if not (yield self.check_keys(api.sandbox_id, key)):
+            returnValue(command.reply("Too many keys"))
+        amount = command.get('amount', 1)
+        value = yield self.redis.incr(key, amount=amount)
+        returnValue(self.reply(command, value=int(value), success=True))
+
 
 class OutboundResource(SandboxResource):
     """Resource that provides the ability to send outbound messages.

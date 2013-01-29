@@ -465,6 +465,16 @@ class TestRedisResource(ResourceTestCaseBase, PersistenceMixin):
                          None)
         self.assertEqual((yield self.r_server.get('count#test_id')), '0')
 
+    @inlineCallbacks
+    def test_handle_incr_create(self):
+        reply = yield self.dispatch_command('incr', key='foo', amount=2)
+        self.assertEqual(reply['success'], True)
+        self.assertEqual(reply['value'], 2)
+        self.assertEqual((yield
+                          self.r_server.get('sandboxes#test_id#foo')),
+                         '2')
+        self.assertEqual((yield self.r_server.get('count#test_id')), '1')
+
 
 class TestOutboundResource(ResourceTestCaseBase):
 
