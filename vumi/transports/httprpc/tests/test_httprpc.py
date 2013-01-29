@@ -126,3 +126,67 @@ class TestJSONTransport(TransportTestCase):
         yield self.dispatch(rep)
         response = yield d
         self.assertEqual(response, '{"content": "bye"}')
+
+
+class CustomOutboundTransport(HttpRpcTransport):
+    RESPONSE_HEADERS = {
+        'Darth-Vader': 'Anakin Skywalker',
+        'Admiral-Ackbar': 'Its a trap!'
+    }
+
+    def handle_raw_inbound_message(self, msgid, request):
+        self.publish_message(
+                message_id=msgid,
+                content='',
+                to_addr='',
+                from_addr='',
+                provider='',
+                session_event=TransportUserMessage.SESSION_NEW,
+                transport_name=self.transport_name,
+                transport_type=self.config.get('transport_type'),
+                transport_metadata={},
+                )
+
+    @inlineCallbacks
+    def handle_outbound_message(self, message):
+            self.finish_request(
+                    message.payload['in_reply_to'],
+                    message.payload['content'].encode('utf-8'),
+                    headers=self.RESPONSE_HEADERS)
+
+            yield self.publish_ack(
+                user_message_id=message['message_id'],
+                sent_message_id=message['message_id'])
+
+
+class TestCustomOutboundTransport(TransportTestCase):
+    transport_class = CustomOutboundTransport
+
+    @inlineCallbacks
+    def setUp(self):
+        yield super(TestCustomOutboundTransport, self).setUp()
+        config = {
+            'web_path': "foo",
+            'web_port': 0,
+            'username': 'testuser',
+            'password': 'testpass',
+            }
+        self.transport = yield self.get_transport(config)
+        self.transport_url = self.transport.get_transport_url()
+
+    @inlineCallbacks
+    def test_optional_headers(self):
+        d = http_request_full(self.transport_url + "foo", '', method='GET')
+        [msg] = yield self.wait_for_dispatched_messages(1)
+
+        tum = TransportUserMessage(**msg.payload)
+        rep = tum.reply("OK")
+        yield self.dispatch(rep)
+
+        response = yield d
+        self.assertEqual(
+            response.headers.getRawHeaders('Darth-Vader'),
+            ['Anakin Skywalker'])
+        self.assertEqual(
+            response.headers.getRawHeaders('Admiral-Ackbar'),
+            ['Its a trap!'])
