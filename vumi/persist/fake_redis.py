@@ -132,6 +132,15 @@ class FakeRedis(object):
         self.set.sync(self, key, new_value)
         return new_value
 
+    @maybe_async
+    def decr(self, key, amount=1):
+        old_value = self._data.get(key)
+        if old_value is None:
+            old_value = 0
+        new_value = int(old_value) - amount
+        self.set.sync(self, key, new_value)
+        return new_value
+
     # Hash operations
 
     @maybe_async
