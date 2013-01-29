@@ -364,6 +364,10 @@ class RedisResource(SandboxResource):
     def _sandboxed_key(self, sandbox_id, key):
         return "#".join(["sandboxes", sandbox_id, key])
 
+    def _too_many_keys(self, command):
+        return self.reply(command, success=False,
+                          reason="Too many keys")
+
     @inlineCallbacks
     def check_keys(self, sandbox_id, key):
         if (yield self.redis.exists(key)):
@@ -378,7 +382,7 @@ class RedisResource(SandboxResource):
     def handle_set(self, api, command):
         key = self._sandboxed_key(api.sandbox_id, command.get('key'))
         if not (yield self.check_keys(api.sandbox_id, key)):
-            returnValue(command.reply("Too many keys"))
+            returnValue(self._too_many_keys(command))
         value = command.get('value')
         yield self.redis.set(key, json.dumps(value))
         returnValue(self.reply(command, success=True))
@@ -405,9 +409,12 @@ class RedisResource(SandboxResource):
     def handle_incr(self, api, command):
         key = self._sandboxed_key(api.sandbox_id, command.get('key'))
         if not (yield self.check_keys(api.sandbox_id, key)):
-            returnValue(command.reply("Too many keys"))
+            returnValue(self._too_many_keys(command))
         amount = command.get('amount', 1)
-        value = yield self.redis.incr(key, amount=amount)
+        try:
+            value = yield self.redis.incr(key, amount=amount)
+        except Exception, e:
+            returnValue(self.reply(command, success=False, reason=unicode(e)))
         returnValue(self.reply(command, value=int(value), success=True))
 
 
