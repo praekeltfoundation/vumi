@@ -195,8 +195,8 @@ class HttpRpcTransport(Transport):
             repr(data),))
         request = self.get_request(request_id)
         if request:
-            for header_name, header_value in headers.iteritems():
-                request.setHeader(header_name, header_value)
+            for h_name, h_value in headers.iteritems():
+                request.responseHeaders.setRawHeaders(h_name, [h_value])
             request.setResponseCode(code)
             request.write(data)
             request.finish()

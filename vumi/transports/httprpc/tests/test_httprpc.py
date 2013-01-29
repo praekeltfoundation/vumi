@@ -128,35 +128,17 @@ class TestJSONTransport(TransportTestCase):
         self.assertEqual(response, '{"content": "bye"}')
 
 
-class CustomOutboundTransport(HttpRpcTransport):
+class CustomOutboundTransport(OkTransport):
     RESPONSE_HEADERS = {
         'Darth-Vader': 'Anakin Skywalker',
         'Admiral-Ackbar': 'Its a trap!'
     }
 
-    def handle_raw_inbound_message(self, msgid, request):
-        self.publish_message(
-                message_id=msgid,
-                content='',
-                to_addr='',
-                from_addr='',
-                provider='',
-                session_event=TransportUserMessage.SESSION_NEW,
-                transport_name=self.transport_name,
-                transport_type=self.config.get('transport_type'),
-                transport_metadata={},
-                )
-
-    @inlineCallbacks
     def handle_outbound_message(self, message):
-            self.finish_request(
-                    message.payload['in_reply_to'],
-                    message.payload['content'].encode('utf-8'),
-                    headers=self.RESPONSE_HEADERS)
-
-            yield self.publish_ack(
-                user_message_id=message['message_id'],
-                sent_message_id=message['message_id'])
+        self.finish_request(
+                message.payload['in_reply_to'],
+                message.payload['content'].encode('utf-8'),
+                headers=self.RESPONSE_HEADERS)
 
 
 class TestCustomOutboundTransport(TransportTestCase):
