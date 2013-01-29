@@ -403,6 +403,10 @@ class ResourceTestCaseBase(TestCase):
             raise ValueError("Create a resource before"
                              " calling dispatch_command")
         msg = SandboxCommand(cmd=cmd, **kwargs)
+        # round-trip message to get something more similar
+        # to what would be returned by a real sandbox when
+        # msgs are loaded from JSON.
+        msg = SandboxCommand.from_json(msg.to_json())
         return self.resource.dispatch_request(self.api, msg)
 
 
@@ -426,40 +430,91 @@ class TestRedisResource(ResourceTestCaseBase, PersistenceMixin):
         yield super(TestRedisResource, self).tearDown()
         yield self._persist_tearDown()
 
+    def check_reply(self, reply, success=True, **kw):
+        self.assertEqual(reply['success'], success)
+        for key, expected_value in kw.iteritems():
+            self.assertEqual(reply[key], expected_value)
+
+    @inlineCallbacks
+    def create_metric(self, metric, value, total_count=1):
+        metric_key = 'sandboxes#test_id#' + metric
+        count_key = 'count#test_id'
+        yield self.r_server.set(metric_key, value)
+        yield self.r_server.set(count_key, total_count)
+
+    @inlineCallbacks
+    def check_metric(self, metric, value, total_count):
+        metric_key = 'sandboxes#test_id#' + metric
+        count_key = 'count#test_id'
+        self.assertEqual((yield self.r_server.get(metric_key)), value)
+        self.assertEqual((yield self.r_server.get(count_key)),
+                         str(total_count))
+
     @inlineCallbacks
     def test_handle_set(self):
         reply = yield self.dispatch_command('set', key='foo', value='bar')
-        self.assertEqual(reply['success'], True)
-        self.assertEqual((yield
-                          self.r_server.get('sandboxes#test_id#foo')),
-                         json.dumps('bar'))
-        self.assertEqual((yield self.r_server.get('count#test_id')), '1')
+        self.check_reply(reply, success=True)
+        yield self.check_metric('foo', json.dumps('bar'), 1)
+
+    @inlineCallbacks
+    def test_handle_set_too_many(self):
+        yield self.create_metric('foo', 'a', total_count=100)
+        reply = yield self.dispatch_command('set', key='bar', value='bar')
+        self.check_reply(reply, success=False, reason='Too many keys')
+        yield self.check_metric('bar', None, 100)
 
     @inlineCallbacks
     def test_handle_get(self):
-        yield self.r_server.set('sandboxes#test_id#foo', json.dumps('bar'))
+        yield self.create_metric('foo', json.dumps('bar'))
         reply = yield self.dispatch_command('get', key='foo')
-        self.assertEqual(reply['success'], True)
-        self.assertEqual(reply['value'], 'bar')
+        self.check_reply(reply, success=True, value='bar')
 
     @inlineCallbacks
     def test_handle_get_for_unknown_key(self):
         reply = yield self.dispatch_command('get', key='foo')
-        self.assertEqual(reply['success'], True)
-        self.assertEqual(reply['value'], None)
+        self.check_reply(reply, success=True, value=None)
 
     @inlineCallbacks
     def test_handle_delete(self):
-        yield self.r_server.set('sandboxes#test_id#foo',
-                                json.dumps('bar'))
+        self.create_metric('foo', json.dumps('bar'))
         yield self.r_server.set('count#test_id', '1')
         reply = yield self.dispatch_command('delete', key='foo')
-        self.assertEqual(reply['success'], True)
-        self.assertEqual(reply['existed'], True)
-        self.assertEqual((yield
-                          self.r_server.get('sandboxes#test_id#foo')),
-                         None)
-        self.assertEqual((yield self.r_server.get('count#test_id')), '0')
+        self.check_reply(reply, success=True, existed=True)
+        yield self.check_metric('foo', None, 0)
+
+    @inlineCallbacks
+    def test_handle_incr_default_amount(self):
+        reply = yield self.dispatch_command('incr', key='foo')
+        self.check_reply(reply, success=True, value=1)
+        yield self.check_metric('foo', '1', 1)
+
+    @inlineCallbacks
+    def test_handle_incr_create(self):
+        reply = yield self.dispatch_command('incr', key='foo', amount=2)
+        self.check_reply(reply, success=True, value=2)
+        yield self.check_metric('foo', '2', 1)
+
+    @inlineCallbacks
+    def test_handle_incr_existing(self):
+        self.create_metric('foo', '2')
+        reply = yield self.dispatch_command('incr', key='foo', amount=2)
+        self.check_reply(reply, success=True, value=4)
+        yield self.check_metric('foo', '4', 1)
+
+    @inlineCallbacks
+    def test_handle_incr_existing_non_int(self):
+        self.create_metric('foo', 'a')
+        reply = yield self.dispatch_command('incr', key='foo', amount=2)
+        self.check_reply(reply, success=False)
+        self.assertTrue(reply['reason'])
+        yield self.check_metric('foo', 'a', 1)
+
+    @inlineCallbacks
+    def test_handle_incr_too_many_keys(self):
+        yield self.create_metric('foo', 'a', total_count=100)
+        reply = yield self.dispatch_command('incr', key='bar', amount=2)
+        self.check_reply(reply, success=False, reason='Too many keys')
+        yield self.check_metric('bar', None, 100)
 
 
 class TestOutboundResource(ResourceTestCaseBase):
@@ -578,6 +633,9 @@ class TestHttpClientResource(ResourceTestCaseBase):
         response.code = code
         self._next_http_request_result = succeed(response)
 
+    def assert_not_unicode(self, arg):
+        self.assertFalse(isinstance(arg, unicode))
+
     def assert_http_request(self, url, method='GET', headers={}, data=None,
                             timeout=None, data_limit=None):
         timeout = (timeout if timeout is not None
@@ -589,6 +647,13 @@ class TestHttpClientResource(ResourceTestCaseBase):
                   timeout=timeout, data_limit=data_limit)
         [(actual_args, actual_kw)] = self._http_requests
         self.assertEqual((actual_args, actual_kw), (args, kw))
+
+        self.assert_not_unicode(actual_args[0])
+        self.assert_not_unicode(actual_kw.get('data'))
+        for key, values in actual_kw.get('headers', {}).items():
+            self.assert_not_unicode(key)
+            for value in values:
+                self.assert_not_unicode(value)
 
     @inlineCallbacks
     def test_handle_get(self):

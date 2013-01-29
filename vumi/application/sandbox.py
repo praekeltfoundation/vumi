@@ -364,6 +364,10 @@ class RedisResource(SandboxResource):
     def _sandboxed_key(self, sandbox_id, key):
         return "#".join(["sandboxes", sandbox_id, key])
 
+    def _too_many_keys(self, command):
+        return self.reply(command, success=False,
+                          reason="Too many keys")
+
     @inlineCallbacks
     def check_keys(self, sandbox_id, key):
         if (yield self.redis.exists(key)):
@@ -378,7 +382,7 @@ class RedisResource(SandboxResource):
     def handle_set(self, api, command):
         key = self._sandboxed_key(api.sandbox_id, command.get('key'))
         if not (yield self.check_keys(api.sandbox_id, key)):
-            returnValue(command.reply("Too many keys"))
+            returnValue(self._too_many_keys(command))
         value = command.get('value')
         yield self.redis.set(key, json.dumps(value))
         returnValue(self.reply(command, success=True))
@@ -400,6 +404,18 @@ class RedisResource(SandboxResource):
             yield self.redis.incr(count_key, -1)
         returnValue(self.reply(command, success=True,
                                existed=existed))
+
+    @inlineCallbacks
+    def handle_incr(self, api, command):
+        key = self._sandboxed_key(api.sandbox_id, command.get('key'))
+        if not (yield self.check_keys(api.sandbox_id, key)):
+            returnValue(self._too_many_keys(command))
+        amount = command.get('amount', 1)
+        try:
+            value = yield self.redis.incr(key, amount=amount)
+        except Exception, e:
+            returnValue(self.reply(command, success=False, reason=unicode(e)))
+        returnValue(self.reply(command, value=int(value), success=True))
 
 
 class OutboundResource(SandboxResource):
@@ -468,8 +484,13 @@ class HttpClientResource(SandboxResource):
         if not isinstance(url, basestring):
             return succeed(self.reply(command, success=False,
                                       reason="No URL given"))
+        url = url.encode("utf-8")
         headers = command.get('headers', {})
+        headers = dict((k.encode("utf-8"), [x.encode("utf-8") for x in v])
+                       for k, v in headers.items())
         data = command.get('data', None)
+        if data is not None:
+            data = data.encode("utf-8")
         d = http_request_full(url, data=data, headers=headers,
                               method=method, timeout=self.timeout,
                               data_limit=self.data_limit)
