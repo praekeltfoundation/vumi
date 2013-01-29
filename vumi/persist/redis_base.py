@@ -209,14 +209,12 @@ class Manager(object):
     setnx = RedisCall(['key', 'value'])
     delete = RedisCall(['key'])
     setex = RedisCall(['key', 'seconds', 'value'])
-    incr = RedisCall(['key'])
-    incrby = RedisCall(['key', 'increment'])
-    decr = RedisCall(['key'])
-    decrby = RedisCall(['key', 'decrement'])
 
     # Integer operations
-
     incr = RedisCall(['key', 'amount'], defaults=[1])
+    incrby = RedisCall(['key', 'amount'])
+    decr = RedisCall(['key', 'amount'], defaults=[1])
+    decrby = RedisCall(['key', 'amount'])
 
     # Hash operations
 
