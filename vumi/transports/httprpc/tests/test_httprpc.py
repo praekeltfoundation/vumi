@@ -130,8 +130,8 @@ class TestJSONTransport(TransportTestCase):
 
 class CustomOutboundTransport(OkTransport):
     RESPONSE_HEADERS = {
-        'Darth-Vader': ['Anakin Skywalker'],
-        'Admiral-Ackbar': ['Its a trap!', 'Shark']
+        'Darth-Vader': ["Anakin Skywalker"],
+        'Admiral-Ackbar': ["It's a trap!", "Shark"]
     }
 
     def handle_outbound_message(self, message):
@@ -168,7 +168,7 @@ class TestCustomOutboundTransport(TransportTestCase):
         response = yield d
         self.assertEqual(
             response.headers.getRawHeaders('Darth-Vader'),
-            ['Anakin Skywalker'])
+            ["Anakin Skywalker"])
         self.assertEqual(
             response.headers.getRawHeaders('Admiral-Ackbar'),
-            ['Its a trap!', 'Shark'])
+            ["It's a trap!", "Shark"])
