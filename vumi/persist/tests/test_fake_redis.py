@@ -31,6 +31,28 @@ class FakeRedisTestCase(TestCase):
         yield self.assert_redis_op('3', 'get', "inc")
 
     @inlineCallbacks
+    def test_incrby(self):
+        yield self.redis.set("inc", 1)
+        yield self.assert_redis_op('1', 'get', "inc")
+        yield self.assert_redis_op(3, 'incr', "inc", 2)
+        yield self.assert_redis_op('3', 'get', "inc")
+
+    @inlineCallbacks
+    def test_decr(self):
+        yield self.redis.set("dec", 4)
+        yield self.assert_redis_op('4', 'get', "dec")
+        yield self.assert_redis_op(3, 'decr', "dec")
+        yield self.assert_redis_op(2, 'decr', "dec")
+        yield self.assert_redis_op('2', 'get', "dec")
+
+    @inlineCallbacks
+    def test_decrby(self):
+        yield self.redis.set("dec", 4)
+        yield self.assert_redis_op('4', 'get', "dec")
+        yield self.assert_redis_op(2, 'decr', "dec", 2)
+        yield self.assert_redis_op('2', 'get', "dec")
+
+    @inlineCallbacks
     def test_setnx(self):
         yield self.assert_redis_op(False, 'exists', "mykey")
         yield self.assert_redis_op(True, 'setnx', "mykey", "value")

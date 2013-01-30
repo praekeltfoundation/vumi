@@ -211,8 +211,10 @@ class Manager(object):
     setex = RedisCall(['key', 'seconds', 'value'])
 
     # Integer operations
-
     incr = RedisCall(['key', 'amount'], defaults=[1])
+    incrby = RedisCall(['key', 'amount'])
+    decr = RedisCall(['key', 'amount'], defaults=[1])
+    decrby = RedisCall(['key', 'amount'])
 
     # Hash operations
 
