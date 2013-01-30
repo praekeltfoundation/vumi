@@ -1,3 +1,4 @@
+import json
 from urllib import urlencode
 
 from twisted.internet.defer import inlineCallbacks
@@ -18,7 +19,7 @@ class TestImiMobileUssdTransportTestCase(TransportTestCase):
         yield super(TestImiMobileUssdTransportTestCase, self).setUp()
         self.config = {
             'web_port': 0,
-            'web_path': '/api/v1/imimobile/ussd/some-suffix',
+            'web_path': '/api/v1/imimobile/ussd/',
             'suffix_to_addrs': {
                 'some-suffix': '56263',
                 'some-other-suffix': '56264',
@@ -30,7 +31,11 @@ class TestImiMobileUssdTransportTestCase(TransportTestCase):
             self.config['web_path'])
         yield self.session_manager.redis._purge_all()  # just in case
 
-    def mk_request(self, **params):
+    def mk_full_request(self, suffix, **params):
+        return http_request_full('%s?%s' % (self.transport_url + suffix,
+            urlencode(params)), data='/api/v1/imimobile/ussd/', method='GET')
+
+    def mk_request(self, suffix, **params):
         defaults = {
             'msisdn': '9221234567',
             'sms': 'Spam Spam Spam Spam Spammity Spam',
@@ -39,15 +44,13 @@ class TestImiMobileUssdTransportTestCase(TransportTestCase):
             'datetime': '1/26/2013 10:00:01 am'
         }
         defaults.update(params)
-
-        return http_request_full('%s?%s' % (self.transport_url,
-            urlencode(defaults)), data='', method='GET')
+        return self.mk_full_request(suffix, **defaults)
 
     @inlineCallbacks
     def test_inbound_begin(self):
         # Second connect is the actual start of the session
         user_content = "Who are you?"
-        deferred = self.mk_request(sms=user_content)
+        d = self.mk_request('some-suffix', sms=user_content)
         [msg] = yield self.wait_for_dispatched_messages(1)
         self.assertEqual(msg['content'], user_content)
         self.assertEqual(msg['to_addr'], '56263')
@@ -65,7 +68,7 @@ class TestImiMobileUssdTransportTestCase(TransportTestCase):
         reply_content = "We are the Knights Who Say ... Ni!"
         reply = TransportUserMessage(**msg.payload).reply(reply_content)
         self.dispatch(reply)
-        response = yield deferred
+        response = yield d
         self.assertEqual(response.delivered_body, reply_content)
         self.assertEqual(
             response.headers.getRawHeaders('X-USSD-SESSION'), ['1'])
@@ -79,7 +82,7 @@ class TestImiMobileUssdTransportTestCase(TransportTestCase):
             '9221234567', to_addr='56263', from_addr='9221234567')
 
         user_content = "Well, what is it you want?"
-        deferred = self.mk_request(sms=user_content)
+        d = self.mk_request('some-suffix', sms=user_content)
         [msg] = yield self.wait_for_dispatched_messages(1)
         self.assertEqual(msg['content'], user_content)
         self.assertEqual(msg['to_addr'], '56263')
@@ -98,7 +101,38 @@ class TestImiMobileUssdTransportTestCase(TransportTestCase):
         reply = TransportUserMessage(**msg.payload).reply(
             reply_content, continue_session=False)
         self.dispatch(reply)
-        response = yield deferred
+        response = yield d
         self.assertEqual(response.delivered_body, reply_content)
         self.assertEqual(
             response.headers.getRawHeaders('X-USSD-SESSION'), ['0'])
+
+    @inlineCallbacks
+    def test_request_with_unknown_suffix(self):
+        response = yield self.mk_request('unk-suffix')
+
+        self.assertEqual(
+            response.delivered_body,
+            json.dumps({'unknown_suffix': 'unk-suffix'}))
+        self.assertEqual(response.code, 400)
+
+    @inlineCallbacks
+    def test_request_with_missing_parameters(self):
+        response = yield self.mk_full_request(
+            'some-suffix', sms='', circle='', opnm='')
+
+        self.assertEqual(
+            response.delivered_body,
+            json.dumps({'missing_parameter': ['msisdn', 'datetime']}))
+        self.assertEqual(response.code, 400)
+
+    @inlineCallbacks
+    def test_request_with_unexpected_parameters(self):
+        response = yield self.mk_request(
+            'some-suffix', unexpected_p1='', unexpected_p2='')
+
+        self.assertEqual(
+            response.delivered_body,
+            json.dumps({
+                'unexpected_parameter': ['unexpected_p1', 'unexpected_p2']
+            }))
+        self.assertEqual(response.code, 400)

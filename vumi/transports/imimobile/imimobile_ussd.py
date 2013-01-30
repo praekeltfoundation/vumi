@@ -48,6 +48,21 @@ class ImiMobileUssdTransport(HttpRpcTransport):
         yield self.session_manager.stop()
         yield super(ImiMobileUssdTransport, self).teardown_transport()
 
+    def get_to_addr(self, request):
+        """
+        Extracts the request url path's suffix and uses it to obtain the tag
+        associated with the suffix. Returns a tuple consisting of the tag and
+        a dict of errors encountered.
+        """
+        errors = {}
+
+        _, suffix = request.path.rsplit('/', 1)
+        tag = self.suffix_to_addrs.get(suffix, None)
+        if tag is None:
+            errors['unknown_suffix'] = suffix
+
+        return tag, errors
+
     def get_field_values(self, request):
         """
         Parses the request params and returns a tuple consisting of a dict of
@@ -69,21 +84,6 @@ class ImiMobileUssdTransport(HttpRpcTransport):
 
         return values, errors
 
-    def get_to_addr(self, request):
-        """
-        Extracts the request url path's suffix and uses it to obtain the tag
-        associated with the suffix. Returns a tuple consisting of the tag and
-        a dict of errors encountered.
-        """
-        errors = {}
-
-        _, suffix = request.path.rsplit('/', 1)
-        tag = self.suffix_to_addrs.get(suffix, None)
-        if tag is None:
-            errors['unknown_suffix'] = suffix
-
-        return tag, errors
-
     @inlineCallbacks
     def handle_raw_inbound_message(self, message_id, request):
         errors = {}
@@ -100,8 +100,6 @@ class ImiMobileUssdTransport(HttpRpcTransport):
             return
 
         from_addr = values['msisdn']
-        content = values['sms']
-
         log.msg('ImiMobileTransport sending from %s to %s.' %
                 (from_addr, to_addr))
 
@@ -119,7 +117,7 @@ class ImiMobileUssdTransport(HttpRpcTransport):
 
         yield self.publish_message(
             message_id=message_id,
-            content=content,
+            content=values['sms'],
             to_addr=to_addr,
             from_addr=from_addr,
             provider='imimobile',
