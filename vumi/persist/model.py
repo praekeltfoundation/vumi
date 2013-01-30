@@ -207,11 +207,8 @@ class Model(object):
                                                     self.__class__))
 
     def __repr__(self):
-        str_items = ["%s=%r" % item for item in iter(self)]
+        str_items = ["%s=%r" % item for item in self.get_items()]
         return "<%s %s>" % (self.__class__.__name__, " ".join(str_items))
-
-    def __iter__(self):
-        return iter(self.get_items())
 
     def get_items(self):
         """
