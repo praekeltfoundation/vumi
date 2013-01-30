@@ -190,11 +190,13 @@ class HttpRpcTransport(Transport):
         raise NotImplementedError("Sub-classes should implement"
                                   " handle_raw_inbound_message.")
 
-    def finish_request(self, request_id, data, code=200):
+    def finish_request(self, request_id, data, code=200, headers={}):
         self.emit("HttpRpcTransport.finish_request with data: %s" % (
             repr(data),))
         request = self.get_request(request_id)
         if request:
+            for h_name, h_values in headers.iteritems():
+                request.responseHeaders.setRawHeaders(h_name, h_values)
             request.setResponseCode(code)
             request.write(data)
             request.finish()
