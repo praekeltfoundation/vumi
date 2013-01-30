@@ -41,7 +41,7 @@ class ImiMobileUssdTransport(HttpRpcTransport):
         r_prefix = "vumi.transports.imimobile_ussd:%s" % self.transport_name
         session_timeout = int(self.config.get("ussd_session_timeout", 600))
         self.session_manager = yield SessionManager.from_redis_config(
-                r_config, r_prefix, max_session_length=session_timeout)
+            r_config, r_prefix, max_session_length=session_timeout)
 
     @inlineCallbacks
     def teardown_transport(self):
