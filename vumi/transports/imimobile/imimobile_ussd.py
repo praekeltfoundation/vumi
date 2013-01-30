@@ -34,6 +34,10 @@ class ImiMobileUssdTransport(HttpRpcTransport):
     @inlineCallbacks
     def setup_transport(self):
         super(ImiMobileUssdTransport, self).setup_transport()
+
+        # Mappings between url suffixes and the tags used as the to_addr for
+        # inbound messages (e.g. shortcodes or longcodes). This is necessary
+        # since the requests from ImiMobile do not provided us with this.
         self.suffix_to_addrs = self.config['suffix_to_addrs']
 
         # configure session manager
