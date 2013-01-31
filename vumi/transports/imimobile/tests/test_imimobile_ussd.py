@@ -1,5 +1,6 @@
 import json
 from urllib import urlencode
+from datetime import datetime
 
 from twisted.internet.defer import inlineCallbacks
 
@@ -46,6 +47,10 @@ class TestImiMobileUssdTransportTestCase(TransportTestCase):
         defaults.update(params)
         return self.mk_full_request(suffix, **defaults)
 
+    def mk_reply(self, request_msg, reply_content, continue_session=True):
+        request_msg = TransportUserMessage(**request_msg.payload)
+        return request_msg.reply(reply_content, continue_session)
+
     @inlineCallbacks
     def test_inbound_begin(self):
         # Second connect is the actual start of the session
@@ -61,17 +66,22 @@ class TestImiMobileUssdTransportTestCase(TransportTestCase):
             'imimobile_ussd': {
                 'opnm': 'some-operator',
                 'circle': 'Andhra Pradesh',
-                'datetime': '1/26/2013 10:00:01 am',
+                'datetime': datetime(2013, 1, 26, 4, 30, 1),
             },
         })
 
         reply_content = "We are the Knights Who Say ... Ni!"
-        reply = TransportUserMessage(**msg.payload).reply(reply_content)
+        reply = self.mk_reply(msg, reply_content)
         self.dispatch(reply)
         response = yield d
         self.assertEqual(response.delivered_body, reply_content)
         self.assertEqual(
             response.headers.getRawHeaders('X-USSD-SESSION'), ['1'])
+
+        [ack] = yield self.wait_for_dispatched_events(1)
+        self.assertEqual(ack.payload['event_type'], 'ack')
+        self.assertEqual(ack.payload['user_message_id'], reply['message_id'])
+        self.assertEqual(ack.payload['sent_message_id'], reply['message_id'])
 
     @inlineCallbacks
     def test_inbound_resume_and_reply_with_end(self):
@@ -93,18 +103,22 @@ class TestImiMobileUssdTransportTestCase(TransportTestCase):
             'imimobile_ussd': {
                 'opnm': 'some-operator',
                 'circle': 'Andhra Pradesh',
-                'datetime': '1/26/2013 10:00:01 am',
+                'datetime': datetime(2013, 1, 26, 4, 30, 1),
             },
         })
 
         reply_content = "We want ... a shrubbery!"
-        reply = TransportUserMessage(**msg.payload).reply(
-            reply_content, continue_session=False)
+        reply = self.mk_reply(msg, reply_content, continue_session=False)
         self.dispatch(reply)
         response = yield d
         self.assertEqual(response.delivered_body, reply_content)
         self.assertEqual(
             response.headers.getRawHeaders('X-USSD-SESSION'), ['0'])
+
+        [ack] = yield self.wait_for_dispatched_events(1)
+        self.assertEqual(ack.payload['event_type'], 'ack')
+        self.assertEqual(ack.payload['user_message_id'], reply['message_id'])
+        self.assertEqual(ack.payload['sent_message_id'], reply['message_id'])
 
     @inlineCallbacks
     def test_request_with_unknown_suffix(self):
@@ -136,3 +150,44 @@ class TestImiMobileUssdTransportTestCase(TransportTestCase):
                 'unexpected_parameter': ['unexpected_p1', 'unexpected_p2']
             }))
         self.assertEqual(response.code, 400)
+
+    @inlineCallbacks
+    def test_nack_insufficient_message_fields(self):
+        msg = self.mkmsg_out(message_id='23', in_reply_to=None, content=None)
+        self.dispatch(msg)
+        [nack] = yield self.wait_for_dispatched_events(1)
+        self.assertEqual(nack.payload['event_type'], 'nack')
+        self.assertEqual(nack.payload['user_message_id'], '23')
+        self.assertEqual(nack.payload['nack_reason'],
+                         self.transport.ERRORS['INSUFFICIENT_MSG_FIELDS'])
+
+    @inlineCallbacks
+    def test_nack_http_http_response_failure(self):
+        self.patch(self.transport, 'finish_request', lambda *a, **kw: None)
+        msg = self.mkmsg_out(
+            message_id='23',
+            in_reply_to='some-number',
+            content='There are some who call me ... Tim!')
+        self.dispatch(msg)
+        [nack] = yield self.wait_for_dispatched_events(1)
+        self.assertEqual(nack.payload['event_type'], 'nack')
+        self.assertEqual(nack.payload['user_message_id'], '23')
+        self.assertEqual(nack.payload['nack_reason'],
+                         self.transport.ERRORS['RESPONSE_FAILURE'])
+
+    def test_ist_to_utc(self):
+        self.assertEqual(
+            ImiMobileUssdTransport.ist_to_utc("1/26/2013 03:30:00 pm"),
+            datetime(2013, 1, 26, 10, 0, 0))
+
+        self.assertEqual(
+            ImiMobileUssdTransport.ist_to_utc("01/29/2013 04:53:59 am"),
+            datetime(2013, 1, 28, 23, 23, 59))
+
+        self.assertEqual(
+            ImiMobileUssdTransport.ist_to_utc("01/31/2013 07:20:00 pm"),
+            datetime(2013, 1, 31, 13, 50, 0))
+
+        self.assertEqual(
+            ImiMobileUssdTransport.ist_to_utc("3/8/2013 8:5:5 am"),
+            datetime(2013, 3, 8, 2, 35, 5))

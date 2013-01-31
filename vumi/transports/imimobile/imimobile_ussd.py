@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timedelta
 
 from twisted.python import log
 from twisted.internet.defer import inlineCallbacks
@@ -30,6 +31,10 @@ class ImiMobileUssdTransport(HttpRpcTransport):
     """
 
     EXPECTED_FIELDS = set(['msisdn', 'sms', 'circle', 'opnm', 'datetime'])
+    ERRORS = {
+        'RESPONSE_FAILURE': "Response to http request failed.",
+        'INSUFFICIENT_MSG_FIELDS': "Insufficiant message fields provided.",
+    }
 
     @inlineCallbacks
     def setup_transport(self):
@@ -80,13 +85,23 @@ class ImiMobileUssdTransport(HttpRpcTransport):
             if field not in self.EXPECTED_FIELDS:
                 errors.setdefault('unexpected_parameter', []).append(field)
             else:
-                values[field] = str(request.args.get(field)[0])
+                values[field] = str(request.args.get(field)[0]).encode('utf-8')
 
         for field in self.EXPECTED_FIELDS:
             if field not in values:
                 errors.setdefault('missing_parameter', []).append(field)
 
         return values, errors
+
+    @classmethod
+    def ist_to_utc(cls, timestamp):
+        """
+        Accepts a timestamp in the format `[M]M/[D]D/YYYY HH:MM:SS (am|pm)` and
+        in India Standard Time, and returns a datetime object normalized to
+        UTC time.
+        """
+        return (datetime.strptime(timestamp, '%m/%d/%Y %I:%M:%S %p') -
+                timedelta(hours=5, minutes=30))
 
     @inlineCallbacks
     def handle_raw_inbound_message(self, message_id, request):
@@ -104,13 +119,13 @@ class ImiMobileUssdTransport(HttpRpcTransport):
             return
 
         from_addr = values['msisdn']
-        log.msg('ImiMobileTransport sending from %s to %s.' %
+        log.msg('ImiMobileTransport receiving inbound message from %s to %s.' %
                 (from_addr, to_addr))
 
-        # Imimobile do not provide any session identifier, so we are
-        # using the msisdn (from_addr) as the session id
+        # We use the msisdn (from_addr) to make a guess about the
+        # session_event.
+        # TODO: Finalise or simplify this block after integration testing
         session = yield self.session_manager.load_session(from_addr)
-
         if session:
             session_event = TransportUserMessage.SESSION_RESUME
             yield self.session_manager.save_session(from_addr, session)
@@ -131,20 +146,29 @@ class ImiMobileUssdTransport(HttpRpcTransport):
                 'imimobile_ussd': {
                     'circle': values['circle'],
                     'opnm': values['opnm'],
-                    'datetime': values['datetime'],
+                    'datetime': self.ist_to_utc(values['datetime']),
                 }
             })
 
     def handle_outbound_message(self, message):
+        error = None
+        message_id = message['message_id']
         if message.payload.get('in_reply_to') and 'content' in message.payload:
             session_has_ended = (
                 message['session_event'] == TransportUserMessage.SESSION_CLOSE)
 
-            self.finish_request(
+            response_id = self.finish_request(
                 message['in_reply_to'],
                 message['content'].encode('utf-8'),
                 headers={'X-USSD-SESSION': [0 if session_has_ended else 1]})
 
-        return self.publish_ack(
-            user_message_id=message['message_id'],
-            sent_message_id=message['message_id'])
+            if response_id is None:
+                error = self.ERRORS['RESPONSE_FAILURE']
+        else:
+            error = self.ERRORS['INSUFFICIENT_MSG_FIELDS']
+
+        if error is not None:
+            return self.publish_nack(message_id, error)
+
+        return self.publish_ack(user_message_id=message_id,
+                                sent_message_id=message_id)
