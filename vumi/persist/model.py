@@ -205,10 +205,15 @@ class Model(object):
             raise ValidationError("Unexpected extra initial fields %r passed"
                                   " to model %s" % (field_values.keys(),
                                                     self.__class__))
+        self.clean()
 
     def __repr__(self):
         str_items = ["%s=%r" % item for item in self.get_items()]
         return "<%s %s>" % (self.__class__.__name__, " ".join(str_items))
+
+    def clean(self):
+        for field_name, descriptor in self.field_descriptors.iteritems():
+            descriptor.clean(self)
 
     def get_items(self):
         """

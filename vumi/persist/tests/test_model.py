@@ -599,10 +599,14 @@ class TestModelOnTxRiak(TestCase):
         m1 = mm_model("bar")
         # Create index directly to simulate old-style index-only implementation
         m1._riak_object.add_index('simples_bin', s1.key)
+        # Manually remove the entry from the data dict to allow it to be
+        # set from the index value in descriptor.clean()
+        m1._riak_object._data.pop('simples')
+
         yield s1.save()
         yield m1.save()
 
-        m2 = yield mm_model.load("bar")
+        m2 = yield mm_model.load(m1.key)
         [s2] = yield self.load_all_bunches_flat(m2.simples)
 
         self.assertEqual(m2.simples.keys(), ["foo"])
