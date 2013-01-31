@@ -3,14 +3,16 @@
 """Basic tools for building a vumi ApplicationWorker."""
 
 import copy
+import warnings
 
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import inlineCallbacks, succeed
 from twisted.python import log
 
 from vumi.service import Worker
 from vumi.errors import ConfigError
-from vumi.message import TransportUserMessage, TransportEvent
-from vumi.middleware import MiddlewareStack, setup_middlewares_from_config
+from vumi.message import TransportUserMessage
+from vumi.middleware import setup_middlewares_from_config
+from vumi.endpoints import ReceiveInboundConnector
 
 
 SESSION_NEW = TransportUserMessage.SESSION_NEW
@@ -64,7 +66,7 @@ class ApplicationWorker(Worker):
     def startWorker(self):
         log.msg('Starting a %s worker with config: %s'
                 % (self.__class__.__name__, self.config))
-        self._consumers = []
+        self._connectors = {}
         self._validate_config()
         self.transport_name = self.config['transport_name']
         self.amqp_prefetch_count = self.config.get('amqp_prefetch_count', 20)
@@ -80,7 +82,7 @@ class ApplicationWorker(Worker):
             SESSION_CLOSE: self.close_session,
             }
 
-        yield self._setup_transport_publisher()
+        yield self.setup_transport_connector()
 
         yield self.setup_middleware()
 
@@ -88,19 +90,17 @@ class ApplicationWorker(Worker):
 
         # Apply pre-fetch limits if we need to.
         if self.amqp_prefetch_count is not None:
-            yield self._setup_amqp_qos()
+            yield self.setup_amqp_qos()
 
         if self.start_message_consumer:
-            yield self._setup_transport_consumer()
-            yield self._setup_event_consumer()
+            yield self._unpause_transport_connector()
 
     @inlineCallbacks
     def stopWorker(self):
-        while self._consumers:
-            consumer = self._consumers.pop()
-            yield consumer.stop()
+        for connector_name in self._connectors.keys():
+            connector = self._connectors.pop(connector_name)
+            yield connector.teardown()
         yield self.teardown_application()
-        yield self.teardown_middleware()
 
     def _validate_config(self):
         if 'transport_name' not in self.config:
@@ -147,17 +147,10 @@ class ApplicationWorker(Worker):
         Subclasses should not override this unless they need to do nonstandard
         middleware setup.
         """
+        # TODO: Make this more flexible
         middlewares = yield setup_middlewares_from_config(self, self.config)
-        self._middlewares = MiddlewareStack(middlewares)
-
-    def teardown_middleware(self):
-        """
-        Middleware teardown happens here.
-
-        Subclasses should not override this unless they need to do nonstandard
-        middleware teardown.
-        """
-        return self._middlewares.teardown()
+        for connector in self._connectors.values():
+            connector.set_middlewares(middlewares)
 
     def _dispatch_event_raw(self, event):
         event_type = event.get('event_type')
@@ -167,10 +160,7 @@ class ApplicationWorker(Worker):
 
     def dispatch_event(self, event):
         """Dispatch to event_type specific handlers."""
-        d = self._middlewares.apply_consume("event", event,
-                                            self.transport_name)
-        d.addCallback(self._dispatch_event_raw)
-        return d
+        return self._dispatch_event_raw(event)
 
     def consume_unknown_event(self, event):
         log.msg("Unknown event type in message %r" % (event,))
@@ -195,10 +185,7 @@ class ApplicationWorker(Worker):
 
     def dispatch_user_message(self, message):
         """Dispatch user messages to handler."""
-        d = self._middlewares.apply_consume("inbound", message,
-                                            self.transport_name)
-        d.addCallback(self._dispatch_user_message_raw)
-        return d
+        return self._dispatch_user_message_raw(message)
 
     def consume_user_message(self, message):
         """Respond to user message."""
@@ -218,16 +205,15 @@ class ApplicationWorker(Worker):
         """
         pass
 
-    def _publish_message(self, message):
-        d = self._middlewares.apply_publish("outbound", message,
-                                            self.transport_name)
-        d.addCallback(self.transport_publisher.publish_message)
-        return d
+    def _publish_message(self, message, endpoint_name=None):
+        publisher = self._connectors[self.transport_name]
+        return publisher.publish_outbound(message, endpoint_name=endpoint_name)
 
     def reply_to(self, original_message, content, continue_session=True,
                  **kws):
         reply = original_message.reply(content, continue_session, **kws)
-        return self._publish_message(reply)
+        endpoint_name = original_message.get_routing_endpoint()
+        return self._publish_message(reply, endpoint_name=endpoint_name)
 
     def reply_to_group(self, original_message, content, continue_session=True,
                        **kws):
@@ -235,6 +221,7 @@ class ApplicationWorker(Worker):
         return self._publish_message(reply)
 
     def send_to(self, to_addr, content, tag='default', **kw):
+        # FIXME: Do we do the right stuff here?
         if tag not in self.SEND_TO_TAGS:
             raise ValueError("Tag %r not defined in SEND_TO_TAGS" % (tag,))
         options = copy.deepcopy(self.send_to_options[tag])
@@ -242,35 +229,54 @@ class ApplicationWorker(Worker):
         msg = TransportUserMessage.send(to_addr, content, **options)
         return self._publish_message(msg)
 
+    def setup_connector(self, connector_name):
+        if connector_name in self._connectors:
+            log.warning("Connector %r already set up." % (connector_name,))
+            # So we always get a deferred from here.
+            return succeed(self._connectors[connector_name])
+        connector = ReceiveInboundConnector(self, connector_name)
+        self._connectors[connector_name] = connector
+        d = connector.setup()
+        return d.addCallback(lambda r: connector)
+
+    @inlineCallbacks
+    def setup_transport_connector(self):
+        connector = yield self.setup_connector(self.transport_name)
+        connector.set_inbound_handler(self.dispatch_user_message)
+        connector.set_event_handler(self.dispatch_event)
+
     @inlineCallbacks
     def setup_transport_connection(self, endpoint_name, transport_name,
                                    message_consumer, event_consumer):
-        consumer = yield self.consume(
-            '%s.inbound' % (transport_name,), message_consumer,
-            message_class=TransportUserMessage, paused=True)
-        event_consumer = yield self.consume(
-            '%s.event' % (transport_name,), event_consumer,
-            message_class=TransportEvent, paused=True)
-        publisher = yield self.publish_to('%s.outbound' % (transport_name,))
+        warnings.warn(
+            "setup_transport_connection() is deprecated. Use connectors and"
+            " endpoints instead.", category=DeprecationWarning)
 
-        self._consumers.extend([consumer, event_consumer])
-        setattr(self, '%s_publisher' % (endpoint_name,), publisher)
-        setattr(self, '%s_consumer' % (endpoint_name,), consumer)
-        setattr(self, '%s_event_consumer' % (endpoint_name,), event_consumer)
+        connector = yield self.setup_connector(transport_name)
+        connector.set_inbound_handler(message_consumer)
+        connector.set_event_handler(event_consumer)
+
+        # FIXME: We probably shouldn't allow this access here.
+        setattr(self, '%s_publisher' % (endpoint_name,),
+                connector._publishers['outbound'])
+        setattr(self, '%s_consumer' % (endpoint_name,),
+                connector._consumers['inbound'])
+        setattr(self, '%s_event_consumer' % (endpoint_name,),
+                connector._consumers['event'])
 
     def _setup_transport_publisher(self):
-        return self.setup_transport_connection(
-            'transport', self.config['transport_name'],
-            self.dispatch_user_message, self.dispatch_event)
+        warnings.warn(
+            "_setup_transport_publisher() is deprecated. Use connectors and"
+            " endpoints instead.", category=DeprecationWarning)
+        return self.setup_transport_connector()
 
-    def _setup_transport_consumer(self):
-        return self.transport_consumer.unpause()
+    def _unpause_transport_connector(self):
+        return self._connectors[self.transport_name].unpause()
 
     def _setup_event_consumer(self):
         return self.transport_event_consumer.unpause()
 
     @inlineCallbacks
-    def _setup_amqp_qos(self):
-        for consumer in self._consumers:
-            yield consumer.channel.basic_qos(
-                0, int(self.amqp_prefetch_count), False)
+    def setup_amqp_qos(self):
+        for conn in self._connectors.values():
+            yield conn.set_consumer_prefetch(int(self.amqp_prefetch_count))

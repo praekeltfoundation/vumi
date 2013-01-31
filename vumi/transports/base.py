@@ -6,14 +6,17 @@ Common infrastructure for transport workers.
 This is likely to get used heavily fast, so try get your changes in early.
 """
 
-from twisted.internet.defer import inlineCallbacks
-from twisted.python import log
+import warnings
 
+from twisted.internet.defer import inlineCallbacks, succeed, maybeDeferred
+
+from vumi import log
 from vumi.errors import ConfigError
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.service import Worker
 from vumi.transports.failures import FailureMessage
-from vumi.middleware import MiddlewareStack, setup_middlewares_from_config
+from vumi.middleware import setup_middlewares_from_config
+from vumi.endpoints import ReceiveOutboundConnector
 
 
 class Transport(Worker):
@@ -39,7 +42,7 @@ class Transport(Worker):
 
         You shouldn't have to override this in subclasses.
         """
-        self._consumers = []
+        self._connectors = {}
 
         self._validate_config()
         if 'TRANSPORT_NAME' in self.config:
@@ -56,7 +59,8 @@ class Transport(Worker):
                                     self.config['concurrent_sends'])
         self.amqp_prefetch_count = self.config.get('amqp_prefetch_count')
 
-        yield self.setup_transport_connection()
+        yield self.setup_failure_publisher()
+        yield self.setup_transport_connector()
         yield self.setup_middleware()
         yield self.setup_transport()
 
@@ -65,21 +69,31 @@ class Transport(Worker):
             yield self.setup_amqp_qos()
 
         if self.start_message_consumer:
-            yield self.message_consumer.unpause()
+            yield self.unpause_transport_connector()
 
     @inlineCallbacks
     def stopWorker(self):
-        while self._consumers:
-            consumer = self._consumers.pop()
-            yield consumer.stop()
+        for connector_name in self._connectors.keys():
+            connector = self._connectors.pop(connector_name)
+            yield connector.teardown()
         yield self.teardown_transport()
-        yield self.teardown_middleware()
 
     def get_rkey(self, mtype):
+        warnings.warn(
+            "get_rkey() is deprecated. Use connectors and"
+            " endpoints instead.", category=DeprecationWarning)
         return '%s.%s' % (self.transport_name, mtype)
 
     def publish_rkey(self, name):
+        warnings.warn(
+            "publish_rkey() is deprecated. Use connectors and"
+            " endpoints instead.", category=DeprecationWarning)
         return self.publish_to(self.get_rkey(name))
+
+    @inlineCallbacks
+    def setup_failure_publisher(self):
+        self.failure_publisher = yield self.publish_to(
+            '%s.failures' % (self.transport_name,))
 
     def _validate_config(self):
         if 'transport_name' not in self.config:
@@ -104,9 +118,8 @@ class Transport(Worker):
 
     @inlineCallbacks
     def setup_amqp_qos(self):
-        for consumer in self._consumers:
-            yield consumer.channel.basic_qos(0, int(self.amqp_prefetch_count),
-                                                False)
+        for conn in self._connectors.values():
+            yield conn.set_consumer_prefetch(int(self.amqp_prefetch_count))
 
     def teardown_transport(self):
         """
@@ -122,29 +135,37 @@ class Transport(Worker):
         Subclasses should not override this unless they need to do nonstandard
         middleware setup.
         """
+        # TODO: Make this more flexible
         middlewares = yield setup_middlewares_from_config(self, self.config)
-        self._middlewares = MiddlewareStack(middlewares)
+        for connector in self._connectors.values():
+            connector.set_middlewares(middlewares)
 
-    def teardown_middleware(self):
-        """
-        Middleware teardown happens here.
+    def setup_connector(self, connector_name):
+        if connector_name in self._connectors:
+            log.warning("Connector %r already set up." % (connector_name,))
+            # So we always get a deferred from here.
+            return succeed(self._connectors[connector_name])
+        connector = ReceiveOutboundConnector(self, connector_name)
+        self._connectors[connector_name] = connector
+        d = connector.setup()
+        return d.addCallback(lambda r: connector)
 
-        Subclasses should not override this unless they need to do nonstandard
-        middleware teardown.
-        """
-        return self._middlewares.teardown()
+    @inlineCallbacks
+    def setup_transport_connector(self):
+        connector = yield self.setup_connector(self.transport_name)
+        connector.set_outbound_handler(self._process_message)
 
     @inlineCallbacks
     def setup_transport_connection(self):
-        self.message_consumer = yield self.consume(
-            self.get_rkey('outbound'), self._process_message,
-            message_class=TransportUserMessage, paused=True)
-        self._consumers.append(self.message_consumer)
+        warnings.warn(
+            "setup_transport_connection() is deprecated. Use connectors and"
+            " endpoints instead.", category=DeprecationWarning)
+        yield self.setup_transport_connector()
+        connector_pubs = self._connectors[self.transport_name]._publishers
 
         # Set up publishers
-        self.message_publisher = yield self.publish_rkey('inbound')
-        self.event_publisher = yield self.publish_rkey('event')
-        self.failure_publisher = yield self.publish_rkey('failures')
+        self.message_publisher = connector_pubs['inbound']
+        self.event_publisher = connector_pubs['event']
 
     def send_failure(self, message, exception, traceback):
         """Send a failure report."""
@@ -154,8 +175,9 @@ class Transport(Worker):
             failure_msg = FailureMessage(
                     message=message.payload, failure_code=failure_code,
                     reason=traceback)
-            d = self._middlewares.apply_publish("failure", failure_msg,
-                                                self.transport_name)
+            connector = self._connectors[self.transport_name]
+            d = connector._middlewares.apply_publish(
+                "failure", failure_msg, self.transport_name)
             d.addCallback(self.failure_publisher.publish_message)
             d.addCallback(lambda _f: self.failure_published())
         except:
@@ -177,10 +199,7 @@ class Transport(Worker):
         kw.setdefault('transport_name', self.transport_name)
         kw.setdefault('transport_metadata', {})
         msg = TransportUserMessage(**kw)
-        d = self._middlewares.apply_publish("inbound", msg,
-                                            self.transport_name)
-        d.addCallback(self.message_publisher.publish_message)
-        return d
+        return self._connectors[self.transport_name].publish_inbound(msg)
 
     def publish_event(self, **kw):
         """
@@ -192,10 +211,7 @@ class Transport(Worker):
         kw.setdefault('transport_name', self.transport_name)
         kw.setdefault('transport_metadata', {})
         event = TransportEvent(**kw)
-        d = self._middlewares.apply_publish("event", event,
-                                            self.transport_name)
-        d.addCallback(self.event_publisher.publish_message)
-        return d
+        return self._connectors[self.transport_name].publish_event(event)
 
     def publish_ack(self, user_message_id, sent_message_id, **kw):
         """
@@ -228,9 +244,7 @@ class Transport(Worker):
                 return None
             return f
 
-        d = self._middlewares.apply_consume("outbound", message,
-                                            self.transport_name)
-        d.addCallback(self.handle_outbound_message)
+        d = maybeDeferred(self.handle_outbound_message, message)
         d.addErrback(_send_failure)
         return d
 
@@ -246,5 +260,16 @@ class Transport(Worker):
         """
         Generate a message id.
         """
-
         return TransportUserMessage.generate_id()
+
+    def pause_transport_connector(self):
+        if self.transport_name not in self._connectors:
+            log.warning("Trying to pause connectors that don't exist.")
+            return
+        return self._connectors[self.transport_name].pause()
+
+    def unpause_transport_connector(self):
+        if self.transport_name not in self._connectors:
+            log.warning("Trying to unpause connectors that don't exist.")
+            return
+        return self._connectors[self.transport_name].unpause()

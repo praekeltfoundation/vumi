@@ -41,16 +41,14 @@ class TransportTestCase(VumiWorkerTestCase, PersistenceMixin):
         config.setdefault('transport_name', self.transport_name)
         return self.get_worker(config, cls, start)
 
-    def assert_rkey_attr(self, rkey_suffix, obj, tr_name=None):
-        if tr_name is None:
-            tr_name = self.transport_name
-        self.assertEqual("%s.%s" % (tr_name, rkey_suffix), obj.routing_key)
-
     def assert_basic_rkeys(self, transport):
-        self.assert_rkey_attr('event', transport.event_publisher)
-        self.assert_rkey_attr('inbound', transport.message_publisher)
-        self.assert_rkey_attr('failures', transport.failure_publisher)
-        self.assert_rkey_attr('outbound', transport.message_consumer)
+        self.assertTrue(len(transport._connectors) >= 1)
+        connector = transport._connectors[transport.transport_name]
+        self.assertTrue(connector._consumers.keys(), set(['outbound']))
+        self.assertTrue(connector._publishers.keys(),
+                        set(['inbound', 'event']))
+        self.assertEqual(transport.failure_publisher.routing_key,
+                         '%s.failures' % (transport.transport_name,))
 
     def mkmsg_fail(self, message, reason,
                    failure_code=FailureMessage.FC_UNSPECIFIED):

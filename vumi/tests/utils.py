@@ -12,7 +12,6 @@ from twisted.trial.unittest import TestCase, SkipTest
 from twisted.internet import defer, reactor
 from twisted.internet.error import ConnectionRefusedError
 from twisted.web.resource import Resource
-from twisted.web.server import Site
 from twisted.internet.defer import DeferredQueue, inlineCallbacks, returnValue
 from twisted.python import log
 
