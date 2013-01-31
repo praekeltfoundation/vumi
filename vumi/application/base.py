@@ -93,7 +93,7 @@ class ApplicationWorker(Worker):
             yield self.setup_amqp_qos()
 
         if self.start_message_consumer:
-            yield self._unpause_transport_connector()
+            yield self._setup_transport_connector()
 
     @inlineCallbacks
     def stopWorker(self):
@@ -270,8 +270,16 @@ class ApplicationWorker(Worker):
             " endpoints instead.", category=DeprecationWarning)
         return self.setup_transport_connector()
 
-    def _unpause_transport_connector(self):
-        return self._connectors[self.transport_name].unpause()
+    def _setup_transport_connector(self):
+        return self.unpause_connectors()
+
+    def pause_connectors(self):
+        for connector in self._connectors.values():
+            connector.pause()
+
+    def unpause_connectors(self):
+        for connector in self._connectors.values():
+            connector.unpause()
 
     def _setup_event_consumer(self):
         return self.transport_event_consumer.unpause()
