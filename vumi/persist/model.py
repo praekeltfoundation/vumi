@@ -5,9 +5,7 @@
 from functools import wraps
 
 from vumi.errors import VumiError
-from vumi.persist.fields import (Field, FieldDescriptor, ValidationError,
-                                    ForeignKeyProxy, ManyToManyProxy,
-                                    ListProxy, DynamicProxy)
+from vumi.persist.fields import Field, FieldDescriptor, ValidationError
 
 
 class ModelMigrationError(VumiError):

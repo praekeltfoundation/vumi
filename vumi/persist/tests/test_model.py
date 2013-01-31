@@ -606,7 +606,7 @@ class TestModelOnTxRiak(TestCase):
         yield s1.save()
         yield m1.save()
 
-        m2 = yield mm_model.load(m1.key)
+        m2 = yield mm_model.load("bar")
         [s2] = yield self.load_all_bunches_flat(m2.simples)
 
         self.assertEqual(m2.simples.keys(), ["foo"])
