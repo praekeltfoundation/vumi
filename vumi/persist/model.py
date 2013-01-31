@@ -223,23 +223,10 @@ class Model(object):
         :returns:
             A list of (key, value) tuples.
         """
-        fields = self.field_descriptors.keys()
-        fields.sort()
-
-        GET_VALUE_MAP = {
-            ForeignKeyProxy: lambda value: value.key,
-            DynamicProxy: lambda value: sorted(value.items()),
-            ListProxy: lambda value: list(value),
-            ManyToManyProxy: lambda value: sorted(value.keys()),
-        }
-
-        def get_value(field):
-            value = getattr(self, field)
-            value_func = GET_VALUE_MAP.get(type(value), lambda value: value)
-            return value_func(value)
-
         return [('key', self.key)] + [
-                    (field, get_value(field)) for field in fields]
+                    (field_name, descriptor.export_value(self))
+                    for field_name, descriptor
+                    in sorted(self.field_descriptors.items())]
 
     def save(self):
         """Save the object to Riak.

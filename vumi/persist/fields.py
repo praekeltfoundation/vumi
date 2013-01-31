@@ -66,7 +66,14 @@ class FieldDescriptor(object):
         return self.field.from_riak(raw_value)
 
     def clean(self, modelobj):
+        """Do any cleanup of the model data for this descriptor after loading
+        the data from Riak."""
         pass
+
+    def export_value(self, modelobj):
+        """Export the value of this descriptor in a format that can be
+        converted to JSON, YAML, etc..."""
+        return self.get_value(modelobj)
 
     def __repr__(self):
         return "<%s key=%s field=%r>" % (self.__class__.__name__, self.key,
@@ -348,6 +355,9 @@ class DynamicDescriptor(FieldDescriptor):
     def get_value(self, modelobj):
         return DynamicProxy(self, modelobj)
 
+    def export_value(self, modelobj):
+        return sorted(self.get_value(modelobj).items())
+
     def set_value(self, modelobj, value):
         raise RuntimeError("DynamicDescriptors should never be assigned to.")
 
@@ -458,6 +468,9 @@ class ListOfDescriptor(FieldDescriptor):
 
     def get_value(self, modelobj):
         return ListProxy(self, modelobj)
+
+    def export_value(self, modelobj):
+        return list(self.get_value(modelobj))
 
     def __set__(self, modelobj, values):
         # override __set__ to do custom validation
@@ -571,6 +584,9 @@ class ForeignKeyDescriptor(FieldDescriptor):
     def get_value(self, modelobj):
         return ForeignKeyProxy(self, modelobj)
 
+    def export_value(self, modelobj):
+        return self.get_value(modelobj).key
+
     def get_foreign_key(self, modelobj):
         return modelobj._riak_object._data.get(self.key)
 
@@ -658,6 +674,9 @@ class ManyToManyDescriptor(ForeignKeyDescriptor):
 
     def get_value(self, modelobj):
         return ManyToManyProxy(self, modelobj)
+
+    def export_value(self, modelobj):
+        return sorted(self.get_value(modelobj).keys())
 
     def set_value(self, modelobj, value):
         raise RuntimeError("ManyToManyDescriptors should never be assigned"
