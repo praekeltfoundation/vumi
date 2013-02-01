@@ -1,5 +1,3 @@
-# -*- test-case-name: vumi.transports.tests.test_base -*-
-
 # TODO: We use gatherResults(), which requires Twisted>=11.1
 #       We need to either implement a fallback (which is easy enough) or
 #       explicitly require a suitable Twisted version.

@@ -5,7 +5,7 @@
 import copy
 import warnings
 
-from twisted.internet.defer import inlineCallbacks, succeed
+from twisted.internet.defer import inlineCallbacks, succeed, maybeDeferred
 from twisted.python import log
 
 from vumi.service import Worker
@@ -18,6 +18,29 @@ from vumi.endpoints import ReceiveInboundConnector
 SESSION_NEW = TransportUserMessage.SESSION_NEW
 SESSION_CLOSE = TransportUserMessage.SESSION_CLOSE
 SESSION_RESUME = TransportUserMessage.SESSION_RESUME
+
+
+def DeprecatedAttribute(object):
+    def __init__(self, name):
+        self.name = '_%s_value' % (name,)
+        self.warned_name = '_%s_warned' % (name,)
+
+    def check_warned(self, obj):
+        if getattr(obj, self.warned_name, False):
+            return
+        warnings.warn(
+            "Direct use of transport publishers and consumers is deprecated."
+            " Use connectors and endpoints instead.",
+            category=DeprecationWarning)
+        setattr(obj, self.warned_name, True)
+
+    def __get__(self, obj, cls):
+        self.check_warned(obj)
+        return getattr(obj, self.name)
+
+    def __set__(self, obj, value):
+        self.check_warned(obj)
+        setattr(obj, self.name, value)
 
 
 class ApplicationWorker(Worker):
@@ -93,7 +116,7 @@ class ApplicationWorker(Worker):
             yield self.setup_amqp_qos()
 
         if self.start_message_consumer:
-            yield self._setup_transport_consumer()
+            yield self.unpause_transport_connector()
 
     @inlineCallbacks
     def stopWorker(self):
@@ -229,6 +252,29 @@ class ApplicationWorker(Worker):
         msg = TransportUserMessage.send(to_addr, content, **options)
         return self._publish_message(msg)
 
+    def _check_for_deprecated_method(self, method_name):
+        # XXX: Is there a better way to do this?
+        my_stp = getattr(type(self), method_name)
+        base_stp = getattr(ApplicationWorker, method_name)
+        if my_stp == base_stp:
+            return False
+        warnings.warn(
+            "%s() is deprecated. Use connectors and endpoints instead." % (
+                method_name,), category=DeprecationWarning)
+        return True
+
+    # Some descriptors for common deprecated attributes.
+    transport_publisher = DeprecatedAttribute('transport_publisher')
+    transport_consumer = DeprecatedAttribute('transport_consumer')
+    transport_event_consumer = DeprecatedAttribute('transport_event_consumer')
+
+    def _setup_deprecated_attrs(self, endpoint_name, connector):
+        def setval(suffix, value):
+            setattr(self, '%s_%s' % (endpoint_name, suffix), value)
+        setval('publisher', connector._publishers['outbound'])
+        setval('consumer', connector._consumers['inbound'])
+        setval('event_consumer', connector._consumers['event'])
+
     def setup_connector(self, connector_name):
         if connector_name in self._connectors:
             log.warning("Connector %r already set up." % (connector_name,))
@@ -239,11 +285,19 @@ class ApplicationWorker(Worker):
         d = connector.setup()
         return d.addCallback(lambda r: connector)
 
-    @inlineCallbacks
     def setup_transport_connector(self):
-        connector = yield self.setup_connector(self.transport_name)
-        connector.set_inbound_handler(self.dispatch_user_message)
-        connector.set_event_handler(self.dispatch_event)
+        if self._check_for_deprecated_method('_setup_transport_publisher'):
+            return self._setup_transport_publisher()
+
+        d = self.setup_connector(self.transport_name)
+
+        def cb(connector):
+            connector.set_inbound_handler(self.dispatch_user_message)
+            connector.set_event_handler(self.dispatch_event)
+            self._setup_deprecated_attrs('transport', connector)
+            return connector
+
+        return d.addCallback(cb)
 
     @inlineCallbacks
     def setup_transport_connection(self, endpoint_name, transport_name,
@@ -255,23 +309,16 @@ class ApplicationWorker(Worker):
         connector = yield self.setup_connector(transport_name)
         connector.set_inbound_handler(message_consumer)
         connector.set_event_handler(event_consumer)
+        self._setup_deprecated_attrs(endpoint_name, connector)
 
-        # FIXME: We probably shouldn't allow this access here.
-        setattr(self, '%s_publisher' % (endpoint_name,),
-                connector._publishers['outbound'])
-        setattr(self, '%s_consumer' % (endpoint_name,),
-                connector._consumers['inbound'])
-        setattr(self, '%s_event_consumer' % (endpoint_name,),
-                connector._consumers['event'])
-
-    def _setup_transport_publisher(self):
-        warnings.warn(
-            "_setup_transport_publisher() is deprecated. Use connectors and"
-            " endpoints instead.", category=DeprecationWarning)
-        return self.setup_transport_connector()
-
-    def _setup_transport_consumer(self):
-        return self.unpause_connectors()
+    def unpause_transport_connector(self):
+        if any([
+                self._check_for_deprecated_method('_setup_transport_consumer'),
+                self._check_for_deprecated_method('_setup_event_consumer')]):
+            d = maybeDeferred(self._setup_transport_consumer)
+            d.addCallback(lambda r: maybeDeferred(self._setup_event_consumer))
+            return d
+        return self._connectors[self.transport_name].unpause()
 
     def pause_connectors(self):
         for connector in self._connectors.values():
@@ -280,6 +327,14 @@ class ApplicationWorker(Worker):
     def unpause_connectors(self):
         for connector in self._connectors.values():
             connector.unpause()
+
+    def _setup_transport_publisher(self):
+        return self.setup_transport_connection(
+            'transport', self.transport_name,
+            self.dispatch_user_message, self.dispatch_event)
+
+    def _setup_transport_consumer(self):
+        return self.transport_consumer.unpause()
 
     def _setup_event_consumer(self):
         return self.transport_event_consumer.unpause()
