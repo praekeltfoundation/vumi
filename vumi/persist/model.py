@@ -206,25 +206,27 @@ class Model(object):
         self.clean()
 
     def __repr__(self):
-        str_items = ["%s=%r" % item for item in self.get_items()]
+        str_items = ["%s=%r" % item for item
+                        in sorted(self.get_data().items())]
         return "<%s %s>" % (self.__class__.__name__, " ".join(str_items))
 
     def clean(self):
         for field_name, descriptor in self.field_descriptors.iteritems():
             descriptor.clean(self)
 
-    def get_items(self):
+    def get_data(self):
         """
-        Returns a list of (key, value) tuples for all known field descriptors.
+        Returns a dictionary with for all known field names & values.
         Useful for when needing to represent a model instance as a dictionary.
 
         :returns:
-            A list of (key, value) tuples.
+            A dict of all values, including the key.
         """
-        return [('key', self.key)] + [
-                    (field_name, descriptor.export_value(self))
-                    for field_name, descriptor
-                    in sorted(self.field_descriptors.items())]
+        data = self._riak_object.get_data()
+        data.update({
+            'key': self.key,
+            })
+        return data
 
     def save(self):
         """Save the object to Riak.

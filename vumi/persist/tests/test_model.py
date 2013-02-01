@@ -140,15 +140,20 @@ class TestModelOnTxRiak(TestCase):
     def test_repr(self):
         simple_model = self.manager.proxy(SimpleModel)
         s = simple_model("foo", a=1, b=u"bar")
-        self.assertEqual(repr(s), "<SimpleModel key='foo' a=1 b=u'bar'>")
+        self.assertEqual(repr(s),
+            "<SimpleModel $VERSION=None a=1 b=u'bar' key='foo'>")
 
-    def test_items(self):
+    def test_get_data(self):
         simple_model = self.manager.proxy(SimpleModel)
         s = simple_model("foo", a=1, b=u"bar")
-        self.assertEqual(s.get_items(),
-            [('key', 'foo'), ('a', 1), ('b', u'bar')])
+        self.assertEqual(s.get_data(), {
+            '$VERSION': None,
+            'key': 'foo',
+            'a': 1,
+            'b': 'bar',
+            })
 
-    def test_items_with_foreign_key_proxy(self):
+    def test_get_data_with_foreign_key_proxy(self):
         simple_model = self.manager.proxy(SimpleModel)
         s1 = simple_model("foo", a=5, b=u'3')
         fk_model = self.manager.proxy(ForeignKeyModel)
@@ -156,9 +161,13 @@ class TestModelOnTxRiak(TestCase):
         f1 = fk_model("bar1")
         f1.simple.set(s1)
 
-        self.assertEqual(f1.get_items(), [('key', 'bar1'), ('simple', 'foo')])
+        self.assertEqual(f1.get_data(), {
+            'key': 'bar1',
+            '$VERSION': None,
+            'simple': 'foo'
+            })
 
-    def test_items_with_many_to_many_proxy(self):
+    def test_get_data_with_many_to_many_proxy(self):
         simple_model = self.manager.proxy(SimpleModel)
         s1 = simple_model("foo", a=5, b=u'3')
         mm_model = self.manager.proxy(ManyToManyModel)
@@ -167,31 +176,37 @@ class TestModelOnTxRiak(TestCase):
         m1.simples.add(s1)
         m1.save()
 
-        self.assertEqual(m1.get_items(),
-            [('key', 'bar'), ('simples', ['foo'])])
+        self.assertEqual(m1.get_data(), {
+            'key': 'bar',
+            '$VERSION': None,
+            'simples': ['foo'],
+            })
 
-    def test_items_with_dynamic_proxy(self):
+    def test_get_data_with_dynamic_proxy(self):
         dynamic_model = self.manager.proxy(DynamicModel)
 
         d1 = dynamic_model("foo", a=u"ab")
         d1.contact_info['foo'] = u'bar'
         d1.contact_info['zip'] = u'zap'
 
-        self.assertEqual(d1.get_items(), [
-            ('key', 'foo'),
-            ('a', 'ab'),
-            ('contact_info', [
-                ('foo', 'bar'),
-                ('zip', 'zap'),
-                ])
-            ])
+        self.assertEqual(d1.get_data(), {
+            'key': 'foo',
+            '$VERSION': None,
+            'a': 'ab',
+            'contact_info.foo': 'bar',
+            'contact_info.zip': 'zap',
+            })
 
-    def test_items_with_list_proxy(self):
+    def test_get_data_with_list_proxy(self):
         list_model = self.manager.proxy(ListOfModel)
         l1 = list_model("foo")
         l1.items.append(1)
         l1.items.append(2)
-        self.assertEqual(l1.get_items(), [('key', 'foo'), ('items', [1, 2])])
+        self.assertEqual(l1.get_data(), {
+            'key': 'foo',
+            '$VERSION': None,
+            'items': [1, 2],
+            })
 
     def test_declare_backlinks(self):
         class TestModel(Model):
