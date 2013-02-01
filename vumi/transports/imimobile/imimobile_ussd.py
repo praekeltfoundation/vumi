@@ -30,11 +30,11 @@ class ImiMobileUssdTransport(HttpRpcTransport):
         expires. Default is 600s.
     """
 
-    EXPECTED_FIELDS = set(['msisdn', 'sms', 'circle', 'opnm', 'datetime'])
-    ERRORS = {
-        'RESPONSE_FAILURE': "Response to http request failed.",
-        'INSUFFICIENT_MSG_FIELDS': "Insufficiant message fields provided.",
-    }
+    EXPECTED_FIELDS = set(['msisdn', 'msg', 'code', 'tid', 'dcs'])
+
+    # errors
+    RESPONSE_FAILURE_ERROR = "Response to http request failed."
+    INSUFFICIENT_MSG_FIELDS_ERROR = "Insufficiant message fields provided."
 
     @inlineCallbacks
     def setup_transport(self):
@@ -100,8 +100,8 @@ class ImiMobileUssdTransport(HttpRpcTransport):
         in India Standard Time, and returns a datetime object normalized to
         UTC time.
         """
-        return (datetime.strptime(timestamp, '%m/%d/%Y %I:%M:%S %p') -
-                timedelta(hours=5, minutes=30))
+        return (datetime.strptime(timestamp, '%m/%d/%Y %I:%M:%S %p')
+                - timedelta(hours=5, minutes=30))
 
     @inlineCallbacks
     def handle_raw_inbound_message(self, message_id, request):
@@ -118,6 +118,9 @@ class ImiMobileUssdTransport(HttpRpcTransport):
             yield self.finish_request(message_id, json.dumps(errors), code=400)
             return
 
+        # TODO change if we are sure 'tid' can be used as a session identifier
+        session_id = values['msisdn']
+
         from_addr = values['msisdn']
         log.msg('ImiMobileTransport receiving inbound message from %s to %s.' %
                 (from_addr, to_addr))
@@ -125,18 +128,18 @@ class ImiMobileUssdTransport(HttpRpcTransport):
         # We use the msisdn (from_addr) to make a guess about the
         # session_event.
         # TODO: Finalise or simplify this block after integration testing
-        session = yield self.session_manager.load_session(from_addr)
+        session = yield self.session_manager.load_session(session_id)
         if session:
             session_event = TransportUserMessage.SESSION_RESUME
-            yield self.session_manager.save_session(from_addr, session)
+            yield self.session_manager.save_session(session_id, session)
         else:
             session_event = TransportUserMessage.SESSION_NEW
             yield self.session_manager.create_session(
-                from_addr, from_addr=from_addr, to_addr=to_addr)
+                session_id, from_addr=from_addr, to_addr=to_addr)
 
         yield self.publish_message(
             message_id=message_id,
-            content=values['sms'],
+            content=values['msg'],
             to_addr=to_addr,
             from_addr=from_addr,
             provider='imimobile',
@@ -144,9 +147,9 @@ class ImiMobileUssdTransport(HttpRpcTransport):
             transport_type='ussd',
             transport_metadata={
                 'imimobile_ussd': {
-                    'circle': values['circle'],
-                    'opnm': values['opnm'],
-                    'datetime': self.ist_to_utc(values['datetime']),
+                    'tid': values['tid'],
+                    'code': values['code'],
+                    'dcs': values['dcs'],
                 }
             })
 
@@ -163,9 +166,9 @@ class ImiMobileUssdTransport(HttpRpcTransport):
                 headers={'X-USSD-SESSION': [0 if session_has_ended else 1]})
 
             if response_id is None:
-                error = self.ERRORS['RESPONSE_FAILURE']
+                error = self.RESPONSE_FAILURE_ERROR
         else:
-            error = self.ERRORS['INSUFFICIENT_MSG_FIELDS']
+            error = self.INSUFFICIENT_MSG_FIELDS_ERROR
 
         if error is not None:
             return self.publish_nack(message_id, error)

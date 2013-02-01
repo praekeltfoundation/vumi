@@ -39,10 +39,10 @@ class TestImiMobileUssdTransportTestCase(TransportTestCase):
     def mk_request(self, suffix, **params):
         defaults = {
             'msisdn': '9221234567',
-            'sms': 'Spam Spam Spam Spam Spammity Spam',
-            'circle': 'Andhra Pradesh',
-            'opnm': 'some-operator',
-            'datetime': '1/26/2013 10:00:01 am'
+            'msg': 'Spam Spam Spam Spam Spammity Spam',
+            'tid': '1',
+            'dcs': 'no-idea-what-this-is',
+            'code': 'VUMI',
         }
         defaults.update(params)
         return self.mk_full_request(suffix, **defaults)
@@ -55,7 +55,7 @@ class TestImiMobileUssdTransportTestCase(TransportTestCase):
     def test_inbound_begin(self):
         # Second connect is the actual start of the session
         user_content = "Who are you?"
-        d = self.mk_request('some-suffix', sms=user_content)
+        d = self.mk_request('some-suffix', msg=user_content)
         [msg] = yield self.wait_for_dispatched_messages(1)
         self.assertEqual(msg['content'], user_content)
         self.assertEqual(msg['to_addr'], '56263')
@@ -64,9 +64,9 @@ class TestImiMobileUssdTransportTestCase(TransportTestCase):
                          TransportUserMessage.SESSION_NEW)
         self.assertEqual(msg['transport_metadata'], {
             'imimobile_ussd': {
-                'opnm': 'some-operator',
-                'circle': 'Andhra Pradesh',
-                'datetime': datetime(2013, 1, 26, 4, 30, 1),
+                'tid': '1',
+                'dcs': 'no-idea-what-this-is',
+                'code': 'VUMI',
             },
         })
 
@@ -92,7 +92,7 @@ class TestImiMobileUssdTransportTestCase(TransportTestCase):
             '9221234567', to_addr='56263', from_addr='9221234567')
 
         user_content = "Well, what is it you want?"
-        d = self.mk_request('some-suffix', sms=user_content)
+        d = self.mk_request('some-suffix', msg=user_content)
         [msg] = yield self.wait_for_dispatched_messages(1)
         self.assertEqual(msg['content'], user_content)
         self.assertEqual(msg['to_addr'], '56263')
@@ -101,9 +101,9 @@ class TestImiMobileUssdTransportTestCase(TransportTestCase):
                          TransportUserMessage.SESSION_RESUME)
         self.assertEqual(msg['transport_metadata'], {
             'imimobile_ussd': {
-                'opnm': 'some-operator',
-                'circle': 'Andhra Pradesh',
-                'datetime': datetime(2013, 1, 26, 4, 30, 1),
+                'tid': '1',
+                'dcs': 'no-idea-what-this-is',
+                'code': 'VUMI',
             },
         })
 
@@ -132,11 +132,11 @@ class TestImiMobileUssdTransportTestCase(TransportTestCase):
     @inlineCallbacks
     def test_request_with_missing_parameters(self):
         response = yield self.mk_full_request(
-            'some-suffix', sms='', circle='', opnm='')
+            'some-suffix', msg='', code='', dcs='')
 
         self.assertEqual(
             response.delivered_body,
-            json.dumps({'missing_parameter': ['msisdn', 'datetime']}))
+            json.dumps({'missing_parameter': ['msisdn', 'tid']}))
         self.assertEqual(response.code, 400)
 
     @inlineCallbacks
@@ -159,7 +159,7 @@ class TestImiMobileUssdTransportTestCase(TransportTestCase):
         self.assertEqual(nack.payload['event_type'], 'nack')
         self.assertEqual(nack.payload['user_message_id'], '23')
         self.assertEqual(nack.payload['nack_reason'],
-                         self.transport.ERRORS['INSUFFICIENT_MSG_FIELDS'])
+                         self.transport.INSUFFICIENT_MSG_FIELDS_ERROR)
 
     @inlineCallbacks
     def test_nack_http_http_response_failure(self):
@@ -173,7 +173,7 @@ class TestImiMobileUssdTransportTestCase(TransportTestCase):
         self.assertEqual(nack.payload['event_type'], 'nack')
         self.assertEqual(nack.payload['user_message_id'], '23')
         self.assertEqual(nack.payload['nack_reason'],
-                         self.transport.ERRORS['RESPONSE_FAILURE'])
+                         self.transport.RESPONSE_FAILURE_ERROR)
 
     def test_ist_to_utc(self):
         self.assertEqual(
