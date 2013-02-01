@@ -120,12 +120,10 @@ class SmppTransportTestCase(TransportTestCase):
         yield self.esme.handle_data(response2.get_bin())
         yield self.esme.handle_data(response1.get_bin())
 
-        acks = [self.mkmsg_ack('445', '3rd_party_id_2'),
-                self.mkmsg_ack('444', '3rd_party_id_1')]
-        for ack in acks:
-            ack.set_routing_endpoint('default')
-
-        self.assertEqual(acks, self.get_dispatched_events())
+        self.assertEqual([
+                self.mkmsg_ack('445', '3rd_party_id_2'),
+                self.mkmsg_ack('444', '3rd_party_id_1'),
+                ], self.get_dispatched_events())
 
     @inlineCallbacks
     def test_failed_submit(self):
@@ -191,11 +189,9 @@ class SmppTransportTestCase(TransportTestCase):
         yield self.esme.handle_data(SubmitSMResp(2, "3rd_party_5").get_bin())
         yield self._amqp.kick_delivery()
         yield self.esme.handle_data(SubmitSMResp(3, "3rd_party_6").get_bin())
-        acks = [self.mkmsg_ack('447', '3rd_party_5'),
-                self.mkmsg_ack('448', '3rd_party_6')]
-        for ack in acks:
-            ack.set_routing_endpoint('default')
-        assert_throttled_status(False, ["Heimlich", "Heimlich", "Other"], acks)
+        assert_throttled_status(False, ["Heimlich", "Heimlich", "Other"],
+                                [self.mkmsg_ack('447', '3rd_party_5'),
+                                 self.mkmsg_ack('448', '3rd_party_6')])
 
     @inlineCallbacks
     def test_reconnect(self):

@@ -114,16 +114,9 @@ class Vas2NetsTransportTestCase(TransportTestCase):
             'network_id': 'provider',
             'timestamp': self.today.strftime('%Y-%m-%dT%H:%M:%S'),
             }
-        msg = super(Vas2NetsTransportTestCase, self).mkmsg_delivery(
+        return super(Vas2NetsTransportTestCase, self).mkmsg_delivery(
             status, user_message_id='vas2nets.abc',
             transport_metadata=transport_metadata)
-        msg.set_routing_endpoint('default')
-        return msg
-
-    def mkmsg_ack(self, *args, **kw):
-        msg = super(Vas2NetsTransportTestCase, self).mkmsg_ack(*args, **kw)
-        msg.set_routing_endpoint('default')
-        return msg
 
     def mkmsg_in(self):
         transport_metadata = {
@@ -132,10 +125,8 @@ class Vas2NetsTransportTestCase(TransportTestCase):
             'network_id': 'provider',
             'timestamp': self.today.strftime('%Y-%m-%dT%H:%M:%S'),
             }
-        msg = super(Vas2NetsTransportTestCase, self).mkmsg_in(
+        return super(Vas2NetsTransportTestCase, self).mkmsg_in(
             message_id='vas2nets.abc', transport_metadata=transport_metadata)
-        msg.set_routing_endpoint('default')
-        return msg
 
     def mkmsg_out(self, **kw):
         transport_metadata = {
@@ -145,9 +136,7 @@ class Vas2NetsTransportTestCase(TransportTestCase):
             'timestamp': self.today.strftime('%Y-%m-%dT%H:%M:%S'),
             }
         kw.setdefault('transport_metadata', transport_metadata)
-        msg = super(Vas2NetsTransportTestCase, self).mkmsg_out(**kw)
-        msg.set_routing_endpoint('default')
-        return msg
+        return super(Vas2NetsTransportTestCase, self).mkmsg_out(**kw)
 
     @inlineCallbacks
     def test_health_check(self):

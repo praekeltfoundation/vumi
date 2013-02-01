@@ -89,7 +89,8 @@ class BaseConnector(object):
         return d.addCallback(handler)
 
     def _publish_message(self, mtype, msg, endpoint_name):
-        msg.set_routing_endpoint(endpoint_name)
+        if endpoint_name is not None:
+            msg.set_routing_endpoint(endpoint_name)
         d = self._middlewares.apply_publish(mtype, msg, self.name)
         return d.addCallback(self._publishers[mtype].publish_message)
 

@@ -240,14 +240,7 @@ class TestIrcTransport(TransportTestCase):
         irc_command = kw.pop('irc_command', None)
         if irc_command is not None:
             helper_metadata['irc']['irc_command'] = irc_command
-        msg = self.mkmsg_out(*args, **kw)
-        msg.set_routing_endpoint('default')
-        return msg
-
-    def mkmsg_ack(self, *args, **kw):
-        msg = super(TestIrcTransport, self).mkmsg_ack(*args, **kw)
-        msg.set_routing_endpoint('default')
-        return msg
+        return self.mkmsg_out(*args, **kw)
 
     def assert_inbound_message(self, msg, to_addr, from_addr, channel, content,
                                addressed_to_transport, irc_command):
