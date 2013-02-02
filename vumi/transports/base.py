@@ -8,18 +8,16 @@ This is likely to get used heavily fast, so try get your changes in early.
 
 import warnings
 
-from twisted.internet.defer import inlineCallbacks, succeed, maybeDeferred
+from twisted.internet.defer import maybeDeferred
 
 from vumi import log
 from vumi.errors import ConfigError
 from vumi.message import TransportUserMessage, TransportEvent
-from vumi.service import Worker
+from vumi.worker_base import BaseWorker, then_call
 from vumi.transports.failures import FailureMessage
-from vumi.middleware import setup_middlewares_from_config
-from vumi.endpoints import ReceiveOutboundConnector
 
 
-class Transport(Worker):
+class Transport(BaseWorker):
     """
     Base class for transport workers.
 
@@ -35,22 +33,17 @@ class Transport(Worker):
     transport_name = None
     start_message_consumer = True
 
-    @inlineCallbacks
-    def startWorker(self):
+    def _worker_specific_setup(self):
         """
         Set up basic transport worker stuff.
 
         You shouldn't have to override this in subclasses.
         """
-        self._connectors = {}
-
-        self._validate_config()
         if 'TRANSPORT_NAME' in self.config:
             log.msg("NOTE: 'TRANSPORT_NAME' in config is deprecated. "
                     "Use 'transport_name' instead.")
             self.config.setdefault('transport_name',
                                    self.config['TRANSPORT_NAME'])
-        self.transport_name = self.config['transport_name']
 
         if 'concurrent_sends' in self.config:
             log.msg("NOTE: 'concurrent_sends' in config is deprecated. "
@@ -59,24 +52,12 @@ class Transport(Worker):
                                     self.config['concurrent_sends'])
         self.amqp_prefetch_count = self.config.get('amqp_prefetch_count')
 
-        yield self.setup_failure_publisher()
-        yield self.setup_transport_connector()
-        yield self.setup_middleware()
-        yield self.setup_transport()
+        d = self.setup_failure_publisher()
+        then_call(d, self.setup_transport)
+        return d
 
-        # Apply concurrency throttling if we need to.
-        if self.amqp_prefetch_count is not None:
-            yield self.setup_amqp_qos()
-
-        if self.start_message_consumer:
-            yield self.unpause_transport_connector()
-
-    @inlineCallbacks
-    def stopWorker(self):
-        for connector_name in self._connectors.keys():
-            connector = self._connectors.pop(connector_name)
-            yield connector.teardown()
-        yield self.teardown_transport()
+    def _worker_specific_teardown(self):
+        return self.teardown_transport()
 
     def get_rkey(self, mtype):
         warnings.warn(
@@ -90,23 +71,19 @@ class Transport(Worker):
             " endpoints instead.", category=DeprecationWarning)
         return self.publish_to(self.get_rkey(name))
 
-    @inlineCallbacks
     def setup_failure_publisher(self):
-        self.failure_publisher = yield self.publish_to(
-            '%s.failures' % (self.transport_name,))
+        d = self.publish_to('%s.failures' % (self.transport_name,))
+
+        def cb(publisher):
+            self.failure_publisher = publisher
+
+        return d.addCallback(cb)
 
     def _validate_config(self):
         if 'transport_name' not in self.config:
             raise ConfigError("Missing 'transport_name' field in config.")
-        return self.validate_config()
-
-    def validate_config(self):
-        """
-        Transport-specific config validation happens in here.
-
-        Subclasses may override this method to perform extra config validation.
-        """
-        pass
+        self.transport_name = self.config['transport_name']
+        return super(Transport, self)._validate_config()
 
     def setup_transport(self):
         """
@@ -116,56 +93,35 @@ class Transport(Worker):
         """
         pass
 
-    @inlineCallbacks
-    def setup_amqp_qos(self):
-        for conn in self._connectors.values():
-            yield conn.set_consumer_prefetch(int(self.amqp_prefetch_count))
-
     def teardown_transport(self):
         """
         Clean-up of setup done in setup_transport should happen here.
         """
         pass
 
-    @inlineCallbacks
-    def setup_middleware(self):
-        """
-        Middleware setup happens here.
+    def setup_connectors(self):
+        d = self.setup_ro_connector(self.transport_name)
 
-        Subclasses should not override this unless they need to do nonstandard
-        middleware setup.
-        """
-        # TODO: Make this more flexible
-        middlewares = yield setup_middlewares_from_config(self, self.config)
-        for connector in self._connectors.values():
-            connector.set_middlewares(middlewares)
+        def cb(connector):
+            connector.set_outbound_handler(self._process_message)
+            return connector
 
-    def setup_connector(self, connector_name):
-        if connector_name in self._connectors:
-            log.warning("Connector %r already set up." % (connector_name,))
-            # So we always get a deferred from here.
-            return succeed(self._connectors[connector_name])
-        connector = ReceiveOutboundConnector(self, connector_name)
-        self._connectors[connector_name] = connector
-        d = connector.setup()
-        return d.addCallback(lambda r: connector)
+        return d.addCallback(cb)
 
-    @inlineCallbacks
-    def setup_transport_connector(self):
-        connector = yield self.setup_connector(self.transport_name)
-        connector.set_outbound_handler(self._process_message)
-
-    @inlineCallbacks
     def setup_transport_connection(self):
         warnings.warn(
             "setup_transport_connection() is deprecated. Use connectors and"
             " endpoints instead.", category=DeprecationWarning)
-        yield self.setup_transport_connector()
-        connector_pubs = self._connectors[self.transport_name]._publishers
 
-        # Set up publishers
-        self.message_publisher = connector_pubs['inbound']
-        self.event_publisher = connector_pubs['event']
+        d = self.setup_connectors()
+
+        def cb(connector):
+            connector_pubs = self._connectors[self.transport_name]._publishers
+            # Set up publishers
+            self.message_publisher = connector_pubs['inbound']
+            self.event_publisher = connector_pubs['event']
+
+        return d.addCallback(cb)
 
     def send_failure(self, message, exception, traceback):
         """Send a failure report."""
@@ -273,3 +229,6 @@ class Transport(Worker):
             log.warning("Trying to unpause connectors that don't exist.")
             return
         return self._connectors[self.transport_name].unpause()
+
+    def _setup_unpause(self):
+        return self.unpause_transport_connector()

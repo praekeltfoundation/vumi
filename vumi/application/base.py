@@ -5,14 +5,12 @@
 import copy
 import warnings
 
-from twisted.internet.defer import inlineCallbacks, succeed, maybeDeferred
+from twisted.internet.defer import inlineCallbacks, maybeDeferred
 from twisted.python import log
 
-from vumi.service import Worker
+from vumi.worker_base import BaseWorker
 from vumi.errors import ConfigError
 from vumi.message import TransportUserMessage
-from vumi.middleware import setup_middlewares_from_config
-from vumi.endpoints import ReceiveInboundConnector
 
 
 SESSION_NEW = TransportUserMessage.SESSION_NEW
@@ -20,30 +18,7 @@ SESSION_CLOSE = TransportUserMessage.SESSION_CLOSE
 SESSION_RESUME = TransportUserMessage.SESSION_RESUME
 
 
-def DeprecatedAttribute(object):
-    def __init__(self, name):
-        self.name = '_%s_value' % (name,)
-        self.warned_name = '_%s_warned' % (name,)
-
-    def check_warned(self, obj):
-        if getattr(obj, self.warned_name, False):
-            return
-        warnings.warn(
-            "Direct use of transport publishers and consumers is deprecated."
-            " Use connectors and endpoints instead.",
-            category=DeprecationWarning)
-        setattr(obj, self.warned_name, True)
-
-    def __get__(self, obj, cls):
-        self.check_warned(obj)
-        return getattr(obj, self.name)
-
-    def __set__(self, obj, value):
-        self.check_warned(obj)
-        setattr(obj, self.name, value)
-
-
-class ApplicationWorker(Worker):
+class ApplicationWorker(BaseWorker):
     """Base class for an application worker.
 
     Handles :class:`vumi.message.TransportUserMessage` and
@@ -85,16 +60,12 @@ class ApplicationWorker(Worker):
 
     SEND_TO_TAGS = frozenset([])
 
-    @inlineCallbacks
-    def startWorker(self):
-        log.msg('Starting a %s worker with config: %s'
-                % (self.__class__.__name__, self.config))
-        self._connectors = {}
-        self._validate_config()
-        self.transport_name = self.config['transport_name']
-        self.amqp_prefetch_count = self.config.get('amqp_prefetch_count', 20)
-        self.send_to_options = self.config.get('send_to', {})
+    def _worker_specific_setup(self):
+        """
+        Set up basic application worker stuff.
 
+        You shouldn't have to override this in subclasses.
+        """
         self._event_handlers = {
             'ack': self.consume_ack,
             'nack': self.consume_nack,
@@ -104,49 +75,27 @@ class ApplicationWorker(Worker):
             SESSION_NEW: self.new_session,
             SESSION_CLOSE: self.close_session,
             }
+        return self.setup_application()
 
-        yield self.setup_transport_connector()
-
-        yield self.setup_middleware()
-
-        yield self.setup_application()
-
-        # Apply pre-fetch limits if we need to.
-        if self.amqp_prefetch_count is not None:
-            yield self.setup_amqp_qos()
-
-        if self.start_message_consumer:
-            yield self.unpause_transport_connector()
-
-    @inlineCallbacks
-    def stopWorker(self):
-        for connector_name in self._connectors.keys():
-            connector = self._connectors.pop(connector_name)
-            yield connector.teardown()
-        yield self.teardown_application()
+    def _worker_specific_teardown(self):
+        return self.teardown_application()
 
     def _validate_config(self):
         if 'transport_name' not in self.config:
             raise ConfigError("Missing 'transport_name' field in config.")
-        send_to_options = self.config.get('send_to', {})
+        self.transport_name = self.config['transport_name']
+
+        self.send_to_options = self.config.get('send_to', {})
         for tag in self.SEND_TO_TAGS:
-            if tag not in send_to_options:
+            if tag not in self.send_to_options:
                 raise ConfigError("No configuration for send_to tag %r but"
                                   " at least a transport_name is required."
                                   % (tag,))
-            if 'transport_name' not in send_to_options[tag]:
+            if 'transport_name' not in self.send_to_options[tag]:
                 raise ConfigError("The configuration for send_to tag %r must"
                                   " contain a transport_name." % (tag,))
 
-        return self.validate_config()
-
-    def validate_config(self):
-        """
-        Application-specific config validation happens in here.
-
-        Subclasses may override this method to perform extra config validation.
-        """
-        pass
+        return super(ApplicationWorker, self)._validate_config()
 
     def setup_application(self):
         """
@@ -161,19 +110,6 @@ class ApplicationWorker(Worker):
         Clean-up of setup done in setup_application should happen here.
         """
         pass
-
-    @inlineCallbacks
-    def setup_middleware(self):
-        """
-        Middleware setup happens here.
-
-        Subclasses should not override this unless they need to do nonstandard
-        middleware setup.
-        """
-        # TODO: Make this more flexible
-        middlewares = yield setup_middlewares_from_config(self, self.config)
-        for connector in self._connectors.values():
-            connector.set_middlewares(middlewares)
 
     def _dispatch_event_raw(self, event):
         event_type = event.get('event_type')
@@ -263,11 +199,6 @@ class ApplicationWorker(Worker):
                 method_name,), category=DeprecationWarning)
         return True
 
-    # Some descriptors for common deprecated attributes.
-    transport_publisher = DeprecatedAttribute('transport_publisher')
-    transport_consumer = DeprecatedAttribute('transport_consumer')
-    transport_event_consumer = DeprecatedAttribute('transport_event_consumer')
-
     def _setup_deprecated_attrs(self, endpoint_name, connector):
         def setval(suffix, value):
             setattr(self, '%s_%s' % (endpoint_name, suffix), value)
@@ -275,21 +206,11 @@ class ApplicationWorker(Worker):
         setval('consumer', connector._consumers['inbound'])
         setval('event_consumer', connector._consumers['event'])
 
-    def setup_connector(self, connector_name):
-        if connector_name in self._connectors:
-            log.warning("Connector %r already set up." % (connector_name,))
-            # So we always get a deferred from here.
-            return succeed(self._connectors[connector_name])
-        connector = ReceiveInboundConnector(self, connector_name)
-        self._connectors[connector_name] = connector
-        d = connector.setup()
-        return d.addCallback(lambda r: connector)
-
-    def setup_transport_connector(self):
+    def setup_connectors(self):
         if self._check_for_deprecated_method('_setup_transport_publisher'):
             return self._setup_transport_publisher()
 
-        d = self.setup_connector(self.transport_name)
+        d = self.setup_ri_connector(self.transport_name)
 
         def cb(connector):
             connector.set_inbound_handler(self.dispatch_user_message)
@@ -299,19 +220,23 @@ class ApplicationWorker(Worker):
 
         return d.addCallback(cb)
 
-    @inlineCallbacks
     def setup_transport_connection(self, endpoint_name, transport_name,
                                    message_consumer, event_consumer):
         warnings.warn(
             "setup_transport_connection() is deprecated. Use connectors and"
             " endpoints instead.", category=DeprecationWarning)
 
-        connector = yield self.setup_connector(transport_name)
-        connector.set_inbound_handler(message_consumer)
-        connector.set_event_handler(event_consumer)
-        self._setup_deprecated_attrs(endpoint_name, connector)
+        d = self.setup_ri_connector(transport_name)
 
-    def unpause_transport_connector(self):
+        def cb(connector):
+            connector.set_inbound_handler(message_consumer)
+            connector.set_event_handler(event_consumer)
+            self._setup_deprecated_attrs(endpoint_name, connector)
+            return connector
+
+        return d.addCallback(cb)
+
+    def _setup_unpause(self):
         if any([
                 self._check_for_deprecated_method('_setup_transport_consumer'),
                 self._check_for_deprecated_method('_setup_event_consumer')]):
@@ -319,14 +244,6 @@ class ApplicationWorker(Worker):
             d.addCallback(lambda r: maybeDeferred(self._setup_event_consumer))
             return d
         return self._connectors[self.transport_name].unpause()
-
-    def pause_connectors(self):
-        for connector in self._connectors.values():
-            connector.pause()
-
-    def unpause_connectors(self):
-        for connector in self._connectors.values():
-            connector.unpause()
 
     def _setup_transport_publisher(self):
         return self.setup_transport_connection(
