@@ -4,7 +4,7 @@
 
 import copy
 
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import inlineCallbacks, succeed
 from twisted.python import log
 
 from vumi.service import Worker
@@ -101,6 +101,15 @@ class ApplicationWorker(Worker):
             yield consumer.stop()
         yield self.teardown_application()
         yield self.teardown_middleware()
+
+    def get_config(self, msg=None):
+        """This should return a message-specific config object.
+
+        It deliberately returns a deferred even when this isn't strictly
+        necessary to ensure that workers will continue to work when per-message
+        configuration needs to be fetched from elsewhere.
+        """
+        return succeed(self.CONFIG_CLASS(self.config))
 
     def _validate_config(self):
         if 'transport_name' not in self.config:

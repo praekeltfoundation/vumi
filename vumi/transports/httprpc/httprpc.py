@@ -10,7 +10,43 @@ from twisted.web import http
 from twisted.web.resource import Resource
 from twisted.web.server import NOT_DONE_YET
 
-from vumi.transports.base import Transport
+from vumi.config import ConfigString, ConfigInt, ConfigBool
+from vumi.transports.base import Transport, TransportConfig
+
+
+class HttpRpcTransportConfig(TransportConfig):
+    """Base config definition for transports.
+
+    You should subclass this and add transport-specific fields.
+    """
+
+    web_path = ConfigString("The path to listen for requests on.")
+    web_port = ConfigInt(
+        "The port to listen for requests on, defaults to `0`.", default=0)
+    health_path = ConfigString(
+        "The path to listen for downstream health checks on"
+        " (useful with HAProxy)", default='health')
+    request_cleanup_interval = ConfigInt(
+        "How often should we actively look for old connections that should"
+        " manually be timed out. Anything less than `1` disables the request"
+        " cleanup meaning that all request objects will be kept in memory"
+        " until the server is restarted, regardless if the remote side has"
+        " dropped the connection or not. Defaults to 5 seconds.",
+        default=5)
+    request_timeout = ConfigInt(
+        "How long should we wait for the remote side generating the response"
+        " for this synchronous operation to come back. Any connection that has"
+        " waited longer than `request_timeout` seconds will manually be"
+        " closed. Defaults to 4 minutes.", default=(4 * 60))
+    request_timeout_status_code = ConfigInt(
+        "What HTTP status code should be generated when a timeout occurs."
+        " Defaults to `504 Gateway Timeout`.", default=504)
+    request_timeout_body = ConfigString(
+        "What HTTP body should be returned when a timeout occurs."
+        " Defaults to ''.", default='')
+    noisy = ConfigBool(
+        "Defaults to `False` set to `True` to make this transport log"
+        " verbosely.", default=False)
 
 
 class HttpRpcHealthResource(Resource):
@@ -58,52 +94,21 @@ class HttpRpcTransport(Transport):
     transport worker that generated the inbound message. This means that
     currently there many only be one transport worker for each instance
     of this transport of a given name.
-
-    Takes the following configuration parameters:
-
-    :param str web_path:
-        The path to listen for requests on.
-    :param int web_port:
-        The port to listen for requests on, defaults to `0`.
-    :param str health_path:
-        The path to listen for downstream health checks on
-        (useful with HAProxy)
-    :param int request_cleanup_interval:
-        How often should we actively look for old connections that should
-        manually be timed out. Anything less than `1` disables the request
-        cleanup meaning that all request objects will be kept in memory until
-        the server is restarted, regardless if the remote side has dropped
-        the connection or not.
-        Defaults to 5 seconds.
-    :param int request_timeout:
-        How long should we wait for the remote side generating the response
-        for this synchronous operation to come back. Any connection that has
-        waited longer than `request_timeout` seconds will manually be closed.
-        Defaults to 4 minutes.
-    :param int request_timeout_status_code:
-        What HTTP status code should be generated when a timeout occurs.
-        Defaults to `504 Gateway Timeout`.
-    :param str request_timeout_body:
-        What HTTP body should be returned when a timeout occurs.
-        Defaults to ''.
-    :param bool noisy:
-        Defaults to `False` set to `True` to make this transport log
-        verbosely.
     """
     content_type = 'text/plain'
 
-    def validate_config(self):
-        self.web_path = self.config['web_path']
-        self.web_port = int(self.config['web_port'])
-        self.health_path = self.config.get('health_path', 'health').lstrip('/')
-        self.request_timeout = int(self.config.get('request_timeout', 60 * 4))
-        self.request_timeout_status_code = int(
-            self.config.get('request_timeout_status_code', 504))
-        self.noisy = bool(self.config.get('noisy', False))
-        self.request_timeout_body = self.config.get('request_timeout_body', '')
+    CONFIG_CLASS = HttpRpcTransportConfig
 
-        self.gc_requests_interval = int(
-            self.config.get('request_cleanup_interval', 5))
+    def validate_config(self):
+        config = self.CONFIG_CLASS(self.config)
+        self.web_path = config.web_path
+        self.web_port = config.web_port
+        self.health_path = config.health_path.lstrip('/')
+        self.request_timeout = config.request_timeout
+        self.request_timeout_status_code = config.request_timeout_status_code
+        self.noisy = config.noisy
+        self.request_timeout_body = config.request_timeout_body
+        self.gc_requests_interval = config.request_cleanup_interval
 
     def get_transport_url(self, suffix=''):
         """

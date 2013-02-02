@@ -9,11 +9,24 @@ This is likely to get used heavily fast, so try get your changes in early.
 from twisted.internet.defer import inlineCallbacks
 from twisted.python import log
 
-from vumi.errors import ConfigError
+from vumi.config import Config, ConfigString, ConfigInt
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.service import Worker
 from vumi.transports.failures import FailureMessage
 from vumi.middleware import MiddlewareStack, setup_middlewares_from_config
+
+
+class TransportConfig(Config):
+    """Base config definition for transports.
+
+    You should subclass this and add transport-specific fields.
+    """
+
+    transport_name = ConfigString(
+        "The name this transport instance will use to create its queues.",
+        required=True)
+    amqp_prefetch_count = ConfigInt(
+        "The number of messages processed concurrently from each AMQP queue.")
 
 
 class Transport(Worker):
@@ -28,6 +41,7 @@ class Transport(Worker):
     """
 
     SUPPRESS_FAILURE_EXCEPTIONS = True
+    CONFIG_CLASS = TransportConfig
 
     transport_name = None
     start_message_consumer = True
@@ -42,19 +56,23 @@ class Transport(Worker):
         self._consumers = []
 
         self._validate_config()
+
+        # TODO: These have been deprecated long enough, methinks.
         if 'TRANSPORT_NAME' in self.config:
             log.msg("NOTE: 'TRANSPORT_NAME' in config is deprecated. "
                     "Use 'transport_name' instead.")
             self.config.setdefault('transport_name',
                                    self.config['TRANSPORT_NAME'])
-        self.transport_name = self.config['transport_name']
 
         if 'concurrent_sends' in self.config:
             log.msg("NOTE: 'concurrent_sends' in config is deprecated. "
                     "use 'amqp_prefetch_count' instead.")
             self.config.setdefault('amqp_prefetch_count',
                                     self.config['concurrent_sends'])
-        self.amqp_prefetch_count = self.config.get('amqp_prefetch_count')
+
+        config = self.CONFIG_CLASS(self.config)
+        self.transport_name = config.transport_name
+        self.amqp_prefetch_count = config.amqp_prefetch_count
 
         yield self.setup_transport_connection()
         yield self.setup_middleware()
@@ -82,8 +100,12 @@ class Transport(Worker):
         return self.publish_to(self.get_rkey(name))
 
     def _validate_config(self):
-        if 'transport_name' not in self.config:
-            raise ConfigError("Missing 'transport_name' field in config.")
+        # We assume that all required fields will either come from the base
+        # config or will have placeholder values that don't fail validation.
+        # This object is only created to trigger validation.
+        # TODO: Eventually we'll be able to remove the legacy validate_config()
+        # and just use config objects.
+        self.CONFIG_CLASS(self.config)
         return self.validate_config()
 
     def validate_config(self):

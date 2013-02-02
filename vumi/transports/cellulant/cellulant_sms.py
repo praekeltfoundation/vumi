@@ -8,33 +8,36 @@ from twisted.internet.defer import inlineCallbacks
 from vumi.utils import http_request_full
 from vumi.errors import ConfigError
 from vumi import log
+from vumi.config import ConfigField, ConfigString
 from vumi.transports.httprpc import HttpRpcTransport
+
+
+class CellulantSmsTransportConfig(HttpRpcTransport.CONFIG_CLASS):
+    """Cellulant transport config.
+    """
+
+    credentials = ConfigField(
+        "A dictionary where the `from_addr` is used for the key lookup and the"
+        " returned value should be a dictionary containing the username and"
+        " password.", required=True)
+    outbound_url = ConfigString(
+        "The URL to send outbound messages to.", required=True)
+    validation_mode = ConfigString(
+        "The mode to operate in. Can be 'strict' or 'permissive'. If 'strict'"
+        " then any parameter received that is not listed in EXPECTED_FIELDS"
+        " nor in IGNORED_FIELDS will raise an error. If 'permissive' then no"
+        " error is raised as long as all the EXPECTED_FIELDS are present.",
+        default='strict')
 
 
 class CellulantSmsTransport(HttpRpcTransport):
     """
     HTTP transport for Cellulant SMS.
-
-    :param str web_path:
-        The HTTP path to listen on.
-    :param int web_port:
-        The HTTP port
-    :param str transport_name:
-        The name this transport instance will use to create its queues
-    :param dict credentials:
-        A dictionary where the `from_addr` is used for the key lookup and the
-        returned value should be a dictionary containing the username and
-        password.
-    :param str outbound_url:
-        The URL to send outbound messages to.
-    :param str validation_mode:
-        The mode to operate in. Can be 'strict' or 'permissive'. If 'strict'
-        then any parameter received that is not listed in EXPECTED_FIELDS nor
-        in IGNORED_FIELDS will raise an error. If 'permissive' then no error
-        is raised as long as all the EXPECTED_FIELDS are present.
     """
 
     transport_type = 'sms'
+
+    CONFIG_CLASS = CellulantSmsTransportConfig
 
     EXPECTED_FIELDS = set(["SOURCEADDR", "DESTADDR", "MESSAGE", "ID"])
     IGNORED_FIELDS = set(["channelID", "keyword", "CHANNELID", "serviceID",
@@ -52,13 +55,13 @@ class CellulantSmsTransport(HttpRpcTransport):
     }
 
     def validate_config(self):
-        self._credentials = self.config['credentials']
-        self._validation_mode = self.config.get('validation_mode',
-            self.STRICT_MODE)
+        config = self.CONFIG_CLASS(self.config)
+        self._credentials = config.credentials
+        self._validation_mode = config.validation_mode
         if self._validation_mode not in self.KNOWN_VALIDATION_MODES:
             raise ConfigError('Invalid validation mode: %s' % (
                 self._validation_mode,))
-        self._outbound_url = self.config['outbound_url']
+        self._outbound_url = config.outbound_url
         return super(CellulantSmsTransport, self).validate_config()
 
     @inlineCallbacks
