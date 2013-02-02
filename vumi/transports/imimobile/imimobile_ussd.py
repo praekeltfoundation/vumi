@@ -54,8 +54,8 @@ class ImiMobileUssdTransport(HttpRpcTransport):
 
     @inlineCallbacks
     def teardown_transport(self):
-        yield self.session_manager.stop()
         yield super(ImiMobileUssdTransport, self).teardown_transport()
+        yield self.session_manager.stop()
 
     def get_to_addr(self, request):
         """
