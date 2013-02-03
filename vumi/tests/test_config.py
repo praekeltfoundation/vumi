@@ -53,6 +53,19 @@ class ConfigTest(TestCase):
 
         self.assertEqual(FooConfig.__doc__, '\n\n'.join([
             "Test config.",
+            " foo: A foo field.",
+            " bar: A bar field.",
+            ]))
+
+        # And again with the fields defined in a different order to check that
+        # we document fields in definition order.
+        class BarConfig(Config):
+            "Test config."
+            bar = ConfigField("A bar field.")
+            foo = ConfigField("A foo field.")
+
+        self.assertEqual(BarConfig.__doc__, '\n\n'.join([
+            "Test config.",
             " bar: A bar field.",
             " foo: A foo field.",
             ]))
@@ -69,3 +82,10 @@ class ConfigTest(TestCase):
         conf = BarConfig({'foo': 'blah', 'bar': 'bleh'})
         self.assertEqual(conf.foo, 'blah')
         self.assertEqual(conf.bar, 'bleh')
+
+        # Inherited fields should come before local fields.
+        self.assertEqual(BarConfig.__doc__, '\n\n'.join([
+            "Another test config.",
+            " foo: From base class.",
+            " bar: New field.",
+            ]))

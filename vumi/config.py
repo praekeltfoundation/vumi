@@ -8,7 +8,14 @@ from vumi.errors import ConfigError
 
 
 class ConfigField(object):
+    _creation_order = 0
+
     def __init__(self, doc, required=False, default=None):
+        # This hack is to allow us to track the order in which fields were
+        # added to a config class. We want to do this so we can document fields
+        # in the same order they're defined.
+        self.creation_order = ConfigField._creation_order
+        ConfigField._creation_order += 1
         self.name = None
         self.doc = doc
         self.required = required
@@ -62,21 +69,22 @@ class ConfigBool(ConfigField):
 class ConfigMetaClass(type):
     def __new__(mcs, name, bases, dict):
         # locate Field instances
-        fields = {}
+        fields = []
         class_dicts = [dict] + [base.__dict__ for base in reversed(bases)]
         for cls_dict in class_dicts:
             for key, possible_field in cls_dict.items():
                 if key in fields:
                     continue
                 if isinstance(possible_field, ConfigField):
-                    fields[key] = possible_field
+                    fields.append(possible_field)
                     possible_field.setup(key)
 
+        fields.sort(key=lambda f: f.creation_order)
         dict['fields'] = fields
         cls = type.__new__(mcs, name, bases, dict)
         doc = cls.__doc__ or "Undocumented config!"
         cls.__doc__ = '\n\n'.join(
-            [doc] + sorted([field.get_doc() for field in fields.values()]))
+            [doc] + [field.get_doc() for field in fields])
         return cls
 
 
@@ -87,7 +95,7 @@ class Config(object):
 
     def __init__(self, config_dict):
         self._config_dict = config_dict
-        for field in self.fields.values():
+        for field in self.fields:
             field.validate(self)
 
     def get_config_value(self, name, default=None):
