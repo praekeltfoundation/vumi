@@ -7,6 +7,7 @@ import copy
 from twisted.internet.defer import inlineCallbacks, succeed
 from twisted.python import log
 
+from vumi.config import Config, ConfigString, ConfigInt, ConfigField
 from vumi.service import Worker
 from vumi.errors import ConfigError
 from vumi.message import TransportUserMessage, TransportEvent
@@ -16,6 +17,21 @@ from vumi.middleware import MiddlewareStack, setup_middlewares_from_config
 SESSION_NEW = TransportUserMessage.SESSION_NEW
 SESSION_CLOSE = TransportUserMessage.SESSION_CLOSE
 SESSION_RESUME = TransportUserMessage.SESSION_RESUME
+
+
+class ApplicationConfig(Config):
+    """Base config definition for transports.
+
+    You should subclass this and add transport-specific fields.
+    """
+
+    transport_name = ConfigString(
+        "The name this application instance will use to create its queues.",
+        required=True)
+    amqp_prefetch_count = ConfigInt(
+        "The number of messages processed concurrently from each AMQP queue.",
+        default=20)
+    send_to = ConfigField("'send_to' configuration dict.", default={})
 
 
 class ApplicationWorker(Worker):
@@ -58,6 +74,7 @@ class ApplicationWorker(Worker):
     transport_name = None
     start_message_consumer = True
 
+    CONFIG_CLASS = ApplicationConfig
     SEND_TO_TAGS = frozenset([])
 
     @inlineCallbacks
@@ -66,9 +83,11 @@ class ApplicationWorker(Worker):
                 % (self.__class__.__name__, self.config))
         self._consumers = []
         self._validate_config()
-        self.transport_name = self.config['transport_name']
-        self.amqp_prefetch_count = self.config.get('amqp_prefetch_count', 20)
-        self.send_to_options = self.config.get('send_to', {})
+
+        config = self.CONFIG_CLASS(self.config)
+        self.transport_name = config.transport_name
+        self.amqp_prefetch_count = config.amqp_prefetch_count
+        self.send_to_options = config.send_to
 
         self._event_handlers = {
             'ack': self.consume_ack,

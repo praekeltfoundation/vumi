@@ -3,6 +3,10 @@
 from vumi.errors import ConfigError
 
 
+# TODO: deepcopy or something for list/dict fields? Do we trust the caller to
+#       not allow our config to be modified?
+
+
 class ConfigField(object):
     def __init__(self, doc, required=False, default=None):
         self.name = None
