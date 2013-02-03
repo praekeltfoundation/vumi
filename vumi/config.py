@@ -105,8 +105,10 @@ class ConfigText(ConfigField):
 class ConfigInt(ConfigField):
     def clean(self, value):
         try:
-            return int(value)
-        except ValueError:
+            # We go via "str" to avoid silently truncating floats.
+            # XXX: Is there a better way to do this?
+            return int(str(value))
+        except (ValueError, TypeError):
             self.raise_config_error("could not be converted to int.")
 
 
@@ -114,13 +116,27 @@ class ConfigFloat(ConfigField):
     def clean(self, value):
         try:
             return float(value)
-        except ValueError:
+        except (ValueError, TypeError):
             self.raise_config_error("could not be converted to float.")
 
 
 class ConfigBool(ConfigField):
     def clean(self, value):
         return bool(value)
+
+
+class ConfigList(ConfigField):
+    def clean(self, value):
+        if not isinstance(value, (list, tuple)):
+            self.raise_config_error("is not a list.")
+        return value
+
+
+class ConfigDict(ConfigField):
+    def clean(self, value):
+        if not isinstance(value, dict):
+            self.raise_config_error("is not a dict.")
+        return value
 
 
 class ConfigMetaClass(type):
