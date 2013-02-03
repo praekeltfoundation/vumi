@@ -10,7 +10,7 @@ from twisted.web import http
 from twisted.web.resource import Resource
 from twisted.web.server import NOT_DONE_YET
 
-from vumi.config import ConfigString, ConfigInt, ConfigBool
+from vumi.config import ConfigText, ConfigInt, ConfigBool
 from vumi.transports.base import Transport, TransportConfig
 
 
@@ -20,10 +20,10 @@ class HttpRpcTransportConfig(TransportConfig):
     You should subclass this and add transport-specific fields.
     """
 
-    web_path = ConfigString("The path to listen for requests on.")
+    web_path = ConfigText("The path to listen for requests on.")
     web_port = ConfigInt(
         "The port to listen for requests on, defaults to `0`.", default=0)
-    health_path = ConfigString(
+    health_path = ConfigText(
         "The path to listen for downstream health checks on"
         " (useful with HAProxy)", default='health')
     request_cleanup_interval = ConfigInt(
@@ -41,7 +41,7 @@ class HttpRpcTransportConfig(TransportConfig):
     request_timeout_status_code = ConfigInt(
         "What HTTP status code should be generated when a timeout occurs."
         " Defaults to `504 Gateway Timeout`.", default=504)
-    request_timeout_body = ConfigString(
+    request_timeout_body = ConfigText(
         "What HTTP body should be returned when a timeout occurs."
         " Defaults to ''.", default='')
     noisy = ConfigBool(

@@ -7,7 +7,7 @@ import copy
 from twisted.internet.defer import inlineCallbacks, succeed
 from twisted.python import log
 
-from vumi.config import Config, ConfigString, ConfigInt, ConfigField
+from vumi.config import Config, ConfigText, ConfigInt, ConfigField
 from vumi.service import Worker
 from vumi.errors import ConfigError
 from vumi.message import TransportUserMessage, TransportEvent
@@ -25,7 +25,7 @@ class ApplicationConfig(Config):
     You should subclass this and add transport-specific fields.
     """
 
-    transport_name = ConfigString(
+    transport_name = ConfigText(
         "The name this application instance will use to create its queues.",
         required=True)
     amqp_prefetch_count = ConfigInt(

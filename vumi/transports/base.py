@@ -9,7 +9,7 @@ This is likely to get used heavily fast, so try get your changes in early.
 from twisted.internet.defer import inlineCallbacks
 from twisted.python import log
 
-from vumi.config import Config, ConfigString, ConfigInt
+from vumi.config import Config, ConfigText, ConfigInt
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.service import Worker
 from vumi.transports.failures import FailureMessage
@@ -22,7 +22,7 @@ class TransportConfig(Config):
     You should subclass this and add transport-specific fields.
     """
 
-    transport_name = ConfigString(
+    transport_name = ConfigText(
         "The name this transport instance will use to create its queues.",
         required=True)
     amqp_prefetch_count = ConfigInt(

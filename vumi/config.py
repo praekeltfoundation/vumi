@@ -1,6 +1,46 @@
 # -*- test-case-name: vumi.tests.test_config -*-
 
+from zope.interface import Interface
+from twisted.python.components import Adapter, registerAdapter
+
 from vumi.errors import ConfigError
+
+
+class IConfigData(Interface):
+    """Interface for a config data provider.
+
+    The default implementation is just a dict. We use interfaces and adapters
+    here because we want to be able to easily swap out the implementation to
+    handle more dynamic configurations or subclass the interface to allow
+    modification of config data.
+    """
+
+    def get(field_name, default):
+        """Get the value of a config field.
+
+        :returns: The value for the given ``field_name``, or ``default`` if
+                  the field has not been specified.
+        """
+
+    def has_key(field_name):
+        """Check for the existence of a config field.
+
+        :returns: ``True`` if a value exists for the given ``field_name``,
+                  ``False`` otherwise.
+        """
+
+
+class DictConfigData(Adapter):
+    "Adapter from dict to IConfigData."
+
+    def get(self, field_name, default):
+        return self.original.get(field_name, default)
+
+    def has_key(self, field_name):
+        return self.original.has_key(field_name)
+
+
+registerAdapter(DictConfigData, dict, IConfigData)
 
 
 # TODO: deepcopy or something for list/dict fields? Do we trust the caller to
@@ -29,40 +69,57 @@ class ConfigField(object):
 
     def validate(self, obj):
         if self.required:
-            if not obj.has_config_value(self.name):
+            if not obj._config_data.has_key(self.name):
                 raise ConfigError(
                     "Missing required config field '%s'" % (self.name))
+        # This will raise an exception if the value exists, but is invalid.
+        self.get_value(obj)
 
-    def convert(self, value):
+    def raise_config_error(self, message_suffix):
+        raise ConfigError("Field '%s' %s" % (self.name, message_suffix))
+
+    def clean(self, value):
         return value
 
+    def get_value(self, obj):
+        value = obj._config_data.get(self.name, self.default)
+        return self.clean(value) if value is not None else None
+
     def __get__(self, obj, cls):
-        value = obj.get_config_value(self.name, self.default)
-        return self.convert(value) if value is not None else None
+        return self.get_value(obj)
 
     def __set__(self, obj, value):
         raise AttributeError("Config fields are read-only.")
 
 
-class ConfigString(ConfigField):
-    def convert(self, value):
-        if isinstance(value, basestring):
-            return value
-        return unicode(value)
+class ConfigText(ConfigField):
+    def clean(self, value):
+        # XXX: We should really differentiate between "unicode" and "bytes".
+        #      However, yaml.load() gives us bytestrings or unicode depending
+        #      on the content.
+        if not isinstance(value, basestring):
+            self.raise_config_error("is not unicode.")
+        return value
 
 
 class ConfigInt(ConfigField):
-    def convert(self, value):
-        return int(value)
+    def clean(self, value):
+        try:
+            return int(value)
+        except ValueError:
+            self.raise_config_error("could not be converted to int.")
 
 
 class ConfigFloat(ConfigField):
-    def convert(self, value):
-        return float(value)
+    def clean(self, value):
+        try:
+            return float(value)
+        except ValueError:
+            self.raise_config_error("could not be converted to float.")
 
 
 class ConfigBool(ConfigField):
-    def convert(self, value):
+    def clean(self, value):
         return bool(value)
 
 
@@ -93,14 +150,7 @@ class Config(object):
 
     __metaclass__ = ConfigMetaClass
 
-    def __init__(self, config_dict):
-        self._config_dict = config_dict
+    def __init__(self, config_data):
+        self._config_data = IConfigData(config_data)
         for field in self.fields:
             field.validate(self)
-
-    def get_config_value(self, name, default=None):
-        # We rely on validation to handle missing required fields.
-        return self._config_dict.get(name, default)
-
-    def has_config_value(self, name):
-        return name in self._config_dict

@@ -19,7 +19,7 @@ from twisted.internet.error import ProcessDone
 from twisted.python.failure import Failure
 
 import vumi
-from vumi.config import ConfigString, ConfigInt, ConfigField
+from vumi.config import ConfigText, ConfigInt, ConfigField
 from vumi.application.base import ApplicationWorker
 from vumi.message import Message
 from vumi.errors import ConfigError
@@ -594,12 +594,12 @@ class SandboxCommand(Message):
 
 class SandboxConfig(ApplicationWorker.CONFIG_CLASS):
     "Sandbox configuration."
-    executable = ConfigString(
+    executable = ConfigText(
         "Full path to the executable to run in the sandbox.")
     args = ConfigField(
         "List of arguments to pass to the executable (not including"
         " the path of the executable itself).", default=[])
-    path = ConfigString("Current working directory to run the executable in.")
+    path = ConfigText("Current working directory to run the executable in.")
     env = ConfigField(
         "Custom environment variables for the sandboxed process.", default={})
     timeout = ConfigInt(
@@ -621,7 +621,7 @@ class SandboxConfig(ApplicationWorker.CONFIG_CLASS):
         " names or values of the RLIMIT constants in"
         " :module:`resource`. Values should be appropriate integers.",
         default={})
-    sandbox_id = ConfigString("This is set based on individual messages.")
+    sandbox_id = ConfigText("This is set based on individual messages.")
 
 
 class Sandbox(ApplicationWorker):
