@@ -15,14 +15,25 @@ class TestImiMobileUssdTransportTestCase(TransportTestCase):
     transport_class = ImiMobileUssdTransport
     timeout = 1
 
+    _from_addr = '9221234567'
+    _to_addr = '56263'
+    _request_defaults = {
+        'msisdn': _from_addr,
+        'msg': 'Spam Spam Spam Spam Spammity Spam',
+        'tid': '1',
+        'dcs': 'no-idea-what-this-is',
+        'code': 'VUMI',
+    }
+
     @inlineCallbacks
     def setUp(self):
         yield super(TestImiMobileUssdTransportTestCase, self).setUp()
         self.config = {
             'web_port': 0,
             'web_path': '/api/v1/imimobile/ussd/',
+            'user_terminated_session_message': "^Farewell",
             'suffix_to_addrs': {
-                'some-suffix': '56263',
+                'some-suffix': self._to_addr,
                 'some-other-suffix': '56264',
              }
         }
@@ -37,13 +48,8 @@ class TestImiMobileUssdTransportTestCase(TransportTestCase):
             urlencode(params)), data='/api/v1/imimobile/ussd/', method='GET')
 
     def mk_request(self, suffix, **params):
-        defaults = {
-            'msisdn': '9221234567',
-            'msg': 'Spam Spam Spam Spam Spammity Spam',
-            'tid': '1',
-            'dcs': 'no-idea-what-this-is',
-            'code': 'VUMI',
-        }
+        defaults = {}
+        defaults.update(self._request_defaults)
         defaults.update(params)
         return self.mk_full_request(suffix, **defaults)
 
@@ -52,23 +58,55 @@ class TestImiMobileUssdTransportTestCase(TransportTestCase):
         return request_msg.reply(reply_content, continue_session)
 
     @inlineCallbacks
+    def mk_session(self, from_addr=_from_addr, to_addr=_to_addr):
+        # first pre-populate the redis datastore to simulate session resume
+        # note: imimobile do not provide a session id, so instead we use the
+        # msisdn as the session id
+        yield self.session_manager.create_session(
+            from_addr, to_addr=to_addr, from_addr=from_addr)
+
+    def assert_message(self, msg, expected_field_values):
+        for field, expected_value in expected_field_values.iteritems():
+            self.assertEqual(msg[field], expected_value)
+
+    def assert_inbound_message(self, msg, **field_values):
+        expected_field_values = {
+            'content': self._request_defaults['msg'],
+            'to_addr': '56263',
+            'from_addr': self._request_defaults['msisdn'],
+            'session_event': TransportUserMessage.SESSION_NEW,
+            'transport_metadata': {
+                'imimobile_ussd': {
+                    'tid': self._request_defaults['tid'],
+                    'dcs': self._request_defaults['dcs'],
+                    'code': self._request_defaults['code'],
+                },
+            }
+        }
+        expected_field_values.update(field_values)
+
+        for field, expected_value in expected_field_values.iteritems():
+            self.assertEqual(msg[field], expected_value)
+
+    def assert_ack(self, ack, reply):
+        self.assertEqual(ack.payload['event_type'], 'ack')
+        self.assertEqual(ack.payload['user_message_id'], reply['message_id'])
+        self.assertEqual(ack.payload['sent_message_id'], reply['message_id'])
+
+    def assert_nack(self, nack, reply, reason):
+        self.assertEqual(nack.payload['event_type'], 'nack')
+        self.assertEqual(nack.payload['user_message_id'], reply['message_id'])
+        self.assertEqual(nack.payload['nack_reason'], reason)
+
+    @inlineCallbacks
     def test_inbound_begin(self):
         # Second connect is the actual start of the session
         user_content = "Who are you?"
         d = self.mk_request('some-suffix', msg=user_content)
         [msg] = yield self.wait_for_dispatched_messages(1)
-        self.assertEqual(msg['content'], user_content)
-        self.assertEqual(msg['to_addr'], '56263')
-        self.assertEqual(msg['from_addr'], '9221234567'),
-        self.assertEqual(msg['session_event'],
-                         TransportUserMessage.SESSION_NEW)
-        self.assertEqual(msg['transport_metadata'], {
-            'imimobile_ussd': {
-                'tid': '1',
-                'dcs': 'no-idea-what-this-is',
-                'code': 'VUMI',
-            },
-        })
+        self.assert_inbound_message(msg,
+            session_event=TransportUserMessage.SESSION_NEW,
+            content=user_content)
 
         reply_content = "We are the Knights Who Say ... Ni!"
         reply = self.mk_reply(msg, reply_content)
@@ -79,33 +117,19 @@ class TestImiMobileUssdTransportTestCase(TransportTestCase):
             response.headers.getRawHeaders('X-USSD-SESSION'), ['1'])
 
         [ack] = yield self.wait_for_dispatched_events(1)
-        self.assertEqual(ack.payload['event_type'], 'ack')
-        self.assertEqual(ack.payload['user_message_id'], reply['message_id'])
-        self.assertEqual(ack.payload['sent_message_id'], reply['message_id'])
+        self.assert_ack(ack, reply)
 
     @inlineCallbacks
     def test_inbound_resume_and_reply_with_end(self):
-        # first pre-populate the redis datastore to simulate session resume
-        # note: imimobile do not provide a session id, so instead we use the
-        # msisdn as the session id
-        yield self.session_manager.create_session(
-            '9221234567', to_addr='56263', from_addr='9221234567')
+        from_addr = '9221234567'
+        yield self.mk_session(from_addr)
 
         user_content = "Well, what is it you want?"
         d = self.mk_request('some-suffix', msg=user_content)
         [msg] = yield self.wait_for_dispatched_messages(1)
-        self.assertEqual(msg['content'], user_content)
-        self.assertEqual(msg['to_addr'], '56263')
-        self.assertEqual(msg['from_addr'], '9221234567')
-        self.assertEqual(msg['session_event'],
-                         TransportUserMessage.SESSION_RESUME)
-        self.assertEqual(msg['transport_metadata'], {
-            'imimobile_ussd': {
-                'tid': '1',
-                'dcs': 'no-idea-what-this-is',
-                'code': 'VUMI',
-            },
-        })
+        self.assert_inbound_message(msg,
+            session_event=TransportUserMessage.SESSION_RESUME,
+            content=user_content)
 
         reply_content = "We want ... a shrubbery!"
         reply = self.mk_reply(msg, reply_content, continue_session=False)
@@ -115,10 +139,59 @@ class TestImiMobileUssdTransportTestCase(TransportTestCase):
         self.assertEqual(
             response.headers.getRawHeaders('X-USSD-SESSION'), ['0'])
 
+        # Assert that the session was removed from the session manager
+        session = yield self.session_manager.load_session(from_addr)
+        self.assertEqual(session, {})
+
         [ack] = yield self.wait_for_dispatched_events(1)
-        self.assertEqual(ack.payload['event_type'], 'ack')
-        self.assertEqual(ack.payload['user_message_id'], reply['message_id'])
-        self.assertEqual(ack.payload['sent_message_id'], reply['message_id'])
+        self.assert_ack(ack, reply)
+
+    @inlineCallbacks
+    def test_inbound_resume_and_reply_with_resume(self):
+        yield self.mk_session()
+
+        user_content = "Well, what is it you want?"
+        d = self.mk_request('some-suffix', msg=user_content)
+        [msg] = yield self.wait_for_dispatched_messages(1)
+        self.assert_inbound_message(msg,
+            session_event=TransportUserMessage.SESSION_RESUME,
+            content=user_content)
+
+        reply_content = "We want ... a shrubbery!"
+        reply = self.mk_reply(msg, reply_content, continue_session=True)
+        self.dispatch(reply)
+        response = yield d
+        self.assertEqual(response.delivered_body, reply_content)
+        self.assertEqual(
+            response.headers.getRawHeaders('X-USSD-SESSION'), ['1'])
+
+        [ack] = yield self.wait_for_dispatched_events(1)
+        self.assert_ack(ack, reply)
+
+    @inlineCallbacks
+    def test_inbound_close_and_reply(self):
+        from_addr = '9221234567'
+        self.mk_session(from_addr=from_addr)
+
+        user_content = "Farewell, sweet Concorde!"
+        d = self.mk_request('some-suffix', msg=user_content)
+        [msg] = yield self.wait_for_dispatched_messages(1)
+        self.assert_inbound_message(msg,
+            session_event=TransportUserMessage.SESSION_CLOSE,
+            content=user_content)
+
+        # Assert that the session was removed from the session manager
+        session = yield self.session_manager.load_session(from_addr)
+        self.assertEqual(session, {})
+
+        reply_content = "I'll, um, I'll just stay here, then."
+        reply = self.mk_reply(msg, reply_content, continue_session=True)
+        self.dispatch(reply)
+        response = yield d
+        self.assertEqual(response.delivered_body, reply_content)
+
+        [ack] = yield self.wait_for_dispatched_events(1)
+        self.assert_ack(ack, reply)
 
     @inlineCallbacks
     def test_request_with_unknown_suffix(self):
@@ -153,27 +226,23 @@ class TestImiMobileUssdTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_nack_insufficient_message_fields(self):
-        msg = self.mkmsg_out(message_id='23', in_reply_to=None, content=None)
-        self.dispatch(msg)
+        reply = self.mkmsg_out(message_id='23', in_reply_to=None, content=None)
+        self.dispatch(reply)
         [nack] = yield self.wait_for_dispatched_events(1)
-        self.assertEqual(nack.payload['event_type'], 'nack')
-        self.assertEqual(nack.payload['user_message_id'], '23')
-        self.assertEqual(nack.payload['nack_reason'],
-                         self.transport.INSUFFICIENT_MSG_FIELDS_ERROR)
+        self.assert_nack(
+            nack, reply, self.transport.INSUFFICIENT_MSG_FIELDS_ERROR)
 
     @inlineCallbacks
     def test_nack_http_http_response_failure(self):
         self.patch(self.transport, 'finish_request', lambda *a, **kw: None)
-        msg = self.mkmsg_out(
+        reply = self.mkmsg_out(
             message_id='23',
             in_reply_to='some-number',
             content='There are some who call me ... Tim!')
-        self.dispatch(msg)
+        self.dispatch(reply)
         [nack] = yield self.wait_for_dispatched_events(1)
-        self.assertEqual(nack.payload['event_type'], 'nack')
-        self.assertEqual(nack.payload['user_message_id'], '23')
-        self.assertEqual(nack.payload['nack_reason'],
-                         self.transport.RESPONSE_FAILURE_ERROR)
+        self.assert_nack(
+            nack, reply, self.transport.RESPONSE_FAILURE_ERROR)
 
     def test_ist_to_utc(self):
         self.assertEqual(

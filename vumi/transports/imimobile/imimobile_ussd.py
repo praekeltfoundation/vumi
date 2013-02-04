@@ -1,3 +1,4 @@
+import re
 import json
 from datetime import datetime, timedelta
 
@@ -23,6 +24,9 @@ class ImiMobileUssdTransport(HttpRpcTransport):
         The HTTP port to listen on.
     :param dict suffix_to_addrs:
         Mappings between url suffixes and to addresses.
+    :param str user_terminated_session_message:
+        A regex used to identify user terminated session messages. Default is
+        '^Map Dialog User Abort User Reason'.
     :param dict redis_manager:
         The configuration parameters for connecting to Redis.
     :param int ussd_session_timeout:
@@ -36,14 +40,24 @@ class ImiMobileUssdTransport(HttpRpcTransport):
     RESPONSE_FAILURE_ERROR = "Response to http request failed."
     INSUFFICIENT_MSG_FIELDS_ERROR = "Insufficiant message fields provided."
 
-    @inlineCallbacks
-    def setup_transport(self):
-        super(ImiMobileUssdTransport, self).setup_transport()
+    def validate_config(self):
+        super(ImiMobileUssdTransport, self).validate_config()
 
         # Mappings between url suffixes and the tags used as the to_addr for
         # inbound messages (e.g. shortcodes or longcodes). This is necessary
         # since the requests from ImiMobile do not provided us with this.
         self.suffix_to_addrs = self.config['suffix_to_addrs']
+
+        # IMImobile do not provide a parameter or header to signal termination
+        # of the session by the user, other than sending "Map Dialog User Abort
+        # User Reason: User specific reason" as the request's message content.
+        self.user_terminated_session_re = re.compile(
+            self.config.get('user_terminated_session_message',
+                            '^Map Dialog User Abort User Reason'))
+
+    @inlineCallbacks
+    def setup_transport(self):
+        super(ImiMobileUssdTransport, self).setup_transport()
 
         # configure session manager
         r_config = self.config.get('redis_manager', {})
@@ -103,6 +117,9 @@ class ImiMobileUssdTransport(HttpRpcTransport):
         return (datetime.strptime(timestamp, '%m/%d/%Y %I:%M:%S %p')
                 - timedelta(hours=5, minutes=30))
 
+    def user_has_terminated_session(self, content):
+        return self.user_terminated_session_re.match(content) is not None
+
     @inlineCallbacks
     def handle_raw_inbound_message(self, message_id, request):
         errors = {}
@@ -118,28 +135,29 @@ class ImiMobileUssdTransport(HttpRpcTransport):
             yield self.finish_request(message_id, json.dumps(errors), code=400)
             return
 
-        # TODO change if we are sure 'tid' can be used as a session identifier
-        session_id = values['msisdn']
-
         from_addr = values['msisdn']
         log.msg('ImiMobileTransport receiving inbound message from %s to %s.' %
                 (from_addr, to_addr))
 
         # We use the msisdn (from_addr) to make a guess about the
-        # session_event.
-        # TODO: Finalise or simplify this block after integration testing
-        session = yield self.session_manager.load_session(session_id)
+        # whether the session is new or not.
+        content = values['msg']
+        session = yield self.session_manager.load_session(from_addr)
         if session:
-            session_event = TransportUserMessage.SESSION_RESUME
-            yield self.session_manager.save_session(session_id, session)
+            if self.user_has_terminated_session(content):
+                yield self.session_manager.clear_session(from_addr)
+                session_event = TransportUserMessage.SESSION_CLOSE
+            else:
+                session_event = TransportUserMessage.SESSION_RESUME
+                yield self.session_manager.save_session(from_addr, session)
         else:
             session_event = TransportUserMessage.SESSION_NEW
             yield self.session_manager.create_session(
-                session_id, from_addr=from_addr, to_addr=to_addr)
+                from_addr, from_addr=from_addr, to_addr=to_addr)
 
         yield self.publish_message(
             message_id=message_id,
-            content=values['msg'],
+            content=content,
             to_addr=to_addr,
             from_addr=from_addr,
             provider='imimobile',
@@ -153,17 +171,23 @@ class ImiMobileUssdTransport(HttpRpcTransport):
                 }
             })
 
+    @inlineCallbacks
     def handle_outbound_message(self, message):
         error = None
         message_id = message['message_id']
+
         if message.payload.get('in_reply_to') and 'content' in message.payload:
-            session_has_ended = (
-                message['session_event'] == TransportUserMessage.SESSION_CLOSE)
+            # IMImobile use 1 for resume and 0 for termination of a session
+            session_header_value = 1
+
+            if message['session_event'] == TransportUserMessage.SESSION_CLOSE:
+                yield self.session_manager.clear_session(message['to_addr'])
+                session_header_value = 0
 
             response_id = self.finish_request(
                 message['in_reply_to'],
                 message['content'].encode('utf-8'),
-                headers={'X-USSD-SESSION': [0 if session_has_ended else 1]})
+                headers={'X-USSD-SESSION': [session_header_value]})
 
             if response_id is None:
                 error = self.RESPONSE_FAILURE_ERROR
@@ -171,7 +195,8 @@ class ImiMobileUssdTransport(HttpRpcTransport):
             error = self.INSUFFICIENT_MSG_FIELDS_ERROR
 
         if error is not None:
-            return self.publish_nack(message_id, error)
+            yield self.publish_nack(message_id, error)
+            return
 
-        return self.publish_ack(user_message_id=message_id,
-                                sent_message_id=message_id)
+        yield self.publish_ack(user_message_id=message_id,
+                               sent_message_id=message_id)
