@@ -65,6 +65,11 @@ class FieldDescriptor(object):
         raw_value = modelobj._riak_object._data.get(self.key)
         return self.field.from_riak(raw_value)
 
+    def clean(self, modelobj):
+        """Do any cleanup of the model data for this descriptor after loading
+        the data from Riak."""
+        pass
+
     def __repr__(self):
         return "<%s key=%s field=%r>" % (self.__class__.__name__, self.key,
                                          self.field)
@@ -559,14 +564,16 @@ class ForeignKeyDescriptor(FieldDescriptor):
             self.model_cls, self.index_name, modelobj.key)
         return mr.get_keys()
 
-    def get_value(self, modelobj):
-        return ForeignKeyProxy(self, modelobj)
-
-    def get_foreign_key(self, modelobj):
+    def clean(self, modelobj):
         if self.key not in modelobj._riak_object._data:
             # We might have an old-style index-only version of the data.
             indexes = modelobj._riak_object.get_indexes(self.index_name)
             modelobj._riak_object._data[self.key] = (indexes or [None])[0]
+
+    def get_value(self, modelobj):
+        return ForeignKeyProxy(self, modelobj)
+
+    def get_foreign_key(self, modelobj):
         return modelobj._riak_object._data.get(self.key)
 
     def set_foreign_key(self, modelobj, foreign_key):
@@ -658,11 +665,13 @@ class ManyToManyDescriptor(ForeignKeyDescriptor):
         raise RuntimeError("ManyToManyDescriptors should never be assigned"
                            " to.")
 
-    def get_foreign_keys(self, modelobj):
+    def clean(self, modelobj):
         if self.key not in modelobj._riak_object._data:
             # We might have an old-style index-only version of the data.
             indexes = modelobj._riak_object.get_indexes(self.index_name)
             modelobj._riak_object._data[self.key] = indexes[:]
+
+    def get_foreign_keys(self, modelobj):
         return modelobj._riak_object._data[self.key][:]
 
     def add_foreign_key(self, modelobj, foreign_key):
