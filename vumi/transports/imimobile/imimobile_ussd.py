@@ -105,7 +105,7 @@ class ImiMobileUssdTransport(HttpRpcTransport):
             if field not in self.EXPECTED_FIELDS:
                 errors.setdefault('unexpected_parameter', []).append(field)
             else:
-                values[field] = str(request.args.get(field)[0]).encode('utf-8')
+                values[field] = str(request.args.get(field)[0])
 
         for field in self.EXPECTED_FIELDS:
             if field not in values:
