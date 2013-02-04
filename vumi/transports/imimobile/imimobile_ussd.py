@@ -85,7 +85,7 @@ class ImiMobileUssdTransport(HttpRpcTransport):
         """
         errors = {}
 
-        _, suffix = request.path.rsplit('/', 1)
+        [suffix] = request.postpath
         tag = self.suffix_to_addrs.get(suffix, None)
         if tag is None:
             errors['unknown_suffix'] = suffix
