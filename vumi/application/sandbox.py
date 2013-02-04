@@ -647,7 +647,7 @@ class Sandbox(ApplicationWorker):
         self.resources = self.create_sandbox_resources(config.sandbox)
         self.resources.validate_config()
 
-    def get_config(self, msg=None):
+    def get_config(self, msg):
         config = self.config.copy()
         config['sandbox_id'] = self.sandbox_id_for_message(msg)
         return succeed(self.CONFIG_CLASS(config))
