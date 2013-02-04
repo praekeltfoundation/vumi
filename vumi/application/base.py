@@ -121,7 +121,7 @@ class ApplicationWorker(Worker):
         yield self.teardown_application()
         yield self.teardown_middleware()
 
-    def get_config(self, msg=None):
+    def get_config(self, msg):
         """This should return a message-specific config object.
 
         It deliberately returns a deferred even when this isn't strictly
