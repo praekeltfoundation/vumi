@@ -32,6 +32,7 @@ class TestImiMobileUssdTransportTestCase(TransportTestCase):
             'web_port': 0,
             'web_path': '/api/v1/imimobile/ussd/',
             'user_terminated_session_message': "^Farewell",
+            'user_terminated_session_response': "You have ended the session",
             'suffix_to_addrs': {
                 'some-suffix': self._to_addr,
                 'some-other-suffix': '56264',
@@ -184,14 +185,10 @@ class TestImiMobileUssdTransportTestCase(TransportTestCase):
         session = yield self.session_manager.load_session(from_addr)
         self.assertEqual(session, {})
 
-        reply_content = "I'll, um, I'll just stay here, then."
-        reply = self.mk_reply(msg, reply_content, continue_session=True)
-        self.dispatch(reply)
         response = yield d
-        self.assertEqual(response.delivered_body, reply_content)
-
-        [ack] = yield self.wait_for_dispatched_events(1)
-        self.assert_ack(ack, reply)
+        self.assertEqual(response.delivered_body, "You have ended the session")
+        self.assertEqual(
+            response.headers.getRawHeaders('X-USSD-SESSION'), ['0'])
 
     @inlineCallbacks
     def test_request_with_unknown_suffix(self):

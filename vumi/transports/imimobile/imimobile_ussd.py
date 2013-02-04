@@ -27,6 +27,9 @@ class ImiMobileUssdTransport(HttpRpcTransport):
     :param str user_terminated_session_message:
         A regex used to identify user terminated session messages. Default is
         '^Map Dialog User Abort User Reason'.
+    :param str user_terminated_session_response:
+        Response given back to the user if the user terminated the session.
+        Default is 'Session Ended'.
     :param dict redis_manager:
         The configuration parameters for connecting to Redis.
     :param int ussd_session_timeout:
@@ -54,6 +57,9 @@ class ImiMobileUssdTransport(HttpRpcTransport):
         self.user_terminated_session_re = re.compile(
             self.config.get('user_terminated_session_message',
                             '^Map Dialog User Abort User Reason'))
+
+        self.user_terminated_session_response = self.config.get(
+            'user_terminated_session_response', 'Session Ended')
 
     @inlineCallbacks
     def setup_transport(self):
@@ -139,21 +145,27 @@ class ImiMobileUssdTransport(HttpRpcTransport):
         log.msg('ImiMobileTransport receiving inbound message from %s to %s.' %
                 (from_addr, to_addr))
 
-        # We use the msisdn (from_addr) to make a guess about the
-        # whether the session is new or not.
         content = values['msg']
-        session = yield self.session_manager.load_session(from_addr)
-        if session:
-            if self.user_has_terminated_session(content):
-                yield self.session_manager.clear_session(from_addr)
-                session_event = TransportUserMessage.SESSION_CLOSE
-            else:
+        if self.user_has_terminated_session(content):
+            yield self.session_manager.clear_session(from_addr)
+            session_event = TransportUserMessage.SESSION_CLOSE
+
+            # IMImobile use 0 for termination of a session
+            self.finish_request(
+                message_id,
+                self.user_terminated_session_response,
+                headers={'X-USSD-SESSION': [0]})
+        else:
+            # We use the msisdn (from_addr) to make a guess about the
+            # whether the session is new or not.
+            session = yield self.session_manager.load_session(from_addr)
+            if session:
                 session_event = TransportUserMessage.SESSION_RESUME
                 yield self.session_manager.save_session(from_addr, session)
-        else:
-            session_event = TransportUserMessage.SESSION_NEW
-            yield self.session_manager.create_session(
-                from_addr, from_addr=from_addr, to_addr=to_addr)
+            else:
+                session_event = TransportUserMessage.SESSION_NEW
+                yield self.session_manager.create_session(
+                    from_addr, from_addr=from_addr, to_addr=to_addr)
 
         yield self.publish_message(
             message_id=message_id,
