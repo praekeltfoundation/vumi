@@ -51,12 +51,12 @@ class ConfigTest(TestCase):
         class FooConfig(Config):
             "Test config."
             foo = ConfigField("A foo field.")
-            bar = ConfigField("A bar field.")
+            bar = ConfigText("A bar field.")
 
         self.assertEqual(FooConfig.__doc__, '\n\n'.join([
             "Test config.",
             " foo: A foo field.",
-            " bar: A bar field.",
+            " bar (str): A bar field.",
             ]))
 
         # And again with the fields defined in a different order to check that
@@ -161,8 +161,9 @@ class ConfigFieldTest(TestCase):
         field = self.make_field(ConfigBool)
         self.assertEqual(False, self.field_value(field, 0))
         self.assertEqual(True, self.field_value(field, 1))
+        self.assertEqual(False, self.field_value(field, "0"))
         self.assertEqual(True, self.field_value(field, "true"))
-        self.assertEqual(True, self.field_value(field, u"false"))
+        self.assertEqual(False, self.field_value(field, u"false"))
         self.assertEqual(True, self.field_value(field, True))
         self.assertEqual(False, self.field_value(field, False))
         self.assertEqual(None, self.field_value(field, None))

@@ -50,6 +50,8 @@ registerAdapter(DictConfigData, dict, IConfigData)
 class ConfigField(object):
     _creation_order = 0
 
+    field_type = None
+
     def __init__(self, doc, required=False, default=None):
         # This hack is to allow us to track the order in which fields were
         # added to a config class. We want to do this so we can document fields
@@ -62,7 +64,10 @@ class ConfigField(object):
         self.default = default
 
     def get_doc(self):
-        return ' %s: %s' % (self.name, self.doc)
+        field_type = ''
+        if self.field_type is not None:
+            field_type = ' (%s)' % (self.field_type,)
+        return ' %s%s: %s' % (self.name, field_type, self.doc)
 
     def setup(self, name):
         self.name = name
@@ -93,6 +98,8 @@ class ConfigField(object):
 
 
 class ConfigText(ConfigField):
+    field_type = 'str'
+
     def clean(self, value):
         # XXX: We should really differentiate between "unicode" and "bytes".
         #      However, yaml.load() gives us bytestrings or unicode depending
@@ -103,6 +110,8 @@ class ConfigText(ConfigField):
 
 
 class ConfigInt(ConfigField):
+    field_type = 'int'
+
     def clean(self, value):
         try:
             # We go via "str" to avoid silently truncating floats.
@@ -113,6 +122,8 @@ class ConfigInt(ConfigField):
 
 
 class ConfigFloat(ConfigField):
+    field_type = 'float'
+
     def clean(self, value):
         try:
             return float(value)
@@ -121,11 +132,18 @@ class ConfigFloat(ConfigField):
 
 
 class ConfigBool(ConfigField):
+    field_type = 'bool'
+
     def clean(self, value):
+        if isinstance(value, basestring):
+            if value.lower() in ('false', '0'):
+                return False
         return bool(value)
 
 
 class ConfigList(ConfigField):
+    field_type = 'list'
+
     def clean(self, value):
         if not isinstance(value, (list, tuple)):
             self.raise_config_error("is not a list.")
@@ -133,6 +151,8 @@ class ConfigList(ConfigField):
 
 
 class ConfigDict(ConfigField):
+    field_type = 'dict'
+
     def clean(self, value):
         if not isinstance(value, dict):
             self.raise_config_error("is not a dict.")

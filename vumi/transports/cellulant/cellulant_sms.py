@@ -8,7 +8,7 @@ from twisted.internet.defer import inlineCallbacks
 from vumi.utils import http_request_full
 from vumi.errors import ConfigError
 from vumi import log
-from vumi.config import ConfigField, ConfigText
+from vumi.config import ConfigDict, ConfigText
 from vumi.transports.httprpc import HttpRpcTransport
 
 
@@ -16,7 +16,7 @@ class CellulantSmsTransportConfig(HttpRpcTransport.CONFIG_CLASS):
     """Cellulant transport config.
     """
 
-    credentials = ConfigField(
+    credentials = ConfigDict(
         "A dictionary where the `from_addr` is used for the key lookup and the"
         " returned value should be a dictionary containing the username and"
         " password.", required=True)

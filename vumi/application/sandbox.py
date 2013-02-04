@@ -19,7 +19,7 @@ from twisted.internet.error import ProcessDone
 from twisted.python.failure import Failure
 
 import vumi
-from vumi.config import ConfigText, ConfigInt, ConfigField
+from vumi.config import ConfigText, ConfigInt, ConfigList, ConfigDict
 from vumi.application.base import ApplicationWorker
 from vumi.message import Message
 from vumi.errors import ConfigError
@@ -596,11 +596,11 @@ class SandboxConfig(ApplicationWorker.CONFIG_CLASS):
     "Sandbox configuration."
     executable = ConfigText(
         "Full path to the executable to run in the sandbox.")
-    args = ConfigField(
+    args = ConfigList(
         "List of arguments to pass to the executable (not including"
         " the path of the executable itself).", default=[])
     path = ConfigText("Current working directory to run the executable in.")
-    env = ConfigField(
+    env = ConfigDict(
         "Custom environment variables for the sandboxed process.", default={})
     timeout = ConfigInt(
         "Length of time the subprocess is given to process a message.",
@@ -608,14 +608,14 @@ class SandboxConfig(ApplicationWorker.CONFIG_CLASS):
     recv_limit = ConfigInt(
         "Maximum number of bytes that will be read from a sandboxed"
         " process' stdout and stderr combined.", default=1024 * 1024)
-    sandbox = ConfigField(
+    sandbox = ConfigDict(
         "Dictionary of resources to provide to the sandbox."
         " Keys are the names of resources (as seen inside the sandbox)."
         " Values are dictionaries which must contain a `cls` key that"
         " gives the full name of the class that provides the resource."
         " Other keys are additional configuration for that resource.",
         default={})
-    rlimits = ConfigField(
+    rlimits = ConfigDict(
         "Dictionary of resource limits to be applied to sandboxed"
         " processes. Defaults are fairly restricted. Keys maybe"
         " names or values of the RLIMIT constants in"

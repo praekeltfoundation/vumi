@@ -7,7 +7,7 @@ import copy
 from twisted.internet.defer import inlineCallbacks, succeed
 from twisted.python import log
 
-from vumi.config import Config, ConfigText, ConfigInt, ConfigField
+from vumi.config import Config, ConfigText, ConfigInt, ConfigDict
 from vumi.service import Worker
 from vumi.errors import ConfigError
 from vumi.message import TransportUserMessage, TransportEvent
@@ -31,7 +31,7 @@ class ApplicationConfig(Config):
     amqp_prefetch_count = ConfigInt(
         "The number of messages processed concurrently from each AMQP queue.",
         default=20)
-    send_to = ConfigField("'send_to' configuration dict.", default={})
+    send_to = ConfigDict("'send_to' configuration dict.", default={})
 
 
 class ApplicationWorker(Worker):
