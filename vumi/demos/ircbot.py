@@ -10,30 +10,30 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from vumi import log
 from vumi.application import ApplicationWorker
 from vumi.persist.txredis_manager import TxRedisManager
+from vumi.config import ConfigText, ConfigDict
+
+
+class MemoConfig(ApplicationWorker.CONFIG_CLASS):
+    "Memo worker config."
+    worker_name = ConfigText("Name of worker.", required=True)
+    redis_manager = ConfigDict("Redis client configuration.", default={})
 
 
 class MemoWorker(ApplicationWorker):
     """Watches for memos to users and notifies users of memos when users
     appear.
-
-    Configuration
-    -------------
-    transport_name : str
-        Name of the transport.
-    worker_name : str
-        Name of this worker. Used as part of the Redis key prefix.
     """
+
+    CONFIG_CLASS = MemoConfig
 
     MEMO_RE = re.compile(r'^\S+ tell (\S+) (.*)$')
 
-    def validate_config(self):
-        self.redis_config = self.config.get('redis_manager', {})
-        self.r_prefix = "ircbot:memos:%s" % (self.config['worker_name'],)
-
     @inlineCallbacks
     def setup_application(self):
-        redis = yield TxRedisManager.from_config(self.redis_config)
-        self.redis = redis.sub_manager(self.r_prefix)
+        config = self.get_static_config()
+        r_prefix = "ircbot:memos:%s" % (config.worker_name,)
+        redis = yield TxRedisManager.from_config(config.redis_manager)
+        self.redis = redis.sub_manager(r_prefix)
 
     def teardown_application(self):
         return self.redis._close()

@@ -8,6 +8,7 @@ from twisted.python import log
 from vumi.application import ApplicationWorker
 from vumi.utils import http_request
 from vumi.components import SessionManager
+from vumi.config import ConfigText, ConfigDict
 
 
 class HangmanGame(object):
@@ -119,34 +120,31 @@ class HangmanGame(object):
                                    }
 
 
+class HangmanConfig(ApplicationWorker.CONFIG_CLASS):
+    "Hangman worker config."
+    worker_name = ConfigText("Name of this hangman worker.", required=True)
+    random_word_url = ConfigText(
+        "URL to GET a random word from.", required=True)
+    redis_manager = ConfigDict("Redis client configuration.", default={})
+
+
 class HangmanWorker(ApplicationWorker):
     """Worker that plays Hangman.
-
-       Configuration
-       -------------
-       transport_name : str
-           Name of the transport.
-       worker_name : str
-           Name of this set of hangman workers.
-       random_word_url : URL
-           Page to GET a random word from.
-           E.g. http://randomword.setgetgo.com/get.php
        """
 
-    def validate_config(self):
-        self.r_config = self.config.get('redis_manager', {})
+    CONFIG_CLASS = HangmanConfig
 
     @inlineCallbacks
     def setup_application(self):
         """Start the worker"""
+        config = self.get_static_config()
         # Connect to Redis
         r_prefix = "hangman_game:%s:%s" % (
-            self.config['transport_name'],
-            self.config['worker_name'])
+            config.transport_name, config.worker_name)
         self.session_manager = yield SessionManager.from_redis_config(
-            self.r_config, r_prefix)
+            config.redis_manager, r_prefix)
 
-        self.random_word_url = self.config['random_word_url']
+        self.random_word_url = config.random_word_url
         log.msg("random_word_url = %s" % self.random_word_url)
 
     @inlineCallbacks
