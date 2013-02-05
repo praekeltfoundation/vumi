@@ -163,14 +163,17 @@ class ConfigMetaClass(type):
     def __new__(mcs, name, bases, dict):
         # locate Field instances
         fields = []
-        class_dicts = [dict] + [base.__dict__ for base in reversed(bases)]
-        for cls_dict in class_dicts:
-            for key, possible_field in cls_dict.items():
-                if key in fields:
-                    continue
-                if isinstance(possible_field, ConfigField):
-                    fields.append(possible_field)
-                    possible_field.setup(key)
+        unified_class_dict = {}
+        for base in bases:
+            unified_class_dict.update(base.__dict__)
+        unified_class_dict.update(dict)
+
+        for key, possible_field in unified_class_dict.items():
+            if key in fields:
+                continue
+            if isinstance(possible_field, ConfigField):
+                fields.append(possible_field)
+                possible_field.setup(key)
 
         fields.sort(key=lambda f: f.creation_order)
         dict['fields'] = fields
