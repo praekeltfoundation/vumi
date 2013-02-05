@@ -180,6 +180,14 @@ class ConfigFieldTest(TestCase):
         self.assert_field_invalid(field, "foo")
         self.assert_field_invalid(field, 123)
 
+    def test_list_field_immutable(self):
+        field = self.make_field(ConfigList)
+        model = self.fake_model(['fault', 'mine'])
+        value = field.get_value(model)
+        self.assertEqual(value, ['fault', 'mine'])
+        value[1] = 'yours'
+        self.assertEqual(field.get_value(model), ['fault', 'mine'])
+
     def test_dict_field(self):
         field = self.make_field(ConfigDict)
         self.assertEqual({}, self.field_value(field, {}))
@@ -190,3 +198,11 @@ class ConfigFieldTest(TestCase):
         self.assert_field_invalid(field, object())
         self.assert_field_invalid(field, "foo")
         self.assert_field_invalid(field, 123)
+
+    def test_dict_field_immutable(self):
+        field = self.make_field(ConfigDict)
+        model = self.fake_model({'fault': 'mine'})
+        value = field.get_value(model)
+        self.assertEqual(value, {'fault': 'mine'})
+        value['fault'] = 'yours'
+        self.assertEqual(field.get_value(model), {'fault': 'mine'})

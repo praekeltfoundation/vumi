@@ -1,5 +1,7 @@
 # -*- test-case-name: vumi.tests.test_config -*-
 
+from copy import deepcopy
+
 from zope.interface import Interface
 from twisted.python.components import Adapter, registerAdapter
 
@@ -41,10 +43,6 @@ class DictConfigData(Adapter):
 
 
 registerAdapter(DictConfigData, dict, IConfigData)
-
-
-# TODO: deepcopy or something for list/dict fields? Do we trust the caller to
-#       not allow our config to be modified?
 
 
 class ConfigField(object):
@@ -147,7 +145,7 @@ class ConfigList(ConfigField):
     def clean(self, value):
         if not isinstance(value, (list, tuple)):
             self.raise_config_error("is not a list.")
-        return value
+        return deepcopy(value)
 
 
 class ConfigDict(ConfigField):
@@ -156,7 +154,7 @@ class ConfigDict(ConfigField):
     def clean(self, value):
         if not isinstance(value, dict):
             self.raise_config_error("is not a dict.")
-        return value
+        return deepcopy(value)
 
 
 class ConfigMetaClass(type):
