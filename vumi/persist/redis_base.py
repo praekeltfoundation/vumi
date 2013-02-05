@@ -66,6 +66,10 @@ class Manager(object):
         self._key_prefix = key_prefix
         self._key_separator = key_separator
 
+    def __deepcopy__(self, memo):
+        "This is to let managers pass through config deepcopies in tests."
+        return self
+
     def get_key_prefix(self):
         """This is only intended for use in testing, not production."""
         return self._key_prefix

@@ -70,7 +70,7 @@ class Transport(Worker):
             self.config.setdefault('amqp_prefetch_count',
                                     self.config['concurrent_sends'])
 
-        config = self.CONFIG_CLASS(self.config)
+        config = self.get_static_config()
         self.transport_name = config.transport_name
         self.amqp_prefetch_count = config.amqp_prefetch_count
 
@@ -99,13 +99,16 @@ class Transport(Worker):
     def publish_rkey(self, name):
         return self.publish_to(self.get_rkey(name))
 
+    def get_static_config(self):
+        return self._static_config
+
     def _validate_config(self):
         # We assume that all required fields will either come from the base
         # config or will have placeholder values that don't fail validation.
         # This object is only created to trigger validation.
         # TODO: Eventually we'll be able to remove the legacy validate_config()
         # and just use config objects.
-        self.CONFIG_CLASS(self.config)
+        self._static_config = self.CONFIG_CLASS(self.config)
         return self.validate_config()
 
     def validate_config(self):

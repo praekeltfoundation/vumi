@@ -100,7 +100,7 @@ class HttpRpcTransport(Transport):
     CONFIG_CLASS = HttpRpcTransportConfig
 
     def validate_config(self):
-        config = self.CONFIG_CLASS(self.config)
+        config = self.get_static_config()
         self.web_path = config.web_path
         self.web_port = config.web_port
         self.health_path = config.health_path.lstrip('/')

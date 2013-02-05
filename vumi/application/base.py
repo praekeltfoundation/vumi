@@ -29,7 +29,8 @@ class ApplicationConfig(Config):
         "The name this application instance will use to create its queues.",
         required=True)
     amqp_prefetch_count = ConfigInt(
-        "The number of messages processed concurrently from each AMQP queue.",
+        "The number of messages fetched concurrently from each AMQP queue"
+        " by each worker instance.",
         default=20)
     send_to = ConfigDict("'send_to' configuration dict.", default={})
 
@@ -84,7 +85,7 @@ class ApplicationWorker(Worker):
         self._consumers = []
         self._validate_config()
 
-        config = self.CONFIG_CLASS(self.config)
+        config = self.get_static_config()
         self.transport_name = config.transport_name
         self.amqp_prefetch_count = config.amqp_prefetch_count
         self.send_to_options = config.send_to
@@ -121,6 +122,9 @@ class ApplicationWorker(Worker):
         yield self.teardown_application()
         yield self.teardown_middleware()
 
+    def get_static_config(self):
+        return self._static_config
+
     def get_config(self, msg):
         """This should return a message-specific config object.
 
@@ -128,18 +132,21 @@ class ApplicationWorker(Worker):
         necessary to ensure that workers will continue to work when per-message
         configuration needs to be fetched from elsewhere.
         """
-        return succeed(self.CONFIG_CLASS(self.config))
+        return succeed(self._static_config)
 
     def _validate_config(self):
-        if 'transport_name' not in self.config:
-            raise ConfigError("Missing 'transport_name' field in config.")
-        send_to_options = self.config.get('send_to', {})
+        # TODO: Figure out what the future of .validate_config() is going to be
+        #       once everything uses config objects. It's handy to be able to
+        #       do complex validation, but maybe that belongs on the config
+        #       object instead?
+        self._static_config = self.CONFIG_CLASS(self.config)
+        send_to = self._static_config.send_to
         for tag in self.SEND_TO_TAGS:
-            if tag not in send_to_options:
+            if tag not in send_to:
                 raise ConfigError("No configuration for send_to tag %r but"
                                   " at least a transport_name is required."
                                   % (tag,))
-            if 'transport_name' not in send_to_options[tag]:
+            if 'transport_name' not in send_to[tag]:
                 raise ConfigError("The configuration for send_to tag %r must"
                                   " contain a transport_name." % (tag,))
 
@@ -287,6 +294,9 @@ class ApplicationWorker(Worker):
         setattr(self, '%s_event_consumer' % (endpoint_name,), event_consumer)
 
     def _setup_transport_publisher(self):
+        # XXX: We don't use a config object here because it's a bit of a pain
+        #      to get one. This method is deprecated by the upcoming endpoints
+        #      work anyway.
         return self.setup_transport_connection(
             'transport', self.config['transport_name'],
             self.dispatch_user_message, self.dispatch_event)

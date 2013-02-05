@@ -55,7 +55,7 @@ class CellulantSmsTransport(HttpRpcTransport):
     }
 
     def validate_config(self):
-        config = self.CONFIG_CLASS(self.config)
+        config = self.get_static_config()
         self._credentials = config.credentials
         self._validation_mode = config.validation_mode
         if self._validation_mode not in self.KNOWN_VALIDATION_MODES:

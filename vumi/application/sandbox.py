@@ -287,6 +287,9 @@ class SandboxResources(object):
         self.resources[resource_name] = resource
 
     def validate_config(self):
+        # FIXME: The name of this method is a vicious lie.
+        #        It does not validate configs. It constructs resources objects.
+        #        Fixing that is beyond the scope of this commit, however.
         for name, config in self.config.iteritems():
             cls = load_class_by_string(config.pop('cls'))
             self.resources[name] = cls(name, self.app_worker, config)
@@ -304,6 +307,8 @@ class SandboxResources(object):
 
 class SandboxResource(object):
     """Base class for sandbox resources."""
+    # TODO: SandboxResources should probably have their own config definitions.
+    #       Is that overkill?
 
     def __init__(self, name, app_worker, config):
         self.name = name
@@ -644,7 +649,7 @@ class Sandbox(ApplicationWorker):
     }
 
     def validate_config(self):
-        config = self.CONFIG_CLASS(self.config)
+        config = self.get_static_config()
         self.resources = self.create_sandbox_resources(config.sandbox)
         self.resources.validate_config()
 
