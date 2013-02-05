@@ -518,11 +518,12 @@ class HttpClientResource(SandboxResource):
 class SandboxApi(object):
     """A sandbox API instance for a particular sandbox run."""
 
-    def __init__(self, resources):
+    def __init__(self, resources, config):
         self._sandbox = None
         self._inbound_messages = {}
         self.resources = resources
         self.fallback_resource = SandboxResource("fallback", None, {})
+        self.config = config
 
     @property
     def sandbox_id(self):
@@ -677,16 +678,17 @@ class Sandbox(ApplicationWorker):
         rlimits.update(self._convert_rlimits(config.rlimits))
         return rlimits
 
-    def create_sandbox_protocol(self, api, config):
-        executable, args = self.get_executable_and_args(config)
-        rlimits = self.get_rlimits(config)
-        spawn_kwargs = dict(args=args, env=config.env, path=config.path)
+    def create_sandbox_protocol(self, api):
+        executable, args = self.get_executable_and_args(api.config)
+        rlimits = self.get_rlimits(api.config)
+        spawn_kwargs = dict(
+            args=args, env=api.config.env, path=api.config.path)
         return SandboxProtocol(
-            config.sandbox_id, api, executable, spawn_kwargs, rlimits,
-            config.timeout, config.recv_limit)
+            api.config.sandbox_id, api, executable, spawn_kwargs, rlimits,
+            api.config.timeout, api.config.recv_limit)
 
-    def create_sandbox_api(self, resources):
-        return SandboxApi(resources)
+    def create_sandbox_api(self, resources, config):
+        return SandboxApi(resources, config)
 
     def sandbox_id_for_message(self, msg_or_event):
         """Return a sandbox id for a message or event.
@@ -700,8 +702,8 @@ class Sandbox(ApplicationWorker):
 
         Sub-classes may override this to retrieve an appropriate protocol.
         """
-        api = self.create_sandbox_api(self.resources)
-        protocol = self.create_sandbox_protocol(api, config)
+        api = self.create_sandbox_api(self.resources, config)
+        protocol = self.create_sandbox_protocol(api)
         return protocol
 
     def _process_in_sandbox(self, sandbox_protocol, api_callback):
@@ -757,6 +759,13 @@ class Sandbox(ApplicationWorker):
         return self.process_event_in_sandbox(event)
 
 
+class JsSandboxConfig(SandboxConfig):
+    "JavaScript sandbox configuration."
+
+    javascript = ConfigText("JavaScript code to run.", required=True)
+    app_context = ConfigText("Custom context to execute JS with.")
+
+
 class JsSandbox(Sandbox):
     """
     Configuration options:
@@ -791,6 +800,8 @@ class JsSandbox(Sandbox):
         {path: require('path')}
     """
 
+    CONFIG_CLASS = JsSandboxConfig
+
     POSSIBLE_NODEJS_EXECUTABLES = [
         '/usr/local/bin/node',
         '/usr/local/bin/nodejs',
@@ -821,7 +832,7 @@ class JsSandbox(Sandbox):
 
         :returns: String containing Javascript for the app to run.
         """
-        return self.config.get('javascript', None)
+        return api.config.javascript
 
     def app_context_for_api(self, api):
         """Called by JsSandboxResource
@@ -830,7 +841,7 @@ class JsSandbox(Sandbox):
         addition context for the namespace the app is being run
         in. This Javascript is expected to be trusted code.
         """
-        return self.config.get('app_context', None)
+        return api.config.app_context
 
     def get_executable_and_args(self, config):
         executable = config.executable
