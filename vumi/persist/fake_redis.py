@@ -367,7 +367,7 @@ class FakeRedis(object):
     @maybe_async
     def ltrim(self, key, start, stop):
         lval = self._data.get(key, [])
-        del lval[0:start]
+        del lval[:start]
         del lval[stop:]
 
     # Expiry operations
