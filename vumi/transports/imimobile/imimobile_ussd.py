@@ -2,7 +2,9 @@ import re
 import json
 from datetime import datetime, timedelta
 
+
 from twisted.python import log
+from twisted.web import http
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.components import SessionManager
@@ -36,6 +38,8 @@ class ImiMobileUssdTransport(HttpRpcTransport):
         Number of seconds before USSD session information stored in Redis
         expires. Default is 600s.
     """
+
+    transport_type = 'ussd'
 
     EXPECTED_FIELDS = set(['msisdn', 'msg', 'code', 'tid', 'dcs'])
 
@@ -105,7 +109,7 @@ class ImiMobileUssdTransport(HttpRpcTransport):
             if field not in self.EXPECTED_FIELDS:
                 errors.setdefault('unexpected_parameter', []).append(field)
             else:
-                values[field] = str(request.args.get(field)[0])
+                values[field] = str(request.args.get(field)[0]).decode('utf-8')
 
         for field in self.EXPECTED_FIELDS:
             if field not in values:
@@ -138,7 +142,8 @@ class ImiMobileUssdTransport(HttpRpcTransport):
 
         if errors:
             log.msg('Unhappy incoming message: %s' % (errors,))
-            yield self.finish_request(message_id, json.dumps(errors), code=400)
+            yield self.finish_request(
+                message_id, json.dumps(errors), code=http.BAD_REQUEST)
             return
 
         from_addr = values['msisdn']
@@ -174,7 +179,7 @@ class ImiMobileUssdTransport(HttpRpcTransport):
             from_addr=from_addr,
             provider='imimobile',
             session_event=session_event,
-            transport_type='ussd',
+            transport_type=self.transport_type,
             transport_metadata={
                 'imimobile_ussd': {
                     'tid': values['tid'],
