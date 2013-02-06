@@ -58,7 +58,7 @@ class MatchResource(resource.Resource):
 
     def _add_resp_header(self, request, key, value):
         if isinstance(value, unicode):
-            value = unicode.encode('utf-8')
+            value = value.encode('utf-8')
         if not isinstance(value, str):
             raise TypeError("HTTP header values must be bytes.")
         request.responseHeaders.addRawHeader(key, value)
