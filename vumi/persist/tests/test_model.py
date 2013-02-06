@@ -140,7 +140,73 @@ class TestModelOnTxRiak(TestCase):
     def test_repr(self):
         simple_model = self.manager.proxy(SimpleModel)
         s = simple_model("foo", a=1, b=u"bar")
-        self.assertEqual(repr(s), "<SimpleModel key=foo a=1 b=u'bar'>")
+        self.assertEqual(repr(s),
+            "<SimpleModel $VERSION=None a=1 b=u'bar' key='foo'>")
+
+    def test_get_data(self):
+        simple_model = self.manager.proxy(SimpleModel)
+        s = simple_model("foo", a=1, b=u"bar")
+        self.assertEqual(s.get_data(), {
+            '$VERSION': None,
+            'key': 'foo',
+            'a': 1,
+            'b': 'bar',
+            })
+
+    def test_get_data_with_foreign_key_proxy(self):
+        simple_model = self.manager.proxy(SimpleModel)
+        s1 = simple_model("foo", a=5, b=u'3')
+        fk_model = self.manager.proxy(ForeignKeyModel)
+
+        f1 = fk_model("bar1")
+        f1.simple.set(s1)
+
+        self.assertEqual(f1.get_data(), {
+            'key': 'bar1',
+            '$VERSION': None,
+            'simple': 'foo'
+            })
+
+    def test_get_data_with_many_to_many_proxy(self):
+        simple_model = self.manager.proxy(SimpleModel)
+        s1 = simple_model("foo", a=5, b=u'3')
+        mm_model = self.manager.proxy(ManyToManyModel)
+
+        m1 = mm_model("bar")
+        m1.simples.add(s1)
+        m1.save()
+
+        self.assertEqual(m1.get_data(), {
+            'key': 'bar',
+            '$VERSION': None,
+            'simples': ['foo'],
+            })
+
+    def test_get_data_with_dynamic_proxy(self):
+        dynamic_model = self.manager.proxy(DynamicModel)
+
+        d1 = dynamic_model("foo", a=u"ab")
+        d1.contact_info['foo'] = u'bar'
+        d1.contact_info['zip'] = u'zap'
+
+        self.assertEqual(d1.get_data(), {
+            'key': 'foo',
+            '$VERSION': None,
+            'a': 'ab',
+            'contact_info.foo': 'bar',
+            'contact_info.zip': 'zap',
+            })
+
+    def test_get_data_with_list_proxy(self):
+        list_model = self.manager.proxy(ListOfModel)
+        l1 = list_model("foo")
+        l1.items.append(1)
+        l1.items.append(2)
+        self.assertEqual(l1.get_data(), {
+            'key': 'foo',
+            '$VERSION': None,
+            'items': [1, 2],
+            })
 
     def test_declare_backlinks(self):
         class TestModel(Model):
@@ -548,6 +614,10 @@ class TestModelOnTxRiak(TestCase):
         m1 = mm_model("bar")
         # Create index directly to simulate old-style index-only implementation
         m1._riak_object.add_index('simples_bin', s1.key)
+        # Manually remove the entry from the data dict to allow it to be
+        # set from the index value in descriptor.clean()
+        m1._riak_object._data.pop('simples')
+
         yield s1.save()
         yield m1.save()
 
