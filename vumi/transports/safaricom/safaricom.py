@@ -2,12 +2,12 @@
 
 import json
 
-from twisted.python import log
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.transports.httprpc import HttpRpcTransport
 from vumi.message import TransportUserMessage
 from vumi.components import SessionManager
+from vumi import log
 
 
 class SafaricomTransport(HttpRpcTransport):
@@ -67,11 +67,14 @@ class SafaricomTransport(HttpRpcTransport):
     def handle_raw_inbound_message(self, message_id, request):
         values, errors = self.get_field_values(request)
         if errors:
-            log.msg('Unhappy incoming message: %s' % (errors,))
+            log.err('Unhappy incoming message: %s' % (errors,))
             yield self.finish_request(message_id, json.dumps(errors), code=400)
             return
-        log.msg(('SafaricomTransport sending from %(ORIG)s to %(DEST)s '
-                 'for %(SESSION_ID)s message "%(USSD_PARAMS)s"') % values)
+        self.emit(('SafaricomTransport sending from %s to %s '
+                    'for %s message "%s" (%s still pending)') % (
+                        values['ORIG'], values['DEST'], values['SESSION_ID'],
+                        values['USSD_PARAMS'], len(self._requests),
+                    ))
         session_id = values['SESSION_ID']
         from_addr = values['ORIG']
         dest = values['DEST']
