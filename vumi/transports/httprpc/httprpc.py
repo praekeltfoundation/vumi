@@ -174,7 +174,7 @@ class HttpRpcTransport(Transport):
 
     def emit(self, msg):
         if self.noisy:
-            log.message(msg)
+            log.debug(msg)
 
     @inlineCallbacks
     def handle_outbound_message(self, message):
