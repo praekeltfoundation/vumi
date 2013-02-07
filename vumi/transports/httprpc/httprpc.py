@@ -5,12 +5,12 @@ import json
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet import reactor
 from twisted.internet.task import LoopingCall
-from twisted.python import log
 from twisted.web import http
 from twisted.web.resource import Resource
 from twisted.web.server import NOT_DONE_YET
 
 from vumi.transports.base import Transport
+from vumi import log
 
 
 class HttpRpcHealthResource(Resource):
@@ -150,7 +150,7 @@ class HttpRpcTransport(Transport):
                 self.close_request(request_id)
 
     def close_request(self, request_id):
-        self.emit('Timing out %s' % (request_id,))
+        log.warn('Timing out %s' % (request_id,))
         self.finish_request(request_id, self.request_timeout_body,
             self.request_timeout_status_code)
 
@@ -174,7 +174,7 @@ class HttpRpcTransport(Transport):
 
     def emit(self, msg):
         if self.noisy:
-            log.msg(msg)
+            log.message(msg)
 
     @inlineCallbacks
     def handle_outbound_message(self, message):
