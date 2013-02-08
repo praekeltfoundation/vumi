@@ -5,16 +5,16 @@ import json
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet import reactor
 from twisted.internet.task import LoopingCall
-from twisted.python import log
 from twisted.web import http
 from twisted.web.resource import Resource
 from twisted.web.server import NOT_DONE_YET
 
+from vumi.transports.base import Transport
 from vumi.config import ConfigText, ConfigInt, ConfigBool
-from vumi.transports.base import Transport, TransportConfig
+from vumi import log
 
 
-class HttpRpcTransportConfig(TransportConfig):
+class HttpRpcTransportConfig(Transport.CONFIG_CLASS):
     """Base config definition for transports.
 
     You should subclass this and add transport-specific fields.
@@ -155,7 +155,7 @@ class HttpRpcTransport(Transport):
                 self.close_request(request_id)
 
     def close_request(self, request_id):
-        self.emit('Timing out %s' % (request_id,))
+        log.warn('Timing out %s' % (request_id,))
         self.finish_request(request_id, self.request_timeout_body,
             self.request_timeout_status_code)
 
@@ -179,7 +179,7 @@ class HttpRpcTransport(Transport):
 
     def emit(self, msg):
         if self.noisy:
-            log.msg(msg)
+            log.debug(msg)
 
     @inlineCallbacks
     def handle_outbound_message(self, message):
