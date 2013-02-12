@@ -20,33 +20,34 @@ class HttpRpcTransportConfig(Transport.CONFIG_CLASS):
     You should subclass this and add transport-specific fields.
     """
 
-    web_path = ConfigText("The path to listen for requests on.")
+    web_path = ConfigText("The path to listen for requests on.", static=True)
     web_port = ConfigInt(
-        "The port to listen for requests on, defaults to `0`.", default=0)
+        "The port to listen for requests on, defaults to `0`.",
+        default=0, static=True)
     health_path = ConfigText(
         "The path to listen for downstream health checks on"
-        " (useful with HAProxy)", default='health')
+        " (useful with HAProxy)", default='health', static=True)
     request_cleanup_interval = ConfigInt(
         "How often should we actively look for old connections that should"
         " manually be timed out. Anything less than `1` disables the request"
         " cleanup meaning that all request objects will be kept in memory"
         " until the server is restarted, regardless if the remote side has"
         " dropped the connection or not. Defaults to 5 seconds.",
-        default=5)
+        default=5, static=True)
     request_timeout = ConfigInt(
         "How long should we wait for the remote side generating the response"
         " for this synchronous operation to come back. Any connection that has"
         " waited longer than `request_timeout` seconds will manually be"
-        " closed. Defaults to 4 minutes.", default=(4 * 60))
+        " closed. Defaults to 4 minutes.", default=(4 * 60), static=True)
     request_timeout_status_code = ConfigInt(
         "What HTTP status code should be generated when a timeout occurs."
-        " Defaults to `504 Gateway Timeout`.", default=504)
+        " Defaults to `504 Gateway Timeout`.", default=504, static=True)
     request_timeout_body = ConfigText(
         "What HTTP body should be returned when a timeout occurs."
-        " Defaults to ''.", default='')
+        " Defaults to ''.", default='', static=True)
     noisy = ConfigBool(
         "Defaults to `False` set to `True` to make this transport log"
-        " verbosely.", default=False)
+        " verbosely.", default=False, static=True)
 
 
 class HttpRpcHealthResource(Resource):

@@ -27,12 +27,13 @@ class ApplicationConfig(Config):
 
     transport_name = ConfigText(
         "The name this application instance will use to create its queues.",
-        required=True)
+        required=True, static=True)
     amqp_prefetch_count = ConfigInt(
         "The number of messages fetched concurrently from each AMQP queue"
         " by each worker instance.",
-        default=20)
-    send_to = ConfigDict("'send_to' configuration dict.", default={})
+        default=20, static=True)
+    send_to = ConfigDict(
+        "'send_to' configuration dict.", default={}, static=True)
 
 
 class ApplicationWorker(Worker):
@@ -132,14 +133,14 @@ class ApplicationWorker(Worker):
         necessary to ensure that workers will continue to work when per-message
         configuration needs to be fetched from elsewhere.
         """
-        return succeed(self._static_config)
+        return succeed(self.CONFIG_CLASS(self.config))
 
     def _validate_config(self):
         # TODO: Figure out what the future of .validate_config() is going to be
         #       once everything uses config objects. It's handy to be able to
         #       do complex validation, but maybe that belongs on the config
         #       object instead?
-        self._static_config = self.CONFIG_CLASS(self.config)
+        self._static_config = self.CONFIG_CLASS(self.config, static=True)
         send_to = self._static_config.send_to
         for tag in self.SEND_TO_TAGS:
             if tag not in send_to:
@@ -192,6 +193,8 @@ class ApplicationWorker(Worker):
         Subclasses should not override this unless they need to do nonstandard
         middleware teardown.
         """
+        if not hasattr(self, '_middlewares'):
+            return
         return self._middlewares.teardown()
 
     def _dispatch_event_raw(self, event):

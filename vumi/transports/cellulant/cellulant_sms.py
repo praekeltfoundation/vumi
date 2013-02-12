@@ -19,15 +19,15 @@ class CellulantSmsTransportConfig(HttpRpcTransport.CONFIG_CLASS):
     credentials = ConfigDict(
         "A dictionary where the `from_addr` is used for the key lookup and the"
         " returned value should be a dictionary containing the username and"
-        " password.", required=True)
+        " password.", required=True, static=True)
     outbound_url = ConfigText(
-        "The URL to send outbound messages to.", required=True)
+        "The URL to send outbound messages to.", required=True, static=True)
     validation_mode = ConfigText(
         "The mode to operate in. Can be 'strict' or 'permissive'. If 'strict'"
         " then any parameter received that is not listed in EXPECTED_FIELDS"
         " nor in IGNORED_FIELDS will raise an error. If 'permissive' then no"
         " error is raised as long as all the EXPECTED_FIELDS are present.",
-        default='strict')
+        default='strict', static=True)
 
 
 class CellulantSmsTransport(HttpRpcTransport):

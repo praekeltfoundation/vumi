@@ -26,15 +26,22 @@ class HTTPRelayError(VumiError):
 
 
 class HTTPRelayConfig(ApplicationWorker.CONFIG_CLASS):
-    url = ConfigUrl("URL to submit incoming message to.", required=True)
-    event_url = ConfigUrl(
-        "URL to submit incoming events to. (Defaults to the same as 'url').")
-    http_method = ConfigText(
-        "HTTP method for submitting messages.", default='POST')
 
-    username = ConfigText("Username for HTTP authentication.", default='')
-    password = ConfigText("Password for HTTP authentication.", default='')
-    auth_method = ConfigText("HTTP authentication method.", default='basic')
+    # TODO: Make these less static?
+    url = ConfigUrl(
+        "URL to submit incoming message to.", required=True, static=True)
+    event_url = ConfigUrl(
+        "URL to submit incoming events to. (Defaults to the same as 'url').",
+        static=True)
+    http_method = ConfigText(
+        "HTTP method for submitting messages.", default='POST', static=True)
+
+    username = ConfigText(
+        "Username for HTTP authentication.", default='', static=True)
+    password = ConfigText(
+        "Password for HTTP authentication.", default='', static=True)
+    auth_method = ConfigText(
+        "HTTP authentication method.", default='basic', static=True)
 
 
 class HTTPRelayApplication(ApplicationWorker):

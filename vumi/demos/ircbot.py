@@ -15,8 +15,9 @@ from vumi.config import ConfigText, ConfigDict
 
 class MemoConfig(ApplicationWorker.CONFIG_CLASS):
     "Memo worker config."
-    worker_name = ConfigText("Name of worker.", required=True)
-    redis_manager = ConfigDict("Redis client configuration.", default={})
+    worker_name = ConfigText("Name of worker.", required=True, static=True)
+    redis_manager = ConfigDict(
+        "Redis client configuration.", default={}, static=True)
 
 
 class MemoWorker(ApplicationWorker):

@@ -11,12 +11,13 @@ from vumi.config import ConfigBool, ConfigList, ConfigDict
 class HttpApiConfig(HttpRpcTransport.CONFIG_CLASS):
     "HTTP API configuration."
     reply_expected = ConfigBool(
-        "True if a reply message is expected.", default=False)
+        "True if a reply message is expected.", default=False, static=True)
     allowed_fields = ConfigList(
         "The list of fields a request is allowed to contain. Defaults to the"
-        " DEFAULT_ALLOWED_FIELDS class attribute.")
+        " DEFAULT_ALLOWED_FIELDS class attribute.", static=True)
     field_defaults = ConfigDict(
-        "Default values for fields not sent by the client.", default={})
+        "Default values for fields not sent by the client.",
+        default={}, static=True)
 
 
 class HttpApiTransport(HttpRpcTransport):

@@ -600,6 +600,15 @@ class SandboxCommand(Message):
 
 class SandboxConfig(ApplicationWorker.CONFIG_CLASS):
     "Sandbox configuration."
+
+    sandbox = ConfigDict(
+        "Dictionary of resources to provide to the sandbox."
+        " Keys are the names of resources (as seen inside the sandbox)."
+        " Values are dictionaries which must contain a `cls` key that"
+        " gives the full name of the class that provides the resource."
+        " Other keys are additional configuration for that resource.",
+        default={}, static=True)
+
     executable = ConfigText(
         "Full path to the executable to run in the sandbox.")
     args = ConfigList(
@@ -614,13 +623,6 @@ class SandboxConfig(ApplicationWorker.CONFIG_CLASS):
     recv_limit = ConfigInt(
         "Maximum number of bytes that will be read from a sandboxed"
         " process' stdout and stderr combined.", default=1024 * 1024)
-    sandbox = ConfigDict(
-        "Dictionary of resources to provide to the sandbox."
-        " Keys are the names of resources (as seen inside the sandbox)."
-        " Values are dictionaries which must contain a `cls` key that"
-        " gives the full name of the class that provides the resource."
-        " Other keys are additional configuration for that resource.",
-        default={})
     rlimits = ConfigDict(
         "Dictionary of resource limits to be applied to sandboxed"
         " processes. Defaults are fairly restricted. Keys maybe"

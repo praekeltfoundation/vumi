@@ -50,7 +50,7 @@ class ConfigField(object):
 
     field_type = None
 
-    def __init__(self, doc, required=False, default=None):
+    def __init__(self, doc, required=False, default=None, static=False):
         # This hack is to allow us to track the order in which fields were
         # added to a config class. We want to do this so we can document fields
         # in the same order they're defined.
@@ -60,6 +60,7 @@ class ConfigField(object):
         self.doc = doc
         self.required = required
         self.default = default
+        self.static = static
 
     def get_doc(self):
         field_type = ''
@@ -89,6 +90,8 @@ class ConfigField(object):
         return self.clean(value) if value is not None else None
 
     def __get__(self, obj, cls):
+        if obj.static and not self.static:
+            self.raise_config_error("is not marked as static.")
         return self.get_value(obj)
 
     def __set__(self, obj, value):
@@ -187,7 +190,8 @@ class Config(object):
 
     __metaclass__ = ConfigMetaClass
 
-    def __init__(self, config_data):
+    def __init__(self, config_data, static=False):
         self._config_data = IConfigData(config_data)
+        self.static = static
         for field in self.fields:
             field.validate(self)

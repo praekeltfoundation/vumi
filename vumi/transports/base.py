@@ -24,9 +24,10 @@ class TransportConfig(Config):
 
     transport_name = ConfigText(
         "The name this transport instance will use to create its queues.",
-        required=True)
+        required=True, static=True)
     amqp_prefetch_count = ConfigInt(
-        "The number of messages processed concurrently from each AMQP queue.")
+        "The number of messages processed concurrently from each AMQP queue.",
+        static=True)
 
 
 class Transport(Worker):
@@ -108,7 +109,7 @@ class Transport(Worker):
         # This object is only created to trigger validation.
         # TODO: Eventually we'll be able to remove the legacy validate_config()
         # and just use config objects.
-        self._static_config = self.CONFIG_CLASS(self.config)
+        self._static_config = self.CONFIG_CLASS(self.config, static=True)
         return self.validate_config()
 
     def validate_config(self):
@@ -157,6 +158,8 @@ class Transport(Worker):
         Subclasses should not override this unless they need to do nonstandard
         middleware teardown.
         """
+        if not hasattr(self, '_middlewares'):
+            return
         return self._middlewares.teardown()
 
     @inlineCallbacks
