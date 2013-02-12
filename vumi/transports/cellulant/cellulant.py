@@ -110,3 +110,6 @@ class CellulantTransport(HttpRpcTransport):
                                 pack_ussd_message(message).encode('utf-8'))
             return self.publish_ack(user_message_id=message['message_id'],
                 sent_message_id=message['message_id'])
+        return self.publish_nack(user_message_id=message['message_id'],
+            sent_message_id=message['message_id'],
+            reason="Missing in_reply_to or content")
