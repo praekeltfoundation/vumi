@@ -176,15 +176,18 @@ class HttpRpcTransport(Transport):
         if self.noisy:
             log.debug(msg)
 
-    @inlineCallbacks
     def handle_outbound_message(self, message):
         self.emit("HttpRpcTransport consuming %s" % (message))
         if message.payload.get('in_reply_to') and 'content' in message.payload:
             self.finish_request(
                     message.payload['in_reply_to'],
                     message.payload['content'].encode('utf-8'))
-            yield self.publish_ack(user_message_id=message['message_id'],
+            return self.publish_ack(user_message_id=message['message_id'],
                 sent_message_id=message['message_id'])
+        else:
+            return self.publish_nack(user_message_id=message['message_id'],
+                sent_message_id=message['message_id'],
+                reason='Missing in_reply_to or content')
 
     def handle_raw_inbound_message(self, msgid, request):
         raise NotImplementedError("Sub-classes should implement"
