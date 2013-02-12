@@ -22,7 +22,7 @@ SESSION_RESUME = TransportUserMessage.SESSION_RESUME
 class ApplicationConfig(Config):
     """Base config definition for applications.
 
-    You should subclass this and add transport-specific fields.
+    You should subclass this and add application-specific fields.
     """
 
     transport_name = ConfigText(
