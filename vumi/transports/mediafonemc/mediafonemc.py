@@ -4,6 +4,7 @@ import json
 from urllib import urlencode
 
 from twisted.python import log
+from twisted.web import http
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.utils import http_request_full
@@ -52,8 +53,13 @@ class MediafoneTransport(HttpRpcTransport):
         log.msg("Making HTTP request: %s" % (url,))
         response = yield http_request_full(url, '', method='GET')
         log.msg("Response: (%s) %r" % (response.code, response.delivered_body))
-        yield self.publish_ack(user_message_id=message['message_id'],
-            sent_message_id=message['message_id'])
+        if response.code == http.OK:
+            yield self.publish_ack(user_message_id=message['message_id'],
+                sent_message_id=message['message_id'])
+        else:
+            yield self.publish_nack(user_message_id=message['message_id'],
+                sent_message_id=message['message_id'],
+                reason='Unexpected response code: %s' % (response.code,))
 
     def get_field_values(self, request):
         values = {}
