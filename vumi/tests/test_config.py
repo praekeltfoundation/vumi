@@ -33,6 +33,16 @@ class ConfigTest(TestCase):
 
         self.assertRaises(ConfigError, FooConfig, {'bar': 'blah'})
 
+    def test_static_field(self):
+        class FooConfig(Config):
+            "Test config."
+            foo = ConfigField("foo", required=True, static=True)
+            bar = ConfigField("bar")
+
+        conf = FooConfig({'foo': 'blah', 'bar': 'baz'}, static=True)
+        self.assertEqual(conf.foo, 'blah')
+        self.assertRaises(ConfigError, lambda: conf.bar)
+
     def test_default_field(self):
         class FooConfig(Config):
             "Test config."
