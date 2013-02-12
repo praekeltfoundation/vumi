@@ -56,8 +56,15 @@ class MatchResource(resource.Resource):
             'outbound': message_store.outbound_messages.load_all_bunches,
         }.get(direction)
 
+    def _add_resp_header(self, request, key, value):
+        if isinstance(value, unicode):
+            value = value.encode('utf-8')
+        if not isinstance(value, str):
+            raise TypeError("HTTP header values must be bytes.")
+        request.responseHeaders.addRawHeader(key, value)
+
     def _render_token(self, token, request):
-        request.responseHeaders.addRawHeader(self.RESP_TOKEN_HEADER, token)
+        self._add_resp_header(request, self.RESP_TOKEN_HEADER, token)
         request.finish()
 
     def render_POST(self, request):
@@ -93,9 +100,9 @@ class MatchResource(resource.Resource):
         in_progress = yield self._in_progress_cb(token)
         count = yield self._count_cb(token)
         keys = yield self._results_cb(token, start, stop, asc)
-        request.responseHeaders.addRawHeader(self.RESP_IN_PROGRESS_HEADER,
-            int(in_progress))
-        request.responseHeaders.addRawHeader(self.RESP_COUNT_HEADER, count)
+        self._add_resp_header(request, self.RESP_IN_PROGRESS_HEADER,
+            str(int(in_progress)))
+        self._add_resp_header(request, self.RESP_COUNT_HEADER, str(count))
         if keys_only:
             request.write(json.dumps(keys))
         else:
