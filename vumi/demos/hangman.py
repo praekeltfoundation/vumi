@@ -147,9 +147,6 @@ class HangmanWorker(ApplicationWorker):
         self.session_manager = yield SessionManager.from_redis_config(
             config.redis_manager, r_prefix)
 
-        # self.random_word_url = config.random_word_url
-        # log.msg("random_word_url = %s" % self.random_word_url)
-
     @inlineCallbacks
     def teardown_application(self):
         yield self.session_manager.stop()
