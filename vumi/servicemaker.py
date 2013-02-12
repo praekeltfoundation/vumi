@@ -118,10 +118,17 @@ class StartWorkerOptions(VumiOptions):
         # So we can stub it out in tests.
         sys.exit(0)
 
+    def emit(self, text):
+        # So we can stub it out in tests.
+        print text
+
     def do_worker_help(self):
         """Print out a usage message for the worker-class and exit"""
         worker_class = load_class_by_string(self.worker_class)
-        print worker_class.__doc__
+        self.emit(worker_class.__doc__)
+        config_class = getattr(worker_class, 'CONFIG_CLASS', None)
+        if config_class is not None:
+            self.emit(config_class.__doc__)
         self.exit()
 
     def get_worker_class(self):
