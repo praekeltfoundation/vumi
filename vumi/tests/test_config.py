@@ -211,6 +211,7 @@ class ConfigFieldTest(TestCase):
     def test_list_field(self):
         field = self.make_field(ConfigList)
         self.assertEqual([], self.field_value(field, []))
+        self.assertEqual([], self.field_value(field, ()))
         self.assertEqual([0], self.field_value(field, [0]))
         self.assertEqual(["foo"], self.field_value(field, ["foo"]))
         self.assertEqual(None, self.field_value(field, None))

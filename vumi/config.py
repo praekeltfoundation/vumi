@@ -146,7 +146,9 @@ class ConfigList(ConfigField):
     field_type = 'list'
 
     def clean(self, value):
-        if not isinstance(value, (list, tuple)):
+        if isinstance(value, tuple):
+            value = list(value)
+        if not isinstance(value, list):
             self.raise_config_error("is not a list.")
         return deepcopy(value)
 
