@@ -297,11 +297,8 @@ class ApplicationWorker(Worker):
         setattr(self, '%s_event_consumer' % (endpoint_name,), event_consumer)
 
     def _setup_transport_publisher(self):
-        # XXX: We don't use a config object here because it's a bit of a pain
-        #      to get one. This method is deprecated by the upcoming endpoints
-        #      work anyway.
         return self.setup_transport_connection(
-            'transport', self.config['transport_name'],
+            'transport', self.get_static_config().transport_name,
             self.dispatch_user_message, self.dispatch_event)
 
     def _setup_transport_consumer(self):
