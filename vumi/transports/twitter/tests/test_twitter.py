@@ -1,4 +1,5 @@
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import inlineCallbacks, Deferred
+from twisted.web import error
 
 from vumi.transports.twitter import TwitterTransport
 from vumi.transports.tests.utils import TransportTestCase
@@ -18,6 +19,14 @@ class FakeTwitter(object):
     def __init__(self, *args, **kwargs):
         self.args = args
         self.kwargs = kwargs
+
+    def update(self, content):
+        d = Deferred()
+        if self.raise_update_error:
+            d.errback(error.Error(503, 'Fail Whale'))
+        else:
+            d.callback('post-id')
+        return d
 
     def track(self, delegate, terms):
         self.track_delegate = delegate
@@ -102,3 +111,14 @@ class TwitterTransportTestCase(TransportTestCase):
         self.assertEqual(msg['message_id'], '1')
         self.assertEqual(msg['session_event'],
                          TransportUserMessage.SESSION_NONE)
+
+    @inlineCallbacks
+    def test_nack(self):
+        self.transport.twitter.raise_update_error = True
+        msg = self.mkmsg_out()
+        yield self.dispatch(msg)
+        [nack] = yield self.wait_for_dispatched_events(1)
+        self.assertEqual(nack['user_message_id'], msg['message_id'])
+        self.assertEqual(nack['sent_message_id'], msg['message_id'])
+        self.assertEqual(nack['nack_reason'],
+            '503 Fail Whale')
