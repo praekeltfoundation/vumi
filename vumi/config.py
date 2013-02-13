@@ -138,8 +138,7 @@ class ConfigBool(ConfigField):
 
     def clean(self, value):
         if isinstance(value, basestring):
-            if value.lower() in ('false', '0'):
-                return False
+            return value.strip().lower() not in ('false', '0', '')
         return bool(value)
 
 
