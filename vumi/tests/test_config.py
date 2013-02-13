@@ -106,24 +106,28 @@ class ConfigTest(TestCase):
         class FooConfig(Config):
             "Test config."
             foo = ConfigField("foo", required=True, static=True)
-            bar = ConfigField("bar", required=True)
+            bar = ConfigInt("bar", required=True)
 
-        conf = FooConfig({'foo': 'blah', 'bar': 'baz'})
+        conf = FooConfig({'foo': 'blah', 'bar': 1})
         self.assertEqual(conf.foo, 'blah')
-        self.assertEqual(conf.bar, 'baz')
+        self.assertEqual(conf.bar, 1)
 
         self.assertRaises(ConfigError, FooConfig, {})
+        self.assertRaises(ConfigError, FooConfig, {'foo': 'blah', 'baz': 'hi'})
 
     def test_static_validation(self):
         class FooConfig(Config):
             "Test config."
             foo = ConfigField("foo", required=True, static=True)
-            bar = ConfigField("bar", required=True)
+            bar = ConfigInt("bar", required=True)
 
         conf = FooConfig({'foo': 'blah'}, static=True)
         self.assertEqual(conf.foo, 'blah')
 
-        self.assertRaises(ConfigError, FooConfig, {})
+        conf = FooConfig({'foo': 'blah', 'bar': 'hi'}, static=True)
+        self.assertEqual(conf.foo, 'blah')
+
+        self.assertRaises(ConfigError, FooConfig, {}, static=True)
 
 
 class FakeModel(object):
