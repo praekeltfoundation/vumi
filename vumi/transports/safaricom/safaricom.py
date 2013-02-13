@@ -130,5 +130,9 @@ class SafaricomTransport(HttpRpcTransport):
                 command = 'CON'
             self.finish_request(message['in_reply_to'],
                 ('%s %s' % (command, message['content'])).encode('utf-8'))
-        return self.publish_ack(user_message_id=message['message_id'],
-            sent_message_id=message['message_id'])
+            return self.publish_ack(user_message_id=message['message_id'],
+                sent_message_id=message['message_id'])
+        else:
+            return self.publish_nack(user_message_id=message['message_id'],
+                sent_message_id=message['message_id'],
+                reason='Missing in_reply_to or content')
