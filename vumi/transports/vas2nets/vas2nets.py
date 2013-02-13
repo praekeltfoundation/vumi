@@ -279,8 +279,11 @@ class Vas2NetsTransport(Transport):
                 sent_message_id=transport_message_id,
                 )
         else:
-            raise Vas2NetsTransportError('No SmsId Header, content: %s' %
-                                         response.delivered_body)
+            err_msg = 'No SmsId Header, content: %s' % response.delivered_body
+            yield self.publish_nack(user_message_id=message['message_id'],
+                sent_message_id=message['message_id'],
+                reason=err_msg)
+            raise Vas2NetsTransportError(err_msg)
 
     def stopWorker(self):
         """shutdown"""
