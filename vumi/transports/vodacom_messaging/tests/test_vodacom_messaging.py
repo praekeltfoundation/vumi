@@ -131,6 +131,17 @@ class TestVodacomMessagingTransport(TransportTestCase):
                             '</headertext>\n</request>'
         self.assertEqual(response, correct_response)
 
+    @inlineCallbacks
+    def test_nack(self):
+        msg = self.mkmsg_out()
+        yield self.dispatch(msg)
+        [nack] = yield self.wait_for_dispatched_events(1)
+        self.assertEqual(nack['user_message_id'], msg['message_id'])
+        self.assertEqual(nack['sent_message_id'], msg['message_id'])
+        self.assertEqual(nack['nack_reason'],
+            'Missing in_reply_to or content')
+
+
 
 class VodacomMessagingResponseTest(TestCase):
     '''

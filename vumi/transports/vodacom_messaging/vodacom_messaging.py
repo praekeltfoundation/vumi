@@ -41,8 +41,12 @@ class VodacomMessagingTransport(HttpRpcTransport):
                 vmr.accept_freetext()
             self.finish_request(message['in_reply_to'],
                                 unicode(vmr).encode('utf-8'))
-        return self.publish_ack(user_message_id=message['message_id'],
-            sent_message_id=message['message_id'])
+            return self.publish_ack(user_message_id=message['message_id'],
+                sent_message_id=message['message_id'])
+        else:
+            return self.publish_nack(user_message_id=message['message_id'],
+                sent_message_id=message['message_id'],
+                reason='Missing in_reply_to or content')
 
 
 class VodacomMessagingResponse(object):
