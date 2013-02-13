@@ -108,6 +108,14 @@ class MtechUssdTransport(HttpRpcTransport):
                 )
 
     def handle_outbound_message(self, message):
+        in_reply_to = message['in_reply_to']
+        session_id = message['transport_metadata'].get('session_id')
+        content = message['content']
+        if not (in_reply_to and session_id and content):
+            return self.publish_nack(user_message_id=message['message_id'],
+                sent_message_id=message['message_id'],
+                reason='Missing in_reply_to, content or session_id')
+
         mur = MtechUssdResponse(message['transport_metadata']['session_id'])
         mur.add_text(message['content'])
         if message['session_event'] != TransportUserMessage.SESSION_CLOSE:
