@@ -205,4 +205,7 @@ class Config(object):
         self._config_data = IConfigData(config_data)
         self.static = static
         for field in self.fields:
+            if self.static and not field.static:
+                # Skip non-static fields on static configs.
+                continue
             field.validate(self)

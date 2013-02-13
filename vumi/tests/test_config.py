@@ -102,6 +102,29 @@ class ConfigTest(TestCase):
             " bar: New field.",
             ]))
 
+    def test_validation(self):
+        class FooConfig(Config):
+            "Test config."
+            foo = ConfigField("foo", required=True, static=True)
+            bar = ConfigField("bar", required=True)
+
+        conf = FooConfig({'foo': 'blah', 'bar': 'baz'})
+        self.assertEqual(conf.foo, 'blah')
+        self.assertEqual(conf.bar, 'baz')
+
+        self.assertRaises(ConfigError, FooConfig, {})
+
+    def test_static_validation(self):
+        class FooConfig(Config):
+            "Test config."
+            foo = ConfigField("foo", required=True, static=True)
+            bar = ConfigField("bar", required=True)
+
+        conf = FooConfig({'foo': 'blah'}, static=True)
+        self.assertEqual(conf.foo, 'blah')
+
+        self.assertRaises(ConfigError, FooConfig, {})
+
 
 class FakeModel(object):
     def __init__(self, config):
