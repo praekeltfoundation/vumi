@@ -1,6 +1,5 @@
 # -*- test-case-name: vumi.application.tests.test_http_relay -*-
 
-from urllib2 import urlparse
 from base64 import b64encode
 
 from twisted.python import log
@@ -10,15 +9,7 @@ from twisted.internet.defer import inlineCallbacks
 from vumi.application.base import ApplicationWorker
 from vumi.utils import http_request_full
 from vumi.errors import VumiError
-from vumi.config import ConfigField, ConfigText
-
-
-class ConfigUrl(ConfigField):
-    # TODO: Move this to the base config module?
-    field_type = 'URL'
-
-    def clean(self, value):
-        return urlparse.urlparse(value)
+from vumi.config import ConfigText, ConfigUrl
 
 
 class HTTPRelayError(VumiError):
@@ -35,13 +26,11 @@ class HTTPRelayConfig(ApplicationWorker.CONFIG_CLASS):
         static=True)
     http_method = ConfigText(
         "HTTP method for submitting messages.", default='POST', static=True)
-
-    username = ConfigText(
-        "Username for HTTP authentication.", default='', static=True)
-    password = ConfigText(
-        "Password for HTTP authentication.", default='', static=True)
     auth_method = ConfigText(
         "HTTP authentication method.", default='basic', static=True)
+
+    username = ConfigText("Username for HTTP authentication.", default='')
+    password = ConfigText("Password for HTTP authentication.", default='')
 
 
 class HTTPRelayApplication(ApplicationWorker):

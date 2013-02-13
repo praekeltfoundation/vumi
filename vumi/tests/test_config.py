@@ -3,7 +3,7 @@ from twisted.trial.unittest import TestCase
 from vumi.errors import ConfigError
 from vumi.config import (
     Config, ConfigField, ConfigText, ConfigInt, ConfigFloat, ConfigBool,
-    ConfigList, ConfigDict)
+    ConfigList, ConfigDict, ConfigUrl)
 
 
 class ConfigTest(TestCase):
@@ -216,3 +216,21 @@ class ConfigFieldTest(TestCase):
         self.assertEqual(value, {'fault': 'mine'})
         value['fault'] = 'yours'
         self.assertEqual(field.get_value(model), {'fault': 'mine'})
+
+    def test_url_field(self):
+        def assert_url(value,
+                       scheme='', netloc='', path='', query='', fragment=''):
+            self.assertEqual(value.scheme, scheme)
+            self.assertEqual(value.netloc, netloc)
+            self.assertEqual(value.path, path)
+            self.assertEqual(value.query, query)
+            self.assertEqual(value.fragment, fragment)
+
+        field = self.make_field(ConfigUrl)
+        assert_url(self.field_value(field, 'foo'), path='foo')
+        assert_url(self.field_value(field, u'foo'), path=u'foo')
+        assert_url(self.field_value(field, u'foo\u1234'), path=u'foo\u1234')
+        self.assertEqual(None, self.field_value(field, None))
+        self.assertEqual(None, self.field_value(field))
+        self.assert_field_invalid(field, object())
+        self.assert_field_invalid(field, 1)

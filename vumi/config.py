@@ -1,6 +1,7 @@
 # -*- test-case-name: vumi.tests.test_config -*-
 
 from copy import deepcopy
+from urllib2 import urlparse
 
 from zope.interface import Interface
 from twisted.python.components import Adapter, registerAdapter
@@ -158,6 +159,17 @@ class ConfigDict(ConfigField):
         if not isinstance(value, dict):
             self.raise_config_error("is not a dict.")
         return deepcopy(value)
+
+
+class ConfigUrl(ConfigField):
+    field_type = 'URL'
+
+    def clean(self, value):
+        if value is None:
+            return None
+        if not isinstance(value, basestring):
+            self.raise_config_error("is not a URL string.")
+        return urlparse.urlparse(value)
 
 
 class ConfigMetaClass(type):
