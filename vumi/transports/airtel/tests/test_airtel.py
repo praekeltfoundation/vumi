@@ -261,6 +261,17 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
         response = yield self.mk_cleanup_request(MSISDN='27761234567')
         self.assertEqual(response.code, http.OK)
         self.assertEqual(response.delivered_body, '')
+        [msg] = yield self.wait_for_dispatched_messages(1)
+        self.assertEqual(msg['session_event'],
+            TransportUserMessage.SESSION_CLOSE)
+        self.assertEqual(msg['to_addr'], '*167*7#')
+        self.assertEqual(msg['from_addr'], '27761234567')
+        self.assertEqual(msg['transport_metadata'], {
+            'airtel': {
+                'status': '522',
+                'clean': 'clean-session',
+            }
+            })
 
     @inlineCallbacks
     def test_cleanup_session_missing_params(self):
