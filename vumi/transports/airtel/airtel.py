@@ -9,7 +9,7 @@ from vumi.transports.httprpc import HttpRpcTransport
 from vumi.components import SessionManager
 from vumi.message import TransportUserMessage
 from vumi import log
-from vumi.config import ConfigInt, ConfigText, ConfigBool
+from vumi.config import ConfigInt, ConfigText, ConfigBool, ConfigDict
 
 
 class AirtelUSSDTransportConfig(HttpRpcTransport.CONFIG_CLASS):
@@ -22,29 +22,16 @@ class AirtelUSSDTransportConfig(HttpRpcTransport.CONFIG_CLASS):
         default=False, static=True)
     airtel_charge_amount = ConfigInt('How much to charge', default=0,
         required=False, static=True)
+    redis_manager = ConfigDict('Parameters to connect to Redis with.',
+        default={}, required=False, static=True)
+    ussd_session_timeout = ConfigInt('Max length of a USSD session',
+        default=60 * 10, required=False, static=True)
 
 
 class AirtelUSSDTransport(HttpRpcTransport):
     """
     Client implementation for the Comviva Flares HTTP Pull API.
     Based on Flares 1.5.0, document version 1.2.0
-
-    :param str web_path:
-        The HTTP path to listen on.
-    :param int web_port:
-        The HTTP port
-    :param str transport_name:
-        The name this transport instance will use to create its queues
-    :param dict redis_manager:
-        The configuration parameters for connecting to Redis.
-    :param str airtel_username:
-        The username for this transport
-    :param str airtel_password:
-        The password for this transport
-    :param bool airtel_charge:
-        Whether or not to charge for the responses sent. Defaults to False.
-    :param int airtel_charge_amount:
-        How much to charge. Defaults to Zero.
     """
 
     transport_type = 'ussd'
@@ -57,16 +44,14 @@ class AirtelUSSDTransport(HttpRpcTransport):
 
     def validate_config(self):
         super(AirtelUSSDTransport, self).validate_config()
+        config = self.get_static_config()
         self.r_prefix = "vumi.transports.safaricom:%s" % self.transport_name
-        self.redis_config = self.config.get('redis_manager', {})
-        self.r_session_timeout = int(self.config.get("ussd_session_timeout",
-                                                                        600))
-        self.airtel_username = self.config['airtel_username']
-        self.airtel_password = self.config['airtel_password']
-        self.airtel_charge = ('Y' if self.config.get('airtel_charge', False)
-                                else 'N')
-        self.airtel_charge_amount = int(
-                                    self.config.get('airtel_charge_amount', 0))
+        self.redis_config = config.redis_manager
+        self.r_session_timeout = config.ussd_session_timeout
+        self.airtel_username = config.airtel_username
+        self.airtel_password = config.airtel_password
+        self.airtel_charge = ('Y' if config.airtel_charge else 'N')
+        self.airtel_charge_amount = config.airtel_charge_amount
 
     @inlineCallbacks
     def setup_transport(self):
