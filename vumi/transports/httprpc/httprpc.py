@@ -9,7 +9,8 @@ from twisted.web import http
 from twisted.web.resource import Resource
 from twisted.web.server import NOT_DONE_YET
 
-from vumi.transports.base import Transport
+from vumi.transports.base import Transport, TransportConfig
+from vumi.config import ConfigText, ConfigInt, ConfigBool, ConfigDict
 from vumi import log
 
 
@@ -48,6 +49,33 @@ class HttpRpcResource(Resource):
 
     def render_POST(self, request):
         return self.render_(request)
+
+
+class HttpRpcTransportConfig(TransportConfig):
+    web_path = ConfigText('The path to listen for requests on.',
+        required=True, static=True)
+    web_port = ConfigInt('The port to listen for requests on.',
+        default=0, required=True, static=True)
+    health_path = ConfigText(
+        'The path to listen for downstream health checks on', static=True,
+        default='health/')
+    request_cleanup_interval = ConfigInt(
+        'How often should we actively look for old connections that'
+        'should manually be timed out. Anything less than 1 disables this.',
+        required=False, static=True, default=5)
+    request_timeout = ConfigInt('How long should we wait for a response',
+        required=False, static=True, default=4 * 60)
+    request_timeout_status_code = ConfigInt(
+        'What HTTP status code should be returned on a timeout.',
+        required=False, static=True, default=504)
+    request_timeout_body = ConfigText(
+        'What HTTP body should be returned when a timeout occurs.',
+        required=False, static=True, default='')
+    noisy = ConfigBool(
+        'Set to True to make this transport log verbosely.', required=False,
+        default=True)
+    redis_manager = ConfigDict('Redis client configuration.', default={},
+        static=True)
 
 
 class HttpRpcTransport(Transport):

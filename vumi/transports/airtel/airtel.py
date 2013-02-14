@@ -5,10 +5,23 @@ import json
 from twisted.internet.defer import inlineCallbacks
 from twisted.web import http
 
-from vumi.transports.httprpc import HttpRpcTransport
+from vumi.transports.httprpc import HttpRpcTransport, HttpRpcTransportConfig
 from vumi.components import SessionManager
 from vumi.message import TransportUserMessage
 from vumi import log
+from vumi.config import ConfigInt, ConfigText, ConfigBool
+
+
+class AirtelUSSDTransportConfig(HttpRpcTransportConfig):
+    airtel_username = ConfigText('The username for this transport',
+        required=True, static=True)
+    airtel_password = ConfigText('The password for this transport',
+        required=True, static=True)
+    airtel_charge = ConfigBool(
+        'Whether or not to charge for the responses sent.', required=False,
+        default=False, static=True)
+    airtel_charge_amount = ConfigInt('How much to charge', default=0,
+        required=False, static=True)
 
 
 class AirtelUSSDTransport(HttpRpcTransport):
@@ -34,7 +47,9 @@ class AirtelUSSDTransport(HttpRpcTransport):
         How much to charge. Defaults to Zero.
     """
 
+    transport_type = 'ussd'
     content_type = 'text/plain; charset=utf-8'
+    CONFIG_CLASS = AirtelUSSDTransportConfig
     EXPECTED_CLEANUP_FIELDS = set(['userid', 'password', 'MSISDN',
                                     'clean', 'status'])
     EXPECTED_USSD_FIELDS = set(['userid', 'password', 'MSISDN',
@@ -42,7 +57,6 @@ class AirtelUSSDTransport(HttpRpcTransport):
 
     def validate_config(self):
         super(AirtelUSSDTransport, self).validate_config()
-        self.transport_type = self.config.get('transport_type', 'ussd')
         self.r_prefix = "vumi.transports.safaricom:%s" % self.transport_name
         self.redis_config = self.config.get('redis_manager', {})
         self.r_session_timeout = int(self.config.get("ussd_session_timeout",
