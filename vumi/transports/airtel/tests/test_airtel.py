@@ -176,11 +176,11 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_submitting_asterisks_as_values(self):
-        yield self.session_manager.create_session('session-id',
+        yield self.session_manager.create_session('27761234567',
                 to_addr='*167*7#', from_addr='27761234567',
-                last_ussd_params='7*a*b')
+                last_ussd_params='*167*7*a*b')
         # we're submitting a bunch of *s
-        deferred = self.mk_request(USSD_PARAMS='7*a*b*****')
+        deferred = self.mk_ussd_request('*167*7*a*b*****#')
 
         [msg] = yield self.wait_for_dispatched_messages(1)
         self.assertEqual(msg['content'], '****')
@@ -189,8 +189,8 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
             continue_session=True)
         self.dispatch(reply)
         yield deferred
-        session = yield self.session_manager.load_session('session-id')
-        self.assertEqual(session['last_ussd_params'], '7*a*b*****')
+        session = yield self.session_manager.load_session('27761234567')
+        self.assertEqual(session['last_ussd_params'], '*167*7*a*b*****')
 
     @inlineCallbacks
     def test_submitting_asterisks_as_values_after_asterisks(self):
