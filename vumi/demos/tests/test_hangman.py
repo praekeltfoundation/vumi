@@ -197,7 +197,8 @@ class TestHangmanWorker(ApplicationTestCase):
 
     @inlineCallbacks
     def test_random_word(self):
-        word = yield self.worker.random_word()
+        word = yield self.worker.random_word(
+            self.worker.config['random_word_url'])
         self.assertEqual(word, 'elephant')
 
     @inlineCallbacks
