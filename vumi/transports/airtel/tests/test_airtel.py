@@ -212,7 +212,7 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_submitting_with_base_code_empty_ussd_params(self):
-        d1 = self.mk_request()
+        d1 = self.mk_ussd_request('*167#')
         [msg1] = yield self.wait_for_dispatched_messages(1)
         self.assertEqual(msg1['to_addr'], '*167#')
         self.assertEqual(msg1['content'], '')
@@ -224,7 +224,7 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
         yield d1
 
         # ask for first menu
-        d2 = self.mk_request(USSD_PARAMS='1')
+        d2 = self.mk_ussd_request('*167*1#')
         [msg1, msg2] = yield self.wait_for_dispatched_messages(2)
         self.assertEqual(msg2['to_addr'], '*167#')
         self.assertEqual(msg2['content'], '1')
@@ -236,7 +236,7 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
         yield d2
 
         # ask for second menu
-        d3 = self.mk_request(USSD_PARAMS='1*1')
+        d3 = self.mk_ussd_request('*167*1*1#')
         [msg1, msg2, msg3] = yield self.wait_for_dispatched_messages(3)
         self.assertEqual(msg3['to_addr'], '*167#')
         self.assertEqual(msg3['content'], '1')
