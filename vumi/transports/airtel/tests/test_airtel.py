@@ -85,14 +85,14 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
     @inlineCallbacks
     def test_inbound_resume_and_reply_with_end(self):
         # first pre-populate the redis datastore to simulate prior BEG message
-        yield self.session_manager.create_session('session-id',
+        yield self.session_manager.create_session('27761234567',
                 to_addr='*167*7#', from_addr='27761234567',
-                last_ussd_params='7*a*b',
+                last_ussd_params='*167*7*a*b',
                 session_event=TransportUserMessage.SESSION_RESUME)
 
         # Safaricom gives us the history of the full session in the USSD_PARAMS
         # The last submitted bit of content is the last value delimited by '*'
-        deferred = self.mk_request(USSD_PARAMS='7*a*b*c')
+        deferred = self.mk_ussd_request('*167*7*a*b*c#')
 
         [msg] = yield self.wait_for_dispatched_messages(1)
         self.assertEqual(msg['content'], 'c')
@@ -100,17 +100,13 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
         self.assertEqual(msg['from_addr'], '27761234567')
         self.assertEqual(msg['session_event'],
                          TransportUserMessage.SESSION_RESUME)
-        self.assertEqual(msg['transport_metadata'], {
-            'safaricom': {
-                'session_id': 'session-id',
-            },
-        })
 
         reply = TransportUserMessage(**msg.payload).reply("hello world",
             continue_session=False)
         self.dispatch(reply)
         response = yield deferred
-        self.assertEqual(response, 'END hello world')
+        self.assertEqual(response.delivered_body, 'hello world')
+        self.assertEqual(response.headers.getRawHeaders('Freeflow'), ['FB'])
 
     @inlineCallbacks
     def test_inbound_resume_with_failed_to_addr_lookup(self):

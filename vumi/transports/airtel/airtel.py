@@ -154,7 +154,7 @@ class AirtelUSSDTransport(HttpRpcTransport):
             new_params = ussd_params[len(last_ussd_params):]
             if new_params:
                 if last_ussd_params:
-                    content = new_params[1:]
+                    content = new_params[1:].rstrip('#')
                 else:
                     content = new_params
             else:
