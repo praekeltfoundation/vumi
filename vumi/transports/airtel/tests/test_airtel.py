@@ -110,11 +110,11 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_inbound_resume_with_failed_to_addr_lookup(self):
-        deferred = self.mk_full_request(ORIG='123456',
-            USSD_PARAMS='7*a', SESSION_ID='session-id')
+        deferred = self.mk_full_request(MSISDN='123456',
+            input='7*a', userid='user-id', password='password')
         response = yield deferred
-        self.assertEqual(json.loads(response), {
-            'missing_parameter': ['DEST'],
+        self.assertEqual(json.loads(response.delivered_body), {
+            'missing_parameter': ['MSC'],
         })
 
     @inlineCallbacks
