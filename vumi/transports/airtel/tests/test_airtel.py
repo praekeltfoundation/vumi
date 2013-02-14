@@ -2,6 +2,7 @@ import json
 from urllib import urlencode
 
 from twisted.internet.defer import inlineCallbacks
+from twisted.web import http
 
 from vumi.transports.tests.utils import TransportTestCase
 from vumi.transports.airtel import AirtelUSSDTransport
@@ -246,3 +247,31 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
             continue_session=True)
         self.dispatch(reply)
         yield d3
+
+    @inlineCallbacks
+    def test_cleanup_unknown_session(self):
+        response = yield self.mk_cleanup_request()
+        self.assertEqual(response.code, http.OK)
+        self.assertEqual(response.delivered_body, 'Unknown Session')
+
+    @inlineCallbacks
+    def test_cleanup_session(self):
+        yield self.session_manager.create_session('27761234567',
+            to_addr='*167*7#', from_addr='27761234567')
+        response = yield self.mk_cleanup_request(MSISDN='27761234567')
+        self.assertEqual(response.code, http.OK)
+        self.assertEqual(response.delivered_body, '')
+
+    @inlineCallbacks
+    def test_cleanup_session_missing_params(self):
+        response = yield self.mk_request(clean='clean-session')
+        self.assertEqual(response.code, http.BAD_REQUEST)
+        self.assertEqual(json.loads(response.delivered_body), {
+            'missing_parameter': ['status'],
+            })
+
+    @inlineCallbacks
+    def test_cleanup_session_invalid_auth(self):
+        response = yield self.mk_cleanup_request(userid='foo', password='bar')
+        self.assertEqual(response.code, http.FORBIDDEN)
+        self.assertEqual(response.delivered_body, 'Forbidden')

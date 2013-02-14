@@ -3,6 +3,7 @@
 import json
 
 from twisted.internet.defer import inlineCallbacks
+from twisted.web import http
 
 from vumi.transports.httprpc import HttpRpcTransport
 from vumi.components import SessionManager
@@ -60,7 +61,7 @@ class AirtelUSSDTransport(HttpRpcTransport):
             self.redis_config, self.r_prefix, self.r_session_timeout)
 
     def is_cleanup(self, request):
-        return 'cleanup' in request.args
+        return 'clean' in request.args
 
     def get_field_values(self, request, expected_set):
         values = {}
@@ -90,13 +91,14 @@ class AirtelUSSDTransport(HttpRpcTransport):
                                                 self.EXPECTED_CLEANUP_FIELDS)
         if errors:
             log.msg('Unhappy incoming message: %s' % (errors,))
-            self.finish_request(message_id, json.dumps(errors), code=400)
+            self.finish_request(message_id, json.dumps(errors),
+                code=http.BAD_REQUEST)
             return
 
         if not self.is_authenticated(request):
             log.msg('Invalid authentication credentials: %s:%s' % (
                 values['userid'], values['password']))
-            self.finish_request(message_id, 'Forbidden', code=403)
+            self.finish_request(message_id, 'Forbidden', code=http.FORBIDDEN)
             return
 
         session_id = values['MSISDN']
@@ -104,14 +106,14 @@ class AirtelUSSDTransport(HttpRpcTransport):
         if not session:
             log.warning('Received cleanup for unknown session: %s' % (
                             session_id,))
-            self.finish_request(message_id, 'Unknown Session', code=200)
+            self.finish_request(message_id, 'Unknown Session', code=http.OK)
             return
 
         from_addr = values['MSISDN']
         to_addr = session['to_addr']
         session_event = TransportUserMessage.SESSION_CLOSE
 
-        yield self.session_manager.clean_session(session_id)
+        yield self.session_manager.clear_session(session_id)
         yield self.publish_message(
                 message_id=message_id,
                 content='',
@@ -122,11 +124,11 @@ class AirtelUSSDTransport(HttpRpcTransport):
                 transport_type=self.transport_type,
                 transport_metadata={
                     'airtel': {
-                        'MSC': values['MSC'],
                         'clean': values['clean'],
                         'status': values['status'],
                     },
                 })
+        self.finish_request(message_id, '', code=http.OK)
 
     @inlineCallbacks
     def handle_ussd_request(self, message_id, request):
@@ -134,13 +136,14 @@ class AirtelUSSDTransport(HttpRpcTransport):
                                                 self.EXPECTED_USSD_FIELDS)
         if errors:
             log.msg('Unhappy incoming message: %s' % (errors,))
-            self.finish_request(message_id, json.dumps(errors), code=400)
+            self.finish_request(message_id, json.dumps(errors),
+                code=http.BAD_REQUEST)
             return
 
         if not self.is_authenticated(request):
             log.msg('Invalid authentication credentials: %s:%s' % (
                 values['userid'], values['password']))
-            self.finish_request(message_id, 'Forbidden', code=403)
+            self.finish_request(message_id, 'Forbidden', code=http.FORBIDDEN)
             return
 
         session_id = values['MSISDN']
@@ -192,7 +195,7 @@ class AirtelUSSDTransport(HttpRpcTransport):
             else:
                 free_flow = 'FC'
             self.finish_request(message['in_reply_to'],
-                message['content'].encode('utf-8'), code=200, headers={
+                message['content'].encode('utf-8'), code=http.OK, headers={
                 'Freeflow': [free_flow],
                 'charge': [self.airtel_charge],
                 'amount': [self.airtel_charge_amount],
