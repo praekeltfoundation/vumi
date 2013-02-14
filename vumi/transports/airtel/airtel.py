@@ -5,14 +5,14 @@ import json
 from twisted.internet.defer import inlineCallbacks
 from twisted.web import http
 
-from vumi.transports.httprpc import HttpRpcTransport, HttpRpcTransportConfig
+from vumi.transports.httprpc import HttpRpcTransport
 from vumi.components import SessionManager
 from vumi.message import TransportUserMessage
 from vumi import log
 from vumi.config import ConfigInt, ConfigText, ConfigBool
 
 
-class AirtelUSSDTransportConfig(HttpRpcTransportConfig):
+class AirtelUSSDTransportConfig(HttpRpcTransport.CONFIG_CLASS):
     airtel_username = ConfigText('The username for this transport',
         required=True, static=True)
     airtel_password = ConfigText('The password for this transport',
