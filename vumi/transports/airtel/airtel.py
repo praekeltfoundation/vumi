@@ -160,14 +160,14 @@ class AirtelUSSDTransport(HttpRpcTransport):
             else:
                 content = ''
 
-            session['last_ussd_params'] = ussd_params
+            session['last_ussd_params'] = ussd_params.rstrip('#')
             yield self.session_manager.save_session(session_id, session)
             session_event = TransportUserMessage.SESSION_RESUME
         else:
             to_addr = ussd_params
             yield self.session_manager.create_session(session_id,
                 from_addr=from_addr, to_addr=to_addr,
-                last_ussd_params=ussd_params)
+                last_ussd_params=ussd_params.rstrip('#'))
             session_event = TransportUserMessage.SESSION_NEW
             content = ''
 

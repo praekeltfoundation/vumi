@@ -120,12 +120,13 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
     @inlineCallbacks
     def test_to_addr_handling(self):
         defaults = {
-            'DEST': '167',
-            'ORIG': '12345',
-            'SESSION_ID': 'session-id',
+            'MSISDN': '12345',
+            'MSC': 'msc',
+            'userid': 'userid',
+            'password': 'password'
         }
 
-        d1 = self.mk_full_request(USSD_PARAMS='7*1', **defaults)
+        d1 = self.mk_full_request(input='*167*7*1#', **defaults)
         [msg1] = yield self.wait_for_dispatched_messages(1)
         self.assertEqual(msg1['to_addr'], '*167*7*1#')
         self.assertEqual(msg1['content'], '')
@@ -133,11 +134,11 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
             TransportUserMessage.SESSION_NEW)
         reply = TransportUserMessage(**msg1.payload).reply("hello world",
             continue_session=True)
-        self.dispatch(reply)
+        yield self.dispatch(reply)
         yield d1
 
         # follow up with the user submitting 'a'
-        d2 = self.mk_full_request(USSD_PARAMS='7*1*a', **defaults)
+        d2 = self.mk_full_request(input='*167*7*1*a#', **defaults)
         [msg1, msg2] = yield self.wait_for_dispatched_messages(2)
         self.assertEqual(msg2['to_addr'], '*167*7*1#')
         self.assertEqual(msg2['content'], 'a')
