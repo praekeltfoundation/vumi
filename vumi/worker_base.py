@@ -8,6 +8,7 @@ from twisted.python import log
 from vumi.service import Worker
 from vumi.middleware import setup_middlewares_from_config
 from vumi.endpoints import ReceiveInboundConnector, ReceiveOutboundConnector
+from vumi.config import Config, ConfigInt
 
 
 def then_call(d, func, *args, **kw):
@@ -37,6 +38,17 @@ def DeprecatedAttribute(object):
         setattr(obj, self.name, value)
 
 
+class BaseConfig(Config):
+    """Base config definition for workers.
+
+    You should subclass this and add worker-specific fields.
+    """
+
+    amqp_prefetch_count = ConfigInt(
+        "The number of messages processed concurrently from each AMQP queue.",
+        static=True)
+
+
 class BaseWorker(Worker):
     """Base class for a message processing worker.
 
@@ -44,7 +56,7 @@ class BaseWorker(Worker):
     dispatcher workers.
     """
 
-    DEFAULT_AMQP_PREFETCH = 20
+    CONFIG_CLASS = BaseConfig
 
     start_message_consumer = True
 
@@ -93,8 +105,26 @@ class BaseWorker(Worker):
         then_call(d, self._worker_specific_teardown)
         return d
 
+    def get_static_config(self):
+        return self._static_config
+
+    def get_config(self, msg):
+        """This should return a message-specific config object.
+
+        It deliberately returns a deferred even when this isn't strictly
+        necessary to ensure that workers will continue to work when per-message
+        configuration needs to be fetched from elsewhere.
+        """
+        return succeed(self.CONFIG_CLASS(self.config))
+
     def _validate_config(self):
-        self.amqp_prefetch_count = self.config.get('amqp_prefetch_count', 20)
+        # We assume that all required fields will either come from the base
+        # config or will have placeholder values that don't fail validation.
+        # This object is only created to trigger validation.
+        # TODO: Eventually we'll be able to remove the legacy validate_config()
+        # and just use config objects.
+        self._static_config = self.CONFIG_CLASS(self.config, static=True)
+        self.amqp_prefetch_count = self._static_config.amqp_prefetch_count
         return self.validate_config()
 
     def validate_config(self):

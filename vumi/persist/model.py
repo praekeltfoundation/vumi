@@ -203,13 +203,30 @@ class Model(object):
             raise ValidationError("Unexpected extra initial fields %r passed"
                                   " to model %s" % (field_values.keys(),
                                                     self.__class__))
+        self.clean()
 
     def __repr__(self):
-        fields = self.field_descriptors.keys()
-        fields.sort()
-        items = ["%s=%r" % (field, getattr(self, field)) for field in fields]
-        return "<%s key=%s %s>" % (self.__class__.__name__, self.key,
-                                   " ".join(items))
+        str_items = ["%s=%r" % item for item
+                        in sorted(self.get_data().items())]
+        return "<%s %s>" % (self.__class__.__name__, " ".join(str_items))
+
+    def clean(self):
+        for field_name, descriptor in self.field_descriptors.iteritems():
+            descriptor.clean(self)
+
+    def get_data(self):
+        """
+        Returns a dictionary with for all known field names & values.
+        Useful for when needing to represent a model instance as a dictionary.
+
+        :returns:
+            A dict of all values, including the key.
+        """
+        data = self._riak_object.get_data()
+        data.update({
+            'key': self.key,
+            })
+        return data
 
     def save(self):
         """Save the object to Riak.

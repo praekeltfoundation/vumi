@@ -5,9 +5,10 @@
 import copy
 import warnings
 
-from twisted.internet.defer import inlineCallbacks, maybeDeferred
+from twisted.internet.defer import maybeDeferred
 from twisted.python import log
 
+from vumi.config import ConfigText, ConfigInt, ConfigDict
 from vumi.worker_base import BaseWorker
 from vumi.errors import ConfigError
 from vumi.message import TransportUserMessage
@@ -16,6 +17,24 @@ from vumi.message import TransportUserMessage
 SESSION_NEW = TransportUserMessage.SESSION_NEW
 SESSION_CLOSE = TransportUserMessage.SESSION_CLOSE
 SESSION_RESUME = TransportUserMessage.SESSION_RESUME
+
+
+class ApplicationConfig(BaseWorker.CONFIG_CLASS):
+    """Base config definition for applications.
+
+    You should subclass this and add application-specific fields.
+    """
+
+    # We override amqp_prefetch_count to set a different default.
+    amqp_prefetch_count = ConfigInt(
+        "The number of messages fetched concurrently from each AMQP queue"
+        " by each worker instance.",
+        default=20, static=True)
+    transport_name = ConfigText(
+        "The name this application instance will use to create its queues.",
+        required=True, static=True)
+    send_to = ConfigDict(
+        "'send_to' configuration dict.", default={}, static=True)
 
 
 class ApplicationWorker(BaseWorker):
@@ -58,6 +77,7 @@ class ApplicationWorker(BaseWorker):
     transport_name = None
     start_message_consumer = True
 
+    CONFIG_CLASS = ApplicationConfig
     SEND_TO_TAGS = frozenset([])
 
     def _worker_specific_setup(self):
@@ -77,25 +97,27 @@ class ApplicationWorker(BaseWorker):
             }
         return self.setup_application()
 
-    def _worker_specific_teardown(self):
-        return self.teardown_application()
-
     def _validate_config(self):
-        if 'transport_name' not in self.config:
-            raise ConfigError("Missing 'transport_name' field in config.")
-        self.transport_name = self.config['transport_name']
+        # TODO: Figure out what the future of .validate_config() is going to be
+        #       once everything uses config objects. It's handy to be able to
+        #       do complex validation, but maybe that belongs on the config
+        #       object instead?
 
-        self.send_to_options = self.config.get('send_to', {})
+        # This needs to happen earlier than _worker_specific_setup() allows.
+        super(ApplicationWorker, self)._validate_config()
+        config = self.get_static_config()
+        self.transport_name = config.transport_name
         for tag in self.SEND_TO_TAGS:
-            if tag not in self.send_to_options:
+            if tag not in config.send_to:
                 raise ConfigError("No configuration for send_to tag %r but"
                                   " at least a transport_name is required."
                                   % (tag,))
-            if 'transport_name' not in self.send_to_options[tag]:
+            if 'transport_name' not in config.send_to[tag]:
                 raise ConfigError("The configuration for send_to tag %r must"
                                   " contain a transport_name." % (tag,))
 
-        return super(ApplicationWorker, self)._validate_config()
+    def _worker_specific_teardown(self):
+        return self.teardown_application()
 
     def setup_application(self):
         """
@@ -183,7 +205,7 @@ class ApplicationWorker(BaseWorker):
         # FIXME: Do we do the right stuff here?
         if tag not in self.SEND_TO_TAGS:
             raise ValueError("Tag %r not defined in SEND_TO_TAGS" % (tag,))
-        options = copy.deepcopy(self.send_to_options[tag])
+        options = copy.deepcopy(self.get_static_config().send_to[tag])
         options.update(kw)
         msg = TransportUserMessage.send(to_addr, content, **options)
         return self._publish_message(msg)
@@ -247,7 +269,7 @@ class ApplicationWorker(BaseWorker):
 
     def _setup_transport_publisher(self):
         return self.setup_transport_connection(
-            'transport', self.transport_name,
+            'transport', self.get_static_config().transport_name,
             self.dispatch_user_message, self.dispatch_event)
 
     def _setup_transport_consumer(self):
@@ -255,8 +277,3 @@ class ApplicationWorker(BaseWorker):
 
     def _setup_event_consumer(self):
         return self.transport_event_consumer.unpause()
-
-    @inlineCallbacks
-    def setup_amqp_qos(self):
-        for conn in self._connectors.values():
-            yield conn.set_consumer_prefetch(int(self.amqp_prefetch_count))

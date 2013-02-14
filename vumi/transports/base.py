@@ -11,10 +11,21 @@ import warnings
 from twisted.internet.defer import maybeDeferred
 
 from vumi import log
-from vumi.errors import ConfigError
+from vumi.config import ConfigText
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.worker_base import BaseWorker, then_call
 from vumi.transports.failures import FailureMessage
+
+
+class TransportConfig(BaseWorker.CONFIG_CLASS):
+    """Base config definition for transports.
+
+    You should subclass this and add transport-specific fields.
+    """
+
+    transport_name = ConfigText(
+        "The name this transport instance will use to create its queues.",
+        required=True, static=True)
 
 
 class Transport(BaseWorker):
@@ -29,6 +40,7 @@ class Transport(BaseWorker):
     """
 
     SUPPRESS_FAILURE_EXCEPTIONS = True
+    CONFIG_CLASS = TransportConfig
 
     transport_name = None
     start_message_consumer = True
@@ -39,22 +51,15 @@ class Transport(BaseWorker):
 
         You shouldn't have to override this in subclasses.
         """
-        if 'TRANSPORT_NAME' in self.config:
-            log.msg("NOTE: 'TRANSPORT_NAME' in config is deprecated. "
-                    "Use 'transport_name' instead.")
-            self.config.setdefault('transport_name',
-                                   self.config['TRANSPORT_NAME'])
-
-        if 'concurrent_sends' in self.config:
-            log.msg("NOTE: 'concurrent_sends' in config is deprecated. "
-                    "use 'amqp_prefetch_count' instead.")
-            self.config.setdefault('amqp_prefetch_count',
-                                    self.config['concurrent_sends'])
-        self.amqp_prefetch_count = self.config.get('amqp_prefetch_count')
 
         d = self.setup_failure_publisher()
         then_call(d, self.setup_transport)
         return d
+
+    def _validate_config(self):
+        # This needs to happen earlier than _worker_specific_setup() allows.
+        super(Transport, self)._validate_config()
+        self.transport_name = self.get_static_config().transport_name
 
     def _worker_specific_teardown(self):
         return self.teardown_transport()
@@ -78,12 +83,6 @@ class Transport(BaseWorker):
             self.failure_publisher = publisher
 
         return d.addCallback(cb)
-
-    def _validate_config(self):
-        if 'transport_name' not in self.config:
-            raise ConfigError("Missing 'transport_name' field in config.")
-        self.transport_name = self.config['transport_name']
-        return super(Transport, self)._validate_config()
 
     def setup_transport(self):
         """

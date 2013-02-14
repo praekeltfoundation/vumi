@@ -258,6 +258,14 @@ class FakeRedisTestCase(TestCase):
             ['v0', 'v1', 'v2', 1, 'v3', 1, 'v4', 1], 'lrange', 'list', 0, -1)
 
     @inlineCallbacks
+    def test_ltrim(self):
+        for i in range(1, 4):
+            yield self.assert_redis_op(i - 1, 'rpush', 'list', str(i))
+        yield self.assert_redis_op(['1', '2', '3'], 'lrange', 'list', 0, -1)
+        yield self.assert_redis_op(None, 'ltrim', 'list', 1, 2)
+        yield self.assert_redis_op(['2', '3'], 'lrange', 'list', 0, -1)
+
+    @inlineCallbacks
     def test_lrem_negative_num(self):
         for i in range(5):
             yield self.assert_redis_op(2 * i, 'rpush', 'list', 'v%d' % i)
