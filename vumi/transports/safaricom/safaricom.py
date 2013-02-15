@@ -50,22 +50,9 @@ class SafaricomTransport(HttpRpcTransport):
         yield self.session_manager.stop()
         yield super(SafaricomTransport, self).teardown_transport()
 
-    def get_field_values(self, request):
-        values = {}
-        errors = {}
-        for field in request.args:
-            if field not in self.EXPECTED_FIELDS:
-                errors.setdefault('unexpected_parameter', []).append(field)
-            else:
-                values[field] = str(request.args.get(field)[0])
-        for field in self.EXPECTED_FIELDS:
-            if field not in values:
-                errors.setdefault('missing_parameter', []).append(field)
-        return values, errors
-
     @inlineCallbacks
     def handle_raw_inbound_message(self, message_id, request):
-        values, errors = self.get_field_values(request)
+        values, errors = self.get_field_values(request, self.EXPECTED_FIELDS)
         if errors:
             log.err('Unhappy incoming message: %s' % (errors,))
             yield self.finish_request(message_id, json.dumps(errors), code=400)
