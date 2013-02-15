@@ -42,24 +42,30 @@ class AirtelUSSDTransport(HttpRpcTransport):
                                 ['MSISDN', 'clean', 'status'])
     EXPECTED_USSD_FIELDS = EXPECTED_AUTH_FIELDS.union(
                                 ['MSISDN', 'MSC', 'input'])
-    ALL_NON_AUTH_FIELDS = EXPECTED_USSD_FIELDS.union(
-                            EXPECTED_CLEANUP_FIELDS) - EXPECTED_AUTH_FIELDS
 
     @inlineCallbacks
     def setup_transport(self):
         super(AirtelUSSDTransport, self).setup_transport()
-        self.config = self.get_static_config()
+        config = self.get_static_config()
         r_prefix = "vumi.transports.safaricom:%s" % self.transport_name
         self.session_manager = yield SessionManager.from_redis_config(
-            self.config.redis_manager, r_prefix,
-            self.config.ussd_session_timeout)
+            config.redis_manager, r_prefix,
+            config.ussd_session_timeout)
 
     def is_cleanup(self, request):
         return 'clean' in request.args
 
     def is_authenticated(self, request):
-        return (request.args['userid'] == [self.config.airtel_username] and
-                request.args['password'] == [self.config.airtel_password])
+        config = self.get_static_config()
+        if self.EXPECTED_AUTH_FIELDS.issubset(request.args):
+            username = request.args['userid'][0]
+            password = request.args['password'][0]
+            auth = (username == config.airtel_username and
+                    password == config.airtel_password)
+            if not auth:
+                log.msg('Invalid authentication credentials: %s:%s' % (
+                            username, password))
+            return auth
 
     def handle_bad_request(self, message_id, request, errors):
         log.msg('Unhappy incoming message: %s' % (errors,))
@@ -67,15 +73,7 @@ class AirtelUSSDTransport(HttpRpcTransport):
                                     code=http.BAD_REQUEST)
 
     def handle_raw_inbound_message(self, message_id, request):
-        values, errors = self.get_field_values(request,
-            self.EXPECTED_AUTH_FIELDS, self.ALL_NON_AUTH_FIELDS)
-
-        if errors:
-            return self.handle_bad_request(message_id, request, errors)
-
         if not self.is_authenticated(request):
-            log.msg('Invalid authentication credentials: %s:%s' % (
-                values['userid'], values['password']))
             self.finish_request(message_id, 'Forbidden', code=http.FORBIDDEN)
             return
 
@@ -171,6 +169,7 @@ class AirtelUSSDTransport(HttpRpcTransport):
                 })
 
     def handle_outbound_message(self, message):
+        config = self.get_static_config()
         if message.payload.get('in_reply_to') and 'content' in message.payload:
             if message['session_event'] == TransportUserMessage.SESSION_CLOSE:
                 free_flow = 'FB'
@@ -179,8 +178,8 @@ class AirtelUSSDTransport(HttpRpcTransport):
             self.finish_request(message['in_reply_to'],
                 message['content'].encode('utf-8'), code=http.OK, headers={
                 'Freeflow': [free_flow],
-                'charge': [('Y' if self.config.airtel_charge else 'N')],
-                'amount': [self.config.airtel_charge_amount],
+                'charge': [('Y' if config.airtel_charge else 'N')],
+                'amount': [config.airtel_charge_amount],
                 })
             return self.publish_ack(user_message_id=message['message_id'],
                 sent_message_id=message['message_id'])
