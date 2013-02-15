@@ -164,7 +164,8 @@ class HttpRpcTransport(Transport):
         """
         return reactor
 
-    def get_field_values(self, request, expected_fields, ignored_fields=set()):
+    def get_field_values(self, request, expected_fields,
+                            ignored_fields=frozenset()):
         values = {}
         errors = {}
         for field in request.args:
