@@ -42,29 +42,21 @@ class AirtelUSSDTransport(HttpRpcTransport):
     EXPECTED_USSD_FIELDS = set(['userid', 'password', 'MSISDN',
                                     'MSC', 'input'])
 
-    def validate_config(self):
-        super(AirtelUSSDTransport, self).validate_config()
-        config = self.get_static_config()
-        self.r_prefix = "vumi.transports.safaricom:%s" % self.transport_name
-        self.redis_config = config.redis_manager
-        self.r_session_timeout = config.ussd_session_timeout
-        self.airtel_username = config.airtel_username
-        self.airtel_password = config.airtel_password
-        self.airtel_charge = ('Y' if config.airtel_charge else 'N')
-        self.airtel_charge_amount = config.airtel_charge_amount
-
     @inlineCallbacks
     def setup_transport(self):
         super(AirtelUSSDTransport, self).setup_transport()
+        self.config = self.get_static_config()
+        r_prefix = "vumi.transports.safaricom:%s" % self.transport_name
         self.session_manager = yield SessionManager.from_redis_config(
-            self.redis_config, self.r_prefix, self.r_session_timeout)
+            self.config.redis_manager, r_prefix,
+            self.config.ussd_session_timeout)
 
     def is_cleanup(self, request):
         return 'clean' in request.args
 
     def is_authenticated(self, request):
-        return (request.args['userid'] == [self.airtel_username] and
-                request.args['password'] == [self.airtel_password])
+        return (request.args['userid'] == [self.config.airtel_username] and
+                request.args['password'] == [self.config.airtel_password])
 
     def handle_raw_inbound_message(self, message_id, request):
         if self.is_cleanup(request):
@@ -183,8 +175,8 @@ class AirtelUSSDTransport(HttpRpcTransport):
             self.finish_request(message['in_reply_to'],
                 message['content'].encode('utf-8'), code=http.OK, headers={
                 'Freeflow': [free_flow],
-                'charge': [self.airtel_charge],
-                'amount': [self.airtel_charge_amount],
+                'charge': [('Y' if self.config.airtel_charge else 'N')],
+                'amount': [self.config.airtel_charge_amount],
                 })
             return self.publish_ack(user_message_id=message['message_id'],
                 sent_message_id=message['message_id'])
