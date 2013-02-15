@@ -13,7 +13,6 @@ from vumi.utils import http_request_full
 class TestAirtelUSSDTransportTestCase(TransportTestCase):
 
     transport_class = AirtelUSSDTransport
-    timeout = 1
 
     @inlineCallbacks
     def setUp(self):
