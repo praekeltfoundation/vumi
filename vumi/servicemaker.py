@@ -62,7 +62,7 @@ class VumiOptions(usage.Options):
         "username": "vumi",
         "password": "vumi",
         "vhost": "/develop",
-        "specfile": "amqp-spec-0-8.xml",
+        "specfile": "amqp-spec-0-9-1.xml",
         "sentry": None,
         }
 
