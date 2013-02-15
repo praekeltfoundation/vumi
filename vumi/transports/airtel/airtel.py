@@ -62,19 +62,6 @@ class AirtelUSSDTransport(HttpRpcTransport):
     def is_cleanup(self, request):
         return 'clean' in request.args
 
-    def get_field_values(self, request, expected_set):
-        values = {}
-        errors = {}
-        for field in request.args:
-            if field not in expected_set:
-                errors.setdefault('unexpected_parameter', []).append(field)
-            else:
-                values[field] = request.args.get(field)[0].decode('utf-8')
-        for field in expected_set:
-            if field not in values:
-                errors.setdefault('missing_parameter', []).append(field)
-        return values, errors
-
     def is_authenticated(self, request):
         return (request.args['userid'] == [self.airtel_username] and
                 request.args['password'] == [self.airtel_password])

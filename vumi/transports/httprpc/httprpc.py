@@ -10,7 +10,7 @@ from twisted.web.resource import Resource
 from twisted.web.server import NOT_DONE_YET
 
 from vumi.transports.base import Transport
-from vumi.config import ConfigText, ConfigInt, ConfigBool
+from vumi.config import ConfigText, ConfigInt, ConfigBool, ConfigError
 from vumi import log
 
 
@@ -48,6 +48,12 @@ class HttpRpcTransportConfig(Transport.CONFIG_CLASS):
     noisy = ConfigBool(
         "Defaults to `False` set to `True` to make this transport log"
         " verbosely.", default=False, static=True)
+    validation_mode = ConfigText(
+        "The mode to operate in. Can be 'strict' or 'permissive'. If 'strict'"
+        " then any parameter received that is not listed in EXPECTED_FIELDS"
+        " nor in IGNORED_FIELDS will raise an error. If 'permissive' then no"
+        " error is raised as long as all the EXPECTED_FIELDS are present.",
+        default='strict', static=True)
 
 
 class HttpRpcHealthResource(Resource):
@@ -99,6 +105,10 @@ class HttpRpcTransport(Transport):
     content_type = 'text/plain'
 
     CONFIG_CLASS = HttpRpcTransportConfig
+    STRICT_MODE = 'strict'
+    PERMISSIVE_MODE = 'permissive'
+    DEFAULT_VALIDATION_MODE = STRICT_MODE
+    KNOWN_VALIDATION_MODES = [STRICT_MODE, PERMISSIVE_MODE]
 
     def validate_config(self):
         config = self.get_static_config()
@@ -110,6 +120,10 @@ class HttpRpcTransport(Transport):
         self.noisy = config.noisy
         self.request_timeout_body = config.request_timeout_body
         self.gc_requests_interval = config.request_cleanup_interval
+        self._validation_mode = config.validation_mode
+        if self._validation_mode not in self.KNOWN_VALIDATION_MODES:
+            raise ConfigError('Invalid validation mode: %s' % (
+                self._validation_mode,))
 
     def get_transport_url(self, suffix=''):
         """
@@ -149,6 +163,20 @@ class HttpRpcTransport(Transport):
         For easier stubbing in tests
         """
         return reactor
+
+    def get_field_values(self, request, expected_fields, ignored_fields=set()):
+        values = {}
+        errors = {}
+        for field in request.args:
+            if field not in (expected_fields | ignored_fields):
+                if self._validation_mode == self.STRICT_MODE:
+                    errors.setdefault('unexpected_parameter', []).append(field)
+            else:
+                values[field] = request.args.get(field)[0].decode('utf-8')
+        for field in expected_fields:
+            if field not in values:
+                errors.setdefault('missing_parameter', []).append(field)
+        return values, errors
 
     def manually_close_requests(self):
         for request_id, (timestamp, request) in self._requests.items():
