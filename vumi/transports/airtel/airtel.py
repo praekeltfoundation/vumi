@@ -69,7 +69,7 @@ class AirtelUSSDTransport(HttpRpcTransport):
             if field not in expected_set:
                 errors.setdefault('unexpected_parameter', []).append(field)
             else:
-                values[field] = str(request.args.get(field)[0])
+                values[field] = request.args.get(field)[0].decode('utf-8')
         for field in expected_set:
             if field not in values:
                 errors.setdefault('missing_parameter', []).append(field)
