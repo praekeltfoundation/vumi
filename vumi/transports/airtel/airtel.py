@@ -37,10 +37,13 @@ class AirtelUSSDTransport(HttpRpcTransport):
     transport_type = 'ussd'
     content_type = 'text/plain; charset=utf-8'
     CONFIG_CLASS = AirtelUSSDTransportConfig
-    EXPECTED_CLEANUP_FIELDS = set(['userid', 'password', 'MSISDN',
-                                    'clean', 'status'])
-    EXPECTED_USSD_FIELDS = set(['userid', 'password', 'MSISDN',
-                                    'MSC', 'input'])
+    EXPECTED_AUTH_FIELDS = set(['userid', 'password'])
+    EXPECTED_CLEANUP_FIELDS = EXPECTED_AUTH_FIELDS.union(
+                                ['MSISDN', 'clean', 'status'])
+    EXPECTED_USSD_FIELDS = EXPECTED_AUTH_FIELDS.union(
+                                ['MSISDN', 'MSC', 'input'])
+    ALL_NON_AUTH_FIELDS = EXPECTED_USSD_FIELDS.union(
+                            EXPECTED_CLEANUP_FIELDS) - EXPECTED_AUTH_FIELDS
 
     @inlineCallbacks
     def setup_transport(self):
@@ -58,7 +61,24 @@ class AirtelUSSDTransport(HttpRpcTransport):
         return (request.args['userid'] == [self.config.airtel_username] and
                 request.args['password'] == [self.config.airtel_password])
 
+    def handle_bad_request(self, message_id, request, errors):
+        log.msg('Unhappy incoming message: %s' % (errors,))
+        return self.finish_request(message_id, json.dumps(errors),
+                                    code=http.BAD_REQUEST)
+
     def handle_raw_inbound_message(self, message_id, request):
+        values, errors = self.get_field_values(request,
+            self.EXPECTED_AUTH_FIELDS, self.ALL_NON_AUTH_FIELDS)
+
+        if errors:
+            return self.handle_bad_request(message_id, request, errors)
+
+        if not self.is_authenticated(request):
+            log.msg('Invalid authentication credentials: %s:%s' % (
+                values['userid'], values['password']))
+            self.finish_request(message_id, 'Forbidden', code=http.FORBIDDEN)
+            return
+
         if self.is_cleanup(request):
             return self.handle_cleanup_request(message_id, request)
         return self.handle_ussd_request(message_id, request)
@@ -68,15 +88,7 @@ class AirtelUSSDTransport(HttpRpcTransport):
         values, errors = self.get_field_values(request,
                                                 self.EXPECTED_CLEANUP_FIELDS)
         if errors:
-            log.msg('Unhappy incoming message: %s' % (errors,))
-            self.finish_request(message_id, json.dumps(errors),
-                code=http.BAD_REQUEST)
-            return
-
-        if not self.is_authenticated(request):
-            log.msg('Invalid authentication credentials: %s:%s' % (
-                values['userid'], values['password']))
-            self.finish_request(message_id, 'Forbidden', code=http.FORBIDDEN)
+            self.handle_bad_request(message_id, request, errors)
             return
 
         session_id = values['MSISDN']
@@ -113,15 +125,7 @@ class AirtelUSSDTransport(HttpRpcTransport):
         values, errors = self.get_field_values(request,
                                                 self.EXPECTED_USSD_FIELDS)
         if errors:
-            log.msg('Unhappy incoming message: %s' % (errors,))
-            self.finish_request(message_id, json.dumps(errors),
-                code=http.BAD_REQUEST)
-            return
-
-        if not self.is_authenticated(request):
-            log.msg('Invalid authentication credentials: %s:%s' % (
-                values['userid'], values['password']))
-            self.finish_request(message_id, 'Forbidden', code=http.FORBIDDEN)
+            self.handle_bad_request(message_id, request, errors)
             return
 
         session_id = values['MSISDN']

@@ -13,6 +13,7 @@ from vumi.utils import http_request_full
 class TestAirtelUSSDTransportTestCase(TransportTestCase):
 
     transport_class = AirtelUSSDTransport
+    timeout = 1
 
     @inlineCallbacks
     def setUp(self):
@@ -111,7 +112,7 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
     @inlineCallbacks
     def test_inbound_resume_with_failed_to_addr_lookup(self):
         deferred = self.mk_full_request(MSISDN='123456',
-            input='7*a', userid='user-id', password='password')
+            input='7*a', userid='userid', password='password')
         response = yield deferred
         self.assertEqual(json.loads(response.delivered_body), {
             'missing_parameter': ['MSC'],
