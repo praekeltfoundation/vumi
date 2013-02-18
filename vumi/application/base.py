@@ -5,7 +5,7 @@
 import copy
 import warnings
 
-from twisted.internet.defer import maybeDeferred
+from twisted.internet.defer import maybeDeferred, succeed
 from twisted.python import log
 
 from vumi.config import ConfigText, ConfigInt, ConfigDict
@@ -260,7 +260,8 @@ class ApplicationWorker(BaseWorker):
             d = maybeDeferred(self._setup_transport_consumer)
             d.addCallback(lambda r: maybeDeferred(self._setup_event_consumer))
             return d
-        return self._connectors[self.transport_name].unpause()
+        self._connectors[self.transport_name].unpause()
+        return succeed(None)
 
     def _setup_transport_publisher(self):
         return self.setup_transport_connection(
