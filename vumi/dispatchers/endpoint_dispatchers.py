@@ -1,0 +1,152 @@
+# -*- test-case-name: vumi.dispatchers.tests.test_endpoint_dispatchers -*-
+
+"""Basic tools for building dispatchers."""
+
+from twisted.internet.defer import gatherResults
+
+from vumi.worker_base import BaseWorker
+from vumi.config import ConfigInt, ConfigDict, ConfigList
+from vumi import log
+
+
+class DispatcherConfig(BaseWorker.CONFIG_CLASS):
+    # We override amqp_prefetch_count to set a different default.
+    amqp_prefetch_count = ConfigInt(
+        "The number of messages fetched concurrently from each AMQP queue"
+        " by each worker instance.",
+        default=20, static=True)
+
+    receive_inbound_connectors = ConfigList(
+        "List of connectors that will receive inbound messages and events.",
+        required=True, static=True)
+    receive_outbound_connectors = ConfigList(
+        "List of connectors that will receive outbound messages.",
+        required=True, static=True)
+
+
+class Dispatcher(BaseWorker):
+    """Base class for a dispatcher."""
+
+    CONFIG_CLASS = DispatcherConfig
+
+    def _worker_specific_setup(self):
+        return self.setup_dispatcher()
+
+    def _worker_specific_teardown(self):
+        return self.teardown_dispatcher()
+
+    def setup_dispatcher(self):
+        """
+        All dispatcher specific setup should happen in here.
+
+        Subclasses should override this method to perform extra setup.
+        """
+        pass
+
+    def teardown_dispatcher(self):
+        """
+        Clean-up of setup done in setup_dispatcher should happen here.
+        """
+        pass
+
+    def get_configured_ri_connectors(self):
+        return self.get_static_config().receive_inbound_connectors
+
+    def get_configured_ro_connectors(self):
+        return self.get_static_config().receive_outbound_connectors
+
+    def process_inbound(self, config, msg, connector_name):
+        raise NotImplementedError()
+
+    def process_outbound(self, config, msg, connector_name):
+        raise NotImplementedError()
+
+    def process_event(self, config, event, connector_name):
+        raise NotImplementedError()
+
+    def _mkhandler(self, handler_func, connector_name):
+        def handler(msg):
+            d = self.get_config(msg)
+            return d.addCallback(handler_func, msg, connector_name)
+        return handler
+
+    def setup_connectors(self):
+        def add_ri_handlers(connector, connector_name):
+            connector.set_default_inbound_handler(
+                self._mkhandler(self.process_inbound, connector_name))
+            connector.set_default_event_handler(
+                self._mkhandler(self.process_event, connector_name))
+            return connector
+
+        def add_ro_handlers(connector, connector_name):
+            connector.set_default_outbound_handler(
+                self._mkhandler(self.process_outbound, connector_name))
+            return connector
+
+        deferreds = []
+        for connector_name in self.get_configured_ri_connectors():
+            d = self.setup_ri_connector(connector_name)
+            d.addCallback(add_ri_handlers, connector_name)
+            deferreds.append(d)
+
+        for connector_name in self.get_configured_ro_connectors():
+            d = self.setup_ro_connector(connector_name)
+            d.addCallback(add_ro_handlers, connector_name)
+            deferreds.append(d)
+
+        return gatherResults(deferreds)
+
+    def publish_inbound(self, msg, connector_name, endpoint):
+        return self._connectors[connector_name].publish_inbound(msg, endpoint)
+
+    def publish_outbound(self, msg, connector_name, endpoint):
+        return self._connectors[connector_name].publish_outbound(msg, endpoint)
+
+    def publish_event(self, event, connector_name, endpoint):
+        return self._connectors[connector_name].publish_event(event, endpoint)
+
+    def _setup_unpause(self):
+        for connector in self._connectors.values():
+            connector.unpause()
+
+
+class RoutingTableDispatcherConfig(Dispatcher.CONFIG_CLASS):
+    routing_table = ConfigDict(
+        "Routing table. Keys are connector names, values are dicts mapping "
+        "endpoint names to [connector, endpoint] pairs.", required=True)
+
+
+class RoutingTableDispatcher(Dispatcher):
+    CONFIG_CLASS = RoutingTableDispatcherConfig
+
+    def find_target(self, config, msg, connector_name):
+        endpoint_name = msg.get_routing_endpoint()
+        endpoint_routing = config.routing_table.get(connector_name)
+        if endpoint_routing is None:
+            log.warning("No routing information for connector '%s'" % (
+                    connector_name,))
+            return None
+        target = endpoint_routing.get(endpoint_name)
+        if target is None:
+            log.warning("No routing information for endpoint '%s' on '%s'" % (
+                    endpoint_name, connector_name,))
+            return None
+        return target
+
+    def process_inbound(self, config, msg, connector_name):
+        target = self.find_target(config, msg, connector_name)
+        if target is None:
+            return
+        return self.publish_inbound(msg, target[0], target[1])
+
+    def process_outbound(self, config, msg, connector_name):
+        target = self.find_target(config, msg, connector_name)
+        if target is None:
+            return
+        return self.publish_outbound(msg, target[0], target[1])
+
+    def process_event(self, config, event, connector_name):
+        target = self.find_target(config, event, connector_name)
+        if target is None:
+            return
+        return self.publish_event(event, target[0], target[1])

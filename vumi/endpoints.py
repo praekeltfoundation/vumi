@@ -98,8 +98,8 @@ class ReceiveInboundConnector(BaseConnector):
         outbound_d = self._setup_publisher('outbound')
         inbound_d = self._setup_consumer('inbound', TransportUserMessage)
         event_d = self._setup_consumer('event', TransportEvent)
-        self._default_handlers['inbound'] = self.default_inbound_handler
-        self._default_handlers['event'] = self.default_event_handler
+        self.set_default_inbound_handler(self.default_inbound_handler)
+        self.set_default_event_handler(self.default_event_handler)
         return gatherResults([outbound_d, inbound_d, event_d])
 
     def default_inbound_handler(self, msg):
@@ -112,12 +112,14 @@ class ReceiveInboundConnector(BaseConnector):
         self._set_endpoint_handler('inbound', handler, endpoint_name)
 
     def set_default_inbound_handler(self, handler):
+        self._endpoint_handlers.setdefault('inbound', {})
         self._default_handlers['inbound'] = handler
 
     def set_event_handler(self, handler, endpoint_name=None):
         self._set_endpoint_handler('event', handler, endpoint_name)
 
     def set_default_event_handler(self, handler):
+        self._endpoint_handlers.setdefault('event', {})
         self._default_handlers['event'] = handler
 
     def publish_outbound(self, msg, endpoint_name=None):
@@ -129,7 +131,7 @@ class ReceiveOutboundConnector(BaseConnector):
         inbound_d = self._setup_publisher('inbound')
         event_d = self._setup_publisher('event')
         outbound_d = self._setup_consumer('outbound', TransportUserMessage)
-        self._default_handlers['outbound'] = self.default_outbound_handler
+        self.set_default_outbound_handler(self.default_outbound_handler)
         return gatherResults([outbound_d, inbound_d, event_d])
 
     def default_outbound_handler(self, msg):
@@ -139,6 +141,7 @@ class ReceiveOutboundConnector(BaseConnector):
         self._set_endpoint_handler('outbound', handler, endpoint_name)
 
     def set_default_outbound_handler(self, handler):
+        self._endpoint_handlers.setdefault('outbound', {})
         self._default_handlers['outbound'] = handler
 
     def publish_inbound(self, msg, endpoint_name=None):
