@@ -45,8 +45,9 @@ class BaseConfig(Config):
     """
 
     amqp_prefetch_count = ConfigInt(
-        "The number of messages processed concurrently from each AMQP queue.",
-        static=True)
+        "The number of messages fetched concurrently from each AMQP queue"
+        " by each worker instance.",
+        default=20, static=True)
 
 
 class BaseWorker(Worker):

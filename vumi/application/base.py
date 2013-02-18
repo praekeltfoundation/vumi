@@ -25,11 +25,6 @@ class ApplicationConfig(BaseWorker.CONFIG_CLASS):
     You should subclass this and add application-specific fields.
     """
 
-    # We override amqp_prefetch_count to set a different default.
-    amqp_prefetch_count = ConfigInt(
-        "The number of messages fetched concurrently from each AMQP queue"
-        " by each worker instance.",
-        default=20, static=True)
     transport_name = ConfigText(
         "The name this application instance will use to create its queues.",
         required=True, static=True)

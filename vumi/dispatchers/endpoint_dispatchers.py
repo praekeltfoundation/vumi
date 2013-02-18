@@ -10,12 +10,6 @@ from vumi import log
 
 
 class DispatcherConfig(BaseWorker.CONFIG_CLASS):
-    # We override amqp_prefetch_count to set a different default.
-    amqp_prefetch_count = ConfigInt(
-        "The number of messages fetched concurrently from each AMQP queue"
-        " by each worker instance.",
-        default=20, static=True)
-
     receive_inbound_connectors = ConfigList(
         "List of connectors that will receive inbound messages and events.",
         required=True, static=True)

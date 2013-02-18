@@ -99,4 +99,4 @@ class BaseTransportTestCase(TransportTestCase):
         consumers = list(self.get_tx_consumers(transport))
         self.assertEqual(1, len(consumers))
         for consumer in consumers:
-            self.assertEqual(consumer.channel.qos_prefetch_count, 0)
+            self.assertEqual(consumer.channel.qos_prefetch_count, 20)
