@@ -3,6 +3,7 @@
 from twisted.python import log
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet import task
+from twisted.web import error
 from twittytwister import twitter
 from oauth import oauth
 
@@ -65,9 +66,14 @@ class TwitterTransport(Transport):
                 moment.
         """
         log.msg("Twitter transport sending %r" % (message,))
-        post_id = yield self.twitter.update(message['content'])
-        self.publish_ack(user_message_id=message['message_id'],
-                            sent_message_id=post_id)
+        try:
+            post_id = yield self.twitter.update(message['content'])
+            yield self.publish_ack(user_message_id=message['message_id'],
+                                sent_message_id=post_id)
+        except error.Error, e:
+            yield self.publish_nack(user_message_id=message['message_id'],
+                                sent_message_id=message['message_id'],
+                                reason=str(e))
 
     @inlineCallbacks
     def handle_replies(self, message):
