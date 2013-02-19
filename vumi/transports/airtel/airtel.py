@@ -170,20 +170,21 @@ class AirtelUSSDTransport(HttpRpcTransport):
 
     def handle_outbound_message(self, message):
         config = self.get_static_config()
-        if message.payload.get('in_reply_to') and 'content' in message.payload:
-            if message['session_event'] == TransportUserMessage.SESSION_CLOSE:
-                free_flow = 'FB'
-            else:
-                free_flow = 'FC'
-            self.finish_request(message['in_reply_to'],
-                message['content'].encode('utf-8'), code=http.OK, headers={
-                'Freeflow': [free_flow],
-                'charge': [('Y' if config.airtel_charge else 'N')],
-                'amount': [config.airtel_charge_amount],
-                })
-            return self.publish_ack(user_message_id=message['message_id'],
-                sent_message_id=message['message_id'])
+        missing_fields = self.ensure_message_values(message,
+                            ['in_reply_to', 'content', 'session_event'])
+
+        if missing_fields:
+            return self.reject_message(message, missing_fields)
+
+        if message['session_event'] == TransportUserMessage.SESSION_CLOSE:
+            free_flow = 'FB'
         else:
-            return self.publish_nack(user_message_id=message['message_id'],
-                sent_message_id=message['message_id'],
-                reason='Missing in_reply_to or content')
+            free_flow = 'FC'
+        self.finish_request(message['in_reply_to'],
+            message['content'].encode('utf-8'), code=http.OK, headers={
+            'Freeflow': [free_flow],
+            'charge': [('Y' if config.airtel_charge else 'N')],
+            'amount': [config.airtel_charge_amount],
+            })
+        return self.publish_ack(user_message_id=message['message_id'],
+            sent_message_id=message['message_id'])

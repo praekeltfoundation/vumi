@@ -78,6 +78,23 @@ class HigateXMLParser():
 
         return messagedict
 
+    def parse_response(self, xmlstring):
+        element = ElementTree.fromstring(xmlstring)
+        status_code = int(element.get('status_code'))
+        if not status_code:
+            return {}
+
+        data = element.find('Data')
+        error_elements = element.findall('Data/field')
+        messagedict = {
+            'status_code': status_code,
+            'error': data.get('name'),
+            'error_fields': [{f.get('name'): f.get('value')}
+                                for f in error_elements],
+        }
+
+        return messagedict
+
     def build(self, messagedict):
         message = ElementTree.Element("Message")
         version = ElementTree.SubElement(message, "Version")
