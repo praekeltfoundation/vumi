@@ -58,7 +58,7 @@ class TestSafaricomTransportTestCase(TransportTestCase):
         })
 
         reply = TransportUserMessage(**msg.payload).reply("ussd message")
-        self.dispatch(reply)
+        yield self.dispatch(reply)
         response = yield deferred
         self.assertEqual(response, 'CON ussd message')
 
@@ -237,4 +237,5 @@ class TestSafaricomTransportTestCase(TransportTestCase):
         [nack] = yield self.wait_for_dispatched_events(1)
         self.assertEqual(nack['user_message_id'], msg['message_id'])
         self.assertEqual(nack['sent_message_id'], msg['message_id'])
-        self.assertEqual(nack['nack_reason'], 'Missing in_reply_to or content')
+        self.assertEqual(nack['nack_reason'],
+            'Missing fields: in_reply_to')

@@ -179,6 +179,13 @@ class HttpRpcTransport(Transport):
                 errors.setdefault('missing_parameter', []).append(field)
         return values, errors
 
+    def ensure_message_values(self, message, expected_fields):
+        missing_fields = []
+        for field in expected_fields:
+            if not message[field]:
+                missing_fields.append(field)
+        return missing_fields
+
     def manually_close_requests(self):
         for request_id, (timestamp, request) in self._requests.items():
             if timestamp < self.clock.seconds() - self.request_timeout:
@@ -213,16 +220,21 @@ class HttpRpcTransport(Transport):
 
     def handle_outbound_message(self, message):
         self.emit("HttpRpcTransport consuming %s" % (message))
-        if message.payload.get('in_reply_to') and 'content' in message.payload:
+        missing_fields = self.ensure_message_values(message,
+                            ['in_reply_to', 'content'])
+        if missing_fields:
+            return self.reject_message(message, missing_fields)
+        else:
             self.finish_request(
                     message.payload['in_reply_to'],
                     message.payload['content'].encode('utf-8'))
             return self.publish_ack(user_message_id=message['message_id'],
                 sent_message_id=message['message_id'])
-        else:
-            return self.publish_nack(user_message_id=message['message_id'],
-                sent_message_id=message['message_id'],
-                reason='Missing in_reply_to or content')
+
+    def reject_message(self, message, missing_fields):
+        return self.publish_nack(user_message_id=message['message_id'],
+            sent_message_id=message['message_id'],
+            reason='Missing fields: %s' % ', '.join(missing_fields))
 
     def handle_raw_inbound_message(self, msgid, request):
         raise NotImplementedError("Sub-classes should implement"

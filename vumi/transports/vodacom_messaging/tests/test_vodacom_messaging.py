@@ -1,5 +1,5 @@
 import re
-from  xml.etree import ElementTree
+from xml.etree import ElementTree
 from urllib import urlencode
 
 from twisted.trial.unittest import TestCase
@@ -139,8 +139,7 @@ class TestVodacomMessagingTransport(TransportTestCase):
         self.assertEqual(nack['user_message_id'], msg['message_id'])
         self.assertEqual(nack['sent_message_id'], msg['message_id'])
         self.assertEqual(nack['nack_reason'],
-            'Missing in_reply_to or content')
-
+            'Missing fields: in_reply_to')
 
 
 class VodacomMessagingResponseTest(TestCase):

@@ -105,11 +105,12 @@ class CellulantTransport(HttpRpcTransport):
             )
 
     def handle_outbound_message(self, message):
-        if message.payload.get('in_reply_to') and 'content' in message.payload:
-            self.finish_request(message['in_reply_to'],
-                                pack_ussd_message(message).encode('utf-8'))
-            return self.publish_ack(user_message_id=message['message_id'],
-                sent_message_id=message['message_id'])
-        return self.publish_nack(user_message_id=message['message_id'],
-            sent_message_id=message['message_id'],
-            reason="Missing in_reply_to or content")
+        missing_fields = self.ensure_message_values(message,
+                                ['in_reply_to', 'content'])
+        if missing_fields:
+            return self.reject_message(message, missing_fields)
+
+        self.finish_request(message['in_reply_to'],
+                            pack_ussd_message(message).encode('utf-8'))
+        return self.publish_ack(user_message_id=message['message_id'],
+            sent_message_id=message['message_id'])
