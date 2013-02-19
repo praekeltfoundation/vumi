@@ -1,4 +1,5 @@
-from twisted.internet.defer import inlineCallbacks, Deferred
+from twisted.internet.defer import inlineCallbacks
+from twisted.internet import defer
 from twisted.web import error
 
 from vumi.transports.twitter import TwitterTransport
@@ -21,12 +22,10 @@ class FakeTwitter(object):
         self.kwargs = kwargs
 
     def update(self, content):
-        d = Deferred()
         if self.raise_update_error:
-            d.errback(error.Error(503, 'Fail Whale'))
+            return defer.fail(error.Error(503, 'Fail Whale'))
         else:
-            d.callback('post-id')
-        return d
+            return defer.succeed('post-id')
 
     def track(self, delegate, terms):
         self.track_delegate = delegate
