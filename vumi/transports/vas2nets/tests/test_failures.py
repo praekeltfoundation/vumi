@@ -157,7 +157,7 @@ class Vas2NetsFailureWorkerTestCase(unittest.TestCase, PersistenceMixin):
         yield self.worker._process_message(self.mkmsg_out())
         yield self.worker.failure_published.deferred
         yield self.broker.kick_delivery()
-        self.assert_dispatched_count(0, 'vas2nets.event')
+        self.assert_dispatched_count(1, 'vas2nets.event')
         self.assert_dispatched_count(1, 'vas2nets.failures')
 
         [twisted_failure] = self.flushLoggedErrors(Vas2NetsTransportError)
@@ -168,6 +168,11 @@ class Vas2NetsFailureWorkerTestCase(unittest.TestCase, PersistenceMixin):
         fmsg = from_json(fmsg.body)
         self.assertTrue(
             "Vas2NetsTransportError: No SmsId Header" in fmsg['reason'])
+
+        [nmsg] = self.get_dispatched('vas2nets.event')
+        nack = from_json(nmsg.body)
+        self.assertTrue(
+            "No SmsId Header" in nack['nack_reason'])
 
         yield self.broker.kick_delivery()
         [key] = yield self.fail_worker.get_failure_keys()

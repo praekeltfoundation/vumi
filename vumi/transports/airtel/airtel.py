@@ -171,7 +171,7 @@ class AirtelUSSDTransport(HttpRpcTransport):
     def handle_outbound_message(self, message):
         config = self.get_static_config()
         missing_fields = self.ensure_message_values(message,
-                            ['in_reply_to', 'content', 'session_event'])
+                            ['in_reply_to', 'content'])
 
         if missing_fields:
             return self.reject_message(message, missing_fields)
