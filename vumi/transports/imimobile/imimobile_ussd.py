@@ -96,27 +96,6 @@ class ImiMobileUssdTransport(HttpRpcTransport):
 
         return tag, errors
 
-    def get_field_values(self, request):
-        """
-        Parses the request params and returns a tuple consisting of a dict of
-        the expected fields' values and a dict of errors encountered, such as
-        unexpected or missing params.
-        """
-        values = {}
-        errors = {}
-
-        for field in request.args:
-            if field not in self.EXPECTED_FIELDS:
-                errors.setdefault('unexpected_parameter', []).append(field)
-            else:
-                values[field] = str(request.args.get(field)[0]).decode('utf-8')
-
-        for field in self.EXPECTED_FIELDS:
-            if field not in values:
-                errors.setdefault('missing_parameter', []).append(field)
-
-        return values, errors
-
     @classmethod
     def ist_to_utc(cls, timestamp):
         """
@@ -137,7 +116,8 @@ class ImiMobileUssdTransport(HttpRpcTransport):
         to_addr, to_addr_errors = self.get_to_addr(request)
         errors.update(to_addr_errors)
 
-        values, field_value_errors = self.get_field_values(request)
+        values, field_value_errors = self.get_field_values(request,
+                                                        self.EXPECTED_FIELDS)
         errors.update(field_value_errors)
 
         if errors:

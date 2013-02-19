@@ -58,6 +58,22 @@ class VumiOptionsTestCase(OptionsTestCase):
                          options.vumi_options)
 
 
+class OldConfigWorker(object):
+    """Dummy worker for testing --worker-help on old workers
+    without CONFIG_CLASS"""
+
+
+class DummyConfigClass(object):
+    """Extra bit of doc string for testing --worker-hellp."""
+
+
+class NewConfigWorker(object):
+    """Dummy worker for testing --worker-help on new workers
+    that support CONFIG_CLASS"""
+
+    CONFIG_CLASS = DummyConfigClass
+
+
 class StartWorkerOptionsTestCase(OptionsTestCase):
     def test_override(self):
         options = StartWorkerOptions()
@@ -121,6 +137,26 @@ class StartWorkerOptionsTestCase(OptionsTestCase):
                               hostname='blah'),
                          options.vumi_options)
         self.assertEqual({}, options.opts)
+
+    def check_worker_help(self, worker_class_name, expected_emits):
+        exits, emits = [], []
+        options = StartWorkerOptions()
+        options.exit = lambda: exits.append(None)  # stub out exit
+        options.emit = lambda text: emits.append(text)
+        options.parseOptions(['--worker-class', worker_class_name,
+                              '--worker-help',
+                              ])
+        self.assertEqual(len(exits), 1)
+        self.assertEqual(emits, expected_emits)
+
+    def test_old_style_config_worker_help(self):
+        self.check_worker_help('vumi.tests.test_servicemaker.OldConfigWorker',
+                               [OldConfigWorker.__doc__])
+
+    def test_new_style_config_worker_help(self):
+        self.check_worker_help('vumi.tests.test_servicemaker.NewConfigWorker',
+                               [NewConfigWorker.__doc__,
+                                NewConfigWorker.CONFIG_CLASS.__doc__])
 
 
 class DummyService(object):
