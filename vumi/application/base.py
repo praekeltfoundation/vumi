@@ -8,7 +8,7 @@ import warnings
 from twisted.internet.defer import maybeDeferred, succeed
 from twisted.python import log
 
-from vumi.config import ConfigText, ConfigInt, ConfigDict
+from vumi.config import ConfigText, ConfigDict
 from vumi.worker_base import BaseWorker
 from vumi.errors import ConfigError
 from vumi.message import TransportUserMessage
