@@ -18,23 +18,19 @@ def then_call(d, func, *args, **kw):
 def DeprecatedAttribute(object):
     def __init__(self, name):
         self.name = '_%s_value' % (name,)
-        self.warned_name = '_%s_warned' % (name,)
 
-    def check_warned(self, obj):
-        if getattr(obj, self.warned_name, False):
-            return
+    def warn(self, obj):
         warnings.warn(
             "Direct use of transport publishers and consumers is deprecated."
             " Use connectors and endpoints instead.",
             category=DeprecationWarning)
-        setattr(obj, self.warned_name, True)
 
     def __get__(self, obj, cls):
-        self.check_warned(obj)
+        self.warn(obj)
         return getattr(obj, self.name)
 
     def __set__(self, obj, value):
-        self.check_warned(obj)
+        self.warn(obj)
         setattr(obj, self.name, value)
 
 
