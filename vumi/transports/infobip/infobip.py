@@ -5,9 +5,9 @@
 
 import json
 
-from twisted.python import log
 from twisted.internet.defer import inlineCallbacks, returnValue
 
+from vumi import log
 from vumi.message import TransportUserMessage
 from vumi.transports.httprpc import HttpRpcTransport
 from vumi.transports.failures import PermanentFailure
@@ -243,14 +243,17 @@ class InfobipTransport(HttpRpcTransport):
             response_id = self.finish_request(message['in_reply_to'],
                                               json.dumps(response_data))
             if response_id is None:
-                raise PermanentFailure("Infobip transport could not find"
-                                       " original request when attempting"
-                                       " to reply.")
+                err_msg = ("Infobip transport could not find original request"
+                            " when attempting to reply.")
+                log.error(err_msg)
+                return self.publish_nack(user_message_id=message['message_id'],
+                    reason=err_msg)
             else:
-                self.publish_ack(message['message_id'],
+                return self.publish_ack(message['message_id'],
                                  sent_message_id=response_id)
         else:
-            log.err("Infobip transport cannot process outbound message that"
-                    " is not a reply: %r" % message)
-            raise PermanentFailure("Infobip transport cannot process outbound"
-                                   " message that is not a reply.""")
+            err_msg = ("Infobip transport cannot process outbound message that"
+                        " is not a reply: %s" % (message['message_id'],))
+            log.error(err_msg)
+            return self.publish_nack(user_message_id=message['message_id'],
+                reason=err_msg)

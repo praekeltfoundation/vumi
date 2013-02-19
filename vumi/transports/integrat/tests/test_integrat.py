@@ -152,6 +152,7 @@ class TestIntegratTransport(TransportTestCase):
         self.worker = yield self.get_transport(config)
         addr = self.worker.web_resource.getHost()
         self.worker_url = "http://%s:%s/" % (addr.host, addr.port)
+        self.higate_response = '<Response status_code="0"/>'
 
     @inlineCallbacks
     def tearDown(self):
@@ -162,7 +163,7 @@ class TestIntegratTransport(TransportTestCase):
         # The content attr will have been set to None by the time we read this.
         request.content_body = request.content.getvalue()
         self.integrat_calls.put(request)
-        return ''
+        return self.higate_response
 
     @inlineCallbacks
     def test_health(self):
@@ -229,3 +230,28 @@ class TestIntegratTransport(TransportTestCase):
         yield http_request(self.worker_url + "foo", xml, method='GET')
         [msg] = yield self.wait_for_dispatched_messages(1)
         self.assertEqual(msg['content'], u'öæł')
+
+    @inlineCallbacks
+    def test_nack(self):
+        self.higate_response = """
+            <Response status_code="-1">
+                <Data name="method_error">
+                    <field name="error_code" value="-1"/>
+                    <field name="reason" value="Expecting POST, not GET"/>
+                </Data>
+            </Response>""".strip()
+
+        msg = TransportUserMessage(to_addr="12345", from_addr="56789",
+                                   transport_name="testgrat",
+                                   transport_type="ussd",
+                                   transport_metadata={
+                                       'session_id': "sess123",
+                                       },
+                                   )
+        yield self.dispatch_outbound(msg)
+        yield self.integrat_calls.get()
+        [nack] = yield self.wait_for_dispatched_events(1)
+        self.assertEqual(nack['user_message_id'], msg['message_id'])
+        self.assertEqual(nack['sent_message_id'], msg['message_id'])
+        self.assertEqual(nack['nack_reason'],
+            'error_code: -1, reason: Expecting POST, not GET')

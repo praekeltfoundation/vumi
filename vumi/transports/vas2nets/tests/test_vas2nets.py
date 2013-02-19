@@ -281,6 +281,11 @@ class Vas2NetsTransportTestCase(TransportTestCase):
         self.assertTrue(
             "Vas2NetsTransportError: No SmsId Header" in fmsg['reason'])
 
+        [nack] = yield self.wait_for_dispatched_events(1)
+        self.assertEqual(nack['user_message_id'], msg['message_id'])
+        self.assertEqual(nack['sent_message_id'], msg['message_id'])
+        self.assertTrue("No SmsId Header" in nack['nack_reason'])
+
     @inlineCallbacks
     def test_send_sms_noconn(self):
         msg = self.mkmsg_out()
