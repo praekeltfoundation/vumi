@@ -153,7 +153,7 @@ class TestIntegratTransport(TestCase):
         yield self.worker.startWorker()
         addr = self.worker.web_resource.getHost()
         self.worker_url = "http://%s:%s/" % (addr.host, addr.port)
-        self.higate_response = """<Response status_code="0"/>"""
+        self.higate_response = '<Response status_code="0"/>'
 
     @inlineCallbacks
     def tearDown(self):
