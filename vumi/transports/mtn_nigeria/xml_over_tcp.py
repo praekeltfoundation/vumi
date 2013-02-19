@@ -3,6 +3,8 @@ import struct
 from xml.etree import ElementTree as ET
 
 from twisted.python import log
+from twisted.internet import reactor
+from twisted.internet.task import LoopingCall
 from twisted.internet.protocol import Protocol
 
 
@@ -13,16 +15,18 @@ class XmlOverTcpClient(Protocol):
     HEADER_FORMAT = '!16s16s'
 
     PACKET_RECEIVED_HANDLERS = {
-        'USSDRequest': 'data_request_packet_received',
-        'AUTHResponse': 'login_response_packet_received',
+        'USSDRequest': 'handle_data_request',
+        'AUTHResponse': 'handle_login_response',
+        'ENQRequest': 'handle_enquire_link_request',
+        'ENQResponse': 'handle_enquire_link_response',
     }
 
     MANDATORY_DATA_REQUEST_FIELDS = set([
         'requestId', 'msisdn', 'clientId', 'starCode', 'msgtype', 'phase',
         'dcs', 'userdata'])
     OTHER_DATA_REQUEST_FIELDS = set(['EndofSession'])
-
     LOGIN_RESPONSE_FIELDS = set(['requestId', 'authMsg'])
+    ENQUIRE_LINK_FIELDS = set(['requestId', 'enqCmd'])
 
     # Data requests and responses need to include a 'dcs' (data coding scheme)
     # field. '15' is used for ASCII, and is the default. The documentation
@@ -31,24 +35,64 @@ class XmlOverTcpClient(Protocol):
 
     # Data requests and responses need to include a 'phase' field. The
     # documentation does not provide any information about 'phase', other
-    # than mentioning that it is mandatory, and must be set to '2'
+    # than mentioning that it is mandatory, and must be set to '2'.
     PHASE = '2'
 
-    def __init__(self, username, password, application_id):
+    def __init__(self, username, password, application_id,
+                 heartbeat_interval=240, timeout_period=120):
         self.username = username
         self.password = password
         self.application_id = application_id
+        self.heartbeat_interval = heartbeat_interval
+        self.timeout_period = timeout_period
+
         self.authenticated = False
+        self.scheduled_timeout = None
+        self.heartbeat = LoopingCall(self.send_enquire_link_request)
 
         self._buffer = ''
         self._current_header = None
 
     def connectionMade(self):
         self.login()
+        self.start_heartbeat()
 
     def connectionLost(self, reason):
-        pass
-        # TODO stop heartbeat
+        self.stop_heartbeat()
+
+    def get_clock(self):
+        """For easier test stubbing."""
+        return reactor
+
+    def timeout(self):
+        """For easier test stubbing."""
+        self.transport.loseConnection()
+
+    def cancel_scheduled_timeout(self):
+        scheduled_timeout = self.scheduled_timeout
+        if scheduled_timeout is not None and scheduled_timeout.active():
+            scheduled_timeout.cancel()
+
+    def reset_scheduled_timeout(self):
+        self.cancel_scheduled_timeout()
+
+        # mod the timeout period by the heartbeat interval to prevent skipped
+        # heartbeats from going unnoticed.
+        delay = self.heartbeat_interval + (
+            self.timeout_period % self.heartbeat_interval)
+
+        self.scheduled_timeout = self.get_clock().callLater(
+            delay, self.timeout)
+
+    def start_heartbeat(self):
+        self.reset_scheduled_timeout()
+        self.heartbeat.clock = self.get_clock()
+        return self.heartbeat.start(self.heartbeat_interval, now=False)
+
+    def stop_heartbeat(self):
+        self.cancel_scheduled_timeout()
+        if self.heartbeat.running:
+            self.heartbeat.stop()
 
     def dataReceived(self, data):
         self._buffer += data
@@ -133,12 +177,12 @@ class XmlOverTcpClient(Protocol):
 
         return True
 
-    def login_response_packet_received(self, session_id, params):
+    def handle_login_response(self, session_id, params):
         if self.validate_packet_fields(params, self.LOGIN_RESPONSE_FIELDS):
             self.authenticated = True
             # TODO start heartbeat
 
-    def data_request_packet_received(self, session_id, params):
+    def handle_data_request(self, session_id, params):
         if not self.authenticated:
             log.msg("Data request packet received before client "
                     "authentication was completed.")
@@ -210,10 +254,31 @@ class XmlOverTcpClient(Protocol):
             ('msisdn', params['msisdn']),
             ('starCode', params['starCode']),
             ('clientId', params['clientId']),
-            ('phase', params.get('phase') or self.PHASE),
-            ('msgtype', params.get('msgtype') or msgtype),
-            ('dcs', params.get('dcs') or self.DATA_CODING_SCHEME),
+            ('phase', params.get('phase', self.PHASE)),
+            ('msgtype', params.get('msgtype', msgtype)),
+            ('dcs', params.get('dcs', self.DATA_CODING_SCHEME)),
             ('userdata', params['userdata']),
-            ('EndofSession', params.get('EndofSession') or end_of_session)
+            ('EndofSession', params.get('EndofSession', end_of_session)),
         ]
         self.send_packet(session_id, 'USSDResponse', packet_params)
+
+    def handle_enquire_link_request(self, session_id, params):
+        if self.validate_packet_fields(params, self.ENQUIRE_LINK_FIELDS):
+            self.send_enquire_link_response(session_id, params['requestId'])
+
+    def send_enquire_link_request(self):
+        self.send_packet(self.gen_id(), 'ENQRequest', [
+            ('requestId', self.gen_id()),
+            ('enqCmd', 'ENQUIRELINK')
+        ])
+
+    def handle_enquire_link_response(self, session_id, params):
+        if self.validate_packet_fields(params, self.ENQUIRE_LINK_FIELDS):
+            # log for verbose logging?
+            self.reset_scheduled_timeout()
+
+    def send_enquire_link_response(self, session_id, request_id):
+        self.send_packet(session_id, 'ENQResponse', [
+            ('requestId', request_id),
+            ('enqCmd', 'ENQUIRELINKRSP')
+        ])

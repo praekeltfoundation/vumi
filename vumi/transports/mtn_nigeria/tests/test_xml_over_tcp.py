@@ -2,6 +2,7 @@ import struct
 
 from twisted.trial import unittest
 from twisted.internet import reactor
+from twisted.internet.task import Clock
 from twisted.internet.defer import Deferred, inlineCallbacks
 from twisted.internet.protocol import Protocol, Factory, ClientFactory
 
@@ -51,6 +52,8 @@ class ToyXmlOverTcpClient(XmlOverTcpClient, WaitForDataMixin):
         self.received_dummy_packets = []
         self.received_data_request_packets = []
         self.next_id = 0
+        self.clock = reactor
+        self.timed_out = False
 
     def connectionMade(self):
         self.factory.deferred_client.callback(self)
@@ -58,6 +61,9 @@ class ToyXmlOverTcpClient(XmlOverTcpClient, WaitForDataMixin):
     def dataReceived(self, data):
         XmlOverTcpClient.dataReceived(self, data)
         self.callback_deferred_data(data)
+
+    def get_clock(self):
+        return self.clock
 
     def dummy_packet_received(self, session_id, params):
         self.received_dummy_packets.append((session_id, params))
@@ -69,6 +75,9 @@ class ToyXmlOverTcpClient(XmlOverTcpClient, WaitForDataMixin):
         id = str(self.next_id).zfill(16)
         self.next_id += 1
         return id
+
+    def timeout(self):
+        self.timed_out = True
 
 
 class ClientServerMixin(object):
@@ -108,6 +117,11 @@ class XmlOverTcpClientTestCase(unittest.TestCase, ClientServerMixin):
             session_id,
             str(length).zfill(self.client.LENGTH_HEADER_SIZE))
         return header + body
+
+    def stub_client_heartbeat(self, heartbeat_interval=120, timeout_period=20):
+        self.client.heartbeat_interval = 120
+        self.client.timeout_period = 20
+        self.client.clock = Clock()
 
     @inlineCallbacks
     def test_contiguous_packets_received(self):
@@ -280,3 +294,88 @@ class XmlOverTcpClientTestCase(unittest.TestCase, ClientServerMixin):
 
         received_packet = yield self.server.wait_for_data()
         self.assertEqual(expected_packet, received_packet)
+
+    @inlineCallbacks
+    def test_periodic_client_enquire_link(self):
+        session_id = str("0").zfill(16)
+        request_id = str("1").zfill(16)
+
+        request_body = (
+            "<ENQRequest>"
+                "<requestId>%s</requestId>"
+                "<enqCmd>ENQUIRELINK</enqCmd>"
+            "</ENQRequest>"
+        % request_id)
+        expected_request_packet = self.mk_serialized_packet(
+            session_id, request_body)
+
+        response_body = (
+            "<ENQResponse>"
+                "<requestId>%s</requestId>"
+                "<enqCmd>ENQUIRELINKRSP</enqCmd>"
+            "</ENQResponse>"
+        % request_id)
+        response_packet = self.mk_serialized_packet(session_id, response_body)
+        self.server.responses[expected_request_packet] = response_packet
+
+        self.stub_client_heartbeat()
+        self.client.start_heartbeat()
+        initial_timeout_time = self.client.scheduled_timeout.getTime()
+
+        # advance to just after the first heartbeat is sent
+        self.client.clock.advance(120.1)
+        yield self.client.wait_for_data()
+        self.assertTrue(
+            self.client.scheduled_timeout.getTime() > initial_timeout_time)
+
+    @inlineCallbacks
+    def test_timeout(self):
+        session_id = str("0").zfill(16)
+        request_id = str("1").zfill(16)
+
+        request_body = (
+            "<ENQRequest>"
+                "<requestId>%s</requestId>"
+                "<enqCmd>ENQUIRELINK</enqCmd>"
+            "</ENQRequest>"
+        % request_id)
+        expected_request_packet = self.mk_serialized_packet(
+            session_id, request_body)
+
+        self.stub_client_heartbeat()
+        self.client.start_heartbeat()
+
+        # advance to just after the first heartbeat is sent
+        self.client.clock.advance(120.1)
+        received_request_packet = yield self.server.wait_for_data()
+        self.assertEqual(expected_request_packet, received_request_packet)
+
+        # advance to just after the timeout occured
+        self.client.clock.advance(20)
+        self.assertTrue(self.client.timed_out)
+
+    @inlineCallbacks
+    def test_server_enquire_link(self):
+        session_id = str("0").zfill(16)
+        request_id = str("1").zfill(16)
+
+        request_body = (
+            "<ENQRequest>"
+                "<requestId>%s</requestId>"
+                "<enqCmd>ENQUIRELINK</enqCmd>"
+            "</ENQRequest>"
+        % request_id)
+        request_packet = self.mk_serialized_packet(session_id, request_body)
+
+        response_body = (
+            "<ENQResponse>"
+                "<requestId>%s</requestId>"
+                "<enqCmd>ENQUIRELINKRSP</enqCmd>"
+            "</ENQResponse>"
+        % request_id)
+        expected_response_packet = self.mk_serialized_packet(
+            session_id, response_body)
+
+        self.server.send_data(request_packet)
+        response_packet = yield self.server.wait_for_data()
+        self.assertEqual(expected_response_packet, response_packet)
