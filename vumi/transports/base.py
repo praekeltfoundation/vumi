@@ -72,6 +72,7 @@ class Transport(BaseWorker):
         return d
 
     def teardown_worker(self):
+        self.pause_connectors()
         return self.teardown_transport()
 
     def setup_transport(self):
