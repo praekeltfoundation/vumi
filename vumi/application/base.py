@@ -75,7 +75,55 @@ class ApplicationWorker(BaseWorker):
     CONFIG_CLASS = ApplicationConfig
     SEND_TO_TAGS = frozenset([])
 
-    def _worker_specific_setup(self):
+    def _check_for_deprecated_method(self, method_name):
+        """Check whether a sub-class overrides a deprecated method."""
+        current_method = getattr(type(self), method_name)
+        base_method = getattr(ApplicationWorker, method_name)
+        if current_method is base_method:
+            return False
+        warnings.warn(
+            "%s() is deprecated. Use connectors and endpoints instead." % (
+                method_name,), category=DeprecationWarning)
+        return True
+
+    def _check_deprecated(self):
+        """Check whether type(self) extends any deprecated methods."""
+        deprecated_methods = [
+            '_setup_transport_publisher',
+            '_setup_transport_consumer',
+            '_setup_event_consumer',
+        ]
+        return any([self._check_for_deprecated_method(method_name) for
+                    method_name in deprecated_methods])
+
+    def _validate_config(self):
+        config = self.get_static_config()
+        self.transport_name = config.transport_name
+        self._is_deprecated = self._check_deprecated()
+        for tag in self.SEND_TO_TAGS:
+            if tag not in config.send_to:
+                raise ConfigError("No configuration for send_to tag %r but"
+                                  " at least a transport_name is required."
+                                  % (tag,))
+            if 'transport_name' not in config.send_to[tag]:
+                raise ConfigError("The configuration for send_to tag %r must"
+                                  " contain a transport_name." % (tag,))
+        self.validate_config()
+
+    def setup_connectors(self):
+        if self._is_deprecated:
+            return self._setup_transport_publisher()
+
+        d = self.setup_ri_connector(self.transport_name)
+
+        def cb(connector):
+            connector.set_inbound_handler(self.dispatch_user_message)
+            connector.set_event_handler(self.dispatch_event)
+            return connector
+
+        return d.addCallback(cb)
+
+    def setup_worker(self):
         """
         Set up basic application worker stuff.
 
@@ -85,33 +133,24 @@ class ApplicationWorker(BaseWorker):
             'ack': self.consume_ack,
             'nack': self.consume_nack,
             'delivery_report': self.consume_delivery_report,
-            }
+        }
         self._session_handlers = {
             SESSION_NEW: self.new_session,
             SESSION_CLOSE: self.close_session,
-            }
-        return self.setup_application()
+        }
+        d = maybeDeferred(self.setup_application)
 
-    def _validate_config(self):
-        # TODO: Figure out what the future of .validate_config() is going to be
-        #       once everything uses config objects. It's handy to be able to
-        #       do complex validation, but maybe that belongs on the config
-        #       object instead?
+        if self._is_deprecated:
+            d.addCallback(lambda r: self._setup_transport_consumer())
+            d.addCallback(lambda r: self._setup_event_consumer())
+        elif self.start_message_consumer:
+            d.addCallback(lambda r: self.unpause_connectors())
 
-        # This needs to happen earlier than _worker_specific_setup() allows.
-        super(ApplicationWorker, self)._validate_config()
-        config = self.get_static_config()
-        self.transport_name = config.transport_name
-        for tag in self.SEND_TO_TAGS:
-            if tag not in config.send_to:
-                raise ConfigError("No configuration for send_to tag %r but"
-                                  " at least a transport_name is required."
-                                  % (tag,))
-            if 'transport_name' not in config.send_to[tag]:
-                raise ConfigError("The configuration for send_to tag %r must"
-                                  " contain a transport_name." % (tag,))
+        return d
 
-    def _worker_specific_teardown(self):
+    def teardown_worker(self):
+        if not self._is_deprecated:
+            self.pause_connectors()
         return self.teardown_application()
 
     def setup_application(self):
@@ -197,7 +236,6 @@ class ApplicationWorker(BaseWorker):
         return self._publish_message(reply)
 
     def send_to(self, to_addr, content, tag='default', **kw):
-        # FIXME: Do we do the right stuff here?
         if tag not in self.SEND_TO_TAGS:
             raise ValueError("Tag %r not defined in SEND_TO_TAGS" % (tag,))
         options = copy.deepcopy(self.get_static_config().send_to[tag])
@@ -205,16 +243,7 @@ class ApplicationWorker(BaseWorker):
         msg = TransportUserMessage.send(to_addr, content, **options)
         return self._publish_message(msg)
 
-    def _check_for_deprecated_method(self, method_name):
-        # XXX: Is there a better way to do this?
-        my_stp = getattr(type(self), method_name)
-        base_stp = getattr(ApplicationWorker, method_name)
-        if my_stp == base_stp:
-            return False
-        warnings.warn(
-            "%s() is deprecated. Use connectors and endpoints instead." % (
-                method_name,), category=DeprecationWarning)
-        return True
+    # Deprecated methods
 
     def _setup_deprecated_attrs(self, endpoint_name, connector):
         def setval(suffix, value):
@@ -222,20 +251,6 @@ class ApplicationWorker(BaseWorker):
         setval('publisher', connector._publishers['outbound'])
         setval('consumer', connector._consumers['inbound'])
         setval('event_consumer', connector._consumers['event'])
-
-    def setup_connectors(self):
-        if self._check_for_deprecated_method('_setup_transport_publisher'):
-            return self._setup_transport_publisher()
-
-        d = self.setup_ri_connector(self.transport_name)
-
-        def cb(connector):
-            connector.set_inbound_handler(self.dispatch_user_message)
-            connector.set_event_handler(self.dispatch_event)
-            self._setup_deprecated_attrs('transport', connector)
-            return connector
-
-        return d.addCallback(cb)
 
     def setup_transport_connection(self, endpoint_name, transport_name,
                                    message_consumer, event_consumer):
@@ -252,16 +267,6 @@ class ApplicationWorker(BaseWorker):
             return connector
 
         return d.addCallback(cb)
-
-    def _setup_unpause(self):
-        if any([
-                self._check_for_deprecated_method('_setup_transport_consumer'),
-                self._check_for_deprecated_method('_setup_event_consumer')]):
-            d = maybeDeferred(self._setup_transport_consumer)
-            d.addCallback(lambda r: maybeDeferred(self._setup_event_consumer))
-            return d
-        self.connectors[self.transport_name].unpause()
-        return succeed(None)
 
     def _setup_transport_publisher(self):
         return self.setup_transport_connection(

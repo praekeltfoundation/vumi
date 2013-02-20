@@ -45,44 +45,34 @@ class Transport(BaseWorker):
     transport_name = None
     start_message_consumer = True
 
-    def _worker_specific_setup(self):
+    def _validate_config(self):
+        config = self.get_static_config()
+        self.transport_name = config.transport_name
+        self.validate_config()
+
+    def setup_connectors(self):
+        d = self.setup_ro_connector(self.transport_name)
+
+        def cb(connector):
+            connector.set_outbound_handler(self._process_message)
+            return connector
+
+        return d.addCallback(cb)
+
+    def setup_worker(self):
         """
         Set up basic transport worker stuff.
 
         You shouldn't have to override this in subclasses.
         """
-
         d = self.setup_failure_publisher()
         then_call(d, self.setup_transport)
+        if self.start_message_consumer:
+            then_call(d, self.unpause_connectors)
         return d
 
-    def _validate_config(self):
-        # This needs to happen earlier than _worker_specific_setup() allows.
-        super(Transport, self)._validate_config()
-        self.transport_name = self.get_static_config().transport_name
-
-    def _worker_specific_teardown(self):
+    def teardown_worker(self):
         return self.teardown_transport()
-
-    def get_rkey(self, mtype):
-        warnings.warn(
-            "get_rkey() is deprecated. Use connectors and"
-            " endpoints instead.", category=DeprecationWarning)
-        return '%s.%s' % (self.transport_name, mtype)
-
-    def publish_rkey(self, name):
-        warnings.warn(
-            "publish_rkey() is deprecated. Use connectors and"
-            " endpoints instead.", category=DeprecationWarning)
-        return self.publish_to(self.get_rkey(name))
-
-    def setup_failure_publisher(self):
-        d = self.publish_to('%s.failures' % (self.transport_name,))
-
-        def cb(publisher):
-            self.failure_publisher = publisher
-
-        return d.addCallback(cb)
 
     def setup_transport(self):
         """
@@ -98,27 +88,11 @@ class Transport(BaseWorker):
         """
         pass
 
-    def setup_connectors(self):
-        d = self.setup_ro_connector(self.transport_name)
+    def setup_failure_publisher(self):
+        d = self.publish_to('%s.failures' % (self.transport_name,))
 
-        def cb(connector):
-            connector.set_outbound_handler(self._process_message)
-            return connector
-
-        return d.addCallback(cb)
-
-    def setup_transport_connection(self):
-        warnings.warn(
-            "setup_transport_connection() is deprecated. Use connectors and"
-            " endpoints instead.", category=DeprecationWarning)
-
-        d = self.setup_connectors()
-
-        def cb(connector):
-            connector_pubs = self.connectors[self.transport_name]._publishers
-            # Set up publishers
-            self.message_publisher = connector_pubs['inbound']
-            self.event_publisher = connector_pubs['event']
+        def cb(publisher):
+            self.failure_publisher = publisher
 
         return d.addCallback(cb)
 
@@ -217,17 +191,43 @@ class Transport(BaseWorker):
         """
         return TransportUserMessage.generate_id()
 
+    # Deprecated methods
+
+    def get_rkey(self, mtype):
+        warnings.warn(
+            "get_rkey() is deprecated. Use connectors and"
+            " endpoints instead.", category=DeprecationWarning)
+        return '%s.%s' % (self.transport_name, mtype)
+
+    def publish_rkey(self, name):
+        warnings.warn(
+            "publish_rkey() is deprecated. Use connectors and"
+            " endpoints instead.", category=DeprecationWarning)
+        return self.publish_to(self.get_rkey(name))
+
+    def setup_transport_connection(self):
+        warnings.warn(
+            "setup_transport_connection() is deprecated. Use connectors and"
+            " endpoints instead.", category=DeprecationWarning)
+
+        d = self.setup_connectors()
+
+        def cb(connector):
+            connector_pubs = self.connectors[self.transport_name]._publishers
+            # Set up publishers
+            self.message_publisher = connector_pubs['inbound']
+            self.event_publisher = connector_pubs['event']
+
+        return d.addCallback(cb)
+
     def pause_transport_connector(self):
-        if self.transport_name not in self.connectors:
-            log.warning("Trying to pause connectors that don't exist.")
-            return
-        return self.connectors[self.transport_name].pause()
+        warnings.warn(
+            "pause_transport_connector() is deprecated. Use"
+            " pause_connectors() instead", category=DeprecationWarning)
+        self.pause_connectors()
 
     def unpause_transport_connector(self):
-        if self.transport_name not in self.connectors:
-            log.warning("Trying to unpause connectors that don't exist.")
-            return
-        return self.connectors[self.transport_name].unpause()
-
-    def _setup_unpause(self):
-        return self.unpause_transport_connector()
+        warnings.warn(
+            "unpause_transport_connector() is deprecated. Use"
+            " unpause_connectors() instead", category=DeprecationWarning)
+        self.unpause_connectors()
