@@ -21,25 +21,23 @@ class BaseConnector(object):
     and consumers required by vumi workers and avoids having to operate on them
     individually all over the place.
     """
-    def __init__(self, worker, connector_name):
+    def __init__(self, worker, connector_name, prefetch_count=None,
+                 middlewares=None):
         self.name = connector_name
         self.worker = worker
         self._consumers = {}
         self._publishers = {}
         self._endpoint_handlers = {}
         self._default_handlers = {}
-        self._middlewares = MiddlewareStack([])
+        self._prefetch_count = prefetch_count
+        self._middlewares = MiddlewareStack(middlewares
+                                            if middlewares is not None else [])
 
     def _rkey(self, mtype):
         return '%s.%s' % (self.name, mtype)
 
     def setup(self):
         raise NotImplementedError()
-
-    def set_consumer_prefetch(self, prefetch_count):
-        # This doesn't return a deferred.
-        for consumer in self._consumers.values():
-            consumer.channel.basic_qos(0, prefetch_count, False)
 
     def teardown(self):
         d = gatherResults([c.stop() for c in self._consumers.values()])
@@ -56,20 +54,22 @@ class BaseConnector(object):
         for consumer in self._consumers.values():
             consumer.unpause()
 
-    def set_middlewares(self, middlewares):
-        # TODO: Implement endpoint-aware middlewares
-        self._middlewares = MiddlewareStack(middlewares)
-
     def _setup_publisher(self, mtype):
         d = self.worker.publish_to(self._rkey(mtype))
         return d.addCallback(cb_add_to_dict, self._publishers, mtype)
+
+    def _set_prefetch_count(self, consumer):
+        if self._prefetch_count is not None:
+            consumer.channel.basic_qos(0, self._prefetch_count, False)
 
     def _setup_consumer(self, mtype, msg_class):
         def handler(msg):
             return self._consume_message(mtype, msg)
         d = self.worker.consume(
             self._rkey(mtype), handler, message_class=msg_class, paused=True)
-        return d.addCallback(cb_add_to_dict, self._consumers, mtype)
+        d.addCallback(cb_add_to_dict, self._consumers, mtype)
+        d.addCallback(lambda consumer: self._set_prefetch_count(consumer))
+        return d
 
     def _set_endpoint_handler(self, mtype, handler, endpoint_name):
         if endpoint_name is None:
@@ -82,7 +82,6 @@ class BaseConnector(object):
         handler = self._endpoint_handlers[mtype].get(endpoint_name)
         if handler is None:
             handler = self._default_handlers[mtype]
-        # TODO: Implement endpoint-aware middlewares
         d = self._middlewares.apply_consume(mtype, msg, self.name)
         return d.addCallback(handler)
 
