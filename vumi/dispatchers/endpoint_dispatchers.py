@@ -2,7 +2,7 @@
 
 """Basic tools for building dispatchers."""
 
-from twisted.internet.defer import gatherResults
+from twisted.internet.defer import gatherResults, maybeDeferred
 
 from vumi.worker_base import BaseWorker
 from vumi.config import ConfigDict, ConfigList
@@ -23,10 +23,13 @@ class Dispatcher(BaseWorker):
 
     CONFIG_CLASS = DispatcherConfig
 
-    def _worker_specific_setup(self):
-        return self.setup_dispatcher()
+    def setup_worker(self):
+        d = maybeDeferred(self.setup_dispatcher)
+        d.addCallback(lambda r: self.unpause_connectors())
+        return d
 
-    def _worker_specific_teardown(self):
+    def teardown_worker(self):
+        self.pause_connectors()
         return self.teardown_dispatcher()
 
     def setup_dispatcher(self):
@@ -98,10 +101,6 @@ class Dispatcher(BaseWorker):
 
     def publish_event(self, event, connector_name, endpoint):
         return self.connectors[connector_name].publish_event(event, endpoint)
-
-    def _setup_unpause(self):
-        for connector in self.connectors.values():
-            connector.unpause()
 
 
 class RoutingTableDispatcherConfig(Dispatcher.CONFIG_CLASS):
