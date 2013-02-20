@@ -4,6 +4,7 @@ import json
 from urllib import urlencode
 
 from twisted.internet.defer import inlineCallbacks, DeferredQueue
+from twisted.web import http
 
 from vumi.utils import http_request, http_request_full
 from vumi.tests.utils import MockHttpServer
@@ -44,6 +45,8 @@ class TestMediaEdgeGSMTransport(TransportTestCase):
         }
         self.transport = yield self.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url()
+        self.mediaedgegsm_response = ''
+        self.mediaedgegsm_response_code = http.OK
 
     @inlineCallbacks
     def tearDown(self):
@@ -52,7 +55,8 @@ class TestMediaEdgeGSMTransport(TransportTestCase):
 
     def handle_request(self, request):
         self.mediaedgegsm_calls.put(request)
-        return ''
+        request.setResponseCode(self.mediaedgegsm_response_code)
+        return self.mediaedgegsm_response
 
     def mkurl(self, content, from_addr="2371234567", **kw):
         params = {
@@ -128,6 +132,21 @@ class TestMediaEdgeGSMTransport(TransportTestCase):
                     'Operator': [operator],
                     'SmsBody': [msg['content']],
                     }, req.args)
+
+    @inlineCallbacks
+    def test_nack(self):
+        self.mediaedgegsm_response_code = http.NOT_FOUND
+        self.mediaedgegsm_response = 'Not Found'
+
+        msg = self.mkmsg_out(to_addr='+41791200000')
+        yield self.dispatch(msg)
+
+        yield self.mediaedgegsm_calls.get()
+        [nack] = yield self.wait_for_dispatched_events(1)
+        self.assertEqual(nack['user_message_id'], msg['message_id'])
+        self.assertEqual(nack['sent_message_id'], msg['message_id'])
+        self.assertEqual(nack['nack_reason'],
+            'Unexpected response code: 404')
 
     @inlineCallbacks
     def test_bad_parameter(self):

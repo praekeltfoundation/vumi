@@ -4,6 +4,7 @@ import json
 from urllib import urlencode
 
 from twisted.python import log
+from twisted.web import http
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.transports.httprpc import HttpRpcTransport
@@ -49,25 +50,11 @@ class MediaEdgeGSMTransport(HttpRpcTransport):
         self._operator_mappings = self.config.get('operator_mappings', {})
         return super(MediaEdgeGSMTransport, self).setup_transport()
 
-    def get_field_values(self, request):
-        values = {}
-        errors = {}
-        for field in request.args:
-            if field not in self.EXPECTED_FIELDS:
-                errors.setdefault('unexpected_parameter', []).append(field)
-            else:
-                values[field] = str(request.args.get(field)[0])
-        for field in self.EXPECTED_FIELDS:
-            if field not in values:
-                errors.setdefault('missing_parameter', []).append(field)
-        return values, errors
-
     @inlineCallbacks
     def handle_outbound_message(self, message):
         if message.payload.get('in_reply_to') and 'content' in message.payload:
             super(MediaEdgeGSMTransport, self).handle_outbound_message(message)
         else:
-
             msisdn = message['to_addr'].lstrip('+')
             params = {
                 "USN": self._outbound_url_username,
@@ -82,12 +69,17 @@ class MediaEdgeGSMTransport(HttpRpcTransport):
             response = yield http_request_full(url, '', method='GET')
             log.msg("Response: (%s) %r" % (response.code,
                 response.delivered_body))
-            yield self.publish_ack(user_message_id=message['message_id'],
-                sent_message_id=message['message_id'])
+            if response.code == http.OK:
+                yield self.publish_ack(user_message_id=message['message_id'],
+                    sent_message_id=message['message_id'])
+            else:
+                yield self.publish_nack(user_message_id=message['message_id'],
+                    sent_message_id=message['message_id'],
+                    reason='Unexpected response code: %s' % (response.code,))
 
     @inlineCallbacks
     def handle_raw_inbound_message(self, message_id, request):
-        values, errors = self.get_field_values(request)
+        values, errors = self.get_field_values(request, self.EXPECTED_FIELDS)
 
         if self._username and (values.get('USN') != self._username):
             errors['credentials'] = 'invalid'
@@ -99,7 +91,8 @@ class MediaEdgeGSMTransport(HttpRpcTransport):
             yield self.finish_request(message_id, json.dumps(errors), code=400)
             return
         log.msg(('MediaEdgeGSMTransport sending from %(PhoneNumber)s to '
-            '%(ServiceNumber)s on %(Operator)s message "%(SMSBODY)s"') % values)
+                    '%(ServiceNumber)s on %(Operator)s message '
+                    '"%(SMSBODY)s"') % values)
         yield self.publish_message(
             message_id=message_id,
             content=values['SMSBODY'],
