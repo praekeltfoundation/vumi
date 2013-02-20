@@ -7,7 +7,7 @@ from twisted.python import log
 
 from vumi.service import Worker
 from vumi.middleware import setup_middlewares_from_config
-from vumi.endpoints import ReceiveInboundConnector, ReceiveOutboundConnector
+from vumi.connectors import ReceiveInboundConnector, ReceiveOutboundConnector
 from vumi.config import Config, ConfigInt
 
 
