@@ -244,8 +244,11 @@ class FakeAMQPBroker(object):
         reactor.callLater(0, check, done)
         return done
 
-    def clear_messages(self, exchange, rkey):
-        del self.dispatched[exchange][rkey][:]
+    def clear_messages(self, exchange, rkey=None):
+        if rkey:
+            del self.dispatched[exchange][rkey][:]
+        else:
+            self.dispatched[exchange].clear()
 
     def get_dispatched(self, exchange, rkey):
         return self.dispatched.get(exchange, {}).get(rkey, [])

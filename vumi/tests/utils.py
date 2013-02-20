@@ -561,6 +561,9 @@ class VumiWorkerTestCase(TestCase):
         rkey = self._rkey(name, connector_name)
         return self._amqp.wait_messages('vumi', rkey, amount)
 
+    def clear_all_dispatched(self):
+        self._amqp.clear_messages('vumi')
+
     def _clear_dispatched(self, name, connector_name=None):
         rkey = self._rkey(name, connector_name)
         return self._amqp.clear_messages('vumi', rkey)

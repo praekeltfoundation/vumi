@@ -36,9 +36,6 @@ class TestRoutingTableDispatcher(VumiWorkerTestCase):
         msg.set_routing_endpoint(endpoint)
         return msg
 
-    def clear_dispatched(self):
-        self._amqp.dispatched['vumi'] = {}
-
     def assert_rkeys_used(self, *rkeys):
         self.assertEqual(set(rkeys), set(self._amqp.dispatched['vumi'].keys()))
 
@@ -51,14 +48,14 @@ class TestRoutingTableDispatcher(VumiWorkerTestCase):
         self.assertEqual(
             [self.with_endpoint(msg)], self.get_dispatched_inbound('app1'))
 
-        self.clear_dispatched()
+        self.clear_all_dispatched()
         msg = self.mkmsg_in()
         yield self.dispatch_inbound(msg, 'transport2')
         self.assert_rkeys_used('transport2.inbound', 'app2.inbound')
         self.assertEqual(
             [self.with_endpoint(msg)], self.get_dispatched_inbound('app2'))
 
-        self.clear_dispatched()
+        self.clear_all_dispatched()
         msg = self.mkmsg_in()
         msg.set_routing_endpoint('ep1')
         yield self.dispatch_inbound(msg, 'transport2')
@@ -77,7 +74,7 @@ class TestRoutingTableDispatcher(VumiWorkerTestCase):
             [self.with_endpoint(msg)],
             self.get_dispatched_outbound('transport1'))
 
-        self.clear_dispatched()
+        self.clear_all_dispatched()
         msg = self.mkmsg_in()
         yield self.dispatch_outbound(msg, 'app2')
         self.assert_rkeys_used('app2.outbound', 'transport2.outbound')
@@ -85,7 +82,7 @@ class TestRoutingTableDispatcher(VumiWorkerTestCase):
             [self.with_endpoint(msg)],
             self.get_dispatched_outbound('transport2'))
 
-        self.clear_dispatched()
+        self.clear_all_dispatched()
         msg = self.mkmsg_in()
         msg.set_routing_endpoint('ep2')
         yield self.dispatch_outbound(msg, 'app1')
@@ -103,14 +100,14 @@ class TestRoutingTableDispatcher(VumiWorkerTestCase):
         self.assertEqual(
             [self.with_endpoint(msg)], self.get_dispatched_events('app1'))
 
-        self.clear_dispatched()
+        self.clear_all_dispatched()
         msg = self.mkmsg_ack()
         yield self.dispatch_event(msg, 'transport2')
         self.assert_rkeys_used('transport2.event', 'app2.event')
         self.assertEqual(
             [self.with_endpoint(msg)], self.get_dispatched_events('app2'))
 
-        self.clear_dispatched()
+        self.clear_all_dispatched()
         msg = self.mkmsg_ack()
         msg.set_routing_endpoint('ep1')
         yield self.dispatch_event(msg, 'transport2')
