@@ -2,7 +2,7 @@ import uuid
 import struct
 from xml.etree import ElementTree as ET
 
-from twisted.python import log
+from vumi import log
 from twisted.internet import reactor
 from twisted.internet.task import LoopingCall
 from twisted.internet.protocol import Protocol
@@ -17,16 +17,25 @@ class XmlOverTcpClient(Protocol):
     PACKET_RECEIVED_HANDLERS = {
         'USSDRequest': 'handle_data_request',
         'AUTHResponse': 'handle_login_response',
+        'AUTHError': 'handle_login_error_response',
         'ENQRequest': 'handle_enquire_link_request',
         'ENQResponse': 'handle_enquire_link_response',
+        'USSDError': 'handle_error_response',
     }
 
+    # packet types which don't need the client to be authenticated
+    IGNORE_AUTH_PACKETS = ['AUTHResponse', 'AUTHError', 'AUTHRequest',
+                           'USSDError']
+
+    # received packet fields
     MANDATORY_DATA_REQUEST_FIELDS = set([
         'requestId', 'msisdn', 'clientId', 'starCode', 'msgtype', 'phase',
         'dcs', 'userdata'])
     OTHER_DATA_REQUEST_FIELDS = set(['EndofSession'])
     LOGIN_RESPONSE_FIELDS = set(['requestId', 'authMsg'])
+    LOGIN_ERROR_FIELDS = set(['requestId', 'authMsg', 'errorCode'])
     ENQUIRE_LINK_FIELDS = set(['requestId', 'enqCmd'])
+    ERROR_FIELDS = set(['requestId', 'errorCode'])
 
     # Data requests and responses need to include a 'dcs' (data coding scheme)
     # field. '15' is used for ASCII, and is the default. The documentation
@@ -37,6 +46,26 @@ class XmlOverTcpClient(Protocol):
     # documentation does not provide any information about 'phase', other
     # than mentioning that it is mandatory, and must be set to '2'.
     PHASE = '2'
+
+    ERRORS = {
+        '001': 'Invalid User Name Password',
+        '002': 'Buffer Overflow',
+        '200': 'No free dialogs',
+        '201': 'Invalid Destination  (applies for n/w initiated session only)',
+        '202': 'Subscriber Not reachable.',
+        '203': ('Timer Expiry (session with subscriber terminated due to '
+                'TimerExp)'),
+        '204': 'Subscriber is Black Listed.',
+        '205': ('Service not Configured. (some service is created but but no '
+               'menu configured for this)'),
+        '206': 'Network Error',
+        '207': 'Unknown Error',
+        '208': 'Invalid Message',
+        '209': 'Subscriber terminated Session (subscriber chose exit option)',
+        '210': 'Incomplete Menu',
+        '211': 'ER not running',
+        '212': 'Timeout waiting for response from ER',
+    }
 
     def __init__(self, username, password, application_id,
                  heartbeat_interval=240, timeout_period=120):
@@ -55,7 +84,6 @@ class XmlOverTcpClient(Protocol):
 
     def connectionMade(self):
         self.login()
-        self.start_heartbeat()
 
     def connectionLost(self, reason):
         self.stop_heartbeat()
@@ -64,7 +92,7 @@ class XmlOverTcpClient(Protocol):
         """For easier test stubbing."""
         return reactor
 
-    def timeout(self):
+    def disconnect(self):
         """For easier test stubbing."""
         self.transport.loseConnection()
 
@@ -82,17 +110,26 @@ class XmlOverTcpClient(Protocol):
             self.timeout_period % self.heartbeat_interval)
 
         self.scheduled_timeout = self.get_clock().callLater(
-            delay, self.timeout)
+            delay, self.disconnect)
 
     def start_heartbeat(self):
+        if not self.authenticated:
+            log.msg("Heartbeat could not be started, client not "
+                    "authentication")
+            return
+
         self.reset_scheduled_timeout()
         self.heartbeat.clock = self.get_clock()
-        return self.heartbeat.start(self.heartbeat_interval, now=False)
+        d = self.heartbeat.start(self.heartbeat_interval, now=False)
+        log.msg("Heartbeat started")
+
+        return d
 
     def stop_heartbeat(self):
         self.cancel_scheduled_timeout()
         if self.heartbeat.running:
             self.heartbeat.stop()
+        log.msg("Heartbeat stopped")
 
     def dataReceived(self, data):
         self._buffer += data
@@ -151,53 +188,79 @@ class XmlOverTcpClient(Protocol):
         handler_name = self.PACKET_RECEIVED_HANDLERS.get(packet_type, None)
         if handler_name is None:
             log.msg("Packet of an unknown type received: %s" % packet_type)
-            # TODO send error response
+            self.send_error_response(
+                session_id, params.get('requestId'), '208')
             return
+
+        if (not self.authenticated and
+                packet_type not in self.IGNORE_AUTH_PACKETS):
+            log.msg("'%s' packet received before client authentication "
+                    "was completed" % packet_type)
+            self.send_error_response(
+                session_id, params.get('requestId'), '207')
+            return
+
         getattr(self, handler_name)(session_id, params)
 
-    @staticmethod
-    def validate_packet_fields(packet_params, mandatory_fields,
+    def validate_packet_fields(self, session_id, params, mandatory_fields,
                                other_fields=set()):
-        packet_fields = set(packet_params.keys())
+        packet_fields = set(params.keys())
+        valid = True
 
         all_fields = mandatory_fields | other_fields
         unexpected_fields = packet_fields - all_fields
         if unexpected_fields:
             log.msg("Unexpected fields in received packet: %s" %
                     list(unexpected_fields))
-            # TODO send error response
-            return False
+            valid = False
 
         missing_mandatory_fields = mandatory_fields - packet_fields
         if missing_mandatory_fields:
             log.msg("Missing mandatory fields in received packet: %s" %
                     list(missing_mandatory_fields))
-            # TODO send error response
-            return False
+            valid = False
 
-        return True
+        if not valid:
+            # send an 'Invalid Message' error response
+            self.send_error_response(
+                session_id, params.get('requestId'), '208')
+
+        return valid
 
     def handle_login_response(self, session_id, params):
-        if self.validate_packet_fields(params, self.LOGIN_RESPONSE_FIELDS):
+        if self.validate_packet_fields(
+                session_id, params, self.LOGIN_RESPONSE_FIELDS):
+            log.msg("Client authentication complete.")
             self.authenticated = True
-            # TODO start heartbeat
+            self.start_heartbeat()
+        else:
+            self.disconnect()
+
+    def handle_login_error_response(self, session_id, params):
+        self.validate_packet_fields(
+            session_id, params, self.LOGIN_ERROR_FIELDS)
+        self.disconnect()
+
+    def handle_error_response(self, session_id, params):
+        if self.validate_packet_fields(
+                session_id, params, self.ERROR_FIELDS):
+            error_code = params['errorCode']
+            error_msg = self.ERRORS.get(error_code)
+            if error_msg is not None:
+                log.msg("Server sent error message: %s" % error_msg)
+            else:
+                log.msg("Server sent an error message with an unknown code: %s"
+                        % error_code)
 
     def handle_data_request(self, session_id, params):
-        if not self.authenticated:
-            log.msg("Data request packet received before client "
-                    "authentication was completed.")
-            # TODO send error response
-            return
-
-        if not self.validate_packet_fields(params,
+        if self.validate_packet_fields(
+                session_id,
+                params,
                 self.MANDATORY_DATA_REQUEST_FIELDS,
                 self.OTHER_DATA_REQUEST_FIELDS):
-            return
-
-        # if EndofSession is not in params, assume this is the end of a session
-        params.setdefault('EndofSession', '1')
-
-        self.data_request_received(session_id, params)
+            # if EndofSession is not in params, assume the end of session
+            params.setdefault('EndofSession', '1')
+            self.data_request_received(session_id, params)
 
     def data_request_received(self, session_id, params):
         raise NotImplementedError("Subclasses should implement.")
@@ -220,16 +283,18 @@ class XmlOverTcpClient(Protocol):
         return header + body
 
     def send_packet(self, session_id, packet_type, params):
+        if (not self.authenticated and
+            packet_type not in self.IGNORE_AUTH_PACKETS):
+            log.msg("'%s' packet could not be sent, client not authenticated"
+                    % packet_type)
+            return
+
         packet = self.serialize_packet(session_id, packet_type, params)
         self.transport.write(packet)
 
     @staticmethod
     def gen_id():
-        """
-        Returns a new uuid's 16 byte string. Used to generate request id's and
-        dummy session id's needed for sending certain types of packets,
-        including login requests and enquire link requests.
-        """
+        """For easier test stubbing."""
         return uuid.uuid4().bytes
 
     def login(self):
@@ -240,6 +305,14 @@ class XmlOverTcpClient(Protocol):
             ('applicationId', self.application_id),
         ]
         self.send_packet(self.gen_id(), 'AUTHRequest', params)
+
+    def send_error_response(self, session_id, request_id=None,
+                            error_code='207'):
+        params = [
+            ('requestId', request_id or self.gen_id()),
+            ('errorCode', error_code),
+        ]
+        self.send_packet(session_id, 'USSDError', params)
 
     def send_data_response(self, session_id, end_session=True, **params):
         if end_session:
@@ -263,7 +336,8 @@ class XmlOverTcpClient(Protocol):
         self.send_packet(session_id, 'USSDResponse', packet_params)
 
     def handle_enquire_link_request(self, session_id, params):
-        if self.validate_packet_fields(params, self.ENQUIRE_LINK_FIELDS):
+        if self.validate_packet_fields(
+                session_id, params, self.ENQUIRE_LINK_FIELDS):
             self.send_enquire_link_response(session_id, params['requestId'])
 
     def send_enquire_link_request(self):
@@ -273,8 +347,8 @@ class XmlOverTcpClient(Protocol):
         ])
 
     def handle_enquire_link_response(self, session_id, params):
-        if self.validate_packet_fields(params, self.ENQUIRE_LINK_FIELDS):
-            # log for verbose logging?
+        if self.validate_packet_fields(
+                session_id, params, self.ENQUIRE_LINK_FIELDS):
             self.reset_scheduled_timeout()
 
     def send_enquire_link_response(self, session_id, request_id):
