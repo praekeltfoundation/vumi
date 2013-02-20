@@ -79,7 +79,7 @@ class BaseTransportTestCase(TransportTestCase):
             ])
 
     def get_tx_consumers(self, tx):
-        for connector in tx._connectors.values():
+        for connector in tx.connectors.values():
             for consumer in connector._consumers.values():
                 yield consumer
 

@@ -42,8 +42,8 @@ class TransportTestCase(VumiWorkerTestCase, PersistenceMixin):
         return self.get_worker(config, cls, start)
 
     def assert_basic_rkeys(self, transport):
-        self.assertTrue(len(transport._connectors) >= 1)
-        connector = transport._connectors[transport.transport_name]
+        self.assertTrue(len(transport.connectors) >= 1)
+        connector = transport.connectors[transport.transport_name]
         self.assertTrue(connector._consumers.keys(), set(['outbound']))
         self.assertTrue(connector._publishers.keys(),
                         set(['inbound', 'event']))

@@ -91,16 +91,16 @@ class Dispatcher(BaseWorker):
         return gatherResults(deferreds)
 
     def publish_inbound(self, msg, connector_name, endpoint):
-        return self._connectors[connector_name].publish_inbound(msg, endpoint)
+        return self.connectors[connector_name].publish_inbound(msg, endpoint)
 
     def publish_outbound(self, msg, connector_name, endpoint):
-        return self._connectors[connector_name].publish_outbound(msg, endpoint)
+        return self.connectors[connector_name].publish_outbound(msg, endpoint)
 
     def publish_event(self, event, connector_name, endpoint):
-        return self._connectors[connector_name].publish_event(event, endpoint)
+        return self.connectors[connector_name].publish_event(event, endpoint)
 
     def _setup_unpause(self):
-        for connector in self._connectors.values():
+        for connector in self.connectors.values():
             connector.unpause()
 
 

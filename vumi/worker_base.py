@@ -67,7 +67,7 @@ class BaseWorker(Worker):
     def startWorker(self):
         log.msg('Starting a %s worker with config: %s'
                 % (self.__class__.__name__, self.config))
-        self._connectors = {}
+        self.connectors = {}
 
         d = maybeDeferred(self._validate_config)
         then_call(d, self.setup_connectors)
@@ -96,8 +96,8 @@ class BaseWorker(Worker):
 
     def stopWorker(self):
         d = succeed(None)
-        for connector_name in self._connectors.keys():
-            connector = self._connectors.pop(connector_name)
+        for connector_name in self.connectors.keys():
+            connector = self.connectors.pop(connector_name)
             then_call(d, connector.teardown)
         then_call(d, self._worker_specific_teardown)
         return d
@@ -143,7 +143,7 @@ class BaseWorker(Worker):
         d = setup_middlewares_from_config(self, self.config)
 
         def cb(middlewares):
-            for connector in self._connectors.values():
+            for connector in self.connectors.values():
                 connector.set_middlewares(middlewares)
         return d.addCallback(cb)
 
@@ -159,16 +159,16 @@ class BaseWorker(Worker):
         return True
 
     def setup_connector(self, connector_cls, connector_name):
-        if connector_name in self._connectors:
+        if connector_name in self.connectors:
             log.warning("Connector %r already set up." % (connector_name,))
-            conn = self._connectors[connector_name]
+            conn = self.connectors[connector_name]
             if not isinstance(conn, connector_cls):
                 log.warning("Connector %r is type %r, not %r" % (
                     connector_name, type(conn), connector_cls))
             # So we always get a deferred from here.
-            return succeed(self._connectors[connector_name])
+            return succeed(self.connectors[connector_name])
         connector = connector_cls(self, connector_name)
-        self._connectors[connector_name] = connector
+        self.connectors[connector_name] = connector
         d = connector.setup()
         return d.addCallback(lambda r: connector)
 
@@ -178,18 +178,14 @@ class BaseWorker(Worker):
     def setup_ro_connector(self, connector_name):
         return self.setup_connector(ReceiveOutboundConnector, connector_name)
 
-    def each_connector(self):
-        for connector in self._connectors.values():
-            yield connector
-
     def pause_connectors(self):
-        for connector in self.each_connector():
+        for connector in self.connectors.itervalues():
             connector.pause()
 
     def unpause_connectors(self):
-        for connector in self.each_connector():
+        for connector in self.connectors.itervalues():
             connector.unpause()
 
     def setup_amqp_qos(self):
-        for connector in self.each_connector():
+        for connector in self.connectors.itervalues():
             connector.set_consumer_prefetch(int(self.amqp_prefetch_count))

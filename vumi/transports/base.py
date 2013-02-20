@@ -115,7 +115,7 @@ class Transport(BaseWorker):
         d = self.setup_connectors()
 
         def cb(connector):
-            connector_pubs = self._connectors[self.transport_name]._publishers
+            connector_pubs = self.connectors[self.transport_name]._publishers
             # Set up publishers
             self.message_publisher = connector_pubs['inbound']
             self.event_publisher = connector_pubs['event']
@@ -130,7 +130,7 @@ class Transport(BaseWorker):
             failure_msg = FailureMessage(
                     message=message.payload, failure_code=failure_code,
                     reason=traceback)
-            connector = self._connectors[self.transport_name]
+            connector = self.connectors[self.transport_name]
             d = connector._middlewares.apply_publish(
                 "failure", failure_msg, self.transport_name)
             d.addCallback(self.failure_publisher.publish_message)
@@ -154,7 +154,7 @@ class Transport(BaseWorker):
         kw.setdefault('transport_name', self.transport_name)
         kw.setdefault('transport_metadata', {})
         msg = TransportUserMessage(**kw)
-        return self._connectors[self.transport_name].publish_inbound(msg)
+        return self.connectors[self.transport_name].publish_inbound(msg)
 
     def publish_event(self, **kw):
         """
@@ -166,7 +166,7 @@ class Transport(BaseWorker):
         kw.setdefault('transport_name', self.transport_name)
         kw.setdefault('transport_metadata', {})
         event = TransportEvent(**kw)
-        return self._connectors[self.transport_name].publish_event(event)
+        return self.connectors[self.transport_name].publish_event(event)
 
     def publish_ack(self, user_message_id, sent_message_id, **kw):
         """
@@ -218,16 +218,16 @@ class Transport(BaseWorker):
         return TransportUserMessage.generate_id()
 
     def pause_transport_connector(self):
-        if self.transport_name not in self._connectors:
+        if self.transport_name not in self.connectors:
             log.warning("Trying to pause connectors that don't exist.")
             return
-        return self._connectors[self.transport_name].pause()
+        return self.connectors[self.transport_name].pause()
 
     def unpause_transport_connector(self):
-        if self.transport_name not in self._connectors:
+        if self.transport_name not in self.connectors:
             log.warning("Trying to unpause connectors that don't exist.")
             return
-        return self._connectors[self.transport_name].unpause()
+        return self.connectors[self.transport_name].unpause()
 
     def _setup_unpause(self):
         return self.unpause_transport_connector()

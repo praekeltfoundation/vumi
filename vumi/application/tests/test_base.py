@@ -230,7 +230,7 @@ class TestApplicationWorker(ApplicationTestCase):
         worker.close_session(FakeUserMessage())
 
     def get_app_consumers(self, app):
-        for connector in app._connectors.values():
+        for connector in app.connectors.values():
             for consumer in connector._consumers.values():
                 yield consumer
 

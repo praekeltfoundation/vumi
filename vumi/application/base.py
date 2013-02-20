@@ -182,7 +182,7 @@ class ApplicationWorker(BaseWorker):
         pass
 
     def _publish_message(self, message, endpoint_name=None):
-        publisher = self._connectors[self.transport_name]
+        publisher = self.connectors[self.transport_name]
         return publisher.publish_outbound(message, endpoint_name=endpoint_name)
 
     def reply_to(self, original_message, content, continue_session=True,
@@ -260,7 +260,7 @@ class ApplicationWorker(BaseWorker):
             d = maybeDeferred(self._setup_transport_consumer)
             d.addCallback(lambda r: maybeDeferred(self._setup_event_consumer))
             return d
-        self._connectors[self.transport_name].unpause()
+        self.connectors[self.transport_name].unpause()
         return succeed(None)
 
     def _setup_transport_publisher(self):

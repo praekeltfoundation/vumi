@@ -117,7 +117,7 @@ class TestRoutingTableDispatcher(VumiWorkerTestCase):
 
     def get_dispatcher_consumers(self, dispatcher):
         consumers = []
-        for conn in dispatcher._connectors.values():
+        for conn in dispatcher.connectors.values():
             consumers.extend(conn._consumers.values())
         return consumers
 
