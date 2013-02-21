@@ -38,6 +38,12 @@ class BaseDispatchWorker(Worker):
         if self.amqp_prefetch_count is not None:
             yield self.setup_amqp_qos()
 
+        consumers = (self.exposed_consumer.values() +
+                        self.transport_consumer.values() +
+                        self.transport_event_consumer.values())
+        for consumer in consumers:
+            yield consumer.unpause()
+
     @inlineCallbacks
     def stopWorker(self):
         yield self.teardown_router()
@@ -79,12 +85,12 @@ class BaseDispatchWorker(Worker):
                 '%s.inbound' % (transport_name,),
                 functools.partial(self.dispatch_inbound_message,
                                   transport_name),
-                message_class=TransportUserMessage)
+                message_class=TransportUserMessage, paused=True)
         for transport_name in self.transport_names:
             self.transport_event_consumer[transport_name] = yield self.consume(
                 '%s.event' % (transport_name,),
                 functools.partial(self.dispatch_inbound_event, transport_name),
-                message_class=TransportEvent)
+                message_class=TransportEvent, paused=True)
 
     @inlineCallbacks
     def setup_exposed_publishers(self):
@@ -105,7 +111,7 @@ class BaseDispatchWorker(Worker):
                 '%s.outbound' % (exposed_name,),
                 functools.partial(self.dispatch_outbound_message,
                                   exposed_name),
-                message_class=TransportUserMessage)
+                message_class=TransportUserMessage, paused=True)
 
     @inlineCallbacks
     def setup_amqp_qos(self):
