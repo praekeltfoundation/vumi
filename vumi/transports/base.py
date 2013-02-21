@@ -84,7 +84,7 @@ class Transport(Worker):
             yield self.setup_amqp_qos()
 
         if self.start_message_consumer:
-            yield self.message_consumer.unpause()
+            self.message_consumer.unpause()
 
     @inlineCallbacks
     def stopWorker(self):

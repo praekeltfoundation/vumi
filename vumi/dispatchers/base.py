@@ -42,7 +42,7 @@ class BaseDispatchWorker(Worker):
                         self.transport_consumer.values() +
                         self.transport_event_consumer.values())
         for consumer in consumers:
-            yield consumer.unpause()
+            consumer.unpause()
 
     @inlineCallbacks
     def stopWorker(self):
