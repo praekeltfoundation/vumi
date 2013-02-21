@@ -12,7 +12,6 @@ from twisted.trial.unittest import TestCase, SkipTest
 from twisted.internet import defer, reactor
 from twisted.internet.error import ConnectionRefusedError
 from twisted.web.resource import Resource
-from twisted.web.server import Site
 from twisted.internet.defer import DeferredQueue, inlineCallbacks, returnValue
 from twisted.python import log
 
@@ -429,6 +428,11 @@ class VumiWorkerTestCase(TestCase):
     def rkey(self, name):
         return "%s.%s" % (self.transport_name, name)
 
+    def _rkey(self, name, connector_name=None):
+        if connector_name is None:
+            return self.rkey(name)
+        return "%s.%s" % (connector_name, name)
+
     @inlineCallbacks
     def get_worker(self, config, cls, start=True):
         """Create and return an instance of a vumi worker.
@@ -549,63 +553,73 @@ class VumiWorkerTestCase(TestCase):
             msg[field] = self.MSG_ID_MATCHER
         return msg
 
-    def _get_dispatched(self, name):
-        return self._amqp.get_messages('vumi', self.rkey(name))
+    def _get_dispatched(self, name, connector_name=None):
+        rkey = self._rkey(name, connector_name)
+        return self._amqp.get_messages('vumi', rkey)
 
-    def _wait_for_dispatched(self, name, amount):
-        return self._amqp.wait_messages('vumi', self.rkey(name), amount)
+    def _wait_for_dispatched(self, name, amount, connector_name=None):
+        rkey = self._rkey(name, connector_name)
+        return self._amqp.wait_messages('vumi', rkey, amount)
 
-    def _clear_dispatched(self, name):
-        return self._amqp.clear_messages('vumi', self.rkey(name))
+    def clear_all_dispatched(self):
+        self._amqp.clear_messages('vumi')
 
-    def get_dispatched_events(self):
-        return self._get_dispatched('event')
+    def _clear_dispatched(self, name, connector_name=None):
+        rkey = self._rkey(name, connector_name)
+        return self._amqp.clear_messages('vumi', rkey)
 
-    def get_dispatched_inbound(self):
-        return self._get_dispatched('inbound')
+    def get_dispatched_events(self, connector_name=None):
+        return self._get_dispatched('event', connector_name)
 
-    def get_dispatched_outbound(self):
-        return self._get_dispatched('outbound')
+    def get_dispatched_inbound(self, connector_name=None):
+        return self._get_dispatched('inbound', connector_name)
 
-    def get_dispatched_failures(self):
-        return self._get_dispatched('failures')
+    def get_dispatched_outbound(self, connector_name=None):
+        return self._get_dispatched('outbound', connector_name)
 
-    def wait_for_dispatched_events(self, amount):
-        return self._wait_for_dispatched('event', amount)
+    def get_dispatched_failures(self, connector_name=None):
+        return self._get_dispatched('failures', connector_name)
 
-    def wait_for_dispatched_inbound(self, amount):
-        return self._wait_for_dispatched('inbound', amount)
+    def wait_for_dispatched_events(self, amount, connector_name=None):
+        return self._wait_for_dispatched('event', amount, connector_name)
 
-    def wait_for_dispatched_outbound(self, amount):
-        return self._wait_for_dispatched('outbound', amount)
+    def wait_for_dispatched_inbound(self, amount, connector_name=None):
+        return self._wait_for_dispatched('inbound', amount, connector_name)
 
-    def wait_for_dispatched_failures(self, amount):
-        return self._wait_for_dispatched('failures', amount)
+    def wait_for_dispatched_outbound(self, amount, connector_name=None):
+        return self._wait_for_dispatched('outbound', amount, connector_name)
 
-    def clear_dispatched_events(self):
-        return self._clear_dispatched('event')
+    def wait_for_dispatched_failures(self, amount, connector_name=None):
+        return self._wait_for_dispatched('failures', amount, connector_name)
 
-    def clear_dispatched_inbound(self):
-        return self._clear_dispatched('inbound')
+    def clear_dispatched_events(self, connector_name=None):
+        return self._clear_dispatched('event', connector_name)
 
-    def clear_dispatched_outbound(self):
-        return self._clear_dispatched('outbound')
+    def clear_dispatched_inbound(self, connector_name=None):
+        return self._clear_dispatched('inbound', connector_name)
 
-    def clear_dispatched_failures(self):
-        return self._clear_dispatched('failures')
+    def clear_dispatched_outbound(self, connector_name=None):
+        return self._clear_dispatched('outbound', connector_name)
+
+    def clear_dispatched_failures(self, connector_name=None):
+        return self._clear_dispatched('failures', connector_name)
 
     def _dispatch(self, message, rkey, exchange='vumi'):
         self._amqp.publish_message(exchange, rkey, message)
         return self._amqp.kick_delivery()
 
-    def dispatch_inbound(self, message):
-        return self._dispatch(message, self.rkey('inbound'))
+    def dispatch_inbound(self, message, connector_name=None):
+        rkey = self._rkey('inbound', connector_name)
+        return self._dispatch(message, rkey)
 
-    def dispatch_outbound(self, message):
-        return self._dispatch(message, self.rkey('outbound'))
+    def dispatch_outbound(self, message, connector_name=None):
+        rkey = self._rkey('outbound', connector_name)
+        return self._dispatch(message, rkey)
 
-    def dispatch_event(self, message):
-        return self._dispatch(message, self.rkey('event'))
+    def dispatch_event(self, message, connector_name=None):
+        rkey = self._rkey('event', connector_name)
+        return self._dispatch(message, rkey)
 
-    def dispatch_failure(self, message):
-        return self._dispatch(message, self.rkey('failure'))
+    def dispatch_failure(self, message, connector_name=None):
+        rkey = self._rkey('failure', connector_name)
+        return self._dispatch(message, rkey)

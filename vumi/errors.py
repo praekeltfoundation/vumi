@@ -20,3 +20,7 @@ class InvalidMessageField(InvalidMessage):
 
 class ConfigError(VumiError):
     pass
+
+
+class DuplicateConnectorError(VumiError):
+    pass

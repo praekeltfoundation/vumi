@@ -171,7 +171,7 @@ class XMPPTransport(Transport):
         roster.setHandlerParent(self.xmpp_client)
 
         self.xmpp_protocol = self._xmpp_protocol(
-            self.jid, self.publish_message, self.message_consumer.unpause)
+            self.jid, self.publish_message, self.unpause_transport_connector)
         self.xmpp_protocol.setHandlerParent(self.xmpp_client)
 
         log.msg("XMPPTransport %s started." % self.transport_name)

@@ -116,6 +116,7 @@ class TransportMessage(Message):
     # sub-classes should set the message type
     MESSAGE_TYPE = None
     MESSAGE_VERSION = '20110921'
+    DEFAULT_ENDPOINT_NAME = 'default'
 
     @staticmethod
     def generate_id():
@@ -132,6 +133,7 @@ class TransportMessage(Message):
         fields.setdefault('message_version', self.MESSAGE_VERSION)
         fields.setdefault('message_type', self.MESSAGE_TYPE)
         fields.setdefault('timestamp', datetime.utcnow())
+        fields.setdefault('routing_metadata', {})
         return fields
 
     def validate_fields(self):
@@ -142,6 +144,24 @@ class TransportMessage(Message):
             )
         if self['message_type'] is None:
             raise InvalidMessageField('message_type')
+
+    @property
+    def routing_metadata(self):
+        return self.payload.setdefault('routing_metadata', {})
+
+    @classmethod
+    def check_routing_endpoint(cls, endpoint_name):
+        if endpoint_name is None:
+            return cls.DEFAULT_ENDPOINT_NAME
+        return endpoint_name
+
+    def set_routing_endpoint(self, endpoint_name=None):
+        endpoint_name = self.check_routing_endpoint(endpoint_name)
+        self.routing_metadata['endpoint_name'] = endpoint_name
+
+    def get_routing_endpoint(self):
+        endpoint_name = self.routing_metadata.get('endpoint_name')
+        return self.check_routing_endpoint(endpoint_name)
 
 
 class TransportUserMessage(TransportMessage):

@@ -78,6 +78,8 @@ class TestApplicationWorker(ApplicationTestCase):
             for msg in msgs + expected_msgs:
                 self.assertTrue(key in msg.payload)
                 msg[key] = 'OVERRIDDEN_BY_TEST'
+                if not msg.get('routing_metadata'):
+                    msg['routing_metadata'] = {'endpoint_name': 'default'}
 
         for msg, expected_msg in zip(msgs, expected_msgs):
             self.assertEqual(msg, expected_msg)
@@ -227,13 +229,18 @@ class TestApplicationWorker(ApplicationTestCase):
         worker.new_session(FakeUserMessage())
         worker.close_session(FakeUserMessage())
 
+    def get_app_consumers(self, app):
+        for connector in app.connectors.values():
+            for consumer in connector._consumers.values():
+                yield consumer
+
     @inlineCallbacks
     def test_application_prefetch_count_custom(self):
         app = yield self.get_application({
             'transport_name': 'test',
             'amqp_prefetch_count': 10,
             })
-        for consumer in app._consumers:
+        for consumer in self.get_app_consumers(app):
             self.assertEqual(consumer.channel.qos_prefetch_count, 10)
 
     @inlineCallbacks
@@ -241,7 +248,7 @@ class TestApplicationWorker(ApplicationTestCase):
         app = yield self.get_application({
             'transport_name': 'test',
             })
-        for consumer in app._consumers:
+        for consumer in self.get_app_consumers(app):
             self.assertEqual(consumer.channel.qos_prefetch_count, 20)
 
     @inlineCallbacks
@@ -250,7 +257,7 @@ class TestApplicationWorker(ApplicationTestCase):
             'transport_name': 'test',
             'amqp_prefetch_count': None,
             })
-        for consumer in app._consumers:
+        for consumer in self.get_app_consumers(app):
             self.assertFalse(consumer.channel.qos_prefetch_count)
 
 
@@ -273,7 +280,7 @@ class TestApplicationMiddlewareHooks(ApplicationTestCase):
         app.consume_user_message = msgs.append
         orig_msg = self.mkmsg_in()
         orig_msg['timestamp'] = 0
-        yield app.dispatch_user_message(orig_msg)
+        yield self.dispatch(orig_msg)
         [msg] = msgs
         self.assertEqual(msg['record'], [
             ('mw1', 'inbound', self.transport_name),
@@ -288,7 +295,7 @@ class TestApplicationMiddlewareHooks(ApplicationTestCase):
         orig_msg = self.mkmsg_ack()
         orig_msg['event_id'] = 1234
         orig_msg['timestamp'] = 0
-        yield app.dispatch_event(orig_msg)
+        yield self.dispatch_event(orig_msg)
         [msg] = msgs
         self.assertEqual(msg['record'], [
             ('mw1', 'event', self.transport_name),

@@ -195,16 +195,17 @@ class SmppTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_reconnect(self):
-        self.assertFalse(self.transport.message_consumer.paused)
+        connector = self.transport.connectors[self.transport.transport_name]
+        self.assertFalse(connector._consumers['outbound'].paused)
         yield self.transport.esme_disconnected()
-        self.assertTrue(self.transport.message_consumer.paused)
+        self.assertTrue(connector._consumers['outbound'].paused)
         yield self.transport.esme_disconnected()
-        self.assertTrue(self.transport.message_consumer.paused)
+        self.assertTrue(connector._consumers['outbound'].paused)
 
         yield self.transport.esme_connected(self.esme)
-        self.assertFalse(self.transport.message_consumer.paused)
+        self.assertFalse(connector._consumers['outbound'].paused)
         yield self.transport.esme_connected(self.esme)
-        self.assertFalse(self.transport.message_consumer.paused)
+        self.assertFalse(connector._consumers['outbound'].paused)
 
 
 class MockSmppTransport(SmppTransport):
