@@ -128,13 +128,13 @@ class BaseWorker(Worker):
         self.connectors[connector_name] = connector
 
         d = connector.setup()
-        then_call(d, lambda: connector)
+        d.addCallback(lambda r: connector)
         return d
 
     def teardown_connector(self, connector_name):
         connector = self.connectors.pop(connector_name)
         d = connector.teardown()
-        d.addCallback(lambda r: None)
+        d.addCallback(lambda r: connector)
         return d
 
     def setup_ri_connector(self, connector_name, middleware=True):
