@@ -5,7 +5,7 @@
 import copy
 import warnings
 
-from twisted.internet.defer import maybeDeferred, succeed
+from twisted.internet.defer import maybeDeferred
 from twisted.python import log
 
 from vumi.config import ConfigText, ConfigDict
