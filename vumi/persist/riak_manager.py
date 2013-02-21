@@ -5,7 +5,7 @@
 from riak import RiakClient, RiakObject, RiakMapReduce
 
 from vumi.persist.model import Manager
-from vumi.utils import flatten_generator
+from vumi.utils import flatten_generator, load_class_by_string
 
 
 class RiakManager(Manager):
@@ -19,6 +19,9 @@ class RiakManager(Manager):
         bucket_prefix = config.pop('bucket_prefix')
         load_bunch_size = config.pop('load_bunch_size',
                                      cls.DEFAULT_LOAD_BUNCH_SIZE)
+        transport_class = config.get('transport_class')
+        if transport_class:
+            config['transport_class'] = load_class_by_string(transport_class)
         client = RiakClient(**config)
         return cls(client, bucket_prefix, load_bunch_size=load_bunch_size)
 
