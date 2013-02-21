@@ -30,7 +30,7 @@ class BaseWorker(Worker):
     """Base class for a message processing worker.
 
     This contains common functionality used by application, transport and
-    dispatcher workers. It should be sub-classed by workers that need to
+    dispatcher workers. It should be subclassed by workers that need to
     manage their own connectors.
     """
 
@@ -98,7 +98,7 @@ class BaseWorker(Worker):
         return succeed(self.CONFIG_CLASS(self.config))
 
     def _validate_config(self):
-        """Once sub-classes call `super().validate_config` properly,
+        """Once subclasses call `super().validate_config` properly,
            this method can be removed.
            """
         # TODO: remove this once all uses of validate_config have been fixed.
@@ -108,7 +108,7 @@ class BaseWorker(Worker):
         """
         Application-specific config validation happens in here.
 
-        Sub-classes may override this method to perform extra config
+        Subclasses may override this method to perform extra config
         validation.
         """
         # TODO: deprecate this in favour of a similar method on

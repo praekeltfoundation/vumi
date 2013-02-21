@@ -58,7 +58,7 @@ class ApplicationWorker(BaseWorker):
     outbound messages.
 
     The available tags are defined by the :attr:`SEND_TO_TAGS` class
-    attribute. Sub-classes must override this attribute with a set of
+    attribute. Subclasses must override this attribute with a set of
     tag names if they wish to use :meth:`send_to`. If applications
     have only a single tag, it is suggested to name that tag `default`
     (this makes calling `send_to` easier since the value of the tag
@@ -76,7 +76,7 @@ class ApplicationWorker(BaseWorker):
     SEND_TO_TAGS = frozenset([])
 
     def _check_for_deprecated_method(self, method_name):
-        """Check whether a sub-class overrides a deprecated method."""
+        """Check whether a subclass overrides a deprecated method."""
         current_method = getattr(type(self), method_name)
         base_method = getattr(ApplicationWorker, method_name)
         if current_method is base_method:
