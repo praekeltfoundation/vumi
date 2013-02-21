@@ -5,7 +5,7 @@
 import copy
 import warnings
 
-from twisted.internet.defer import maybeDeferred
+from twisted.internet.defer import maybeDeferred, succeed
 from twisted.python import log
 
 from vumi.config import ConfigText, ConfigDict
@@ -257,6 +257,11 @@ class ApplicationWorker(BaseWorker):
         warnings.warn(
             "setup_transport_connection() is deprecated. Use connectors and"
             " endpoints instead.", category=DeprecationWarning)
+
+        if transport_name in self.connectors:
+            log.warning("Transport connector %r already set up."
+                        % (transport_name,))
+            return succeed(self.connectors[transport_name])
 
         d = self.setup_ri_connector(transport_name)
 
