@@ -3,9 +3,8 @@
 """Basic tools for building a vumi ApplicationWorker."""
 
 import copy
-import warnings
 
-from twisted.internet.defer import maybeDeferred, succeed
+from twisted.internet.defer import maybeDeferred
 from twisted.python import log
 
 from vumi.config import ConfigText, ConfigDict
@@ -75,31 +74,9 @@ class ApplicationWorker(BaseWorker):
     CONFIG_CLASS = ApplicationConfig
     SEND_TO_TAGS = frozenset([])
 
-    def _check_for_deprecated_method(self, method_name):
-        """Check whether a subclass overrides a deprecated method."""
-        current_method = getattr(type(self), method_name)
-        base_method = getattr(ApplicationWorker, method_name)
-        if current_method is base_method:
-            return False
-        warnings.warn(
-            "%s() is deprecated. Use connectors and endpoints instead." % (
-                method_name,), category=DeprecationWarning)
-        return True
-
-    def _check_deprecated(self):
-        """Check whether type(self) extends any deprecated methods."""
-        deprecated_methods = [
-            '_setup_transport_publisher',
-            '_setup_transport_consumer',
-            '_setup_event_consumer',
-        ]
-        return any([self._check_for_deprecated_method(method_name) for
-                    method_name in deprecated_methods])
-
     def _validate_config(self):
         config = self.get_static_config()
         self.transport_name = config.transport_name
-        self._is_deprecated = self._check_deprecated()
         for tag in self.SEND_TO_TAGS:
             if tag not in config.send_to:
                 raise ConfigError("No configuration for send_to tag %r but"
@@ -111,9 +88,6 @@ class ApplicationWorker(BaseWorker):
         self.validate_config()
 
     def setup_connectors(self):
-        if self._is_deprecated:
-            return self._setup_transport_publisher()
-
         d = self.setup_ri_connector(self.transport_name)
 
         def cb(connector):
@@ -140,17 +114,13 @@ class ApplicationWorker(BaseWorker):
         }
         d = maybeDeferred(self.setup_application)
 
-        if self._is_deprecated:
-            d.addCallback(lambda r: self._setup_transport_consumer())
-            d.addCallback(lambda r: self._setup_event_consumer())
-        elif self.start_message_consumer:
+        if self.start_message_consumer:
             d.addCallback(lambda r: self.unpause_connectors())
 
         return d
 
     def teardown_worker(self):
-        if not self._is_deprecated:
-            self.pause_connectors()
+        self.pause_connectors()
         return self.teardown_application()
 
     def setup_application(self):
@@ -242,44 +212,3 @@ class ApplicationWorker(BaseWorker):
         options.update(kw)
         msg = TransportUserMessage.send(to_addr, content, **options)
         return self._publish_message(msg)
-
-    # Deprecated methods
-
-    def _setup_deprecated_attrs(self, endpoint_name, connector):
-        def setval(suffix, value):
-            setattr(self, '%s_%s' % (endpoint_name, suffix), value)
-        setval('publisher', connector._publishers['outbound'])
-        setval('consumer', connector._consumers['inbound'])
-        setval('event_consumer', connector._consumers['event'])
-
-    def setup_transport_connection(self, endpoint_name, transport_name,
-                                   message_consumer, event_consumer):
-        warnings.warn(
-            "setup_transport_connection() is deprecated. Use connectors and"
-            " endpoints instead.", category=DeprecationWarning)
-
-        if transport_name in self.connectors:
-            log.warning("Transport connector %r already set up."
-                        % (transport_name,))
-            return succeed(self.connectors[transport_name])
-
-        d = self.setup_ri_connector(transport_name)
-
-        def cb(connector):
-            connector.set_inbound_handler(message_consumer)
-            connector.set_event_handler(event_consumer)
-            self._setup_deprecated_attrs(endpoint_name, connector)
-            return connector
-
-        return d.addCallback(cb)
-
-    def _setup_transport_publisher(self):
-        return self.setup_transport_connection(
-            'transport', self.get_static_config().transport_name,
-            self.dispatch_user_message, self.dispatch_event)
-
-    def _setup_transport_consumer(self):
-        return self.transport_consumer.unpause()
-
-    def _setup_event_consumer(self):
-        return self.transport_event_consumer.unpause()
