@@ -13,7 +13,7 @@ from twisted.internet.defer import maybeDeferred
 from vumi import log
 from vumi.config import ConfigText
 from vumi.message import TransportUserMessage, TransportEvent
-from vumi.worker_base import BaseWorker, then_call
+from vumi.worker import BaseWorker, then_call
 from vumi.transports.failures import FailureMessage
 
 

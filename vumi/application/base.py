@@ -9,7 +9,7 @@ from twisted.internet.defer import maybeDeferred
 from twisted.python import log
 
 from vumi.config import ConfigText, ConfigDict
-from vumi.worker_base import BaseWorker
+from vumi.worker import BaseWorker
 from vumi.errors import ConfigError
 from vumi.message import TransportUserMessage
 

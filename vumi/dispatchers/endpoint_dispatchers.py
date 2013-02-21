@@ -4,7 +4,7 @@
 
 from twisted.internet.defer import gatherResults, maybeDeferred
 
-from vumi.worker_base import BaseWorker
+from vumi.worker import BaseWorker
 from vumi.config import ConfigDict, ConfigList
 from vumi import log
 
