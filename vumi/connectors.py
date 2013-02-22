@@ -1,7 +1,3 @@
-# TODO: We use gatherResults(), which requires Twisted>=11.1
-#       We need to either implement a fallback (which is easy enough) or
-#       explicitly require a suitable Twisted version.
-
 from twisted.internet.defer import gatherResults
 
 from vumi import log
