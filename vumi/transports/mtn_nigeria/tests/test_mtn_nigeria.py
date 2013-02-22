@@ -24,16 +24,32 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
         'msg_type': '1',
         'end_of_session': '0',
     }
-    _params_xml = (
-        "<requestId>%(request_id)s</requestId>"
-        "<msisdn>%(msisdn)s</msisdn>"
-        "<starCode>%(star_code)s</starCode>"
-        "<clientId>%(client_id)s</clientId>"
-        "<phase>%(phase)s</phase>"
-        "<msgtype>%(msg_type)s</msgtype>"
-        "<dcs>%(dcs)s</dcs>"
-        "<userdata>%(user_data)s</userdata>"
-        "<EndofSession>%(end_of_session)s</EndofSession>"
+    _request_body = (
+        "<USSDRequest>"
+            "<requestId>%(request_id)s</requestId>"
+            "<msisdn>%(msisdn)s</msisdn>"
+            "<starCode>%(star_code)s</starCode>"
+            "<clientId>%(client_id)s</clientId>"
+            "<phase>%(phase)s</phase>"
+            "<msgtype>%(msg_type)s</msgtype>"
+            "<dcs>%(dcs)s</dcs>"
+            "<userdata>%(user_data)s</userdata>"
+            "<EndofSession>%(end_of_session)s</EndofSession>"
+        "</USSDRequest>"
+    )
+    _response_body = (
+        "<USSDResponse>"
+            "<requestId>%(request_id)s</requestId>"
+            "<msisdn>%(msisdn)s</msisdn>"
+            "<starCode>%(star_code)s</starCode>"
+            "<clientId>%(client_id)s</clientId>"
+            "<phase>%(phase)s</phase>"
+            "<msgtype>%(msg_type)s</msgtype>"
+            "<dcs>%(dcs)s</dcs>"
+            "<userdata>%(user_data)s</userdata>"
+            "<EndofSession>%(end_of_session)s</EndofSession>"
+            "<delvrpt>%(delivery_report)s</delvrpt>"
+        "</USSDResponse>"
     )
 
     _expected_outbound_payload = {
@@ -92,18 +108,17 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
         self.patch(self.transport.factory.protocol, 'login', stubbed_login)
         return d
 
-    def mk_data_packet(self, session_id, type, **params):
-        defaults = self._params.copy()
-        defaults.update(params)
-        body = "<%s>%s</%s>" % (type, (self._params_xml % defaults), type)
-        return utils.mk_packet(session_id, body)
-
     def mk_data_request_packet(self, session_id, **params):
-        return self.mk_data_packet(session_id, 'USSDRequest', **params)
+        _params = self._params.copy()
+        _params.update(params)
+        return utils.mk_packet(session_id, self._request_body % _params)
 
     def mk_data_response_packet(self, session_id, **params):
-        params.setdefault('msg_type', 2)
-        return self.mk_data_packet(session_id, 'USSDResponse', **params)
+        params.setdefault('msg_type', '2')
+        params.setdefault('delivery_report', '0')
+        _params = self._params.copy()
+        _params.update(params)
+        return utils.mk_packet(session_id, self._response_body % _params)
 
     def mk_error_response_packet(self, session_id, request_id, error_code):
         body = (

@@ -348,6 +348,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
                 "<dcs>15</dcs>"
                 "<userdata>*123#</userdata>"
                 "<EndofSession>0</EndofSession>"
+                "<delvrpt>0</delvrpt>"
             "</USSDResponse>"
         )
         expected_packet = utils.mk_packet(session_id, body)
@@ -379,6 +380,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
                 "<dcs>15</dcs>"
                 "<userdata>*123#</userdata>"
                 "<EndofSession>1</EndofSession>"
+                "<delvrpt>0</delvrpt>"
             "</USSDResponse>"
         )
         expected_packet = utils.mk_packet(session_id, body)

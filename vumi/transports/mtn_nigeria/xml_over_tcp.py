@@ -265,7 +265,7 @@ class XmlOverTcpClient(Protocol):
         # construct body
         root = ET.Element(packet_type)
         for param_name, param_value in params:
-            ET.SubElement(root, param_name).text = param_value.encode()
+            ET.SubElement(root, param_name).text = str(param_value).encode()
         body = ET.tostring(root)
 
         # construct header
@@ -332,6 +332,11 @@ class XmlOverTcpClient(Protocol):
             msg_type = '2'
             end_of_session = '0'
 
+        # XXX: delivery reports can be given for the delivery of the last
+        # message in a session. However, the documentation does not provide any
+        # information on how delivery report packets look, so this is currently
+        # disabled ('delvrpt' is set to '0' below).
+
         packet_params = [
             ('requestId', request_id),
             ('msisdn', msisdn),
@@ -342,6 +347,7 @@ class XmlOverTcpClient(Protocol):
             ('dcs', self.DATA_CODING_SCHEME),
             ('userdata', user_data),
             ('EndofSession', end_of_session),
+            ('delvrpt', '0'),
         ]
         return self.send_packet(session_id, 'USSDResponse', packet_params)
 
