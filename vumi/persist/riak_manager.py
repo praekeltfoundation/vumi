@@ -31,6 +31,8 @@ class RiakManager(Manager):
         prefix = config.get('prefix', 'riak')
         mapred_prefix = config.get('mapred_prefix', 'mapred')
         client_id = config.get('client_id')
+        # NOTE: the current riak.RiakClient expects this parameter but
+        #       internally doesn't do anything with it.
         solr_transport_class = config.get('solr_transport_class', None)
         transport_options = config.get('transport_options', None)
 
