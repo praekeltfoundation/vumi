@@ -2,7 +2,8 @@
 
 """A manager implementation on top of the riak Python package."""
 
-from riak import RiakClient, RiakObject, RiakMapReduce
+from riak import (RiakClient, RiakObject, RiakMapReduce, RiakHttpTransport,
+                    RiakPbcTransport)
 
 from vumi.persist.model import Manager
 from vumi.utils import flatten_generator
@@ -19,7 +20,26 @@ class RiakManager(Manager):
         bucket_prefix = config.pop('bucket_prefix')
         load_bunch_size = config.pop('load_bunch_size',
                                      cls.DEFAULT_LOAD_BUNCH_SIZE)
-        client = RiakClient(**config)
+        transport_type = config.pop('transport_type', 'http')
+        transport_class = {
+            'http': RiakHttpTransport,
+            'protocol_buffer': RiakPbcTransport,
+        }.get(transport_type, RiakHttpTransport)
+
+        host = config.get('host', '127.0.0.1')
+        port = config.get('port', 8098)
+        prefix = config.get('prefix', 'riak')
+        mapred_prefix = config.get('mapred_prefix', 'mapred')
+        client_id = config.get('client_id')
+        # NOTE: the current riak.RiakClient expects this parameter but
+        #       internally doesn't do anything with it.
+        solr_transport_class = config.get('solr_transport_class', None)
+        transport_options = config.get('transport_options', None)
+
+        client = RiakClient(host=host, port=port, prefix=prefix,
+            mapred_prefix=mapred_prefix, transport_class=transport_class,
+            client_id=client_id, solr_transport_class=solr_transport_class,
+            transport_options=transport_options)
         return cls(client, bucket_prefix, load_bunch_size=load_bunch_size)
 
     def riak_object(self, modelcls, key, result=None):
