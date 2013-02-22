@@ -13,7 +13,7 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
                                           MockXmlOverTcpServerMixin):
 
     transport_class = MtnNigeriaUssdTransport
-    _session_id_header_size = XmlOverTcpClient.HEADER_SIZE
+    _session_id_header_size = XmlOverTcpClient.SESSION_ID_HEADER_SIZE
     _params = {
         'request_id': '1291850641',
         'msisdn': '27845335367',
@@ -63,7 +63,7 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
         'transport_type': 'ussd',
         'transport_metadata': {
             'mtn_nigeria_ussd': {
-                'session_id': ("0" * 16),
+                'session_id': ("0" * _session_id_header_size),
                 'clientId': _params['client_id'],
                 'phase': _params['phase'],
                 'dcs': _params['dcs'],
