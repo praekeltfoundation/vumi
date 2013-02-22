@@ -168,6 +168,10 @@ class MtnNigeriaUssdClient(XmlOverTcpClient):
         XmlOverTcpClient.__init__(self, **kwargs)
         self.vumi_transport = vumi_transport
 
+    def connectionMade(self):
+        XmlOverTcpClient.connectionMade(self)
+        self.factory.resetDelay()
+
     def data_request_received(self, session_id, params):
         return self.vumi_transport.handle_raw_inbound_message(
             session_id, params)
@@ -182,5 +186,6 @@ class MtnNigeriaUssdClientFactory(ReconnectingClientFactory):
 
     def buildProtocol(self, addr):
         client = self.protocol(**self.client_args)
+        client.factory = self
         self.client = client
         return client
