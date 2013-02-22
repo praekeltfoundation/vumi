@@ -1,4 +1,3 @@
-import uuid
 import struct
 from xml.etree import ElementTree as ET
 
@@ -24,8 +23,8 @@ class XmlOverTcpClient(Protocol):
     }
 
     # packet types which don't need the client to be authenticated
-    IGNORE_AUTH_PACKETS = ['AUTHResponse', 'AUTHError', 'AUTHRequest',
-                           'USSDError']
+    IGNORE_AUTH_PACKETS = [
+        'AUTHResponse', 'AUTHError', 'AUTHRequest', 'USSDError']
 
     # received packet fields
     MANDATORY_DATA_REQUEST_FIELDS = set([
@@ -68,13 +67,14 @@ class XmlOverTcpClient(Protocol):
     }
 
     def __init__(self, username, password, application_id,
-                 heartbeat_interval=240, timeout_period=120):
+                 heartbeat_interval=240, timeout_period=60):
         self.username = username
         self.password = password
         self.application_id = application_id
         self.heartbeat_interval = heartbeat_interval
         self.timeout_period = timeout_period
 
+        self.clock = reactor
         self.authenticated = False
         self.scheduled_timeout = None
         self.heartbeat = LoopingCall(self.send_enquire_link_request)
@@ -87,10 +87,6 @@ class XmlOverTcpClient(Protocol):
 
     def connectionLost(self, reason):
         self.stop_heartbeat()
-
-    def get_clock(self):
-        """For easier test stubbing."""
-        return reactor
 
     def disconnect(self):
         """For easier test stubbing."""
@@ -109,17 +105,17 @@ class XmlOverTcpClient(Protocol):
         delay = self.heartbeat_interval + (
             self.timeout_period % self.heartbeat_interval)
 
-        self.scheduled_timeout = self.get_clock().callLater(
+        self.scheduled_timeout = self.clock.callLater(
             delay, self.disconnect)
 
     def start_heartbeat(self):
         if not self.authenticated:
             log.msg("Heartbeat could not be started, client not "
-                    "authentication")
+                    "authenticated")
             return
 
         self.reset_scheduled_timeout()
-        self.heartbeat.clock = self.get_clock()
+        self.heartbeat.clock = self.clock
         d = self.heartbeat.start(self.heartbeat_interval, now=False)
         log.msg("Heartbeat started")
 
@@ -253,9 +249,7 @@ class XmlOverTcpClient(Protocol):
                         % error_code)
 
     def handle_data_request(self, session_id, params):
-        if self.validate_packet_fields(
-                session_id,
-                params,
+        if self.validate_packet_fields(session_id, params,
                 self.MANDATORY_DATA_REQUEST_FIELDS,
                 self.OTHER_DATA_REQUEST_FIELDS):
             # if EndofSession is not in params, assume the end of session
@@ -270,32 +264,33 @@ class XmlOverTcpClient(Protocol):
         # construct body
         root = ET.Element(packet_type)
         for param_name, param_value in params:
-            ET.SubElement(root, param_name).text = param_value
+            ET.SubElement(root, param_name).text = param_value.encode()
         body = ET.tostring(root)
 
         # construct header
         length = len(body) + cls.HEADER_SIZE
         header = struct.pack(
             cls.HEADER_FORMAT,
-            session_id,
+            session_id.encode(),
             str(length).zfill(cls.LENGTH_HEADER_SIZE))
 
         return header + body
 
     def send_packet(self, session_id, packet_type, params):
         if (not self.authenticated and
-            packet_type not in self.IGNORE_AUTH_PACKETS):
+                packet_type not in self.IGNORE_AUTH_PACKETS):
             log.msg("'%s' packet could not be sent, client not authenticated"
                     % packet_type)
-            return
+            return False
 
         packet = self.serialize_packet(session_id, packet_type, params)
         self.transport.write(packet)
+        return True
 
     @staticmethod
     def gen_id():
         """For easier test stubbing."""
-        return uuid.uuid4().bytes
+        return "0" * 16
 
     def login(self):
         params = [
@@ -306,34 +301,36 @@ class XmlOverTcpClient(Protocol):
         ]
         self.send_packet(self.gen_id(), 'AUTHRequest', params)
 
-    def send_error_response(self, session_id, request_id=None,
+    def send_error_response(self, session_id=None, request_id=None,
                             error_code='207'):
         params = [
             ('requestId', request_id or self.gen_id()),
             ('errorCode', error_code),
         ]
-        self.send_packet(session_id, 'USSDError', params)
+        return self.send_packet(
+            session_id or self.gen_id(), 'USSDError', params)
 
-    def send_data_response(self, session_id, end_session=True, **params):
+    def send_data_response(self, session_id, request_id, client_id, msisdn,
+                           user_data, star_code, end_session=True):
         if end_session:
-            msgtype = '6'
+            msg_type = '6'
             end_of_session = '1'
         else:
-            msgtype = '2'
+            msg_type = '2'
             end_of_session = '0'
 
         packet_params = [
-            ('requestId', params['requestId']),
-            ('msisdn', params['msisdn']),
-            ('starCode', params['starCode']),
-            ('clientId', params['clientId']),
-            ('phase', params.get('phase', self.PHASE)),
-            ('msgtype', params.get('msgtype', msgtype)),
-            ('dcs', params.get('dcs', self.DATA_CODING_SCHEME)),
-            ('userdata', params['userdata']),
-            ('EndofSession', params.get('EndofSession', end_of_session)),
+            ('requestId', request_id),
+            ('msisdn', msisdn),
+            ('starCode', star_code),
+            ('clientId', client_id),
+            ('phase', self.PHASE),
+            ('msgtype', msg_type),
+            ('dcs', self.DATA_CODING_SCHEME),
+            ('userdata', user_data),
+            ('EndofSession', end_of_session),
         ]
-        self.send_packet(session_id, 'USSDResponse', packet_params)
+        return self.send_packet(session_id, 'USSDResponse', packet_params)
 
     def handle_enquire_link_request(self, session_id, params):
         if self.validate_packet_fields(

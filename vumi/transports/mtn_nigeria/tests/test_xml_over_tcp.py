@@ -1,49 +1,13 @@
-import struct
-
 from twisted.trial import unittest
-from twisted.internet import reactor
 from twisted.internet.task import Clock
-from twisted.internet.defer import Deferred, inlineCallbacks
-from twisted.internet.protocol import Protocol, Factory, ClientFactory
+from twisted.internet.defer import inlineCallbacks
 
 from vumi import log
 from vumi.transports.mtn_nigeria.xml_over_tcp import XmlOverTcpClient
+from vumi.transports.mtn_nigeria.tests import utils
 
 
-class WaitForDataMixin(object):
-    waiting_for_data = False
-    deferred_data = Deferred()
-
-    def wait_for_data(self):
-        d = Deferred()
-        self.deferred_data = d
-        self.waiting_for_data = True
-        return d
-
-    def callback_deferred_data(self, data):
-        if self.waiting_for_data and not self.deferred_data.called:
-            self.waiting_for_data = False
-            self.deferred_data.callback(data)
-
-
-class MockXmlOverTcpServer(Protocol, WaitForDataMixin):
-    def __init__(self):
-        self.responses = {}
-
-    def send_data(self, data):
-        self.transport.write(data)
-
-    def connectionMade(self):
-        self.factory.deferred_server.callback(self)
-
-    def dataReceived(self, data):
-        response = self.responses.get(data)
-        if response is not None:
-            self.transport.write(response)
-        self.callback_deferred_data(data)
-
-
-class ToyXmlOverTcpClient(XmlOverTcpClient, WaitForDataMixin):
+class ToyXmlOverTcpClient(XmlOverTcpClient, utils.WaitForDataMixin):
     _PACKET_RECEIVED_HANDLERS = {'DummyPacket': 'dummy_packet_received'}
     _ERRORS = {'000': 'Dummy error occured'}
 
@@ -55,18 +19,14 @@ class ToyXmlOverTcpClient(XmlOverTcpClient, WaitForDataMixin):
         self.received_dummy_packets = []
         self.received_data_request_packets = []
         self.next_id = 0
-        self.clock = reactor
         self.disconnected = False
 
     def connectionMade(self):
-        self.factory.deferred_client.callback(self)
+        pass
 
     def dataReceived(self, data):
         XmlOverTcpClient.dataReceived(self, data)
         self.callback_deferred_data(data)
-
-    def get_clock(self):
-        return self.clock
 
     def dummy_packet_received(self, session_id, params):
         self.received_dummy_packets.append((session_id, params))
@@ -83,29 +43,12 @@ class ToyXmlOverTcpClient(XmlOverTcpClient, WaitForDataMixin):
         self.disconnected = True
 
 
-class ClientServerMixin(object):
-    @inlineCallbacks
-    def start_protocols(self):
-        server_factory = Factory()
-        server_factory.protocol = MockXmlOverTcpServer
-        server_factory.deferred_server = Deferred()
-        self.server_port = reactor.listenTCP(0, server_factory)
-
-        client_factory = ClientFactory()
-        client_factory.protocol = ToyXmlOverTcpClient
-        client_factory.deferred_client = Deferred()
-        self.client_connector = reactor.connectTCP(
-            '127.0.0.1', self.server_port.getHost().port, client_factory)
-
-        self.client = yield client_factory.deferred_client
-        self.server = yield server_factory.deferred_server
-
-    def stop_protocols(self):
-        self.client_connector.disconnect()
-        self.server_port.loseConnection()
+class XmlOverTcpClientServerMixin(utils.MockClientServerMixin):
+    client_protocol = ToyXmlOverTcpClient
+    server_protocol = utils.MockXmlOverTcpServer
 
 
-class XmlOverTcpClientTestCase(unittest.TestCase, ClientServerMixin):
+class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
     @inlineCallbacks
     def setUp(self):
         # stub logger
@@ -116,14 +59,6 @@ class XmlOverTcpClientTestCase(unittest.TestCase, ClientServerMixin):
 
     def tearDown(self):
         self.stop_protocols()
-
-    def mk_serialized_packet(self, session_id, body):
-        length = len(body) + self.client.HEADER_SIZE
-        header = struct.pack(
-            self.client.HEADER_FORMAT,
-            session_id,
-            str(length).zfill(self.client.LENGTH_HEADER_SIZE))
-        return header + body
 
     def stub_client_heartbeat(self, heartbeat_interval=120, timeout_period=20):
         self.client.heartbeat_interval = 120
@@ -136,8 +71,8 @@ class XmlOverTcpClientTestCase(unittest.TestCase, ClientServerMixin):
         body_a = "<DummyPacket><someParam>123</someParam></DummyPacket>"
         session_id_b = '2' * 16
         body_b = "<DummyPacket><someParam>456</someParam></DummyPacket>"
-        data = self.mk_serialized_packet(session_id_a, body_a)
-        data += self.mk_serialized_packet(session_id_b, body_b)
+        data = utils.mk_packet(session_id_a, body_a)
+        data += utils.mk_packet(session_id_b, body_b)
         self.client.authenticated = True
         self.server.send_data(data)
 
@@ -157,8 +92,8 @@ class XmlOverTcpClientTestCase(unittest.TestCase, ClientServerMixin):
 
         # add a full first packet, then concatenate a sliced version of a
         # second packet
-        data = self.mk_serialized_packet(session_id_a, body_a)
-        data += self.mk_serialized_packet(session_id_b, body_b)[:12]
+        data = utils.mk_packet(session_id_a, body_a)
+        data += utils.mk_packet(session_id_b, body_b)[:12]
         self.client.authenticated = True
         self.server.send_data(data)
 
@@ -180,7 +115,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, ClientServerMixin):
                 "<applicationId>1029384756</applicationId>"
             "</AUTHRequest>"
         % request_id)
-        expected_request_packet = self.mk_serialized_packet(
+        expected_request_packet = utils.mk_packet(
             session_id, request_body)
 
         response_body = (
@@ -189,7 +124,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, ClientServerMixin):
                 "<authMsg>SUCCESS</authMsg>"
             "</AUTHResponse>"
         % request_id)
-        response_packet = self.mk_serialized_packet(session_id, response_body)
+        response_packet = utils.mk_packet(session_id, response_body)
         self.server.responses[expected_request_packet] = response_packet
 
         self.client.login()
@@ -209,7 +144,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, ClientServerMixin):
                 "<applicationId>1029384756</applicationId>"
             "</AUTHRequest>"
         % request_id)
-        expected_request_packet = self.mk_serialized_packet(
+        expected_request_packet = utils.mk_packet(
             session_id, request_body)
 
         response_body = (
@@ -219,7 +154,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, ClientServerMixin):
                 "<errorCode>001</errorCode>"
             "</AUTHError>"
         % request_id)
-        response_packet = self.mk_serialized_packet(session_id, response_body)
+        response_packet = utils.mk_packet(session_id, response_body)
         self.server.responses[expected_request_packet] = response_packet
 
         self.client.login()
@@ -237,7 +172,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, ClientServerMixin):
                 "<requestId>%s</requestId>"
             "</UnknownPacket>"
         % request_id)
-        request_packet = self.mk_serialized_packet(session_id, request_body)
+        request_packet = utils.mk_packet(session_id, request_body)
 
         response_body = (
             "<USSDError>"
@@ -245,7 +180,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, ClientServerMixin):
                 "<errorCode>208</errorCode>"
             "</USSDError>"
         % request_id)
-        expected_response_packet = self.mk_serialized_packet(
+        expected_response_packet = utils.mk_packet(
             session_id, response_body)
 
         self.server.send_data(request_packet)
@@ -265,7 +200,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, ClientServerMixin):
                 "<requestId>%s</requestId>"
             "</DummyPacket>"
         % request_id)
-        request_packet = self.mk_serialized_packet(session_id, request_body)
+        request_packet = utils.mk_packet(session_id, request_body)
 
         response_body = (
             "<USSDError>"
@@ -273,7 +208,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, ClientServerMixin):
                 "<errorCode>207</errorCode>"
             "</USSDError>"
         % request_id)
-        expected_response_packet = self.mk_serialized_packet(
+        expected_response_packet = utils.mk_packet(
             session_id, response_body)
 
         self.server.send_data(request_packet)
@@ -303,7 +238,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, ClientServerMixin):
                 "<EndofSession>0</EndofSession>"
             "</USSDRequest>"
         )
-        packet = self.mk_serialized_packet(session_id, body)
+        packet = utils.mk_packet(session_id, body)
         self.client.authenticated = True
         self.server.send_data(packet)
 
@@ -339,7 +274,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, ClientServerMixin):
                 "<errorCode>208</errorCode>"
             "</USSDError>"
         )
-        expected_packet = self.mk_serialized_packet(session_id, body)
+        expected_packet = utils.mk_packet(session_id, body)
 
         params = {
             'requestId': '1291850641',
@@ -362,7 +297,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, ClientServerMixin):
                 "<errorCode>208</errorCode>"
             "</USSDError>"
         )
-        expected_packet = self.mk_serialized_packet(session_id, body)
+        expected_packet = utils.mk_packet(session_id, body)
 
         params = {
             'requestId': '1291850641',
@@ -393,18 +328,17 @@ class XmlOverTcpClientTestCase(unittest.TestCase, ClientServerMixin):
                 "<EndofSession>0</EndofSession>"
             "</USSDResponse>"
         )
-        expected_packet = self.mk_serialized_packet(session_id, body)
+        expected_packet = utils.mk_packet(session_id, body)
 
         self.client.authenticated = True
         self.client.send_data_response(
-            session_id,
-            end_session=False,
-            requestId='1291850641',
+            session_id=session_id,
+            request_id='1291850641',
+            star_code='123',
+            client_id='123',
             msisdn='27845335367',
-            starCode='123',
-            clientId='123',
-            userdata='*123#',
-        )
+            user_data='*123#',
+            end_session=False)
 
         received_packet = yield self.server.wait_for_data()
         self.assertEqual(expected_packet, received_packet)
@@ -425,18 +359,17 @@ class XmlOverTcpClientTestCase(unittest.TestCase, ClientServerMixin):
                 "<EndofSession>1</EndofSession>"
             "</USSDResponse>"
         )
-        expected_packet = self.mk_serialized_packet(session_id, body)
+        expected_packet = utils.mk_packet(session_id, body)
 
         self.client.authenticated = True
         self.client.send_data_response(
-            session_id,
-            end_session=True,
-            requestId='1291850641',
+            session_id=session_id,
+            request_id='1291850641',
+            star_code='123',
+            client_id='123',
             msisdn='27845335367',
-            starCode='123',
-            clientId='123',
-            userdata='*123#',
-        )
+            user_data='*123#',
+            end_session=True)
 
         received_packet = yield self.server.wait_for_data()
         self.assertEqual(expected_packet, received_packet)
@@ -451,7 +384,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, ClientServerMixin):
                 "<enqCmd>ENQUIRELINK</enqCmd>"
             "</ENQRequest>"
         % request_id_1)
-        expected_request_packet_1 = self.mk_serialized_packet(
+        expected_request_packet_1 = utils.mk_packet(
             session_id_1, request_body_1)
         response_body_1 = (
             "<ENQResponse>"
@@ -459,7 +392,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, ClientServerMixin):
                 "<enqCmd>ENQUIRELINKRSP</enqCmd>"
             "</ENQResponse>"
         % request_id_1)
-        response_packet_1 = self.mk_serialized_packet(
+        response_packet_1 = utils.mk_packet(
             session_id_1, response_body_1)
         self.server.responses[expected_request_packet_1] = response_packet_1
 
@@ -471,7 +404,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, ClientServerMixin):
                 "<enqCmd>ENQUIRELINK</enqCmd>"
             "</ENQRequest>"
         % request_id_2)
-        expected_request_packet_2 = self.mk_serialized_packet(
+        expected_request_packet_2 = utils.mk_packet(
             session_id_2, request_body_2)
         response_body_2 = (
             "<ENQResponse>"
@@ -479,7 +412,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, ClientServerMixin):
                 "<enqCmd>ENQUIRELINKRSP</enqCmd>"
             "</ENQResponse>"
         % request_id_2)
-        response_packet_2 = self.mk_serialized_packet(
+        response_packet_2 = utils.mk_packet(
             session_id_2, response_body_2)
         self.server.responses[expected_request_packet_2] = response_packet_2
 
@@ -511,7 +444,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, ClientServerMixin):
                 "<enqCmd>ENQUIRELINK</enqCmd>"
             "</ENQRequest>"
         % request_id)
-        expected_request_packet = self.mk_serialized_packet(
+        expected_request_packet = utils.mk_packet(
             session_id, request_body)
 
         self.stub_client_heartbeat()
@@ -538,7 +471,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, ClientServerMixin):
                 "<enqCmd>ENQUIRELINK</enqCmd>"
             "</ENQRequest>"
         % request_id)
-        request_packet = self.mk_serialized_packet(session_id, request_body)
+        request_packet = utils.mk_packet(session_id, request_body)
 
         response_body = (
             "<ENQResponse>"
@@ -546,7 +479,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, ClientServerMixin):
                 "<enqCmd>ENQUIRELINKRSP</enqCmd>"
             "</ENQResponse>"
         % request_id)
-        expected_response_packet = self.mk_serialized_packet(
+        expected_response_packet = utils.mk_packet(
             session_id, response_body)
 
         self.client.authenticated = True
@@ -563,7 +496,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, ClientServerMixin):
                 "<errorCode>000</errorCode>"
             "</USSDError>"
         )
-        error_packet = self.mk_serialized_packet(session_id, body)
+        error_packet = utils.mk_packet(session_id, body)
 
         self.server.send_data(error_packet)
         yield self.client.wait_for_data()
@@ -578,7 +511,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, ClientServerMixin):
                 "<errorCode>1337</errorCode>"
             "</USSDError>"
         )
-        error_packet = self.mk_serialized_packet(session_id, body)
+        error_packet = utils.mk_packet(session_id, body)
 
         self.server.send_data(error_packet)
         yield self.client.wait_for_data()
