@@ -3,7 +3,7 @@ from twisted.trial.unittest import TestCase
 from vumi.errors import ConfigError
 from vumi.config import (
     Config, ConfigField, ConfigText, ConfigInt, ConfigFloat, ConfigBool,
-    ConfigList, ConfigDict, ConfigUrl, ConfigClassName)
+    ConfigList, ConfigDict, ConfigUrl)
 
 
 class ConfigTest(TestCase):
@@ -264,12 +264,3 @@ class ConfigFieldTest(TestCase):
         self.assertEqual(None, self.field_value(field))
         self.assert_field_invalid(field, object())
         self.assert_field_invalid(field, 1)
-
-    def test_class_name_field(self):
-        klass = type(self)
-        class_name = '%s.%s' % (klass.__module__, klass.__name__)
-        field = self.make_field(ConfigClassName)
-        self.assertEqual(klass, self.field_value(field, class_name))
-        self.assertEqual(None, self.field_value(field, None))
-        self.assertEqual(None, self.field_value(field))
-        self.assert_field_invalid(field, '1.invalid-module/name')

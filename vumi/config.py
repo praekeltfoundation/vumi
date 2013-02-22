@@ -7,7 +7,6 @@ from zope.interface import Interface
 from twisted.python.components import Adapter, registerAdapter
 
 from vumi.errors import ConfigError
-from vumi.utils import load_class_by_string
 
 
 class IConfigData(Interface):
@@ -172,20 +171,6 @@ class ConfigUrl(ConfigField):
         if not isinstance(value, basestring):
             self.raise_config_error("is not a URL string.")
         return urlparse.urlparse(value)
-
-
-class ConfigClassName(ConfigField):
-    field_type = 'Class'
-
-    def clean(self, value):
-        if value is None:
-            return None
-        if not isinstance(value, basestring):
-            self.raise_config_error('is not a Class name string')
-        try:
-            return load_class_by_string(value)
-        except (AttributeError, ValueError, ImportError), e:
-            self.raise_config_error(': %s' % (e,))
 
 
 class ConfigMetaClass(type):
