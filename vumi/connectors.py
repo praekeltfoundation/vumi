@@ -57,6 +57,7 @@ class BaseConnector(object):
     def _set_prefetch_count(self, consumer):
         if self._prefetch_count is not None:
             consumer.channel.basic_qos(0, self._prefetch_count, False)
+        return consumer
 
     def _setup_consumer(self, mtype, msg_class):
         def handler(msg):
@@ -73,10 +74,15 @@ class BaseConnector(object):
         handlers = self._endpoint_handlers.setdefault(mtype, {})
         handlers[endpoint_name] = handler
 
+    def _set_default_endpoint_handler(self, mtype, handler):
+        self._endpoint_handlers.setdefault(mtype, {})
+        self._default_handlers[mtype] = handler
+
     def _consume_message(self, mtype, msg):
         endpoint_name = msg.get_routing_endpoint()
         handler = self._endpoint_handlers[mtype].get(endpoint_name)
         if handler is None:
+            # TODO: this will error if there is no default handler
             handler = self._default_handlers[mtype]
         d = self._middlewares.apply_consume(mtype, msg, self.name)
         return d.addCallback(handler)
@@ -107,15 +113,13 @@ class ReceiveInboundConnector(BaseConnector):
         self._set_endpoint_handler('inbound', handler, endpoint_name)
 
     def set_default_inbound_handler(self, handler):
-        self._endpoint_handlers.setdefault('inbound', {})
-        self._default_handlers['inbound'] = handler
+        self._set_default_endpoint_handler('inbound', handler)
 
     def set_event_handler(self, handler, endpoint_name=None):
         self._set_endpoint_handler('event', handler, endpoint_name)
 
     def set_default_event_handler(self, handler):
-        self._endpoint_handlers.setdefault('event', {})
-        self._default_handlers['event'] = handler
+        self._set_default_endpoint_handler('event', handler)
 
     def publish_outbound(self, msg, endpoint_name=None):
         return self._publish_message('outbound', msg, endpoint_name)
@@ -136,8 +140,7 @@ class ReceiveOutboundConnector(BaseConnector):
         self._set_endpoint_handler('outbound', handler, endpoint_name)
 
     def set_default_outbound_handler(self, handler):
-        self._endpoint_handlers.setdefault('outbound', {})
-        self._default_handlers['outbound'] = handler
+        self._set_default_endpoint_handler('outbound', handler)
 
     def publish_inbound(self, msg, endpoint_name=None):
         return self._publish_message('inbound', msg, endpoint_name)
