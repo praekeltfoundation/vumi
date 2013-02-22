@@ -2,10 +2,11 @@
 
 """A manager implementation on top of the riak Python package."""
 
-from riak import RiakClient, RiakObject, RiakMapReduce
+from riak import (RiakClient, RiakObject, RiakMapReduce, RiakHttpTransport,
+                    RiakPbcTransport)
 
 from vumi.persist.model import Manager
-from vumi.utils import flatten_generator, load_class_by_string
+from vumi.utils import flatten_generator
 
 
 class RiakManager(Manager):
@@ -19,10 +20,12 @@ class RiakManager(Manager):
         bucket_prefix = config.pop('bucket_prefix')
         load_bunch_size = config.pop('load_bunch_size',
                                      cls.DEFAULT_LOAD_BUNCH_SIZE)
-        transport_class = config.get('transport_class')
-        if transport_class:
-            config['transport_class'] = load_class_by_string(transport_class)
-        client = RiakClient(**config)
+        transport_type = config.pop('transport_type', 'http')
+        transport_class = {
+            'http': RiakHttpTransport,
+            'protocol_buffer': RiakPbcTransport,
+        }.get(transport_type, RiakHttpTransport)
+        client = RiakClient(transport_class=transport_class, **config)
         return cls(client, bucket_prefix, load_bunch_size=load_bunch_size)
 
     def riak_object(self, modelcls, key, result=None):

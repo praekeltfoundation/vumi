@@ -3,11 +3,11 @@
 """A manager implementation on top of txriak."""
 
 from riakasaurus.riak import RiakClient, RiakObject, RiakMapReduce
+from riakasaurus import transport
 from twisted.internet.defer import (
     inlineCallbacks, gatherResults, maybeDeferred, succeed)
 
 from vumi.persist.model import Manager
-from vumi.utils import load_class_by_string
 
 
 class TxRiakManager(Manager):
@@ -21,10 +21,13 @@ class TxRiakManager(Manager):
         bucket_prefix = config.pop('bucket_prefix')
         load_bunch_size = config.pop('load_bunch_size',
                                      cls.DEFAULT_LOAD_BUNCH_SIZE)
-        transport_class = config.pop('transport_class', None)
-        if transport_class:
-            config['transport'] = load_class_by_string(transport_class)
-        client = RiakClient(**config)
+        transport_type = config.pop('transport_type', 'http')
+        transport_class = {
+            'http': transport.HTTPTransport,
+            'protocol_buffer': transport.PBCTransport,
+        }.get(transport_type, transport.HTTPTransport)
+
+        client = RiakClient(transport=transport_class, **config)
         return cls(client, bucket_prefix, load_bunch_size=load_bunch_size)
 
     def _encode_indexes(self, iterable, encoding='utf-8'):

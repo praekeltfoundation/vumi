@@ -6,6 +6,8 @@ from twisted.internet.defer import inlineCallbacks
 from vumi.persist.model import Manager
 from vumi.tests.utils import import_skip
 
+from riakasaurus import transport
+
 
 class DummyModel(object):
 
@@ -188,3 +190,30 @@ class TestTxRiakManager(CommonRiakManagerTests, TestCase):
 
     def test_call_decorator(self):
         self.assertEqual(type(self.manager).call_decorator, inlineCallbacks)
+
+    def test_transport_class_protocol_buffer(self):
+        manager_class = type(self.manager)
+        manager = manager_class.from_config({
+            'transport_type': 'protocol_buffer',
+            'bucket_prefix': 'foo',
+            })
+        self.assertEqual(type(manager.client.transport),
+            transport.PBCTransport)
+        return manager.client.transport.quit()
+
+    def test_transport_class_http(self):
+        manager_class = type(self.manager)
+        manager = manager_class.from_config({
+            'transport_type': 'http',
+            'bucket_prefix': 'foo',
+            })
+        self.assertEqual(type(manager.client.transport),
+            transport.HTTPTransport)
+
+    def test_transport_class_default(self):
+        manager_class = type(self.manager)
+        manager = manager_class.from_config({
+            'bucket_prefix': 'foo',
+            })
+        self.assertEqual(type(manager.client.transport),
+            transport.HTTPTransport)
