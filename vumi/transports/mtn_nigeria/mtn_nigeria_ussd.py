@@ -131,7 +131,7 @@ class MtnNigeriaUssdTransport(Transport):
 
             # send an 'Invalid Message' error response
             self.factory.client.send_error_response(
-                message['transport_metadata'].get('session_id'),
+                metadata.get('session_id'),
                 message.payload.get('in_reply_to'),
                 '208')
 

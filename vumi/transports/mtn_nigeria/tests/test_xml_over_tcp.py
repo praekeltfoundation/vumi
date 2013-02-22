@@ -1,3 +1,5 @@
+from itertools import count
+
 from twisted.trial import unittest
 from twisted.internet.task import Clock
 from twisted.internet.defer import inlineCallbacks
@@ -18,8 +20,13 @@ class ToyXmlOverTcpClient(XmlOverTcpClient, utils.WaitForDataMixin):
 
         self.received_dummy_packets = []
         self.received_data_request_packets = []
-        self.next_id = 0
         self.disconnected = False
+
+        self.session_id_counter = count()
+        self.generated_session_ids = []
+
+        self.request_id_counter = count()
+        self.generated_request_ids = []
 
     def connectionMade(self):
         pass
@@ -34,10 +41,15 @@ class ToyXmlOverTcpClient(XmlOverTcpClient, utils.WaitForDataMixin):
     def data_request_received(self, session_id, params):
         self.received_data_request_packets.append((session_id, params))
 
-    def gen_id(self):
-        id = str(self.next_id).zfill(16)
-        self.next_id += 1
-        return id
+    @classmethod
+    def session_id_from_nr(cls, nr):
+        return str(nr).zfill(cls.SESSION_ID_HEADER_SIZE)
+
+    def gen_session_id(self):
+        return self.session_id_from_nr(next(self.session_id_counter))
+
+    def gen_request_id(self):
+        return str(next(self.request_id_counter))
 
     def disconnect(self):
         self.disconnected = True
@@ -55,10 +67,16 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
         self.log = []
         self.patch(log, 'msg', lambda msg: self.log.append(msg))
 
+        self.session_id_nr = 0
+        self.request_id_nr = 0
+
         yield self.start_protocols()
 
     def tearDown(self):
         self.stop_protocols()
+
+    def mk_session_id(self, nr):
+        return self.client.session_id_from_nr(nr)
 
     def stub_client_heartbeat(self, heartbeat_interval=120, timeout_period=20):
         self.client.heartbeat_interval = 120
@@ -67,10 +85,12 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
 
     @inlineCallbacks
     def test_contiguous_packets_received(self):
-        session_id_a = '1' * 16
+        session_id_a = self.mk_session_id(0)
         body_a = "<DummyPacket><someParam>123</someParam></DummyPacket>"
-        session_id_b = '2' * 16
+
+        session_id_b = self.mk_session_id(1)
         body_b = "<DummyPacket><someParam>456</someParam></DummyPacket>"
+
         data = utils.mk_packet(session_id_a, body_a)
         data += utils.mk_packet(session_id_b, body_b)
         self.client.authenticated = True
@@ -85,9 +105,10 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
 
     @inlineCallbacks
     def test_partial_data_received(self):
-        session_id_a = '1' * 16
+        session_id_a = self.mk_session_id(0)
         body_a = "<DummyPacket><someParam>123</someParam></DummyPacket>"
-        session_id_b = '2' * 16
+
+        session_id_b = self.mk_session_id(1)
         body_b = "<DummyPacket><someParam>456</someParam></DummyPacket>"
 
         # add a full first packet, then concatenate a sliced version of a
@@ -104,8 +125,8 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
 
     @inlineCallbacks
     def test_authentication(self):
-        request_id = str('0').zfill(16)
-        session_id = str('1').zfill(16)
+        session_id = self.mk_session_id(0)
+        request_id = '0'
 
         request_body = (
             "<AUTHRequest>"
@@ -133,8 +154,8 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
 
     @inlineCallbacks
     def test_authentication_error_handling(self):
-        request_id = str('0').zfill(16)
-        session_id = str('1').zfill(16)
+        session_id = self.mk_session_id(0)
+        request_id = '0'
 
         request_body = (
             "<AUTHRequest>"
@@ -164,8 +185,8 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
 
     @inlineCallbacks
     def test_unknown_packet_handling(self):
-        session_id = '0' * 16
-        request_id = '1' * 16
+        session_id = self.mk_session_id(0)
+        request_id = '0'
 
         request_body = (
             "<UnknownPacket>"
@@ -192,8 +213,8 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
 
     @inlineCallbacks
     def test_packet_received_before_auth(self):
-        session_id = '0' * 16
-        request_id = '1' * 16
+        session_id = self.mk_session_id(0)
+        request_id = '0'
 
         request_body = (
             "<DummyPacket>"
@@ -219,12 +240,13 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
         self.assertEqual(expected_response_packet, response_packet)
 
     def test_packet_send_before_auth(self):
-        self.client.send_packet('0' * 16, 'DummyPacket', [])
+        self.client.send_packet(self.mk_session_id(0), 'DummyPacket', [])
         self.assertTrue('DummyPacket' in self.log.pop())
 
     @inlineCallbacks
     def test_data_request_handling(self):
-        session_id = '1' * 16
+        session_id = self.mk_session_id(0)
+
         body = (
             "<USSDRequest>"
                 "<requestId>1291850641</requestId>"
@@ -267,7 +289,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
 
     @inlineCallbacks
     def test_field_validation_for_missing_mandatory_fields(self):
-        session_id = '0' * 16
+        session_id = self.mk_session_id(0)
         body = (
             "<USSDError>"
                 "<requestId>1291850641</requestId>"
@@ -290,7 +312,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
 
     @inlineCallbacks
     def test_field_validation_for_unexpected_fields(self):
-        session_id = '0' * 16
+        session_id = self.mk_session_id(0)
         body = (
             "<USSDError>"
                 "<requestId>1291850641</requestId>"
@@ -376,45 +398,46 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
 
     @inlineCallbacks
     def test_periodic_client_enquire_link(self):
-        session_id_1 = str('0').zfill(16)
-        request_id_1 = str('1').zfill(16)
-        request_body_1 = (
-            "<ENQRequest>"
-                "<requestId>%s</requestId>"
-                "<enqCmd>ENQUIRELINK</enqCmd>"
-            "</ENQRequest>"
-        % request_id_1)
-        expected_request_packet_1 = utils.mk_packet(
-            session_id_1, request_body_1)
-        response_body_1 = (
-            "<ENQResponse>"
-                "<requestId>%s</requestId>"
-                "<enqCmd>ENQUIRELINKRSP</enqCmd>"
-            "</ENQResponse>"
-        % request_id_1)
-        response_packet_1 = utils.mk_packet(
-            session_id_1, response_body_1)
-        self.server.responses[expected_request_packet_1] = response_packet_1
+        session_id_a = self.mk_session_id(0)
+        request_id_a = '0'
 
-        session_id_2 = str('2').zfill(16)
-        request_id_2 = str('3').zfill(16)
-        request_body_2 = (
+        request_body_a = (
             "<ENQRequest>"
                 "<requestId>%s</requestId>"
                 "<enqCmd>ENQUIRELINK</enqCmd>"
             "</ENQRequest>"
-        % request_id_2)
-        expected_request_packet_2 = utils.mk_packet(
-            session_id_2, request_body_2)
-        response_body_2 = (
+        % request_id_a)
+        expected_request_packet_a = utils.mk_packet(
+            session_id_a, request_body_a)
+        response_body_a = (
             "<ENQResponse>"
                 "<requestId>%s</requestId>"
                 "<enqCmd>ENQUIRELINKRSP</enqCmd>"
             "</ENQResponse>"
-        % request_id_2)
-        response_packet_2 = utils.mk_packet(
-            session_id_2, response_body_2)
-        self.server.responses[expected_request_packet_2] = response_packet_2
+        % request_id_a)
+        response_packet_a = utils.mk_packet(
+            session_id_a, response_body_a)
+        self.server.responses[expected_request_packet_a] = response_packet_a
+
+        session_id_b = self.mk_session_id(1)
+        request_id_b = '1'
+        request_body_b = (
+            "<ENQRequest>"
+                "<requestId>%s</requestId>"
+                "<enqCmd>ENQUIRELINK</enqCmd>"
+            "</ENQRequest>"
+        % request_id_b)
+        expected_request_packet_b = utils.mk_packet(
+            session_id_b, request_body_b)
+        response_body_b = (
+            "<ENQResponse>"
+                "<requestId>%s</requestId>"
+                "<enqCmd>ENQUIRELINKRSP</enqCmd>"
+            "</ENQResponse>"
+        % request_id_b)
+        response_packet_b = utils.mk_packet(
+            session_id_b, response_body_b)
+        self.server.responses[expected_request_packet_b] = response_packet_b
 
         self.stub_client_heartbeat()
         self.client.authenticated = True
@@ -435,8 +458,8 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
 
     @inlineCallbacks
     def test_timeout(self):
-        session_id = str('0').zfill(16)
-        request_id = str('1').zfill(16)
+        session_id = self.mk_session_id(0)
+        request_id = '0'
 
         request_body = (
             "<ENQRequest>"
@@ -462,8 +485,8 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
 
     @inlineCallbacks
     def test_server_enquire_link(self):
-        session_id = str('0').zfill(16)
-        request_id = str('1').zfill(16)
+        session_id = self.mk_session_id(0)
+        request_id = '0'
 
         request_body = (
             "<ENQRequest>"
@@ -489,7 +512,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
 
     @inlineCallbacks
     def test_error_response_handling_for_known_codes(self):
-        session_id = '0' * 16
+        session_id = self.mk_session_id(0)
         body = (
             "<USSDError>"
                 "<requestId>1</requestId>"
@@ -504,7 +527,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
 
     @inlineCallbacks
     def test_error_response_handling_for_unknown_codes(self):
-        session_id = '0' * 16
+        session_id = self.mk_session_id(0)
         body = (
             "<USSDError>"
                 "<requestId>1</requestId>"

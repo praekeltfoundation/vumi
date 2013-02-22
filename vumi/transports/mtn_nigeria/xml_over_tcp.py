@@ -1,3 +1,4 @@
+import uuid
 import struct
 from xml.etree import ElementTree as ET
 
@@ -287,28 +288,40 @@ class XmlOverTcpClient(Protocol):
         self.transport.write(packet)
         return True
 
+    @classmethod
+    def gen_session_id(cls):
+        """
+        Generates session id. Used for packets needing a dummy session id.
+        """
+        # XXX: Slicing the generated uuid is probably a bad idea, and will
+        # affect collision resistence, but I can't think of a simpler way to
+        # generate a unique 16 char alphanumeric.
+        return uuid.uuid4().hex[:cls.SESSION_ID_HEADER_SIZE]
+
     @staticmethod
-    def gen_id():
-        """For easier test stubbing."""
-        return "0" * 16
+    def gen_request_id():
+        """
+        Generates request id. Used for packets needing a dummy request id.
+        """
+        return uuid.uuid4().hex
 
     def login(self):
         params = [
-            ('requestId', self.gen_id()),
+            ('requestId', self.gen_request_id()),
             ('userName', self.username),
             ('passWord', self.password),  # plaintext passwords, yay :/
             ('applicationId', self.application_id),
         ]
-        self.send_packet(self.gen_id(), 'AUTHRequest', params)
+        self.send_packet(self.gen_session_id(), 'AUTHRequest', params)
 
     def send_error_response(self, session_id=None, request_id=None,
                             error_code='207'):
         params = [
-            ('requestId', request_id or self.gen_id()),
+            ('requestId', request_id or self.gen_request_id()),
             ('errorCode', error_code),
         ]
         return self.send_packet(
-            session_id or self.gen_id(), 'USSDError', params)
+            session_id or self.gen_session_id(), 'USSDError', params)
 
     def send_data_response(self, session_id, request_id, client_id, msisdn,
                            user_data, star_code, end_session=True):
@@ -338,8 +351,8 @@ class XmlOverTcpClient(Protocol):
             self.send_enquire_link_response(session_id, params['requestId'])
 
     def send_enquire_link_request(self):
-        self.send_packet(self.gen_id(), 'ENQRequest', [
-            ('requestId', self.gen_id()),
+        self.send_packet(self.gen_session_id(), 'ENQRequest', [
+            ('requestId', self.gen_request_id()),
             ('enqCmd', 'ENQUIRELINK')
         ])
 
