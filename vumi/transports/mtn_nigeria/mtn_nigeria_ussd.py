@@ -144,8 +144,9 @@ class MtnNigeriaUssdTransport(Transport):
             return self.publish_ack(user_message_id=message_id,
                                     sent_message_id=message_id)
 
-        log.msg(self.RESPONSE_FAILURE_ERROR)
-        return self.publish_nack(message_id, self.RESPONSE_FAILURE_ERROR)
+        reason = self.RESPONSE_FAILURE_ERROR
+        log.msg(reason)
+        return self.publish_nack(message_id, reason)
 
     def handle_outbound_message(self, message):
         if self.validate_outbound_message(message):

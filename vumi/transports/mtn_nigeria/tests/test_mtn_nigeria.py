@@ -6,13 +6,14 @@ from vumi.transports.mtn_nigeria.tests import utils
 from vumi.transports.tests.utils import TransportTestCase
 from vumi.transports.mtn_nigeria import MtnNigeriaUssdTransport
 from vumi.transports.mtn_nigeria.tests.utils import MockXmlOverTcpServerMixin
+from vumi.transports.mtn_nigeria.xml_over_tcp import XmlOverTcpClient
 
 
 class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
                                           MockXmlOverTcpServerMixin):
 
     transport_class = MtnNigeriaUssdTransport
-
+    _session_id_header_size = XmlOverTcpClient.HEADER_SIZE
     _params = {
         'request_id': '1291850641',
         'msisdn': '27845335367',
@@ -129,6 +130,9 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
         % (request_id, error_code))
         return utils.mk_packet(session_id, body)
 
+    def mk_session_id(self, nr):
+        return str(nr).zfill(self._session_id_header_size)
+
     def send_request(self, session_id, **params):
         packet = self.mk_data_request_packet(session_id, **params)
         self.server.send_data(packet)
@@ -161,7 +165,7 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
 
     @inlineCallbacks
     def test_inbound_begin(self):
-        session_id = "0" * 16
+        session_id = self.mk_session_id(0)
         request_content = "Who are you?"
         self.send_request(session_id, user_data=request_content)
         [msg] = yield self.wait_for_dispatched_messages(1)
@@ -182,7 +186,7 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
 
     @inlineCallbacks
     def test_inbound_resume_and_reply_with_end(self):
-        session_id = "0" * 16
+        session_id = self.mk_session_id(0)
         request_content = "Well, what is it you want?"
         self.send_request(
             session_id,
@@ -211,7 +215,7 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
 
     @inlineCallbacks
     def test_inbound_resume_and_reply_with_resume(self):
-        session_id = "0" * 16
+        session_id = self.mk_session_id(0)
         request_content = "Well, what is it you want?"
         self.send_request(
             session_id,
@@ -240,7 +244,7 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
 
     @inlineCallbacks
     def test_user_terminated_session(self):
-        session_id = "0" * 16
+        session_id = self.mk_session_id(0)
         request_content = "I'm leaving now"
         self.send_request(
             session_id,
