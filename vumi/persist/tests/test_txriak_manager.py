@@ -195,7 +195,7 @@ class TestTxRiakManager(CommonRiakManagerTests, TestCase):
         manager_class = type(self.manager)
         manager = manager_class.from_config({
             'transport_type': 'protocol_buffer',
-            'bucket_prefix': 'foo',
+            'bucket_prefix': 'test.',
             })
         self.assertEqual(type(manager.client.transport),
             transport.PBCTransport)
@@ -205,7 +205,7 @@ class TestTxRiakManager(CommonRiakManagerTests, TestCase):
         manager_class = type(self.manager)
         manager = manager_class.from_config({
             'transport_type': 'http',
-            'bucket_prefix': 'foo',
+            'bucket_prefix': 'test.',
             })
         self.assertEqual(type(manager.client.transport),
             transport.HTTPTransport)
@@ -213,7 +213,7 @@ class TestTxRiakManager(CommonRiakManagerTests, TestCase):
     def test_transport_class_default(self):
         manager_class = type(self.manager)
         manager = manager_class.from_config({
-            'bucket_prefix': 'foo',
+            'bucket_prefix': 'test.',
             })
         self.assertEqual(type(manager.client.transport),
             transport.HTTPTransport)
