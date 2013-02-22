@@ -67,6 +67,7 @@ class CellulantTransport(HttpRpcTransport):
         to_addr = None
         if op_code == "BEG":
             to_addr = request.args.get('INPUT')[0]
+            content = None
             yield self.set_ussd_for_msisdn_session(
                 request.args.get('MSISDN')[0],
                 request.args.get('sessionID')[0],
@@ -75,6 +76,7 @@ class CellulantTransport(HttpRpcTransport):
             to_addr = yield self.get_ussd_for_msisdn_session(
                 request.args.get('MSISDN')[0],
                 request.args.get('sessionID')[0])
+            content = request.args.get('INPUT')[0]
 
         if ((request.args.get('ABORT')[0] not in ('0', 'null'))
             or (op_code == 'ABO')):
@@ -95,7 +97,7 @@ class CellulantTransport(HttpRpcTransport):
             }
             self.publish_message(
                 message_id=message_id,
-                content=request.args.get('INPUT')[0],
+                content=content,
                 to_addr=to_addr,
                 from_addr=request.args.get('MSISDN')[0],
                 session_event=event,

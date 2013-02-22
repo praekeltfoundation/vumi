@@ -55,7 +55,7 @@ class TestCellulantTransportTestCase(TransportTestCase):
         deferred = self.mk_request(INPUT="*120*1#")
 
         [msg] = yield self.wait_for_dispatched_messages(1)
-        self.assertEqual(msg['content'], '*120*1#')
+        self.assertEqual(msg['content'], None)
         self.assertEqual(msg['to_addr'], '*120*1#')
         self.assertEqual(msg['from_addr'], '27761234567'),
         self.assertEqual(msg['session_event'],
