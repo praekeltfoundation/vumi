@@ -250,11 +250,12 @@ class MessageStore(object):
     def get_batch(self, batch_id):
         return self.batches.load(batch_id)
 
+    @Manager.calls_manager
     def get_tag_info(self, tag):
-        tagmdl = self.current_tags.load(tag)
+        tagmdl = yield self.current_tags.load(tag)
         if tagmdl is None:
-            tagmdl = self.current_tags(tag)
-        return tagmdl
+            tagmdl = yield self.current_tags(tag)
+        returnValue(tagmdl)
 
     def batch_status(self, batch_id):
         return self.cache.get_event_status(batch_id)

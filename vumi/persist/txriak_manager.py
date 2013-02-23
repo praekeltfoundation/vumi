@@ -3,6 +3,7 @@
 """A manager implementation on top of txriak."""
 
 from riakasaurus.riak import RiakClient, RiakObject, RiakMapReduce
+from riakasaurus import transport
 from twisted.internet.defer import (
     inlineCallbacks, gatherResults, maybeDeferred, succeed)
 
@@ -20,7 +21,23 @@ class TxRiakManager(Manager):
         bucket_prefix = config.pop('bucket_prefix')
         load_bunch_size = config.pop('load_bunch_size',
                                      cls.DEFAULT_LOAD_BUNCH_SIZE)
-        client = RiakClient(**config)
+        transport_type = config.pop('transport_type', 'http')
+        transport_class = {
+            'http': transport.HTTPTransport,
+            'protocol_buffer': transport.PBCTransport,
+        }.get(transport_type, transport.HTTPTransport)
+
+        host = config.get('host', '127.0.0.1')
+        port = config.get('port', 8098)
+        prefix = config.get('prefix', 'riak')
+        mapred_prefix = config.get('mapred_prefix', 'mapred')
+        client_id = config.get('client_id')
+        # NOTE: the current riakasaurus RiakClient doesn't accept
+        #       transport_options or solr_transport_class like the sync
+        #       RiakManager client.
+        client = RiakClient(host=host, port=port, prefix=prefix,
+            mapred_prefix=mapred_prefix, client_id=client_id,
+            transport=transport_class)
         return cls(client, bucket_prefix, load_bunch_size=load_bunch_size)
 
     def _encode_indexes(self, iterable, encoding='utf-8'):
