@@ -1,7 +1,8 @@
 from twisted.internet.defer import inlineCallbacks, returnValue
 
-from vumi.connectors import BaseConnector
-from vumi.tests.utils import VumiWorkerTestCase
+from vumi.connectors import (
+    BaseConnector, ReceiveInboundConnector, ReceiveOutboundConnector)
+from vumi.tests.utils import VumiWorkerTestCase, LogCatcher
 from vumi.worker import BaseWorker
 from vumi.message import TransportUserMessage
 from vumi.middleware.tests.utils import RecordingMiddleware
@@ -162,14 +163,6 @@ class TestBaseConnector(BaseConnectorTestCase):
         self.assertEqual(msgs, [msg])
 
     @inlineCallbacks
-    def test_no_endpoint_handler(self):
-        conn, consumer = yield self.mk_consumer(connector_name='foo')
-        consumer.unpause()
-        msg = self.mkmsg_in()
-        yield self.dispatch_inbound(msg, connector_name='foo')
-        # TODO: decide what to do about this
-
-    @inlineCallbacks
     def test_publish_message_with_endpoint(self):
         conn = yield self.mk_connector(connector_name='foo')
         yield conn._setup_publisher('outbound')
@@ -180,8 +173,42 @@ class TestBaseConnector(BaseConnectorTestCase):
 
 
 class TestReceiveInboundConnector(BaseConnectorTestCase):
-    pass
+    connector_class = ReceiveInboundConnector
+
+    @inlineCallbacks
+    def test_no_inbound_handler(self):
+        conn = yield self.mk_connector(connector_name='foo')
+        yield conn.setup()
+        conn.unpause()
+        with LogCatcher() as lc:
+            yield self.dispatch_inbound(self.mkmsg_in(), connector_name='foo')
+            [log] = lc.logs
+        self.assertTrue(log['message'][0].startswith(
+            "No inbound handler for 'foo': "))
+
+    @inlineCallbacks
+    def test_no_event_handler(self):
+        conn = yield self.mk_connector(connector_name='foo')
+        yield conn.setup()
+        conn.unpause()
+        with LogCatcher() as lc:
+            yield self.dispatch_event(self.mkmsg_ack(), connector_name='foo')
+            [log] = lc.logs
+        self.assertTrue(log['message'][0].startswith(
+            "No event handler for 'foo': "))
 
 
 class TestReceiveOutboundConnector(BaseConnectorTestCase):
-    pass
+    connector_class = ReceiveOutboundConnector
+
+    @inlineCallbacks
+    def test_no_outbound_handler(self):
+        conn = yield self.mk_connector(connector_name='foo')
+        yield conn.setup()
+        conn.unpause()
+        with LogCatcher() as lc:
+            yield self.dispatch_outbound(
+                self.mkmsg_out(), connector_name='foo')
+            [log] = lc.logs
+        self.assertTrue(log['message'][0].startswith(
+            "No outbound handler for 'foo': "))
