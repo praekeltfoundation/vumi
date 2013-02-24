@@ -72,10 +72,22 @@ class TestBaseWorker(VumiWorkerTestCase):
         pass
 
     def test__validate_config(self):
-        pass
+        # should call .validate_config()
+        calls = []
+
+        def record(f):
+            def wrap(*args, **kwargs):
+                calls.append((args, kwargs))
+                return f(*args, **kwargs)
+            return wrap
+
+        self.worker.validate_config = record(self.worker.validate_config)
+        self.worker._validate_config()
+        self.assertEqual(calls, [((), {})])
 
     def test_validate_config(self):
-        pass
+        # should just be callable and not raise
+        self.worker.validate_config()
 
     @inlineCallbacks
     def test_setup_connector(self):
