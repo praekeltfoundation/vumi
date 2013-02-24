@@ -4,7 +4,6 @@ from twisted.internet.defer import inlineCallbacks, succeed
 from vumi.worker import BaseConfig, BaseWorker
 from vumi.connectors import ReceiveInboundConnector, ReceiveOutboundConnector
 from vumi.tests.utils import VumiWorkerTestCase, LogCatcher, get_stubbed_worker
-from vumi.message import TransportUserMessage
 from vumi.middleware.base import BaseMiddleware
 
 
@@ -32,6 +31,16 @@ class DummyMiddleware(BaseMiddleware):
         return succeed(None)
 
 
+class CallRecorder(object):
+    def __init__(self, func, calls=None):
+        self.func = func
+        self.calls = calls if calls is not None else []
+
+    def __call__(self, *args, **kwargs):
+        self.calls.append((self.func.__name__, args, kwargs))
+        return self.func(*args, **kwargs)
+
+
 class TestBaseConfig(TestCase):
     def test_no_amqp_prefetch(self):
         config = BaseConfig({})
@@ -49,13 +58,39 @@ class TestBaseWorker(VumiWorkerTestCase):
         yield super(TestBaseWorker, self).setUp()
         self.worker = yield self.get_worker({}, DummyWorker)
 
-    # TODO: complete tests
-
+    @inlineCallbacks
     def test_start_worker(self):
-        pass
+        worker, calls = self.worker, []
+        worker.setup_middleware = CallRecorder(worker.setup_middleware, calls)
+        worker.setup_connectors = CallRecorder(worker.setup_connectors, calls)
+        worker.setup_worker = CallRecorder(worker.setup_worker, calls)
+        with LogCatcher() as lc:
+            yield worker.startWorker()
+            self.assertEqual(lc.messages(), ['Starting a DummyWorker worker'
+                                             ' with config: {}'])
+        self.assertEqual(calls, [
+            ('setup_middleware', (), {}),
+            ('setup_connectors', (), {}),
+            ('setup_worker', (), {}),
+        ])
 
+    @inlineCallbacks
     def test_stop_worker(self):
-        pass
+        worker, calls = self.worker, []
+        worker.teardown_middleware = CallRecorder(worker.teardown_middleware,
+                                                  calls)
+        worker.teardown_connectors = CallRecorder(worker.teardown_connectors,
+                                                  calls)
+        worker.teardown_worker = CallRecorder(worker.teardown_worker, calls)
+        yield worker.startWorker()
+        with LogCatcher() as lc:
+            yield worker.stopWorker()
+            self.assertEqual(lc.messages(), ['Stopping a DummyWorker worker.'])
+        self.assertEqual(calls, [
+            ('teardown_worker', (), {}),
+            ('teardown_connectors', (), {}),
+            ('teardown_middleware', (), {}),
+        ])
 
     def test_setup_connectors_raises(self):
         worker = get_stubbed_worker(BaseWorker, {}, None)  # None -> dummy AMQP
@@ -110,17 +145,11 @@ class TestBaseWorker(VumiWorkerTestCase):
 
     def test__validate_config(self):
         # should call .validate_config()
-        calls = []
-
-        def record(f):
-            def wrap(*args, **kwargs):
-                calls.append((args, kwargs))
-                return f(*args, **kwargs)
-            return wrap
-
-        self.worker.validate_config = record(self.worker.validate_config)
+        self.worker.validate_config = CallRecorder(self.worker.validate_config)
         self.worker._validate_config()
-        self.assertEqual(calls, [((), {})])
+        self.assertEqual(self.worker.validate_config.calls, [
+            ('validate_config', (), {})
+        ])
 
     def test_validate_config(self):
         # should just be callable and not raise
