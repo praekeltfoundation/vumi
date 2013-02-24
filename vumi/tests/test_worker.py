@@ -95,8 +95,16 @@ class TestBaseWorker(VumiWorkerTestCase):
         self.assertTrue(isinstance(connector, ReceiveOutboundConnector))
         self.assertEqual(connector.name, 'foo')
 
+    @inlineCallbacks
     def test_pause_connectors(self):
-        pass
+        connector = yield self.worker.setup_ri_connector('foo')
+        connector.unpause()
+        self.worker.pause_connectors()
+        self.assertTrue(connector.paused)
 
+    @inlineCallbacks
     def test_unpause_connectors(self):
-        pass
+        connector = yield self.worker.setup_ri_connector('foo')
+        connector.pause()
+        self.worker.unpause_connectors()
+        self.assertFalse(connector.paused)
