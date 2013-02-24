@@ -52,6 +52,7 @@ class BaseWorker(Worker):
         return d
 
     def stopWorker(self):
+        log.msg('Stopping a %s worker.' % (self.__class__.__name__,))
         d = succeed(None)
         then_call(d, self.teardown_worker)
         then_call(d, self.teardown_connectors)
