@@ -3,6 +3,7 @@ from twisted.internet.defer import gatherResults
 from vumi import log
 from vumi.message import TransportMessage, TransportEvent, TransportUserMessage
 from vumi.middleware import MiddlewareStack
+from vumi.errors import UnhandledConsumerType
 
 
 def cb_add_to_dict(r, dict_obj, key):
@@ -85,10 +86,14 @@ class BaseConnector(object):
 
     def _consume_message(self, mtype, msg):
         endpoint_name = msg.get_routing_endpoint()
-        handler = self._endpoint_handlers[mtype].get(endpoint_name)
+        endpoint_handlers = self._endpoint_handlers.get(mtype, {})
+        handler = endpoint_handlers.get(endpoint_name)
         if handler is None:
-            # TODO: this will error if there is no default handler
-            handler = self._default_handlers[mtype]
+            handler = self._default_handlers.get(mtype)
+        if handler is None:
+            raise UnhandledConsumerType("Found no handlers for consumer %r"
+                                        " while processing msg: %r"
+                                        % (mtype, msg))
         d = self._middlewares.apply_consume(mtype, msg, self.name)
         return d.addCallback(handler)
 
