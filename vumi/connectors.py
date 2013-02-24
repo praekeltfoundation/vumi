@@ -40,6 +40,11 @@ class BaseConnector(object):
         d.addCallback(lambda r: self._middlewares.teardown())
         return d
 
+    @property
+    def paused(self):
+        return all(consumer.paused
+                   for consumer in self._consumers.itervalues())
+
     def pause(self):
         # This doesn't return a deferred.
         for consumer in self._consumers.values():

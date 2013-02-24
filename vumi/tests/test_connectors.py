@@ -105,6 +105,14 @@ class TestBaseConnector(BaseConnectorTestCase):
         self.assertFalse(consumer.keep_consuming)
 
     @inlineCallbacks
+    def test_paused(self):
+        conn, consumer = yield self.mk_consumer()
+        consumer.pause()
+        self.assertTrue(conn.paused)
+        consumer.unpause()
+        self.assertFalse(conn.paused)
+
+    @inlineCallbacks
     def test_pause(self):
         conn, consumer = yield self.mk_consumer()
         consumer.unpause()
