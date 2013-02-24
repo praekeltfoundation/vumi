@@ -1,4 +1,5 @@
 from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.trial.unittest import SkipTest
 
 from vumi.connectors import (
     BaseConnector, ReceiveInboundConnector, ReceiveOutboundConnector)
@@ -174,11 +175,13 @@ class TestBaseConnector(BaseConnectorTestCase):
 
     @inlineCallbacks
     def test_no_endpoint_handler(self):
+        raise SkipTest("Test skipped until errors raised during"
+                       " consuming can be recovered from.")
         conn, consumer = yield self.mk_consumer(connector_name='foo')
         consumer.unpause()
         msg = self.mkmsg_in()
         yield self.dispatch_inbound(msg, connector_name='foo')
-        # TODO: decide what to do about this
+        # TODO: clean up and check for UnhandledConsumerType error
 
     @inlineCallbacks
     def test_publish_message_with_endpoint(self):
