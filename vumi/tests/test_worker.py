@@ -1,11 +1,11 @@
 from twisted.trial.unittest import TestCase
-from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.defer import inlineCallbacks, succeed
 
 from vumi.worker import BaseConfig, BaseWorker
 from vumi.connectors import ReceiveInboundConnector, ReceiveOutboundConnector
 from vumi.tests.utils import VumiWorkerTestCase, LogCatcher, get_stubbed_worker
 from vumi.message import TransportUserMessage
-from vumi.middleware.tests.utils import RecordingMiddleware
+from vumi.middleware.base import BaseMiddleware
 
 
 class DummyWorker(BaseWorker):
@@ -17,6 +17,19 @@ class DummyWorker(BaseWorker):
 
     def teardown_worker(self):
         pass
+
+
+class DummyMiddleware(BaseMiddleware):
+    setup_called = False
+    teardown_called = False
+
+    def setup_middleware(self):
+        self.setup_called = True
+        return succeed(None)
+
+    def teardown_middleware(self):
+        self.teardown_called = True
+        return succeed(None)
 
 
 class TestBaseConfig(TestCase):
@@ -59,11 +72,25 @@ class TestBaseWorker(VumiWorkerTestCase):
         worker = get_stubbed_worker(BaseWorker, {}, None)  # None -> dummy AMQP
         self.assertRaises(NotImplementedError, worker.teardown_worker)
 
+    @inlineCallbacks
     def test_setup_middleware(self):
-        pass
+        worker = get_stubbed_worker(DummyWorker, {
+            'middleware': [{'mw': 'vumi.tests.test_worker'
+                                  '.DummyMiddleware'}],
+        })
+        yield worker.setup_middleware()
+        self.assertEqual([mw.name for mw in worker.middlewares], ['mw'])
+        self.assertTrue(worker.middlewares[0].setup_called)
 
+    @inlineCallbacks
     def test_teardown_middleware(self):
-        pass
+        worker = get_stubbed_worker(DummyWorker, {
+            'middleware': [{'mw': 'vumi.tests.test_worker'
+                                  '.DummyMiddleware'}],
+        })
+        yield worker.setup_middleware()
+        yield worker.teardown_middleware()
+        self.assertTrue(worker.middlewares[0].teardown_called)
 
     def test_get_static_config(self):
         cfg = self.worker.get_static_config()
