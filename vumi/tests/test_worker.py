@@ -77,11 +77,23 @@ class TestBaseWorker(VumiWorkerTestCase):
     def test_validate_config(self):
         pass
 
+    @inlineCallbacks
     def test_setup_connector(self):
-        pass
+        connector = yield self.worker.setup_connector(ReceiveInboundConnector,
+                                                      'foo')
+        self.assertTrue('foo' in self.worker.connectors)
+        self.assertTrue(isinstance(connector, ReceiveInboundConnector))
+        # test setup happened
+        self.assertTrue(connector._consumers['inbound'].keep_consuming)
 
+    @inlineCallbacks
     def test_teardown_connector(self):
-        pass
+        connector = yield self.worker.setup_connector(ReceiveInboundConnector,
+                                                      'foo')
+        yield self.worker.teardown_connector('foo')
+        self.assertFalse('foo' in self.worker.connectors)
+        # test teardown happened
+        self.assertFalse(connector._consumers['inbound'].keep_consuming)
 
     @inlineCallbacks
     def test_setup_ri_connector(self):
