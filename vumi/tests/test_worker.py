@@ -61,8 +61,12 @@ class TestBaseWorker(VumiWorkerTestCase):
         worker = get_stubbed_worker(BaseWorker, {}, None)  # None -> dummy AMQP
         self.assertRaises(NotImplementedError, worker.setup_connectors)
 
+    @inlineCallbacks
     def test_teardown_connectors(self):
-        pass
+        connector = yield self.worker.setup_ri_connector('foo')
+        yield self.worker.teardown_connectors()
+        self.assertTrue('foo' not in self.worker.connectors)
+        self.assertFalse(connector._consumers['inbound'].keep_consuming)
 
     def test_setup_worker_raises(self):
         worker = get_stubbed_worker(BaseWorker, {}, None)  # None -> dummy AMQP
