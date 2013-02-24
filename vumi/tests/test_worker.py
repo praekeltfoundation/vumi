@@ -2,7 +2,7 @@ from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.worker import BaseConfig, BaseWorker
-from vumi.tests.utils import VumiWorkerTestCase, LogCatcher
+from vumi.tests.utils import VumiWorkerTestCase, LogCatcher, get_stubbed_worker
 from vumi.message import TransportUserMessage
 from vumi.middleware.tests.utils import RecordingMiddleware
 
@@ -44,16 +44,19 @@ class TestBaseWorker(VumiWorkerTestCase):
         pass
 
     def test_setup_connectors_raises(self):
-        pass
+        worker = get_stubbed_worker(BaseWorker, {}, None)  # None -> dummy AMQP
+        self.assertRaises(NotImplementedError, worker.setup_connectors)
 
     def test_teardown_connectors(self):
         pass
 
     def test_setup_worker_raises(self):
-        pass
+        worker = get_stubbed_worker(BaseWorker, {}, None)  # None -> dummy AMQP
+        self.assertRaises(NotImplementedError, worker.setup_worker)
 
     def test_teardown_worker_raises(self):
-        pass
+        worker = get_stubbed_worker(BaseWorker, {}, None)  # None -> dummy AMQP
+        self.assertRaises(NotImplementedError, worker.teardown_worker)
 
     def test_setup_middleware(self):
         pass
