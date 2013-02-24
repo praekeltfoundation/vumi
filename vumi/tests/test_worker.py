@@ -2,6 +2,7 @@ from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.worker import BaseConfig, BaseWorker
+from vumi.connectors import ReceiveInboundConnector, ReceiveOutboundConnector
 from vumi.tests.utils import VumiWorkerTestCase, LogCatcher, get_stubbed_worker
 from vumi.message import TransportUserMessage
 from vumi.middleware.tests.utils import RecordingMiddleware
@@ -82,11 +83,17 @@ class TestBaseWorker(VumiWorkerTestCase):
     def test_teardown_connector(self):
         pass
 
+    @inlineCallbacks
     def test_setup_ri_connector(self):
-        pass
+        connector = yield self.worker.setup_ri_connector('foo')
+        self.assertTrue(isinstance(connector, ReceiveInboundConnector))
+        self.assertEqual(connector.name, 'foo')
 
+    @inlineCallbacks
     def test_setup_ro_connector(self):
-        pass
+        connector = yield self.worker.setup_ro_connector('foo')
+        self.assertTrue(isinstance(connector, ReceiveOutboundConnector))
+        self.assertEqual(connector.name, 'foo')
 
     def test_pause_connectors(self):
         pass
