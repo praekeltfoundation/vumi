@@ -1,14 +1,9 @@
-from twisted.internet.defer import gatherResults
+from twisted.internet.defer import gatherResults, inlineCallbacks, returnValue
 
 from vumi import log
 from vumi.message import TransportMessage, TransportEvent, TransportUserMessage
 from vumi.middleware import MiddlewareStack
 from vumi.errors import UnhandledConsumerType
-
-
-def cb_add_to_dict(r, dict_obj, key):
-    dict_obj[key] = r
-    return r
 
 
 class BaseConnector(object):
@@ -56,23 +51,28 @@ class BaseConnector(object):
         for consumer in self._consumers.values():
             consumer.unpause()
 
+    @inlineCallbacks
     def _setup_publisher(self, mtype):
-        d = self.worker.publish_to(self._rkey(mtype))
-        return d.addCallback(cb_add_to_dict, self._publishers, mtype)
+        publisher = yield self.worker.publish_to(self._rkey(mtype))
+        self._publishers[mtype] = publisher
+        returnValue(publisher)
 
     def _set_prefetch_count(self, consumer):
         if self._prefetch_count is not None:
             consumer.channel.basic_qos(0, self._prefetch_count, False)
-        return consumer
 
-    def _setup_consumer(self, mtype, msg_class):
+    @inlineCallbacks
+    def _setup_consumer(self, mtype, msg_class, default_handler):
         def handler(msg):
             return self._consume_message(mtype, msg)
-        d = self.worker.consume(
-            self._rkey(mtype), handler, message_class=msg_class, paused=True)
-        d.addCallback(cb_add_to_dict, self._consumers, mtype)
-        d.addCallback(lambda consumer: self._set_prefetch_count(consumer))
-        return d
+
+        consumer = yield self.worker.consume(self._rkey(mtype), handler,
+                                             message_class=msg_class,
+                                             paused=True)
+        self._consumers[mtype] = consumer
+        self._set_default_endpoint_handler(mtype, default_handler)
+        self._set_prefetch_count(consumer)
+        returnValue(consumer)
 
     def _set_endpoint_handler(self, mtype, handler, endpoint_name):
         if endpoint_name is None:
@@ -86,14 +86,9 @@ class BaseConnector(object):
 
     def _consume_message(self, mtype, msg):
         endpoint_name = msg.get_routing_endpoint()
-        endpoint_handlers = self._endpoint_handlers.get(mtype, {})
-        handler = endpoint_handlers.get(endpoint_name)
+        handler = self._endpoint_handlers[mtype].get(endpoint_name)
         if handler is None:
             handler = self._default_handlers.get(mtype)
-        if handler is None:
-            raise UnhandledConsumerType("Found no handlers for consumer %r"
-                                        " while processing msg: %r"
-                                        % (mtype, msg))
         d = self._middlewares.apply_consume(mtype, msg, self.name)
         return d.addCallback(handler)
 
@@ -107,10 +102,10 @@ class BaseConnector(object):
 class ReceiveInboundConnector(BaseConnector):
     def setup(self):
         outbound_d = self._setup_publisher('outbound')
-        inbound_d = self._setup_consumer('inbound', TransportUserMessage)
-        event_d = self._setup_consumer('event', TransportEvent)
-        self.set_default_inbound_handler(self.default_inbound_handler)
-        self.set_default_event_handler(self.default_event_handler)
+        inbound_d = self._setup_consumer('inbound', TransportUserMessage,
+                                         self.default_inbound_handler)
+        event_d = self._setup_consumer('event', TransportEvent,
+                                       self.default_event_handler)
         return gatherResults([outbound_d, inbound_d, event_d])
 
     def default_inbound_handler(self, msg):
@@ -139,8 +134,8 @@ class ReceiveOutboundConnector(BaseConnector):
     def setup(self):
         inbound_d = self._setup_publisher('inbound')
         event_d = self._setup_publisher('event')
-        outbound_d = self._setup_consumer('outbound', TransportUserMessage)
-        self.set_default_outbound_handler(self.default_outbound_handler)
+        outbound_d = self._setup_consumer('outbound', TransportUserMessage,
+                                          self.default_outbound_handler)
         return gatherResults([outbound_d, inbound_d, event_d])
 
     def default_outbound_handler(self, msg):
