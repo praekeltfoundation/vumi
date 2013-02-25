@@ -86,8 +86,8 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
             'username': 'root',
             'password': 'toor',
             'application_id': '1029384756',
-            'heartbeat_interval': 240,
-            'heartbeat_interval': 120,
+            'enquire_link_interval': 240,
+            'timeout_period': 120,
             'user_termination_response': 'Bye'
         }
         self.transport = yield self.get_transport(config)

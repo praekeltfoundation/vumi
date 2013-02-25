@@ -78,11 +78,6 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
     def mk_session_id(self, nr):
         return self.client.session_id_from_nr(nr)
 
-    def stub_client_heartbeat(self, heartbeat_interval=120, timeout_period=20):
-        self.client.heartbeat_interval = 120
-        self.client.timeout_period = 20
-        self.client.clock = Clock()
-
     @inlineCallbacks
     def test_contiguous_packets_received(self):
         session_id_a = self.mk_session_id(0)
@@ -281,58 +276,34 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
             [(session_id, expected_params)])
 
     def test_field_validation_for_valid_cases(self):
-        self.assertTrue(self.client.validate_packet_fields(
-            '0', {'a': '1', 'b': '2'}, set(['a', 'b']), set(['b', 'c'])))
+        self.assertEqual(None, self.client.validate_packet_fields(
+            {'a': '1', 'b': '2'}, set(['a', 'b']), set(['b', 'c'])))
 
-        self.assertTrue(self.client.validate_packet_fields(
-            '0', {'a': '1', 'b': '2'}, set(['a', 'b'])))
+        self.assertEqual(None, self.client.validate_packet_fields(
+            {'a': '1', 'b': '2'}, set(['a', 'b'])))
 
-    @inlineCallbacks
     def test_field_validation_for_missing_mandatory_fields(self):
-        session_id = self.mk_session_id(0)
-        body = (
-            "<USSDError>"
-                "<requestId>1291850641</requestId>"
-                "<errorCode>208</errorCode>"
-            "</USSDError>"
-        )
-        expected_packet = utils.mk_packet(session_id, body)
-
         params = {
             'requestId': '1291850641',
             'a': '1',
             'b': '2'
         }
-        self.assertFalse(self.client.validate_packet_fields(
-            session_id, params, set(['requestId', 'a', 'b', 'c'])))
-        self.assertTrue(str(['c']) in self.log.pop())
+        error = self.client.validate_packet_fields(
+            params, set(['requestId', 'a', 'b', 'c']))
+        self.assertEqual(error['code'], '208')
+        self.assertTrue(str(['c']) in error['reason'])
 
-        received_packet = yield self.server.wait_for_data()
-        self.assertEqual(expected_packet, received_packet)
-
-    @inlineCallbacks
     def test_field_validation_for_unexpected_fields(self):
-        session_id = self.mk_session_id(0)
-        body = (
-            "<USSDError>"
-                "<requestId>1291850641</requestId>"
-                "<errorCode>208</errorCode>"
-            "</USSDError>"
-        )
-        expected_packet = utils.mk_packet(session_id, body)
-
         params = {
             'requestId': '1291850641',
             'a': '1',
             'b': '2',
             'd': '3'
         }
-        self.assertFalse(self.client.validate_packet_fields(
-            session_id, params, set(['requestId', 'a', 'b'])))
-        self.assertTrue(str(['d']) in self.log.pop())
-
-        received_packet = yield self.server.wait_for_data()
-        self.assertEqual(expected_packet, received_packet)
+        error = self.client.validate_packet_fields(
+            params, set(['requestId', 'a', 'b']))
+        self.assertEqual(error['code'], '208')
+        self.assertTrue(str(['d']) in error['reason'])
 
     @inlineCallbacks
     def test_continuing_session_data_response(self):
@@ -441,9 +412,11 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
             session_id_b, response_body_b)
         self.server.responses[expected_request_packet_b] = response_packet_b
 
-        self.stub_client_heartbeat()
+        self.client.enquire_link_interval = 120
+        self.client.timeout_period = 20
+        self.client.clock = Clock()
         self.client.authenticated = True
-        self.client.start_heartbeat()
+        self.client.start_periodic_enquire_link()
         timeout_t0 = self.client.scheduled_timeout.getTime()
 
         # advance to just after the first heartbeat is sent
@@ -472,9 +445,11 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
         expected_request_packet = utils.mk_packet(
             session_id, request_body)
 
-        self.stub_client_heartbeat()
+        self.client.enquire_link_interval = 120
+        self.client.timeout_period = 20
+        self.client.clock = Clock()
         self.client.authenticated = True
-        self.client.start_heartbeat()
+        self.client.start_periodic_enquire_link()
 
         # advance to just after the first heartbeat is sent
         self.client.clock.advance(120.1)

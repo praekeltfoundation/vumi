@@ -1,4 +1,5 @@
 from twisted.internet import reactor
+from twisted.internet.defer import inlineCallbacks
 from twisted.internet.protocol import ReconnectingClientFactory
 
 from vumi import log
@@ -26,9 +27,9 @@ class MtnNigeriaUssdTransportConfig(Transport.CONFIG_CLASS):
     application_id = ConfigText(
         "An application ID required by MTN Nigeria for client authentication.",
         required=True, static=True)
-    heartbeat_interval = ConfigInt(
-        "The interval (in seconds) between heartbeats sent to the server to "
-        "check whether the connection is alive and well.",
+    enquire_link_interval = ConfigInt(
+        "The interval (in seconds) between enquire links sent to the server "
+        "to check whether the connection is alive and well.",
         default=240, static=True)
     timeout_period = ConfigInt(
         "How long (in seconds) after a heartbeat the client should wait "
@@ -45,6 +46,9 @@ class MtnNigeriaUssdTransport(Transport):
 
     CONFIG_CLASS = MtnNigeriaUssdTransportConfig
 
+    # The encoding we use internally
+    ENCODING = 'UTF-8'
+
     REQUIRED_METADATA_FIELDS = set(['session_id', 'clientId'])
 
     # errors
@@ -60,7 +64,7 @@ class MtnNigeriaUssdTransport(Transport):
             username=config.username,
             password=config.password,
             application_id=config.application_id,
-            heartbeat_interval=config.heartbeat_interval,
+            enquire_link_interval=config.enquire_link_interval,
             timeout_period=config.timeout_period)
         self.client_connector = reactor.connectTCP(
             config.server_hostname, config.server_port, self.factory)
@@ -86,8 +90,9 @@ class MtnNigeriaUssdTransport(Transport):
 
     def handle_raw_inbound_message(self, session_id, params):
         # ensure the params are in the encoding we use internally
+        params['session_id'] = session_id
         params = dict(
-            (k, str(v).decode('UTF-8')) for k, v in params.iteritems())
+            (k, str(v).decode(self.ENCODING)) for k, v in params.iteritems())
 
         # pop needed fields (the rest is left as metadata)
         message_id, from_addr, to_addr, content = self.pop_fields(
@@ -108,8 +113,6 @@ class MtnNigeriaUssdTransport(Transport):
                 msisdn=from_addr,
                 user_data=self.user_termination_response,
                 end_session=True)
-
-        params['session_id'] = session_id.decode('UTF-8')
         return self.publish_message(
             message_id=message_id,
             content=content,
@@ -122,22 +125,12 @@ class MtnNigeriaUssdTransport(Transport):
 
     def validate_outbound_message(self, message):
         metadata = message['transport_metadata']['mtn_nigeria_ussd']
-        missing_fields = (
-            self.REQUIRED_METADATA_FIELDS - set(metadata.keys()))
+        missing_fields = (self.REQUIRED_METADATA_FIELDS - set(metadata.keys()))
         if missing_fields:
             reason = self.METADATA_FIELDS_MISSING_ERROR % list(missing_fields)
-            log.msg(reason)
-            self.publish_nack(message['message_id'], reason)
+            return {'code': '208', 'reason': reason}
 
-            # send an 'Invalid Message' error response
-            self.factory.client.send_error_response(
-                metadata.get('session_id'),
-                message.payload.get('in_reply_to'),
-                '208')
-
-            return False
-
-        return True
+        return None
 
     def send_response(self, message_id, **client_args):
         if self.factory.client.send_data_response(**client_args):
@@ -148,19 +141,31 @@ class MtnNigeriaUssdTransport(Transport):
         log.msg(reason)
         return self.publish_nack(message_id, reason)
 
+    @inlineCallbacks
     def handle_outbound_message(self, message):
-        if self.validate_outbound_message(message):
-            metadata = message['transport_metadata']['mtn_nigeria_ussd']
-            session_close_event = TransportUserMessage.SESSION_CLOSE
-            return self.send_response(
-                message_id=message['message_id'],
-                session_id=metadata['session_id'],
-                request_id=message['in_reply_to'],
-                star_code=message['from_addr'],
-                client_id=metadata['clientId'],
-                msisdn=message['to_addr'],
-                user_data=message['content'].encode('UTF-8'),
-                end_session=message['session_event'] == session_close_event)
+        metadata = message['transport_metadata']['mtn_nigeria_ussd']
+
+        error = self.validate_outbound_message(message)
+        if error is not None:
+            log.msg(error['reason'])
+            yield self.publish_nack(message['message_id'], error['reason'])
+            yield self.factory.client.send_error_response(
+                metadata.get('session_id'),
+                message.payload.get('in_reply_to'),
+                '208')
+            return
+
+        end_session = (
+            message['session_event'] == TransportUserMessage.SESSION_CLOSE)
+        yield self.send_response(
+            message_id=message['message_id'],
+            session_id=metadata['session_id'],
+            request_id=message['in_reply_to'],
+            star_code=message['from_addr'],
+            client_id=metadata['clientId'],
+            msisdn=message['to_addr'],
+            user_data=message['content'].encode(self.ENCODING),
+            end_session=end_session)
 
 
 class MtnNigeriaUssdClient(XmlOverTcpClient):
