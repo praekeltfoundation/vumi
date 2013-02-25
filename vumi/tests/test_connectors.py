@@ -40,7 +40,8 @@ class BaseConnectorTestCase(VumiWorkerTestCase):
     @inlineCallbacks
     def mk_consumer(self, *args, **kwargs):
         conn = yield self.mk_connector(*args, **kwargs)
-        consumer = yield conn._setup_consumer('inbound', TransportUserMessage, lambda msg: None)
+        consumer = yield conn._setup_consumer('inbound', TransportUserMessage,
+                                              lambda msg: None)
         returnValue((conn, consumer))
 
 
