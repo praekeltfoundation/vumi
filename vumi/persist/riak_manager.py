@@ -2,6 +2,8 @@
 
 """A manager implementation on top of the riak Python package."""
 
+import json
+
 from riak import (RiakClient, RiakObject, RiakMapReduce, RiakHttpTransport,
                     RiakPbcTransport)
 
@@ -40,6 +42,14 @@ class RiakManager(Manager):
             mapred_prefix=mapred_prefix, transport_class=transport_class,
             client_id=client_id, solr_transport_class=solr_transport_class,
             transport_options=transport_options)
+        # Some versions of the riak client library use simplejson by
+        # preference, which breaks some of our unicode assumptions. This makes
+        # sure we're using stdlib json which doesn't sometimes return
+        # bytestrings instead of unicode.
+        client.set_encoder('application/json', json.dumps)
+        client.set_encoder('text/json', json.dumps)
+        client.set_decoder('application/json', json.loads)
+        client.set_decoder('text/json', json.loads)
         return cls(client, bucket_prefix, load_bunch_size=load_bunch_size)
 
     def riak_object(self, modelcls, key, result=None):
