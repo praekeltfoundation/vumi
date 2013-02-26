@@ -8,17 +8,17 @@ from twisted.internet.defer import inlineCallbacks, DeferredQueue
 
 from vumi.tests.utils import MockHttpServer
 from vumi.utils import http_request_full
-from vumi.transports.apposit import AppositSmsTransport
+from vumi.transports.apposit import AppositTransport
 from vumi.transports.tests.utils import TransportTestCase
 
 
-class TestAppositSmsTransport(TransportTestCase):
-    transport_name = 'test_apposit_sms_transport'
-    transport_class = AppositSmsTransport
+class TestAppositTransport(TransportTestCase):
+    transport_name = 'test_apposit_transport'
+    transport_class = AppositTransport
 
     @inlineCallbacks
     def setUp(self):
-        super(TestAppositSmsTransport, self).setUp()
+        super(TestAppositTransport, self).setUp()
 
         self.mock_server = MockHttpServer(self.handle_inbound_request)
         self.outbound_requests = DeferredQueue()
@@ -51,7 +51,7 @@ class TestAppositSmsTransport(TransportTestCase):
     @inlineCallbacks
     def tearDown(self):
         yield self.mock_server.stop()
-        yield super(TestAppositSmsTransport, self).tearDown()
+        yield super(TestAppositTransport, self).tearDown()
 
     def send_full_inbound_request(self, **params):
         return http_request_full(
@@ -62,7 +62,7 @@ class TestAppositSmsTransport(TransportTestCase):
         params = {
             'fromAddress': '251911223344',
             'toAddress': '8123',
-            'channel': 'sms',
+            'channel': 'SMS',
             'content': 'never odd or even',
         }
         params.update(kwargs)
@@ -82,6 +82,7 @@ class TestAppositSmsTransport(TransportTestCase):
             'from_addr': '8123',
             'to_addr': '251911223344',
             'content': 'so many dynamos',
+            'transport_type': 'sms',
         }
         args.update(kwargs)
         return self.mkmsg_out(**args)
@@ -94,7 +95,7 @@ class TestAppositSmsTransport(TransportTestCase):
             'fromAddress': ['8123'],
             'toAddress': ['251911223344'],
             'content': ['so many dynamos'],
-            'channel': ['sms'],
+            'channel': ['SMS'],
         }
         expected_args.update(kwargs)
 
@@ -105,6 +106,7 @@ class TestAppositSmsTransport(TransportTestCase):
     def assert_message_fields(self, msg, **kwargs):
         fields = {
             'transport_name': self.transport_name,
+            'transport_type': 'sms',
             'from_addr': '251911223344',
             'to_addr': '8123',
             'content': 'so many dynamos',
@@ -133,6 +135,7 @@ class TestAppositSmsTransport(TransportTestCase):
         [msg] = self.get_dispatched_messages()
         self.assert_message_fields(msg,
             transport_name=self.transport_name,
+            transport_type='sms',
             from_addr='251911223344',
             to_addr='8123',
             content='so many dynamos',
@@ -159,7 +162,7 @@ class TestAppositSmsTransport(TransportTestCase):
             content=['racecar'],
             fromAddress=['8123'],
             toAddress=['251911223344'],
-            channel=['sms'])
+            channel=['SMS'])
 
         [ack] = yield self.wait_for_dispatched_events(1)
         self.assert_ack(ack, msg)
@@ -175,7 +178,7 @@ class TestAppositSmsTransport(TransportTestCase):
                          {'message_id': msg['message_id']})
 
     @inlineCallbacks
-    def test_inbound_requests_for_invalid_channel(self):
+    def test_inbound_requests_for_unsupported_channel(self):
         response = yield self.send_full_inbound_request(
             fromAddress='251911223344',
             toAddress='8123',
@@ -184,14 +187,14 @@ class TestAppositSmsTransport(TransportTestCase):
 
         self.assertEqual(response.code, 400)
         self.assertEqual(json.loads(response.delivered_body),
-                         {'invalid_channel': 'steven'})
+                         {'unsupported_channel': 'steven'})
 
     @inlineCallbacks
     def test_inbound_requests_for_unexpected_param(self):
         response = yield self.send_full_inbound_request(
             fromAddress='251911223344',
             toAddress='8123',
-            channel='sms',
+            channel='SMS',
             steven='its a trap',
             content='never odd or even')
 
@@ -246,25 +249,38 @@ class TestAppositSmsTransport(TransportTestCase):
 
     @inlineCallbacks
     def test_outbound_requests_for_known_error_responses(self):
-        self.set_mock_server_response(http.BAD_REQUEST, '102999')
+        code = '102999'
+        self.set_mock_server_response(http.BAD_REQUEST, code)
 
         msg = self.mkmsg_out(
             from_addr='8123',
             to_addr='251911223344',
-            content='racecar')
+            content='racecar',
+            transport_type='sms')
         yield self.dispatch(msg)
 
         [nack] = yield self.wait_for_dispatched_events(1)
-        self.assert_nack(
-            nack, msg, self.transport.KNOWN_ERROR_RESPONSE_CODES['102999'])
+        self.assert_nack(nack, msg, "(%s) %s" % (
+            code, self.transport.KNOWN_ERROR_RESPONSE_CODES[code]))
 
     @inlineCallbacks
     def test_outbound_requests_for_unknown_error_responses(self):
-        self.set_mock_server_response(http.BAD_REQUEST, '103000')
+        code = '103000'
+        self.set_mock_server_response(http.BAD_REQUEST, code)
 
         msg = self.mk_outbound_message()
         yield self.dispatch(msg)
 
         [nack] = yield self.wait_for_dispatched_events(1)
         self.assert_nack(
-            nack, msg, self.transport.UNKNOWN_ERROR_RESPONSE % 103000)
+            nack, msg, self.transport.UNKNOWN_RESPONSE_CODE_ERROR % code)
+
+    @inlineCallbacks
+    def test_outbound_requests_for_unsupported_transport_types(self):
+        transport_type = 'steven'
+        msg = self.mk_outbound_message(transport_type=transport_type)
+        yield self.dispatch(msg)
+
+        [nack] = yield self.wait_for_dispatched_events(1)
+        self.assert_nack(nack, msg,
+            self.transport.UNSUPPORTED_TRANSPORT_TYPE_ERROR % transport_type)

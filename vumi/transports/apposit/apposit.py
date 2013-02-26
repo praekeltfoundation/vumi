@@ -10,7 +10,7 @@ from vumi.config import ConfigDict, ConfigText
 from vumi.transports.httprpc import HttpRpcTransport
 
 
-class AppositSmsTransportConfig(HttpRpcTransport.CONFIG_CLASS):
+class AppositTransportConfig(HttpRpcTransport.CONFIG_CLASS):
     """Apposit transport config."""
 
     credentials = ConfigDict(
@@ -22,14 +22,25 @@ class AppositSmsTransportConfig(HttpRpcTransport.CONFIG_CLASS):
         "The URL to send outbound messages to.", required=True, static=True)
 
 
-class AppositSmsTransport(HttpRpcTransport):
+class AppositTransport(HttpRpcTransport):
     """
-    HTTP transport for Apposit SMS.
+    HTTP transport for Apposit's interconnection services.
     """
 
-    transport_type = 'sms'
+    # Apposit supports multiple channel types (e.g. sms, ussd, ivr, email).
+    # Currently, we only have this working for sms, but theoretically, this
+    # transport could support other channel types that have corresponding vumi
+    # transport types. However, supporting other channels may require a bit
+    # more work if they work too differently to the sms channel. For example,
+    # support for Apposit's ussd channel will probably require session
+    # management, which currently isn't included, since the sms channel does
+    # not need this.
+    CHANNEL_LOOKUP = {'sms': 'SMS'}
+    TRANSPORT_TYPE_LOOKUP = dict(
+        reversed(i) for i in CHANNEL_LOOKUP.iteritems())
+
     ENCODING = 'UTF-8'
-    CONFIG_CLASS = AppositSmsTransportConfig
+    CONFIG_CLASS = AppositTransportConfig
     EXPECTED_FIELDS = frozenset([
         'fromAddress', 'toAddress', 'channel', 'content'])
     KNOWN_ERROR_RESPONSE_CODES = {
@@ -53,21 +64,24 @@ class AppositSmsTransport(HttpRpcTransport):
         '102025': "Content or Content ID is not Approved",
         '102999': "Other Runtime Error",
     }
-    UNKNOWN_ERROR_RESPONSE = "Response with unknown code received: %s"
+
+    UNKNOWN_RESPONSE_CODE_ERROR = "Response with unknown code received: %s"
+    UNSUPPORTED_TRANSPORT_TYPE_ERROR = (
+        "No corresponding channel exists for transport type: %s")
 
     def validate_config(self):
         config = self.get_static_config()
         self.credentials = config.credentials
         self.outbound_url = config.outbound_url
-        return super(AppositSmsTransport, self).validate_config()
+        return super(AppositTransport, self).validate_config()
 
     @inlineCallbacks
     def handle_raw_inbound_message(self, message_id, request):
         values, errors = self.get_field_values(request, self.EXPECTED_FIELDS)
 
         channel = values.get('channel')
-        if channel is not None and channel.lower() != self.transport_type:
-            errors['invalid_channel'] = channel
+        if channel is not None and channel not in self.CHANNEL_LOOKUP.values():
+            errors['unsupported_channel'] = channel
 
         if errors:
             log.msg('Unhappy incoming message: %s' % (errors,))
@@ -75,7 +89,7 @@ class AppositSmsTransport(HttpRpcTransport):
                                       code=http.BAD_REQUEST)
             return
 
-        self.emit("AppositSmsTransport receiving inbound message from "
+        self.emit("AppositTransport receiving inbound message from "
                   "%(fromAddress)s to %(toAddress)s" % values)
 
         yield self.publish_message(
@@ -85,29 +99,33 @@ class AppositSmsTransport(HttpRpcTransport):
             from_addr=values['fromAddress'],
             to_addr=values['toAddress'],
             provider='apposit',
-            transport_type=self.transport_type,
+            transport_type=self.TRANSPORT_TYPE_LOOKUP[channel],
         )
         yield self.finish_request(
             message_id, json.dumps({'message_id': message_id}))
 
     @inlineCallbacks
     def handle_outbound_message(self, message):
-        credentials = self.credentials.get(message['from_addr'], {})
-        username = credentials.get('username', '')
-        password = credentials.get('password', '')
-        service_id = credentials.get('service_id', '')
+        channel = self.CHANNEL_LOOKUP.get(message['transport_type'])
+        if channel is None:
+            reason = (self.UNSUPPORTED_TRANSPORT_TYPE_ERROR
+                      % message['transport_type'])
+            log.msg(reason)
+            yield self.publish_nack(message['message_id'], reason)
+            return
 
         self.emit("Sending outbound message: %s" % (message,))
 
         # build the params dict and ensure each param encoded correctly
+        credentials = self.credentials.get(message['from_addr'], {})
         params = dict((k, v.encode(self.ENCODING)) for k, v in {
-            'username': username,
-            'password': password,
-            'serviceId': service_id,
+            'username': credentials.get('username', ''),
+            'password': credentials.get('password', ''),
+            'serviceId': credentials.get('service_id', ''),
             'fromAddress': message['from_addr'],
             'toAddress': message['to_addr'],
             'content': message['content'],
-            'channel': self.transport_type,
+            'channel': channel,
         }.iteritems())
 
         url = '%s?%s' % (self.outbound_url, urlencode(params))
@@ -118,12 +136,14 @@ class AppositSmsTransport(HttpRpcTransport):
             response.code, response.delivered_body))
 
         response_content = response.delivered_body.strip()
-        message_id = message['message_id']
         if response.code == http.OK:
-            yield self.publish_ack(user_message_id=message_id,
-                                   sent_message_id=message_id)
+            yield self.publish_ack(user_message_id=message['message_id'],
+                                   sent_message_id=message['message_id'])
         else:
-            reason = self.KNOWN_ERROR_RESPONSE_CODES.get(response_content,
-                self.UNKNOWN_ERROR_RESPONSE % response_content)
+            error = self.KNOWN_ERROR_RESPONSE_CODES.get(response_content)
+            if error is not None:
+                reason = "(%s) %s" % (response_content, error)
+            else:
+                reason = self.UNKNOWN_RESPONSE_CODE_ERROR % response_content
             log.msg(reason)
-            yield self.publish_nack(message_id, reason)
+            yield self.publish_nack(message['message_id'], reason)

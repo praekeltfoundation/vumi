@@ -1,3 +1,3 @@
-from vumi.transports.apposit.apposit_sms import AppositSmsTransport
+from vumi.transports.apposit.apposit import AppositTransport
 
-__all__ = ['AppositSmsTransport']
+__all__ = ['AppositTransport']
