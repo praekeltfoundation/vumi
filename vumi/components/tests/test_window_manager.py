@@ -189,3 +189,28 @@ class WindowManagerTestCase(TestCase, PersistenceMixin):
         self.assertEqual(len(key_callbacks.values()[1]), 20)
         self.assertEqual((yield self.wm.get_windows()), [])
         self.assertEqual(set(cleanup_callbacks), set(window_ids))
+
+
+class ConcurrentWindowManagerTestCase(TestCase, PersistenceMixin):
+
+    @inlineCallbacks
+    def setUp(self):
+        self._persist_setUp()
+        redis = yield self.get_redis_manager()
+        self.window_id = 'window_id'
+
+        # Patch the clock so we can control time
+        self.clock = Clock()
+        self.patch(WindowManager, 'get_clock', lambda _: self.clock)
+        self.patch(WindowManager, 'count_waiting', lambda _, window_id: 100)
+
+        self.wm = WindowManager(redis, window_size=10, flight_lifetime=10)
+        yield self.wm.create_window(self.window_id)
+        self.redis = self.wm.redis
+
+    @inlineCallbacks
+    def test_race_condition(self):
+        yield self.wm.add(self.window_id, 1)
+        yield self.wm.add(self.window_id, 2)
+        yield self.wm._monitor_windows(lambda *a: True, True)
+        self.assertEqual((yield self.wm.get_next_key(self.window_id)), None)

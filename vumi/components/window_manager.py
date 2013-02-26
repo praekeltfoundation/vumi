@@ -107,8 +107,9 @@ class WindowManager(object):
 
         if room_available:
             next_key = yield self.redis.rpoplpush(window_key, inflight_key)
-            yield self._set_timestamp(window_id, next_key)
-            returnValue(next_key)
+            if next_key:
+                yield self._set_timestamp(window_id, next_key)
+                returnValue(next_key)
 
     def _set_timestamp(self, window_id, flight_key):
         return self.redis.zadd(self.stats_key(window_id), **{

@@ -405,7 +405,8 @@ class Zset(object):
 
     def zadd(self, **valscores):
         new_zval = [val for val in self._zval if val[1] not in valscores]
-        new_zval.extend((score, value) for value, score in valscores.items())
+        new_zval.extend((float(score), value) for value, score
+                            in valscores.items())
         new_zval.sort()
         added = len(new_zval) - len(self._zval)
         self._zval = new_zval
