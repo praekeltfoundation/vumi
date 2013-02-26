@@ -105,7 +105,7 @@ class WindowManager(object):
         flight_size = yield self.count_in_flight(window_id)
         room_available = self.window_size - flight_size
 
-        if room_available:
+        if room_available > 0:
             next_key = yield self.redis.rpoplpush(window_key, inflight_key)
             if next_key:
                 yield self._set_timestamp(window_id, next_key)

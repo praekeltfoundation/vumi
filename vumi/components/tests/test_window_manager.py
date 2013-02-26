@@ -199,9 +199,8 @@ class ConcurrentWindowManagerTestCase(TestCase, PersistenceMixin):
         redis = yield self.get_redis_manager()
         self.window_id = 'window_id'
 
-        # Patch the clock so we can control time
+        # Patch the count_waiting so we can fake the race condition
         self.clock = Clock()
-        self.patch(WindowManager, 'get_clock', lambda _: self.clock)
         self.patch(WindowManager, 'count_waiting', lambda _, window_id: 100)
 
         self.wm = WindowManager(redis, window_size=10, flight_lifetime=10)
@@ -209,7 +208,28 @@ class ConcurrentWindowManagerTestCase(TestCase, PersistenceMixin):
         self.redis = self.wm.redis
 
     @inlineCallbacks
+    def tearDown(self):
+        yield self._persist_tearDown()
+        self.wm.stop()
+
+    @inlineCallbacks
     def test_race_condition(self):
+        """
+        A race condition can occur when multiple window managers try and
+        access the same window at the same time.
+
+        A LoopingCall loops over the available windows, for those windows
+        it tries to get a next key. It does that by checking how many are
+        waiting to be sent out and adding however many it can still carry
+        to its own flight.
+
+        Since there are concurrent workers, between the time of checking how
+        many are available and how much room it has available, a different
+        window manager may have already beaten it to it.
+
+        If this happens Redis' `rpoplpush` method will return None since
+        there are no more available keys for the given window.
+        """
         yield self.wm.add(self.window_id, 1)
         yield self.wm.add(self.window_id, 2)
         yield self.wm._monitor_windows(lambda *a: True, True)
