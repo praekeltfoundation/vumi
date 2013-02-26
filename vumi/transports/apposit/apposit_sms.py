@@ -13,9 +13,6 @@ from vumi.transports.httprpc import HttpRpcTransport
 class AppositSmsTransportConfig(HttpRpcTransport.CONFIG_CLASS):
     """Apposit transport config."""
 
-    transport_name = ConfigText(
-        "The name this transport instance will use to create its queues.",
-        required=True, static=True)
     credentials = ConfigDict(
         "A dictionary where the `from_addr` is used for the key lookup and "
         "the returned value should be a dictionary containing the "
@@ -33,7 +30,8 @@ class AppositSmsTransport(HttpRpcTransport):
     transport_type = 'sms'
     ENCODING = 'UTF-8'
     CONFIG_CLASS = AppositSmsTransportConfig
-    EXPECTED_FIELDS = set(['fromAddress', 'toAddress', 'channel', 'content'])
+    EXPECTED_FIELDS = frozenset([
+        'fromAddress', 'toAddress', 'channel', 'content'])
     KNOWN_ERROR_RESPONSE_CODES = {
         '102001': "Username Not Set",
         '102002': "Password Not Set",
@@ -61,12 +59,7 @@ class AppositSmsTransport(HttpRpcTransport):
         config = self.get_static_config()
         self.credentials = config.credentials
         self.outbound_url = config.outbound_url
-        self.noisy = config.noisy
         return super(AppositSmsTransport, self).validate_config()
-
-    def log_msg(self, msg, msg_is_noisy=False):
-        if not msg_is_noisy or self.noisy:
-            log.msg(msg)
 
     @inlineCallbacks
     def handle_raw_inbound_message(self, message_id, request):
@@ -82,8 +75,8 @@ class AppositSmsTransport(HttpRpcTransport):
                                       code=http.BAD_REQUEST)
             return
 
-        self.log_msg("AppositSmsTransport receiving inbound message from "
-                     "%(fromAddress)s to %(toAddress)s" % values, True)
+        self.emit("AppositSmsTransport receiving inbound message from "
+                  "%(fromAddress)s to %(toAddress)s" % values)
 
         yield self.publish_message(
             transport_name=self.transport_name,
@@ -104,7 +97,7 @@ class AppositSmsTransport(HttpRpcTransport):
         password = credentials.get('password', '')
         service_id = credentials.get('service_id', '')
 
-        self.log_msg("Sending outbound message: %s" % (message,), True)
+        self.emit("Sending outbound message: %s" % (message,))
 
         # build the params dict and ensure each param encoded correctly
         params = dict((k, v.encode(self.ENCODING)) for k, v in {
@@ -118,11 +111,11 @@ class AppositSmsTransport(HttpRpcTransport):
         }.iteritems())
 
         url = '%s?%s' % (self.outbound_url, urlencode(params))
-        self.log_msg("Making HTTP request: %s" % (url,), True)
+        self.emit("Making HTTP request: %s" % (url,))
 
         response = yield http_request_full(url, '', method='POST')
-        self.log_msg("Response: (%s) %r" % (
-            response.code, response.delivered_body), True)
+        self.emit("Response: (%s) %r" % (
+            response.code, response.delivered_body))
 
         response_content = response.delivered_body.strip()
         message_id = message['message_id']
@@ -132,5 +125,5 @@ class AppositSmsTransport(HttpRpcTransport):
         else:
             reason = self.KNOWN_ERROR_RESPONSE_CODES.get(response_content,
                 self.UNKNOWN_ERROR_RESPONSE % response_content)
-            self.log_msg(reason)
+            log.msg(reason)
             yield self.publish_nack(message_id, reason)
