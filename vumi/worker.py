@@ -36,13 +36,15 @@ class BaseWorker(Worker):
 
     CONFIG_CLASS = BaseConfig
 
-    def startWorker(self):
-        log.msg('Starting a %s worker with config: %s'
-                % (self.__class__.__name__, self.config))
+    def __init__(self, options, config=None):
+        super(BaseWorker, self).__init__(options, config=config)
         self.connectors = {}
         self.middlewares = []
         self._static_config = self.CONFIG_CLASS(self.config, static=True)
 
+    def startWorker(self):
+        log.msg('Starting a %s worker with config: %s'
+                % (self.__class__.__name__, self.config))
         d = maybeDeferred(self._validate_config)
         then_call(d, self.setup_middleware)
         then_call(d, self.setup_connectors)
@@ -50,6 +52,7 @@ class BaseWorker(Worker):
         return d
 
     def stopWorker(self):
+        log.msg('Stopping a %s worker.' % (self.__class__.__name__,))
         d = succeed(None)
         then_call(d, self.teardown_worker)
         then_call(d, self.teardown_connectors)
