@@ -137,6 +137,17 @@ class TestBaseDispatchWorker(VumiWorkerTestCase):
         self.assert_no_messages('transport1.outbound', 'transport2.outbound')
 
     @inlineCallbacks
+    def test_unroutable_outbound_error(self):
+        dispatcher = yield self.get_dispatcher()
+        router = dispatcher._router
+        msg = self.mkmsg_out(transport_name='foo')
+        with LogCatcher() as log:
+            yield router.dispatch_outbound_message(msg)
+            [error] = log.errors
+            self.assertTrue(('Unknown transport_name: foo' in
+                                error['message'][0]))
+
+    @inlineCallbacks
     def test_outbound_message_routing_transport_mapping(self):
         """
         Test that transport mappings are applied for outbound messages.
