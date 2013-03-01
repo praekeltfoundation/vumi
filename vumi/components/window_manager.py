@@ -6,6 +6,8 @@ from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet.task import LoopingCall
 
+from vumi import log
+
 
 class WindowException(Exception):
     pass
@@ -106,6 +108,8 @@ class WindowManager(object):
         room_available = self.window_size - flight_size
 
         if room_available > 0:
+            log.debug('Window %s has space for %s' % (window_key,
+                                                        room_available))
             next_key = yield self.redis.rpoplpush(window_key, inflight_key)
             if next_key:
                 yield self._set_timestamp(window_id, next_key)
