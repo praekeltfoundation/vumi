@@ -58,6 +58,8 @@ class CommonRiakManagerTests(object):
         self.assertEqual(manager.__class__, manager_cls)
         self.assertEqual(manager.load_bunch_size,
                          manager.DEFAULT_LOAD_BUNCH_SIZE)
+        self.assertEqual(manager.mapreduce_timeout,
+                         manager.DEFAULT_MAPREDUCE_TIMEOUT)
 
     def test_from_config_with_bunch_size(self):
         manager_cls = self.manager.__class__
@@ -65,6 +67,13 @@ class CommonRiakManagerTests(object):
                                            'load_bunch_size': 10,
                                            })
         self.assertEqual(manager.load_bunch_size, 10)
+
+    def test_from_config_with_mapreduce_timeout(self):
+        manager_cls = self.manager.__class__
+        manager = manager_cls.from_config({'bucket_prefix': 'test.',
+                                           'mapreduce_timeout': 1000,
+                                           })
+        self.assertEqual(manager.mapreduce_timeout, 1000)
 
     def test_sub_manager(self):
         sub_manager = self.manager.sub_manager("foo.")
