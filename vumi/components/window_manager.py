@@ -142,8 +142,7 @@ class WindowManager(object):
     @inlineCallbacks
     def get_data(self, window_id, key):
         json_data = yield self.redis.get(self.window_key(window_id, key))
-        if json_data:
-            returnValue(json.loads(json_data))
+        returnValue(json.loads(json_data))
 
     @inlineCallbacks
     def remove_key(self, window_id, key):

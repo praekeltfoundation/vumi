@@ -213,7 +213,7 @@ class ConcurrentWindowManagerTestCase(TestCase, PersistenceMixin):
         self.wm.stop()
 
     @inlineCallbacks
-    def test_get_next_key_race_condition(self):
+    def test_race_condition(self):
         """
         A race condition can occur when multiple window managers try and
         access the same window at the same time.
@@ -234,28 +234,3 @@ class ConcurrentWindowManagerTestCase(TestCase, PersistenceMixin):
         yield self.wm.add(self.window_id, 2)
         yield self.wm._monitor_windows(lambda *a: True, True)
         self.assertEqual((yield self.wm.get_next_key(self.window_id)), None)
-
-    @inlineCallbacks
-    def test_get_data_race_condition(self):
-        """
-        This is the same race condition as outlined above, it only happens
-        in a different method. The one that retrieves the data for the key.
-        Any different worker might have beaten this one to it and have
-        already removed it.
-        """
-        yield self.wm.add(self.window_id, {'value': 1}, 'key-1')
-        yield self.wm.add(self.window_id, {'value': 2}, 'key-2')
-
-        self.assertEqual((yield self.wm.get_next_key(self.window_id)), 'key-1')
-        self.assertEqual((yield self.wm.get_data(self.window_id, 'key-1')),
-            {'value': 1})
-        yield self.wm.remove_key(self.window_id, 'key-1')
-
-        self.assertEqual((yield self.wm.get_next_key(self.window_id)), 'key-2')
-        self.assertEqual((yield self.wm.get_data(self.window_id, 'key-2')),
-            {'value': 2})
-        yield self.wm.remove_key(self.window_id, 'key-2')
-
-        self.assertEqual((yield self.wm.get_next_key(self.window_id)), None)
-        self.assertEqual((yield self.wm.get_data(self.window_id, 'key-2')),
-            None)
