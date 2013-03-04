@@ -58,6 +58,8 @@ class CommonRiakManagerTests(object):
         self.assertEqual(manager.__class__, manager_cls)
         self.assertEqual(manager.load_bunch_size,
                          manager.DEFAULT_LOAD_BUNCH_SIZE)
+        self.assertEqual(manager.mapreduce_timeout,
+                         manager.DEFAULT_MAPREDUCE_TIMEOUT)
 
     def test_from_config_with_bunch_size(self):
         manager_cls = self.manager.__class__
@@ -65,6 +67,13 @@ class CommonRiakManagerTests(object):
                                            'load_bunch_size': 10,
                                            })
         self.assertEqual(manager.load_bunch_size, 10)
+
+    def test_from_config_with_mapreduce_timeout(self):
+        manager_cls = self.manager.__class__
+        manager = manager_cls.from_config({'bucket_prefix': 'test.',
+                                           'mapreduce_timeout': 1000,
+                                           })
+        self.assertEqual(manager.mapreduce_timeout, 1000)
 
     def test_sub_manager(self):
         sub_manager = self.manager.sub_manager("foo.")
@@ -164,6 +173,29 @@ class CommonRiakManagerTests(object):
         self.assertEqual([d.key for d in results], expected_keys)
         mr_results.sort(key=lambda l: l.get_key())
         self.assertEqual([l.get_key() for l in mr_results], expected_keys)
+
+    @Manager.calls_manager
+    def test_run_riak_map_reduce_with_timeout(self):
+        dummies = [self.mkdummy(str(i), {"a": i}) for i in range(4)]
+        for dummy in dummies:
+            dummy.add_index('test_index_bin', 'test_key')
+            yield self.manager.store(dummy)
+
+        # override mapreduce_timeout for testing
+        self.manager.mapreduce_timeout = 1  # millisecond
+
+        mr = self.manager.riak_map_reduce()
+        mr.index('test.dummy_model', 'test_index_bin', 'test_key')
+
+        try:
+            yield self.manager.run_map_reduce(mr, lambda m, l: None)
+        except Exception, err:
+            msg = str(err)
+            self.assertTrue(msg.startswith("Error running MapReduce"
+                                           " operation."))
+            self.assertTrue(msg.endswith("Body: '{\"error\":\"timeout\"}'"))
+        else:
+            self.fail("Map reduce operation did not timeout")
 
     @Manager.calls_manager
     def test_purge_all(self):

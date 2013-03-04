@@ -21,6 +21,8 @@ class TxRiakManager(Manager):
         bucket_prefix = config.pop('bucket_prefix')
         load_bunch_size = config.pop('load_bunch_size',
                                      cls.DEFAULT_LOAD_BUNCH_SIZE)
+        mapreduce_timeout = config.pop('mapreduce_timeout',
+                                       cls.DEFAULT_MAPREDUCE_TIMEOUT)
         transport_type = config.pop('transport_type', 'http')
         transport_class = {
             'http': transport.HTTPTransport,
@@ -38,7 +40,8 @@ class TxRiakManager(Manager):
         client = RiakClient(host=host, port=port, prefix=prefix,
             mapred_prefix=mapred_prefix, client_id=client_id,
             transport=transport_class)
-        return cls(client, bucket_prefix, load_bunch_size=load_bunch_size)
+        return cls(client, bucket_prefix, load_bunch_size=load_bunch_size,
+                   mapreduce_timeout=mapreduce_timeout)
 
     def _encode_indexes(self, iterable, encoding='utf-8'):
         """
@@ -131,7 +134,7 @@ class TxRiakManager(Manager):
                 deferreds.append(maybeDeferred(mapper_func, self, row))
             return gatherResults(deferreds)
 
-        mapreduce_done = mapreduce.run()
+        mapreduce_done = mapreduce.run(timeout=self.mapreduce_timeout)
         if mapper_func is not None:
             mapreduce_done.addCallback(map_results)
         if reducer_func is not None:
