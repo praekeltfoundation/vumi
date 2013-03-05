@@ -64,7 +64,7 @@ class TestAppositTransport(TransportTestCase):
             'to': '8123',
             'channel': 'SMS',
             'content': 'never odd or even',
-            'isTest': 'True',
+            'isTest': 'true',
         }
         params.update(kwargs)
         return self.send_full_inbound_request(**params)
@@ -112,7 +112,7 @@ class TestAppositTransport(TransportTestCase):
             'to_addr': '8123',
             'content': 'so many dynamos',
             'provider': 'apposit',
-            'transport_metadata': {}
+            'transport_metadata': {'apposit': {'isTest': 'true'}},
         }
         fields.update(kwargs)
 
@@ -131,7 +131,13 @@ class TestAppositTransport(TransportTestCase):
 
     @inlineCallbacks
     def test_inbound(self):
-        response = yield self.send_inbound_request(content='so many dynamos')
+        response = yield self.send_inbound_request(**{
+            'from': '251911223344',
+            'to': '8123',
+            'content': 'so many dynamos',
+            'channel': 'SMS',
+            'isTest': 'true',
+        })
 
         [msg] = self.get_dispatched_messages()
         self.assert_message_fields(msg,
@@ -141,7 +147,7 @@ class TestAppositTransport(TransportTestCase):
             to_addr='8123',
             content='so many dynamos',
             provider='apposit',
-            transport_metadata={})
+            transport_metadata={'apposit': {'isTest': 'true'}})
 
         self.assertEqual(response.code, http.OK)
         self.assertEqual(json.loads(response.delivered_body),

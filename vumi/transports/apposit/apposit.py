@@ -41,8 +41,7 @@ class AppositTransport(HttpRpcTransport):
     TRANSPORT_TYPE_LOOKUP = dict(
         reversed(i) for i in CHANNEL_LOOKUP.iteritems())
 
-    EXPECTED_FIELDS = frozenset(['from', 'to', 'channel', 'content'])
-    IGNORED_FIELDS = frozenset(['isTest'])
+    EXPECTED_FIELDS = frozenset(['from', 'to', 'channel', 'content', 'isTest'])
 
     KNOWN_ERROR_RESPONSE_CODES = {
         '102001': "Username Not Set",
@@ -78,8 +77,7 @@ class AppositTransport(HttpRpcTransport):
 
     @inlineCallbacks
     def handle_raw_inbound_message(self, message_id, request):
-        values, errors = self.get_field_values(
-            request, self.EXPECTED_FIELDS, self.IGNORED_FIELDS)
+        values, errors = self.get_field_values(request, self.EXPECTED_FIELDS)
 
         channel = values.get('channel')
         if channel is not None and channel not in self.CHANNEL_LOOKUP.values():
@@ -102,7 +100,8 @@ class AppositTransport(HttpRpcTransport):
             to_addr=values['to'],
             provider='apposit',
             transport_type=self.TRANSPORT_TYPE_LOOKUP[channel],
-        )
+            transport_metadata={'apposit': {'isTest': values['isTest']}})
+
         yield self.finish_request(
             message_id, json.dumps({'message_id': message_id}))
 
