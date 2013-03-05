@@ -301,7 +301,7 @@ class Consumer(object):
                     if isinstance(message, QueueCloseMarker):
                         log.msg("Queue closed.")
                         return
-                    yield self.consume(message)
+                    yield self._consume(message)
             except txamqp.queue.Closed, e:
                 log.err("Queue has closed", e)
 
@@ -309,16 +309,8 @@ class Consumer(object):
         yield None
         returnValue(self)
 
-    def pause(self):
-        self.paused = True
-        return self.channel.channel_flow(active=False)
-
-    def unpause(self):
-        self.paused = False
-        return self.channel.channel_flow(active=True)
-
     @inlineCallbacks
-    def consume(self, message):
+    def _consume(self, message):
         result = yield self.consume_message(self.message_class.from_json(
                                             message.content.body))
         if result is not False:
@@ -335,6 +327,14 @@ class Consumer(object):
         Should be overridden by sub-classes.
         """
         log.msg("Received message: %s" % message)
+
+    def pause(self):
+        self.paused = True
+        return self.channel.channel_flow(active=False)
+
+    def unpause(self):
+        self.paused = False
+        return self.channel.channel_flow(active=True)
 
     def ack(self, message, multiple=False):
         """Acknowledge a message as processed."""
