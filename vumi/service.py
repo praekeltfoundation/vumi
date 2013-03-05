@@ -317,7 +317,7 @@ class Consumer(object):
 
         Logs the message at the `info` logging level.
 
-        Should be overridden by sub-classes.
+        Should be overridden by subclasses.
         """
         log.msg("Received message: %s" % message)
 
