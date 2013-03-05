@@ -6,7 +6,7 @@ from copy import deepcopy
 from twisted.python import log
 from twisted.application.service import MultiService
 from twisted.application.internet import TCPClient
-from twisted.internet.defer import inlineCallbacks, returnValue, succeed
+from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet.task import LoopingCall
 from twisted.internet import protocol, reactor
 from twisted.web.resource import Resource
@@ -295,7 +295,6 @@ class Consumer(object):
         self.paused = self.start_paused
         self._consume_loop = LoopingCall(self._consume)
         self._consume_done = self._consume_loop.start(0)
-        return succeed(self)
 
     @inlineCallbacks
     def _consume(self):
