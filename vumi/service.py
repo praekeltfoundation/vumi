@@ -289,9 +289,8 @@ class Consumer(object):
     def start(self, channel, queue):
         self.channel = channel
         self.queue = queue
-        self.keep_consuming = True
-        self._testing = hasattr(channel, 'message_processed')
         self.paused = self.start_paused
+        self.keep_consuming = True
 
         @inlineCallbacks
         def read_messages():
@@ -322,8 +321,6 @@ class Consumer(object):
     def consume(self, message):
         result = yield self.consume_message(self.message_class.from_json(
                                             message.content.body))
-        if self._testing:
-            self.channel.message_processed()
         if result is not False:
             returnValue(self.ack(message))
         else:
@@ -331,11 +328,22 @@ class Consumer(object):
                     'Not acknowledging AMQ message' % result)
 
     def consume_message(self, message):
-        """helper method, override in implementation"""
+        """Fallback consume method.
+
+        Logs the message at the `info` logging level.
+
+        Should be overridden by sub-classes.
+        """
         log.msg("Received message: %s" % message)
 
-    def ack(self, message):
-        self.channel.basic_ack(message.delivery_tag, True)
+    def ack(self, message, multiple=False):
+        """Acknowledge a message as processed."""
+        self.channel.basic_ack(message.delivery_tag, multiple=multiple)
+
+    def nack(self, message, multiple=False, requeue=True):
+        """Reject a message as unprocessed."""
+        self.channel.basic_reject(message.delivery_tag, multiple=multiple,
+                                  requeue=requeue)
 
     @inlineCallbacks
     def stop(self):

@@ -165,6 +165,12 @@ class FakeAMQPBroker(object):
 
     def basic_ack(self, queue, delivery_tag):
         self._get_queue(queue).ack(delivery_tag)
+        self._message_processed()
+        return None
+
+    def basic_nack(self, queue, delivery_tag):
+        self._get_queue(queue).nack(delivery_tag)
+        self._message_processed()
         return None
 
     def deliver_to_channels(self):
@@ -176,7 +182,7 @@ class FakeAMQPBroker(object):
             self.try_deliver_to_channel(channel)
 
         # Process the sentinel "message" we added in kick_delivery().
-        self.message_processed()
+        self._message_processed()
 
     def try_deliver_to_channel(self, channel):
         if not channel.deliverable():
@@ -264,7 +270,7 @@ class FakeAMQPBroker(object):
         amq_message = Content(data)
         return self.basic_publish(exchange, routing_key, amq_message)
 
-    def message_processed(self):
+    def _message_processed(self):
         assert self._delivering is not None
         self._delivering['count'] -= 1
         if self._delivering['count'] <= 0:
@@ -340,6 +346,15 @@ class FakeAMQPChannel(object):
                 if (dtag == delivery_tag):
                     return resp
 
+    def basic_nack(self, delivery_tag, multiple, requeue):
+        assert delivery_tag in [d for d, _q in self.unacked]
+        for dtag, queue in self.unacked[:]:
+            if multiple or (dtag == delivery_tag):
+                self.unacked.remove((dtag, queue))
+                resp = self.broker.basic_nack(queue, dtag)
+                if (dtag == delivery_tag):
+                    return resp
+
     def deliverable(self):
         if not self.flow_active:
             return False
@@ -358,13 +373,6 @@ class FakeAMQPChannel(object):
             return mk_get_ok(msg['content'], msg['exchange'],
                              msg['routing_key'], dtag)
         return Message(mkMethod("get-empty", 72))
-
-    def message_processed(self):
-        """
-        Notify the broker that a message has been processed, in order
-        to make delivery sane.
-        """
-        self.broker.message_processed()
 
 
 class FakeAMQPExchange(object):
@@ -446,6 +454,11 @@ class FakeAMQPQueue(object):
 
     def ack(self, delivery_tag):
         self.unacked_messages.pop(delivery_tag)
+
+    def nack(self, delivery_tag):
+        msg = self.unacked_messages.pop(delivery_tag)
+        self.put(msg['exchange'], msg['routing_key'],
+                 msg['content'])
 
     def get_message(self):
         try:
