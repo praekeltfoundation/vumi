@@ -230,45 +230,44 @@ class TransportUserMessage(TransportMessage):
         as SMS) and directed messages within a group chat (such as
         name-prefixed content in an IRC channel message).
 
+        NOTE: Certain fields are required to come from the message being
+              replied to and may not be overridden by this method:
+
+              # If we're not using this addressing, we shouldn't be replying.
+              'to_addr', 'from_addr', 'group', 'in_reply_to',
+              # These three belong together and are supposed to be opaque.
+              'transport_name', 'transport_type', 'transport_metadata'
+
         FIXME: `helper_metadata` should *not* be copied to the reply message.
                We only do it here because a bunch of legacy code relies on it.
-
-        NOTE: `transport_name` should only be used by transports to determine
-              whether they should be looking at `transport_metadata` and should
-              therefore not be modified in replies.
-
-              Unfortunately, we currently rewrite `transport_name` as part of
-              certain kinds of message routing. While connectors and endpoints
-              should make this unnecessary for the most part, you will still be
-              able to change the `transport_name` by modifying the source
-              message before calling this method.
         """
         session_event = None if continue_session else self.SESSION_CLOSE
 
-        # These are fields that we want to default, but which may be overridden
-        # by the caller.
+        for field in [
+                # If we're not using this addressing, we shouldn't be replying.
+                'to_addr', 'from_addr', 'group', 'in_reply_to',
+                # These three belong together and are supposed to be opaque.
+                'transport_name', 'transport_type', 'transport_metadata']:
+            if field in kw:
+                # Other "bad keyword argument" conditions cause TypeErrors.
+                raise TypeError("'%s' may not be overridden." % (field,))
+
         fields = {
             'helper_metadata': self['helper_metadata'],  # XXX: See above.
             'session_event': session_event,
+            'to_addr': self['from_addr'],
+            'from_addr': self['to_addr'],
+            'group': self['group'],
+            'in_reply_to': self['message_id'],
+            'transport_name': self['transport_name'],
+            'transport_type': self['transport_type'],
+            'transport_metadata': self['transport_metadata'],
         }
         fields.update(kw)
 
         # The ones we specify directly in here are either mandatory or may not
         # be overridden.
-        out_msg = TransportUserMessage(
-            content=content,
-            # If we're not using this addressing, we shouldn't be replying.
-            to_addr=self['from_addr'],
-            from_addr=self['to_addr'],
-            group=self['group'],
-            in_reply_to=self['message_id'],
-            # These three belong together and are supposed to be opaque. If you
-            # must change them, do it on the source message before calling
-            # reply().
-            transport_name=self['transport_name'],
-            transport_type=self['transport_type'],
-            transport_metadata=self['transport_metadata'],
-            **fields)
+        out_msg = TransportUserMessage(content=content, **fields)
         return out_msg
 
     def reply_group(self, *args, **kw):
