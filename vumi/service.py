@@ -6,7 +6,8 @@ from copy import deepcopy
 from twisted.python import log
 from twisted.application.service import MultiService
 from twisted.application.internet import TCPClient
-from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.defer import inlineCallbacks, returnValue, succeed
+from twisted.internet.task import LoopingCall
 from twisted.internet import protocol, reactor
 from twisted.web.resource import Resource
 import txamqp
@@ -285,39 +286,31 @@ class Consumer(object):
     message_class = Message
     start_paused = False
 
-    @inlineCallbacks
+    _consume_loop = None
+
     def start(self, channel, queue):
+        log.msg("Consumer starting...")
         self.channel = channel
         self.queue = queue
         self.paused = self.start_paused
-        self.keep_consuming = True
-
-        @inlineCallbacks
-        def read_messages():
-            log.msg("Consumer starting...")
-            try:
-                while self.keep_consuming:
-                    message = yield self.queue.get()
-                    if isinstance(message, QueueCloseMarker):
-                        log.msg("Queue closed.")
-                        return
-                    yield self._consume(message)
-            except txamqp.queue.Closed, e:
-                log.err("Queue has closed", e)
-
-        read_messages()
-        yield None
-        returnValue(self)
+        self._consume_loop = LoopingCall(self._consume)
+        self._consume_done = self._consume_loop.start(0)
+        return succeed(self)
 
     @inlineCallbacks
-    def _consume(self, message):
-        result = yield self.consume_message(self.message_class.from_json(
-                                            message.content.body))
-        if result is not False:
-            returnValue(self.ack(message))
-        else:
-            log.msg('Received %s as a return value consume_message. '
-                    'Not acknowledging AMQ message' % result)
+    def _consume(self):
+        message = yield self.queue.get()
+        if isinstance(message, QueueCloseMarker):
+            log.msg("Queue closed.")
+            self._consume_loop.stop()
+            return
+        try:
+            yield self.consume_message(
+                self.message_class.from_json(message.content.body))
+            self.ack(message)
+        except Exception:
+            log.err()
+            self.nack(message)
 
     def consume_message(self, message):
         """Fallback consume method.
@@ -348,13 +341,14 @@ class Consumer(object):
     @inlineCallbacks
     def stop(self):
         log.msg("Consumer stopping...")
-        self.keep_consuming = False
         # This actually closes the channel on the server
         yield self.channel.channel_close()
         # This just marks the channel as closed on the client
         self.channel.close(None)
-        self.queue.put(QueueCloseMarker())
-        returnValue(self.keep_consuming)
+        # This waits for the client to consume its current messages
+        if self._consume_loop is not None:
+            self.queue.put(QueueCloseMarker())
+            yield self._consume_done
 
 
 class DynamicConsumer(Consumer):
