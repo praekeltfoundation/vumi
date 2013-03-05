@@ -230,6 +230,9 @@ class TransportUserMessage(TransportMessage):
         as SMS) and directed messages within a group chat (such as
         name-prefixed content in an IRC channel message).
 
+        If `session_event` is provided in the the keyword args,
+        `continue_session` will be ignored.
+
         NOTE: Certain fields are required to come from the message being
               replied to and may not be overridden by this method:
 
