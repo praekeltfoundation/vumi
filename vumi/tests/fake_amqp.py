@@ -161,7 +161,15 @@ class FakeAMQPBroker(object):
         return None
 
     def basic_get(self, queue):
-        return self._get_queue(queue).get_message()
+        dtag, msg = self._get_queue(queue).get_message()
+        if dtag is not None:
+            if self._delivering is None:
+                self._delivering = {
+                    'deferred': Deferred(),
+                    'count': 0,
+                }
+            self._delivering['count'] += 1
+        return (dtag, msg)
 
     def basic_ack(self, queue, delivery_tag):
         self._get_queue(queue).ack(delivery_tag)
