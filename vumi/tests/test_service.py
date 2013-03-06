@@ -36,6 +36,31 @@ class ServiceTestCase(TestCase):
         self.assertEquals(log, [Message(key="value")])
 
     @inlineCallbacks
+    def test_failed_consume(self):
+        class TestError(Exception):
+            pass
+
+        logs, errors = [], []
+
+        def raise_error(msg):
+            # after failing, the message is requeued and retried
+            if not errors:
+                errors.append(msg)
+                raise TestError()
+            logs.append(msg)
+
+        message = fake_amq_message({"key": "value"})
+        worker = get_stubbed_worker(Worker)
+
+        yield worker.consume('test.routing.key', raise_error)
+        worker._amqp_client.broker.basic_publish('vumi', 'test.routing.key',
+                                                 message.content)
+        yield worker._amqp_client.broker.wait_delivery()
+        self.assertEqual(len(self.flushLoggedErrors(TestError)), 1)
+        self.assertEquals(logs, [Message(key="value")])
+        self.assertEquals(errors, [Message(key="value")])
+
+    @inlineCallbacks
     def test_start_publisher(self):
         """The publisher should publish"""
         worker = get_stubbed_worker(Worker)

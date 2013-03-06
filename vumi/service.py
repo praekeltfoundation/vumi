@@ -358,8 +358,8 @@ class Consumer(object):
 
     def nack(self, message, multiple=False, requeue=True):
         """Reject a message as unprocessed."""
-        self.channel.basic_reject(message.delivery_tag, multiple=multiple,
-                                  requeue=requeue)
+        self.channel.basic_nack(message.delivery_tag, multiple=multiple,
+                                requeue=requeue)
 
     @inlineCallbacks
     def stop(self):
