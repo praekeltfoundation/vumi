@@ -311,6 +311,7 @@ class Consumer(object):
             self.ack(message)
         except Exception:
             log.err()
+            log.msg(message.content.body)
             self.nack(message)
 
     def consume_message(self, message):

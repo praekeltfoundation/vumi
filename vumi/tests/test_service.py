@@ -2,7 +2,8 @@ from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.service import Worker, WorkerCreator
-from vumi.tests.utils import (fake_amq_message, get_stubbed_worker)
+from vumi.tests.utils import (
+    fake_amq_message, get_stubbed_worker, LogCatcher)
 from vumi.message import Message
 
 
@@ -53,12 +54,17 @@ class ServiceTestCase(TestCase):
         worker = get_stubbed_worker(Worker)
 
         yield worker.consume('test.routing.key', raise_error)
-        worker._amqp_client.broker.basic_publish('vumi', 'test.routing.key',
-                                                 message.content)
-        yield worker._amqp_client.broker.wait_delivery()
+
+        lc = LogCatcher()
+        with lc:
+            worker._amqp_client.broker.basic_publish(
+                'vumi', 'test.routing.key', message.content)
+            yield worker._amqp_client.broker.wait_delivery()
+
         self.assertEqual(len(self.flushLoggedErrors(TestError)), 1)
         self.assertEquals(logs, [Message(key="value")])
         self.assertEquals(errors, [Message(key="value")])
+        self.assertEqual(lc.messages(), ['{"key": "value"}'])
 
     @inlineCallbacks
     def test_start_publisher(self):
