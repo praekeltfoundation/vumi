@@ -178,6 +178,13 @@ class FakeAMQPTestCase(TestCase):
         self.assertEqual('blah', self.chan1.basic_get('q1').content.body)
         self.assertEqual('get-empty', self.chan1.basic_get('q1').method.name)
 
+    def test_basic_ack(self):
+        self.set_up_broker()
+        self.chan1.queue_bind('q1', 'direct', 'routing.key')
+        self.chan1.basic_publish('direct', 'routing.key', mkmsg('blah'))
+        msg = self.chan1.basic_get('q1')
+        self.chan1.basic_ack(msg.delivery_tag, False)
+
     def test_consumer_wrangling(self):
         self.set_up_broker()
         self.chan1.queue_bind('q1', 'direct', 'foo')
