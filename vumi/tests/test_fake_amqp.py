@@ -183,7 +183,33 @@ class FakeAMQPTestCase(TestCase):
         self.chan1.queue_bind('q1', 'direct', 'routing.key')
         self.chan1.basic_publish('direct', 'routing.key', mkmsg('blah'))
         msg = self.chan1.basic_get('q1')
+        self.assertTrue(msg.delivery_tag in self.q1.unacked_messages)
         self.chan1.basic_ack(msg.delivery_tag, False)
+        self.assertTrue(msg.delivery_tag not in self.q1.unacked_messages)
+
+    def test_basic_nack_with_requeue(self):
+        self.set_up_broker()
+        self.chan1.queue_bind('q1', 'direct', 'routing.key')
+        self.chan1.basic_publish('direct', 'routing.key', mkmsg('blah'))
+        msg = self.chan1.basic_get('q1')
+        self.assertTrue(msg.delivery_tag in self.q1.unacked_messages)
+        self.assertEqual(self.q1.messages, [])
+        self.chan1.basic_nack(msg.delivery_tag, False, requeue=True)
+        self.assertTrue(msg.delivery_tag not in self.q1.unacked_messages)
+        self.assertEqual(self.q1.messages,
+                        [{'content': 'blah', 'routing_key': 'routing.key',
+                          'exchange': 'direct'}])
+
+    def test_basic_nack_without_requeue(self):
+        self.set_up_broker()
+        self.chan1.queue_bind('q1', 'direct', 'routing.key')
+        self.chan1.basic_publish('direct', 'routing.key', mkmsg('blah'))
+        msg = self.chan1.basic_get('q1')
+        self.assertTrue(msg.delivery_tag in self.q1.unacked_messages)
+        self.assertEqual(self.q1.messages, [])
+        self.chan1.basic_nack(msg.delivery_tag, False, requeue=False)
+        self.assertTrue(msg.delivery_tag not in self.q1.unacked_messages)
+        self.assertEqual(self.q1.messages, [])
 
     def test_consumer_wrangling(self):
         self.set_up_broker()

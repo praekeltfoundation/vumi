@@ -176,8 +176,8 @@ class FakeAMQPBroker(object):
         self._message_processed()
         return None
 
-    def basic_nack(self, queue, delivery_tag):
-        self._get_queue(queue).nack(delivery_tag)
+    def basic_nack(self, queue, delivery_tag, requeue):
+        self._get_queue(queue).nack(delivery_tag, requeue)
         self._message_processed()
         return None
 
@@ -359,7 +359,7 @@ class FakeAMQPChannel(object):
         for dtag, queue in self.unacked[:]:
             if multiple or (dtag == delivery_tag):
                 self.unacked.remove((dtag, queue))
-                resp = self.broker.basic_nack(queue, dtag)
+                resp = self.broker.basic_nack(queue, dtag, requeue)
                 if (dtag == delivery_tag):
                     return resp
 
@@ -461,12 +461,13 @@ class FakeAMQPQueue(object):
                 })
 
     def ack(self, delivery_tag):
-        self.unacked_messages.pop(delivery_tag)
+        return self.unacked_messages.pop(delivery_tag)
 
-    def nack(self, delivery_tag):
+    def nack(self, delivery_tag, requeue):
         msg = self.unacked_messages.pop(delivery_tag)
-        self.put(msg['exchange'], msg['routing_key'],
-                 msg['content'])
+        if requeue:
+            self.put(msg['exchange'], msg['routing_key'],
+                     mkContent(msg['content']))
 
     def get_message(self):
         try:
