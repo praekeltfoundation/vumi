@@ -301,6 +301,10 @@ class Consumer(object):
     @inlineCallbacks
     def _consume(self):
         message = yield self.queue.get()
+        if isinstance(message, QueueCloseMarker):
+            log.msg("Queue closed.")
+            self._consume_loop.stop()
+            return
         try:
             yield self.consume_message(
                 self.message_class.from_json(message.content.body))
@@ -308,32 +312,6 @@ class Consumer(object):
         except Exception:
             log.err()
             self.nack(message)
-
-    def _process_message(self, message):
-        if isinstance(message, QueueCloseMarker):
-            log.msg("Queue closed.")
-            self._consume_loop.stop()
-        else:
-            try:
-                message_obj = self.message_class.from_json(
-                    message.content.body)
-                d = maybeDeferred(self.consume_message, message_obj)
-            except:
-                d = fail(Failure())
-            d.addCallback(self._ack_message, message)
-            d.addErrback(self._nack_message, message)
-            return d
-
-    def _ack_message(self, result, message):
-        self.ack(message)
-
-    def _nack_message(self, f, message):
-        log.err(f)
-        self.nack(message)
-
-    def _consume(self):
-        d = self.queue.get()
-        return d.addCallback(self._process_message)
 
     def consume_message(self, message):
         """Fallback consume method.
