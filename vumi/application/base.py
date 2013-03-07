@@ -73,7 +73,7 @@ class ApplicationWorker(BaseWorker):
     start_message_consumer = True
 
     CONFIG_CLASS = ApplicationConfig
-    SEND_TO_TAGS = frozenset([])
+    SEND_TO_TAGS = None
 
     def _check_for_deprecated_method(self, method_name):
         """Check whether a subclass overrides a deprecated method."""
@@ -81,9 +81,9 @@ class ApplicationWorker(BaseWorker):
         base_method = getattr(ApplicationWorker, method_name)
         if current_method == base_method:
             return False
-        warnings.warn(
+        self._depr_warn(
             "%s() is deprecated. Use connectors and endpoints instead." % (
-                method_name,), category=DeprecationWarning)
+                method_name,))
         return True
 
     def _check_deprecated(self):
@@ -96,18 +96,26 @@ class ApplicationWorker(BaseWorker):
         return any([self._check_for_deprecated_method(method_name) for
                     method_name in deprecated_methods])
 
+    def _depr_warn(self, message, stacklevel=1):
+        stacklevel += 1  # To push it up to our caller.
+        warnings.warn(DeprecationWarning(message), stacklevel=stacklevel)
+
     def _validate_config(self):
         config = self.get_static_config()
         self.transport_name = config.transport_name
         self._is_deprecated = self._check_deprecated()
-        for tag in self.SEND_TO_TAGS:
-            if tag not in config.send_to:
-                raise ConfigError("No configuration for send_to tag %r but"
-                                  " at least a transport_name is required."
-                                  % (tag,))
-            if 'transport_name' not in config.send_to[tag]:
-                raise ConfigError("The configuration for send_to tag %r must"
-                                  " contain a transport_name." % (tag,))
+        if self.SEND_TO_TAGS is not None:
+            self._depr_warn(
+                "SEND_TO_TAGS is deprecated. Use endpoints instead of tags.")
+            for tag in self.SEND_TO_TAGS:
+                if tag not in config.send_to:
+                    raise ConfigError(
+                        "No configuration for send_to tag %r but at least a"
+                        " transport_name is required." % (tag,))
+                if 'transport_name' not in config.send_to[tag]:
+                    raise ConfigError(
+                        "The configuration for send_to tag %r must contain a"
+                        " transport_name." % (tag,))
         self.validate_config()
 
     def setup_connectors(self):
@@ -233,15 +241,30 @@ class ApplicationWorker(BaseWorker):
     def reply_to_group(self, original_message, content, continue_session=True,
                        **kws):
         reply = original_message.reply_group(content, continue_session, **kws)
-        return self._publish_message(reply)
+        endpoint_name = original_message.get_routing_endpoint()
+        return self._publish_message(reply, endpoint_name=endpoint_name)
 
-    def send_to(self, to_addr, content, tag='default', **kw):
+    def _depr_send_to(self, to_addr, content, tag, **kw):
+        self._depr_warn(
+            "The 'tag' parameter to send_to() is deprecated. Use"
+            " 'endpoint' instead.", stacklevel=2)
+        if tag is None:
+            tag = 'default'
         if tag not in self.SEND_TO_TAGS:
             raise ValueError("Tag %r not defined in SEND_TO_TAGS" % (tag,))
         options = copy.deepcopy(self.get_static_config().send_to[tag])
         options.update(kw)
         msg = TransportUserMessage.send(to_addr, content, **options)
-        return self._publish_message(msg)
+        return self._publish_message(msg, endpoint_name=tag)
+
+    def send_to(self, to_addr, content, tag=None, endpoint=None, **kw):
+        options = {}
+        if endpoint is None:
+            return self._depr_send_to(to_addr, content, tag, **kw)
+
+        options.update(kw)
+        msg = TransportUserMessage.send(to_addr, content, **options)
+        return self._publish_message(msg, endpoint_name=endpoint)
 
     # Deprecated methods
 
@@ -254,9 +277,9 @@ class ApplicationWorker(BaseWorker):
 
     def setup_transport_connection(self, endpoint_name, transport_name,
                                    message_consumer, event_consumer):
-        warnings.warn(
+        self._depr_warn(
             "setup_transport_connection() is deprecated. Use connectors and"
-            " endpoints instead.", category=DeprecationWarning)
+            " endpoints instead.")
 
         if transport_name in self.connectors:
             log.warning("Transport connector %r already set up."
