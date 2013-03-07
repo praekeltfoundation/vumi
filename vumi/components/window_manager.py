@@ -169,12 +169,17 @@ class WindowManager(object):
     def get_internal_id(self, window_id, external_id):
         return self.redis.get(self.map_key(window_id, 'internal', external_id))
 
+    def get_external_id(self, window_id, flight_key):
+        return self.redis.get(self.map_key(window_id, 'external', flight_key))
+
+    @inlineCallbacks
     def clear_external_id(self, window_id, flight_key):
-        external_id = yield self.redis.delete(self.map_key(window_id,
-            'external', flight_key))
+        external_id = yield self.get_external_id(window_id, flight_key)
         if external_id:
+            yield self.redis.delete(self.map_key(window_id, 'external',
+                                                 flight_key))
             yield self.redis.delete(self.map_key(window_id, 'internal',
-                external_id))
+                                                 external_id))
 
     def monitor(self, key_callback, interval=10, cleanup=True,
                 cleanup_callback=None):
