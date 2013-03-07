@@ -93,8 +93,8 @@ class TestAppositTransport(TransportTestCase):
             'username': ['root'],
             'password': ['toor'],
             'serviceId': ['service-id-1'],
-            'from': ['8123'],
-            'to': ['251911223344'],
+            'fromAddress': ['8123'],
+            'toAddress': ['251911223344'],
             'content': ['so many dynamos'],
             'channel': ['SMS'],
         }
@@ -167,8 +167,8 @@ class TestAppositTransport(TransportTestCase):
             'password': ['toor'],
             'serviceId': ['service-id-1'],
             'content': ['racecar'],
-            'from': ['8123'],
-            'to': ['251911223344'],
+            'fromAddress': ['8123'],
+            'toAddress': ['251911223344'],
             'channel': ['SMS']
         })
 
@@ -232,22 +232,20 @@ class TestAppositTransport(TransportTestCase):
         msg1 = self.mk_outbound_message(from_addr='8123')
         yield self.dispatch(msg1)
         request1 = yield self.outbound_requests.get()
-        self.assert_outbound_request(request1, **{
-            'from': ['8123'],
-            'username': ['root'],
-            'password': ['toor'],
-            'serviceId': ['service-id-1']
-        })
+        self.assert_outbound_request(request1,
+            fromAddress=['8123'],
+            username=['root'],
+            password=['toor'],
+            serviceId=['service-id-1'])
 
         msg2 = self.mk_outbound_message(from_addr='8124')
         yield self.dispatch(msg2)
         request2 = yield self.outbound_requests.get()
-        self.assert_outbound_request(request2, **{
-            'from': ['8124'],
-            'username': ['admin'],
-            'password': ['nimda'],
-            'serviceId': ['service-id-2']
-        })
+        self.assert_outbound_request(request2,
+            fromAddress=['8124'],
+            username=['admin'],
+            password=['nimda'],
+            serviceId=['service-id-2'])
 
         [ack1, ack2] = yield self.wait_for_dispatched_events(2)
         self.assert_ack(ack1, msg1)

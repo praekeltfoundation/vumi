@@ -123,8 +123,8 @@ class AppositTransport(HttpRpcTransport):
             'username': credentials.get('username', ''),
             'password': credentials.get('password', ''),
             'serviceId': credentials.get('service_id', ''),
-            'from': message['from_addr'],
-            'to': message['to_addr'],
+            'fromAddress': message['from_addr'],
+            'toAddress': message['to_addr'],
             'content': message['content'],
             'channel': channel,
         }.iteritems())
