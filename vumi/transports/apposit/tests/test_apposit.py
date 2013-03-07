@@ -60,10 +60,11 @@ class TestAppositTransport(TransportTestCase):
 
     def send_inbound_request(self, **kwargs):
         params = {
-            'fromAddress': '251911223344',
-            'toAddress': '8123',
+            'from': '251911223344',
+            'to': '8123',
             'channel': 'SMS',
             'content': 'never odd or even',
+            'isTest': 'true',
         }
         params.update(kwargs)
         return self.send_full_inbound_request(**params)
@@ -111,12 +112,12 @@ class TestAppositTransport(TransportTestCase):
             'to_addr': '8123',
             'content': 'so many dynamos',
             'provider': 'apposit',
-            'transport_metadata': {}
+            'transport_metadata': {'apposit': {'isTest': 'true'}},
         }
         fields.update(kwargs)
 
-        for field, expected_value in fields.iteritems():
-            self.assertEqual(msg[field], expected_value)
+        for field_name, expected_value in fields.iteritems():
+            self.assertEqual(msg[field_name], expected_value)
 
     def assert_ack(self, ack, msg):
         self.assertEqual(ack.payload['event_type'], 'ack')
@@ -130,7 +131,13 @@ class TestAppositTransport(TransportTestCase):
 
     @inlineCallbacks
     def test_inbound(self):
-        response = yield self.send_inbound_request(content='so many dynamos')
+        response = yield self.send_inbound_request(**{
+            'from': '251911223344',
+            'to': '8123',
+            'content': 'so many dynamos',
+            'channel': 'SMS',
+            'isTest': 'true',
+        })
 
         [msg] = self.get_dispatched_messages()
         self.assert_message_fields(msg,
@@ -140,7 +147,7 @@ class TestAppositTransport(TransportTestCase):
             to_addr='8123',
             content='so many dynamos',
             provider='apposit',
-            transport_metadata={})
+            transport_metadata={'apposit': {'isTest': 'true'}})
 
         self.assertEqual(response.code, http.OK)
         self.assertEqual(json.loads(response.delivered_body),
@@ -155,14 +162,15 @@ class TestAppositTransport(TransportTestCase):
         yield self.dispatch(msg)
 
         request = yield self.outbound_requests.get()
-        self.assert_outbound_request(request,
-            username=['root'],
-            password=['toor'],
-            serviceId=['service-id-1'],
-            content=['racecar'],
-            fromAddress=['8123'],
-            toAddress=['251911223344'],
-            channel=['SMS'])
+        self.assert_outbound_request(request, **{
+            'username': ['root'],
+            'password': ['toor'],
+            'serviceId': ['service-id-1'],
+            'content': ['racecar'],
+            'fromAddress': ['8123'],
+            'toAddress': ['251911223344'],
+            'channel': ['SMS']
+        })
 
         [ack] = yield self.wait_for_dispatched_events(1)
         self.assert_ack(ack, msg)
@@ -179,11 +187,13 @@ class TestAppositTransport(TransportTestCase):
 
     @inlineCallbacks
     def test_inbound_requests_for_unsupported_channel(self):
-        response = yield self.send_full_inbound_request(
-            fromAddress='251911223344',
-            toAddress='8123',
-            channel='steven',
-            content='never odd or even')
+        response = yield self.send_full_inbound_request(**{
+            'from': '251911223344',
+            'to': '8123',
+            'channel': 'steven',
+            'content': 'never odd or even',
+            'isTest': 'false',
+        })
 
         self.assertEqual(response.code, 400)
         self.assertEqual(json.loads(response.delivered_body),
@@ -191,12 +201,14 @@ class TestAppositTransport(TransportTestCase):
 
     @inlineCallbacks
     def test_inbound_requests_for_unexpected_param(self):
-        response = yield self.send_full_inbound_request(
-            fromAddress='251911223344',
-            toAddress='8123',
-            channel='SMS',
-            steven='its a trap',
-            content='never odd or even')
+        response = yield self.send_full_inbound_request(**{
+            'from': '251911223344',
+            'to': '8123',
+            'channel': 'SMS',
+            'steven': 'its a trap',
+            'content': 'never odd or even',
+            'isTest': 'false',
+        })
 
         self.assertEqual(response.code, 400)
         self.assertEqual(json.loads(response.delivered_body),
@@ -204,10 +216,12 @@ class TestAppositTransport(TransportTestCase):
 
     @inlineCallbacks
     def test_inbound_requests_for_missing_param(self):
-        response = yield self.send_full_inbound_request(
-            fromAddress='251911223344',
-            toAddress='8123',
-            content='never odd or even')
+        response = yield self.send_full_inbound_request(**{
+            'from': '251911223344',
+            'to': '8123',
+            'content': 'never odd or even',
+            'isTest': 'false',
+        })
 
         self.assertEqual(response.code, 400)
         self.assertEqual(json.loads(response.delivered_body),

@@ -26,6 +26,8 @@ class AppositTransport(HttpRpcTransport):
     """
     HTTP transport for Apposit's interconnection services.
     """
+    ENCODING = 'UTF-8'
+    CONFIG_CLASS = AppositTransportConfig
 
     # Apposit supports multiple channel types (e.g. sms, ussd, ivr, email).
     # Currently, we only have this working for sms, but theoretically, this
@@ -39,10 +41,8 @@ class AppositTransport(HttpRpcTransport):
     TRANSPORT_TYPE_LOOKUP = dict(
         reversed(i) for i in CHANNEL_LOOKUP.iteritems())
 
-    ENCODING = 'UTF-8'
-    CONFIG_CLASS = AppositTransportConfig
-    EXPECTED_FIELDS = frozenset([
-        'fromAddress', 'toAddress', 'channel', 'content'])
+    EXPECTED_FIELDS = frozenset(['from', 'to', 'channel', 'content', 'isTest'])
+
     KNOWN_ERROR_RESPONSE_CODES = {
         '102001': "Username Not Set",
         '102002': "Password Not Set",
@@ -90,17 +90,18 @@ class AppositTransport(HttpRpcTransport):
             return
 
         self.emit("AppositTransport receiving inbound message from "
-                  "%(fromAddress)s to %(toAddress)s" % values)
+                  "%(from)s to %(to)s" % values)
 
         yield self.publish_message(
             transport_name=self.transport_name,
             message_id=message_id,
             content=values['content'],
-            from_addr=values['fromAddress'],
-            to_addr=values['toAddress'],
+            from_addr=values['from'],
+            to_addr=values['to'],
             provider='apposit',
             transport_type=self.TRANSPORT_TYPE_LOOKUP[channel],
-        )
+            transport_metadata={'apposit': {'isTest': values['isTest']}})
+
         yield self.finish_request(
             message_id, json.dumps({'message_id': message_id}))
 
