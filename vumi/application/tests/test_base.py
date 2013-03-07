@@ -1,3 +1,5 @@
+import warnings
+
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.errors import ConfigError
@@ -259,6 +261,20 @@ class TestApplicationWorker(ApplicationTestCase):
             })
         for consumer in self.get_app_consumers(app):
             self.assertFalse(consumer.channel.qos_prefetch_count)
+
+    @inlineCallbacks
+    def test_deprecated_methods_warning(self):
+        class DeprApp(ApplicationWorker):
+            def _setup_transport_publisher(self):
+                return super(DeprApp, self)._setup_transport_publisher()
+
+        with warnings.catch_warnings(record=True) as warns:
+            yield self.get_application({})
+        self.assertEqual(warns, [])
+
+        with warnings.catch_warnings(record=True) as warns:
+            yield self.get_application({}, DeprApp)
+        self.assertEqual(len(warns), 2)
 
 
 class TestApplicationMiddlewareHooks(ApplicationTestCase):

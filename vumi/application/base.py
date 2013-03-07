@@ -79,7 +79,7 @@ class ApplicationWorker(BaseWorker):
         """Check whether a subclass overrides a deprecated method."""
         current_method = getattr(type(self), method_name)
         base_method = getattr(ApplicationWorker, method_name)
-        if current_method is base_method:
+        if current_method == base_method:
             return False
         warnings.warn(
             "%s() is deprecated. Use connectors and endpoints instead." % (
