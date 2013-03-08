@@ -288,9 +288,9 @@ class TransportUserMessage(TransportMessage):
         }
         fields.update(kw)
 
-        # The ones we specify directly in here are either mandatory or may not
-        # be overridden.
         out_msg = TransportUserMessage(content=content, **fields)
+        # The reply should go out the same endpoint it came in.
+        out_msg.set_routing_endpoint(self.get_routing_endpoint())
         return out_msg
 
     def reply_group(self, *args, **kw):
