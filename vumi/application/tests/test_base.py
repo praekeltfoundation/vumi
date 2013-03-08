@@ -5,11 +5,13 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from vumi.errors import ConfigError
 from vumi.application.base import ApplicationWorker, SESSION_NEW, SESSION_CLOSE
 from vumi.message import TransportUserMessage, TransportEvent
-from vumi.tests.utils import get_stubbed_worker
+from vumi.tests.utils import get_stubbed_worker, LogCatcher
 from vumi.application.tests.utils import ApplicationTestCase
 
 
 class DummyApplicationWorker(ApplicationWorker):
+
+    ALLOWED_ENDPOINTS = frozenset(['default', 'outbound1'])
 
     def __init__(self, *args, **kwargs):
         super(DummyApplicationWorker, self).__init__(*args, **kwargs)
@@ -268,7 +270,10 @@ class TestDeprApplicationWorker(ApplicationTestCase):
         self.assertEqual(len(msgs), len(expected_msgs))
 
     def assert_warnings(self, warning_strs):
-        warning_strs = ["SEND_TO_TAGS is deprecated."] + warning_strs
+        warning_strs = [
+            "SEND_TO_TAGS is deprecated.",
+            "'send_to' configuration is deprecated.",
+        ] + warning_strs
         self.assertEqual(len(self.warns), len(warning_strs))
         for warning_obj, warning_str in zip(self.warns, warning_strs):
             self.assertTrue(
@@ -331,7 +336,13 @@ class TestDeprApplicationWorker(ApplicationTestCase):
     def test_send_to_with_no_send_to_tags(self):
         config = {'transport_name': 'badconfig_app', 'send_to': {}}
         with warnings.catch_warnings(record=True) as warns:
-            yield self.assertFailure(self.get_application(config), ConfigError)
+            with LogCatcher(message=r'is required\.$') as lc:
+                yield self.get_application(config)
+                def_log, out1_log = sorted(lc.messages())
+        self.assertTrue(def_log.startswith(
+            "No configuration for send_to tag 'default'."))
+        self.assertTrue(out1_log.startswith(
+            "No configuration for send_to tag 'outbound1'."))
         self.warns.extend(warns)
         self.assert_warnings(["SEND_TO_TAGS is deprecated."])
 
@@ -344,9 +355,18 @@ class TestDeprApplicationWorker(ApplicationTestCase):
                       },
                   }
         with warnings.catch_warnings(record=True) as warns:
-            yield self.assertFailure(self.get_application(config), ConfigError)
+            with LogCatcher(message=r'is required\.$') as lc:
+                yield self.get_application(config)
+                def_log, out1_log = sorted(lc.messages())
+        self.assertTrue(def_log.startswith(
+            "No transport_name configured for send_to tag 'default'."))
+        self.assertTrue(out1_log.startswith(
+            "No transport_name configured for send_to tag 'outbound1'."))
         self.warns.extend(warns)
-        self.assert_warnings(["SEND_TO_TAGS is deprecated."])
+        self.assert_warnings([
+            "SEND_TO_TAGS is deprecated.",
+            "'send_to' configuration is deprecated.",
+        ])
 
 
 class TestApplicationMiddlewareHooks(ApplicationTestCase):
