@@ -258,7 +258,11 @@ class SimpleDispatchRouter(BaseDispatchRouter):
     def dispatch_outbound_message(self, msg):
         name = msg['transport_name']
         name = self.config.get('transport_mappings', {}).get(name, name)
-        self.dispatcher.publish_outbound_message(name, msg)
+        if name in self.dispatcher.transport_publisher:
+            self.dispatcher.publish_outbound_message(name, msg)
+        else:
+            log.error('Unknown transport_name: %s, discarding %r' % (
+                name, msg.payload))
 
 
 class TransportToTransportRouter(BaseDispatchRouter):

@@ -84,6 +84,29 @@ class WindowManagerTestCase(TestCase, PersistenceMixin):
         self.assertTrue(next_flight_key)
 
     @inlineCallbacks
+    def test_set_and_external_id(self):
+        yield self.wm.set_external_id(self.window_id, "flight_key",
+                                      "external_id")
+        self.assertEqual(
+            (yield self.wm.get_external_id(self.window_id, "flight_key")),
+            "external_id")
+        self.assertEqual(
+            (yield self.wm.get_internal_id(self.window_id, "external_id")),
+            "flight_key")
+
+    @inlineCallbacks
+    def test_remove_key_removes_external_and_internal_id(self):
+        yield self.wm.set_external_id(self.window_id, "flight_key",
+                                      "external_id")
+        yield self.wm.remove_key(self.window_id, "flight_key")
+        self.assertEqual(
+            (yield self.wm.get_external_id(self.window_id, "flight_key")),
+            None)
+        self.assertEqual(
+            (yield self.wm.get_internal_id(self.window_id, "external_id")),
+            None)
+
+    @inlineCallbacks
     def assert_count_waiting(self, window_id, amount):
         self.assertEqual((yield self.wm.count_waiting(window_id)), amount)
 

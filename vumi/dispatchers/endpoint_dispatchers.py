@@ -62,9 +62,14 @@ class Dispatcher(BaseWorker):
         raise NotImplementedError()
 
     def _mkhandler(self, handler_func, connector_name):
+        def errback(f):
+            log.error("Error routing message for %s" % (connector_name,), f)
+
         def handler(msg):
             d = self.get_config(msg)
-            return d.addCallback(handler_func, msg, connector_name)
+            d.addCallback(handler_func, msg, connector_name)
+            d.addErrback(errback)
+            return d
         return handler
 
     def setup_connectors(self):

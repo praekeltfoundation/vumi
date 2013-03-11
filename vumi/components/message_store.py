@@ -26,6 +26,7 @@ class CurrentTag(Model):
     # key is flattened tag
     current_batch = ForeignKey(Batch, null=True)
     tag = Tag()
+    metadata = Dynamic(Unicode())
 
     @staticmethod
     def _flatten_tag(tag):

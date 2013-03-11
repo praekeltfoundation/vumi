@@ -5,11 +5,10 @@
 import copy
 
 from twisted.internet.defer import maybeDeferred
-from twisted.python import log
 
 from vumi.config import ConfigText, ConfigDict
 from vumi.worker import BaseWorker
-from vumi.errors import ConfigError
+from vumi import log
 from vumi.message import TransportUserMessage
 
 
@@ -41,10 +40,17 @@ class ApplicationWorker(BaseWorker):
     :meth:`reply_to` (for replies to incoming messages) or
     :meth:`send_to` (for messages that are not replies).
 
-    Messages sent via :meth:`send_to` pass optional additional data
-    from configuration to the TransportUserMessage constructor, based
-    on the tag parameter passed to send_to. This usually contains
-    information useful for routing the message.
+    :meth:`send_to` can take either an `endpoint` parameter or a deprecated
+    `tag` parameter.
+
+    :attr:`ALLOWED_ENDPOINTS` lists the endpoints this application is allowed
+    to send messages to using the :meth:`send_to` method. If it is set to
+    `None`, any endpoint is allowed.
+
+    (DEPRECATED) Messages sent via :meth:`send_to` pass optional additional
+    data from configuration to the TransportUserMessage constructor, based on
+    the tag parameter passed to send_to. This usually contains information
+    useful for routing the message.
 
     An example :meth:`send_to` configuration might look like::
 
@@ -52,39 +58,42 @@ class ApplicationWorker(BaseWorker):
         - default:
           transport_name: sms_transport
 
-    Currently 'transport_name' **must** be defined for each send_to
-    section since all existing dispatchers rely on this for routing
+    NOTE: If you are using non-endpoint routing, 'transport_name' **must** be
+    defined for each send_to section since dispatchers rely on this for routing
     outbound messages.
 
-    The available tags are defined by the :attr:`SEND_TO_TAGS` class
-    attribute. Subclasses must override this attribute with a set of
-    tag names if they wish to use :meth:`send_to`. If applications
-    have only a single tag, it is suggested to name that tag `default`
-    (this makes calling `send_to` easier since the value of the tag
-    parameter may be omitted).
+    (DEPRECATED) The available tags are defined by the :attr:`SEND_TO_TAGS`
+    class attribute. Subclasses must override this attribute with a set of tag
+    names if they wish to use :meth:`send_to`. If applications have only a
+    single tag, it is suggested to name that tag `default` (this makes calling
+    `send_to` easier since the value of the tag parameter may be omitted).
 
-    By default :attr:`SEND_TO_TAGS` is empty and all calls to
-    :meth:`send_to` will fail (this is to make it easy to identify
-    which tags an application requires `send_to` configuration for).
+    (DEPRECATED) By default :attr:`SEND_TO_TAGS` is empty and all calls to
+    :meth:`send_to` will fail (this is to make it easy to identify which tags
+    an application requires `send_to` configuration for).
     """
 
     transport_name = None
     start_message_consumer = True
 
     CONFIG_CLASS = ApplicationConfig
-    SEND_TO_TAGS = frozenset([])
+    SEND_TO_TAGS = None
+    ALLOWED_ENDPOINTS = frozenset(['default'])
 
     def _validate_config(self):
         config = self.get_static_config()
         self.transport_name = config.transport_name
-        for tag in self.SEND_TO_TAGS:
+        for tag in (self.SEND_TO_TAGS or []):
             if tag not in config.send_to:
-                raise ConfigError("No configuration for send_to tag %r but"
-                                  " at least a transport_name is required."
-                                  % (tag,))
-            if 'transport_name' not in config.send_to[tag]:
-                raise ConfigError("The configuration for send_to tag %r must"
-                                  " contain a transport_name." % (tag,))
+                log.warning(
+                    "No configuration for send_to tag %r. If you are using"
+                    " (deprecated) non-endpoint routing, at least a"
+                    " transport_name is required." % (tag,))
+            elif 'transport_name' not in config.send_to[tag]:
+                log.warning(
+                    "No transport_name configured for send_to tag %r. If you"
+                    " are using (deprecated) non-endpoint routing, one is"
+                    " required." % (tag,))
         self.validate_config()
 
     def setup_connectors(self):
@@ -203,12 +212,20 @@ class ApplicationWorker(BaseWorker):
     def reply_to_group(self, original_message, content, continue_session=True,
                        **kws):
         reply = original_message.reply_group(content, continue_session, **kws)
-        return self._publish_message(reply)
+        endpoint_name = original_message.get_routing_endpoint()
+        return self._publish_message(reply, endpoint_name=endpoint_name)
 
-    def send_to(self, to_addr, content, tag='default', **kw):
-        if tag not in self.SEND_TO_TAGS:
-            raise ValueError("Tag %r not defined in SEND_TO_TAGS" % (tag,))
-        options = copy.deepcopy(self.get_static_config().send_to[tag])
+    def send_to(self, to_addr, content, endpoint=None, **kw):
+        if endpoint is None:
+            endpoint = 'default'
+
+        if (self.ALLOWED_ENDPOINTS is not None
+                and endpoint not in self.ALLOWED_ENDPOINTS):
+            raise ValueError("Endpoint %r not defined in ALLOWED_ENDPOINTS" % (
+                endpoint,))
+
+        options = copy.deepcopy(
+            self.get_static_config().send_to.get(endpoint, {}))
         options.update(kw)
         msg = TransportUserMessage.send(to_addr, content, **options)
-        return self._publish_message(msg)
+        return self._publish_message(msg, endpoint_name=endpoint)
