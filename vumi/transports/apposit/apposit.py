@@ -1,3 +1,5 @@
+# -*- test-case-name: vumi.transports.apposit.tests.test_apposit -*-
+
 import json
 from urllib import urlencode
 
