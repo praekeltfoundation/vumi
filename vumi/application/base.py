@@ -75,7 +75,8 @@ class ApplicationWorker(BaseWorker):
     """
 
     transport_name = None
-    start_message_consumer = True
+    start_message_consumer = None
+    UNPAUSE_CONNECTORS = True
 
     CONFIG_CLASS = ApplicationConfig
     SEND_TO_TAGS = None
@@ -165,7 +166,13 @@ class ApplicationWorker(BaseWorker):
         if self._is_deprecated:
             d.addCallback(lambda r: self._setup_transport_consumer())
             d.addCallback(lambda r: self._setup_event_consumer())
-        elif self.start_message_consumer:
+
+        if self.start_message_consumer is not None:
+            self._depr_warn(
+                "The 'start_message_consumer' attribute is deprecated. Use"
+                " 'UNPAUSE_CONNECTORS' instead.")
+            self.UNPAUSE_CONNECTORS = self.start_message_consumer
+        if self.UNPAUSE_CONNECTORS:
             d.addCallback(lambda r: self.unpause_connectors())
 
         return d

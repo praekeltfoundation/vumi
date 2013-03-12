@@ -42,6 +42,7 @@ class DummyApplicationWorker(ApplicationWorker):
 class DeprApplicationWorker(DummyApplicationWorker):
 
     SEND_TO_TAGS = frozenset(['default', 'outbound1'])
+    start_message_consumer = True
 
 
 class EchoApplicationWorker(ApplicationWorker):
@@ -273,6 +274,7 @@ class TestDeprApplicationWorker(ApplicationTestCase):
         warning_strs = [
             "SEND_TO_TAGS is deprecated.",
             "'send_to' configuration is deprecated.",
+            "The 'start_message_consumer' attribute is deprecated.",
         ] + warning_strs
         self.assertEqual(len(self.warns), len(warning_strs))
         for warning_obj, warning_str in zip(self.warns, warning_strs):
@@ -344,7 +346,10 @@ class TestDeprApplicationWorker(ApplicationTestCase):
         self.assertTrue(out1_log.startswith(
             "No configuration for send_to tag 'outbound1'."))
         self.warns.extend(warns)
-        self.assert_warnings(["SEND_TO_TAGS is deprecated."])
+        self.assert_warnings([
+            "SEND_TO_TAGS is deprecated.",
+            "The 'start_message_consumer' attribute is deprecated.",
+        ])
 
     @inlineCallbacks
     def test_send_to_with_bad_config(self):
@@ -366,6 +371,7 @@ class TestDeprApplicationWorker(ApplicationTestCase):
         self.assert_warnings([
             "SEND_TO_TAGS is deprecated.",
             "'send_to' configuration is deprecated.",
+            "The 'start_message_consumer' attribute is deprecated.",
         ])
 
 
