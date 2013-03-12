@@ -18,7 +18,7 @@ from vumi.errors import VumiError
 from vumi.message import Message
 from vumi.utils import (load_class_by_string, vumi_resource_path, http_request,
                         basic_auth_string, LogFilterSite)
-import string
+
 
 SPECS = {}
 
@@ -163,8 +163,6 @@ class Worker(MultiService, object):
     The Worker is responsible for starting consumers & publishers
     as needed.
     """
-    # This will obviously be supplied by configuration in future
-    SYSTEM_ID = "vumi-go-prod-1"
 
     def __init__(self, options, config=None):
         super(Worker, self).__init__()
@@ -173,7 +171,6 @@ class Worker(MultiService, object):
             config = {}
         self.config = config
         self._amqp_client = None
-        self._hb_pub = None
 
     def _amqp_connected(self, amqp_client):
         self._amqp_client = amqp_client
@@ -199,11 +196,6 @@ class Worker(MultiService, object):
         if self.running:
             yield self.stopWorker()
         yield super(Worker, self).stopService()
-
-    def start_heartbeat(self, cls):
-        system_id    = Worker.SYSTEM_ID
-        worker_id    = self.config.get('worker_name', "ANONYMOUS(%s)" % self.__class__.__name__)
-        self._hb_pub = self.start_publisher(cls, system_id, worker_id)
 
     def routing_key_to_class_name(self, routing_key):
         return ''.join(map(lambda s: s.capitalize(), routing_key.split('.')))

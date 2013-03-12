@@ -13,7 +13,6 @@ from vumi.errors import ConfigError
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.middleware import MiddlewareStack, setup_middlewares_from_config
 
-from vumi.blinkenlights.publisher import HeartBeatPublisher
 
 SESSION_NEW = TransportUserMessage.SESSION_NEW
 SESSION_CLOSE = TransportUserMessage.SESSION_CLOSE
@@ -92,8 +91,6 @@ class ApplicationWorker(Worker):
         self.amqp_prefetch_count = config.amqp_prefetch_count
         self.send_to_options = config.send_to
 
-        yield self.start_heartbeat(HeartBeatPublisher)
-
         self._event_handlers = {
             'ack': self.consume_ack,
             'nack': self.consume_nack,
@@ -117,7 +114,6 @@ class ApplicationWorker(Worker):
         if self.start_message_consumer:
             yield self._setup_transport_consumer()
             yield self._setup_event_consumer()
-
 
     @inlineCallbacks
     def stopWorker(self):

@@ -16,7 +16,6 @@ from vumi import log
 from vumi.components import SessionManager
 from vumi.persist.txredis_manager import TxRedisManager
 
-from vumi.blinkenlights.publisher import HeartBeatPublisher
 
 class BaseDispatchWorker(Worker):
     """Base class for a dispatch worker.
@@ -28,7 +27,6 @@ class BaseDispatchWorker(Worker):
         log.msg('Starting a %s dispatcher with config: %s'
                 % (self.__class__.__name__, self.config))
 
-        yield self.start_heartbeat(HeartBeatPublisher)
         yield self.setup_endpoints()
         yield self.setup_middleware()
         yield self.setup_router()
