@@ -15,6 +15,7 @@ from vumi.service import Worker
 from vumi.transports.failures import FailureMessage
 from vumi.middleware import MiddlewareStack, setup_middlewares_from_config
 
+from vumi.blinkenlights.publisher import HeartBeatPublisher
 
 class TransportConfig(Config):
     """Base config definition for transports.
@@ -74,6 +75,8 @@ class Transport(Worker):
         config = self.get_static_config()
         self.transport_name = config.transport_name
         self.amqp_prefetch_count = config.amqp_prefetch_count
+
+        yield self.start_heartbeat(HeartBeatPublisher)
 
         yield self.setup_transport_connection()
         yield self.setup_middleware()
