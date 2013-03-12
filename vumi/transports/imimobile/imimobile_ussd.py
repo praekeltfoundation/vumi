@@ -1,3 +1,5 @@
+# -*- test-case-name: vumi.transports.imimobile.tests.test_imimobile_ussd -*-
+
 import re
 import json
 from datetime import datetime, timedelta
@@ -96,27 +98,6 @@ class ImiMobileUssdTransport(HttpRpcTransport):
 
         return tag, errors
 
-    def get_field_values(self, request):
-        """
-        Parses the request params and returns a tuple consisting of a dict of
-        the expected fields' values and a dict of errors encountered, such as
-        unexpected or missing params.
-        """
-        values = {}
-        errors = {}
-
-        for field in request.args:
-            if field not in self.EXPECTED_FIELDS:
-                errors.setdefault('unexpected_parameter', []).append(field)
-            else:
-                values[field] = str(request.args.get(field)[0]).decode('utf-8')
-
-        for field in self.EXPECTED_FIELDS:
-            if field not in values:
-                errors.setdefault('missing_parameter', []).append(field)
-
-        return values, errors
-
     @classmethod
     def ist_to_utc(cls, timestamp):
         """
@@ -137,7 +118,8 @@ class ImiMobileUssdTransport(HttpRpcTransport):
         to_addr, to_addr_errors = self.get_to_addr(request)
         errors.update(to_addr_errors)
 
-        values, field_value_errors = self.get_field_values(request)
+        values, field_value_errors = self.get_field_values(request,
+                                                        self.EXPECTED_FIELDS)
         errors.update(field_value_errors)
 
         if errors:
@@ -159,7 +141,7 @@ class ImiMobileUssdTransport(HttpRpcTransport):
             self.finish_request(
                 message_id,
                 self.user_terminated_session_response,
-                headers={'X-USSD-SESSION': [0]})
+                headers={'X-USSD-SESSION': ['0']})
         else:
             # We use the msisdn (from_addr) to make a guess about the
             # whether the session is new or not.
@@ -195,11 +177,11 @@ class ImiMobileUssdTransport(HttpRpcTransport):
 
         if message.payload.get('in_reply_to') and 'content' in message.payload:
             # IMImobile use 1 for resume and 0 for termination of a session
-            session_header_value = 1
+            session_header_value = '1'
 
             if message['session_event'] == TransportUserMessage.SESSION_CLOSE:
                 yield self.session_manager.clear_session(message['to_addr'])
-                session_header_value = 0
+                session_header_value = '0'
 
             response_id = self.finish_request(
                 message['in_reply_to'],

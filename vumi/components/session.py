@@ -33,7 +33,7 @@ class SessionManager(object):
 
     @classmethod
     def from_redis_config(cls, config, key_prefix=None,
-                          max_session_length=None, gc_period=1.0):
+                          max_session_length=None, gc_period=None):
         """Create a `SessionManager` instance using `TxRedisManager`.
         """
         from vumi.persist.txredis_manager import TxRedisManager

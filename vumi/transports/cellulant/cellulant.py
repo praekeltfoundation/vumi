@@ -67,6 +67,7 @@ class CellulantTransport(HttpRpcTransport):
         to_addr = None
         if op_code == "BEG":
             to_addr = request.args.get('INPUT')[0]
+            content = None
             yield self.set_ussd_for_msisdn_session(
                 request.args.get('MSISDN')[0],
                 request.args.get('sessionID')[0],
@@ -75,6 +76,7 @@ class CellulantTransport(HttpRpcTransport):
             to_addr = yield self.get_ussd_for_msisdn_session(
                 request.args.get('MSISDN')[0],
                 request.args.get('sessionID')[0])
+            content = request.args.get('INPUT')[0]
 
         if ((request.args.get('ABORT')[0] not in ('0', 'null'))
             or (op_code == 'ABO')):
@@ -95,7 +97,7 @@ class CellulantTransport(HttpRpcTransport):
             }
             self.publish_message(
                 message_id=message_id,
-                content=request.args.get('INPUT')[0],
+                content=content,
                 to_addr=to_addr,
                 from_addr=request.args.get('MSISDN')[0],
                 session_event=event,
@@ -105,8 +107,12 @@ class CellulantTransport(HttpRpcTransport):
             )
 
     def handle_outbound_message(self, message):
-        if message.payload.get('in_reply_to') and 'content' in message.payload:
-            self.finish_request(message['in_reply_to'],
-                                pack_ussd_message(message).encode('utf-8'))
-            return self.publish_ack(user_message_id=message['message_id'],
-                sent_message_id=message['message_id'])
+        missing_fields = self.ensure_message_values(message,
+                                ['in_reply_to', 'content'])
+        if missing_fields:
+            return self.reject_message(message, missing_fields)
+
+        self.finish_request(message['in_reply_to'],
+                            pack_ussd_message(message).encode('utf-8'))
+        return self.publish_ack(user_message_id=message['message_id'],
+            sent_message_id=message['message_id'])

@@ -58,14 +58,14 @@ class HttpApiTransport(HttpRpcTransport):
                 message)
         log.msg("HttpApiTransport dropping outbound message: %s" % (message))
 
-    def get_field_values(self, request, required_fields):
+    def get_api_field_values(self, request, required_fields):
         values = self.field_defaults.copy()
         errors = {}
         for field in request.args:
             if field not in self.allowed_fields:
                 errors.setdefault('unexpected_parameter', []).append(field)
             else:
-                values[field] = str(request.args.get(field)[0])
+                values[field] = request.args.get(field)[0].decode('utf-8')
         for field in required_fields:
             if field not in values and field in self.allowed_fields:
                 errors.setdefault('missing_parameter', []).append(field)
@@ -73,8 +73,8 @@ class HttpApiTransport(HttpRpcTransport):
 
     @inlineCallbacks
     def handle_raw_inbound_message(self, message_id, request):
-        values, errors = self.get_field_values(request, ['content', 'to_addr',
-                                                         'from_addr'])
+        values, errors = self.get_api_field_values(request, ['content',
+                                                    'to_addr', 'from_addr'])
         if errors:
             yield self.finish_request(message_id, json.dumps(errors), code=400)
             return

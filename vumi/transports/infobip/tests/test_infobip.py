@@ -244,25 +244,16 @@ class TestInfobipUssdTransport(TransportTestCase):
 
         with LogCatcher() as logger:
             yield self.dispatch(msg)
-            [error, logged_failure] = logger.errors
+            [error] = logger.errors
 
         expected_error = ("Infobip transport cannot process outbound message"
-                          " that is not a reply.")
-
-        twisted_failure = logged_failure['failure']
-        self.assertEqual(self.flushLoggedErrors(PermanentFailure),
-                         [twisted_failure])
-        failure = twisted_failure.value
-        self.assertEqual(failure.failure_code, FailureMessage.FC_PERMANENT)
-        self.assertEqual(str(failure), expected_error)
+                          " that is not a reply: %s" % (msg['message_id'],))
 
         [errmsg] = error['message']
-        expected_logged_error = "'" + expected_error.replace('.', ':')
-        self.assertTrue(errmsg.startswith(expected_logged_error))
-        [msg] = yield self.wait_for_dispatched_failures(1)
-        self.assertEqual(msg['failure_code'], "permanent")
-        last_line = msg['reason'].splitlines()[-1].strip()
-        self.assertTrue(last_line.endswith(expected_error))
+        self.assertTrue(expected_error in errmsg)
+        [nack] = yield self.wait_for_dispatched_events(1)
+        self.assertEqual(nack['user_message_id'], msg['message_id'])
+        self.assertEqual(nack['nack_reason'], expected_error)
 
     @inlineCallbacks
     def test_ack(self):
@@ -281,16 +272,18 @@ class TestInfobipUssdTransport(TransportTestCase):
         # finish message so reply will fail
         self.transport.finish_request(msg['message_id'], "Done")
         reply = msg.reply("Ping")
-        yield self.dispatch(reply)
 
-        [msg] = yield self.get_dispatched_failures()
-        self.assertEqual(msg['failure_code'], "permanent")
-        last_line = msg['reason'].splitlines()[-1].strip()
+        with LogCatcher() as logger:
+            yield self.dispatch(reply)
+            [error] = logger.errors
+
         expected_error = ("Infobip transport could not find original request"
                           " when attempting to reply.")
-        self.assertTrue(last_line.endswith(expected_error))
 
-        [error] = self.flushLoggedErrors(PermanentFailure)
-        failure = error.value
-        self.assertEqual(failure.failure_code, FailureMessage.FC_PERMANENT)
-        self.assertEqual(str(failure), expected_error)
+        [errmsg] = error['message']
+        self.assertTrue(expected_error in errmsg)
+
+        [nack] = yield self.wait_for_dispatched_events(1)
+        [nack] = yield self.wait_for_dispatched_events(1)
+        self.assertEqual(nack['user_message_id'], reply['message_id'])
+        self.assertEqual(nack['nack_reason'], expected_error)
