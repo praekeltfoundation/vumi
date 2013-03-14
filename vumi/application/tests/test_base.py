@@ -1,18 +1,20 @@
-from twisted.internet.defer import inlineCallbacks
+import warnings
+
+from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.errors import ConfigError
 from vumi.application.base import ApplicationWorker, SESSION_NEW, SESSION_CLOSE
 from vumi.message import TransportUserMessage, TransportEvent
-from vumi.tests.utils import get_stubbed_worker
+from vumi.tests.utils import get_stubbed_worker, LogCatcher
 from vumi.application.tests.utils import ApplicationTestCase
 
 
 class DummyApplicationWorker(ApplicationWorker):
 
-    SEND_TO_TAGS = frozenset(['default', 'outbound1'])
+    ALLOWED_ENDPOINTS = frozenset(['default', 'outbound1'])
 
     def __init__(self, *args, **kwargs):
-        super(ApplicationWorker, self).__init__(*args, **kwargs)
+        super(DummyApplicationWorker, self).__init__(*args, **kwargs)
         self.record = []
 
     def consume_unknown_event(self, event):
@@ -35,6 +37,12 @@ class DummyApplicationWorker(ApplicationWorker):
 
     def close_session(self, message):
         self.record.append(('close_session', message))
+
+
+class DeprApplicationWorker(DummyApplicationWorker):
+
+    SEND_TO_TAGS = frozenset(['default', 'outbound1'])
+    start_message_consumer = True
 
 
 class EchoApplicationWorker(ApplicationWorker):
@@ -60,17 +68,7 @@ class TestApplicationWorker(ApplicationTestCase):
     def setUp(self):
         yield super(TestApplicationWorker, self).setUp()
         self.transport_name = 'test'
-        self.config = {
-            'transport_name': self.transport_name,
-            'send_to': {
-                'default': {
-                    'transport_name': 'default_transport',
-                    },
-                'outbound1': {
-                    'transport_name': 'outbound1_transport',
-                    },
-                },
-            }
+        self.config = {'transport_name': self.transport_name}
         self.worker = yield self.get_application(self.config)
 
     def assert_msgs_match(self, msgs, expected_msgs):
@@ -78,6 +76,8 @@ class TestApplicationWorker(ApplicationTestCase):
             for msg in msgs + expected_msgs:
                 self.assertTrue(key in msg.payload)
                 msg[key] = 'OVERRIDDEN_BY_TEST'
+                if not msg.get('routing_metadata'):
+                    msg['routing_metadata'] = {'endpoint_name': 'default'}
 
         for msg, expected_msg in zip(msgs, expected_msgs):
             self.assertEqual(msg, expected_msg)
@@ -158,63 +158,25 @@ class TestApplicationWorker(ApplicationTestCase):
 
     @inlineCallbacks
     def test_send_to(self):
-        sent_msg = yield self.worker.send_to('+12345', "Hi!")
+        sent_msg = yield self.worker.send_to(
+            '+12345', "Hi!", endpoint="default")
         sends = self.get_dispatched_messages()
-        expecteds = [TransportUserMessage.send('+12345', "Hi!",
-                transport_name='default_transport')]
+        expecteds = [TransportUserMessage.send(
+            '+12345', "Hi!", transport_name=None)]
         self.assert_msgs_match(sends, expecteds)
         self.assert_msgs_match(sends, [sent_msg])
 
     @inlineCallbacks
-    def test_send_to_with_options(self):
-        sent_msg = yield self.worker.send_to('+12345', "Hi!",
-                transport_type=TransportUserMessage.TT_USSD)
+    def test_send_to_with_different_endpoint(self):
+        sent_msg = yield self.worker.send_to(
+            '+12345', "Hi!", endpoint="outbound1",
+            transport_type=TransportUserMessage.TT_USSD)
         sends = self.get_dispatched_messages()
-        expecteds = [TransportUserMessage.send('+12345', "Hi!",
-                transport_type=TransportUserMessage.TT_USSD,
-                transport_name='default_transport')]
-        self.assert_msgs_match(sends, expecteds)
+        expecteds = [TransportUserMessage.send(
+            '+12345', "Hi!", transport_type=TransportUserMessage.TT_USSD)]
+        expecteds[0].set_routing_endpoint("outbound1")
         self.assert_msgs_match(sends, [sent_msg])
-
-    @inlineCallbacks
-    def test_send_to_with_tag(self):
-        sent_msg = yield self.worker.send_to('+12345', "Hi!", "outbound1",
-                transport_type=TransportUserMessage.TT_USSD)
-        sends = self.get_dispatched_messages()
-        expecteds = [TransportUserMessage.send('+12345', "Hi!",
-                transport_type=TransportUserMessage.TT_USSD,
-                transport_name='outbound1_transport')]
         self.assert_msgs_match(sends, expecteds)
-        self.assert_msgs_match(sends, [sent_msg])
-
-    def test_send_to_with_bad_tag(self):
-        self.assertRaises(ValueError, self.worker.send_to,
-                          '+12345', "Hi!", "outbound_unknown")
-
-    @inlineCallbacks
-    def test_send_to_with_no_send_to_tags(self):
-        config = {'transport_name': 'notags_app'}
-        notags_worker = get_stubbed_worker(ApplicationWorker,
-                                           config=config)
-        yield notags_worker.startWorker()
-        self.assertRaises(ValueError, notags_worker.send_to,
-                          '+12345', "Hi!")
-
-    @inlineCallbacks
-    def test_send_to_with_bad_config(self):
-        config = {'transport_name': 'badconfig_app',
-                  'send_to': {
-                      'default': {},  # missing transport_name
-                      'outbound1': {},  # also missing transport_name
-                      },
-                  }
-        badcfg_worker = get_stubbed_worker(DummyApplicationWorker,
-                                           config=config)
-        errors = []
-        d = badcfg_worker.startWorker()
-        d.addErrback(lambda result: errors.append(result))
-        yield d
-        self.assertEqual(errors[0].type, ConfigError)
 
     def test_subclassing_api(self):
         worker = get_stubbed_worker(ApplicationWorker,
@@ -227,13 +189,18 @@ class TestApplicationWorker(ApplicationTestCase):
         worker.new_session(FakeUserMessage())
         worker.close_session(FakeUserMessage())
 
+    def get_app_consumers(self, app):
+        for connector in app.connectors.values():
+            for consumer in connector._consumers.values():
+                yield consumer
+
     @inlineCallbacks
     def test_application_prefetch_count_custom(self):
         app = yield self.get_application({
             'transport_name': 'test',
             'amqp_prefetch_count': 10,
             })
-        for consumer in app._consumers:
+        for consumer in self.get_app_consumers(app):
             self.assertEqual(consumer.channel.qos_prefetch_count, 10)
 
     @inlineCallbacks
@@ -241,7 +208,7 @@ class TestApplicationWorker(ApplicationTestCase):
         app = yield self.get_application({
             'transport_name': 'test',
             })
-        for consumer in app._consumers:
+        for consumer in self.get_app_consumers(app):
             self.assertEqual(consumer.channel.qos_prefetch_count, 20)
 
     @inlineCallbacks
@@ -250,8 +217,162 @@ class TestApplicationWorker(ApplicationTestCase):
             'transport_name': 'test',
             'amqp_prefetch_count': None,
             })
-        for consumer in app._consumers:
+        for consumer in self.get_app_consumers(app):
             self.assertFalse(consumer.channel.qos_prefetch_count)
+
+    @inlineCallbacks
+    def test_deprecated_methods_warning(self):
+        class DeprApp(ApplicationWorker):
+            def _setup_transport_publisher(self):
+                return super(DeprApp, self)._setup_transport_publisher()
+
+        with warnings.catch_warnings(record=True) as warns:
+            yield self.get_application({})
+        self.assertEqual(warns, [])
+
+        with warnings.catch_warnings(record=True) as warns:
+            yield self.get_application({}, DeprApp)
+        self.assertEqual(len(warns), 2)
+
+
+class TestDeprApplicationWorker(ApplicationTestCase):
+
+    application_class = DeprApplicationWorker
+
+    @inlineCallbacks
+    def setUp(self):
+        yield super(TestDeprApplicationWorker, self).setUp()
+        self.transport_name = 'test'
+        self.config = {
+            'transport_name': self.transport_name,
+            'send_to': {
+                'default': {
+                    'transport_name': 'default_transport',
+                    },
+                'outbound1': {
+                    'transport_name': 'outbound1_transport',
+                    },
+                },
+            }
+        with warnings.catch_warnings(record=True) as warns:
+            self.worker = yield self.get_application(self.config)
+        self.warns = warns[:]
+
+    def assert_msgs_match(self, msgs, expected_msgs):
+        for key in ['timestamp', 'message_id']:
+            for msg in msgs + expected_msgs:
+                self.assertTrue(key in msg.payload)
+                msg[key] = 'OVERRIDDEN_BY_TEST'
+                if not msg.get('routing_metadata'):
+                    msg['routing_metadata'] = {'endpoint_name': 'default'}
+
+        for msg, expected_msg in zip(msgs, expected_msgs):
+            self.assertEqual(msg, expected_msg)
+        self.assertEqual(len(msgs), len(expected_msgs))
+
+    def assert_warnings(self, warning_strs):
+        warning_strs = [
+            "SEND_TO_TAGS is deprecated.",
+            "'send_to' configuration is deprecated.",
+            "The 'start_message_consumer' attribute is deprecated.",
+        ] + warning_strs
+        self.assertEqual(len(self.warns), len(warning_strs))
+        for warning_obj, warning_str in zip(self.warns, warning_strs):
+            self.assertTrue(
+                warning_str in str(warning_obj.message),
+                "Warning message %r does not contain %r." % (
+                    str(warning_obj.message), warning_str))
+
+    @inlineCallbacks
+    def send_to(self, *args, **kw):
+        with warnings.catch_warnings(record=True) as warns:
+            sent_msg = yield self.worker.send_to(*args, **kw)
+        self.warns.extend(warns)
+        returnValue(sent_msg)
+
+    @inlineCallbacks
+    def test_send_to(self):
+        sent_msg = yield self.send_to('+12345', "Hi!")
+        sends = self.get_dispatched_messages()
+        expecteds = [TransportUserMessage.send('+12345', "Hi!",
+                transport_name='default_transport')]
+        self.assert_msgs_match(sends, expecteds)
+        self.assert_msgs_match(sends, [sent_msg])
+        self.assert_warnings([
+            "The 'tag' parameter to send_to() is deprecated."])
+
+    @inlineCallbacks
+    def test_send_to_with_options(self):
+        sent_msg = yield self.send_to(
+            '+12345', "Hi!", transport_type=TransportUserMessage.TT_USSD)
+        sends = self.get_dispatched_messages()
+        expecteds = [TransportUserMessage.send('+12345', "Hi!",
+                transport_type=TransportUserMessage.TT_USSD,
+                transport_name='default_transport')]
+        self.assert_msgs_match(sends, expecteds)
+        self.assert_msgs_match(sends, [sent_msg])
+        self.assert_warnings([
+            "The 'tag' parameter to send_to() is deprecated."])
+
+    @inlineCallbacks
+    def test_send_to_with_tag(self):
+        sent_msg = yield self.send_to('+12345', "Hi!", "outbound1",
+                transport_type=TransportUserMessage.TT_USSD)
+        sends = self.get_dispatched_messages()
+        expecteds = [TransportUserMessage.send('+12345', "Hi!",
+                transport_type=TransportUserMessage.TT_USSD,
+                transport_name='outbound1_transport')]
+        expecteds[0].set_routing_endpoint("outbound1")
+        self.assert_msgs_match(sends, expecteds)
+        self.assert_msgs_match(sends, [sent_msg])
+        self.assert_warnings([
+            "The 'tag' parameter to send_to() is deprecated."])
+
+    @inlineCallbacks
+    def test_send_to_with_bad_tag(self):
+        yield self.assertFailure(
+            self.send_to('+12345', "Hi!", "outbound_unknown"), ValueError)
+        self.assert_warnings([])
+
+    @inlineCallbacks
+    def test_send_to_with_no_send_to_tags(self):
+        config = {'transport_name': 'badconfig_app', 'send_to': {}}
+        with warnings.catch_warnings(record=True) as warns:
+            with LogCatcher(message=r'is required\.$') as lc:
+                yield self.get_application(config)
+                def_log, out1_log = sorted(lc.messages())
+        self.assertTrue(def_log.startswith(
+            "No configuration for send_to tag 'default'."))
+        self.assertTrue(out1_log.startswith(
+            "No configuration for send_to tag 'outbound1'."))
+        self.warns.extend(warns)
+        self.assert_warnings([
+            "SEND_TO_TAGS is deprecated.",
+            "The 'start_message_consumer' attribute is deprecated.",
+        ])
+
+    @inlineCallbacks
+    def test_send_to_with_bad_config(self):
+        config = {'transport_name': 'badconfig_app',
+                  'send_to': {
+                      'default': {},  # missing transport_name
+                      'outbound1': {},  # also missing transport_name
+                      },
+                  }
+        with warnings.catch_warnings(record=True) as warns:
+            with LogCatcher(message=r'is required\.$') as lc:
+                yield self.get_application(config)
+                def_log, out1_log = sorted(lc.messages())
+        self.assertTrue(def_log.startswith(
+            "No transport_name configured for send_to tag 'default'."))
+        self.assertTrue(out1_log.startswith(
+            "No transport_name configured for send_to tag 'outbound1'."))
+        self.warns.extend(warns)
+        self.assert_warnings([
+            "SEND_TO_TAGS is deprecated.",
+            "'send_to' configuration is deprecated.",
+            "The 'start_message_consumer' attribute is deprecated.",
+        ])
 
 
 class TestApplicationMiddlewareHooks(ApplicationTestCase):
@@ -273,7 +394,7 @@ class TestApplicationMiddlewareHooks(ApplicationTestCase):
         app.consume_user_message = msgs.append
         orig_msg = self.mkmsg_in()
         orig_msg['timestamp'] = 0
-        yield app.dispatch_user_message(orig_msg)
+        yield self.dispatch(orig_msg)
         [msg] = msgs
         self.assertEqual(msg['record'], [
             ('mw1', 'inbound', self.transport_name),
@@ -288,7 +409,7 @@ class TestApplicationMiddlewareHooks(ApplicationTestCase):
         orig_msg = self.mkmsg_ack()
         orig_msg['event_id'] = 1234
         orig_msg['timestamp'] = 0
-        yield app.dispatch_event(orig_msg)
+        yield self.dispatch_event(orig_msg)
         [msg] = msgs
         self.assertEqual(msg['record'], [
             ('mw1', 'event', self.transport_name),
