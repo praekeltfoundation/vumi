@@ -229,20 +229,48 @@ class TransportUserMessage(TransportMessage):
         :meth:`reply` suitable for constructing both one-to-one messages (such
         as SMS) and directed messages within a group chat (such as
         name-prefixed content in an IRC channel message).
+
+        If `session_event` is provided in the the keyword args,
+        `continue_session` will be ignored.
+
+        NOTE: Certain fields are required to come from the message being
+              replied to and may not be overridden by this method:
+
+              # If we're not using this addressing, we shouldn't be replying.
+              'to_addr', 'from_addr', 'group', 'in_reply_to',
+              # These three belong together and are supposed to be opaque.
+              'transport_name', 'transport_type', 'transport_metadata'
+
+        FIXME: `helper_metadata` should *not* be copied to the reply message.
+               We only do it here because a bunch of legacy code relies on it.
         """
         session_event = None if continue_session else self.SESSION_CLOSE
-        out_msg = TransportUserMessage(
-            to_addr=self['from_addr'],
-            from_addr=self['to_addr'],
-            group=self['group'],
-            in_reply_to=self['message_id'],
-            content=content,
-            session_event=session_event,
-            transport_name=self['transport_name'],
-            transport_type=self['transport_type'],
-            transport_metadata=self['transport_metadata'],
-            helper_metadata=self['helper_metadata'],
-            **kw)
+
+        for field in [
+                # If we're not using this addressing, we shouldn't be replying.
+                'to_addr', 'from_addr', 'group', 'in_reply_to',
+                # These three belong together and are supposed to be opaque.
+                'transport_name', 'transport_type', 'transport_metadata']:
+            if field in kw:
+                # Other "bad keyword argument" conditions cause TypeErrors.
+                raise TypeError("'%s' may not be overridden." % (field,))
+
+        fields = {
+            'helper_metadata': self['helper_metadata'],  # XXX: See above.
+            'session_event': session_event,
+            'to_addr': self['from_addr'],
+            'from_addr': self['to_addr'],
+            'group': self['group'],
+            'in_reply_to': self['message_id'],
+            'transport_name': self['transport_name'],
+            'transport_type': self['transport_type'],
+            'transport_metadata': self['transport_metadata'],
+        }
+        fields.update(kw)
+
+        # The ones we specify directly in here are either mandatory or may not
+        # be overridden.
+        out_msg = TransportUserMessage(content=content, **fields)
         return out_msg
 
     def reply_group(self, *args, **kw):

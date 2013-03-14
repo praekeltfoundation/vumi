@@ -64,6 +64,18 @@ class TestTransport(TransportTestCase):
         yield self.dispatch(rep)
         response = yield d
         self.assertEqual(response, 'OK')
+        [ack] = yield self.wait_for_dispatched_events(1)
+        self.assertEqual(ack['user_message_id'], rep['message_id'])
+        self.assertEqual(ack['sent_message_id'], rep['message_id'])
+
+    @inlineCallbacks
+    def test_nack(self):
+        msg = self.mkmsg_out()
+        self.dispatch(msg)
+        [nack] = yield self.wait_for_dispatched_events(1)
+        self.assertEqual(nack['user_message_id'], msg['message_id'])
+        self.assertEqual(nack['sent_message_id'], msg['message_id'])
+        self.assertEqual(nack['nack_reason'], 'Missing fields: in_reply_to')
 
     @inlineCallbacks
     def test_timeout(self):
@@ -126,3 +138,49 @@ class TestJSONTransport(TransportTestCase):
         yield self.dispatch(rep)
         response = yield d
         self.assertEqual(response, '{"content": "bye"}')
+
+
+class CustomOutboundTransport(OkTransport):
+    RESPONSE_HEADERS = {
+        'Darth-Vader': ["Anakin Skywalker"],
+        'Admiral-Ackbar': ["It's a trap!", "Shark"]
+    }
+
+    def handle_outbound_message(self, message):
+        self.finish_request(
+                message.payload['in_reply_to'],
+                message.payload['content'].encode('utf-8'),
+                headers=self.RESPONSE_HEADERS)
+
+
+class TestCustomOutboundTransport(TransportTestCase):
+    transport_class = CustomOutboundTransport
+
+    @inlineCallbacks
+    def setUp(self):
+        yield super(TestCustomOutboundTransport, self).setUp()
+        config = {
+            'web_path': "foo",
+            'web_port': 0,
+            'username': 'testuser',
+            'password': 'testpass',
+            }
+        self.transport = yield self.get_transport(config)
+        self.transport_url = self.transport.get_transport_url()
+
+    @inlineCallbacks
+    def test_optional_headers(self):
+        d = http_request_full(self.transport_url + "foo", '', method='GET')
+        [msg] = yield self.wait_for_dispatched_messages(1)
+
+        tum = TransportUserMessage(**msg.payload)
+        rep = tum.reply("OK")
+        yield self.dispatch(rep)
+
+        response = yield d
+        self.assertEqual(
+            response.headers.getRawHeaders('Darth-Vader'),
+            ["Anakin Skywalker"])
+        self.assertEqual(
+            response.headers.getRawHeaders('Admiral-Ackbar'),
+            ["It's a trap!", "Shark"])

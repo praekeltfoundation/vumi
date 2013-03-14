@@ -66,6 +66,10 @@ class Manager(object):
         self._key_prefix = key_prefix
         self._key_separator = key_separator
 
+    def __deepcopy__(self, memo):
+        "This is to let managers pass through config deepcopies in tests."
+        return self
+
     def get_key_prefix(self):
         """This is only intended for use in testing, not production."""
         return self._key_prefix
@@ -211,8 +215,10 @@ class Manager(object):
     setex = RedisCall(['key', 'seconds', 'value'])
 
     # Integer operations
-
     incr = RedisCall(['key', 'amount'], defaults=[1])
+    incrby = RedisCall(['key', 'amount'])
+    decr = RedisCall(['key', 'amount'], defaults=[1])
+    decrby = RedisCall(['key', 'amount'])
 
     # Hash operations
 
@@ -254,12 +260,14 @@ class Manager(object):
 
     llen = RedisCall(['key'])
     lpop = RedisCall(['key'])
+    rpop = RedisCall(['key'])
     lpush = RedisCall(['key', 'obj'])
     rpush = RedisCall(['key', 'obj'])
     lrange = RedisCall(['key', 'start', 'end'])
     lrem = RedisCall(['key', 'value', 'num'], defaults=[0])
     rpoplpush = RedisCall(['source'], vararg='destination',
         key_args=['source', 'destination'])
+    ltrim = RedisCall(['key', 'start', 'stop'])
 
     # Expiry operations
 

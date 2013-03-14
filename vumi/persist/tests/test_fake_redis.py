@@ -31,6 +31,28 @@ class FakeRedisTestCase(TestCase):
         yield self.assert_redis_op('3', 'get', "inc")
 
     @inlineCallbacks
+    def test_incrby(self):
+        yield self.redis.set("inc", 1)
+        yield self.assert_redis_op('1', 'get', "inc")
+        yield self.assert_redis_op(3, 'incr', "inc", 2)
+        yield self.assert_redis_op('3', 'get', "inc")
+
+    @inlineCallbacks
+    def test_decr(self):
+        yield self.redis.set("dec", 4)
+        yield self.assert_redis_op('4', 'get', "dec")
+        yield self.assert_redis_op(3, 'decr', "dec")
+        yield self.assert_redis_op(2, 'decr', "dec")
+        yield self.assert_redis_op('2', 'get', "dec")
+
+    @inlineCallbacks
+    def test_decrby(self):
+        yield self.redis.set("dec", 4)
+        yield self.assert_redis_op('4', 'get', "dec")
+        yield self.assert_redis_op(2, 'decr', "dec", 2)
+        yield self.assert_redis_op('2', 'get', "dec")
+
+    @inlineCallbacks
     def test_setnx(self):
         yield self.assert_redis_op(False, 'exists', "mykey")
         yield self.assert_redis_op(True, 'setnx', "mykey", "value")
@@ -55,6 +77,10 @@ class FakeRedisTestCase(TestCase):
         yield self.assert_redis_op(0, 'zadd', 'set', one=2.0)
         yield self.assert_redis_op([('one', 2.0)], 'zrange', 'set', 0, -1,
                                    withscores=True)
+        self.assertRaises(
+            Exception, self.redis.zadd, "set", one='foo')
+        self.assertRaises(
+            Exception, self.redis.zadd, "set", one=None)
 
     @inlineCallbacks
     def test_zrange(self):
@@ -234,6 +260,14 @@ class FakeRedisTestCase(TestCase):
         yield self.assert_redis_op(2, 'lrem', 'list', 1, 2)
         yield self.assert_redis_op(
             ['v0', 'v1', 'v2', 1, 'v3', 1, 'v4', 1], 'lrange', 'list', 0, -1)
+
+    @inlineCallbacks
+    def test_ltrim(self):
+        for i in range(1, 4):
+            yield self.assert_redis_op(i - 1, 'rpush', 'list', str(i))
+        yield self.assert_redis_op(['1', '2', '3'], 'lrange', 'list', 0, -1)
+        yield self.assert_redis_op(None, 'ltrim', 'list', 1, 2)
+        yield self.assert_redis_op(['2', '3'], 'lrange', 'list', 0, -1)
 
     @inlineCallbacks
     def test_lrem_negative_num(self):

@@ -192,8 +192,11 @@ class BaseSmsSyncTransport(HttpRpcTransport):
     def handle_outbound_message(self, message):
         msginfo = yield self.msginfo_for_message(message)
         if msginfo is None:
-            raise PermanentFailure("SmsSyncTransport couldn't determine"
-                                   " secret for outbound message.")
+            err_msg = ("SmsSyncTransport couldn't determine"
+                        " secret for outbound message.")
+            yield self.publish_nack(user_message_id=message['message_id'],
+                sent_message_id=message['message_id'], reason=err_msg)
+            raise PermanentFailure(err_msg)
         else:
             account_key = self.key_for_account(msginfo.account_id)
             yield self.redis.rpush(account_key, message.to_json())

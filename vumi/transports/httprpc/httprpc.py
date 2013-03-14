@@ -5,12 +5,55 @@ import json
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet import reactor
 from twisted.internet.task import LoopingCall
-from twisted.python import log
 from twisted.web import http
 from twisted.web.resource import Resource
 from twisted.web.server import NOT_DONE_YET
 
 from vumi.transports.base import Transport
+from vumi.config import ConfigText, ConfigInt, ConfigBool, ConfigError
+from vumi import log
+
+
+class HttpRpcTransportConfig(Transport.CONFIG_CLASS):
+    """Base config definition for transports.
+
+    You should subclass this and add transport-specific fields.
+    """
+
+    web_path = ConfigText("The path to listen for requests on.", static=True)
+    web_port = ConfigInt(
+        "The port to listen for requests on, defaults to `0`.",
+        default=0, static=True)
+    health_path = ConfigText(
+        "The path to listen for downstream health checks on"
+        " (useful with HAProxy)", default='health', static=True)
+    request_cleanup_interval = ConfigInt(
+        "How often should we actively look for old connections that should"
+        " manually be timed out. Anything less than `1` disables the request"
+        " cleanup meaning that all request objects will be kept in memory"
+        " until the server is restarted, regardless if the remote side has"
+        " dropped the connection or not. Defaults to 5 seconds.",
+        default=5, static=True)
+    request_timeout = ConfigInt(
+        "How long should we wait for the remote side generating the response"
+        " for this synchronous operation to come back. Any connection that has"
+        " waited longer than `request_timeout` seconds will manually be"
+        " closed. Defaults to 4 minutes.", default=(4 * 60), static=True)
+    request_timeout_status_code = ConfigInt(
+        "What HTTP status code should be generated when a timeout occurs."
+        " Defaults to `504 Gateway Timeout`.", default=504, static=True)
+    request_timeout_body = ConfigText(
+        "What HTTP body should be returned when a timeout occurs."
+        " Defaults to ''.", default='', static=True)
+    noisy = ConfigBool(
+        "Defaults to `False` set to `True` to make this transport log"
+        " verbosely.", default=False, static=True)
+    validation_mode = ConfigText(
+        "The mode to operate in. Can be 'strict' or 'permissive'. If 'strict'"
+        " then any parameter received that is not listed in EXPECTED_FIELDS"
+        " nor in IGNORED_FIELDS will raise an error. If 'permissive' then no"
+        " error is raised as long as all the EXPECTED_FIELDS are present.",
+        default='strict', static=True)
 
 
 class HttpRpcHealthResource(Resource):
@@ -58,52 +101,29 @@ class HttpRpcTransport(Transport):
     transport worker that generated the inbound message. This means that
     currently there many only be one transport worker for each instance
     of this transport of a given name.
-
-    Takes the following configuration parameters:
-
-    :param str web_path:
-        The path to listen for requests on.
-    :param int web_port:
-        The port to listen for requests on, defaults to `0`.
-    :param str health_path:
-        The path to listen for downstream health checks on
-        (useful with HAProxy)
-    :param int request_cleanup_interval:
-        How often should we actively look for old connections that should
-        manually be timed out. Anything less than `1` disables the request
-        cleanup meaning that all request objects will be kept in memory until
-        the server is restarted, regardless if the remote side has dropped
-        the connection or not.
-        Defaults to 5 seconds.
-    :param int request_timeout:
-        How long should we wait for the remote side generating the response
-        for this synchronous operation to come back. Any connection that has
-        waited longer than `request_timeout` seconds will manually be closed.
-        Defaults to 4 minutes.
-    :param int request_timeout_status_code:
-        What HTTP status code should be generated when a timeout occurs.
-        Defaults to `504 Gateway Timeout`.
-    :param str request_timeout_body:
-        What HTTP body should be returned when a timeout occurs.
-        Defaults to ''.
-    :param bool noisy:
-        Defaults to `False` set to `True` to make this transport log
-        verbosely.
     """
     content_type = 'text/plain'
 
-    def validate_config(self):
-        self.web_path = self.config['web_path']
-        self.web_port = int(self.config['web_port'])
-        self.health_path = self.config.get('health_path', 'health').lstrip('/')
-        self.request_timeout = int(self.config.get('request_timeout', 60 * 4))
-        self.request_timeout_status_code = int(
-            self.config.get('request_timeout_status_code', 504))
-        self.noisy = bool(self.config.get('noisy', False))
-        self.request_timeout_body = self.config.get('request_timeout_body', '')
+    CONFIG_CLASS = HttpRpcTransportConfig
+    STRICT_MODE = 'strict'
+    PERMISSIVE_MODE = 'permissive'
+    DEFAULT_VALIDATION_MODE = STRICT_MODE
+    KNOWN_VALIDATION_MODES = [STRICT_MODE, PERMISSIVE_MODE]
 
-        self.gc_requests_interval = int(
-            self.config.get('request_cleanup_interval', 5))
+    def validate_config(self):
+        config = self.get_static_config()
+        self.web_path = config.web_path
+        self.web_port = config.web_port
+        self.health_path = config.health_path.lstrip('/')
+        self.request_timeout = config.request_timeout
+        self.request_timeout_status_code = config.request_timeout_status_code
+        self.noisy = config.noisy
+        self.request_timeout_body = config.request_timeout_body
+        self.gc_requests_interval = config.request_cleanup_interval
+        self._validation_mode = config.validation_mode
+        if self._validation_mode not in self.KNOWN_VALIDATION_MODES:
+            raise ConfigError('Invalid validation mode: %s' % (
+                self._validation_mode,))
 
     def get_transport_url(self, suffix=''):
         """
@@ -144,13 +164,35 @@ class HttpRpcTransport(Transport):
         """
         return reactor
 
+    def get_field_values(self, request, expected_fields,
+                            ignored_fields=frozenset()):
+        values = {}
+        errors = {}
+        for field in request.args:
+            if field not in (expected_fields | ignored_fields):
+                if self._validation_mode == self.STRICT_MODE:
+                    errors.setdefault('unexpected_parameter', []).append(field)
+            else:
+                values[field] = request.args.get(field)[0].decode('utf-8')
+        for field in expected_fields:
+            if field not in values:
+                errors.setdefault('missing_parameter', []).append(field)
+        return values, errors
+
+    def ensure_message_values(self, message, expected_fields):
+        missing_fields = []
+        for field in expected_fields:
+            if not message[field]:
+                missing_fields.append(field)
+        return missing_fields
+
     def manually_close_requests(self):
         for request_id, (timestamp, request) in self._requests.items():
             if timestamp < self.clock.seconds() - self.request_timeout:
                 self.close_request(request_id)
 
     def close_request(self, request_id):
-        self.emit('Timing out %s' % (request_id,))
+        log.warning('Timing out %s' % (request_id,))
         self.finish_request(request_id, self.request_timeout_body,
             self.request_timeout_status_code)
 
@@ -174,27 +216,37 @@ class HttpRpcTransport(Transport):
 
     def emit(self, msg):
         if self.noisy:
-            log.msg(msg)
+            log.debug(msg)
 
-    @inlineCallbacks
     def handle_outbound_message(self, message):
         self.emit("HttpRpcTransport consuming %s" % (message))
-        if message.payload.get('in_reply_to') and 'content' in message.payload:
+        missing_fields = self.ensure_message_values(message,
+                            ['in_reply_to', 'content'])
+        if missing_fields:
+            return self.reject_message(message, missing_fields)
+        else:
             self.finish_request(
                     message.payload['in_reply_to'],
                     message.payload['content'].encode('utf-8'))
-            yield self.publish_ack(user_message_id=message['message_id'],
+            return self.publish_ack(user_message_id=message['message_id'],
                 sent_message_id=message['message_id'])
+
+    def reject_message(self, message, missing_fields):
+        return self.publish_nack(user_message_id=message['message_id'],
+            sent_message_id=message['message_id'],
+            reason='Missing fields: %s' % ', '.join(missing_fields))
 
     def handle_raw_inbound_message(self, msgid, request):
         raise NotImplementedError("Sub-classes should implement"
                                   " handle_raw_inbound_message.")
 
-    def finish_request(self, request_id, data, code=200):
+    def finish_request(self, request_id, data, code=200, headers={}):
         self.emit("HttpRpcTransport.finish_request with data: %s" % (
             repr(data),))
         request = self.get_request(request_id)
         if request:
+            for h_name, h_values in headers.iteritems():
+                request.responseHeaders.setRawHeaders(h_name, h_values)
             request.setResponseCode(code)
             request.write(data)
             request.finish()

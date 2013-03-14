@@ -292,7 +292,8 @@ class SmppTransport(Transport):
                 yield self.submit_sm_throttled(sent_sms_id)
             else:
                 # We have an error
-                yield self.submit_sm_failure(sent_sms_id, status)
+                yield self.submit_sm_failure(sent_sms_id,
+                                             status or 'Unspecified')
                 yield self._stop_throttling()
 
     @inlineCallbacks

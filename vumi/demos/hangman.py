@@ -8,6 +8,7 @@ from twisted.python import log
 from vumi.application import ApplicationWorker
 from vumi.utils import http_request
 from vumi.components import SessionManager
+from vumi.config import ConfigText, ConfigDict
 
 
 class HangmanGame(object):
@@ -119,43 +120,40 @@ class HangmanGame(object):
                                    }
 
 
+class HangmanConfig(ApplicationWorker.CONFIG_CLASS):
+    "Hangman worker config."
+    worker_name = ConfigText(
+        "Name of this hangman worker.", required=True, static=True)
+    redis_manager = ConfigDict(
+        "Redis client configuration.", default={}, static=True)
+
+    random_word_url = ConfigText(
+        "URL to GET a random word from.", required=True)
+
+
 class HangmanWorker(ApplicationWorker):
     """Worker that plays Hangman.
-
-       Configuration
-       -------------
-       transport_name : str
-           Name of the transport.
-       worker_name : str
-           Name of this set of hangman workers.
-       random_word_url : URL
-           Page to GET a random word from.
-           E.g. http://randomword.setgetgo.com/get.php
        """
 
-    def validate_config(self):
-        self.r_config = self.config.get('redis_manager', {})
+    CONFIG_CLASS = HangmanConfig
 
     @inlineCallbacks
     def setup_application(self):
         """Start the worker"""
+        config = self.get_static_config()
         # Connect to Redis
         r_prefix = "hangman_game:%s:%s" % (
-            self.config['transport_name'],
-            self.config['worker_name'])
+            config.transport_name, config.worker_name)
         self.session_manager = yield SessionManager.from_redis_config(
-            self.r_config, r_prefix)
-
-        self.random_word_url = self.config['random_word_url']
-        log.msg("random_word_url = %s" % self.random_word_url)
+            config.redis_manager, r_prefix)
 
     @inlineCallbacks
     def teardown_application(self):
         yield self.session_manager.stop()
 
-    def random_word(self):
-        log.msg('Fetching random word from %s' % (self.random_word_url,))
-        d = http_request(self.random_word_url, None, method='GET')
+    def random_word(self, random_word_url):
+        log.msg('Fetching random word from %s' % (random_word_url,))
+        d = http_request(random_word_url, None, method='GET')
 
         def _decode(word):
             # result from http_request should always be bytes
@@ -183,10 +181,10 @@ class HangmanWorker(ApplicationWorker):
         returnValue(game)
 
     @inlineCallbacks
-    def new_game(self, msisdn):
+    def new_game(self, msisdn, random_word_url):
         """Create a new game for the given user ID.
            """
-        word = yield self.random_word()
+        word = yield self.random_word(random_word_url)
         word = word.strip().lower()
         game = HangmanGame(word)
         game_key = self.game_key(msisdn)
@@ -213,9 +211,10 @@ class HangmanWorker(ApplicationWorker):
         log.msg("User message: %s" % msg['content'])
 
         user_id = msg.user()
+        config = yield self.get_config(msg)
         game = yield self.load_game(user_id)
         if game is None:
-            game = yield self.new_game(user_id)
+            game = yield self.new_game(user_id, config.random_word_url)
 
         if msg['content'] is None:
             # probably new session -- just send the user the board
@@ -230,7 +229,7 @@ class HangmanWorker(ApplicationWorker):
             yield self.delete_game(user_id)
             continue_session = False
         elif game.exit_code == game.DONE_WANTS_NEW:
-            game = yield self.new_game(user_id)
+            game = yield self.new_game(user_id, config.random_word_url)
         else:
             yield self.save_game(user_id, game)
 

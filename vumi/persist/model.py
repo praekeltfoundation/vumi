@@ -203,13 +203,30 @@ class Model(object):
             raise ValidationError("Unexpected extra initial fields %r passed"
                                   " to model %s" % (field_values.keys(),
                                                     self.__class__))
+        self.clean()
 
     def __repr__(self):
-        fields = self.field_descriptors.keys()
-        fields.sort()
-        items = ["%s=%r" % (field, getattr(self, field)) for field in fields]
-        return "<%s key=%s %s>" % (self.__class__.__name__, self.key,
-                                   " ".join(items))
+        str_items = ["%s=%r" % item for item
+                        in sorted(self.get_data().items())]
+        return "<%s %s>" % (self.__class__.__name__, " ".join(str_items))
+
+    def clean(self):
+        for field_name, descriptor in self.field_descriptors.iteritems():
+            descriptor.clean(self)
+
+    def get_data(self):
+        """
+        Returns a dictionary with for all known field names & values.
+        Useful for when needing to represent a model instance as a dictionary.
+
+        :returns:
+            A dict of all values, including the key.
+        """
+        data = self._riak_object.get_data()
+        data.update({
+            'key': self.key,
+            })
+        return data
 
     def save(self):
         """Save the object to Riak.
@@ -464,11 +481,15 @@ class Manager(object):
     """A wrapper around a Riak client."""
 
     DEFAULT_LOAD_BUNCH_SIZE = 100
+    DEFAULT_MAPREDUCE_TIMEOUT = 4 * 60 * 1000  # in milliseconds
 
-    def __init__(self, client, bucket_prefix, load_bunch_size=None):
+    def __init__(self, client, bucket_prefix, load_bunch_size=None,
+                 mapreduce_timeout=None):
         self.client = client
         self.bucket_prefix = bucket_prefix
         self.load_bunch_size = load_bunch_size or self.DEFAULT_LOAD_BUNCH_SIZE
+        self.mapreduce_timeout = (mapreduce_timeout or
+                                  self.DEFAULT_MAPREDUCE_TIMEOUT)
         self._bucket_cache = {}
 
     def proxy(self, modelcls):
