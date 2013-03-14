@@ -9,19 +9,19 @@ class RecordingMiddleware(BaseMiddleware):
        is being called correctly.
        """
 
-    def _handle(self, direction, message, endpoint):
+    def _handle(self, direction, message, connector_name):
         record = message.payload.setdefault('record', [])
-        record.append((self.name, direction, endpoint))
+        record.append((self.name, direction, connector_name))
         return message
 
-    def handle_inbound(self, message, endpoint):
-        return self._handle('inbound', message, endpoint)
+    def handle_inbound(self, message, connector_name):
+        return self._handle('inbound', message, connector_name)
 
-    def handle_outbound(self, message, endpoint):
-        return self._handle('outbound', message, endpoint)
+    def handle_outbound(self, message, connector_name):
+        return self._handle('outbound', message, connector_name)
 
-    def handle_event(self, message, endpoint):
-        return self._handle('event', message, endpoint)
+    def handle_event(self, message, connector_name):
+        return self._handle('event', message, connector_name)
 
-    def handle_failure(self, message, endpoint):
-        return self._handle('failure', message, endpoint)
+    def handle_failure(self, message, connector_name):
+        return self._handle('failure', message, connector_name)

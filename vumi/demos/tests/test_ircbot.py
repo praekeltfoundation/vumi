@@ -31,9 +31,6 @@ class TestMemoWorker(ApplicationTestCase):
                             transport_metadata=transport_metadata)
         yield self.dispatch(msg)
 
-    def clear_messages(self):
-        self._amqp.clear_messages('vumi', '%s.outbound' % self.transport_name)
-
     @inlineCallbacks
     def recv(self, n=0):
         msgs = yield self.wait_for_dispatched_messages(n)
@@ -76,7 +73,7 @@ class TestMemoWorker(ApplicationTestCase):
 
         # replies to setting memos
         replies = yield self.recv(3)
-        self.clear_messages()
+        self.clear_dispatched_outbound()
 
         yield self.send('ping', channel='#test', from_addr='testmemo')
         replies = yield self.recv(2)
@@ -86,7 +83,7 @@ class TestMemoWorker(ApplicationTestCase):
             ('reply', 'testmemo, testnick asked me tell you:'
              ' this is memo 2'),
             ])
-        self.clear_messages()
+        self.clear_dispatched_outbound()
 
         yield self.send('ping', channel='#another', from_addr='testmemo')
         replies = yield self.recv(1)

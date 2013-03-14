@@ -24,19 +24,22 @@ class LoggingMiddleware(BaseMiddleware):
         failure_log_level = self.config.get('failure_log_level', 'error')
         self.failure_logger = getattr(log, failure_log_level)
 
-    def _log(self, direction, logger, msg, endpoint):
-        logger("Processed %s message for %s: %s" % (direction, endpoint,
-                                                    msg.to_json()))
+    def _log(self, direction, logger, msg, connector_name):
+        logger("Processed %s message for %s: %s" % (
+                direction, connector_name, msg.to_json()))
         return msg
 
-    def handle_inbound(self, message, endpoint):
-        return self._log("inbound", self.message_logger, message, endpoint)
+    def handle_inbound(self, message, connector_name):
+        return self._log(
+            "inbound", self.message_logger, message, connector_name)
 
-    def handle_outbound(self, message, endpoint):
-        return self._log("outbound", self.message_logger, message, endpoint)
+    def handle_outbound(self, message, connector_name):
+        return self._log(
+            "outbound", self.message_logger, message, connector_name)
 
-    def handle_event(self, event, endpoint):
-        return self._log("event", self.message_logger, event, endpoint)
+    def handle_event(self, event, connector_name):
+        return self._log("event", self.message_logger, event, connector_name)
 
-    def handle_failure(self, failure, endpoint):
-        return self._log("failure", self.failure_logger, failure, endpoint)
+    def handle_failure(self, failure, connector_name):
+        return self._log(
+            "failure", self.failure_logger, failure, connector_name)

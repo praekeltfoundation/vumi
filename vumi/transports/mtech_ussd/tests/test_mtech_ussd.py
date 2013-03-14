@@ -178,7 +178,7 @@ class TestMtechUssdTransport(TransportTestCase):
                 ])
         self.assertEqual(response, correct_response)
 
-        self._amqp.dispatched.clear()
+        self.clear_all_dispatched()
 
         response_d = self.make_ussd_request(sid, page_id="indexX", data="foo")
 
