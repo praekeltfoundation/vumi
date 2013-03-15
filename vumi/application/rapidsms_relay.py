@@ -2,10 +2,13 @@
 import json
 from base64 import b64encode
 
-from twisted.internet.defer import inlineCallbacks, DeferredList
+from zope.interface import implements
+from twisted.internet.defer import inlineCallbacks, DeferredList, returnValue
 from twisted.web import http
-from twisted.web.resource import Resource
+from twisted.web.resource import Resource, IResource
 from twisted.web.server import NOT_DONE_YET
+from twisted.cred import portal, checkers, credentials, error
+from twisted.web.guard import HTTPAuthSessionWrapper, BasicCredentialFactory
 
 from vumi.application.base import ApplicationWorker
 from vumi.message import to_json
@@ -52,6 +55,34 @@ class SendResource(Resource):
         return self.render_(request)
 
 
+class RapidSMSRelayRealm(object):
+    implements(portal.IRealm)
+
+    def __init__(self, resource):
+        self.resource = resource
+
+    def requestAvatar(self, user, mind, *interfaces):
+        if IResource in interfaces:
+            return (IResource, self.resource, lambda: None)
+        raise NotImplementedError()
+
+
+class RapidSMSRelayAccessChecker(object):
+    implements(checkers.ICredentialsChecker)
+    credentialInterfaces = (credentials.IUsernamePassword,)
+
+    def __init__(self, passwords):
+        self.passwords = passwords
+
+    @inlineCallbacks
+    def requestAvatarId(self, credentials):
+        username = credentials.username
+        password = credentials.password
+        if password and password == self.passwords.get(username):
+            returnValue(username)
+        raise error.UnauthorizedLogin()
+
+
 class RapidSMSRelay(ApplicationWorker):
     """Application that relays messages to RapidSMS.
 
@@ -79,6 +110,8 @@ class RapidSMSRelay(ApplicationWorker):
 
     SEND_TO_TAGS = frozenset(['default'])
 
+    # TODO: Use new configuration objects
+
     def validate_config(self):
         self.rapidsms_url = self.config['rapidsms_url']
         self.web_path = self.config['web_path']
@@ -89,6 +122,7 @@ class RapidSMSRelay(ApplicationWorker):
         }
         self.username = self.config.get('username')
         self.password = self.config.get('password', '')
+        self.passwords = self.config.get('passwords', {})
         self.http_method = self.config.get('http_method', 'POST')
         self.auth_method = self.config.get('auth_method', 'basic')
         if self.auth_method not in self.supported_auth_methods:
@@ -108,12 +142,23 @@ class RapidSMSRelay(ApplicationWorker):
             return handler(self.username, self.password)
         return {}
 
+    def get_protected_resource(self, resource):
+        checker = RapidSMSRelayAccessChecker(self.passwords)
+        realm = RapidSMSRelayRealm(resource)
+        p = portal.Portal(realm, [checker])
+        factory = BasicCredentialFactory("RapidSMS Relay")
+        protected_resource = HTTPAuthSessionWrapper(p, [factory])
+        return protected_resource
+
     @inlineCallbacks
     def setup_application(self):
         # start receipt web resource
+        send_resource = SendResource(self)
+        if self.passwords:
+            send_resource = self.get_protected_resource(send_resource)
         self.web_resource = yield self.start_web_resources(
             [
-                (SendResource(self), self.web_path),
+                (send_resource, self.web_path),
                 (HealthResource(), 'health'),
             ],
             self.web_port)
@@ -123,9 +168,6 @@ class RapidSMSRelay(ApplicationWorker):
         yield self.web_resource.loseConnection()
 
     def handle_raw_outbound_message(self, request):
-        # TODO: handle username and password?
-        # user=my_username
-        # password=my_password
         # TODO: if RapidSMS sends back 'in_reply_to', will that help Vumi?
         data = json.loads(request.content.read())
         content = data['content']
