@@ -3,7 +3,7 @@ import json
 from base64 import b64encode
 
 from zope.interface import implements
-from twisted.internet.defer import inlineCallbacks, DeferredList, returnValue
+from twisted.internet.defer import inlineCallbacks, DeferredList
 from twisted.web import http
 from twisted.web.resource import Resource, IResource
 from twisted.web.server import NOT_DONE_YET
@@ -11,6 +11,7 @@ from twisted.cred import portal, checkers, credentials, error
 from twisted.web.guard import HTTPAuthSessionWrapper, BasicCredentialFactory
 
 from vumi.application.base import ApplicationWorker
+from vumi.config import ConfigUrl, ConfigText, ConfigInt, ConfigDict
 from vumi.message import to_json
 from vumi.utils import http_request_full
 from vumi.errors import ConfigError
@@ -82,51 +83,47 @@ class RapidSMSRelayAccessChecker(object):
         raise error.UnauthorizedLogin()
 
 
-class RapidSMSRelay(ApplicationWorker):
-    """Application that relays messages to RapidSMS.
-
-    RapidSMS relay configuration options:
-
-    :param str rapidsms_url:
-        URL of the rapidsms http backend.
-    :param str web_path:
-        Path to listen for outbound messages from RapidSMS on.
-    :param str web_port:
-        Port to listen for outbound messages from RapidSMS on.
-    :param str username:
-        Username to use for the `rapidsms_url` (default: no authentication).
-    :param str password:
-        Password to use for the `rapidsms_url` (default: none).
-    :param str auth_method:
-        Authentication method to use with `rapidsms_url` (default: 'basic').
-        The 'basic' method is currently the only available method.
-    :param str http_method:
-        HTTP request method to use for the `rapidsms_url` (default: POST)
+class RapidSMSRelayConfig(ApplicationWorker.CONFIG_CLASS):
+    """RapidSMS relay configuration.
 
     A RapidSMS relay requires a `send_to` configuration section for the
     `default` send_to tag.
     """
 
+    web_path = ConfigText(
+        "Path to listen for outbound messages from RapidSMS on.",
+        static=True)
+    web_port = ConfigInt(
+        "Port to listen for outbound messages from RapidSMS on.",
+        static=True)
+    rapidsms_url = ConfigUrl("URL of the rapidsms http backend.")
+    username = ConfigText(
+        "Username to use for the `rapidsms_url` (default: no authentication)",
+        default=None)
+    password = ConfigText(
+        "Password to use for the `rapidsms_url`", default=None)
+    auth_method = ConfigText(
+        "Authentication method to use with `rapidsms_url`."
+        "The 'basic' method is currently the only available method.",
+        default='basic')
+    http_method = ConfigText(
+        "HTTP request method to use for the `rapidsms_url`",
+        default='POST')
+    passwords = ConfigDict(
+        "Dictionary of allowed passwords.",
+        static=True)  # TODO: remove static flag
+
+
+class RapidSMSRelay(ApplicationWorker):
+    """Application that relays messages to RapidSMS."""
+
+    CONFIG_CLASS = RapidSMSRelayConfig
     SEND_TO_TAGS = frozenset(['default'])
 
-    # TODO: Use new configuration objects
-
     def validate_config(self):
-        self.rapidsms_url = self.config['rapidsms_url']
-        self.web_path = self.config['web_path']
-        self.web_port = int(self.config['web_port'])
-
         self.supported_auth_methods = {
             'basic': self.generate_basic_auth_headers,
         }
-        self.username = self.config.get('username')
-        self.password = self.config.get('password', '')
-        self.passwords = self.config.get('passwords', {})
-        self.http_method = self.config.get('http_method', 'POST')
-        self.auth_method = self.config.get('auth_method', 'basic')
-        if self.auth_method not in self.supported_auth_methods:
-            raise ConfigError('HTTP Authentication method %s'
-                              ' not supported' % (repr(self.auth_method,)))
 
     def generate_basic_auth_headers(self, username, password):
         credentials = ':'.join([username, password])
@@ -135,14 +132,17 @@ class RapidSMSRelay(ApplicationWorker):
             'Authorization': ['Basic %s' % (auth_string,)]
         }
 
-    def get_auth_headers(self):
-        if self.username is not None:
-            handler = self.supported_auth_methods.get(self.auth_method)
-            return handler(self.username, self.password)
+    def get_auth_headers(self, config):
+        if config.auth_method not in self.supported_auth_methods:
+            raise ConfigError('HTTP Authentication method %s'
+                              ' not supported' % (repr(config.auth_method,)))
+        if config.username is not None:
+            handler = self.supported_auth_methods.get(config.auth_method)
+            return handler(config.username, config.password)
         return {}
 
-    def get_protected_resource(self, resource):
-        checker = RapidSMSRelayAccessChecker(self.passwords)
+    def get_protected_resource(self, resource, passwords):
+        checker = RapidSMSRelayAccessChecker(passwords)
         realm = RapidSMSRelayRealm(resource)
         p = portal.Portal(realm, [checker])
         factory = BasicCredentialFactory("RapidSMS Relay")
@@ -151,16 +151,17 @@ class RapidSMSRelay(ApplicationWorker):
 
     @inlineCallbacks
     def setup_application(self):
-        # start receipt web resource
+        config = self.get_static_config()
         send_resource = SendResource(self)
-        if self.passwords:
-            send_resource = self.get_protected_resource(send_resource)
+        if config.passwords:
+            send_resource = self.get_protected_resource(send_resource,
+                                                        config.passwords)
         self.web_resource = yield self.start_web_resources(
             [
-                (send_resource, self.web_path),
+                (send_resource, config.web_path),
                 (HealthResource(), 'health'),
             ],
-            self.web_port)
+            config.web_port)
 
     @inlineCallbacks
     def teardown_application(self):
@@ -177,13 +178,16 @@ class RapidSMSRelay(ApplicationWorker):
         d.addCallback(lambda msgs: [msg[1] for msg in msgs if msg[0]])
         return d
 
+    @inlineCallbacks
     def _call_rapidsms(self, message):
-        headers = self.get_auth_headers()
-        response = http_request_full(self.rapidsms_url, message.to_json(),
-                                     headers, self.http_method)
+        config = yield self.get_config(message)
+        headers = self.get_auth_headers(config)
+        response = http_request_full(config.rapidsms_url.geturl(),
+                                     message.to_json(),
+                                     headers, config.http_method)
         response.addCallback(lambda response: log.info(response.code))
         response.addErrback(lambda failure: log.err(failure))
-        return response
+        yield response
 
     def consume_user_message(self, message):
         return self._call_rapidsms(message)
