@@ -9,7 +9,7 @@ from twisted.web.resource import Resource
 from vumi.application.tests.test_base import ApplicationTestCase
 from vumi.tests.utils import TestResourceWorker, LogCatcher, get_stubbed_worker
 from vumi.application.rapidsms_relay import RapidSMSRelay
-from vumi.utils import http_request_full
+from vumi.utils import http_request_full, basic_auth_string
 from vumi.message import TransportUserMessage, from_json
 
 
@@ -39,18 +39,20 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
         yield super(RapidSMSRelayTestCase, self).setUp()
 
     @inlineCallbacks
-    def setup_resource(self, callback):
+    def setup_resource(self, callback, passwords=None):
         self.resource = yield self.make_resource_worker(callback=callback)
-        self.app = yield self.setup_app(self.path, self.resource)
+        self.app = yield self.setup_app(self.path, self.resource,
+                                        passwords=passwords)
 
     @inlineCallbacks
-    def setup_app(self, path, resource):
+    def setup_app(self, path, resource, passwords=None):
         app = yield self.get_application({
             'rapidsms_url': 'http://localhost:%s%s' % (resource.port, path),
             'web_path': '/send/',
             'web_port': '0',
             'username': 'username',
             'password': 'password',
+            'passwords': passwords,
         })
         returnValue(app)
 
@@ -131,10 +133,13 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
             ])
         self.assertEqual([], self.get_dispatched_messages())
 
-    def _call_relay(self, data):
+    def _call_relay(self, data, auth=None):
         host = self.app.web_resource.getHost()
         send_url = "http://localhost:%d/send" % (host.port,)
-        return http_request_full(send_url, data)
+        headers = {}
+        if auth is not None:
+            headers['Authorization'] = basic_auth_string(*auth)
+        return http_request_full(send_url, data, headers=headers)
 
     @inlineCallbacks
     def test_rapidsms_relay_outbound(self):
@@ -190,3 +195,31 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
             self.assertEqual(msg['to_addr'], to_addr)
             self.assertEqual(msg['content'], 'foo')
         self.assertEqual(len(msgs), 2)
+
+    @inlineCallbacks
+    def test_rapidsms_relay_outbound_authenticated(self):
+        auth = ("username", "good-password")
+        yield self.setup_resource(lambda r: self.fail("Unexpected call"),
+                                  passwords={"username": "good-password"})
+        rapidsms_msg = {
+            'to_addr': ['+123456'],
+            'content': u'f\xc6r',
+        }
+        response = yield self._call_relay(json.dumps(rapidsms_msg), auth=auth)
+        [msg] = self.get_response_msgs(response)
+        self.assertEqual([msg], self.get_dispatched_messages())
+        self.assertEqual(msg['to_addr'], '+123456')
+        self.assertEqual(msg['content'], u'f\xc6r')
+
+    @inlineCallbacks
+    def test_rapidsms_relay_outbound_failed_authenticated(self):
+        auth = ("username", "bad-password")
+        yield self.setup_resource(lambda r: self.fail("Unexpected call"),
+                                  passwords={"username": "good-password"})
+        rapidsms_msg = {
+            'to_addr': ['+123456'],
+            'content': u'f\xc6r',
+        }
+        response = yield self._call_relay(json.dumps(rapidsms_msg), auth=auth)
+        self.assertEqual(response.code, 401)
+        self.assertEqual(response.delivered_body, "Unauthorized")

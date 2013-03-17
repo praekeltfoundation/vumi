@@ -74,12 +74,11 @@ class RapidSMSRelayAccessChecker(object):
     def __init__(self, passwords):
         self.passwords = passwords
 
-    @inlineCallbacks
     def requestAvatarId(self, credentials):
         username = credentials.username
         password = credentials.password
         if password and password == self.passwords.get(username):
-            returnValue(username)
+            return username
         raise error.UnauthorizedLogin()
 
 
