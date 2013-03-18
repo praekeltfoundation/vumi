@@ -13,7 +13,7 @@ from vumi.errors import ConfigError
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.middleware import MiddlewareStack, setup_middlewares_from_config
 
-from vumi.blinkenlights.publisher import HeartBeatPublisher
+from vumi.blinkenlights.heartbeat import HeartBeatPublisher
 
 SESSION_NEW = TransportUserMessage.SESSION_NEW
 SESSION_CLOSE = TransportUserMessage.SESSION_CLOSE

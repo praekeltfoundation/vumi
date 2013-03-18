@@ -16,7 +16,7 @@ from vumi import log
 from vumi.components import SessionManager
 from vumi.persist.txredis_manager import TxRedisManager
 
-from vumi.blinkenlights.publisher import HeartBeatPublisher
+from vumi.blinkenlights.heartbeat import HeartBeatPublisher
 
 class BaseDispatchWorker(Worker):
     """Base class for a dispatch worker.

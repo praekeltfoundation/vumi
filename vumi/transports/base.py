@@ -15,7 +15,7 @@ from vumi.service import Worker
 from vumi.transports.failures import FailureMessage
 from vumi.middleware import MiddlewareStack, setup_middlewares_from_config
 
-from vumi.blinkenlights.publisher import HeartBeatPublisher
+from vumi.blinkenlights.heartbeat import HeartBeatPublisher
 
 class TransportConfig(Config):
     """Base config definition for transports.
