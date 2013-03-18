@@ -25,8 +25,6 @@ class RPCServer(jsonrpc.JSONRPC):
     iteration.
     """
 
-    PORT = 7080
-
     def __init__(self, state):
         jsonrpc.JSONRPC.__init__(self)
         self._state = state
@@ -70,7 +68,8 @@ class Event(object):
 
 class HeartBeatMonitor(Worker):
 
-    INTERVAL_SECS = 30
+    deadline = 30
+    data_port = 7080
 
     def _ensure(self, system_id, worker_id):
         """
@@ -130,12 +129,17 @@ class HeartBeatMonitor(Worker):
         Iterate over worker records and check to see whether any have not
         checked-in on time.
         """
-        deadline = time.time() - HeartBeatMonitor.INTERVAL_SECS
+        deadline = time.time() - self.deadline
         self._process_missing(self._find_missing_workers(deadline))
 
     @inlineCallbacks
     def startWorker(self):
         log.msg("Heartbeat Starting consumer")
+
+        self.data_port = self.config.get("data_server_port",
+                                    HeartBeatMonitor.data_port)
+        self.deadline = self.config.get("deadline",
+                                        HeartBeatMonitor.deadline)
 
         self._state = collections.defaultdict(dict)
 
@@ -147,7 +151,7 @@ class HeartBeatMonitor(Worker):
         # Start the JSON-RPC server
         root = RPCServer(self._state)
         site = server.Site(root)
-        rpc_service = internet.TCPServer(RPCServer.PORT, site)
+        rpc_service = internet.TCPServer(self.data_port, site)
         rpc_service.setServiceParent(
             service.Application("heartbeat-data-server")
         )
@@ -158,7 +162,7 @@ class HeartBeatMonitor(Worker):
     def _start_looping_task(self):
         """ Create a timer task to check for missing worker heartbeats """
         self._task = LoopingCall(self._check_missing)
-        done = self._task.start(HeartBeatMonitor.INTERVAL_SECS, now=False)
+        done = self._task.start(self.deadline, now=False)
         done.addErrback(lambda failure: log.err(failure, "timer task died"))
 
     def stopWorker(self):
