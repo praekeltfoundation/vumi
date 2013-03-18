@@ -3,7 +3,7 @@ import json
 from base64 import b64encode
 
 from zope.interface import implements
-from twisted.internet.defer import inlineCallbacks, DeferredList
+from twisted.internet.defer import inlineCallbacks, DeferredList, fail
 from twisted.web import http
 from twisted.web.resource import Resource, IResource
 from twisted.web.server import NOT_DONE_YET
@@ -96,22 +96,33 @@ class RapidSMSRelayConfig(ApplicationWorker.CONFIG_CLASS):
     web_port = ConfigInt(
         "Port to listen for outbound messages from RapidSMS on.",
         static=True)
+
+    # TODO: make username and password not static
+    vumi_username = ConfigText(
+        "Username required when calling `web_path` (default: no"
+        " authentication)",
+        default=None, static=True)
+    vumi_password = ConfigText(
+        "Password required when calling `web_path`", default=None,
+        static=True)
+    vumi_auth_method = ConfigText(
+        "Authentication method required when calling `web_path`."
+        "The 'basic' method is currently the only available method",
+        default='basic', static=True)
+
     rapidsms_url = ConfigUrl("URL of the rapidsms http backend.")
-    username = ConfigText(
+    rapidsms_username = ConfigText(
         "Username to use for the `rapidsms_url` (default: no authentication)",
         default=None)
-    password = ConfigText(
+    rapidsms_password = ConfigText(
         "Password to use for the `rapidsms_url`", default=None)
-    auth_method = ConfigText(
+    rapidsms_auth_method = ConfigText(
         "Authentication method to use with `rapidsms_url`."
         "The 'basic' method is currently the only available method.",
         default='basic')
-    http_method = ConfigText(
+    rapidsms_http_method = ConfigText(
         "HTTP request method to use for the `rapidsms_url`",
         default='POST')
-    passwords = ConfigDict(
-        "Dictionary of allowed passwords.",
-        static=True)  # TODO: remove static flag
 
 
 class RapidSMSRelay(ApplicationWorker):
@@ -133,12 +144,15 @@ class RapidSMSRelay(ApplicationWorker):
         }
 
     def get_auth_headers(self, config):
-        if config.auth_method not in self.supported_auth_methods:
+        auth_method, username, password = (config.rapidsms_auth_method,
+                                           config.rapidsms_username,
+                                           config.rapidsms_password)
+        if auth_method not in self.supported_auth_methods:
             raise ConfigError('HTTP Authentication method %s'
-                              ' not supported' % (repr(config.auth_method,)))
-        if config.username is not None:
-            handler = self.supported_auth_methods.get(config.auth_method)
-            return handler(config.username, config.password)
+                              ' not supported' % (repr(auth_method,)))
+        if username is not None:
+            handler = self.supported_auth_methods.get(auth_method)
+            return handler(username, password)
         return {}
 
     def get_protected_resource(self, resource, passwords):
@@ -153,9 +167,10 @@ class RapidSMSRelay(ApplicationWorker):
     def setup_application(self):
         config = self.get_static_config()
         send_resource = SendResource(self)
-        if config.passwords:
+        if config.vumi_username:
+            passwords = {config.vumi_username: config.vumi_password}
             send_resource = self.get_protected_resource(send_resource,
-                                                        config.passwords)
+                                                        passwords)
         self.web_resource = yield self.start_web_resources(
             [
                 (send_resource, config.web_path),
@@ -168,12 +183,20 @@ class RapidSMSRelay(ApplicationWorker):
         yield self.web_resource.loseConnection()
 
     def handle_raw_outbound_message(self, request):
-        # TODO: if RapidSMS sends back 'in_reply_to', will that help Vumi?
         data = json.loads(request.content.read())
         content = data['content']
+        to_addrs = data['to_addr']
         sends = []
-        for to_addr in data['to_addr']:
-            sends.append(self.send_to(to_addr, content))
+        if 'in_reply_to' in data and False: # TODO: complete
+            # TODO: Add redis store.
+            [to_addr] = to_addrs
+            if original_message['from_addr'] == to_addr:
+                sends.append(self.reply_to(original_message, content))
+            else:
+                sends.append(fail("Invalid to_addr for reply"))
+        else:
+            for to_addr in to_addrs:
+                sends.append(self.send_to(to_addr, content))
         d = DeferredList(sends, consumeErrors=True)
         d.addCallback(lambda msgs: [msg[1] for msg in msgs if msg[0]])
         return d
@@ -184,7 +207,7 @@ class RapidSMSRelay(ApplicationWorker):
         headers = self.get_auth_headers(config)
         response = http_request_full(config.rapidsms_url.geturl(),
                                      message.to_json(),
-                                     headers, config.http_method)
+                                     headers, config.rapidsms_http_method)
         response.addCallback(lambda response: log.info(response.code))
         response.addErrback(lambda failure: log.err(failure))
         yield response

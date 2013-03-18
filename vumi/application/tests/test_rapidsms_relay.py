@@ -46,13 +46,18 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
 
     @inlineCallbacks
     def setup_app(self, path, resource, passwords=None):
+        if passwords:
+            vumi_username, vumi_password = passwords.items()[0]
+        else:
+            vumi_username, vumi_password = '', ''
         app = yield self.get_application({
             'rapidsms_url': 'http://localhost:%s%s' % (resource.port, path),
             'web_path': '/send/',
             'web_port': '0',
-            'username': 'username',
-            'password': 'password',
-            'passwords': passwords,
+            'rapidsms_username': 'username',
+            'rapidsms_password': 'password',
+            'vumi_username': vumi_username,
+            'vumi_password': vumi_password,
         })
         returnValue(app)
 
