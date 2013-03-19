@@ -46,11 +46,12 @@ class TestHeartBeatPublisher(TestCase):
         pub._beat()
 
         [msg] = self.broker.get_dispatched("vumi.health", "heartbeat.inbound")
-        self.assertEqual(json.loads(msg.body), gen_fake_attrs)
+        self.assertEqual(json.loads(msg.body), self.gen_fake_attrs())
 
 
     def gen_fake_attrs(self):
         attrs = {
+            'version': publisher.HeartBeatMessage.VERSION_20130319,
             'system_id': "system-1",
             'worker_id': "worker-1",
             'hostname': "test-host-1",
@@ -69,6 +70,7 @@ class TestHeartBeatMonitor(TestCase):
 
     def gen_fake_attrs(self, timestamp):
         attrs = {
+            'version': publisher.HeartBeatMessage.VERSION_20130319,
             'system_id': "system-1",
             'worker_id': "worker-1",
             'hostname': "test-host-1",

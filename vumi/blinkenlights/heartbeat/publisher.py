@@ -8,11 +8,21 @@ from vumi.log import log
 
 class HeartBeatMessage(Message):
     """
-    Basically just a wrapper around a dict for now
+    Basically just a wrapper around a dict for now,
+    with some minimal validation and version identification
     """
+
+    VERSION_20130319 = "20130319"
 
     def __init__(self, **kw):
         super(HeartBeatMessage, self).__init__(**kw)
+
+    def validate_fields(self):
+        self.assert_field_present(
+            'version',
+            'system_id',
+            'worker_id',
+            )
 
 
 class HeartBeatPublisher(Publisher):

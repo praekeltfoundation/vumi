@@ -25,6 +25,10 @@ import socket
 
 SPECS = {}
 
+# can't include heartbeat.publisher.py to get this constant,
+# as it will generate an unresolvable cyclical dependency
+HEARTBEAT_MSG_VERSION = "20130319"
+
 
 def get_spec(specfile):
     """
@@ -210,6 +214,7 @@ class Worker(MultiService, object):
         worker_id = self.config.get("worker_name",
                                     "ANONYMOUS_%s" % self.__class__.__name__)
         attrs = {
+            'version': HEARTBEAT_MSG_VERSION,
             'system_id': Worker.SYSTEM_ID,
             'worker_id': worker_id,
             'hostname': socket.gethostname(),
