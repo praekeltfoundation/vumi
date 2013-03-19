@@ -49,7 +49,7 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
         if passwords:
             vumi_username, vumi_password = passwords.items()[0]
         else:
-            vumi_username, vumi_password = '', ''
+            vumi_username, vumi_password = None, None
         app = yield self.get_application({
             'rapidsms_url': 'http://localhost:%s%s' % (resource.port, path),
             'web_path': '/send/',

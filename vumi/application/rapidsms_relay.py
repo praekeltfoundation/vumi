@@ -3,7 +3,8 @@ import json
 from base64 import b64encode
 
 from zope.interface import implements
-from twisted.internet.defer import inlineCallbacks, DeferredList, fail
+from twisted.internet.defer import (
+    inlineCallbacks, returnValue, DeferredList, fail)
 from twisted.web import http
 from twisted.web.resource import Resource, IResource
 from twisted.web.server import NOT_DONE_YET
@@ -11,7 +12,7 @@ from twisted.cred import portal, checkers, credentials, error
 from twisted.web.guard import HTTPAuthSessionWrapper, BasicCredentialFactory
 
 from vumi.application.base import ApplicationWorker
-from vumi.config import ConfigUrl, ConfigText, ConfigInt, ConfigDict
+from vumi.config import ConfigUrl, ConfigText, ConfigInt, ConfigContext
 from vumi.message import to_json
 from vumi.utils import http_request_full
 from vumi.errors import ConfigError
@@ -70,17 +71,14 @@ class RapidSMSRelayRealm(object):
 
 class RapidSMSRelayAccessChecker(object):
     implements(checkers.ICredentialsChecker)
-    credentialInterfaces = (credentials.IUsernamePassword,)
+    credentialInterfaces = (credentials.IUsernamePassword,
+                            credentials.IAnonymous)
 
-    def __init__(self, passwords):
-        self.passwords = passwords
+    def __init__(self, get_avatar_id):
+        self._get_avatar_id = get_avatar_id
 
     def requestAvatarId(self, credentials):
-        username = credentials.username
-        password = credentials.password
-        if password and password == self.passwords.get(username):
-            return username
-        raise error.UnauthorizedLogin()
+        return self._get_avatar_id(credentials)
 
 
 class RapidSMSRelayConfig(ApplicationWorker.CONFIG_CLASS):
@@ -97,18 +95,16 @@ class RapidSMSRelayConfig(ApplicationWorker.CONFIG_CLASS):
         "Port to listen for outbound messages from RapidSMS on.",
         static=True)
 
-    # TODO: make username and password not static
     vumi_username = ConfigText(
         "Username required when calling `web_path` (default: no"
         " authentication)",
-        default=None, static=True)
+        default=None)
     vumi_password = ConfigText(
-        "Password required when calling `web_path`", default=None,
-        static=True)
+        "Password required when calling `web_path`", default=None)
     vumi_auth_method = ConfigText(
         "Authentication method required when calling `web_path`."
         "The 'basic' method is currently the only available method",
-        default='basic', static=True)
+        default='basic')
 
     rapidsms_url = ConfigUrl("URL of the rapidsms http backend.")
     rapidsms_username = ConfigText(
@@ -155,8 +151,8 @@ class RapidSMSRelay(ApplicationWorker):
             return handler(username, password)
         return {}
 
-    def get_protected_resource(self, resource, passwords):
-        checker = RapidSMSRelayAccessChecker(passwords)
+    def get_protected_resource(self, resource):
+        checker = RapidSMSRelayAccessChecker(self.get_avatar_id)
         realm = RapidSMSRelayRealm(resource)
         p = portal.Portal(realm, [checker])
         factory = BasicCredentialFactory("RapidSMS Relay")
@@ -164,13 +160,25 @@ class RapidSMSRelay(ApplicationWorker):
         return protected_resource
 
     @inlineCallbacks
+    def get_avatar_id(self, creds):
+        if credentials.IAnonymous.providedBy(creds):
+            config = yield self.get_config(None, ConfigContext(username=None))
+            # allow anonymous authentication if no username is configured
+            if config.vumi_username is None:
+                returnValue(None)
+        elif credentials.IUsernamePassword.providedBy(creds):
+            username, password = creds.username, creds.password
+            config = yield self.get_config(None,
+                                           ConfigContext(username=username))
+            if (username == config.vumi_username and
+                password == config.vumi_password):
+                returnValue(username)
+        raise error.UnauthorizedLogin()
+
+    @inlineCallbacks
     def setup_application(self):
         config = self.get_static_config()
-        send_resource = SendResource(self)
-        if config.vumi_username:
-            passwords = {config.vumi_username: config.vumi_password}
-            send_resource = self.get_protected_resource(send_resource,
-                                                        passwords)
+        send_resource = self.get_protected_resource(SendResource(self))
         self.web_resource = yield self.start_web_resources(
             [
                 (send_resource, config.web_path),
