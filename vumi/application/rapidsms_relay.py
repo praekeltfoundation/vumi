@@ -59,6 +59,10 @@ class SendResource(Resource):
         return self.render_(request)
 
 
+class BadRequestError(Exception):
+    """Raised when an invalid request was received from RapidSMS."""
+
+
 class RapidSMSRelayRealm(object):
     implements(portal.IRealm)
 
@@ -207,24 +211,43 @@ class RapidSMSRelay(ApplicationWorker):
         if self.redis is not None:
             yield self.redis.close_manager()
 
-    def handle_raw_outbound_message(self, request):
-        data = json.loads(request.content.read())
-        content = data['content']
-        to_addrs = data['to_addr']
+    @inlineCallbacks
+    def _handle_reply_to(self, config, content, to_addrs, in_reply_to):
+        print "Foo"
+        if not config.allow_replies:
+            raise BadRequestError("Support for `in_reply_to` not configured.")
+        orig_msg = yield self._get_message(in_reply_to)
+        if not orig_msg:
+            raise BadRequestError("Original message %r not found." %
+                                  (in_reply_to,))
+        if to_addrs:
+            if len(to_addrs) > 1 or to_addrs[0] != orig_msg['from_addr']:
+                raise BadRequestError(
+                    "Supplied `to_addrs` don't match `from_addr` of original"
+                    " message %r" % (in_reply_to,))
+        reply = yield self.reply_to(orig_msg, content)
+        returnValue(reply)
+
+    def _handle_send_to(self, config, content, to_addrs):
         sends = []
-        if 'in_reply_to' in data and False: # TODO: complete
-            # TODO: Add redis store.
-            [to_addr] = to_addrs
-            if original_message['from_addr'] == to_addr:
-                sends.append(self.reply_to(original_message, content))
-            else:
-                sends.append(fail("Invalid to_addr for reply"))
-        else:
-            for to_addr in to_addrs:
-                sends.append(self.send_to(to_addr, content))
+        for to_addr in to_addrs:
+            sends.append(self.send_to(to_addr, content))
         d = DeferredList(sends, consumeErrors=True)
         d.addCallback(lambda msgs: [msg[1] for msg in msgs if msg[0]])
         return d
+
+    def handle_raw_outbound_message(self, request):
+        config = self.get_config(None,
+                                 ConfigContext(username=request.getUser()))
+        data = json.loads(request.content.read())
+        content = data['content']
+        to_addrs = data['to_addr']
+        in_reply_to = data.get('in_reply_to')
+        if in_reply_to is not None:
+            return self._handle_reply_to(config, content, to_addrs,
+                                         in_reply_to)
+        else:
+            return self._handle_send_to(config, content, to_addrs)
 
     @inlineCallbacks
     def _call_rapidsms(self, message):
