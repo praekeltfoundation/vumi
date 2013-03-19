@@ -29,10 +29,6 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
     path = '/test/resource/path'
 
     @inlineCallbacks
-    def setUp(self):
-        yield super(RapidSMSRelayTestCase, self).setUp()
-
-    @inlineCallbacks
     def setup_resource(self, callback=None, auth=None):
         if callback is None:
             callback = lambda r: self.fail("No RapidSMS requests expected.")
