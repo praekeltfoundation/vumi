@@ -250,7 +250,7 @@ class RapidSMSRelay(ApplicationWorker):
                     "Supplied `to_addrs` don't match `from_addr` of original"
                     " message %r" % (in_reply_to,))
         reply = yield self.reply_to(orig_msg, content)
-        returnValue(reply)
+        returnValue([reply])
 
     def _handle_send_to(self, config, content, to_addrs):
         sends = []

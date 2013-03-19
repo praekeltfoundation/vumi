@@ -188,11 +188,29 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
         self.assertEqual(len(msgs), 2)
 
     @inlineCallbacks
+    def test_rapidsms_relay_reply(self):
+        msg_id, to_addr = 'abc', '+1234'
+        yield self.setup_resource(lambda r: 'OK')
+        yield self.dispatch(self.mkmsg_in(message_id=msg_id,
+                                          from_addr=to_addr))
+
+        rapidsms_msg = {
+            'to_addr': [to_addr],
+            'content': 'foo',
+            'in_reply_to': msg_id,
+        }
+        response = yield self._call_relay(json.dumps(rapidsms_msg))
+        [response_msg] = self.get_response_msgs(response)
+        [msg] = self.get_dispatched_messages()
+        self.assertEqual(msg, response_msg)
+        self.assertEqual(msg['to_addr'], to_addr)
+        self.assertEqual(msg['in_reply_to'], msg_id)
+
+    @inlineCallbacks
     def test_rapidsms_relay_reply_unknown_msg(self):
         yield self.setup_resource()
-        addresses = ['+123456', '+678901']
         rapidsms_msg = {
-            'to_addr': addresses,
+            'to_addr': ['+123456'],
             'content': 'foo',
             'in_reply_to': 'unknown_message_id',
         }
