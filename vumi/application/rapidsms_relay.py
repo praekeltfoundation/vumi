@@ -42,11 +42,22 @@ class SendResource(Resource):
         request.write(to_json([msg.payload for msg in msgs]))
         request.finish()
 
+    def fail_request(self, request, f):
+        if f.check(BadRequestError):
+            code = http.BAD_REQUEST
+        else:
+            code = http.INTERNAL_SERVER_ERROR
+        log.err(f)
+        request.setResponseCode(code)
+        request.write(f.getErrorMessage())
+        request.finish()
+
     def render_(self, request):
         log.msg("Send request: %s" % (request,))
         request.setHeader("content-type", "application/json")
         d = self.application.handle_raw_outbound_message(request)
         d.addCallback(lambda msgs: self.finish_request(request, msgs))
+        d.addErrback(lambda f: self.fail_request(request, f))
         return NOT_DONE_YET
 
     def render_PUT(self, request):
@@ -216,7 +227,7 @@ class RapidSMSRelay(ApplicationWorker):
 
     def _load_message(self, message_id):
         d = self.redis.get(self._msg_key(message_id))
-        d.addCallback(lambda r: TransportUserMessage.from_json(r))
+        d.addCallback(lambda r: r and TransportUserMessage.from_json(r))
         return d
 
     def _store_message(self, message, timeout):
@@ -227,10 +238,9 @@ class RapidSMSRelay(ApplicationWorker):
 
     @inlineCallbacks
     def _handle_reply_to(self, config, content, to_addrs, in_reply_to):
-        print "Foo"
         if not config.allow_replies:
             raise BadRequestError("Support for `in_reply_to` not configured.")
-        orig_msg = yield self._get_message(in_reply_to)
+        orig_msg = yield self._load_message(in_reply_to)
         if not orig_msg:
             raise BadRequestError("Original message %r not found." %
                                   (in_reply_to,))
@@ -250,18 +260,20 @@ class RapidSMSRelay(ApplicationWorker):
         d.addCallback(lambda msgs: [msg[1] for msg in msgs if msg[0]])
         return d
 
+    @inlineCallbacks
     def handle_raw_outbound_message(self, request):
-        config = self.get_config(None,
-                                 ConfigContext(username=request.getUser()))
+        config = yield self.get_config(
+            None, ConfigContext(username=request.getUser()))
         data = json.loads(request.content.read())
         content = data['content']
         to_addrs = data['to_addr']
         in_reply_to = data.get('in_reply_to')
         if in_reply_to is not None:
-            return self._handle_reply_to(config, content, to_addrs,
-                                         in_reply_to)
+            msgs = yield self._handle_reply_to(config, content, to_addrs,
+                                               in_reply_to)
         else:
-            return self._handle_send_to(config, content, to_addrs)
+            msgs = yield self._handle_send_to(config, content, to_addrs)
+        returnValue(msgs)
 
     @inlineCallbacks
     def _call_rapidsms(self, message):

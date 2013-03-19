@@ -8,7 +8,7 @@ from twisted.web.resource import Resource
 
 from vumi.application.tests.test_base import ApplicationTestCase
 from vumi.tests.utils import TestResourceWorker, LogCatcher, get_stubbed_worker
-from vumi.application.rapidsms_relay import RapidSMSRelay
+from vumi.application.rapidsms_relay import RapidSMSRelay, BadRequestError
 from vumi.utils import http_request_full, basic_auth_string
 from vumi.message import TransportUserMessage, from_json
 
@@ -200,6 +200,22 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
             self.assertEqual(msg['to_addr'], to_addr)
             self.assertEqual(msg['content'], 'foo')
         self.assertEqual(len(msgs), 2)
+
+    @inlineCallbacks
+    def test_rapidsms_relay_reply_unknown_msg(self):
+        yield self.setup_resource(
+            lambda r: self.fail("Unexpected RapidSMS call"))
+        addresses = ['+123456', '+678901']
+        rapidsms_msg = {
+            'to_addr': addresses,
+            'content': 'foo',
+            'in_reply_to': 'unknown_message_id',
+        }
+        response = yield self._call_relay(json.dumps(rapidsms_msg))
+        self.assertEqual(response.code, 400)
+        self.assertEqual(response.delivered_body,
+                         "Original message u'unknown_message_id' not found.")
+        [err] = self.flushLoggedErrors(BadRequestError)
 
     @inlineCallbacks
     def test_rapidsms_relay_outbound_authenticated(self):
