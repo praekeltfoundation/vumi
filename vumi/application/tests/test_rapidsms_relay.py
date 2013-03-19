@@ -131,6 +131,16 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
             headers['Authorization'] = basic_auth_string(*auth)
         return http_request_full(send_url, data, headers=headers)
 
+    def _check_messages(self, response, expecteds):
+        response_msgs = self.get_response_msgs(response)
+        msgs = self.get_dispatched_messages()
+        for rmsg, msg, expected in zip(response_msgs, msgs, expecteds):
+            self.assertEqual(msg, rmsg)
+            for k, v in expected.items():
+                self.assertEqual(msg[k], v)
+        self.assertEqual(len(msgs), len(expecteds))
+        self.assertEqual(len(response_msgs), len(expecteds))
+
     @inlineCallbacks
     def test_rapidsms_relay_outbound(self):
         yield self.setup_resource()
@@ -139,10 +149,8 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
             'content': 'foo',
         }
         response = yield self._call_relay(json.dumps(rapidsms_msg))
-        [msg] = self.get_response_msgs(response)
-        self.assertEqual([msg], self.get_dispatched_messages())
-        self.assertEqual(msg['to_addr'], '+123456')
-        self.assertEqual(msg['content'], 'foo')
+        self._check_messages(response, [
+            {'to_addr': '+123456', 'content':  u'foo'}])
 
     @inlineCallbacks
     def test_rapidsms_relay_outbound_unicode(self):
@@ -152,10 +160,8 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
             'content': u'f\xc6r',
         }
         response = yield self._call_relay(json.dumps(rapidsms_msg))
-        [msg] = self.get_response_msgs(response)
-        self.assertEqual([msg], self.get_dispatched_messages())
-        self.assertEqual(msg['to_addr'], '+123456')
-        self.assertEqual(msg['content'], u'f\xc6r')
+        self._check_messages(response, [
+            {'to_addr': '+123456', 'content':  u'f\xc6r'}])
 
     @inlineCallbacks
     def test_rapidsms_relay_multiple_outbound(self):
@@ -166,13 +172,9 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
             'content': 'foo',
         }
         response = yield self._call_relay(json.dumps(rapidsms_msg))
-        response_msgs = self.get_response_msgs(response)
-        msgs = self.get_dispatched_messages()
-        for msg, response_msg, to_addr in zip(msgs, response_msgs, addresses):
-            self.assertEqual(msg, response_msg)
-            self.assertEqual(msg['to_addr'], to_addr)
-            self.assertEqual(msg['content'], 'foo')
-        self.assertEqual(len(msgs), 2)
+        self._check_messages(response, [
+            {'to_addr': addr, 'content':  u'foo'}
+            for addr in addresses])
 
     @inlineCallbacks
     def test_rapidsms_relay_reply(self):
@@ -187,11 +189,8 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
             'in_reply_to': msg_id,
         }
         response = yield self._call_relay(json.dumps(rapidsms_msg))
-        [response_msg] = self.get_response_msgs(response)
-        [msg] = self.get_dispatched_messages()
-        self.assertEqual(msg, response_msg)
-        self.assertEqual(msg['to_addr'], to_addr)
-        self.assertEqual(msg['in_reply_to'], msg_id)
+        self._check_messages(response, [
+            {'to_addr': to_addr, 'content':  u'foo', 'in_reply_to': msg_id}])
 
     @inlineCallbacks
     def test_rapidsms_relay_reply_unknown_msg(self):
@@ -216,10 +215,8 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
             'content': u'f\xc6r',
         }
         response = yield self._call_relay(json.dumps(rapidsms_msg), auth=auth)
-        [msg] = self.get_response_msgs(response)
-        self.assertEqual([msg], self.get_dispatched_messages())
-        self.assertEqual(msg['to_addr'], '+123456')
-        self.assertEqual(msg['content'], u'f\xc6r')
+        self._check_messages(response, [
+            {'to_addr': '+123456', 'content': u'f\xc6r'}])
 
     @inlineCallbacks
     def test_rapidsms_relay_outbound_failed_authenticated(self):
