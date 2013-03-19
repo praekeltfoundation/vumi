@@ -12,7 +12,9 @@ from twisted.cred import portal, checkers, credentials, error
 from twisted.web.guard import HTTPAuthSessionWrapper, BasicCredentialFactory
 
 from vumi.application.base import ApplicationWorker
-from vumi.config import ConfigUrl, ConfigText, ConfigInt, ConfigContext
+from vumi.persist.txredis_manager import TxRedisManager
+from vumi.config import (
+    ConfigUrl, ConfigText, ConfigInt, ConfigDict, ConfigBool, ConfigContext)
 from vumi.message import to_json
 from vumi.utils import http_request_full
 from vumi.errors import ConfigError
@@ -94,6 +96,13 @@ class RapidSMSRelayConfig(ApplicationWorker.CONFIG_CLASS):
     web_port = ConfigInt(
         "Port to listen for outbound messages from RapidSMS on.",
         static=True)
+    redis_manager = ConfigDict(
+        "Redis manager configuration (only required if"
+        " `allow_replies` is true)",
+        default={}, static=True)
+    allow_replies = ConfigBool(
+        "Whether to support replies via the `in_reply_to` argument"
+        " from RapidSMS.", default=True, static=True)
 
     vumi_username = ConfigText(
         "Username required when calling `web_path` (default: no"
@@ -105,6 +114,9 @@ class RapidSMSRelayConfig(ApplicationWorker.CONFIG_CLASS):
         "Authentication method required when calling `web_path`."
         "The 'basic' method is currently the only available method",
         default='basic')
+    vumi_reply_timeout = ConfigInt(
+        "Number of seconds to keep original messages in redis so that"
+        " replies may be sent via `in_reply_to`.", default=10 * 60)
 
     rapidsms_url = ConfigUrl("URL of the rapidsms http backend.")
     rapidsms_username = ConfigText(
@@ -178,6 +190,9 @@ class RapidSMSRelay(ApplicationWorker):
     @inlineCallbacks
     def setup_application(self):
         config = self.get_static_config()
+        self.redis = None
+        if config.allow_replies:
+            self.redis = yield TxRedisManager.from_config(config.redis_manager)
         send_resource = self.get_protected_resource(SendResource(self))
         self.web_resource = yield self.start_web_resources(
             [
@@ -189,6 +204,8 @@ class RapidSMSRelay(ApplicationWorker):
     @inlineCallbacks
     def teardown_application(self):
         yield self.web_resource.loseConnection()
+        if self.redis is not None:
+            yield self.redis.close_manager()
 
     def handle_raw_outbound_message(self, request):
         data = json.loads(request.content.read())
