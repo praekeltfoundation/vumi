@@ -22,11 +22,6 @@ class TestResource(Resource):
     def render_POST(self, request):
         return self.callback(request)
 
-        request.setResponseCode(self.code)
-        for key, value in self.headers.items():
-            request.setHeader(key, value)
-        return self.content
-
 
 class RapidSMSRelayTestCase(ApplicationTestCase):
 
