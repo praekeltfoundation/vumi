@@ -47,7 +47,6 @@ class HeartBeatPublisher(Publisher):
         attrs = self._gen_attrs_func()
         msg = HeartBeatMessage(**attrs)
         self.publish_message(msg)
-        log.msg("Sent message: %s" % msg)
 
     def start(self, channel):
         super(HeartBeatPublisher, self).start(channel)

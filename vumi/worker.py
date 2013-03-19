@@ -48,7 +48,12 @@ class BaseWorker(Worker):
         self.middlewares = []
         self._static_config = self.CONFIG_CLASS(self.config, static=True)
         self._hb_pub = None
+
+        # Disable heartbeats if worker_name is not set. We're
+        # currently using it as the primary identifier for a worker
         self._heartbeat_enabled = True
+        if 'worker_name' not in self.config:
+            self._heartbeat_enabled = False
 
     def startWorker(self):
         log.msg('Starting a %s worker with config: %s'
@@ -75,6 +80,8 @@ class BaseWorker(Worker):
     def setup_heartbeat(self):
         d = succeed(None)
         if self._heartbeat_enabled:
+            log.msg("Starting HeartBeat publisher with worker_id=%s"
+                    % self.config.get("worker_name"))
             self._hb_pub = self.start_publisher(HeartBeatPublisher,
                                                 self._gen_heartbeat_attrs)
         return d
@@ -87,8 +94,7 @@ class BaseWorker(Worker):
         return d
 
     def _gen_heartbeat_attrs(self):
-        worker_id = self.config.get("worker_name",
-                                    "ANONYMOUS_%s" % self.__class__.__name__)
+        worker_id = self.config.get("worker_name")
         attrs = {
             'version': HeartBeatMessage.VERSION_20130319,
             'system_id': Worker.SYSTEM_ID,

@@ -19,15 +19,7 @@ from vumi.message import Message
 from vumi.utils import (load_class_by_string, vumi_resource_path, http_request,
                         basic_auth_string, LogFilterSite)
 
-import time
-import os
-import socket
-
 SPECS = {}
-
-# can't include heartbeat.publisher.py to get this constant,
-# as it will generate an unresolvable cyclical dependency
-HEARTBEAT_MSG_VERSION = "20130319"
 
 
 def get_spec(specfile):
