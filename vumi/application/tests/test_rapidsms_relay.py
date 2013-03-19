@@ -26,7 +26,6 @@ class TestResource(Resource):
 class RapidSMSRelayTestCase(ApplicationTestCase):
 
     application_class = RapidSMSRelay
-    timeout = 5
     path = '/test/resource/path'
 
     @inlineCallbacks
