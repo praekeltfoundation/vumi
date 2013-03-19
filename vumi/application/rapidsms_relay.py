@@ -4,7 +4,7 @@ from base64 import b64encode
 
 from zope.interface import implements
 from twisted.internet.defer import (
-    inlineCallbacks, returnValue, DeferredList, fail)
+    inlineCallbacks, returnValue, DeferredList)
 from twisted.web import http
 from twisted.web.resource import Resource, IResource
 from twisted.web.server import NOT_DONE_YET
@@ -15,7 +15,7 @@ from vumi.application.base import ApplicationWorker
 from vumi.persist.txredis_manager import TxRedisManager
 from vumi.config import (
     ConfigUrl, ConfigText, ConfigInt, ConfigDict, ConfigBool, ConfigContext)
-from vumi.message import to_json
+from vumi.message import to_json, TransportUserMessage
 from vumi.utils import http_request_full
 from vumi.errors import ConfigError
 from vumi import log
@@ -211,6 +211,20 @@ class RapidSMSRelay(ApplicationWorker):
         if self.redis is not None:
             yield self.redis.close_manager()
 
+    def _msg_key(self, message_id):
+        return ":".join(["messages", message_id])
+
+    def _load_message(self, message_id):
+        d = self.redis.get(self._msg_key(message_id))
+        d.addCallback(lambda r: TransportUserMessage.from_json(r))
+        return d
+
+    def _store_message(self, message, timeout):
+        msg_key = self._msg_key(message['message_id'])
+        d = self.redis.set(msg_key, message.to_json())
+        d.addCallback(lambda r: self.redis.expire(msg_key, timeout))
+        return d
+
     @inlineCallbacks
     def _handle_reply_to(self, config, content, to_addrs, in_reply_to):
         print "Foo"
@@ -253,6 +267,7 @@ class RapidSMSRelay(ApplicationWorker):
     def _call_rapidsms(self, message):
         config = yield self.get_config(message)
         headers = self.get_auth_headers(config)
+        yield self._store_message(message, config.vumi_reply_timeout)
         response = http_request_full(config.rapidsms_url.geturl(),
                                      message.to_json(),
                                      headers, config.rapidsms_http_method)
