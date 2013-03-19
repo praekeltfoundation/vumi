@@ -43,7 +43,7 @@ class StoringMiddlewareTestCase(TestCase, PersistenceMixin):
 
     def mk_msg(self):
         msg = TransportUserMessage(to_addr="45678", from_addr="12345",
-                                   transport_name="dummy_endpoint",
+                                   transport_name="dummy_connector",
                                    transport_type="dummy_transport_type")
         return msg
 
@@ -82,7 +82,7 @@ class StoringMiddlewareTestCase(TestCase, PersistenceMixin):
     @inlineCallbacks
     def test_handle_outbound(self):
         msg = self.mk_msg()
-        response = yield self.mw.handle_outbound(msg, "dummy_endpoint")
+        response = yield self.mw.handle_outbound(msg, "dummy_connector")
         self.assertTrue(isinstance(response, TransportUserMessage))
         yield self.assert_outbound_stored(msg)
 
@@ -91,14 +91,14 @@ class StoringMiddlewareTestCase(TestCase, PersistenceMixin):
         batch_id = yield self.store.batch_start([("pool", "tag")])
         msg = self.mk_msg()
         TaggingMiddleware.add_tag_to_msg(msg, ["pool", "tag"])
-        response = yield self.mw.handle_outbound(msg, "dummy_endpoint")
+        response = yield self.mw.handle_outbound(msg, "dummy_connector")
         self.assertTrue(isinstance(response, TransportUserMessage))
         yield self.assert_outbound_stored(msg, batch_id)
 
     @inlineCallbacks
     def test_handle_inbound(self):
         msg = self.mk_msg()
-        response = yield self.mw.handle_inbound(msg, "dummy_endpoint")
+        response = yield self.mw.handle_inbound(msg, "dummy_connector")
         self.assertTrue(isinstance(response, TransportUserMessage))
         yield self.assert_inbound_stored(msg)
 
@@ -107,7 +107,7 @@ class StoringMiddlewareTestCase(TestCase, PersistenceMixin):
         batch_id = yield self.store.batch_start([("pool", "tag")])
         msg = self.mk_msg()
         TaggingMiddleware.add_tag_to_msg(msg, ["pool", "tag"])
-        response = yield self.mw.handle_inbound(msg, "dummy_endpoint")
+        response = yield self.mw.handle_inbound(msg, "dummy_connector")
         self.assertTrue(isinstance(response, TransportUserMessage))
         yield self.assert_inbound_stored(msg, batch_id)
 
@@ -119,6 +119,6 @@ class StoringMiddlewareTestCase(TestCase, PersistenceMixin):
 
         ack = self.mk_ack(user_message_id=msg_id)
         event_id = ack['event_id']
-        response = yield self.mw.handle_event(ack, "dummy_endpoint")
+        response = yield self.mw.handle_event(ack, "dummy_connector")
         self.assertTrue(isinstance(response, TransportEvent))
         yield self.assert_outbound_stored(msg, events=[event_id])

@@ -45,7 +45,6 @@ class HeartBeatPublisher(Publisher):
         Read various host and worker attributes and wrap them in a message
         """
         attrs = self._gen_attrs_func()
-        log.msg("attrs: " % attrs)
         msg = HeartBeatMessage(**attrs)
         self.publish_message(msg)
         log.msg("Sent message: %s" % msg)

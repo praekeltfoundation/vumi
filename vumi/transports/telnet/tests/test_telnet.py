@@ -43,18 +43,20 @@ class TelnetServerTransportTestCase(TransportTestCase):
     @inlineCallbacks
     def tearDown(self):
         if self.client.transport.connected:
-            yield self.client.transport.loseConnection()
+            self.clear_dispatched_messages()
+            self.client.transport.loseConnection()
+            # Wait for all registered clients to get their disconnects.
+            yield self.wait_for_dispatched_messages(len(self.worker._clients))
         yield super(TelnetServerTransportTestCase, self).tearDown()
-
-    def get_messages(self, rkey, cls=TransportUserMessage):
-        contents = self._amqp.get_dispatched('vumi', rkey)
-        messages = [cls.from_json(content.body)
-                    for content in contents]
-        return messages
 
     def wait_for_client_start(self):
         """Wait for first message from client to be ready."""
-        return self._amqp.wait_messages('vumi', 'test.inbound', 1)
+        return self.wait_for_dispatched_messages(1)
+
+    def get_dispatched_messages(self):
+        return [TransportUserMessage.from_json(m.to_json())
+                for m in super(TelnetServerTransportTestCase,
+                               self).get_dispatched_messages()]
 
     @inlineCallbacks
     def make_client(self):
@@ -63,8 +65,9 @@ class TelnetServerTransportTestCase(TransportTestCase):
         client = yield cc.connectTCP("127.0.0.1", addr.port)
         returnValue(client)
 
+    @inlineCallbacks
     def test_client_register(self):
-        [msg] = self.get_messages('test.inbound')
+        [msg] = yield self.get_dispatched_messages()
         self.assertEqual(msg['content'], None)
         self.assertEqual(msg['session_event'],
                          TransportUserMessage.SESSION_NEW)
@@ -72,8 +75,8 @@ class TelnetServerTransportTestCase(TransportTestCase):
     @inlineCallbacks
     def test_client_deregister(self):
         self.client.transport.loseConnection()
-        yield self._amqp.wait_messages('vumi', 'test.inbound', 2)
-        [reg, msg] = self.get_messages('test.inbound')
+        yield self.wait_for_dispatched_messages(2)
+        [reg, msg] = yield self.get_dispatched_messages()
         self.assertEqual(msg['content'], None)
         self.assertEqual(msg['session_event'],
                          TransportUserMessage.SESSION_CLOSE)
@@ -81,8 +84,8 @@ class TelnetServerTransportTestCase(TransportTestCase):
     @inlineCallbacks
     def test_handle_input(self):
         self.client.transport.write("foo\n")
-        yield self._amqp.wait_messages('vumi', 'test.inbound', 2)
-        [reg, msg] = self.get_messages('test.inbound')
+        yield self.wait_for_dispatched_messages(2)
+        [reg, msg] = yield self.get_dispatched_messages()
         self.assertEqual(msg['content'], "foo")
         self.assertEqual(msg['session_event'],
                          TransportUserMessage.SESSION_RESUME)
@@ -90,15 +93,15 @@ class TelnetServerTransportTestCase(TransportTestCase):
     @inlineCallbacks
     def test_handle_non_ascii_input(self):
         self.client.transport.write(NON_ASCII.encode("utf-8"))
-        yield self._amqp.wait_messages('vumi', 'test.inbound', 2)
-        [reg, msg] = self.get_messages('test.inbound')
+        yield self.wait_for_dispatched_messages(2)
+        [reg, msg] = yield self.get_dispatched_messages()
         self.assertEqual(msg['content'], NON_ASCII)
         self.assertEqual(msg['session_event'],
                          TransportUserMessage.SESSION_RESUME)
 
     @inlineCallbacks
     def test_outbound_reply(self):
-        [reg] = self.get_messages('test.inbound')
+        [reg] = yield self.get_dispatched_messages()
         reply = reg.reply(content="reply_foo", continue_session=False)
         yield self.dispatch(reply)
         line = yield self.client.transport.protocol.queue.get()
@@ -107,7 +110,7 @@ class TelnetServerTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_non_ascii_outbound_reply(self):
-        [reg] = self.get_messages('test.inbound')
+        [reg] = yield self.get_dispatched_messages()
         reply = reg.reply(content=NON_ASCII, continue_session=False)
         yield self.dispatch(reply)
         line = yield self.client.transport.protocol.queue.get()
@@ -116,7 +119,7 @@ class TelnetServerTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_non_ascii_outbound_unknown_address(self):
-        [reg] = self.get_messages('test.inbound')
+        [reg] = yield self.get_dispatched_messages()
         reply = reg.reply(content=NON_ASCII, continue_session=False)
         reply['to_addr'] = 'nowhere'
         yield self.dispatch(reply)
@@ -127,7 +130,7 @@ class TelnetServerTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_outbound_close_event(self):
-        [reg] = self.get_messages('test.inbound')
+        [reg] = yield self.get_dispatched_messages()
         reply = reg.reply(content="reply_done", continue_session=False)
         yield self.dispatch(reply)
         line = yield self.client.transport.protocol.queue.get()
@@ -138,7 +141,7 @@ class TelnetServerTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_outbound_send(self):
-        [reg] = self.get_messages('test.inbound')
+        [reg] = yield self.get_dispatched_messages()
         msg = self.mkmsg_out(content="send_foo", to_addr=reg['from_addr'])
         yield self.dispatch(msg)
         line = yield self.client.transport.protocol.queue.get()

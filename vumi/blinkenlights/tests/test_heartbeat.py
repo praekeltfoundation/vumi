@@ -122,6 +122,5 @@ class TestHeartBeatMonitor(TestCase):
 
         # verify that the worker is found to be late
         missing = self.worker._find_missing_workers(deadline)
-        print self.worker._state
         self.assertEqual(len(missing), 1)
         self.assertEqual(missing[0]['worker_id'], msg['worker_id'])

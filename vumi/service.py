@@ -207,22 +207,6 @@ class Worker(MultiService, object):
             yield self.stopWorker()
         yield super(Worker, self).stopService()
 
-    def start_heartbeat(self, cls):
-        self._hb_pub = self.start_publisher(cls, self._gen_heartbeat_attrs)
-
-    def _gen_heartbeat_attrs(self):
-        worker_id = self.config.get("worker_name",
-                                    "ANONYMOUS_%s" % self.__class__.__name__)
-        attrs = {
-            'version': HEARTBEAT_MSG_VERSION,
-            'system_id': Worker.SYSTEM_ID,
-            'worker_id': worker_id,
-            'hostname': socket.gethostname(),
-            'timestamp': time.time(),
-            'pid': os.getpid(),
-        }
-        return attrs
-
     def routing_key_to_class_name(self, routing_key):
         return ''.join(map(lambda s: s.capitalize(), routing_key.split('.')))
 
