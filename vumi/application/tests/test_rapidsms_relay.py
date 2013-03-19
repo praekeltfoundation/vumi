@@ -39,7 +39,9 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
         yield super(RapidSMSRelayTestCase, self).setUp()
 
     @inlineCallbacks
-    def setup_resource(self, callback, passwords=None):
+    def setup_resource(self, callback=None, passwords=None):
+        if callback is None:
+            callback = lambda r: self.fail("No RapidSMS requests expected.")
         self.resource = yield self.make_resource_worker(callback=callback)
         self.app = yield self.setup_app(self.path, self.resource,
                                         passwords=passwords)
@@ -124,10 +126,7 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
 
     @inlineCallbacks
     def test_rapidsms_relay_logs_events(self):
-        def cb(request):
-            self.fail("RapidSMS relay should not send events to RapidSMS")
-
-        yield self.setup_resource(cb)
+        yield self.setup_resource()
         with LogCatcher() as lc:
             yield self.dispatch(self.mkmsg_delivery(), rkey=self.rkey('event'))
             yield self.dispatch(self.mkmsg_ack(), rkey=self.rkey('event'))
@@ -148,11 +147,7 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
 
     @inlineCallbacks
     def test_rapidsms_relay_outbound(self):
-        def cb(request):
-            self.fail("RapidSMS relay should not send outbound messages to"
-                      " RapidSMS")
-
-        yield self.setup_resource(cb)
+        yield self.setup_resource()
         rapidsms_msg = {
             'to_addr': ['+123456'],
             'content': 'foo',
@@ -165,11 +160,7 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
 
     @inlineCallbacks
     def test_rapidsms_relay_outbound_unicode(self):
-        def cb(request):
-            self.fail("RapidSMS relay should not send outbound messages to"
-                      " RapidSMS")
-
-        yield self.setup_resource(cb)
+        yield self.setup_resource()
         rapidsms_msg = {
             'to_addr': ['+123456'],
             'content': u'f\xc6r',
@@ -182,11 +173,7 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
 
     @inlineCallbacks
     def test_rapidsms_relay_multiple_outbound(self):
-        def cb(request):
-            self.fail("RapidSMS relay should not send outbound messages to"
-                      " RapidSMS")
-
-        yield self.setup_resource(cb)
+        yield self.setup_resource()
         addresses = ['+123456', '+678901']
         rapidsms_msg = {
             'to_addr': addresses,
@@ -203,8 +190,7 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
 
     @inlineCallbacks
     def test_rapidsms_relay_reply_unknown_msg(self):
-        yield self.setup_resource(
-            lambda r: self.fail("Unexpected RapidSMS call"))
+        yield self.setup_resource()
         addresses = ['+123456', '+678901']
         rapidsms_msg = {
             'to_addr': addresses,
@@ -220,7 +206,7 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
     @inlineCallbacks
     def test_rapidsms_relay_outbound_authenticated(self):
         auth = ("username", "good-password")
-        yield self.setup_resource(lambda r: self.fail("Unexpected call"),
+        yield self.setup_resource(callback=None,
                                   passwords={"username": "good-password"})
         rapidsms_msg = {
             'to_addr': ['+123456'],
@@ -235,7 +221,7 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
     @inlineCallbacks
     def test_rapidsms_relay_outbound_failed_authenticated(self):
         auth = ("username", "bad-password")
-        yield self.setup_resource(lambda r: self.fail("Unexpected call"),
+        yield self.setup_resource(callback=None,
                                   passwords={"username": "good-password"})
         rapidsms_msg = {
             'to_addr': ['+123456'],
