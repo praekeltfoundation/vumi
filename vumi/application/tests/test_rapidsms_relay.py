@@ -13,7 +13,7 @@ from vumi.utils import http_request_full, basic_auth_string
 from vumi.message import TransportUserMessage, from_json
 
 
-class TestResource(Resource):
+class DummyRapidResource(Resource):
     isLeaf = True
 
     def __init__(self, callback):
@@ -32,15 +32,12 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
     def setup_resource(self, callback=None, auth=None):
         if callback is None:
             callback = lambda r: self.fail("No RapidSMS requests expected.")
-        self.resource = yield self.make_resource_worker(callback=callback)
+        self.resource = yield self.setup_dummy_rapidsms(callback=callback)
         self.app = yield self.setup_app(self.path, self.resource, auth=auth)
 
     @inlineCallbacks
     def setup_app(self, path, resource, auth=None):
-        if auth:
-            vumi_username, vumi_password = auth
-        else:
-            vumi_username, vumi_password = None, None
+        vumi_username, vumi_password = auth if auth else (None, None)
         app = yield self.get_application({
             'rapidsms_url': 'http://localhost:%s%s' % (resource.port, path),
             'web_path': '/send/',
@@ -53,9 +50,9 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
         returnValue(app)
 
     @inlineCallbacks
-    def make_resource_worker(self, callback):
+    def setup_dummy_rapidsms(self, callback):
         w = get_stubbed_worker(TestResourceWorker, {})
-        w.set_resources([(self.path, TestResource, (callback,))])
+        w.set_resources([(self.path, DummyRapidResource, (callback,))])
         self._workers.append(w)
         yield w.startWorker()
         returnValue(w)
