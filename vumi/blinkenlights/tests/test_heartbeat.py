@@ -1,3 +1,7 @@
+import os
+import time
+import json
+
 from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
 
@@ -5,18 +9,11 @@ from vumi.service import Worker, WorkerCreator
 from vumi.tests.utils import (fake_amq_message,
                               get_stubbed_worker,
                               get_stubbed_channel)
-
 from vumi.tests.fake_amqp import FakeAMQPBroker
 from vumi.message import Message
-
 from vumi.blinkenlights.heartbeat import publisher
 from vumi.blinkenlights.heartbeat import monitor
-
 from vumi.errors import MissingMessageField
-
-import os
-import time
-import json
 
 class MockHeartBeatMonitor(monitor.HeartBeatMonitor):
 

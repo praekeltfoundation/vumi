@@ -1,3 +1,4 @@
+# -*- test-case-name: vumi.blinkenlights.tests.test_heartbeat -*-
 
 from twisted.internet.task import LoopingCall
 

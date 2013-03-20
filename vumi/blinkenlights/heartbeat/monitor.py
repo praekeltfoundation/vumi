@@ -1,13 +1,13 @@
+# -*- test-case-name: vumi.blinkenlights.tests.test_heartbeat -*-
+
+import time
+import collections
 
 from twisted.internet.defer import inlineCallbacks
 from twisted.web import server
 from twisted.application import service, internet
 from twisted.internet.task import LoopingCall
-
 from txjsonrpc.web import jsonrpc
-
-import time
-import collections
 
 from vumi.service import Worker
 from vumi.log import log
@@ -71,6 +71,41 @@ class HeartBeatMonitor(Worker):
     deadline = 30
     data_port = 7080
 
+    @inlineCallbacks
+    def startWorker(self):
+        log.msg("Heartbeat monitor initializing")
+
+        self.data_port = self.config.get("data_server_port",
+                                    HeartBeatMonitor.data_port)
+        self.deadline = self.config.get("deadline",
+                                        HeartBeatMonitor.deadline)
+
+        log.msg("heartbeat-data-server running on port %s" % self.data_port)
+
+        self._state = collections.defaultdict(dict)
+
+        # Start consuming heartbeats
+        yield self.consume("heartbeat.inbound", self.consume_message,
+                           exchange_name='vumi.health',
+                           message_class=HeartBeatMessage)
+
+        # Start the JSON-RPC server
+        root = RPCServer(self._state)
+        site = server.Site(root)
+        rpc_service = internet.TCPServer(self.data_port, site)
+        rpc_service.setServiceParent(
+            service.Application("heartbeat-data-server")
+        )
+        self.addService(rpc_service)
+
+        self._start_looping_task()
+
+    def stopWorker(self):
+        log.msg("HeartBeat: stopping")
+        if self._task:
+            self._task.stop()
+            self._task = None
+
     def _ensure(self, system_id, worker_id):
         """
         Make sure there is an entry for worker data in the in-memory db.
@@ -132,44 +167,11 @@ class HeartBeatMonitor(Worker):
         deadline = time.time() - self.deadline
         self._process_missing(self._find_missing_workers(deadline))
 
-    @inlineCallbacks
-    def startWorker(self):
-        log.msg("Heartbeat Starting consumer")
-
-        self.data_port = self.config.get("data_server_port",
-                                    HeartBeatMonitor.data_port)
-        self.deadline = self.config.get("deadline",
-                                        HeartBeatMonitor.deadline)
-
-        self._state = collections.defaultdict(dict)
-
-        # Start consuming heartbeats
-        yield self.consume("heartbeat.inbound", self.consume_message,
-                           exchange_name='vumi.health',
-                           message_class=HeartBeatMessage)
-
-        # Start the JSON-RPC server
-        root = RPCServer(self._state)
-        site = server.Site(root)
-        rpc_service = internet.TCPServer(self.data_port, site)
-        rpc_service.setServiceParent(
-            service.Application("heartbeat-data-server")
-        )
-        self.addService(rpc_service)
-
-        self._start_looping_task()
-
     def _start_looping_task(self):
         """ Create a timer task to check for missing worker heartbeats """
         self._task = LoopingCall(self._check_missing)
         done = self._task.start(self.deadline, now=False)
         done.addErrback(lambda failure: log.err(failure, "timer task died"))
-
-    def stopWorker(self):
-        log.msg("HeartBeat: stopping")
-        if self._task:
-            self._task.stop()
-            self._task = None
 
     def consume_message(self, msg):
         log.msg("Received message: %s" % msg)

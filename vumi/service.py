@@ -19,6 +19,7 @@ from vumi.message import Message
 from vumi.utils import (load_class_by_string, vumi_resource_path, http_request,
                         basic_auth_string, LogFilterSite)
 
+
 SPECS = {}
 
 
@@ -172,7 +173,6 @@ class Worker(MultiService, object):
             config = {}
         self.config = config
         self._amqp_client = None
-        self._hb_pub = None
 
     def _amqp_connected(self, amqp_client):
         self._amqp_client = amqp_client

@@ -179,9 +179,6 @@ class ApplicationWorker(BaseWorker):
     def teardown_worker(self):
         if not self._is_deprecated:
             self.pause_connectors()
-        # stop the publisher
-        if self._hb_pub is not None:
-            self._hb_pub.stop()
         return self.teardown_application()
 
     def setup_application(self):
