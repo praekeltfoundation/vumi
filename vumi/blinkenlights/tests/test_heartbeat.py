@@ -12,6 +12,8 @@ from vumi.message import Message
 from vumi.blinkenlights.heartbeat import publisher
 from vumi.blinkenlights.heartbeat import monitor
 
+from vumi.errors import MissingMessageField
+
 import os
 import time
 import json
@@ -37,6 +39,17 @@ class TestHeartBeatPublisher(TestCase):
     def tearDown(self):
         pass
 
+    def gen_fake_attrs(self):
+        attrs = {
+            'version': publisher.HeartBeatMessage.VERSION_20130319,
+            'system_id': "system-1",
+            'worker_id': "worker-1",
+            'hostname': "test-host-1",
+            'timestamp': 100,
+            'pid': 43,
+            }
+        return attrs
+
     @inlineCallbacks
     def test_publish_heartbeat(self):
         self.broker = FakeAMQPBroker()
@@ -48,17 +61,18 @@ class TestHeartBeatPublisher(TestCase):
         [msg] = self.broker.get_dispatched("vumi.health", "heartbeat.inbound")
         self.assertEqual(json.loads(msg.body), self.gen_fake_attrs())
 
+    def test_message_validation(self):
+        attrs = self.gen_fake_attrs()
+        attrs.pop("version")
+        self.assertRaises(MissingMessageField, publisher.HeartBeatMessage, **attrs)
+        attrs = self.gen_fake_attrs()
+        attrs.pop("system_id")
+        self.assertRaises(MissingMessageField, publisher.HeartBeatMessage, **attrs)
+        attrs = self.gen_fake_attrs()
+        attrs.pop("worker_id")
+        self.assertRaises(MissingMessageField, publisher.HeartBeatMessage, **attrs)
 
-    def gen_fake_attrs(self):
-        attrs = {
-            'version': publisher.HeartBeatMessage.VERSION_20130319,
-            'system_id': "system-1",
-            'worker_id': "worker-1",
-            'hostname': "test-host-1",
-            'timestamp': 100,
-            'pid': 43,
-        }
-        return attrs
+
 
 class TestHeartBeatMonitor(TestCase):
 
