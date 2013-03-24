@@ -5,6 +5,7 @@ from twisted.internet.defer import inlineCallbacks, DeferredQueue, returnValue
 from twisted.web.http_headers import Headers
 from twisted.web import http
 from twisted.web.server import NOT_DONE_YET
+from twisted.trial.unittest import SkipTest
 
 from vumi.utils import http_request_full
 from vumi.message import TransportUserMessage, TransportEvent
@@ -37,7 +38,6 @@ class TestEventReceiver(TestMessageReceiver):
 
 
 class StreamingHTTPWorkerTestCase(ApplicationTestCase):
-    timeout=1
 
     use_riak = True
     application_class = StreamingHTTPRelayWorker
@@ -229,6 +229,7 @@ class StreamingHTTPWorkerTestCase(ApplicationTestCase):
 
     @inlineCallbacks
     def test_invalid_in_reply_to(self):
+        raise SkipTest("Not implemented yet.")
         msg = {
             'content': 'foo',
             'in_reply_to': '1',  # this doesn't exist
@@ -239,42 +240,43 @@ class StreamingHTTPWorkerTestCase(ApplicationTestCase):
                                            self.auth_headers, method='PUT')
         self.assertEqual(response.code, http.BAD_REQUEST)
 
-    # @inlineCallbacks
-    # def test_in_reply_to(self):
-    #     inbound_msg = self.mkmsg_in(content='in 1', message_id='1')
-    #     yield self.vumi_api.mdb.add_inbound_message(inbound_msg,
-    #                                                     batch_id=self.batch_id)
+    @inlineCallbacks
+    def test_in_reply_to(self):
+        raise SkipTest("Not implemented yet.")
+        inbound_msg = self.mkmsg_in(content='in 1', message_id='1')
+        yield self.vumi_api.mdb.add_inbound_message(inbound_msg,
+                                                        batch_id=self.batch_id)
 
-    #     msg = {
-    #         'content': 'foo',
-    #         'in_reply_to': inbound_msg['message_id'],
-    #         'message_id': 'evil_id',
-    #         'session_event': 'evil_event',
-    #     }
+        msg = {
+            'content': 'foo',
+            'in_reply_to': inbound_msg['message_id'],
+            'message_id': 'evil_id',
+            'session_event': 'evil_event',
+        }
 
-    #     url = '%s/%s/messages.json' % (self.url, self.api_username)
-    #     response = yield http_request_full(url, json.dumps(msg),
-    #                                        self.auth_headers, method='PUT')
+        url = '%s/%s/messages.json' % (self.url, self.api_username)
+        response = yield http_request_full(url, json.dumps(msg),
+                                           self.auth_headers, method='PUT')
 
-    #     put_msg = json.loads(response.delivered_body)
-    #     self.assertEqual(response.code, http.OK)
+        put_msg = json.loads(response.delivered_body)
+        self.assertEqual(response.code, http.OK)
 
-    #     [sent_msg] = self.get_dispatched_messages()
-    #     self.assertEqual(sent_msg['to_addr'], sent_msg['to_addr'])
-    #     self.assertEqual(sent_msg['helper_metadata'], {
-    #         'go': {
-    #             'user_account': self.account.key,
-    #         },
-    #         'tag': {
-    #             'tag': list(self.tag),
-    #         }
-    #     })
-    #     # We do not respect the message_id that's been given.
-    #     self.assertNotEqual(sent_msg['message_id'], msg['message_id'])
-    #     self.assertNotEqual(sent_msg['session_event'], msg['session_event'])
-    #     self.assertEqual(sent_msg['message_id'], put_msg['message_id'])
-    #     self.assertEqual(sent_msg['to_addr'], inbound_msg['from_addr'])
-    #     self.assertEqual(sent_msg['from_addr'], self.tag[1])
+        [sent_msg] = self.get_dispatched_messages()
+        self.assertEqual(sent_msg['to_addr'], sent_msg['to_addr'])
+        self.assertEqual(sent_msg['helper_metadata'], {
+            'go': {
+                'user_account': self.account.key,
+            },
+            'tag': {
+                'tag': list(self.tag),
+            }
+        })
+        # We do not respect the message_id that's been given.
+        self.assertNotEqual(sent_msg['message_id'], msg['message_id'])
+        self.assertNotEqual(sent_msg['session_event'], msg['session_event'])
+        self.assertEqual(sent_msg['message_id'], put_msg['message_id'])
+        self.assertEqual(sent_msg['to_addr'], inbound_msg['from_addr'])
+        self.assertEqual(sent_msg['from_addr'], self.tag[1])
 
     @inlineCallbacks
     def test_concurrency_limits(self):
@@ -378,3 +380,19 @@ class StreamingHTTPWorkerTestCase(ApplicationTestCase):
         yield event_d
 
         self.assertEqual(TransportEvent.from_json(posted_json_data), ack1)
+
+    @inlineCallbacks
+    def test_bad_urls(self):
+        def assert_not_found(url, headers={}):
+            d = http_request_full(self.url, method='GET', headers=headers)
+            d.addCallback(lambda r: self.assertEqual(r.code, http.NOT_FOUND))
+            return d
+
+        yield assert_not_found(self.url)
+        yield assert_not_found(self.url + '/')
+        yield assert_not_found('%s/%s' % (self.url, self.api_username),
+                               headers=self.auth_headers)
+        yield assert_not_found('%s/%s/' % (self.url, self.api_username),
+                               headers=self.auth_headers)
+        yield assert_not_found('%s/%s/foo' % (self.url, self.api_username),
+                               headers=self.auth_headers)

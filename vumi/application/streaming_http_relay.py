@@ -387,6 +387,9 @@ class APIUserResource(resource.Resource):
     def release_request(self, err, user_id):
         return self.redis.decr(self.key(user_id))
 
+    def render(self, request):
+        return resource.NoResource().render(request)
+
     def getChild(self, path, request):
         return util.DeferredResource(self.getDeferredChild(path, request))
 
@@ -420,19 +423,22 @@ class StreamingResource(resource.Resource):
         resource.Resource.__init__(self)
         self.worker = worker
 
+    def render(self, request):
+        return resource.NoResource().render(request)
+
     def getChild(self, api_username, request):
-        if api_username:
+        if not api_username:
+            return resource.NoResource()
 
-            resource = APIUserResource(self.worker, api_username)
+        res = APIUserResource(self.worker, api_username)
+        checker = APIUserAccessChecker(self.worker, api_username)
+        realm = APIUserRealm(res)
+        p = portal.Portal(realm, [checker])
 
-            checker = APIUserAccessChecker(self.worker, api_username)
-            realm = APIUserRealm(resource)
-            p = portal.Portal(realm, [checker])
+        factory = BasicCredentialFactory("Vumi Message Stream")
+        protected_resource = HTTPAuthSessionWrapper(p, [factory])
 
-            factory = BasicCredentialFactory("Vumi Message Stream")
-            protected_resource = HTTPAuthSessionWrapper(p, [factory])
-
-            return protected_resource
+        return protected_resource
 
 
 class APIUserRealm(object):
