@@ -59,9 +59,9 @@ class BaseWorker(Worker):
         log.msg('Starting a %s worker with config: %s'
                 % (self.__class__.__name__, self.config))
         d = maybeDeferred(self._validate_config)
+        then_call(d, self.setup_heartbeat)
         then_call(d, self.setup_middleware)
         then_call(d, self.setup_connectors)
-        then_call(d, self.setup_heartbeat)
         then_call(d, self.setup_worker)
         return d
 
@@ -69,9 +69,9 @@ class BaseWorker(Worker):
         log.msg('Stopping a %s worker.' % (self.__class__.__name__,))
         d = succeed(None)
         then_call(d, self.teardown_worker)
-        then_call(d, self.teardown_heartbeat)
         then_call(d, self.teardown_connectors)
         then_call(d, self.teardown_middleware)
+        then_call(d, self.teardown_heartbeat)
         return d
 
     def setup_connectors(self):
@@ -94,11 +94,21 @@ class BaseWorker(Worker):
         return d
 
     def _gen_heartbeat_attrs(self):
-        worker_id = self.config.get("worker_name")
+        # worker_name is guaranteed to be set here, otherwise this func would
+        # not have been called
+        name = self.config.get("worker_name")
+        num = self.options.get("worker-number")
+        if num:
+            worker_id = "%s.%s" % (name, num,)
+        else:
+            num = -1
+            worker_id = name
         attrs = {
             'version': HeartBeatMessage.VERSION_20130319,
             'system_id': Worker.SYSTEM_ID,
             'worker_id': worker_id,
+            'worker_name': name,
+            'number': num,
             'hostname': socket.gethostname(),
             'timestamp': time.time(),
             'pid': os.getpid(),

@@ -14,4 +14,5 @@ python-smpp
 pytz
 riakasaurus>=1.0.9
 riak
+txJSON-RPC
 https://github.com/dustin/twitty-twister/tarball/master#egg=twittytwister-0.1.1
