@@ -163,8 +163,6 @@ class Worker(MultiService, object):
     The Worker is responsible for starting consumers & publishers
     as needed.
     """
-    # This will obviously be supplied by configuration in future
-    SYSTEM_ID = "vumi-go-prod-1"
 
     def __init__(self, options, config=None):
         super(Worker, self).__init__()

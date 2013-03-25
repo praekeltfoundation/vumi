@@ -98,6 +98,7 @@ class BaseWorker(Worker):
         # not have been called
         name = self.config.get("worker_name")
         num = self.options.get("worker-number")
+        system_id = self.options.get("system-id", "global")
         if num:
             worker_id = "%s.%s" % (name, num,)
         else:
@@ -105,7 +106,7 @@ class BaseWorker(Worker):
             worker_id = name
         attrs = {
             'version': HeartBeatMessage.VERSION_20130319,
-            'system_id': Worker.SYSTEM_ID,
+            'system_id': system_id,
             'worker_id': worker_id,
             'worker_name': name,
             'number': num,
