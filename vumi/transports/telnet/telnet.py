@@ -43,10 +43,15 @@ class TelnetServerTransport(Transport):
     :type telnet_port: int
     :param telnet_port:
         Port for the telnet server to listen on.
+    :type to_addr: str
+    :param to_addr:
+        The to_addr to use for the telnet server.
+        Defaults to 'host:port'.
     """
 
     def validate_config(self):
         self.telnet_port = int(self.config['telnet_port'])
+        self._to_addr = self.config.get('to_addr')
 
     @inlineCallbacks
     def setup_transport(self):
@@ -59,7 +64,8 @@ class TelnetServerTransport(Transport):
         factory.protocol = protocol
         self.telnet_server = yield reactor.listenTCP(self.telnet_port,
                                                      factory)
-        self._to_addr = self._format_addr(self.telnet_server.getHost())
+        if self._to_addr is None:
+            self._to_addr = self._format_addr(self.telnet_server.getHost())
 
     @inlineCallbacks
     def teardown_transport(self):

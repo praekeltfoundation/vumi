@@ -147,3 +147,14 @@ class TelnetServerTransportTestCase(TransportTestCase):
         line = yield self.client.transport.protocol.queue.get()
         self.assertEqual(line, "send_foo")
         self.assertTrue(self.client.transport.connected)
+
+    @inlineCallbacks
+    def test_to_addr_override(self):
+        old_worker = self.worker
+        self.assertEqual(old_worker._to_addr,
+            old_worker._format_addr(old_worker.telnet_server.getHost()))
+        worker = yield self.get_transport({
+            'telnet_port': 0,
+            'to_addr': 'foo'
+        })
+        self.assertEqual(worker._to_addr, 'foo')
