@@ -12,6 +12,7 @@ from vumi.worker import BaseWorker
 from vumi import log
 from vumi.message import TransportUserMessage
 
+
 SESSION_NEW = TransportUserMessage.SESSION_NEW
 SESSION_CLOSE = TransportUserMessage.SESSION_CLOSE
 SESSION_RESUME = TransportUserMessage.SESSION_RESUME

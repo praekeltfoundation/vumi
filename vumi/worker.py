@@ -1,6 +1,8 @@
+# -*- test-case-name: vumi.tests.test_worker -*-
+
 """Basic tools for workers that handle TransportMessages."""
 
-from twisted.internet.defer import succeed, maybeDeferred
+from twisted.internet.defer import inlineCallbacks, succeed, maybeDeferred
 from twisted.python import log
 
 from vumi.service import Worker
@@ -49,19 +51,13 @@ class BaseWorker(Worker):
         self._static_config = self.CONFIG_CLASS(self.config, static=True)
         self._hb_pub = None
 
-        # Disable heartbeats if worker_name is not set. We're
-        # currently using it as the primary identifier for a worker
-        self._heartbeat_enabled = True
-        if 'worker_name' not in self.config:
-            self._heartbeat_enabled = False
-
     def startWorker(self):
         log.msg('Starting a %s worker with config: %s'
                 % (self.__class__.__name__, self.config))
         d = maybeDeferred(self._validate_config)
+        then_call(d, self.setup_heartbeat)
         then_call(d, self.setup_middleware)
         then_call(d, self.setup_connectors)
-        then_call(d, self.setup_heartbeat)
         then_call(d, self.setup_worker)
         return d
 
@@ -69,29 +65,31 @@ class BaseWorker(Worker):
         log.msg('Stopping a %s worker.' % (self.__class__.__name__,))
         d = succeed(None)
         then_call(d, self.teardown_worker)
-        then_call(d, self.teardown_heartbeat)
         then_call(d, self.teardown_connectors)
         then_call(d, self.teardown_middleware)
+        then_call(d, self.teardown_heartbeat)
         return d
 
     def setup_connectors(self):
         raise NotImplementedError()
 
+    @inlineCallbacks
     def setup_heartbeat(self):
-        d = succeed(None)
-        if self._heartbeat_enabled:
+        # Disable heartbeats if worker_name is not set. We're
+        # currently using it as the primary identifier for a worker
+        if 'worker_name' in self.config:
             log.msg("Starting HeartBeat publisher with worker_id=%s"
                     % self.config.get("worker_name"))
-            self._hb_pub = self.start_publisher(HeartBeatPublisher,
+            self._hb_pub = yield self.start_publisher(HeartBeatPublisher,
                                                 self._gen_heartbeat_attrs)
-        return d
+        else:
+            log.msg("HeartBeat publisher disabled. No worker_id "
+                    "field found in config.")
 
     def teardown_heartbeat(self):
-        d = succeed(None)
-        if self._heartbeat_enabled and self._hb_pub is not None:
+        if self._hb_pub is not None:
             self._hb_pub.stop()
             self._hb_pub = None
-        return d
 
     def _gen_heartbeat_attrs(self):
         worker_id = self.config.get("worker_name")
@@ -102,7 +100,7 @@ class BaseWorker(Worker):
             'hostname': socket.gethostname(),
             'timestamp': time.time(),
             'pid': os.getpid(),
-            }
+        }
         return attrs
 
     def teardown_connectors(self):
