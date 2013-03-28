@@ -41,36 +41,44 @@ class AddressedTelnetTransportProtocol(StatefulTelnetProtocol):
 
     def __init__(self, vumi_transport):
         self.vumi_transport = vumi_transport
+        self.to_addr = None
+        self.from_addr = None
 
     def connectionMade(self):
-        self.transport.write('Please provide "to_addr": ')
+        self.transport.write('Please provide "to_addr":\n')
 
     def telnet_ToAddr(self, line):
         if not line:
             return "ToAddr"
 
         self.to_addr = line
-        self.transport.write('Please provide "from_addr": ')
+        self.transport.write('Please provide "from_addr":\n')
         return "FromAddr"
 
     def telnet_FromAddr(self, line):
         if not line:
             return "FromAddr"
 
-        self.from_addr = line
-        summary = "Sending all messages to: %s and from: %s" % (self.to_addr,
-                                                                self.from_addr)
-        self.transport.write("\n".join(["", summary, "-" * len(summary), ""]))
-        self.vumi_transport._to_addr = self.to_addr
-        self.vumi_transport._from_addr = self.from_addr
-        self.vumi_transport.register_client(self)
+        if self.from_addr is None:
+            self.from_addr = line
+            summary = "[Sending all messages to: %s and from: %s]\n" % (
+                            self.to_addr, self.from_addr)
+            self.transport.write(summary)
+
+            self.vumi_transport._to_addr = self.to_addr
+            self.vumi_transport.register_client(self)
+        return "SetupDone"
+
+    def telnet_SetupDone(self, line):
+        self.vumi_transport.handle_input(self, line.rstrip('\r\n'))
 
     def getAddress(self):
         return self.from_addr
 
     def connectionLost(self, reason):
         StatefulTelnetProtocol.connectionLost(self, reason)
-        self.vumi_transport.deregister_client(self)
+        if self.from_addr is not None:
+            self.vumi_transport.deregister_client(self)
 
 
 class TelnetServerTransport(Transport):
