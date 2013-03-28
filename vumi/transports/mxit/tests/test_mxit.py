@@ -3,6 +3,7 @@ from twisted.web.http import Request, BAD_REQUEST
 
 from vumi.transports.tests.utils import TransportTestCase
 from vumi.transports.mxit import MxitTransport
+from vumi.transports.mxit.responses import ResponseParser
 from vumi.message import TransportUserMessage
 from vumi.utils import http_request_full
 
@@ -133,4 +134,23 @@ class TestMxitTransportTestCase(TransportTestCase):
             self.sample_menu_resp, continue_session=True)
         self.dispatch(reply)
         resp = yield resp_d
-        print resp.delivered_body
+        self.assertTrue('1. option 1' in resp.delivered_body)
+        self.assertTrue('2. option 2' in resp.delivered_body)
+        self.assertTrue('3. option 3' in resp.delivered_body)
+
+        self.assertTrue('?input=1' in resp.delivered_body)
+        self.assertTrue('?input=2' in resp.delivered_body)
+        self.assertTrue('?input=3' in resp.delivered_body)
+
+    def test_response_parser(self):
+        header, items = ResponseParser.parse(self.sample_menu_resp)
+        self.assertEqual(header, 'Hello!')
+        self.assertEqual(items, [
+            ('1', 'option 1'),
+            ('2', 'option 2'),
+            ('3', 'option 3'),
+        ])
+
+        header, items = ResponseParser.parse('foo!')
+        self.assertEqual(header, 'foo!')
+        self.assertEqual(items, [])
