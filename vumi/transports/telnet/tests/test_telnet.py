@@ -45,6 +45,7 @@ class BaseTelnetServerTransortTestCase(TransportTestCase):
     def tearDown(self):
         if self.client.transport.connected:
             self.client.transport.loseConnection()
+            self.clear_dispatched_messages()
             # Wait for all registered clients to get their disconnects.
             yield self.wait_for_dispatched_messages(len(self.worker._clients))
         yield super(BaseTelnetServerTransortTestCase, self).tearDown()
@@ -67,11 +68,6 @@ class BaseTelnetServerTransortTestCase(TransportTestCase):
 
 
 class TelnetServerTransportTestCase(BaseTelnetServerTransortTestCase):
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield super(TelnetServerTransportTestCase).tearDown()
-        self.clear_dispatched_messages()
 
     @inlineCallbacks
     def test_client_register(self):
