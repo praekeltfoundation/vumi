@@ -75,6 +75,11 @@ class Vas2NetsTransportTestCase(TransportTestCase):
         self.worker = yield self.get_transport(self.config)
         self.today = datetime.utcnow().date()
 
+    @inlineCallbacks
+    def tearDown(self):
+        yield self.worker.stopWorker()
+        yield super(Vas2NetsTransportTestCase, self).tearDown()
+
     def make_resource_worker(self, msg_id, msg, code=http.OK, send_id=None):
         w = get_stubbed_worker(TestResourceWorker, {})
         w.set_resources([

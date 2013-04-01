@@ -5,21 +5,20 @@ import json
 from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
 
-from vumi.service import Worker, WorkerCreator
-from vumi.tests.utils import (fake_amq_message,
-                              get_stubbed_worker,
+from vumi.tests.utils import (get_stubbed_worker,
                               get_stubbed_channel)
 from vumi.tests.fake_amqp import FakeAMQPBroker
-from vumi.message import Message
 from vumi.blinkenlights.heartbeat import publisher
 from vumi.blinkenlights.heartbeat import monitor
 from vumi.errors import MissingMessageField
+
 
 class MockHeartBeatMonitor(monitor.HeartBeatMonitor):
 
     # stub out the LoopingCall task
     def _start_looping_task(self):
         self._task = None
+
 
 class MockHeartBeatPublisher(publisher.HeartBeatPublisher):
 
@@ -61,14 +60,16 @@ class TestHeartBeatPublisher(TestCase):
     def test_message_validation(self):
         attrs = self.gen_fake_attrs()
         attrs.pop("version")
-        self.assertRaises(MissingMessageField, publisher.HeartBeatMessage, **attrs)
+        self.assertRaises(MissingMessageField,
+                          publisher.HeartBeatMessage, **attrs)
         attrs = self.gen_fake_attrs()
         attrs.pop("system_id")
-        self.assertRaises(MissingMessageField, publisher.HeartBeatMessage, **attrs)
+        self.assertRaises(MissingMessageField,
+                          publisher.HeartBeatMessage, **attrs)
         attrs = self.gen_fake_attrs()
         attrs.pop("worker_id")
-        self.assertRaises(MissingMessageField, publisher.HeartBeatMessage, **attrs)
-
+        self.assertRaises(MissingMessageField,
+                          publisher.HeartBeatMessage, **attrs)
 
 
 class TestHeartBeatMonitor(TestCase):
