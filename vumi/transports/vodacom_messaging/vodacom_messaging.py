@@ -31,16 +31,22 @@ class VodacomMessagingTransport(HttpRpcTransport):
                 )
 
     def handle_outbound_message(self, message):
-        if message.payload.get('in_reply_to') and 'content' in message.payload:
-            should_close = (message['session_event']
-                            == TransportUserMessage.SESSION_CLOSE)
-            vmr = VodacomMessagingResponse(self.config['web_host'],
-                                            self.config['web_path'])
-            vmr.set_headertext(message['content'])
-            if not should_close:
-                vmr.accept_freetext()
-            self.finish_request(message['in_reply_to'],
-                                unicode(vmr).encode('utf-8'))
+        missing_fields = self.ensure_message_values(message,
+                                ['in_reply_to', 'content'])
+        if missing_fields:
+            return self.reject_message(message, missing_fields)
+
+        should_close = (message['session_event']
+                        == TransportUserMessage.SESSION_CLOSE)
+        vmr = VodacomMessagingResponse(self.config['web_host'],
+                                        self.config['web_path'])
+        vmr.set_headertext(message['content'])
+        if not should_close:
+            vmr.accept_freetext()
+        self.finish_request(message['in_reply_to'],
+                            unicode(vmr).encode('utf-8'))
+        return self.publish_ack(user_message_id=message['message_id'],
+            sent_message_id=message['message_id'])
 
 
 class VodacomMessagingResponse(object):

@@ -163,6 +163,8 @@ class Worker(MultiService, object):
     The Worker is responsible for starting consumers & publishers
     as needed.
     """
+    # This will obviously be supplied by configuration in future
+    SYSTEM_ID = "vumi-go-prod-1"
 
     def __init__(self, options, config=None):
         super(Worker, self).__init__()
@@ -291,6 +293,7 @@ class Consumer(object):
         self.queue = queue
         self.keep_consuming = True
         self._testing = hasattr(channel, 'message_processed')
+        self.paused = self.start_paused
 
         @inlineCallbacks
         def read_messages():
@@ -310,9 +313,11 @@ class Consumer(object):
         returnValue(self)
 
     def pause(self):
+        self.paused = True
         return self.channel.channel_flow(active=False)
 
     def unpause(self):
+        self.paused = False
         return self.channel.channel_flow(active=True)
 
     @inlineCallbacks

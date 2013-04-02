@@ -3,6 +3,7 @@
 from twisted.python import log
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet import task
+from twisted.web import error
 from twittytwister import twitter
 from oauth import oauth
 
@@ -36,7 +37,8 @@ class TwitterTransport(Transport):
         token = oauth.OAuthToken(self.access_token, self.access_token_secret)
         self.twitter = self._twitter_class(consumer=consumer, token=token)
         yield self.start_tracking_terms()
-        self.start_checking_for_replies()
+        if self.check_replies_interval > 0:
+            self.start_checking_for_replies()
 
     @inlineCallbacks
     def start_tracking_terms(self):
@@ -64,9 +66,14 @@ class TwitterTransport(Transport):
                 moment.
         """
         log.msg("Twitter transport sending %r" % (message,))
-        post_id = yield self.twitter.update(message['content'])
-        self.publish_ack(user_message_id=message['message_id'],
-                            sent_message_id=post_id)
+        try:
+            post_id = yield self.twitter.update(message['content'])
+            yield self.publish_ack(user_message_id=message['message_id'],
+                                sent_message_id=post_id)
+        except error.Error, e:
+            yield self.publish_nack(user_message_id=message['message_id'],
+                                sent_message_id=message['message_id'],
+                                reason=str(e))
 
     @inlineCallbacks
     def handle_replies(self, message):
@@ -98,9 +105,9 @@ class TwitterTransport(Transport):
         conversation.
         """
         self.publish_message(
-            message_id=status.id,
+            message_id=unicode(status.id),
             content=status.text,
-            to_addr=status.in_reply_to_screen_name,
+            to_addr=status.in_reply_to_screen_name or '',
             from_addr=status.user.screen_name,
             session_event=TransportUserMessage.SESSION_NONE,
             transport_type=self.transport_type,

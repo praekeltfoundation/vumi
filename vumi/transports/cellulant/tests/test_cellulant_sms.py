@@ -7,7 +7,7 @@ from twisted.internet.defer import inlineCallbacks, DeferredQueue, returnValue
 
 from vumi.utils import http_request, http_request_full
 from vumi.tests.utils import MockHttpServer
-from vumi.transports.tests.test_base import TransportTestCase
+from vumi.transports.tests.utils import TransportTestCase
 from vumi.transports.cellulant import CellulantSmsTransport
 
 
@@ -197,7 +197,6 @@ class TestAcksCellulantSmsTransport(TransportTestCase):
             },
             'outbound_url': self.mock_cellulant_sms.url,
             'validation_mode': 'permissive',
-            'eager_delivery_reporting': True,
         }
         self.transport = yield self.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url()
@@ -224,49 +223,44 @@ class TestAcksCellulantSmsTransport(TransportTestCase):
         returnValue(events)
 
     @inlineCallbacks
-    def test_dr_param_error_E0(self):
-        [ack, dr] = yield self.mock_event('E0', 2)
-        self.assertEqual(ack['event_type'], 'ack')
-        self.assertEqual(ack['user_message_id'], 'id_E0')
-        self.assertEqual(dr['event_type'], 'delivery_report')
-        self.assertEqual(dr['delivery_status'], 'failed')
-        self.assertEqual(dr['user_message_id'], 'id_E0')
+    def test_nack_param_error_E0(self):
+        [nack] = yield self.mock_event('E0', 1)
+        self.assertEqual(nack['event_type'], 'nack')
+        self.assertEqual(nack['user_message_id'], 'id_E0')
+        self.assertEqual(nack['nack_reason'],
+            self.transport.KNOWN_ERROR_RESPONSE_CODES['E0'])
 
     @inlineCallbacks
-    def test_dr_login_error_E1(self):
-        [ack, dr] = yield self.mock_event('E1', 2)
-        self.assertEqual(ack['event_type'], 'ack')
-        self.assertEqual(ack['user_message_id'], 'id_E1')
-        self.assertEqual(dr['event_type'], 'delivery_report')
-        self.assertEqual(dr['delivery_status'], 'failed')
-        self.assertEqual(dr['user_message_id'], 'id_E1')
+    def test_nack_login_error_E1(self):
+        [nack] = yield self.mock_event('E1', 1)
+        self.assertEqual(nack['event_type'], 'nack')
+        self.assertEqual(nack['user_message_id'], 'id_E1')
+        self.assertEqual(nack['nack_reason'],
+            self.transport.KNOWN_ERROR_RESPONSE_CODES['E1'])
 
     @inlineCallbacks
-    def test_dr_credits_error_E2(self):
-        [ack, dr] = yield self.mock_event('E2', 2)
-        self.assertEqual(ack['event_type'], 'ack')
-        self.assertEqual(ack['user_message_id'], 'id_E2')
-        self.assertEqual(dr['event_type'], 'delivery_report')
-        self.assertEqual(dr['delivery_status'], 'failed')
-        self.assertEqual(dr['user_message_id'], 'id_E2')
+    def test_nack_credits_error_E2(self):
+        [nack] = yield self.mock_event('E2', 1)
+        self.assertEqual(nack['event_type'], 'nack')
+        self.assertEqual(nack['user_message_id'], 'id_E2')
+        self.assertEqual(nack['nack_reason'],
+            self.transport.KNOWN_ERROR_RESPONSE_CODES['E2'])
 
     @inlineCallbacks
-    def test_dr_delivery_failed_1005(self):
-        [ack, dr] = yield self.mock_event('1005', 2)
-        self.assertEqual(ack['event_type'], 'ack')
-        self.assertEqual(ack['user_message_id'], 'id_1005')
-        self.assertEqual(dr['event_type'], 'delivery_report')
-        self.assertEqual(dr['delivery_status'], 'failed')
-        self.assertEqual(dr['user_message_id'], 'id_1005')
+    def test_nack_delivery_failed_1005(self):
+        [nack] = yield self.mock_event('1005', 1)
+        self.assertEqual(nack['event_type'], 'nack')
+        self.assertEqual(nack['user_message_id'], 'id_1005')
+        self.assertEqual(nack['nack_reason'],
+            self.transport.KNOWN_ERROR_RESPONSE_CODES['1005'])
 
     @inlineCallbacks
     def test_unknown_response(self):
-        [ack, dr] = yield self.mock_event('something_unexpected', 1)
-        self.assertEqual(ack['event_type'], 'ack')
-        self.assertEqual(ack['user_message_id'], 'id_something_unexpected')
-        self.assertEqual(dr['event_type'], 'delivery_report')
-        self.assertEqual(dr['delivery_status'], 'failed')
-        self.assertEqual(dr['user_message_id'], 'id_something_unexpected')
+        [nack] = yield self.mock_event('something_unexpected', 1)
+        self.assertEqual(nack['event_type'], 'nack')
+        self.assertEqual(nack['user_message_id'], 'id_something_unexpected')
+        self.assertEqual(nack['nack_reason'],
+            'Unknown response code: something_unexpected')
 
     @inlineCallbacks
     def test_ack_success(self):
@@ -274,35 +268,6 @@ class TestAcksCellulantSmsTransport(TransportTestCase):
         self.assertEqual(event['event_type'], 'ack')
         self.assertEqual(event['user_message_id'], 'id_1')
 
-    @inlineCallbacks
-    def test_eager_modes(self):
-        yield self.transport.stopWorker()
-        eager_transport = yield self.get_transport(self.config)
-        [ack, dr] = yield self.mock_event('E2', 2)
-        self.assertEqual(ack['event_type'], 'ack')
-        self.assertEqual(ack['user_message_id'], 'id_E2')
-        self.assertEqual(dr['event_type'], 'delivery_report')
-        self.assertEqual(dr['delivery_status'], 'failed')
-        self.assertEqual(dr['user_message_id'], 'id_E2')
-        yield eager_transport.stopWorker()
-
-        self.config.update({
-            'eager_delivery_reporting': False,
-            })
-        lazy_transport = yield self.get_transport(self.config)
-        [_, _, ack] = yield self.mock_event('E2', 3)
-        self.assertEqual(ack['event_type'], 'ack')
-        self.assertEqual(ack['user_message_id'], 'id_E2')
-        yield lazy_transport.stopWorker()
-
-        self.config.update({
-            'eager_delivery_reporting': False,
-            })
-        lazy_transport = yield self.get_transport(self.config)
-        [_, _, _, ack] = yield self.mock_event('something_unexpected', 4)
-        self.assertEqual(ack['event_type'], 'ack')
-        self.assertEqual(ack['user_message_id'], 'id_something_unexpected')
-        yield lazy_transport.stopWorker()
 
 class TestPermissiveCellulantSmsTransport(TransportTestCase):
 

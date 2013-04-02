@@ -31,6 +31,28 @@ class FakeRedisTestCase(TestCase):
         yield self.assert_redis_op('3', 'get', "inc")
 
     @inlineCallbacks
+    def test_incrby(self):
+        yield self.redis.set("inc", 1)
+        yield self.assert_redis_op('1', 'get', "inc")
+        yield self.assert_redis_op(3, 'incr', "inc", 2)
+        yield self.assert_redis_op('3', 'get', "inc")
+
+    @inlineCallbacks
+    def test_decr(self):
+        yield self.redis.set("dec", 4)
+        yield self.assert_redis_op('4', 'get', "dec")
+        yield self.assert_redis_op(3, 'decr', "dec")
+        yield self.assert_redis_op(2, 'decr', "dec")
+        yield self.assert_redis_op('2', 'get', "dec")
+
+    @inlineCallbacks
+    def test_decrby(self):
+        yield self.redis.set("dec", 4)
+        yield self.assert_redis_op('4', 'get', "dec")
+        yield self.assert_redis_op(2, 'decr', "dec", 2)
+        yield self.assert_redis_op('2', 'get', "dec")
+
+    @inlineCallbacks
     def test_setnx(self):
         yield self.assert_redis_op(False, 'exists', "mykey")
         yield self.assert_redis_op(True, 'setnx', "mykey", "value")
@@ -55,6 +77,10 @@ class FakeRedisTestCase(TestCase):
         yield self.assert_redis_op(0, 'zadd', 'set', one=2.0)
         yield self.assert_redis_op([('one', 2.0)], 'zrange', 'set', 0, -1,
                                    withscores=True)
+        self.assertRaises(
+            Exception, self.redis.zadd, "set", one='foo')
+        self.assertRaises(
+            Exception, self.redis.zadd, "set", one=None)
 
     @inlineCallbacks
     def test_zrange(self):
@@ -75,6 +101,8 @@ class FakeRedisTestCase(TestCase):
         yield self.assert_redis_op(
             [('three', 0.3), ('two', 0.2), ('one', 0.1)],
             'zrange', 'set', 0, -1, withscores=True, desc=True)
+        yield self.assert_redis_op([('three', 0.3)],
+            'zrange', 'set', 0, 0, withscores=True, desc=True)
 
     @inlineCallbacks
     def test_zrangebyscore(self):
@@ -90,6 +118,13 @@ class FakeRedisTestCase(TestCase):
             'zrangebyscore', 'set', '0.2', '+inf')
         yield self.assert_redis_op(['one', 'two'],
             'zrangebyscore', 'set', '-inf', '0.2')
+
+    @inlineCallbacks
+    def test_zcount(self):
+        yield self.redis.zadd('set', one=0.1, two=0.2, three=0.3, four=0.4,
+            five=0.5)
+        yield self.assert_redis_op('3', 'zcount',
+            'set', 0.2, 0.4)
 
     @inlineCallbacks
     def test_zrangebyscore_with_scores(self):
@@ -149,16 +184,24 @@ class FakeRedisTestCase(TestCase):
         yield self.assert_redis_op(False, 'hexists', 'key', 'field')
 
     @inlineCallbacks
+    def test_hsetnx(self):
+        yield self.redis.hset('key', 'field', 1)
+        self.assert_redis_op(0, 'hsetnx', 'key', 'field', 2)
+        self.assertEqual((yield self.redis.hget('key', 'field')), '1')
+        self.assert_redis_op(1, 'hsetnx', 'key', 'other-field', 2)
+        self.assertEqual((yield self.redis.hget('key', 'other-field')), '2')
+
+    @inlineCallbacks
     def test_sadd(self):
-        yield self.assert_redis_op(None, 'sadd', 'set', 1)
-        yield self.assert_redis_op(None, 'sadd', 'set', 2, 3, 4)
+        yield self.assert_redis_op(1, 'sadd', 'set', 1)
+        yield self.assert_redis_op(3, 'sadd', 'set', 2, 3, 4)
         yield self.assert_redis_op(
             set(['1', '2', '3', '4']), 'smembers', 'set')
 
     @inlineCallbacks
     def test_smove(self):
-        yield self.assert_redis_op(None, 'sadd', 'set1', 1)
-        yield self.assert_redis_op(None, 'sadd', 'set2', 2)
+        yield self.assert_redis_op(1, 'sadd', 'set1', 1)
+        yield self.assert_redis_op(1, 'sadd', 'set2', 2)
         yield self.assert_redis_op(True, 'smove', 'set1', 'set2', '1')
         yield self.assert_redis_op(set(), 'smembers', 'set1')
         yield self.assert_redis_op(set(['1', '2']), 'smembers', 'set2')
@@ -170,8 +213,8 @@ class FakeRedisTestCase(TestCase):
 
     @inlineCallbacks
     def test_sunion(self):
-        yield self.assert_redis_op(None, 'sadd', 'set1', 1)
-        yield self.assert_redis_op(None, 'sadd', 'set2', 2)
+        yield self.assert_redis_op(1, 'sadd', 'set1', 1)
+        yield self.assert_redis_op(1, 'sadd', 'set2', 2)
         yield self.assert_redis_op(set(['1']), 'sunion', 'set1')
         yield self.assert_redis_op(set(['1', '2']), 'sunion', 'set1', 'set2')
         yield self.assert_redis_op(set(), 'sunion', 'other')
@@ -217,6 +260,14 @@ class FakeRedisTestCase(TestCase):
         yield self.assert_redis_op(2, 'lrem', 'list', 1, 2)
         yield self.assert_redis_op(
             ['v0', 'v1', 'v2', 1, 'v3', 1, 'v4', 1], 'lrange', 'list', 0, -1)
+
+    @inlineCallbacks
+    def test_ltrim(self):
+        for i in range(1, 4):
+            yield self.assert_redis_op(i - 1, 'rpush', 'list', str(i))
+        yield self.assert_redis_op(['1', '2', '3'], 'lrange', 'list', 0, -1)
+        yield self.assert_redis_op(None, 'ltrim', 'list', 1, 2)
+        yield self.assert_redis_op(['2', '3'], 'lrange', 'list', 0, -1)
 
     @inlineCallbacks
     def test_lrem_negative_num(self):

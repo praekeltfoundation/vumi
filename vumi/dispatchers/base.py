@@ -4,7 +4,6 @@
 
 import re
 import functools
-from collections import defaultdict
 
 from twisted.internet.defer import inlineCallbacks, returnValue, maybeDeferred
 
@@ -35,6 +34,15 @@ class BaseDispatchWorker(Worker):
         yield self.setup_exposed_publishers()
         yield self.setup_transport_consumers()
         yield self.setup_exposed_consumers()
+        self.amqp_prefetch_count = self.config.get('amqp_prefetch_count', 20)
+        if self.amqp_prefetch_count is not None:
+            yield self.setup_amqp_qos()
+
+        consumers = (self.exposed_consumer.values() +
+                        self.transport_consumer.values() +
+                        self.transport_event_consumer.values())
+        for consumer in consumers:
+            consumer.unpause()
 
     @inlineCallbacks
     def stopWorker(self):
@@ -42,8 +50,8 @@ class BaseDispatchWorker(Worker):
         yield self.teardown_middleware()
 
     def setup_endpoints(self):
-        self._transport_names = self.config.get('transport_names', [])
-        self._exposed_names = self.config.get('exposed_names', [])
+        self.transport_names = self.config.get('transport_names', [])
+        self.exposed_names = self.config.get('exposed_names', [])
 
     @inlineCallbacks
     def setup_middleware(self):
@@ -64,7 +72,7 @@ class BaseDispatchWorker(Worker):
     @inlineCallbacks
     def setup_transport_publishers(self):
         self.transport_publisher = {}
-        for transport_name in self._transport_names:
+        for transport_name in self.transport_names:
             self.transport_publisher[transport_name] = yield self.publish_to(
                 '%s.outbound' % (transport_name,))
 
@@ -72,38 +80,47 @@ class BaseDispatchWorker(Worker):
     def setup_transport_consumers(self):
         self.transport_consumer = {}
         self.transport_event_consumer = {}
-        for transport_name in self._transport_names:
+        for transport_name in self.transport_names:
             self.transport_consumer[transport_name] = yield self.consume(
                 '%s.inbound' % (transport_name,),
                 functools.partial(self.dispatch_inbound_message,
                                   transport_name),
-                message_class=TransportUserMessage)
-        for transport_name in self._transport_names:
+                message_class=TransportUserMessage, paused=True)
+        for transport_name in self.transport_names:
             self.transport_event_consumer[transport_name] = yield self.consume(
                 '%s.event' % (transport_name,),
                 functools.partial(self.dispatch_inbound_event, transport_name),
-                message_class=TransportEvent)
+                message_class=TransportEvent, paused=True)
 
     @inlineCallbacks
     def setup_exposed_publishers(self):
         self.exposed_publisher = {}
         self.exposed_event_publisher = {}
-        for exposed_name in self._exposed_names:
+        for exposed_name in self.exposed_names:
             self.exposed_publisher[exposed_name] = yield self.publish_to(
                 '%s.inbound' % (exposed_name,))
-        for exposed_name in self._exposed_names:
+        for exposed_name in self.exposed_names:
             self.exposed_event_publisher[exposed_name] = yield self.publish_to(
                 '%s.event' % (exposed_name,))
 
     @inlineCallbacks
     def setup_exposed_consumers(self):
         self.exposed_consumer = {}
-        for exposed_name in self._exposed_names:
+        for exposed_name in self.exposed_names:
             self.exposed_consumer[exposed_name] = yield self.consume(
                 '%s.outbound' % (exposed_name,),
                 functools.partial(self.dispatch_outbound_message,
                                   exposed_name),
-                message_class=TransportUserMessage)
+                message_class=TransportUserMessage, paused=True)
+
+    @inlineCallbacks
+    def setup_amqp_qos(self):
+        consumers = (self.transport_consumer.values() +
+                        self.transport_event_consumer.values() +
+                        self.exposed_consumer.values())
+        for consumer in consumers:
+            yield consumer.channel.basic_qos(
+                0, int(self.amqp_prefetch_count), False)
 
     def dispatch_inbound_message(self, endpoint, msg):
         d = self._middlewares.apply_consume("inbound", msg, endpoint)
@@ -241,7 +258,11 @@ class SimpleDispatchRouter(BaseDispatchRouter):
     def dispatch_outbound_message(self, msg):
         name = msg['transport_name']
         name = self.config.get('transport_mappings', {}).get(name, name)
-        self.dispatcher.publish_outbound_message(name, msg)
+        if name in self.dispatcher.transport_publisher:
+            self.dispatcher.publish_outbound_message(name, msg)
+        else:
+            log.error('Unknown transport_name: %s, discarding %r' % (
+                name, msg.payload))
 
 
 class TransportToTransportRouter(BaseDispatchRouter):
@@ -337,10 +358,10 @@ class FromAddrMultiplexRouter(BaseDispatchRouter):
     """
 
     def setup_routing(self):
-        if len(self.config['exposed_names']) != 1:
+        if len(self.dispatcher.exposed_names) != 1:
             raise ConfigError("Only one exposed name allowed for %s." % (
                     type(self).__name__,))
-        [self.exposed_name] = self.config['exposed_names']
+        [self.exposed_name] = self.dispatcher.exposed_names
 
     def dispatch_inbound_message(self, msg):
         msg['transport_name'] = self.exposed_name
@@ -553,32 +574,32 @@ class ContentKeywordRouter(SimpleDispatchRouter):
             log.error("No transport for %s" % (msg['from_addr'],))
 
 
-class RedirectOutboundRouter(BaseDispatchRouter):
+class RedirectRouter(BaseDispatchRouter):
     """Router that dispatches outbound messages to a different transport.
 
     :param dict redirect_outbound:
         A dictionary where the key is the name of an exposed_name and
         the value is the name of a transport_name.
+    :param dict redirect_inbound:
+        A dictionary where the key is the value of a transport_name and
+        the value is the value of an exposed_name.
     """
 
     def setup_routing(self):
-        self.mappings = self.config.get('redirect_outbound', {})
-        self.inverse_mappings = defaultdict(list)
-        for app_name, transport_name in self.mappings.items():
-            self.inverse_mappings[transport_name].append(app_name)
+        self.outbound_mappings = self.config.get('redirect_outbound', {})
+        self.inbound_mappings = self.config.get('redirect_inbound', {})
 
     def _dispatch_inbound(self, publish_function, vumi_message):
         transport_name = vumi_message['transport_name']
-        mappings_for_message = self.inverse_mappings[transport_name]
-        if not mappings_for_message:
+        redirect_to = self.inbound_mappings[transport_name]
+        if not redirect_to:
             raise ConfigError(
                 "No exposed name available for %s's inbound message: %s" % (
                 transport_name, vumi_message))
 
-        for app_name in mappings_for_message:
-            msg_copy = vumi_message.copy()
-            msg_copy['transport_name'] = app_name
-            publish_function(app_name, msg_copy)
+        msg_copy = vumi_message.copy()
+        msg_copy['transport_name'] = redirect_to
+        publish_function(redirect_to, msg_copy)
 
     def dispatch_inbound_event(self, event):
         self._dispatch_inbound(self.dispatcher.publish_inbound_event, event)
@@ -588,9 +609,24 @@ class RedirectOutboundRouter(BaseDispatchRouter):
 
     def dispatch_outbound_message(self, msg):
         transport_name = msg['transport_name']
-        redirect_to = self.mappings.get(transport_name)
+        redirect_to = self.outbound_mappings.get(transport_name)
         if redirect_to:
             self.dispatcher.publish_outbound_message(redirect_to, msg)
         else:
             log.error('No redirect_outbound specified for %s' % (
                 transport_name,))
+
+
+class RedirectOutboundRouter(RedirectRouter):
+    """
+    Deprecated in favour of `RedirectRouter`.
+
+    RedirectRouter provides the same features while also allowing
+    inbound redirection to take place, which `RedirectOutboundRouter`
+    conveniently ignores.
+    """
+    def setup_routing(self, *args, **kwargs):
+        log.warning('RedirectOutboundRouter is deprecated, please use '
+            '`RedirectRouter` instead.')
+        return super(RedirectOutboundRouter, self).setup_routing(
+            *args, **kwargs)

@@ -1,10 +1,10 @@
 import re
-from  xml.etree import ElementTree
+from xml.etree import ElementTree
 from urllib import urlencode
 
 from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
-from vumi.transports.tests.test_base import TransportTestCase
+from vumi.transports.tests.utils import TransportTestCase
 from vumi.utils import http_request
 from vumi.transports.vodacom_messaging import (VodacomMessagingResponse,
     VodacomMessagingTransport)
@@ -130,6 +130,16 @@ class TestVodacomMessagingTransport(TransportTestCase):
         correct_response = '<request>\n\t<headertext>OK' + \
                             '</headertext>\n</request>'
         self.assertEqual(response, correct_response)
+
+    @inlineCallbacks
+    def test_nack(self):
+        msg = self.mkmsg_out()
+        yield self.dispatch(msg)
+        [nack] = yield self.wait_for_dispatched_events(1)
+        self.assertEqual(nack['user_message_id'], msg['message_id'])
+        self.assertEqual(nack['sent_message_id'], msg['message_id'])
+        self.assertEqual(nack['nack_reason'],
+            'Missing fields: in_reply_to')
 
 
 class VodacomMessagingResponseTest(TestCase):

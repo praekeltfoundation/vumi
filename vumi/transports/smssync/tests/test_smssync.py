@@ -11,9 +11,10 @@ from twisted.internet.task import Clock
 
 from vumi.message import TransportUserMessage
 from vumi.utils import http_request
-from vumi.transports.tests.test_base import TransportTestCase
+from vumi.transports.tests.utils import TransportTestCase
 from vumi.transports.smssync import SingleSmsSync, MultiSmsSync
 from vumi.transports.smssync.smssync import SmsSyncMsgInfo
+from vumi.transports.failures import PermanentFailure
 
 
 class TestSingleSmsSync(TransportTestCase):
@@ -201,3 +202,16 @@ class TestMultiSmsSync(TestSingleSmsSync):
         self.config["country_codes"] = {
             self.account_id: self.country_code
         }
+
+    @inlineCallbacks
+    def test_nack(self):
+        msg = self.mkmsg_out()
+        # we intentionally skip adding the msg info to force the transport
+        # to reply with a nack
+        yield self.dispatch(msg)
+        [nack] = yield self.wait_for_dispatched_events(1)
+        [twisted_failure] = self.flushLoggedErrors(PermanentFailure)
+        self.assertEqual(nack['event_type'], 'nack')
+        self.assertEqual(nack['user_message_id'], msg['message_id'])
+        self.assertEqual(nack['nack_reason'],
+            "SmsSyncTransport couldn't determine secret for outbound message.")

@@ -9,7 +9,7 @@ from twisted.web.server import Site
 from twisted.web.resource import Resource
 from twisted.web.static import Data
 
-from vumi.application.tests.test_base import ApplicationTestCase
+from vumi.application.tests.utils import ApplicationTestCase
 from vumi.demos.hangman import HangmanGame, HangmanWorker
 from vumi.message import TransportUserMessage
 
@@ -197,7 +197,8 @@ class TestHangmanWorker(ApplicationTestCase):
 
     @inlineCallbacks
     def test_random_word(self):
-        word = yield self.worker.random_word()
+        word = yield self.worker.random_word(
+            self.worker.config['random_word_url'])
         self.assertEqual(word, 'elephant')
 
     @inlineCallbacks

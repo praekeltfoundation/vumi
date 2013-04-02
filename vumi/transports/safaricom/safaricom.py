@@ -2,12 +2,12 @@
 
 import json
 
-from twisted.python import log
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.transports.httprpc import HttpRpcTransport
 from vumi.message import TransportUserMessage
 from vumi.components import SessionManager
+from vumi import log
 
 
 class SafaricomTransport(HttpRpcTransport):
@@ -50,28 +50,18 @@ class SafaricomTransport(HttpRpcTransport):
         yield self.session_manager.stop()
         yield super(SafaricomTransport, self).teardown_transport()
 
-    def get_field_values(self, request):
-        values = {}
-        errors = {}
-        for field in request.args:
-            if field not in self.EXPECTED_FIELDS:
-                errors.setdefault('unexpected_parameter', []).append(field)
-            else:
-                values[field] = str(request.args.get(field)[0])
-        for field in self.EXPECTED_FIELDS:
-            if field not in values:
-                errors.setdefault('missing_parameter', []).append(field)
-        return values, errors
-
     @inlineCallbacks
     def handle_raw_inbound_message(self, message_id, request):
-        values, errors = self.get_field_values(request)
+        values, errors = self.get_field_values(request, self.EXPECTED_FIELDS)
         if errors:
-            log.msg('Unhappy incoming message: %s' % (errors,))
+            log.err('Unhappy incoming message: %s' % (errors,))
             yield self.finish_request(message_id, json.dumps(errors), code=400)
             return
-        log.msg(('SafaricomTransport sending from %(ORIG)s to %(DEST)s '
-                 'for %(SESSION_ID)s message "%(USSD_PARAMS)s"') % values)
+        self.emit(('SafaricomTransport sending from %s to %s '
+                    'for %s message "%s" (%s still pending)') % (
+                        values['ORIG'], values['DEST'], values['SESSION_ID'],
+                        values['USSD_PARAMS'], len(self._requests),
+                    ))
         session_id = values['SESSION_ID']
         from_addr = values['ORIG']
         dest = values['DEST']
@@ -120,10 +110,16 @@ class SafaricomTransport(HttpRpcTransport):
         )
 
     def handle_outbound_message(self, message):
-        if message.payload.get('in_reply_to') and 'content' in message.payload:
-            if message['session_event'] == TransportUserMessage.SESSION_CLOSE:
-                command = 'END'
-            else:
-                command = 'CON'
-            self.finish_request(message['in_reply_to'],
-                ('%s %s' % (command, message['content'])).encode('utf-8'))
+        missing_fields = self.ensure_message_values(message,
+                                ['in_reply_to', 'content'])
+        if missing_fields:
+            return self.reject_message(message, missing_fields)
+
+        if message['session_event'] == TransportUserMessage.SESSION_CLOSE:
+            command = 'END'
+        else:
+            command = 'CON'
+        self.finish_request(message['in_reply_to'],
+            ('%s %s' % (command, message['content'])).encode('utf-8'))
+        return self.publish_ack(user_message_id=message['message_id'],
+            sent_message_id=message['message_id'])

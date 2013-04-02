@@ -3,7 +3,7 @@ from urllib import urlencode
 
 from twisted.internet.defer import inlineCallbacks
 
-from vumi.transports.tests.test_base import TransportTestCase
+from vumi.transports.tests.utils import TransportTestCase
 from vumi.transports.safaricom import SafaricomTransport
 from vumi.message import TransportUserMessage
 from vumi.utils import http_request
@@ -58,7 +58,7 @@ class TestSafaricomTransportTestCase(TransportTestCase):
         })
 
         reply = TransportUserMessage(**msg.payload).reply("ussd message")
-        self.dispatch(reply)
+        yield self.dispatch(reply)
         response = yield deferred
         self.assertEqual(response, 'CON ussd message')
 
@@ -229,3 +229,13 @@ class TestSafaricomTransportTestCase(TransportTestCase):
             continue_session=True)
         self.dispatch(reply)
         yield d3
+
+    @inlineCallbacks
+    def test_nack(self):
+        msg = self.mkmsg_out()
+        yield self.dispatch(msg)
+        [nack] = yield self.wait_for_dispatched_events(1)
+        self.assertEqual(nack['user_message_id'], msg['message_id'])
+        self.assertEqual(nack['sent_message_id'], msg['message_id'])
+        self.assertEqual(nack['nack_reason'],
+            'Missing fields: in_reply_to')

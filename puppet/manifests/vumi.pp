@@ -1,6 +1,6 @@
 # defaults for Exec
 Exec {
-    path => ["/bin", "/usr/bin", "/usr/local/bin", "/usr/local/sbin"],
+    path => ["/bin", "/sbin", "/usr/bin", "/usr/sbin", "/usr/local/bin", "/usr/local/sbin"],
     user => 'vagrant',
 }
 

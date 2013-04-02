@@ -1,7 +1,7 @@
 from twisted.internet.defer import inlineCallbacks
 from twisted.trial.unittest import TestCase
 
-from vumi.transports.tests.test_base import TransportTestCase
+from vumi.transports.tests.utils import TransportTestCase
 from vumi.utils import http_request_full
 from vumi.message import TransportUserMessage
 from vumi.transports.mtech_ussd import MtechUssdTransport
@@ -130,6 +130,16 @@ class TestMtechUssdTransport(TransportTestCase):
         self.assertEqual(response, correct_response)
 
     @inlineCallbacks
+    def test_nack(self):
+        msg = self.mkmsg_out()
+        yield self.dispatch(msg)
+        [nack] = yield self.wait_for_dispatched_events(1)
+        self.assertEqual(nack['user_message_id'], msg['message_id'])
+        self.assertEqual(nack['sent_message_id'], msg['message_id'])
+        self.assertEqual(nack['nack_reason'],
+            'Missing in_reply_to, content or session_id')
+
+    @inlineCallbacks
     def test_inbound_missing_session(self):
         sid = 'a41739890287485d968ea66e8b44bfd3'
         response = yield self.make_ussd_request_full(
@@ -168,7 +178,7 @@ class TestMtechUssdTransport(TransportTestCase):
                 ])
         self.assertEqual(response, correct_response)
 
-        self._amqp.dispatched.clear()
+        self.clear_all_dispatched()
 
         response_d = self.make_ussd_request(sid, page_id="indexX", data="foo")
 

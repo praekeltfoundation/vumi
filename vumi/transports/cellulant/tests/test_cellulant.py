@@ -2,7 +2,7 @@ from urllib import urlencode
 
 from twisted.internet.defer import inlineCallbacks
 
-from vumi.transports.tests.test_base import TransportTestCase
+from vumi.transports.tests.utils import TransportTestCase
 from vumi.transports.cellulant import CellulantTransport
 from vumi.message import TransportUserMessage
 from vumi.utils import http_request
@@ -55,7 +55,7 @@ class TestCellulantTransportTestCase(TransportTestCase):
         deferred = self.mk_request(INPUT="*120*1#")
 
         [msg] = yield self.wait_for_dispatched_messages(1)
-        self.assertEqual(msg['content'], '*120*1#')
+        self.assertEqual(msg['content'], None)
         self.assertEqual(msg['to_addr'], '*120*1#')
         self.assertEqual(msg['from_addr'], '27761234567'),
         self.assertEqual(msg['session_event'],
@@ -65,7 +65,7 @@ class TestCellulantTransportTestCase(TransportTestCase):
         })
 
         reply = TransportUserMessage(**msg.payload).reply("ussd message")
-        self.dispatch(reply)
+        yield self.dispatch(reply)
         response = yield deferred
         self.assertEqual(response, '1|ussd message|null|null|null|null')
 
@@ -126,3 +126,12 @@ class TestCellulantTransportTestCase(TransportTestCase):
         [msg] = yield self.get_dispatched_messages()
         self.assertEqual(msg['session_event'],
                          TransportUserMessage.SESSION_CLOSE)
+
+    @inlineCallbacks
+    def test_nack(self):
+        msg = self.mkmsg_out()
+        self.dispatch(msg)
+        [nack] = yield self.wait_for_dispatched_events(1)
+        self.assertEqual(nack['user_message_id'], msg['message_id'])
+        self.assertEqual(nack['sent_message_id'], msg['message_id'])
+        self.assertEqual(nack['nack_reason'], 'Missing fields: in_reply_to')

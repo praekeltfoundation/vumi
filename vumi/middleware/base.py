@@ -56,7 +56,7 @@ class BaseMiddleware(object):
         """
         pass
 
-    def handle_inbound(self, message, endpoint):
+    def handle_inbound(self, message, connector_name):
         """Called when an inbound transport user message is published
         or consumed.
 
@@ -67,28 +67,28 @@ class BaseMiddleware(object):
 
         :param vumi.message.TransportUserMessage message:
             Inbound message to process.
-        :param string endpoint:
-            The `transport_name` of the endpoint the message is being
-            received on or send to.
+        :param string connector_name:
+            The name of the connector the message is being received on or sent
+            to.
         :rtype: vumi.message.TransportUserMessage
         :returns: The processed message.
         """
         return message
 
-    def handle_outbound(self, message, endpoint):
+    def handle_outbound(self, message, connector_name):
         """Called to process an outbound transport user message.
         See :meth:`handle_inbound`.
         """
         return message
 
-    def handle_event(self, event, endpoint):
+    def handle_event(self, event, connector_name):
         """Called to process an event message (
         :class:`vumi.message.TransportEvent`).
         See :meth:`handle_inbound`.
         """
         return event
 
-    def handle_failure(self, failure, endpoint):
+    def handle_failure(self, failure, connector_name):
         """Called to process a failure message (
         :class:`vumi.transports.failures.FailureMessage`).
         See :meth:`handle_inbound`.
@@ -114,23 +114,23 @@ class MiddlewareStack(object):
         self.middlewares = middlewares
 
     @inlineCallbacks
-    def _handle(self, middlewares, handler_name, message, endpoint):
+    def _handle(self, middlewares, handler_name, message, connector_name):
         method_name = 'handle_%s' % (handler_name,)
         for middleware in middlewares:
             handler = getattr(middleware, method_name)
-            message = yield handler(message, endpoint)
+            message = yield handler(message, connector_name)
             if message is None:
                 raise MiddlewareError('Returned value of %s.%s should never ' \
                                 'be None' % (middleware, method_name,))
         returnValue(message)
 
-    def apply_consume(self, handler_name, message, endpoint):
+    def apply_consume(self, handler_name, message, connector_name):
         return self._handle(
-            self.middlewares, handler_name, message, endpoint)
+            self.middlewares, handler_name, message, connector_name)
 
-    def apply_publish(self, handler_name, message, endpoint):
+    def apply_publish(self, handler_name, message, connector_name):
         return self._handle(
-            reversed(self.middlewares), handler_name, message, endpoint)
+            reversed(self.middlewares), handler_name, message, connector_name)
 
     @inlineCallbacks
     def teardown(self):

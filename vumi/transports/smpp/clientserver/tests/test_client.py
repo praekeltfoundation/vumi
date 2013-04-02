@@ -296,6 +296,15 @@ class EsmeReceiverMixin(EsmeGenericMixin):
                 "\x05\x00\x03\xff\x02\x01hello"))
 
     @inlineCallbacks
+    def test_deliver_sm_multipart_weird_coding(self):
+        esme = yield self.get_esme(
+            deliver_sm=self.assertion_cb(u'hello', 'short_message'))
+        yield esme.handle_deliver_sm(self.get_sm(
+                "\x05\x00\x03\xff\x02\x02l\x00l\x00o", 8))
+        yield esme.handle_deliver_sm(self.get_sm(
+                "\x05\x00\x03\xff\x02\x01\x00h\x00e\x00", 8))
+
+    @inlineCallbacks
     def test_deliver_sm_ussd_start(self):
         def assert_ussd(value):
             self.assertEqual('ussd', value['message_type'])

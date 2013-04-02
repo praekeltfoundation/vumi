@@ -3,7 +3,7 @@ from twisted.internet.defer import inlineCallbacks, Deferred, DeferredQueue
 from twisted.internet.protocol import DatagramProtocol
 from twisted.internet import reactor
 
-from vumi.tests.utils import TestChannel, get_stubbed_worker
+from vumi.tests.utils import get_stubbed_worker, get_stubbed_channel
 from vumi.tests.fake_amqp import FakeAMQPBroker
 from vumi.blinkenlights import metrics_workers
 from vumi.blinkenlights.message20110818 import MetricMessage
@@ -237,16 +237,15 @@ class TestAggregationSystem(TestCase):
 class TestGraphitePublisher(TestCase):
 
     def _check_msg(self, channel, metric, value, timestamp):
-        msg = channel.publish_log[-1]
-        self.assertEqual(msg["routing_key"], metric)
-        self.assertEqual(msg["exchange"], "graphite")
-        content = msg["content"]
-        self.assertEqual(content.properties, {"delivery mode": 2})
-        self.assertEqual(content.body, "%f %d" % (value, timestamp))
+        [msg] = self.broker.get_dispatched("graphite", metric)
+        self.assertEqual(msg.properties, {"delivery mode": 2})
+        self.assertEqual(msg.body, "%f %d" % (value, timestamp))
 
+    @inlineCallbacks
     def test_publish_metric(self):
+        self.broker = FakeAMQPBroker()
         datapoint = ("vumi.test.v1", 1.0, 1234)
-        channel = TestChannel()
+        channel = yield get_stubbed_channel(self.broker)
         pub = metrics_workers.GraphitePublisher()
         pub.start(channel)
         pub.publish_metric(*datapoint)

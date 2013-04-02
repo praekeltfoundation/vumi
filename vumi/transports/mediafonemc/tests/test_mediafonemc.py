@@ -4,10 +4,11 @@ import json
 from urllib import urlencode
 
 from twisted.internet.defer import inlineCallbacks, DeferredQueue
+from twisted.web import http
 
 from vumi.utils import http_request, http_request_full
 from vumi.tests.utils import MockHttpServer
-from vumi.transports.tests.test_base import TransportTestCase
+from vumi.transports.tests.utils import TransportTestCase
 from vumi.transports.mediafonemc import MediafoneTransport
 
 
@@ -36,6 +37,8 @@ class TestMediafoneTransport(TransportTestCase):
         }
         self.transport = yield self.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url()
+        self.mediafonemc_response = ''
+        self.mediafonemc_response_code = http.OK
 
     @inlineCallbacks
     def tearDown(self):
@@ -44,7 +47,8 @@ class TestMediafoneTransport(TransportTestCase):
 
     def handle_request(self, request):
         self.mediafone_calls.put(request)
-        return ''
+        request.setResponseCode(self.mediafonemc_response_code)
+        return self.mediafonemc_response
 
     def mkurl(self, content, from_addr="2371234567", **kw):
         params = {
@@ -92,6 +96,21 @@ class TestMediafoneTransport(TransportTestCase):
                 'password': ['pass'],
                 'msg': ['hello world'],
                 }, req.args)
+
+    @inlineCallbacks
+    def test_nack(self):
+        self.mediafonemc_response_code = http.NOT_FOUND
+        self.mediafonemc_response = 'Not Found'
+
+        msg = self.mkmsg_out(to_addr='2371234567')
+        yield self.dispatch(msg)
+
+        yield self.mediafone_calls.get()
+        [nack] = yield self.wait_for_dispatched_events(1)
+        self.assertEqual(nack['user_message_id'], msg['message_id'])
+        self.assertEqual(nack['sent_message_id'], msg['message_id'])
+        self.assertEqual(nack['nack_reason'],
+            'Unexpected response code: 404')
 
     @inlineCallbacks
     def test_handle_non_ascii_input(self):

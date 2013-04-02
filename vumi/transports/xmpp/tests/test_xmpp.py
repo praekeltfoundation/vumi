@@ -2,7 +2,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet.task import Clock
 from twisted.words.xish import domish
 
-from vumi.transports.tests.test_base import TransportTestCase
+from vumi.transports.tests.utils import TransportTestCase
 from vumi.message import TransportUserMessage, from_json
 from vumi.transports.xmpp.xmpp import XMPPTransport
 from vumi.transports.xmpp.tests import test_xmpp_stubs
@@ -37,11 +37,11 @@ class XMPPTransportTestCase(TransportTestCase):
     @inlineCallbacks
     def test_outbound_message(self):
         transport = yield self.mk_transport()
-        yield self.dispatch(TransportUserMessage(
+        msg = TransportUserMessage(
             to_addr='user@xmpp.domain.com', from_addr='test@case.com',
             content='hello world', transport_name='test_xmpp',
-            transport_type='xmpp', transport_metadata={}),
-            rkey='test_xmpp.outbound')
+            transport_type='xmpp', transport_metadata={})
+        yield self.dispatch(msg, rkey='test_xmpp.outbound')
 
         xmlstream = transport.xmpp_protocol.xmlstream
         self.assertEqual(len(xmlstream.outbox), 1)
@@ -61,10 +61,7 @@ class XMPPTransportTestCase(TransportTestCase):
         message.addElement((None, 'body'), content='hello world')
         protocol = transport.xmpp_protocol
         protocol.onMessage(message)
-        dispatched_messages = self._amqp.get_dispatched('vumi',
-            'test_xmpp.inbound')
-        self.assertEqual(1, len(dispatched_messages))
-        msg = from_json(dispatched_messages[0].body)
+        [msg] = self.get_dispatched_messages()
         self.assertEqual(msg['to_addr'], self.jid.userhost())
         self.assertEqual(msg['from_addr'], 'test@case.com')
         self.assertEqual(msg['transport_name'], 'test_xmpp')
@@ -162,9 +159,6 @@ class XMPPTransportTestCase(TransportTestCase):
         message.addElement((None, 'body'), content='hello world')
         protocol = transport.xmpp_protocol
         protocol.onMessage(message)
-        dispatched_messages = self._amqp.get_dispatched('vumi',
-            'test_xmpp.inbound')
-        self.assertEqual(1, len(dispatched_messages))
-        msg = from_json(dispatched_messages[0].body)
+        [msg] = self.get_dispatched_messages()
         self.assertEqual(msg['from_addr'], 'test@case.com')
         self.assertEqual(msg['transport_metadata']['xmpp_id'], message['id'])

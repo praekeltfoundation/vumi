@@ -141,8 +141,9 @@ class FakeAMQPBroker(object):
 
     def basic_consume(self, queue, tag):
         self._get_queue(queue).add_consumer(tag)
-        self.kick_delivery()
-        return Message(mkMethod("consume-ok", 21), [("consumer_tag", tag)])
+        d = self.kick_delivery()
+        return d.addCallback(lambda _: Message(
+            mkMethod("consume-ok", 21), [("consumer_tag", tag)]))
 
     def basic_cancel(self, tag, queue):
         if queue in self.queues:
@@ -243,8 +244,11 @@ class FakeAMQPBroker(object):
         reactor.callLater(0, check, done)
         return done
 
-    def clear_messages(self, exchange, rkey):
-        del self.dispatched[exchange][rkey][:]
+    def clear_messages(self, exchange, rkey=None):
+        if rkey:
+            del self.dispatched[exchange][rkey][:]
+        else:
+            self.dispatched[exchange].clear()
 
     def get_dispatched(self, exchange, rkey):
         return self.dispatched.get(exchange, {}).get(rkey, [])
