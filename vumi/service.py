@@ -470,7 +470,7 @@ class Publisher(object):
 
     def publish_raw(self, data, **kwargs):
         amq_message = Content(data)
-        amq_message['delivery mode'] = kwargs.pop('delivery_mode',
+        amq_message['delivery-mode'] = kwargs.pop('delivery_mode',
                 self.delivery_mode)
         return self.publish(amq_message, **kwargs)
 
