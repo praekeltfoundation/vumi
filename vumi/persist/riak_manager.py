@@ -2,7 +2,10 @@
 
 """A manager implementation on top of the riak Python package."""
 
-from riak import RiakClient, RiakObject, RiakMapReduce
+import json
+
+from riak import (RiakClient, RiakObject, RiakMapReduce, RiakHttpTransport,
+                    RiakPbcTransport)
 
 from vumi.persist.model import Manager
 from vumi.utils import flatten_generator
@@ -19,8 +22,38 @@ class RiakManager(Manager):
         bucket_prefix = config.pop('bucket_prefix')
         load_bunch_size = config.pop('load_bunch_size',
                                      cls.DEFAULT_LOAD_BUNCH_SIZE)
-        client = RiakClient(**config)
-        return cls(client, bucket_prefix, load_bunch_size=load_bunch_size)
+        mapreduce_timeout = config.pop('mapreduce_timeout',
+                                       cls.DEFAULT_MAPREDUCE_TIMEOUT)
+        transport_type = config.pop('transport_type', 'http')
+        transport_class = {
+            'http': RiakHttpTransport,
+            'protocol_buffer': RiakPbcTransport,
+        }.get(transport_type, RiakHttpTransport)
+
+        host = config.get('host', '127.0.0.1')
+        port = config.get('port', 8098)
+        prefix = config.get('prefix', 'riak')
+        mapred_prefix = config.get('mapred_prefix', 'mapred')
+        client_id = config.get('client_id')
+        # NOTE: the current riak.RiakClient expects this parameter but
+        #       internally doesn't do anything with it.
+        solr_transport_class = config.get('solr_transport_class', None)
+        transport_options = config.get('transport_options', None)
+
+        client = RiakClient(host=host, port=port, prefix=prefix,
+            mapred_prefix=mapred_prefix, transport_class=transport_class,
+            client_id=client_id, solr_transport_class=solr_transport_class,
+            transport_options=transport_options)
+        # Some versions of the riak client library use simplejson by
+        # preference, which breaks some of our unicode assumptions. This makes
+        # sure we're using stdlib json which doesn't sometimes return
+        # bytestrings instead of unicode.
+        client.set_encoder('application/json', json.dumps)
+        client.set_encoder('text/json', json.dumps)
+        client.set_decoder('application/json', json.loads)
+        client.set_decoder('text/json', json.loads)
+        return cls(client, bucket_prefix, load_bunch_size=load_bunch_size,
+                   mapreduce_timeout=mapreduce_timeout)
 
     def riak_object(self, modelcls, key, result=None):
         bucket = self.bucket_for_modelcls(modelcls)
@@ -68,7 +101,7 @@ class RiakManager(Manager):
         return RiakMapReduce(self.client)
 
     def run_map_reduce(self, mapreduce, mapper_func=None, reducer_func=None):
-        results = mapreduce.run()
+        results = mapreduce.run(timeout=self.mapreduce_timeout)
         if mapper_func is not None:
             results = [mapper_func(self, row) for row in results]
         if reducer_func is not None:

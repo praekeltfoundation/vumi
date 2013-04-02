@@ -6,6 +6,8 @@ from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet.task import LoopingCall
 
+from vumi import log
+
 
 class WindowException(Exception):
     pass
@@ -87,9 +89,12 @@ class WindowManager(object):
     @inlineCallbacks
     def add(self, window_id, data, key=None):
         key = key or uuid.uuid4().get_hex()
-        yield self.redis.lpush(self.window_key(window_id), key)
+        # The redis.set() has to complete before redis.lpush(),
+        # otherwise the key can be popped from the window before the
+        # data is available.
         yield self.redis.set(self.window_key(window_id, key),
-            json.dumps(data))
+                             json.dumps(data))
+        yield self.redis.lpush(self.window_key(window_id), key)
         returnValue(key)
 
     @inlineCallbacks
@@ -105,10 +110,13 @@ class WindowManager(object):
         flight_size = yield self.count_in_flight(window_id)
         room_available = self.window_size - flight_size
 
-        if room_available:
+        if room_available > 0:
+            log.debug('Window %s has space for %s' % (window_key,
+                                                        room_available))
             next_key = yield self.redis.rpoplpush(window_key, inflight_key)
-            yield self._set_timestamp(window_id, next_key)
-            returnValue(next_key)
+            if next_key:
+                yield self._set_timestamp(window_id, next_key)
+                returnValue(next_key)
 
     def _set_timestamp(self, window_id, flight_key):
         return self.redis.zadd(self.stats_key(window_id), **{
@@ -161,12 +169,17 @@ class WindowManager(object):
     def get_internal_id(self, window_id, external_id):
         return self.redis.get(self.map_key(window_id, 'internal', external_id))
 
+    def get_external_id(self, window_id, flight_key):
+        return self.redis.get(self.map_key(window_id, 'external', flight_key))
+
+    @inlineCallbacks
     def clear_external_id(self, window_id, flight_key):
-        external_id = yield self.redis.delete(self.map_key(window_id,
-            'external', flight_key))
+        external_id = yield self.get_external_id(window_id, flight_key)
         if external_id:
+            yield self.redis.delete(self.map_key(window_id, 'external',
+                                                 flight_key))
             yield self.redis.delete(self.map_key(window_id, 'internal',
-                external_id))
+                                                 external_id))
 
     def monitor(self, key_callback, interval=10, cleanup=True,
                 cleanup_callback=None):

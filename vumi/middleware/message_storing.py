@@ -51,19 +51,19 @@ class StoringMiddleware(BaseMiddleware):
         yield self.redis.close_manager()
 
     @inlineCallbacks
-    def handle_inbound(self, message, endpoint):
+    def handle_inbound(self, message, connector_name):
         tag = TaggingMiddleware.map_msg_to_tag(message)
         yield self.store.add_inbound_message(message, tag=tag)
         returnValue(message)
 
     @inlineCallbacks
-    def handle_outbound(self, message, endpoint):
+    def handle_outbound(self, message, connector_name):
         tag = TaggingMiddleware.map_msg_to_tag(message)
         yield self.store.add_outbound_message(message, tag=tag)
         returnValue(message)
 
     @inlineCallbacks
-    def handle_event(self, event, endpoint):
+    def handle_event(self, event, connector_name):
         transport_metadata = event.get('transport_metadata', {})
         # FIXME: The SMPP transport writes a 'datetime' object
         #        in the 'date' of the transport_metadata.

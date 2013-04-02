@@ -1,3 +1,5 @@
+import binascii
+
 from twisted.internet.defer import Deferred, inlineCallbacks, succeed
 from twisted.internet.task import Clock
 from smpp.pdu_builder import SubmitSMResp, DeliverSM
@@ -144,6 +146,30 @@ class SmppTransportTestCase(TransportTestCase):
         self.assertEqual(actual, comparison)
 
     @inlineCallbacks
+    def test_failed_submit_with_no_reason(self):
+        message = self.mkmsg_out("message", message_id='446')
+        # Equivalent of SubmitSMResp(1, "3rd_party_id_3", command_status='XXX')
+        # but with a bad command_status (pdu_builder can't produce binary with
+        # command_statuses' it doesn't understand). Use
+        # smpp.pdu.unpack(response_bin) to get a PDU object:
+        response_hex = ("0000001f80000004"
+                        "0000ffff"  # unknown command status
+                        "000000013372645f70617274795f69645f3300")
+        response_bin = binascii.a2b_hex(response_hex)
+        yield self.dispatch(message)
+        yield self.esme.handle_data(response_bin)
+
+        self.assert_sent_contents(["message"])
+        # There should be a nack
+        [nack] = yield self.wait_for_dispatched_events(1)
+        self.assertEqual(nack['user_message_id'], message['message_id'])
+        self.assertEqual(nack['nack_reason'], 'Unspecified')
+
+        comparison = self.mkmsg_fail(message.payload, 'Unspecified')
+        [actual] = yield self.get_dispatched_failures()
+        self.assertEqual(actual, comparison)
+
+    @inlineCallbacks
     def test_delivery_report_for_unknown_message(self):
         dr = ("id:123 sub:... dlvrd:... submit date:200101010030"
               " done date:200101020030 stat:DELIVRD err:... text:Meep")
@@ -195,16 +221,17 @@ class SmppTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_reconnect(self):
-        self.assertFalse(self.transport.message_consumer.paused)
+        connector = self.transport.connectors[self.transport.transport_name]
+        self.assertFalse(connector._consumers['outbound'].paused)
         yield self.transport.esme_disconnected()
-        self.assertTrue(self.transport.message_consumer.paused)
+        self.assertTrue(connector._consumers['outbound'].paused)
         yield self.transport.esme_disconnected()
-        self.assertTrue(self.transport.message_consumer.paused)
+        self.assertTrue(connector._consumers['outbound'].paused)
 
         yield self.transport.esme_connected(self.esme)
-        self.assertFalse(self.transport.message_consumer.paused)
+        self.assertFalse(connector._consumers['outbound'].paused)
         yield self.transport.esme_connected(self.esme)
-        self.assertFalse(self.transport.message_consumer.paused)
+        self.assertFalse(connector._consumers['outbound'].paused)
 
 
 class MockSmppTransport(SmppTransport):

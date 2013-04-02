@@ -1,3 +1,5 @@
+# -*- test-case-name: vumi.transports.imimobile.tests.test_imimobile_ussd -*-
+
 import re
 import json
 from datetime import datetime, timedelta
@@ -139,7 +141,7 @@ class ImiMobileUssdTransport(HttpRpcTransport):
             self.finish_request(
                 message_id,
                 self.user_terminated_session_response,
-                headers={'X-USSD-SESSION': [0]})
+                headers={'X-USSD-SESSION': ['0']})
         else:
             # We use the msisdn (from_addr) to make a guess about the
             # whether the session is new or not.
@@ -175,11 +177,11 @@ class ImiMobileUssdTransport(HttpRpcTransport):
 
         if message.payload.get('in_reply_to') and 'content' in message.payload:
             # IMImobile use 1 for resume and 0 for termination of a session
-            session_header_value = 1
+            session_header_value = '1'
 
             if message['session_event'] == TransportUserMessage.SESSION_CLOSE:
                 yield self.session_manager.clear_session(message['to_addr'])
-                session_header_value = 0
+                session_header_value = '0'
 
             response_id = self.finish_request(
                 message['in_reply_to'],
