@@ -7,7 +7,7 @@ from twisted.internet.defer import inlineCallbacks
 from twisted.web.server import Site
 from twisted.application import strports
 
-from vumi.worker import BaseWorker, BaseConfig
+from vumi.worker import BaseWorker
 from vumi.config import ConfigDict, ConfigText
 from vumi.persist.txredis_manager import TxRedisManager
 from vumi.components.tagpool import TagpoolManager
@@ -34,39 +34,41 @@ class TagpoolApiServer(JSONRPC):
         return self.tagpool.acquire_tag(pool)
 
     @signature(['tag', 'tag'])
-    def acquire_specific_tag(self, tag):
+    def jsonrpc_acquire_specific_tag(self, tag):
         return self.tagpool.acquire_specific_tag(tag)
 
     @signature(['null', 'tag'])
-    def release_tag(self, tag):
+    def jsonrpc_release_tag(self, tag):
         return self.tagpool.release_tag(tag)
 
     @signature(['null', 'array of tags'])
-    def declare_tags(self, tags):
+    def jsonrpc_declare_tags(self, tags):
         return self.tagpool.declare_tags(tags)
 
-    def get_metadata(self, pool):
+    def jsonrpc_get_metadata(self, pool):
         return self.tagpool.get_metadata(pool)
 
-    def set_metadata(self, pool, metadata):
-        return self.tagpool.get_metadata(pool, metadata)
+    def jsonrpc_set_metadata(self, pool, metadata):
+        return self.tagpool.set_metadata(pool, metadata)
 
-    def purge_pool(self, pool):
+    def jsonrpc_purge_pool(self, pool):
         return self.tagpool.purge_pool(pool)
 
-    def list_pools(self):
-        return self.tagpool.list_pools()
+    def jsonrpc_list_pools(self):
+        d = self.tagpool.list_pools()
+        d.addCallback(list)
+        return d
 
-    def free_tags(self, pool):
+    def jsonrpc_free_tags(self, pool):
         return self.tagpool.free_tags(pool)
 
-    def inuse_tags(self, pool):
+    def jsonrpc_inuse_tags(self, pool):
         return self.tagpool.inuse_tags(pool)
 
 
 class TagpoolApiWorker(BaseWorker):
 
-    class CONFIG_CLASS(BaseConfig):
+    class CONFIG_CLASS(BaseWorker.CONFIG_CLASS):
         worker_name = ConfigText(
             "Name of this tagpool API worker.", required=True, static=True)
         endpoint = ConfigText(
