@@ -2,7 +2,15 @@
 
 """JSON RPC API for vumi.components.tagpool."""
 
-from txjsonrpc.web import jsonrpc
+from txjsonrpc.web.jsonrpc import JSONRPC
+from twisted.internet.defer import inlineCallbacks
+from twisted.web.server import Site
+from twisted.application import strports
+
+from vumi.worker import BaseWorker, BaseConfig
+from vumi.config import ConfigDict, ConfigText
+from vumi.persist.txredis_manager import TxRedisManager
+from vumi.components.tagpool import TagpoolManager
 
 
 def signature(signature_for_f):
@@ -13,17 +21,17 @@ def signature(signature_for_f):
     return decorator
 
 
-class TagpoolApiServer(jsonrpc.JSONRPC):
+class TagpoolApiServer(JSONRPC):
     def __init__(self, tagpool):
-        super(TagpoolApiServer, self).__init__()
+        JSONRPC.__init__(self)
         self.tagpool = tagpool
 
     # TODO: add rest of signatures
     # TODO: add doc strings
 
     @signature(['tag', 'string'])
-    def acquire_tag(self, pool):
-        return self.tagpool.acquire(pool)
+    def jsonrpc_acquire_tag(self, pool):
+        return self.tagpool.acquire_tag(pool)
 
     @signature(['tag', 'tag'])
     def acquire_specific_tag(self, tag):
@@ -56,24 +64,23 @@ class TagpoolApiServer(jsonrpc.JSONRPC):
         return self.tagpool.inuse_tags(pool)
 
 
-class TagpoolApiWorker(Worker):
+class TagpoolApiWorker(BaseWorker):
 
-    class CONFIG_CLASS():
-
-
-    def __init__(self):
-        pass  # maybe put creation here?
+    class CONFIG_CLASS(BaseConfig):
+        worker_name = ConfigText(
+            "Name of this tagpool API worker.", required=True, static=True)
+        endpoint = ConfigText(
+            "Endpoint to listen on.", required=True, static=True)
+        redis_manager = ConfigDict(
+            "Redis client configuration.", default={}, static=True)
 
     @inlineCallbacks
     def startWorker(self):
-        tagpool = ...
-        port = ...
-        site = server.Site(TagpoolApiServer(tagpool))
-        rpc_service = internet.TCPServer(port, site)
-        self.addService(rpc_service)
-
-    def stopWorker(self):
-        pass
+        config = self.get_static_config()
+        redis_manager = yield TxRedisManager.from_config(config.redis_manager)
+        tagpool = TagpoolManager(redis_manager)
+        site = Site(TagpoolApiServer(tagpool))
+        self.addService(strports.service(config.endpoint, site))
 
 
 class TagpoolApiClient(object):
