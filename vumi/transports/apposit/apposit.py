@@ -133,13 +133,12 @@ class AppositTransport(HttpRpcTransport):
             'channel': channel,
         }.iteritems())
 
-        params = urlencode(params)
         self.emit("Making HTTP POST request: %s with body %s" %
                   (self.outbound_url, params))
 
         response = yield http_request_full(
             self.outbound_url,
-            data=params,
+            data=urlencode(params),
             method='POST',
             headers={'Content-Type': self.CONTENT_TYPE})
 
