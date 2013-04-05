@@ -119,7 +119,7 @@ class RpcType(object):
     # See: http://xmlrpc.scripting.com/spec.html
     # valid simple types are:
     #    int, boolean, string, double, base64 and dateTime.iso8601
-    # valid compount types are:
+    # valid compound types are:
     #    array, struct
     jsonrpc_type = None
 
