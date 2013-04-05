@@ -11,16 +11,32 @@ from vumi.rpc import (
 
 class TestSignature(TestCase):
     def test_check_params(self):
-        Signature(lambda x: x, x=Int())
+        s = Signature(lambda x, y: x, x=Int(), y=Unicode())
+        s.check_params([1, u"a"], {})
+        self.assertRaises(RpcCheckError, s.check_params, [u"a", u"a"], {})
+        self.assertRaises(RpcCheckError, s.check_params, [1, 2], {})
+        self.assertRaises(RpcCheckError, s.check_params, [1, u"a", 3], {})
 
     def test_check_result(self):
-        pass
+        s = Signature(lambda x: x, x=Int("foo"),
+                      returns=Int("bar"))
+        self.assertEqual(s.check_result(5), 5)
+        self.assertRaises(RpcCheckError, s.check_result, 'a')
 
     def test_param_doc(self):
-        pass
+        s = Signature(lambda x: x, x=Int("foo"),
+                      returns=Int("bar"))
+        self.assertEqual(s.param_doc(), [
+                ':param Int x:',
+                '    foo',
+                ':rtype Int:',
+                '    bar'])
 
     def test_jsonrpc_signature(self):
-        pass
+        s = Signature(lambda x: unicode(x), x=Int("foo"),
+                      returns=Unicode("bar"))
+        self.assertEqual(s.jsonrpc_signature(),
+                         [['string', 'int']])
 
 
 class DummyApi(object):
