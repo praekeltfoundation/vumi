@@ -31,7 +31,7 @@ class AppositTransport(HttpRpcTransport):
 
     ENCODING = 'UTF-8'
     CONFIG_CLASS = AppositTransportConfig
-    OUTBOUND_CONTENT_TYPE = 'application/x-www-form-urlencoded'
+    CONTENT_TYPE = 'application/x-www-form-urlencoded'
 
     # Apposit supports multiple channel types (e.g. sms, ussd, ivr, email).
     # Currently, we only have this working for sms, but theoretically, this
@@ -133,14 +133,17 @@ class AppositTransport(HttpRpcTransport):
             'channel': channel,
         }.iteritems())
 
-        url = '%s?%s' % (self.outbound_url, urlencode(params))
-        self.emit("Making HTTP request: %s" % (url,))
+        self.emit("Making HTTP POST request: %s with body %s" %
+                  (self.outbound_url, params))
 
-        response = yield http_request_full(url, '', method='POST', headers={
-            'Content-Type': self.OUTBOUND_CONTENT_TYPE
-        })
-        self.emit("Response: (%s) %r" % (
-            response.code, response.delivered_body))
+        response = yield http_request_full(
+            self.outbound_url,
+            data=urlencode(params),
+            method='POST',
+            headers={'Content-Type': self.CONTENT_TYPE})
+
+        self.emit("Response: (%s) %r" %
+                  (response.code, response.delivered_body))
 
         response_content = response.delivered_body.strip()
         if response.code == http.OK:
