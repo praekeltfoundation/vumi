@@ -7,6 +7,7 @@ from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet import reactor
 from twisted.web.server import Site
+from twisted.python import log
 
 from vumi.components.tagpool_api import TagpoolApiServer
 from vumi.components.tagpool import TagpoolManager
@@ -102,6 +103,16 @@ class TestTagpoolApiServer(TestCase, PersistenceMixin):
         result = yield self.proxy.callRemote("purge_pool", "pool1")
         self.assertEqual(result, None)
         self.assertEqual((yield self.tagpool.free_tags("pool1")), [])
+
+    @inlineCallbacks
+    def test_purge_pool_with_keys_in_use(self):
+        d = self.proxy.callRemote("purge_pool", "pool2")
+        yield d.addErrback(lambda f: log.err(f))
+        errors = self.flushLoggedErrors('txjsonrpc.jsonrpclib.Fault')
+        self.assertEqual(len(errors), 1)
+        server_errors = self.flushLoggedErrors(
+            'vumi.components.tagpool.TagpoolError')
+        self.assertEqual(len(server_errors), 1)
 
     @inlineCallbacks
     def test_list_pools(self):
