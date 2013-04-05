@@ -93,7 +93,7 @@ class TagpoolApiWorker(BaseWorker):
         worker_name = ConfigText(
             "Name of this tagpool API worker.", required=True, static=True)
         endpoint = ConfigText(
-            "Endpoint to listen on.", required=True, static=True)
+            "Twisted endpoint to listen on.", required=True, static=True)
         redis_manager = ConfigDict(
             "Redis client configuration.", default={}, static=True)
 
