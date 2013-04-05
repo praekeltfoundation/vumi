@@ -11,7 +11,7 @@ from vumi.rpc import (
 
 class TestSignature(TestCase):
     def test_check_params(self):
-        pass
+        Signature(lambda x: x, x=Int())
 
     def test_check_result(self):
         pass
@@ -23,9 +23,43 @@ class TestSignature(TestCase):
         pass
 
 
+class DummyApi(object):
+    def __init__(self, result=None):
+        self.result = result
+
+    @signature(a=Unicode(), b=Int())
+    def test(self, a, b):
+        """Basic doc."""
+        return self.result
+
+
+@signature(a=Unicode(), b=Int(), returns=Unicode())
+def dummy_function(a, b):
+    return a * b
+
+
 class TestSignatureDecorate(TestCase):
-    def test_decoration(self):
-        pass
+    def test_decorate_unbound_method(self):
+        api = DummyApi()
+        self.assertEqual(api.test.signature, [['null', 'string', 'int']])
+        self.assertTrue(isinstance(api.test.signature_object, Signature))
+        self.assertEqual(api.test.__name__, 'test')
+        self.assertEqual(api.test.__module__, 'vumi.tests.test_rpc')
+        self.assertEqual(
+            api.test.__doc__,
+            'Basic doc.\n\n:param Unicode a:\n:param Int b:\n:rtype Null:')
+
+        self.assertEqual(api.test(u'a', 1), None)
+        self.assertRaises(RpcCheckError, api.test, 'a', 1)
+        self.assertRaises(RpcCheckError, api.test, u'a', 1, 2)
+
+        api.result = 1
+        self.assertRaises(RpcCheckError, api.test, u'a', 1)
+
+    def test_decorate_function(self):
+        self.assertEqual(dummy_function(u"a", 2), u"aa")
+        self.assertRaises(RpcCheckError, dummy_function, u"a", None)
+        self.assertRaises(RpcCheckError, dummy_function, u"a", 1, 2)
 
 
 class TestRpcType(TestCase):
