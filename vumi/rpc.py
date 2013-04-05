@@ -199,10 +199,17 @@ class List(RpcType):
 class Dict(RpcType):
     jsonrpc_type = 'struct'
 
+    def __init__(self, *args, **kw):
+        self._item_type = kw.pop('item_type', None)
+        super(Dict, self).__init__(*args, **kw)
+
     def nonnull_check(self, name, value):
         if not isinstance(value, dict):
             raise RpcCheckError("Dict value expected for %s (got %r)"
                                 % (name, value))
+        if self._item_type is not None:
+            for key, item in value.iteritems():
+                self._item_type.check('item %s of %s' % (key, name), item)
 
 
 class Tag(RpcType):
@@ -216,3 +223,7 @@ class Tag(RpcType):
             raise RpcCheckError("Tag %s must contain two elements, a pool name"
                                 " and a tag name (got %r)"
                                 % (name, value))
+        for item in value:
+            if not isinstance(item, unicode):
+                raise RpcCheckError("Tag %s must have unicode pool and tag"
+                                    " name (got %r)" % (name, value))
