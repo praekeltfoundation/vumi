@@ -91,28 +91,30 @@ class BaseWorker(Worker):
             self._hb_pub.stop()
             self._hb_pub = None
 
+
     def _gen_heartbeat_attrs(self):
         # worker_name is guaranteed to be set here, otherwise this func would
         # not have been called
         name = self.config.get("worker_name")
-        num = self.options.get("worker-number")
+        num = self.options.get("worker-number", 0)
         system_id = self.options.get("system-id", "global")
-        if num:
-            worker_id = "%s.%s" % (name, num,)
-        else:
-            num = -1
-            worker_id = name
+        worker_id = "%s.%s" % (name, num,)
         attrs = {
             'version': HeartBeatMessage.VERSION_20130319,
             'system_id': system_id,
             'worker_id': worker_id,
             'worker_name': name,
-            'number': num,
+            'worker_number': num,
             'hostname': socket.gethostname(),
             'timestamp': time.time(),
             'pid': os.getpid(),
         }
+        attrs.update(self.custom_heartbeat_attrs())
         return attrs
+
+    def custom_heartbeat_attrs(self):
+        """ Worker subclasses can override this to add custom attributes """
+        return {}
 
     def teardown_connectors(self):
         d = succeed(None)

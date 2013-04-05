@@ -1,7 +1,6 @@
 # -*- test-case-name: vumi.blinkenlights.tests.test_heartbeat -*-
 
 import time
-import collections
 
 from twisted.internet.defer import inlineCallbacks
 from twisted.web import server
@@ -12,6 +11,7 @@ from txjsonrpc.web import jsonrpc
 from vumi.service import Worker
 from vumi.log import log
 from vumi.blinkenlights.heartbeat.publisher import HeartBeatMessage
+from vumi.errors import ConfigError
 
 
 class RPCServer(jsonrpc.JSONRPC):
@@ -36,21 +36,25 @@ class RPCServer(jsonrpc.JSONRPC):
         """
         Walk the tree and transform objects into JSON hashes
         """
-        data = {}
-        for system_id, workers in self._state.iteritems():
-            data[system_id] = {}
-            for worker_id, wkr in workers.iteritems():
-                wkr_js = data[system_id][worker_id] = {}
-                wkr_js['worker_id'] = wkr['worker_id']
-                wkr_js['hostname'] = wkr['hostname']
-                wkr_js['pid'] = wkr['pid']
-                wkr_js['events'] = []
-                for ev in wkr['events']:
-                    wkr_js['events'].append({
-                                              'state': ev.state,
-                                              'timestamp': ev.timestamp,
-                                            })
-        return data
+        jsn = {}
+        for system_id, system_data in self._state.iteritems():
+            jsn[system_id] = {}
+            for worker_id, w in system_data['workers'].iteritems():
+                wkr = jsn[system_id][worker_id] = {}
+                wkr['system_id'] = w['system_id']
+                wkr['worker_id'] = w['worker_id']
+                wkr['worker_name'] = w['worker_name']
+                wkr['hostname'] = w['hostname']
+                wkr['pid'] = w['pid']
+                wkr['timestamp'] = w['timestamp']
+                wkr['events'] = []
+                for ev in w['events']:
+                    wkr['events'].append(
+                        {
+                            'state': ev.state,
+                            'timestamp': ev.timestamp,
+                        })
+        return jsn
 
 
 class Event(object):
@@ -60,6 +64,7 @@ class Event(object):
 
     ALIVE = "ALIVE"
     MISSING = "MISSING"
+    START = "START"
 
     def __init__(self, timestamp, state):
         self.timestamp = timestamp
@@ -71,6 +76,11 @@ class HeartBeatMonitor(Worker):
     deadline = 30
     data_port = 7080
 
+    # Instance vars:
+    #
+    # _state: Nested dict storing information about monitored objects
+    #
+
     @inlineCallbacks
     def startWorker(self):
         log.msg("Heartbeat monitor initializing")
@@ -80,9 +90,8 @@ class HeartBeatMonitor(Worker):
         self.deadline = self.config.get("deadline",
                                         HeartBeatMonitor.deadline)
 
+        self._build_worker_tree(self.config)
         log.msg("heartbeat-data-server running on port %s" % self.data_port)
-
-        self._state = collections.defaultdict(dict)
 
         # Start consuming heartbeats
         yield self.consume("heartbeat.inbound", self.consume_message,
@@ -101,56 +110,109 @@ class HeartBeatMonitor(Worker):
         self._start_looping_task()
 
     def stopWorker(self):
-        log.msg("HeartBeat: stopping")
+        log.msg("HeartBeat: stopping worker")
         if self._task:
             self._task.stop()
             self._task = None
 
-    def _ensure(self, system_id, worker_id):
+    def _assert_field(self, cfg, key):
+        if key not in cfg:
+            raise ConfigError("Expected '%s' field in config" % key)
+
+    def _build_worker_tree(self, config):
         """
-        Make sure there is an entry for worker data in the in-memory db.
-        Returns a reference to the worker node.
+        Build a tree of worker objects based on the config
         """
-        if worker_id not in self._state[system_id]:
-            wkr = {
-                    'events': [],
-                  }
-            self._state[system_id][worker_id] = wkr
-        return self._state[system_id][worker_id]
+        self._assert_field(config, 'monitored_systems')
+        systems = config.get("monitored_systems", None)
+        self._state = state = {}
+        # loop over each defined system
+        for sys in systems.values():
+            self._assert_field(sys, 'workers')
+            self._assert_field(sys, 'system_id')
+            system_id = sys['system_id']
+            state[system_id] = {}
+            state[system_id]['workers'] = wkrs = {}
+            # loop over each defined worker in the system
+            for wkr in sys['workers'].values():
+                self._assert_field(wkr, 'worker_name')
+                self._assert_field(wkr, 'max_procs')
+                name = wkr['worker_name']
+                max_procs = wkr['max_procs']
+                # create an entry for each worker from 0 to max_procs
+                for i in range(0, max_procs):
+                    worker_id = "%s.%s" % (name, i)
+                    wkrs[worker_id] = self._init_worker(system_id,
+                                                        worker_id,
+                                                        name,
+                                                        i)
+
+    def _init_worker(self, system_id, worker_id, name, number):
+        wkr = {}
+        tm = time.time()
+        wkr['system_id'] = system_id
+        wkr['worker_id'] = worker_id
+        wkr['hostname'] = None
+        wkr['pid'] = None
+        wkr['worker_name'] = name
+        wkr['timestamp'] = tm
+        wkr['events'] = [Event(tm, Event.START)]
+        return wkr
+
+    def _lookup_worker(self, system_id, worker_id):
+        """
+        Returns a reference to the worker node or None.
+        """
+        if system_id not in self._state:
+            return None
+        if worker_id not in self._state[system_id]['workers']:
+            return None
+        return self._state[system_id]['workers'][worker_id]
 
     def update(self, msg):
         """
         Process a heartbeat message
         """
+
+        # extract mandatory fields
+        version = msg.get('version', None)
         system_id = msg.get('system_id', None)
         worker_id = msg.get('worker_id', None)
+        timestamp = msg.get('timestamp', None)
 
-        # discard if msg format isn't valid
-        if not system_id or not worker_id:
+        # invalid/obsolete msg, so discard
+        if (not system_id) or (not worker_id):
             return
 
-        # ensure there is an entry for the worker in the db
-        wkr = self._ensure(system_id, worker_id)
+        # Discard msg if wkr is unknown
+        wkr = self._lookup_worker(system_id, worker_id)
+        if wkr is None:
+            return
 
         # update the worker's known state
         wkr['system_id'] = msg['system_id']
         wkr['worker_id'] = msg['worker_id']
+        wkr['worker_name'] = msg.get('worker_name', None)
+        wkr['worker_number'] = msg['worker_number']
         wkr['hostname'] = msg['hostname']
         wkr['pid'] = msg['pid']
         wkr['timestamp'] = msg['timestamp']
 
         # Add an event if necessary
-        if (not wkr['events']) or wkr['events'][-1].state == Event.MISSING:
+        state = wkr['events'][-1].state
+        if state == Event.START or state == Event.MISSING:
             ev = Event(msg['timestamp'], Event.ALIVE)
             wkr['events'].append(ev)
 
     def _find_missing_workers(self, deadline):
         lst = []
-        for system_id, workers in self._state.iteritems():
-            for wkr in [wkr for wkr in workers.values()
-                        if wkr['timestamp'] < deadline]:
-                if wkr['events'][-1].state == Event.ALIVE:
-                    lst.append(wkr)
+        systems = self._state.values()
+        for sys in systems:
+            for wkr in sys['workers'].values():
+                if wkr['timestamp'] < deadline:
+                    state = wkr['events'][-1].state
+                    if state == Event.START or state == Event.ALIVE:
+                        lst.append(wkr)
         return lst
 
     def _process_missing(self, workers):
