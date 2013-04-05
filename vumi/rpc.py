@@ -4,6 +4,7 @@
 
 import inspect
 import textwrap
+import functools
 
 from twisted.internet.defer import Deferred
 
@@ -18,22 +19,22 @@ class Signature(object):
     NO_ARG = object()
 
     def __init__(self, f, **kw):
-        self._argspec = inspect.getargspec(f)
-        self._return = kw.get('returns', Null())
-        self._params = kw
-        self._defaults = [self.NO_DEFAULT] * (
-            len(self._argspec.args) - len(self._argspec.defaults or ()))
-        self._defaults += list(self._argspec.args)
+        self.argspec = inspect.getargspec(f)
+        self.returns = kw.get('returns', Null())
+        self.params = kw
+        self.defaults = [self.NO_DEFAULT] * (
+            len(self.argspec.args) - len(self.argspec.defaults or ()))
+        self.defaults += list(self.argspec.args)
 
     def check_params(self, args, kw):
         if kw:
             raise RpcCheckError("Keyword parameters not yet supported.")
-        if len(args) > len(self._argspec.args):
+        if len(args) > len(self.argspec.args):
             raise RpcCheckError("Too many positional arguments.")
-        args = list(args) + [self.NO_ARG] * (len(self._argspec) - len(args))
+        args = list(args) + [self.NO_ARG] * (len(self.argspec) - len(args))
 
-        for arg_name, default, arg_value in zip(self._argspec.args,
-                                                self._defaults, args):
+        for arg_name, default, arg_value in zip(self.argspec.args,
+                                                self.defaults, args):
             if arg_name == 'self':
                 continue  # TODO: do better here
             if arg_value is self.NO_ARG:
@@ -41,11 +42,11 @@ class Signature(object):
             if arg_value is self.NO_DEFAULT:
                 raise RpcCheckError("Positional argument %r missing"
                                     " but no default is available." % arg_name)
-            arg_type = self._params[arg_name]
+            arg_type = self.params[arg_name]
             arg_type.check(arg_name, arg_value)
 
     def check_result(self, result):
-        self._return.check('return value', result)
+        self.returns.check('return value', result)
         return result
 
     def _wrap_help(self, help_text):
@@ -69,20 +70,20 @@ class Signature(object):
         return lines
 
     def _args_with_defaults(self):
-        for arg, default in zip(self._argspec.args, self._defaults):
+        for arg, default in zip(self.argspec.args, self.defaults):
             if arg == 'self':
                 continue
-            yield arg, self._params[arg], default
+            yield arg, self.params[arg], default
 
     def param_doc(self):
         lines = []
         for arg, arg_type, default in self._args_with_defaults():
-            lines.extend(self._format_param(arg, self._params[arg], default))
-        lines.extend(self._format_return(self._return))
+            lines.extend(self._format_param(arg, self.params[arg], default))
+        lines.extend(self._format_return(self.returns))
         return lines
 
     def jsonrpc_signature(self):
-        sig = [self._return.jsonrpc_type]
+        sig = [self.returns.jsonrpc_type]
         sig.extend(arg_type.jsonrpc_type for _, arg_type, _
                    in self._args_with_defaults())
         return [sig]
@@ -92,7 +93,7 @@ def signature(**kw):
     def decorator(f):
         sig = Signature(f, **kw)
 
-        def wrapped(*args, **kw):
+        def wrapper(*args, **kw):
             sig.check_params(args, kw)
             result = f(*args, **kw)
             if isinstance(result, Deferred):
@@ -101,12 +102,14 @@ def signature(**kw):
                 sig.check_result(result)
             return result
 
-        # TOOD: better wrapping
-        wrapped.signature = sig.jsonrpc_signature()
-        wrapped.__doc__ = "\n".join(textwrap.wrap(f.__doc__ or '')
-                                    + ["\n"]
-                                    + sig.param_doc())
-        return wrapped
+        functools.update_wrapper(wrapper, f)
+        doc = textwrap.wrap(wrapper.__doc__ or '')
+        doc.append("")
+        doc.extend(sig.param_doc())
+        wrapper.__doc__ = "\n".join(doc)
+        wrapper.signature = sig.jsonrpc_signature()
+        wrapper.signature_object = sig
+        return wrapper
 
     return decorator
 
