@@ -103,6 +103,8 @@ class TestAppositTransport(TransportTestCase):
         self.assertEqual(request.path, '/')
         self.assertEqual(request.method, 'POST')
         self.assertEqual(expected_args, request.args)
+        self.assertEqual(request.getHeader('Content-Type'),
+                         self.transport.OUTBOUND_CONTENT_TYPE)
 
     def assert_message_fields(self, msg, **kwargs):
         fields = {
