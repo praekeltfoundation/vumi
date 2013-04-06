@@ -132,7 +132,3 @@ class TagpoolApiWorker(BaseWorker):
 
     def setup_connectors(self):
         pass
-
-
-class TagpoolApiClient(object):
-    pass

@@ -192,7 +192,3 @@ class TestTagpoolApiWorker(VumiWorkerTestCase, PersistenceMixin):
         result = yield proxy.callRemote('system.methodSignature',
                                         'acquire_tag')
         self.assertEqual(result, [[u'array', u'string']])
-
-
-class TestTagpoolApiClient(TestCase):
-    pass
