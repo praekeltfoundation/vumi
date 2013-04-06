@@ -4,14 +4,14 @@
 
 from txjsonrpc.web.jsonrpc import Proxy
 from twisted.trial.unittest import TestCase
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet import reactor
 from twisted.web.server import Site
 from twisted.python import log
 
-from vumi.components.tagpool_api import TagpoolApiServer
+from vumi.components.tagpool_api import TagpoolApiServer, TagpoolApiWorker
 from vumi.components.tagpool import TagpoolManager
-from vumi.tests.utils import PersistenceMixin
+from vumi.tests.utils import VumiWorkerTestCase, PersistenceMixin
 
 
 class TestTagpoolApiServer(TestCase, PersistenceMixin):
@@ -24,7 +24,7 @@ class TestTagpoolApiServer(TestCase, PersistenceMixin):
         site = Site(TagpoolApiServer(self.tagpool))
         self.server = yield reactor.listenTCP(0, site)
         addr = self.server.getHost()
-        self.proxy = Proxy("http://localhost:%d/" % addr.port)
+        self.proxy = Proxy("http://%s:%d/" % (addr.host, addr.port))
         yield self.setup_tags()
 
     @inlineCallbacks
@@ -138,8 +138,60 @@ class TestTagpoolApiServer(TestCase, PersistenceMixin):
         self.assertEqual(result, [])
 
 
-class TestTagpoolApiWorker(TestCase):
-    pass
+class TestTagpoolApiWorker(VumiWorkerTestCase, PersistenceMixin):
+
+    def setUp(self):
+        self._persist_setUp()
+        super(TestTagpoolApiWorker, self).setUp()
+
+    @inlineCallbacks
+    def tearDown(self):
+        for worker in self._workers:
+            if worker.running:
+                yield worker.stopService()
+        yield super(TestTagpoolApiWorker, self).tearDown()
+
+    @inlineCallbacks
+    def get_api_worker(self, config=None, start=True):
+        config = {} if config is None else config
+        config.setdefault('worker_name', 'test_api_worker')
+        config.setdefault('endpoint', 'tcp:0')
+        config = self.mk_config(config)
+        worker = yield self.get_worker(config, TagpoolApiWorker, start)
+        if not start:
+            returnValue(worker)
+        yield worker.startService()
+        port = worker.services[0]._waitingForPort.result
+        addr = port.getHost()
+        proxy = Proxy("http://%s:%d" % (addr.host, addr.port))
+        returnValue((worker, proxy))
+
+    @inlineCallbacks
+    def test_list_methods(self):
+        worker, proxy = yield self.get_api_worker()
+        result = yield proxy.callRemote('system.listMethods')
+        self.assertTrue(u'acquire_tag' in result)
+
+    @inlineCallbacks
+    def test_method_help(self):
+        worker, proxy = yield self.get_api_worker()
+        result = yield proxy.callRemote('system.methodHelp', 'acquire_tag')
+        self.assertEqual(result, "\n".join([
+            "Acquire a tag from the pool (returns None if"
+            " no tags are avaliable).",
+            "",
+            ":param Unicode pool:",
+            "    Name of pool to acquire tag from.",
+            ":rtype Tag:",
+            "    Tag acquired (or None).",
+            ]))
+
+    @inlineCallbacks
+    def test_method_signature(self):
+        worker, proxy = yield self.get_api_worker()
+        result = yield proxy.callRemote('system.methodSignature',
+                                        'acquire_tag')
+        self.assertEqual(result, [[u'array', u'string']])
 
 
 class TestTagpoolApiClient(TestCase):
