@@ -27,10 +27,10 @@ class TestSignature(TestCase):
         s = Signature(lambda x: x, x=Int("foo"),
                       returns=Int("bar"))
         self.assertEqual(s.param_doc(), [
-                ':param Int x:',
-                '    foo',
-                ':rtype Int:',
-                '    bar'])
+            ':param Int x:',
+            '    foo',
+            ':rtype Int:',
+            '    bar'])
 
     def test_jsonrpc_signature(self):
         s = Signature(lambda x: unicode(x), x=Int("foo"),
