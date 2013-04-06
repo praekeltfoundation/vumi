@@ -5,6 +5,7 @@
 import inspect
 import textwrap
 import functools
+import itertools
 
 from twisted.internet.defer import Deferred
 
@@ -19,9 +20,14 @@ class Signature(object):
     NO_ARG = object()
 
     def __init__(self, f, **kw):
-        self.argspec = inspect.getargspec(f)
-        self.returns = kw.get('returns', Null())
+        self.returns = kw.pop('returns', Null())
+        self_arg = kw.pop('_self_arg', 'self')
         self.params = kw
+        self.argspec = inspect.getargspec(f)
+        # Note: inspect.ismethod(f) and getattr(f, 'im_self') is None
+        #       won't work because f hasn't been marked as a bound method
+        #       by the time the decorator sees it.
+        self.requires_self = self.argspec.args[:1] == [self_arg]
         self.defaults = [self.NO_DEFAULT] * (
             len(self.argspec.args) - len(self.argspec.defaults or ()))
         self.defaults += list(self.argspec.args)
@@ -31,12 +37,13 @@ class Signature(object):
             raise RpcCheckError("Keyword parameters not yet supported.")
         if len(args) > len(self.argspec.args):
             raise RpcCheckError("Too many positional arguments.")
-        args = list(args) + [self.NO_ARG] * (len(self.argspec) - len(args))
 
-        for arg_name, default, arg_value in zip(self.argspec.args,
-                                                self.defaults, args):
-            if arg_name == 'self':
-                continue  # TODO: do better here
+        args = list(args) + [self.NO_ARG] * (len(self.argspec) - len(args))
+        arg_tuples = itertools.izip(self.argspec.args, self.defaults, args)
+        if self.requires_self:
+            next(arg_tuples)
+
+        for arg_name, default, arg_value in arg_tuples:
             if arg_value is self.NO_ARG:
                 arg_value = default
             if arg_value is self.NO_DEFAULT:
@@ -70,9 +77,11 @@ class Signature(object):
         return lines
 
     def _args_with_defaults(self):
-        for arg, default in zip(self.argspec.args, self.defaults):
-            if arg == 'self':
-                continue
+        args_defaults = itertools.izip(self.argspec.args, self.defaults)
+        if self.requires_self:
+            next(args_defaults)
+
+        for arg, default in args_defaults:
             yield arg, self.params[arg], default
 
     def param_doc(self):
