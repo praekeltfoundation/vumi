@@ -11,20 +11,22 @@ from vumi.rpc import (
 
 class TestSignature(TestCase):
     def test_check_params(self):
-        s = Signature(lambda x, y: x, x=Int(), y=Unicode())
-        s.check_params([1, u"a"], {})
-        self.assertRaises(RpcCheckError, s.check_params, [u"a", u"a"], {})
-        self.assertRaises(RpcCheckError, s.check_params, [1, 2], {})
-        self.assertRaises(RpcCheckError, s.check_params, [1, u"a", 3], {})
+        s = Signature(lambda slf, x, y: x, x=Int(), y=Unicode())
+        s.check_params([None, 1, u"a"], {})
+        self.assertRaises(RpcCheckError, s.check_params,
+                          [None, u"a", u"a"], {})
+        self.assertRaises(RpcCheckError, s.check_params, [None, 1, 2], {})
+        self.assertRaises(RpcCheckError, s.check_params,
+                          [None, 1, u"a", 3], {})
 
     def test_check_result(self):
-        s = Signature(lambda x: x, x=Int("foo"),
+        s = Signature(lambda slf, x: x, x=Int("foo"),
                       returns=Int("bar"))
         self.assertEqual(s.check_result(5), 5)
         self.assertRaises(RpcCheckError, s.check_result, 'a')
 
     def test_param_doc(self):
-        s = Signature(lambda x: x, x=Int("foo"),
+        s = Signature(lambda slf, x: x, x=Int("foo"),
                       returns=Int("bar"))
         self.assertEqual(s.param_doc(), [
             ':param Int x:',
@@ -33,7 +35,7 @@ class TestSignature(TestCase):
             '    bar'])
 
     def test_jsonrpc_signature(self):
-        s = Signature(lambda x: unicode(x), x=Int("foo"),
+        s = Signature(lambda slf, x: unicode(x), x=Int("foo"),
                       returns=Unicode("bar"))
         self.assertEqual(s.jsonrpc_signature(),
                          [['string', 'int']])
@@ -49,9 +51,9 @@ class DummyApi(object):
         return self.result
 
 
-@signature(a=Unicode(), b=Int(), returns=Unicode())
+@signature(a=Unicode(), b=Int(), returns=Unicode(), requires_self=False)
 def dummy_function(a, b):
-    return a * b
+    return unicode(a * b)
 
 
 class TestSignatureDecorate(TestCase):
@@ -74,6 +76,7 @@ class TestSignatureDecorate(TestCase):
 
     def test_decorate_function(self):
         self.assertEqual(dummy_function(u"a", 2), u"aa")
+        self.assertRaises(RpcCheckError, dummy_function, "a", 1)
         self.assertRaises(RpcCheckError, dummy_function, u"a", None)
         self.assertRaises(RpcCheckError, dummy_function, u"a", 1, 2)
 

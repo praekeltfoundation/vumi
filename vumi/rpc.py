@@ -19,15 +19,11 @@ class Signature(object):
     NO_DEFAULT = object()
     NO_ARG = object()
 
-    def __init__(self, f, **kw):
-        self.returns = kw.pop('returns', Null())
-        self_arg = kw.pop('_self_arg', 'self')
+    def __init__(self, f, returns=None, requires_self=True, **kw):
+        self.returns = returns if returns is not None else Null()
+        self.requires_self = requires_self
         self.params = kw
         self.argspec = inspect.getargspec(f)
-        # Note: inspect.ismethod(f) and getattr(f, 'im_self') is None
-        #       won't work because f hasn't been marked as a bound method
-        #       by the time the decorator sees it.
-        self.requires_self = self.argspec.args[:1] == [self_arg]
         self.defaults = [self.NO_DEFAULT] * (
             len(self.argspec.args) - len(self.argspec.defaults or ()))
         self.defaults += list(self.argspec.args)
