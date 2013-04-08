@@ -32,6 +32,7 @@ class MediafoneTransport(HttpRpcTransport):
 
     transport_type = 'sms'
 
+    ENCONDIG = 'utf-8'
     EXPECTED_FIELDS = set(['to', 'from', 'sms'])
 
     def setup_transport(self):
