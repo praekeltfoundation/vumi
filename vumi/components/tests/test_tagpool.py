@@ -40,11 +40,24 @@ class TestTxTagpoolManager(TestCase, PersistenceMixin):
         self.assertEqual((yield self.tpm.acquire_tag("poolA")), tag3)
 
     @inlineCallbacks
+    def test_declare_unicode_tag(self):
+        tag = (u"poöl", u"tág")
+        yield self.tpm.declare_tags([tag])
+        self.assertEqual((yield self.tpm.acquire_tag(tag[0])), tag)
+
+    @inlineCallbacks
     def test_purge_pool(self):
         tag1, tag2 = ("poolA", "tag1"), ("poolA", "tag2")
         yield self.tpm.declare_tags([tag1, tag2])
         yield self.tpm.purge_pool('poolA')
         self.assertEqual((yield self.tpm.acquire_tag('poolA')), None)
+
+    @inlineCallbacks
+    def test_purge_unicode_pool(self):
+        tag = (u"poöl", u"tág")
+        yield self.tpm.declare_tags([tag])
+        yield self.tpm.purge_pool(tag[0])
+        self.assertEqual((yield self.tpm.acquire_tag(tag[0])), None)
 
     @inlineCallbacks
     def test_purge_inuse_pool(self):
@@ -66,6 +79,13 @@ class TestTxTagpoolManager(TestCase, PersistenceMixin):
                          set(['poolA', 'poolB']))
 
     @inlineCallbacks
+    def test_list_unicode_pool(self):
+        tag = (u"poöl", u"tág")
+        yield self.tpm.declare_tags([tag])
+        self.assertEqual((yield self.tpm.list_pools()),
+                         set([tag[0]]))
+
+    @inlineCallbacks
     def test_acquire_tag(self):
         tkey = self.pool_key_generator("poolA")
         tag1, tag2 = ("poolA", "tag1"), ("poolA", "tag2")
@@ -76,9 +96,16 @@ class TestTxTagpoolManager(TestCase, PersistenceMixin):
         self.assertEqual((yield redis.lrange(tkey("free:list"), 0, -1)),
                          ["tag2"])
         self.assertEqual((yield redis.smembers(tkey("free:set"))),
-                          set(["tag2"]))
+                         set(["tag2"]))
         self.assertEqual((yield redis.smembers(tkey("inuse:set"))),
-                          set(["tag1"]))
+                         set(["tag1"]))
+
+    @inlineCallbacks
+    def test_acquire_unicode_tag(self):
+        tag = (u"poöl", u"tág")
+        yield self.tpm.declare_tags([tag])
+        self.assertEqual((yield self.tpm.acquire_tag(tag[0])), tag)
+        self.assertEqual((yield self.tpm.acquire_tag(tag[0])), None)
 
     @inlineCallbacks
     def test_acquire_specific_tag(self):
@@ -99,6 +126,13 @@ class TestTxTagpoolManager(TestCase, PersistenceMixin):
                          set(["tag5"]))
 
     @inlineCallbacks
+    def test_acquire_specific_unicode_tag(self):
+        tag = (u"poöl", u"tág")
+        yield self.tpm.declare_tags([tag])
+        self.assertEqual((yield self.tpm.acquire_specific_tag(tag)), tag)
+        self.assertEqual((yield self.tpm.acquire_specific_tag(tag[0])), None)
+
+    @inlineCallbacks
     def test_release_tag(self):
         tkey = self.pool_key_generator("poolA")
         tag1, tag2, tag3 = [("poolA", "tag%d" % i) for i in (1, 2, 3)]
@@ -113,6 +147,14 @@ class TestTxTagpoolManager(TestCase, PersistenceMixin):
                          set(["tag1", "tag3"]))
         self.assertEqual((yield redis.smembers(tkey("inuse:set"))),
                          set(["tag2"]))
+
+    @inlineCallbacks
+    def test_release_unicode_tag(self):
+        tag = (u"poöl", u"tág")
+        yield self.tpm.declare_tags([tag])
+        yield self.tpm.acquire_tag(tag[0])
+        yield self.tpm.release_tag(tag)
+        self.assertEqual((yield self.tpm.acquire_tag(tag[0])), tag)
 
     @inlineCallbacks
     def test_metadata(self):
@@ -135,6 +177,21 @@ class TestTxTagpoolManager(TestCase, PersistenceMixin):
         short_md = {"foo": "bar"}
         yield self.tpm.set_metadata("poolA", short_md)
         self.assertEqual((yield self.tpm.get_metadata("poolA")), short_md)
+
+    @inlineCallbacks
+    def test_metadata_for_unicode_pool_name(self):
+        pool = u"poöl"
+        metadata = {"foo": "bar"}
+        yield self.tpm.set_metadata(pool, metadata)
+        self.assertEqual((yield self.tpm.get_metadata(pool)),
+                         metadata)
+
+    @inlineCallbacks
+    def test_unicode_metadata(self):
+        metadata = {u"föo": u"báz"}
+        yield self.tpm.set_metadata("pool", metadata)
+        self.assertEqual((yield self.tpm.get_metadata("pool")),
+                         metadata)
 
 
 class TestTagpoolManager(TestTxTagpoolManager):
