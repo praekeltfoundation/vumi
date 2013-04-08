@@ -130,7 +130,7 @@ class TestTxTagpoolManager(TestCase, PersistenceMixin):
         tag = (u"poöl", u"tág")
         yield self.tpm.declare_tags([tag])
         self.assertEqual((yield self.tpm.acquire_specific_tag(tag)), tag)
-        self.assertEqual((yield self.tpm.acquire_specific_tag(tag[0])), None)
+        self.assertEqual((yield self.tpm.acquire_specific_tag(tag)), None)
 
     @inlineCallbacks
     def test_release_tag(self):
