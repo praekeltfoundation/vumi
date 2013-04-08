@@ -105,6 +105,7 @@ class HttpRpcTransport(Transport):
     content_type = 'text/plain'
 
     CONFIG_CLASS = HttpRpcTransportConfig
+    ENCODING = 'UTF-8'
     STRICT_MODE = 'strict'
     PERMISSIVE_MODE = 'permissive'
     DEFAULT_VALIDATION_MODE = STRICT_MODE
@@ -173,7 +174,8 @@ class HttpRpcTransport(Transport):
                 if self._validation_mode == self.STRICT_MODE:
                     errors.setdefault('unexpected_parameter', []).append(field)
             else:
-                values[field] = request.args.get(field)[0].decode('utf-8')
+                values[field] = (
+                    request.args.get(field)[0].decode(self.ENCODING))
         for field in expected_fields:
             if field not in values:
                 errors.setdefault('missing_parameter', []).append(field)
