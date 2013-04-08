@@ -30,6 +30,7 @@ def pack_ussd_message(message):
 
 class CellulantTransport(HttpRpcTransport):
 
+    ENCODING = 'utf-8'
     EVENT_MAP = {
         'BEG': TransportUserMessage.SESSION_NEW,
         'ABO': TransportUserMessage.SESSION_CLOSE,
@@ -113,6 +114,6 @@ class CellulantTransport(HttpRpcTransport):
             return self.reject_message(message, missing_fields)
 
         self.finish_request(message['in_reply_to'],
-                            pack_ussd_message(message).encode('utf-8'))
+                            pack_ussd_message(message).encode(self.ENCODING))
         return self.publish_ack(user_message_id=message['message_id'],
             sent_message_id=message['message_id'])

@@ -29,7 +29,7 @@ class AppositTransport(HttpRpcTransport):
     HTTP transport for Apposit's interconnection services.
     """
 
-    ENCODING = 'UTF-8'
+    ENCODING = 'utf-8'
     CONFIG_CLASS = AppositTransportConfig
     CONTENT_TYPE = 'application/x-www-form-urlencoded'
 
