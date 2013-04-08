@@ -33,6 +33,7 @@ apt::package { "libcurl3": ensure => latest }
 apt::package { "libcurl4-openssl-dev": ensure => latest }
 apt::package { "redis-server": ensure => latest }
 apt::package { "protobuf-compiler": ensure => latest }
+apt::package { "libpq-dev": ensure => latest }
 
 file {
     "/var/praekelt":
