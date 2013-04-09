@@ -20,28 +20,12 @@ class TagpoolApiServer(JSONRPC):
         JSONRPC.__init__(self)
         self.tagpool = tagpool
 
-    # TODO: Remove these once the TagpoolManager supports unicode
-    #       tag and pool names.
-
-    def _decode_tag_or_none(self, tag):
-        if tag is None:
-            return tag
-        return (tag[0].decode('ascii'), tag[1].decode('ascii'))
-
-    def _decode_tag_list(self, tags):
-        return [(pool.decode('ascii'), tag.decode('ascii'))
-                for pool, tag in tags]
-
-    def _decode_pool_list(self, pools):
-        return [pool.decode('ascii') for pool in pools]
-
     @signature(pool=Unicode("Name of pool to acquire tag from."),
                returns=Tag("Tag acquired (or None).", null=True))
     def jsonrpc_acquire_tag(self, pool):
         """Acquire a tag from the pool (returns None if no tags are avaliable).
            """
         d = self.tagpool.acquire_tag(pool)
-        d.addCallback(self._decode_tag_or_none)
         return d
 
     @signature(tag=Tag("Tag to acquire as [pool, tagname] pair."),
@@ -50,7 +34,6 @@ class TagpoolApiServer(JSONRPC):
         """Acquire the specific tag (returns None if the tag is unavailable).
            """
         d = self.tagpool.acquire_specific_tag(tag)
-        d.addCallback(self._decode_tag_or_none)
         return d
 
     @signature(tag=Tag("Tag to release."))
@@ -87,7 +70,7 @@ class TagpoolApiServer(JSONRPC):
     def jsonrpc_list_pools(self):
         """Return a list of all available pools."""
         d = self.tagpool.list_pools()
-        d.addCallback(self._decode_pool_list)
+        d.addCallback(list)
         return d
 
     @signature(pool=Unicode("Name of pool."),
@@ -95,7 +78,6 @@ class TagpoolApiServer(JSONRPC):
     def jsonrpc_free_tags(self, pool):
         """Return a list of free tags in the given pool."""
         d = self.tagpool.free_tags(pool)
-        d.addCallback(self._decode_tag_list)
         return d
 
     @signature(pool=Unicode("Name of pool."),
@@ -103,7 +85,6 @@ class TagpoolApiServer(JSONRPC):
     def jsonrpc_inuse_tags(self, pool):
         """Return a list of tags currently in use within the given pool."""
         d = self.tagpool.inuse_tags(pool)
-        d.addCallback(self._decode_tag_list)
         return d
 
 
