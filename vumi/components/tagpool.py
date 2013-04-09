@@ -152,9 +152,9 @@ class TagpoolManager(object):
     def _acquire_specific_tag(self, pool, local_tag):
         local_tag = self._encode(local_tag)
         free_list_key, free_set_key, inuse_set_key = self._tag_pool_keys(pool)
-        moved = yield self.redis.smove(free_set_key, inuse_set_key, local_tag)
+        moved = yield self.redis.lrem(free_list_key, local_tag, num=1)
         if moved:
-            yield self.redis.lrem(free_list_key, local_tag, num=1)
+            yield self.redis.smove(free_set_key, inuse_set_key, local_tag)
         returnValue(moved)
 
     @Manager.calls_manager
