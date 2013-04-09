@@ -151,6 +151,7 @@ class TestRavenUtilityFunctions(TestCase):
     def setUp(self):
         try:
             import raven
+            raven  # To keep pyflakes happy.
         except ImportError, e:
             import_skip(e, 'raven')
 
