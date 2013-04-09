@@ -155,7 +155,7 @@ class TestTagpoolApiWorker(VumiWorkerTestCase, PersistenceMixin):
     def get_api_worker(self, config=None, start=True):
         config = {} if config is None else config
         config.setdefault('worker_name', 'test_api_worker')
-        config.setdefault('endpoint', 'tcp:0')
+        config.setdefault('twisted_endpoint', 'tcp:0')
         config = self.mk_config(config)
         worker = yield self.get_worker(config, TagpoolApiWorker, start)
         if not start:

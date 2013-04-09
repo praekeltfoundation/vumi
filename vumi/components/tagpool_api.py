@@ -112,7 +112,7 @@ class TagpoolApiWorker(BaseWorker):
     class CONFIG_CLASS(BaseWorker.CONFIG_CLASS):
         worker_name = ConfigText(
             "Name of this tagpool API worker.", required=True, static=True)
-        endpoint = ConfigText(
+        twisted_endpoint = ConfigText(
             "Twisted endpoint to listen on.", required=True, static=True)
         redis_manager = ConfigDict(
             "Redis client configuration.", default={}, static=True)
@@ -125,7 +125,7 @@ class TagpoolApiWorker(BaseWorker):
         rpc = TagpoolApiServer(tagpool)
         addIntrospection(rpc)
         site = Site(rpc)
-        self.addService(strports.service(config.endpoint, site))
+        self.addService(strports.service(config.twisted_endpoint, site))
 
     def teardown_worker(self):
         pass
