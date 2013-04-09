@@ -109,6 +109,13 @@ class TagpoolManager(object):
         returnValue([(pool, self._decode(local_tag))
                      for local_tag in free_tags])
 
+    @Manager.calls_manager
+    def inuse_tags(self, pool):
+        _free_list, _free_set, inuse_set_key = self._tag_pool_keys(pool)
+        inuse_tags = yield self.redis.smembers(inuse_set_key)
+        returnValue([(pool, self._decode(local_tag))
+                     for local_tag in inuse_tags])
+
     def _pool_list_key(self):
         return ":".join(["tagpools", "list"])
 
@@ -125,13 +132,6 @@ class TagpoolManager(object):
         pool = self._encode(pool)
         pool_list_key = self._pool_list_key()
         yield self.redis.srem(pool_list_key, pool)
-
-    @Manager.calls_manager
-    def inuse_tags(self, pool):
-        _free_list, _free_set, inuse_set_key = self._tag_pool_keys(pool)
-        inuse_tags = yield self.redis.smembers(inuse_set_key)
-        returnValue([(pool, self._decode(local_tag))
-                     for local_tag in inuse_tags])
 
     def _tag_pool_keys(self, pool):
         pool = self._encode(pool)
