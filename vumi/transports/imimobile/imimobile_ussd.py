@@ -43,6 +43,7 @@ class ImiMobileUssdTransport(HttpRpcTransport):
 
     transport_type = 'ussd'
 
+    ENCODING = 'utf-8'
     EXPECTED_FIELDS = set(['msisdn', 'msg', 'code', 'tid', 'dcs'])
 
     # errors
@@ -185,7 +186,7 @@ class ImiMobileUssdTransport(HttpRpcTransport):
 
             response_id = self.finish_request(
                 message['in_reply_to'],
-                message['content'].encode('utf-8'),
+                message['content'].encode(self.ENCODING),
                 headers={'X-USSD-SESSION': [session_header_value]})
 
             if response_id is None:
