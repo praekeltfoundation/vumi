@@ -177,8 +177,7 @@ class FakeRedis(object):
     @maybe_async
     def hmset(self, key, mapping):
         hval = self._data.setdefault(key, {})
-        hval.update(dict([(key, value)
-            for key, value in mapping.items()]))
+        hval.update(dict([(k, v) for k, v in mapping.items()]))
 
     @maybe_async
     def hgetall(self, key):
@@ -433,7 +432,7 @@ class Zset(object):
         return [(v, score_cast_func(k)) for k, v in zval[start:stop]]
 
     def zrangebyscore(self, min='-inf', max='+inf', start=0, num=None,
-        score_cast_func=float):
+                      score_cast_func=float):
         results = self.zrange(0, -1, score_cast_func=score_cast_func)
         results.sort(key=lambda val: val[1])
 

@@ -199,8 +199,8 @@ class SandboxTestCase(SandboxTestCaseBase):
             "sys.stdout.write(json.dumps(log) + '\\n')\n",
             {'env': {'PYTHONPATH': '/pp1:/pp2'},
              'sandbox': {
-                'log': {'cls': 'vumi.application.sandbox.LoggingResource'},
-            }},
+                 'log': {'cls': 'vumi.application.sandbox.LoggingResource'},
+             }},
         )
         with LogCatcher() as lc:
             status = yield app.process_message_in_sandbox(self.mk_msg())
@@ -220,8 +220,8 @@ class SandboxTestCase(SandboxTestCaseBase):
             "sys.stdout.write(json.dumps(log) + '\\n')\n",
             {'env': {},
              'sandbox': {
-                'log': {'cls': 'vumi.application.sandbox.LoggingResource'},
-            }},
+                 'log': {'cls': 'vumi.application.sandbox.LoggingResource'},
+             }},
         )
         with LogCatcher() as lc:
             status = yield app.process_message_in_sandbox(self.mk_msg())

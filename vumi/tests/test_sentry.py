@@ -123,7 +123,7 @@ class TestSentryLoggerSerivce(TestCase):
         yield self.service.startService()
         self.logger.msg("Hello", logLevel=logging.WARN)
         self.assertEqual(self.client.messages, [
-           (("Hello",), {'data': {'level': 30, 'logger': 'test.logger'}}),
+            (("Hello",), {'data': {'level': 30, 'logger': 'test.logger'}}),
         ])
         del self.client.messages[:]
         yield self.service.stopService()
