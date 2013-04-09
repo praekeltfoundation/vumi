@@ -121,6 +121,6 @@ class SafaricomTransport(HttpRpcTransport):
         else:
             command = 'CON'
         self.finish_request(message['in_reply_to'],
-            ('%s %s' % (command, message['content'])).encode(self.ENCODING)
+            ('%s %s' % (command, message['content'])).encode(self.ENCODING))
         return self.publish_ack(user_message_id=message['message_id'],
             sent_message_id=message['message_id'])
