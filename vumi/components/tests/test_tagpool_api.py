@@ -36,10 +36,10 @@ class TestTagpoolApiServer(TestCase, PersistenceMixin):
     def setup_tags(self):
         # pool1 has two tags which are free
         yield self.tagpool.declare_tags([
-                ("pool1", "tag1"), ("pool1", "tag2")])
+            ("pool1", "tag1"), ("pool1", "tag2")])
         # pool2 has two tags which are used
         yield self.tagpool.declare_tags([
-                ("pool2", "tag1"), ("pool2", "tag2")])
+            ("pool2", "tag1"), ("pool2", "tag2")])
         yield self.tagpool.acquire_specific_tag(["pool2", "tag1"])
         yield self.tagpool.acquire_specific_tag(["pool2", "tag2"])
         # pool3 is empty but has metadata
@@ -184,7 +184,7 @@ class TestTagpoolApiWorker(VumiWorkerTestCase, PersistenceMixin):
             "    Name of pool to acquire tag from.",
             ":rtype Tag:",
             "    Tag acquired (or None).",
-            ]))
+        ]))
 
     @inlineCallbacks
     def test_method_signature(self):
