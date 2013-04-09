@@ -116,6 +116,21 @@ class TagpoolManager(object):
         returnValue([(pool, self._decode(local_tag))
                      for local_tag in inuse_tags])
 
+    @Manager.calls_manager
+    def acquired_by(self, tag):
+        pool, local_tag = tag
+        local_tag = self._encode(local_tag)
+        reason_hash_key = self._tag_pool_reason_key(pool)
+        raw_reason = yield self.redis.hget(reason_hash_key, local_tag)
+        reason = json.loads(raw_reason)
+        returnValue((reason.get('owner'), reason))
+
+    @Manager.calls_manager
+    def owned_by(self, owner):
+        owner_tag_list_key = self._owner_tag_list_key(owner)
+        owned_tags = yield self.redis.smembers(owner_tag_list_key)
+        returnValue([json.loads(raw_tag) for raw_tag in owned_tags])
+
     def _pool_list_key(self):
         return ":".join(["tagpools", "list"])
 
