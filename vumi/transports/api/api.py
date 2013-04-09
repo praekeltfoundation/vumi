@@ -33,6 +33,7 @@ class HttpApiTransport(HttpRpcTransport):
 
     transport_type = 'http_api'
 
+    ENCODING = 'utf-8'
     CONFIG_CLASS = HttpApiConfig
     DEFAULT_ALLOWED_FIELDS = (
         'content',
@@ -65,7 +66,8 @@ class HttpApiTransport(HttpRpcTransport):
             if field not in self.allowed_fields:
                 errors.setdefault('unexpected_parameter', []).append(field)
             else:
-                values[field] = request.args.get(field)[0].decode('utf-8')
+                values[field] = (
+                    request.args.get(field)[0].decode(self.ENCODING))
         for field in required_fields:
             if field not in values and field in self.allowed_fields:
                 errors.setdefault('missing_parameter', []).append(field)
