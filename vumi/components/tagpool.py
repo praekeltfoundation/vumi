@@ -4,6 +4,7 @@
 """Tag pool manager."""
 
 import json
+import time
 
 from twisted.internet.defer import returnValue
 
@@ -36,14 +37,15 @@ class TagpoolManager(object):
         return binary_data.decode(self.encoding)
 
     @Manager.calls_manager
-    def acquire_tag(self, pool):
-        local_tag = yield self._acquire_tag(pool)
+    def acquire_tag(self, pool, owner=None, reason=None):
+        local_tag = yield self._acquire_tag(pool, owner, reason)
         returnValue((pool, local_tag) if local_tag is not None else None)
 
     @Manager.calls_manager
-    def acquire_specific_tag(self, tag):
+    def acquire_specific_tag(self, tag, owner=None, reason=None):
         pool, local_tag = tag
-        acquired = yield self._acquire_specific_tag(pool, local_tag)
+        acquired = yield self._acquire_specific_tag(pool, local_tag,
+                                                    owner, reason)
         if acquired:
             returnValue(tag)
         returnValue(None)
@@ -141,20 +143,22 @@ class TagpoolManager(object):
         return ":".join(["tagpools", pool, "metadata"])
 
     @Manager.calls_manager
-    def _acquire_tag(self, pool):
+    def _acquire_tag(self, pool, owner, reason):
         free_list_key, free_set_key, inuse_set_key = self._tag_pool_keys(pool)
         tag = yield self.redis.lpop(free_list_key)
         if tag is not None:
             yield self.redis.smove(free_set_key, inuse_set_key, tag)
+            yield self._store_reason(pool, tag, owner, reason)
         returnValue(self._decode(tag) if tag is not None else None)
 
     @Manager.calls_manager
-    def _acquire_specific_tag(self, pool, local_tag):
+    def _acquire_specific_tag(self, pool, local_tag, owner, reason):
         local_tag = self._encode(local_tag)
         free_list_key, free_set_key, inuse_set_key = self._tag_pool_keys(pool)
         moved = yield self.redis.lrem(free_list_key, local_tag, num=1)
         if moved:
             yield self.redis.smove(free_set_key, inuse_set_key, local_tag)
+            yield self._store_reason(pool, local_tag, owner, reason)
         returnValue(moved)
 
     @Manager.calls_manager
@@ -164,6 +168,7 @@ class TagpoolManager(object):
         count = yield self.redis.smove(inuse_set_key, free_set_key, local_tag)
         if count == 1:
             yield self.redis.rpush(free_list_key, local_tag)
+            yield self._remove_reason(pool, local_tag)
 
     @Manager.calls_manager
     def _declare_tags(self, pool, local_tags):
@@ -174,3 +179,36 @@ class TagpoolManager(object):
         for tag in sorted(new_tags - old_tags):
             yield self.redis.sadd(free_set_key, tag)
             yield self.redis.rpush(free_list_key, tag)
+
+    def _tag_pool_reason_key(self, pool):
+        pool = self._encode(pool)
+        return ":".join(["tagpools", pool, "reason:hash"])
+
+    def _owner_tag_list_key(self, owner):
+        if owner is None:
+            return ":".join(["tagpools", "unowned", "tags"])
+        owner = self._encode(owner)
+        return ":".join(["tagpools", "owners", owner, "tags"])
+
+    @Manager.calls_manager
+    def _store_reason(self, pool, local_tag, owner, reason):
+        if reason is None:
+            reason = {}
+        reason['timestamp'] = time.time()
+        reason['owner'] = owner
+        reason_hash_key = self._tag_pool_reason_key(pool)
+        yield self.redis.hset(reason_hash_key, local_tag, json.dumps(reason))
+        owner_tag_list_key = self._owner_tag_list_key(owner)
+        yield self.redis.sadd(owner_tag_list_key,
+                              json.dumps([pool, self._decode(local_tag)]))
+
+    @Manager.calls_manager
+    def _remove_reason(self, pool, local_tag):
+        reason_hash_key = self._tag_pool_reason_key(pool)
+        reason = yield self.redis.hget(reason_hash_key, local_tag)
+        if reason is not None:
+            reason = json.loads(reason)
+            owner = reason.get('owner')
+            owner_tag_list_key = self._owner_tag_list_key(owner)
+            self.redis.srem(owner_tag_list_key,
+                            json.dumps([pool, self._decode(local_tag)]))
