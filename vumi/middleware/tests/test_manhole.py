@@ -1,12 +1,12 @@
+import os
+
 from tempfile import NamedTemporaryFile
 
 from twisted.trial.unittest import TestCase
 from twisted.conch.manhole_ssh import ConchFactory
-from twisted.conch import error
 from twisted.conch.ssh import (transport, userauth, connection, channel,
-    common)
+    session)
 from twisted.internet import defer, protocol, reactor
-from twisted.internet.endpoints import TCP4ClientEndpoint
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.middleware.manhole import ManholeMiddleware
@@ -17,23 +17,25 @@ private_key = ConchFactory.privateKeys['ssh-rsa']
 public_key = ConchFactory.publicKeys['ssh-rsa']
 
 
+class DummyWorker(object):
+    pass
+
+
 class ClientTransport(transport.SSHClientTransport):
 
-    def verifyHostKey(self, pubKey, fingerprint):
-        if fingerprint != 'b1:94:6a:c9:24:92:d2:34:7c:62:35:b4:d2:61:11:84':
-            return defer.fail(error.ConchError('bad key'))
-        else:
-            return defer.succeed(1)
+    def verifyHostKey(self, pub_key, fingerprint):
+        return defer.succeed(1)
 
     def connectionSecure(self):
-        self.requestService(ClientUserAuth('user', ClientConnection()))
+        return self.requestService(ClientUserAuth(os.getlogin(),
+            ClientConnection(self.factory.channelConnected)))
 
 
 class ClientUserAuth(userauth.SSHUserAuthClient):
 
     def getPassword(self, prompt=None):
+        # Not doing password based auth
         return
-        # this says we won't do password authentication
 
     def getPublicKey(self):
         return public_key.blob()
@@ -44,53 +46,89 @@ class ClientUserAuth(userauth.SSHUserAuthClient):
 
 class ClientConnection(connection.SSHConnection):
 
+    def __init__(self, channel_connected):
+        connection.SSHConnection.__init__(self)
+        self._channel_connected = channel_connected
+
     def serviceStarted(self):
-        self.openChannel(CatChannel(conn=self))
+        channel = ClientChannel(self._channel_connected,
+            conn=self)
+        self.openChannel(channel)
 
 
-class CatChannel(channel.SSHChannel):
+class ClientChannel(channel.SSHChannel):
 
     name = 'session'
 
-    # def channelOpen(self, data):
-    #     d = self.conn.sendRequest(self, 'exec', common.NS('cat'),
-    #                               wantReply=1)
-    #     d.addCallback(self._cbSendRequest)
-    #     self.catData = ''
+    def __init__(self, channel_connected, *args, **kwargs):
+        channel.SSHChannel.__init__(self, *args, **kwargs)
+        self._channel_connected = channel_connected
+        self.buffer = u''
+        self.queue = defer.DeferredQueue()
 
-    # def _cbSendRequest(self, ignored):
-    #     self.write('This data will be echoed back to us by "cat."\r\n')
-    #     self.conn.sendEOF(self)
-    #     self.loseConnection()
+    def channelOpen(self, data):
+        self._channel_connected.callback(self)
 
     def dataReceived(self, data):
-        self.catData += data
-
-    def closed(self):
-        print 'We got this from "cat":', self.catData
+        self.buffer += data
+        lines = self.buffer.split('\r\n')
+        for line in lines[:-1]:
+            self.queue.put(line)
+        self.buffer = lines[-1]
 
 
 class ManholeMiddlewareTestCase(TestCase):
 
+    @inlineCallbacks
     def setUp(self):
 
-        self.private_key_file = NamedTemporaryFile()
+        self.private_key_file = NamedTemporaryFile(mode='w')
         self.private_key_file.write(private_key.toString('OPENSSH'))
+        self.private_key_file.flush()
 
-        self.pub_key_file = NamedTemporaryFile()
+        self.pub_key_file = NamedTemporaryFile(mode='w')
         self.pub_key_file.write(public_key.toString('OPENSSH'))
+        self.pub_key_file.flush()
 
         self._middlewares = []
+
+        mw = self.get_middleware({
+            'authorized_keys': [self.pub_key_file.name]
+        })
+        host = mw.socket.getHost()
+
+        factory = protocol.ClientFactory()
+        factory.protocol = ClientTransport
+
+        wait_for_channel = defer.Deferred()
+
+        factory.channelConnected = wait_for_channel
+        self.socket = reactor.connectTCP(host.host, host.port, factory)
+
+        self.channel = yield self.open_shell(wait_for_channel)
+
+    @inlineCallbacks
+    def open_shell(self, wait_for_channel):
+        channel = yield wait_for_channel
+        conn = channel.conn
+        term = session.packRequest_pty_req("xterm-mono", (0, 0, 0, 0), '')
+        yield conn.sendRequest(channel, 'pty-req', term, wantReply=1)
+        yield conn.sendRequest(channel, 'shell', '', wantReply=1)
+        defer.returnValue(channel)
 
     def tearDown(self):
         for mw in self._middlewares:
             mw.teardown_middleware()
+        self.socket.disconnect()
 
     def get_middleware(self, config={}):
         config = dict({
             'port': '0',
         }, **config)
-        worker = object()
+
+        worker = DummyWorker()
+        worker.transport_name = 'foo'
+
         mw = ManholeMiddleware("test_manhole_mw", config, worker)
         mw.setup_middleware()
         self._middlewares.append(mw)
@@ -98,12 +136,7 @@ class ManholeMiddlewareTestCase(TestCase):
 
     @inlineCallbacks
     def test_mw(self):
-        mw = self.get_middleware()
-        host = mw.socket.getHost()
-
-        factory = protocol.ClientFactory()
-        factory.protocol = ClientTransport
-
-        point = TCP4ClientEndpoint(reactor, host.host, host.port)
-        proto = yield point.connect(factory)
-        print proto
+        self.channel.write('print worker.transport_name\n')
+        sent_line = yield self.channel.queue.get()
+        received_line = yield self.channel.queue.get()
+        self.assertEqual(received_line, 'foo')
