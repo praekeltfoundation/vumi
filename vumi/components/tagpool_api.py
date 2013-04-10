@@ -21,19 +21,25 @@ class TagpoolApiServer(JSONRPC):
         self.tagpool = tagpool
 
     @signature(pool=Unicode("Name of pool to acquire tag from."),
+               owner=Unicode("Owner acquiring tag (or None).", null=True),
+               reason=Dict("Metadata on why tag is being acquired (or None).",
+                           null=True),
                returns=Tag("Tag acquired (or None).", null=True))
-    def jsonrpc_acquire_tag(self, pool):
+    def jsonrpc_acquire_tag(self, pool, owner=None, reason=None):
         """Acquire a tag from the pool (returns None if no tags are avaliable).
            """
-        d = self.tagpool.acquire_tag(pool)
+        d = self.tagpool.acquire_tag(pool, owner, reason)
         return d
 
     @signature(tag=Tag("Tag to acquire as [pool, tagname] pair."),
+               owner=Unicode("Owner acquiring tag (or None).", null=True),
+               reason=Dict("Metadata on why tag is being acquired (or None).",
+                           null=True),
                returns=Tag("Tag acquired (or None).", null=True))
-    def jsonrpc_acquire_specific_tag(self, tag):
+    def jsonrpc_acquire_specific_tag(self, tag, owner=None, reason=None):
         """Acquire the specific tag (returns None if the tag is unavailable).
            """
-        d = self.tagpool.acquire_specific_tag(tag)
+        d = self.tagpool.acquire_specific_tag(tag, owner, reason)
         return d
 
     @signature(tag=Tag("Tag to release."))

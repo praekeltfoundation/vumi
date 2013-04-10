@@ -204,12 +204,18 @@ class TestTagpoolApiWorker(VumiWorkerTestCase, PersistenceMixin):
     def test_method_help(self):
         worker, proxy = yield self.get_api_worker()
         result = yield proxy.callRemote('system.methodHelp', 'acquire_tag')
-        self.assertEqual(result, "\n".join([
+        self.assertEqual(result, u"\n".join([
             "Acquire a tag from the pool (returns None if"
             " no tags are avaliable).",
             "",
             ":param Unicode pool:",
             "    Name of pool to acquire tag from.",
+            ":param Unicode owner:",
+            "    Owner acquiring tag (or None). May be null. Default: None.",
+            ":param Dict reason:",
+            "    Metadata on why tag is being acquired (or None)."
+            " May be null.",
+            "    Default: None.",
             ":rtype Tag:",
             "    Tag acquired (or None).",
         ]))
@@ -219,4 +225,4 @@ class TestTagpoolApiWorker(VumiWorkerTestCase, PersistenceMixin):
         worker, proxy = yield self.get_api_worker()
         result = yield proxy.callRemote('system.methodSignature',
                                         'acquire_tag')
-        self.assertEqual(result, [[u'array', u'string']])
+        self.assertEqual(result, [[u'array', u'string', u'string', u'struct']])
