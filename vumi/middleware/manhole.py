@@ -8,7 +8,7 @@ from twisted.cred import portal
 from twisted.conch import manhole_ssh, manhole_tap
 from twisted.conch.checkers import SSHPublicKeyDatabase
 from twisted.python.filepath import FilePath
-from twisted.internet.endpoints import TCP4ServerEndpoint
+from twisted.internet.endpoints import serverFromString
 
 
 class SSHPubKeyDatabase(SSHPublicKeyDatabase):
@@ -40,13 +40,13 @@ class ManholeMiddleware(BaseMiddleware):
 
     :param int twisted_endpoint:
         The Twisted endpoint to listen on.
-        Defaults to `0` which has the reactor select any available port.
+        Defaults to `tcp:0` which has the reactor select any available port.
     :param list authorized_keys:
         List of absolute paths to `authorized_keys` files containing SSH public
         keys that are allowed access.
     """
     def validate_config(self):
-        self.twisted_endpoint = int(self.config.get('twisted_endpoint', 0))
+        self.twisted_endpoint = self.config.get('twisted_endpoint', 'tcp:0')
         self.authorized_keys = self.config.get('authorized_keys', None)
 
     @inlineCallbacks
@@ -59,7 +59,7 @@ class ManholeMiddleware(BaseMiddleware):
         })
         ssh_portal = portal.Portal(ssh_realm, [checker])
         factory = manhole_ssh.ConchFactory(ssh_portal)
-        endpoint = TCP4ServerEndpoint(reactor, self.twisted_endpoint)
+        endpoint = serverFromString(reactor, self.twisted_endpoint)
         self.socket = yield endpoint.listen(factory)
 
     def teardown_middleware(self):
