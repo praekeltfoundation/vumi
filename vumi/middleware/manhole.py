@@ -19,7 +19,7 @@ class SSHPubKeyDatabase(SSHPublicKeyDatabase):
         self.authorized_keys = authorized_keys
 
     def getAuthorizedKeysFiles(self, credentials):
-        if self.authorized_keys:
+        if self.authorized_keys is not None:
             return [FilePath(ak) for ak in self.authorized_keys]
 
         return SSHPublicKeyDatabase.getAuthorizedKeysFiles(self, credentials)
@@ -45,7 +45,7 @@ class ManholeMiddleware(BaseMiddleware):
     """
     def validate_config(self):
         self.port = int(self.config.get('port', 0))
-        self.authorized_keys = self.config.get('authorized_keys', [])
+        self.authorized_keys = self.config.get('authorized_keys', None)
 
     def setup_middleware(self):
         self.validate_config()
