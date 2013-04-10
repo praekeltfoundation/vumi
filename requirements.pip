@@ -15,6 +15,4 @@ pytz
 riakasaurus>=1.0.9
 riak
 https://github.com/dustin/twitty-twister/tarball/master#egg=twittytwister-0.1.1
-pyasn1
-pycrypto
 txJSON-RPC==0.3.1
