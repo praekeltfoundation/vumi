@@ -24,11 +24,11 @@ class HangmanGame(object):
            Message set in reply to last user action. Defaults to 'New game!'.
        """
 
-    UI_TEMPLATE = u'\n'.join([
-        u"%(msg)s",
-        u"Word: %(word)s",
-        u"Letters guessed so far: %(guesses)s",
-        u"%(prompt)s (0 to quit):"])
+    UI_TEMPLATE = (
+        u"%(msg)s\n"
+        u"Word: %(word)s\n"
+        u"Letters guessed so far: %(guesses)s\n"
+        u"%(prompt)s (0 to quit):\n")
 
     # exit codes
     NOT_DONE, DONE, DONE_WANTS_NEW = range(3)
