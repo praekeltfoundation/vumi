@@ -2,7 +2,6 @@ import warnings
 
 from twisted.internet.defer import inlineCallbacks, returnValue
 
-from vumi.errors import ConfigError
 from vumi.application.base import ApplicationWorker, SESSION_NEW, SESSION_CLOSE
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.tests.utils import get_stubbed_worker, LogCatcher
@@ -381,11 +380,11 @@ class TestApplicationMiddlewareHooks(ApplicationTestCase):
     application_class = ApplicationWorker
 
     TEST_MIDDLEWARE_CONFIG = {
-       "middleware": [
+        "middleware": [
             {"mw1": "vumi.middleware.tests.utils.RecordingMiddleware"},
             {"mw2": "vumi.middleware.tests.utils.RecordingMiddleware"},
-            ],
-        }
+        ],
+    }
 
     @inlineCallbacks
     def test_middleware_for_inbound_messages(self):

@@ -54,7 +54,7 @@ class HigateXMLParser():
             contextlist = element.find("Response").find("OnUSSEvent").find(
                 "USSContext").items()
             if element.find("Response").find("OnUSSEvent").find(
-                "USSText") != None:
+                    "USSText") is not None:
                 USSText = safetext(element.find("Response").find(
                         "OnUSSEvent").find("USSText"))
 

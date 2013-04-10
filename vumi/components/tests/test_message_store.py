@@ -287,30 +287,30 @@ class TestMessageStore(TestMessageStoreBase):
         msg_id, msg, batch_id = yield self._create_inbound(content='hello')
         self.assertEqual([msg_id],
             (yield self.store.batch_inbound_keys_matching(batch_id, query=[{
-            'key': 'msg.content',
-            'pattern': 'hell.+',
-            'flags': 'i',
+                'key': 'msg.content',
+                'pattern': 'hell.+',
+                'flags': 'i',
             }])))
         # test case sensitivity
         self.assertEqual([],
             (yield self.store.batch_inbound_keys_matching(batch_id, query=[{
-            'key': 'msg.content',
-            'pattern': 'HELLO',
-            'flags': '',
+                'key': 'msg.content',
+                'pattern': 'HELLO',
+                'flags': '',
             }])))
         # the inbound from_addr has a leading +, it needs to be escaped
         self.assertEqual([msg_id],
             (yield self.store.batch_inbound_keys_matching(batch_id, query=[{
-            'key': 'msg.from_addr',
-            'pattern': "\%s" % (msg.payload['from_addr'],),
-            'flags': 'i',
+                'key': 'msg.from_addr',
+                'pattern': "\%s" % (msg.payload['from_addr'],),
+                'flags': 'i',
             }])))
         # the outbound to_addr has a leading +, it needs to be escaped
         self.assertEqual([msg_id],
             (yield self.store.batch_inbound_keys_matching(batch_id, query=[{
-            'key': 'msg.to_addr',
-            'pattern': "\%s" % (msg.payload['to_addr'],),
-            'flags': 'i',
+                'key': 'msg.to_addr',
+                'pattern': "\%s" % (msg.payload['to_addr'],),
+                'flags': 'i',
             }])))
 
     @inlineCallbacks
@@ -318,29 +318,29 @@ class TestMessageStore(TestMessageStoreBase):
         msg_id, msg, batch_id = yield self._create_outbound(content='hello')
         self.assertEqual([msg_id],
             (yield self.store.batch_outbound_keys_matching(batch_id, query=[{
-            'key': 'msg.content',
-            'pattern': 'hell.+',
-            'flags': 'i',
+                'key': 'msg.content',
+                'pattern': 'hell.+',
+                'flags': 'i',
             }])))
         # test case sensitivity
         self.assertEqual([],
             (yield self.store.batch_outbound_keys_matching(batch_id, query=[{
-            'key': 'msg.content',
-            'pattern': 'HELLO',
-            'flags': '',
+                'key': 'msg.content',
+                'pattern': 'HELLO',
+                'flags': '',
             }])))
         self.assertEqual([msg_id],
             (yield self.store.batch_outbound_keys_matching(batch_id, query=[{
-            'key': 'msg.from_addr',
-            'pattern': msg.payload['from_addr'],
-            'flags': 'i',
+                'key': 'msg.from_addr',
+                'pattern': msg.payload['from_addr'],
+                'flags': 'i',
             }])))
         # the outbound to_addr has a leading +, it needs to be escaped
         self.assertEqual([msg_id],
             (yield self.store.batch_outbound_keys_matching(batch_id, query=[{
-            'key': 'msg.to_addr',
-            'pattern': "\%s" % (msg.payload['to_addr'],),
-            'flags': 'i',
+                'key': 'msg.to_addr',
+                'pattern': "\%s" % (msg.payload['to_addr'],),
+                'flags': 'i',
             }])))
 
 
