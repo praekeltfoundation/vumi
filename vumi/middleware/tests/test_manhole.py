@@ -4,8 +4,8 @@ from tempfile import NamedTemporaryFile
 
 from twisted.trial.unittest import TestCase
 from twisted.conch.manhole_ssh import ConchFactory
-from twisted.conch.ssh import (transport, userauth, connection, channel,
-    session)
+from twisted.conch.ssh import (
+    transport, userauth, connection, channel, session)
 from twisted.internet import defer, protocol, reactor
 from twisted.internet.defer import inlineCallbacks
 
@@ -27,8 +27,8 @@ class ClientTransport(transport.SSHClientTransport):
         return defer.succeed(1)
 
     def connectionSecure(self):
-        return self.requestService(ClientUserAuth(os.getlogin(),
-            ClientConnection(self.factory.channelConnected)))
+        return self.requestService(ClientUserAuth(
+            os.getlogin(), ClientConnection(self.factory.channelConnected)))
 
 
 class ClientUserAuth(userauth.SSHUserAuthClient):
@@ -52,7 +52,7 @@ class ClientConnection(connection.SSHConnection):
 
     def serviceStarted(self):
         channel = ClientChannel(self._channel_connected,
-            conn=self)
+                                conn=self)
         self.openChannel(channel)
 
 
@@ -137,6 +137,8 @@ class ManholeMiddlewareTestCase(TestCase):
     @inlineCallbacks
     def test_mw(self):
         self.channel.write('print worker.transport_name\n')
-        sent_line = yield self.channel.queue.get()
+        # read the echoed line we sent first
+        yield self.channel.queue.get()
+        # next is the server response
         received_line = yield self.channel.queue.get()
         self.assertEqual(received_line, 'foo')
