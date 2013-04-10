@@ -19,6 +19,12 @@ class TestSignature(TestCase):
         self.assertRaises(RpcCheckError, s.check_params,
                           [None, 1, u"a", 3], {})
 
+    def test_check_params_with_defaults(self):
+        s = Signature(lambda slf, x, y=u"default": x,
+                      x=Int(), y=Unicode())
+        s.check_params([None, 1, u"a"], {})
+        s.check_params([None, 1], {})
+
     def test_check_result(self):
         s = Signature(lambda slf, x: x, x=Int("foo"),
                       returns=Int("bar"))

@@ -26,7 +26,7 @@ class Signature(object):
         self.argspec = inspect.getargspec(f)
         self.defaults = [self.NO_DEFAULT] * (
             len(self.argspec.args) - len(self.argspec.defaults or ()))
-        self.defaults += list(self.argspec.args)
+        self.defaults += list(self.argspec.defaults or ())
 
     def check_params(self, args, kw):
         if kw:
@@ -34,7 +34,8 @@ class Signature(object):
         if len(args) > len(self.argspec.args):
             raise RpcCheckError("Too many positional arguments.")
 
-        args = list(args) + [self.NO_ARG] * (len(self.argspec) - len(args))
+        missing_arg_count = len(self.argspec.args) - len(args)
+        args = list(args) + [self.NO_ARG] * missing_arg_count
         arg_tuples = itertools.izip(self.argspec.args, self.defaults, args)
         if self.requires_self:
             next(arg_tuples)
