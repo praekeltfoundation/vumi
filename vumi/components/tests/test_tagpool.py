@@ -209,6 +209,13 @@ class TestTxTagpoolManager(TestCase, PersistenceMixin):
         self._check_reason("me", owner, reason, {"foo": "bar"})
 
     @inlineCallbacks
+    def test_acquired_by_undeclared_tags(self):
+        tag = ["pool", "tag"]
+        owner, reason = yield self.tpm.acquired_by(tag)
+        self.assertEqual(owner, None)
+        self.assertEqual(reason, None)
+
+    @inlineCallbacks
     def test_acquired_by_no_owner(self):
         tag = ["pool", "tag"]
         yield self.tpm.declare_tags([tag])

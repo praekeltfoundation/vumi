@@ -122,8 +122,12 @@ class TagpoolManager(object):
         local_tag = self._encode(local_tag)
         reason_hash_key = self._tag_pool_reason_key(pool)
         raw_reason = yield self.redis.hget(reason_hash_key, local_tag)
-        reason = json.loads(raw_reason)
-        returnValue((reason.get('owner'), reason))
+        if raw_reason is not None:
+            reason = json.loads(raw_reason)
+            owner = reason.get('owner')
+        else:
+            reason, owner = None, None
+        returnValue((owner, reason))
 
     @Manager.calls_manager
     def owned_tags(self, owner):
