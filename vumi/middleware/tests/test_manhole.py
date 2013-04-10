@@ -79,7 +79,6 @@ class ClientChannel(channel.SSHChannel):
 
 class ManholeMiddlewareTestCase(TestCase):
 
-    @inlineCallbacks
     def setUp(self):
 
         self.private_key_file = NamedTemporaryFile(mode='w')
@@ -91,35 +90,35 @@ class ManholeMiddlewareTestCase(TestCase):
         self.pub_key_file.flush()
 
         self._middlewares = []
+        self._client_sockets = []
 
-        mw = self.get_middleware({
+        self.mw = self.get_middleware({
             'authorized_keys': [self.pub_key_file.name]
         })
-        host = mw.socket.getHost()
-
-        factory = protocol.ClientFactory()
-        factory.protocol = ClientTransport
-
-        wait_for_channel = defer.Deferred()
-
-        factory.channelConnected = wait_for_channel
-        self.socket = reactor.connectTCP(host.host, host.port, factory)
-
-        self.channel = yield self.open_shell(wait_for_channel)
 
     @inlineCallbacks
-    def open_shell(self, wait_for_channel):
-        channel = yield wait_for_channel
+    def open_shell(self, middleware):
+        host = middleware.socket.getHost()
+        factory = protocol.ClientFactory()
+        factory.protocol = ClientTransport
+        factory.channelConnected = defer.Deferred()
+
+        socket = reactor.connectTCP(host.host, host.port, factory)
+
+        channel = yield factory.channelConnected
         conn = channel.conn
         term = session.packRequest_pty_req("xterm-mono", (0, 0, 0, 0), '')
         yield conn.sendRequest(channel, 'pty-req', term, wantReply=1)
         yield conn.sendRequest(channel, 'shell', '', wantReply=1)
+        self._client_sockets.append(socket)
         defer.returnValue(channel)
 
     def tearDown(self):
+        for socket in self._client_sockets:
+            socket.disconnect()
+
         for mw in self._middlewares:
             mw.teardown_middleware()
-        self.socket.disconnect()
 
     def get_middleware(self, config={}):
         config = dict({
@@ -136,9 +135,10 @@ class ManholeMiddlewareTestCase(TestCase):
 
     @inlineCallbacks
     def test_mw(self):
-        self.channel.write('print worker.transport_name\n')
+        shell = yield self.open_shell(self.mw)
+        shell.write('print worker.transport_name\n')
         # read the echoed line we sent first
-        yield self.channel.queue.get()
+        yield shell.queue.get()
         # next is the server response
-        received_line = yield self.channel.queue.get()
+        received_line = yield shell.queue.get()
         self.assertEqual(received_line, 'foo')
