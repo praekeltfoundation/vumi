@@ -87,6 +87,21 @@ class TagpoolApiServer(JSONRPC):
         d = self.tagpool.inuse_tags(pool)
         return d
 
+    @signature(tag=Tag("Tag to return ownership information on."),
+               returns=List("List of owner and reason.", length=2, null=True))
+    def jsonrpc_acquired_by(self, tag):
+        """Returns the owner of an acquired tag and why is was acquired."""
+        d = self.tagpool.acquired_by(tag)
+        d.addCallback(list)
+        return d
+
+    @signature(owner=Unicode("Owner of tags (or None for unowned tags).",
+                             null=True),
+               returns=List("List of tags owned.", item_type=Tag()))
+    def jsonrpc_owned_tags(self, owner):
+        """Return a list of tags currently owned by an owner."""
+        return self.tagpool.owned_tags(owner)
+
 
 class TagpoolApiWorker(BaseWorker):
 

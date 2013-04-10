@@ -137,6 +137,34 @@ class TestTagpoolApiServer(TestCase, PersistenceMixin):
         result = yield self.proxy.callRemote("inuse_tags", "pool3")
         self.assertEqual(result, [])
 
+    def _check_reason(self, result, expected_owner, expected_reason):
+        owner, reason = result
+        self.assertEqual(owner, expected_owner)
+        self.assertEqual(reason.pop('owner'), expected_owner)
+        self.assertTrue(isinstance(reason.pop('timestamp'), float))
+        self.assertEqual(reason, expected_reason)
+
+    @inlineCallbacks
+    def test_acquired_by(self):
+        result = yield self.proxy.callRemote("acquired_by", ["pool1", "tag1"])
+        self.assertEqual(result, [None, None])
+        result = yield self.proxy.callRemote("acquired_by", ["pool2", "tag1"])
+        self._check_reason(result, None, {})
+        yield self.tagpool.acquire_tag("pool1", owner="me",
+                                       reason={"foo": "bar"})
+        result = yield self.proxy.callRemote("acquired_by", ["pool1", "tag1"])
+        self._check_reason(result, "me", {"foo": "bar"})
+
+    @inlineCallbacks
+    def test_owned_tags(self):
+        result = yield self.proxy.callRemote("owned_tags", None)
+        self.assertEqual(sorted(result),
+                         [[u'pool2', u'tag1'], [u'pool2', u'tag2']])
+        yield self.tagpool.acquire_tag("pool1", owner="me",
+                                       reason={"foo": "bar"})
+        result = yield self.proxy.callRemote("owned_tags", "me")
+        self.assertEqual(result, [["pool1", "tag1"]])
+
 
 class TestTagpoolApiWorker(VumiWorkerTestCase, PersistenceMixin):
 
