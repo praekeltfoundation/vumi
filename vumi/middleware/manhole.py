@@ -47,7 +47,7 @@ class ManholeMiddleware(BaseMiddleware):
         ssh_realm = manhole_ssh.TerminalRealm()
         ssh_realm.chainedProtocolFactory = manhole_tap.chainedProtocolFactory({
             'worker': self.worker,
-            })
+        })
         ssh_portal = portal.Portal(ssh_realm, [checker])
         ssh_factory = manhole_ssh.ConchFactory(ssh_portal)
         self.socket = reactor.listenTCP(self.port, ssh_factory)
