@@ -45,6 +45,13 @@ class TestTagpoolApiServer(TestCase, PersistenceMixin):
         # pool3 is empty but has metadata
         yield self.tagpool.set_metadata("pool3", {"meta": "data"})
 
+    def _check_reason(self, result, expected_owner, expected_reason):
+        owner, reason = result
+        self.assertEqual(owner, expected_owner)
+        self.assertEqual(reason.pop('owner'), expected_owner)
+        self.assertTrue(isinstance(reason.pop('timestamp'), float))
+        self.assertEqual(reason, expected_reason)
+
     @inlineCallbacks
     def test_acquire_tag(self):
         result = yield self.proxy.callRemote("acquire_tag", "pool1")
@@ -53,6 +60,14 @@ class TestTagpoolApiServer(TestCase, PersistenceMixin):
                          [("pool1", "tag1")])
         result = yield self.proxy.callRemote("acquire_tag", "pool2")
         self.assertEqual(result, None)
+
+    @inlineCallbacks
+    def test_acquire_tag_with_owner_and_reason(self):
+        result = yield self.proxy.callRemote(
+            "acquire_tag", "pool1", "me", {"foo": "bar"})
+        self.assertEqual(result, ["pool1", "tag1"])
+        result = yield self.tagpool.acquired_by(["pool1", "tag1"])
+        self._check_reason(result, "me", {"foo": "bar"})
 
     @inlineCallbacks
     def test_acquire_specific_tag(self):
@@ -64,6 +79,14 @@ class TestTagpoolApiServer(TestCase, PersistenceMixin):
         result = yield self.proxy.callRemote("acquire_specific_tag",
                                              ["pool2", "tag1"])
         self.assertEqual(result, None)
+
+    @inlineCallbacks
+    def test_acquire_specific_tag_with_owner_and_reason(self):
+        result = yield self.proxy.callRemote(
+            "acquire_specific_tag", ["pool1", "tag1"], "me", {"foo": "bar"})
+        self.assertEqual(result, ["pool1", "tag1"])
+        result = yield self.tagpool.acquired_by(["pool1", "tag1"])
+        self._check_reason(result, "me", {"foo": "bar"})
 
     @inlineCallbacks
     def test_release_tag(self):
@@ -136,13 +159,6 @@ class TestTagpoolApiServer(TestCase, PersistenceMixin):
         self.assertEqual(result, [["pool2", "tag1"], ["pool2", "tag2"]])
         result = yield self.proxy.callRemote("inuse_tags", "pool3")
         self.assertEqual(result, [])
-
-    def _check_reason(self, result, expected_owner, expected_reason):
-        owner, reason = result
-        self.assertEqual(owner, expected_owner)
-        self.assertEqual(reason.pop('owner'), expected_owner)
-        self.assertTrue(isinstance(reason.pop('timestamp'), float))
-        self.assertEqual(reason, expected_reason)
 
     @inlineCallbacks
     def test_acquired_by(self):
