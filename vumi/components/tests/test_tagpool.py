@@ -256,6 +256,22 @@ class TestTxTagpoolManager(TestCase, PersistenceMixin):
         my_tags = yield self.tpm.owned_tags(None)
         self.assertEqual(my_tags, [tags[0]])
 
+    @inlineCallbacks
+    def test_owned_tags_unicode_owner(self):
+        tags = [["pool1", "tag1"], ["pool2", "tag2"]]
+        yield self.tpm.declare_tags(tags)
+        yield self.tpm.acquire_tag(tags[0][0], owner=u"mé")
+        my_tags = yield self.tpm.owned_tags(u"mé")
+        self.assertEqual(my_tags, [tags[0]])
+
+    @inlineCallbacks
+    def test_owned_tags_unicode_tags(self):
+        tags = [[u"poöl1", u"tág1"], [u"poöl2", u"tág2"]]
+        yield self.tpm.declare_tags(tags)
+        yield self.tpm.acquire_tag(tags[0][0], owner="me")
+        my_tags = yield self.tpm.owned_tags(u"me")
+        self.assertEqual(my_tags, [tags[0]])
+
 
 class TestTagpoolManager(TestTxTagpoolManager):
     sync_persistence = True
