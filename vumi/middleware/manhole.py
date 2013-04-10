@@ -30,6 +30,12 @@ class ManholeMiddleware(BaseMiddleware):
     Middleware providing SSH access into the worker this middleware is attached
     to.
 
+    Requires the following packages to be installed:
+
+        * pyasn1
+        * pycrypto
+
+
     :param int port:
         The port to open up. Defaults to `0` which has the reactor select
         any available port.
