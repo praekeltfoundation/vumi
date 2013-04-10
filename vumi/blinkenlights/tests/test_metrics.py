@@ -49,7 +49,7 @@ class TestMetricManager(TestCase):
                             for p in datapoint[2]),
                         "Not all datapoints near now (%f): %r"
                         % (now, datapoint))
-        self.assertEqual([p[1] for p in datapoint[2]], values)
+        self.assertEqual([dp[1] for dp in datapoint[2]], values)
 
     def test_register(self):
         mm = metrics.MetricManager("vumi.test.")
@@ -191,7 +191,7 @@ class CheckValuesMixin(object):
                         "Not all datapoints near now (%f): %r"
                         % (now, datapoints))
         self.assertTrue(all(isinstance(d[0], (int, long)) for d in datapoints))
-        actual_values = [d[1] for d in datapoints]
+        actual_values = [dp[1] for dp in datapoints]
         return actual_values
 
     def check_poll_func(self, metric, n, test):

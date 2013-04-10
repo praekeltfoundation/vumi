@@ -80,7 +80,7 @@ class CellulantTransport(HttpRpcTransport):
             content = request.args.get('INPUT')[0]
 
         if ((request.args.get('ABORT')[0] not in ('0', 'null'))
-            or (op_code == 'ABO')):
+                or (op_code == 'ABO')):
             # respond to phones aborting a session
             self.finish_request(message_id, '')
             event = TransportUserMessage.SESSION_CLOSE

@@ -15,11 +15,11 @@ class BaseTransportTestCase(TransportTestCase):
     transport_class = Transport
 
     TEST_MIDDLEWARE_CONFIG = {
-       "middleware": [
+        "middleware": [
             {"mw1": "vumi.middleware.tests.utils.RecordingMiddleware"},
             {"mw2": "vumi.middleware.tests.utils.RecordingMiddleware"},
-            ],
-        }
+        ],
+    }
 
     @inlineCallbacks
     def test_start_transport(self):

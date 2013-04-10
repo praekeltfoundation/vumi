@@ -115,9 +115,9 @@ if __name__ == '__main__':
         f.printTraceback()
 
     def _main():
-        maybeDeferred(LogParser, options
-                      ).addErrback(_eb
-                      ).addCallback(lambda _: reactor.stop())
+        d = maybeDeferred(LogParser, options)
+        d.addErrback(_eb)
+        d.addCallback(lambda _: reactor.stop())
 
     reactor.callLater(0, _main)
     reactor.run()
