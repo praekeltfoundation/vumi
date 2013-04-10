@@ -189,12 +189,17 @@ class List(RpcType):
 
     def __init__(self, *args, **kw):
         self._item_type = kw.pop('item_type', None)
+        self._length = kw.pop('length', None)
         super(List, self).__init__(*args, **kw)
 
     def nonnull_check(self, name, value):
         if not isinstance(value, list):
             raise RpcCheckError("List value expected for %s (got %r)"
                                 % (name, value))
+        if self._length is not None and len(value) != self._length:
+            raise RpcCheckError("List value for %s expected to have"
+                                " length %d (got %r)"
+                                % (name, self._length, value))
         if self._item_type is not None:
             item_name = 'items of %s' % (name,)
             for item in value:

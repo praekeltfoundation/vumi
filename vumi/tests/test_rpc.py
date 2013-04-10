@@ -155,6 +155,12 @@ class TestList(TestCase):
         l.check("name", [1, 2, 3])
         self.assertRaises(RpcCheckError, l.check, "name", [1, 0.1])
 
+    def test_length(self):
+        l = List(length=2)
+        l.check("name", [1, 2])
+        self.assertRaises(RpcCheckError, l.check, "name", [])
+        self.assertRaises(RpcCheckError, l.check, "name", [1, 2, 3])
+
 
 class TestDict(TestCase):
     def test_jsonrpc_type(self):
