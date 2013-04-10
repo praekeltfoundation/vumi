@@ -38,7 +38,7 @@ class ManholeMiddleware(BaseMiddleware):
         * pycrypto
 
 
-    :param int twisted_endpoint:
+    :param str twisted_endpoint:
         The Twisted endpoint to listen on.
         Defaults to `tcp:0` which has the reactor select any available port.
     :param list authorized_keys:
