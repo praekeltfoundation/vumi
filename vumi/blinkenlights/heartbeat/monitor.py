@@ -47,9 +47,9 @@ class RPCServer(jsonrpc.JSONRPC):
                 wkr_js['events'] = []
                 for ev in wkr['events']:
                     wkr_js['events'].append({
-                                              'state': ev.state,
-                                              'timestamp': ev.timestamp,
-                                            })
+                        'state': ev.state,
+                        'timestamp': ev.timestamp,
+                    })
         return data
 
 
