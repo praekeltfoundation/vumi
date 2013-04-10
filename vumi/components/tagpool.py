@@ -126,7 +126,7 @@ class TagpoolManager(object):
         returnValue((reason.get('owner'), reason))
 
     @Manager.calls_manager
-    def owned_by(self, owner):
+    def owned_tags(self, owner):
         owner_tag_list_key = self._owner_tag_list_key(owner)
         owned_tags = yield self.redis.smembers(owner_tag_list_key)
         returnValue([json.loads(raw_tag) for raw_tag in owned_tags])

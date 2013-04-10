@@ -241,19 +241,19 @@ class TestTxTagpoolManager(TestCase, PersistenceMixin):
         self._check_reason("me", owner, reason, {"foo": "bar"})
 
     @inlineCallbacks
-    def test_owned_by(self):
+    def test_owned_tags(self):
         tags = [["pool1", "tag1"], ["pool2", "tag2"]]
         yield self.tpm.declare_tags(tags)
         yield self.tpm.acquire_tag(tags[0][0], owner="me")
-        my_tags = yield self.tpm.owned_by("me")
+        my_tags = yield self.tpm.owned_tags("me")
         self.assertEqual(my_tags, [tags[0]])
 
     @inlineCallbacks
-    def test_owned_by_no_owner(self):
+    def test_owned_tags_no_owner(self):
         tags = [["pool1", "tag1"], ["pool2", "tag2"]]
         yield self.tpm.declare_tags(tags)
         yield self.tpm.acquire_tag(tags[0][0])
-        my_tags = yield self.tpm.owned_by(None)
+        my_tags = yield self.tpm.owned_tags(None)
         self.assertEqual(my_tags, [tags[0]])
 
 
