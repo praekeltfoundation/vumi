@@ -1,13 +1,11 @@
 import os
-
-from tempfile import NamedTemporaryFile
-
 from twisted.trial.unittest import TestCase
 from twisted.conch.manhole_ssh import ConchFactory
 from twisted.conch.ssh import (
     transport, userauth, connection, channel, session)
 from twisted.internet import defer, protocol, reactor
 from twisted.internet.defer import inlineCallbacks
+from twisted.internet.endpoints import TCP4ClientEndpoint
 
 from vumi.middleware.manhole import ManholeMiddleware
 
@@ -99,22 +97,24 @@ class ManholeMiddlewareTestCase(TestCase):
         factory.protocol = ClientTransport
         factory.channelConnected = defer.Deferred()
 
-        socket = reactor.connectTCP(host.host, host.port, factory)
+        endpoint = TCP4ClientEndpoint(reactor, host.host, host.port)
+        proto = yield endpoint.connect(factory)
 
         channel = yield factory.channelConnected
         conn = channel.conn
         term = session.packRequest_pty_req("vt100", (0, 0, 0, 0), '')
         yield conn.sendRequest(channel, 'pty-req', term, wantReply=1)
         yield conn.sendRequest(channel, 'shell', '', wantReply=1)
-        self._client_sockets.append(socket)
+        self._client_sockets.append(proto)
         defer.returnValue(channel)
 
+    @inlineCallbacks
     def tearDown(self):
-        for socket in self._client_sockets:
-            socket.disconnect()
-
         for mw in self._middlewares:
-            mw.teardown_middleware()
+            yield mw.teardown_middleware()
+
+        for proto in self._client_sockets:
+            proto.loseConnection()
 
     def get_middleware(self, config={}):
         config = dict({
