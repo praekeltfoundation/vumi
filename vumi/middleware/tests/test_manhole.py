@@ -80,12 +80,8 @@ class ClientChannel(channel.SSHChannel):
 class ManholeMiddlewareTestCase(TestCase):
 
     def setUp(self):
-
-        self.private_key_file = NamedTemporaryFile(mode='w')
-        self.private_key_file.write(private_key.toString('OPENSSH'))
-        self.private_key_file.flush()
-
-        self.pub_key_file = NamedTemporaryFile(mode='w')
+        self.pub_key_file_name = self.mktemp()
+        self.pub_key_file = open(self.pub_key_file_name, 'w')
         self.pub_key_file.write(public_key.toString('OPENSSH'))
         self.pub_key_file.flush()
 
@@ -107,7 +103,7 @@ class ManholeMiddlewareTestCase(TestCase):
 
         channel = yield factory.channelConnected
         conn = channel.conn
-        term = session.packRequest_pty_req("xterm-mono", (0, 0, 0, 0), '')
+        term = session.packRequest_pty_req("vt100", (0, 0, 0, 0), '')
         yield conn.sendRequest(channel, 'pty-req', term, wantReply=1)
         yield conn.sendRequest(channel, 'shell', '', wantReply=1)
         self._client_sockets.append(socket)
