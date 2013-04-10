@@ -137,7 +137,9 @@ class ManholeMiddlewareTestCase(TestCase):
     def test_mw(self):
         shell = yield self.open_shell(self.mw)
         shell.write('print worker.transport_name\n')
-        # read the echoed line we sent first
+        # read the echoed line we sent first, this is hard to test because
+        # I'm not seeing how I can tell Twisted not to use color in the
+        # returned response.
         yield shell.queue.get()
         # next is the server response
         received_line = yield shell.queue.get()
