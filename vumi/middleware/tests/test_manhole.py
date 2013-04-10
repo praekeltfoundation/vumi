@@ -1,83 +1,36 @@
-import os
-from twisted.trial.unittest import TestCase
-from twisted.conch.manhole_ssh import ConchFactory
-from twisted.conch.ssh import (
-    transport, userauth, connection, channel, session)
+from twisted.trial.unittest import TestCase, SkipTest
+
 from twisted.internet import defer, protocol, reactor
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet.endpoints import TCP4ClientEndpoint
 
-from vumi.middleware.manhole import ManholeMiddleware
+try:
 
+    from twisted.conch.manhole_ssh import ConchFactory
+    from twisted.conch.ssh import session
+    from vumi.middleware.manhole import ManholeMiddleware
+    from vumi.middleware.manhole_utils import ClientTransport
 
-# these are shipped along with Twisted
-private_key = ConchFactory.privateKeys['ssh-rsa']
-public_key = ConchFactory.publicKeys['ssh-rsa']
+    # these are shipped along with Twisted
+    private_key = ConchFactory.privateKeys['ssh-rsa']
+    public_key = ConchFactory.publicKeys['ssh-rsa']
+
+except ImportError:
+    ssh = False
+else:
+    ssh = True
 
 
 class DummyWorker(object):
     pass
 
 
-class ClientTransport(transport.SSHClientTransport):
-
-    def verifyHostKey(self, pub_key, fingerprint):
-        return defer.succeed(1)
-
-    def connectionSecure(self):
-        return self.requestService(ClientUserAuth(
-            os.getlogin(), ClientConnection(self.factory.channelConnected)))
-
-
-class ClientUserAuth(userauth.SSHUserAuthClient):
-
-    def getPassword(self, prompt=None):
-        # Not doing password based auth
-        return
-
-    def getPublicKey(self):
-        return public_key.blob()
-
-    def getPrivateKey(self):
-        return defer.succeed(private_key.keyObject)
-
-
-class ClientConnection(connection.SSHConnection):
-
-    def __init__(self, channel_connected):
-        connection.SSHConnection.__init__(self)
-        self._channel_connected = channel_connected
-
-    def serviceStarted(self):
-        channel = ClientChannel(self._channel_connected,
-                                conn=self)
-        self.openChannel(channel)
-
-
-class ClientChannel(channel.SSHChannel):
-
-    name = 'session'
-
-    def __init__(self, channel_connected, *args, **kwargs):
-        channel.SSHChannel.__init__(self, *args, **kwargs)
-        self._channel_connected = channel_connected
-        self.buffer = u''
-        self.queue = defer.DeferredQueue()
-
-    def channelOpen(self, data):
-        self._channel_connected.callback(self)
-
-    def dataReceived(self, data):
-        self.buffer += data
-        lines = self.buffer.split('\r\n')
-        for line in lines[:-1]:
-            self.queue.put(line)
-        self.buffer = lines[-1]
-
-
 class ManholeMiddlewareTestCase(TestCase):
 
     def setUp(self):
+        if not ssh:
+            raise SkipTest('Crypto requirements missing. Skipping Test.')
+
         self.pub_key_file_name = self.mktemp()
         self.pub_key_file = open(self.pub_key_file_name, 'w')
         self.pub_key_file.write(public_key.toString('OPENSSH'))
