@@ -6,11 +6,9 @@ from copy import deepcopy
 from twisted.python import log
 from twisted.application.service import MultiService
 from twisted.application.internet import TCPClient
-from twisted.internet.defer import (
-    inlineCallbacks, returnValue, maybeDeferred, fail)
+from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet.task import LoopingCall
 from twisted.internet import protocol, reactor
-from twisted.python.failure import Failure
 from twisted.web.resource import Resource
 import txamqp
 from txamqp.client import TwistedDelegate
