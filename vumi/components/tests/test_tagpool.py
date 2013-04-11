@@ -193,6 +193,92 @@ class TestTxTagpoolManager(TestCase, PersistenceMixin):
         self.assertEqual((yield self.tpm.get_metadata("pool")),
                          metadata)
 
+    def _check_reason(self, expected_owner, owner, reason, expected_data):
+        self.assertEqual(expected_owner, owner)
+        self.assertEqual(expected_owner, reason.pop('owner'))
+        timestamp = reason.pop('timestamp')
+        self.assertTrue(isinstance(timestamp, float))
+        self.assertEqual(reason, expected_data)
+
+    @inlineCallbacks
+    def test_acquired_by(self):
+        tag = ["pool", "tag"]
+        yield self.tpm.declare_tags([tag])
+        yield self.tpm.acquire_tag(tag[0], "me", {"foo": "bar"})
+        owner, reason = yield self.tpm.acquired_by(tag)
+        self._check_reason("me", owner, reason, {"foo": "bar"})
+
+    @inlineCallbacks
+    def test_acquired_by_undeclared_tags(self):
+        tag = ["pool", "tag"]
+        owner, reason = yield self.tpm.acquired_by(tag)
+        self.assertEqual(owner, None)
+        self.assertEqual(reason, None)
+
+    @inlineCallbacks
+    def test_acquired_by_no_owner(self):
+        tag = ["pool", "tag"]
+        yield self.tpm.declare_tags([tag])
+        yield self.tpm.acquire_tag(tag[0])
+        owner, reason = yield self.tpm.acquired_by(tag)
+        self._check_reason(None, owner, reason, {})
+
+    @inlineCallbacks
+    def test_acquired_by_unicode_owner(self):
+        tag = ["pool", "tag"]
+        yield self.tpm.declare_tags([tag])
+        yield self.tpm.acquire_tag(tag[0], u"mé")
+        owner, reason = yield self.tpm.acquired_by(tag)
+        self._check_reason(u"mé", owner, reason, {})
+
+    @inlineCallbacks
+    def test_acquired_by_from_unicode_tag(self):
+        tag = [u"poöl", u"tág"]
+        yield self.tpm.declare_tags([tag])
+        yield self.tpm.acquire_tag(tag[0], "me")
+        owner, reason = yield self.tpm.acquired_by(tag)
+        self._check_reason(u"me", owner, reason, {})
+
+    @inlineCallbacks
+    def test_acquired_by_after_using_specific_tag(self):
+        tag = ["pool", "tag"]
+        yield self.tpm.declare_tags([tag])
+        yield self.tpm.acquire_specific_tag(tag, "me", {"foo": "bar"})
+        owner, reason = yield self.tpm.acquired_by(tag)
+        self._check_reason("me", owner, reason, {"foo": "bar"})
+
+    @inlineCallbacks
+    def test_owned_tags(self):
+        tags = [["pool1", "tag1"], ["pool2", "tag2"]]
+        yield self.tpm.declare_tags(tags)
+        yield self.tpm.acquire_tag(tags[0][0], owner="me")
+        my_tags = yield self.tpm.owned_tags("me")
+        self.assertEqual(my_tags, [tags[0]])
+
+    @inlineCallbacks
+    def test_owned_tags_no_owner(self):
+        tags = [["pool1", "tag1"], ["pool2", "tag2"]]
+        yield self.tpm.declare_tags(tags)
+        yield self.tpm.acquire_tag(tags[0][0])
+        my_tags = yield self.tpm.owned_tags(None)
+        self.assertEqual(my_tags, [tags[0]])
+
+    @inlineCallbacks
+    def test_owned_tags_unicode_owner(self):
+        tags = [["pool1", "tag1"], ["pool2", "tag2"]]
+        yield self.tpm.declare_tags(tags)
+        yield self.tpm.acquire_tag(tags[0][0], owner=u"mé")
+        my_tags = yield self.tpm.owned_tags(u"mé")
+        self.assertEqual(my_tags, [tags[0]])
+
+    @inlineCallbacks
+    def test_owned_tags_unicode_tags(self):
+        tags = [[u"poöl1", u"tág1"], [u"poöl2", u"tág2"]]
+        yield self.tpm.declare_tags(tags)
+        yield self.tpm.acquire_tag(tags[0][0], owner="me")
+        my_tags = yield self.tpm.owned_tags(u"me")
+        self.assertEqual(my_tags, [tags[0]])
+
 
 class TestTagpoolManager(TestTxTagpoolManager):
     sync_persistence = True

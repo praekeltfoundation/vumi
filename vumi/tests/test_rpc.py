@@ -19,6 +19,12 @@ class TestSignature(TestCase):
         self.assertRaises(RpcCheckError, s.check_params,
                           [None, 1, u"a", 3], {})
 
+    def test_check_params_with_defaults(self):
+        s = Signature(lambda slf, x, y=u"default": x,
+                      x=Int(), y=Unicode())
+        s.check_params([None, 1, u"a"], {})
+        s.check_params([None, 1], {})
+
     def test_check_result(self):
         s = Signature(lambda slf, x: x, x=Int("foo"),
                       returns=Int("bar"))
@@ -154,6 +160,12 @@ class TestList(TestCase):
         l.check("name", [])
         l.check("name", [1, 2, 3])
         self.assertRaises(RpcCheckError, l.check, "name", [1, 0.1])
+
+    def test_length(self):
+        l = List(length=2)
+        l.check("name", [1, 2])
+        self.assertRaises(RpcCheckError, l.check, "name", [])
+        self.assertRaises(RpcCheckError, l.check, "name", [1, 2, 3])
 
 
 class TestDict(TestCase):
