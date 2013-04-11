@@ -80,4 +80,10 @@ exec { "RabbitMQ setup":
 file {'/etc/riak/app.config':
     ensure=>present,
     source=>'puppet:///modules/vumi/riak-app.config'
+
+}
+
+service {'riak':
+    ensure    => 'running',
+    subscribe => File['/etc/riak/app.config']
 }
