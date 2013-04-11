@@ -401,9 +401,9 @@ class VumiMapReduce(object):
         :param str end_value:
             The end value to search on. Defaults to `None`.
         """
-        mr = mgr.riak_map_reduce(
-            ).index(mgr.bucket_name(model), index_name, start_value, end_value
-            ).map("""
+        mr = mgr.riak_map_reduce().index(
+            mgr.bucket_name(model), index_name, start_value, end_value).map(
+                """
                 function(value, keyData, arg) {
                     /*
                         skip deleted values, might show up during a test
@@ -424,9 +424,9 @@ class VumiMapReduce(object):
                     }
                     return [];
                 }
-            """, {
-                'arg': query,  # Client lib turns this to JSON for us.
-            })
+                """, {
+                    'arg': query,  # Client lib turns this to JSON for us.
+                })
         return cls(mgr, mr)
 
     @classmethod

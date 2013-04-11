@@ -26,10 +26,10 @@ class LoggingMiddlewareTestCase(TestCase):
         mw = self.mklogger({})
         with LogCatcher() as lc:
             for handler, rkey in [
-                (mw.handle_inbound, "inbound"),
-                (mw.handle_outbound, "outbound"),
-                (mw.handle_event, "event"),
-                (mw.handle_failure, "failure")]:
+                    (mw.handle_inbound, "inbound"),
+                    (mw.handle_outbound, "outbound"),
+                    (mw.handle_event, "event"),
+                    (mw.handle_failure, "failure")]:
                 msg = DummyMessage(rkey)
                 result = handler(msg, "dummy_connector")
                 self.assertEqual(result, msg)

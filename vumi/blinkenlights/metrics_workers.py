@@ -223,10 +223,11 @@ class MetricAggregator(Worker):
                 ts = ts_key * self.bucket_size
                 items = self.buckets[ts_key].iteritems()
                 for metric_name, (agg_set, values) in items:
+                    values = [v for t, v in sorted(values)]
                     for agg_name in agg_set:
                         agg_metric = "%s.%s" % (metric_name, agg_name)
                         agg_func = Aggregator.from_name(agg_name)
-                        agg_value = agg_func([v[1] for v in values])
+                        agg_value = agg_func(values)
                         aggregates.append((agg_metric, agg_value))
 
                 for agg_metric, agg_value in aggregates:

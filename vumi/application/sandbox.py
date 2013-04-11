@@ -599,7 +599,6 @@ class SandboxCommand(Message):
 
 
 class SandboxConfig(ApplicationWorker.CONFIG_CLASS):
-    "Sandbox configuration."
 
     sandbox = ConfigDict(
         "Dictionary of resources to provide to the sandbox."

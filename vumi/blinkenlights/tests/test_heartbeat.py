@@ -11,9 +11,7 @@ from vumi.tests.fake_amqp import FakeAMQPBroker
 from vumi.blinkenlights.heartbeat import publisher
 from vumi.blinkenlights.heartbeat import monitor
 from vumi.utils import generate_worker_id
-from vumi.blinkenlights.heartbeat.storage import (hostinfo_key,
-                                                  attr_key,
-                                                  issue_key)
+from vumi.blinkenlights.heartbeat.storage import hostinfo_key
 
 from vumi.errors import MissingMessageField
 
