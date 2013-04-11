@@ -45,6 +45,13 @@ class TestTagpoolApiServer(TestCase, PersistenceMixin):
         # pool3 is empty but has metadata
         yield self.tagpool.set_metadata("pool3", {"meta": "data"})
 
+    def _check_reason(self, result, expected_owner, expected_reason):
+        owner, reason = result
+        self.assertEqual(owner, expected_owner)
+        self.assertEqual(reason.pop('owner'), expected_owner)
+        self.assertTrue(isinstance(reason.pop('timestamp'), float))
+        self.assertEqual(reason, expected_reason)
+
     @inlineCallbacks
     def test_acquire_tag(self):
         result = yield self.proxy.callRemote("acquire_tag", "pool1")
@@ -53,6 +60,14 @@ class TestTagpoolApiServer(TestCase, PersistenceMixin):
                          [("pool1", "tag1")])
         result = yield self.proxy.callRemote("acquire_tag", "pool2")
         self.assertEqual(result, None)
+
+    @inlineCallbacks
+    def test_acquire_tag_with_owner_and_reason(self):
+        result = yield self.proxy.callRemote(
+            "acquire_tag", "pool1", "me", {"foo": "bar"})
+        self.assertEqual(result, ["pool1", "tag1"])
+        result = yield self.tagpool.acquired_by(["pool1", "tag1"])
+        self._check_reason(result, "me", {"foo": "bar"})
 
     @inlineCallbacks
     def test_acquire_specific_tag(self):
@@ -64,6 +79,14 @@ class TestTagpoolApiServer(TestCase, PersistenceMixin):
         result = yield self.proxy.callRemote("acquire_specific_tag",
                                              ["pool2", "tag1"])
         self.assertEqual(result, None)
+
+    @inlineCallbacks
+    def test_acquire_specific_tag_with_owner_and_reason(self):
+        result = yield self.proxy.callRemote(
+            "acquire_specific_tag", ["pool1", "tag1"], "me", {"foo": "bar"})
+        self.assertEqual(result, ["pool1", "tag1"])
+        result = yield self.tagpool.acquired_by(["pool1", "tag1"])
+        self._check_reason(result, "me", {"foo": "bar"})
 
     @inlineCallbacks
     def test_release_tag(self):
@@ -137,6 +160,27 @@ class TestTagpoolApiServer(TestCase, PersistenceMixin):
         result = yield self.proxy.callRemote("inuse_tags", "pool3")
         self.assertEqual(result, [])
 
+    @inlineCallbacks
+    def test_acquired_by(self):
+        result = yield self.proxy.callRemote("acquired_by", ["pool1", "tag1"])
+        self.assertEqual(result, [None, None])
+        result = yield self.proxy.callRemote("acquired_by", ["pool2", "tag1"])
+        self._check_reason(result, None, {})
+        yield self.tagpool.acquire_tag("pool1", owner="me",
+                                       reason={"foo": "bar"})
+        result = yield self.proxy.callRemote("acquired_by", ["pool1", "tag1"])
+        self._check_reason(result, "me", {"foo": "bar"})
+
+    @inlineCallbacks
+    def test_owned_tags(self):
+        result = yield self.proxy.callRemote("owned_tags", None)
+        self.assertEqual(sorted(result),
+                         [[u'pool2', u'tag1'], [u'pool2', u'tag2']])
+        yield self.tagpool.acquire_tag("pool1", owner="me",
+                                       reason={"foo": "bar"})
+        result = yield self.proxy.callRemote("owned_tags", "me")
+        self.assertEqual(result, [["pool1", "tag1"]])
+
 
 class TestTagpoolApiWorker(VumiWorkerTestCase, PersistenceMixin):
 
@@ -176,12 +220,18 @@ class TestTagpoolApiWorker(VumiWorkerTestCase, PersistenceMixin):
     def test_method_help(self):
         worker, proxy = yield self.get_api_worker()
         result = yield proxy.callRemote('system.methodHelp', 'acquire_tag')
-        self.assertEqual(result, "\n".join([
+        self.assertEqual(result, u"\n".join([
             "Acquire a tag from the pool (returns None if"
             " no tags are avaliable).",
             "",
             ":param Unicode pool:",
             "    Name of pool to acquire tag from.",
+            ":param Unicode owner:",
+            "    Owner acquiring tag (or None). May be null. Default: None.",
+            ":param Dict reason:",
+            "    Metadata on why tag is being acquired (or None)."
+            " May be null.",
+            "    Default: None.",
             ":rtype Tag:",
             "    Tag acquired (or None).",
         ]))
@@ -191,4 +241,4 @@ class TestTagpoolApiWorker(VumiWorkerTestCase, PersistenceMixin):
         worker, proxy = yield self.get_api_worker()
         result = yield proxy.callRemote('system.methodSignature',
                                         'acquire_tag')
-        self.assertEqual(result, [[u'array', u'string']])
+        self.assertEqual(result, [[u'array', u'string', u'string', u'struct']])

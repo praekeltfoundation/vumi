@@ -21,19 +21,25 @@ class TagpoolApiServer(JSONRPC):
         self.tagpool = tagpool
 
     @signature(pool=Unicode("Name of pool to acquire tag from."),
+               owner=Unicode("Owner acquiring tag (or None).", null=True),
+               reason=Dict("Metadata on why tag is being acquired (or None).",
+                           null=True),
                returns=Tag("Tag acquired (or None).", null=True))
-    def jsonrpc_acquire_tag(self, pool):
+    def jsonrpc_acquire_tag(self, pool, owner=None, reason=None):
         """Acquire a tag from the pool (returns None if no tags are avaliable).
            """
-        d = self.tagpool.acquire_tag(pool)
+        d = self.tagpool.acquire_tag(pool, owner, reason)
         return d
 
     @signature(tag=Tag("Tag to acquire as [pool, tagname] pair."),
+               owner=Unicode("Owner acquiring tag (or None).", null=True),
+               reason=Dict("Metadata on why tag is being acquired (or None).",
+                           null=True),
                returns=Tag("Tag acquired (or None).", null=True))
-    def jsonrpc_acquire_specific_tag(self, tag):
+    def jsonrpc_acquire_specific_tag(self, tag, owner=None, reason=None):
         """Acquire the specific tag (returns None if the tag is unavailable).
            """
-        d = self.tagpool.acquire_specific_tag(tag)
+        d = self.tagpool.acquire_specific_tag(tag, owner, reason)
         return d
 
     @signature(tag=Tag("Tag to release."))
@@ -86,6 +92,21 @@ class TagpoolApiServer(JSONRPC):
         """Return a list of tags currently in use within the given pool."""
         d = self.tagpool.inuse_tags(pool)
         return d
+
+    @signature(tag=Tag("Tag to return ownership information on."),
+               returns=List("List of owner and reason.", length=2, null=True))
+    def jsonrpc_acquired_by(self, tag):
+        """Returns the owner of an acquired tag and why is was acquired."""
+        d = self.tagpool.acquired_by(tag)
+        d.addCallback(list)
+        return d
+
+    @signature(owner=Unicode("Owner of tags (or None for unowned tags).",
+                             null=True),
+               returns=List("List of tags owned.", item_type=Tag()))
+    def jsonrpc_owned_tags(self, owner):
+        """Return a list of tags currently owned by an owner."""
+        return self.tagpool.owned_tags(owner)
 
 
 class TagpoolApiWorker(BaseWorker):

@@ -26,7 +26,7 @@ class Signature(object):
         self.argspec = inspect.getargspec(f)
         self.defaults = [self.NO_DEFAULT] * (
             len(self.argspec.args) - len(self.argspec.defaults or ()))
-        self.defaults += list(self.argspec.args)
+        self.defaults += list(self.argspec.defaults or ())
 
     def check_params(self, args, kw):
         if kw:
@@ -34,7 +34,8 @@ class Signature(object):
         if len(args) > len(self.argspec.args):
             raise RpcCheckError("Too many positional arguments.")
 
-        args = list(args) + [self.NO_ARG] * (len(self.argspec) - len(args))
+        missing_arg_count = len(self.argspec.args) - len(args)
+        args = list(args) + [self.NO_ARG] * missing_arg_count
         arg_tuples = itertools.izip(self.argspec.args, self.defaults, args)
         if self.requires_self:
             next(arg_tuples)
@@ -189,12 +190,17 @@ class List(RpcType):
 
     def __init__(self, *args, **kw):
         self._item_type = kw.pop('item_type', None)
+        self._length = kw.pop('length', None)
         super(List, self).__init__(*args, **kw)
 
     def nonnull_check(self, name, value):
         if not isinstance(value, list):
             raise RpcCheckError("List value expected for %s (got %r)"
                                 % (name, value))
+        if self._length is not None and len(value) != self._length:
+            raise RpcCheckError("List value for %s expected to have"
+                                " length %d (got %r)"
+                                % (name, self._length, value))
         if self._item_type is not None:
             item_name = 'items of %s' % (name,)
             for item in value:
