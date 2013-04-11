@@ -66,9 +66,9 @@ class ConfigField(object):
 
     def get_doc(self):
         if self.field_type is None:
-            header = self.name
+            header = ":param %s:" % (self.name,)
         else:
-            header = '%s (%s)' % (self.name, self.field_type)
+            header = ":param %s %s:" % (self.field_type, self.name)
         return header, self.doc
 
     def setup(self, name):
@@ -186,7 +186,7 @@ def generate_doc(cls, fields, header_indent='', indent=' ' * 4):
     for field in fields:
         header, field_doc = field.get_doc()
         doc.append("")
-        doc.append(header_indent + ':%s:' % (header,))
+        doc.append(header_indent + header)
         doc.append("")
         doc.extend(textwrap.wrap(field_doc, initial_indent=indent,
                                  subsequent_indent=indent))
