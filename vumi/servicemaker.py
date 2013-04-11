@@ -54,9 +54,6 @@ class VumiOptions(usage.Options):
         ["vumi-config", None, None,
          "YAML config file for setting core vumi options (any command-line"
          " parameter marked with an asterisk)"],
-        ["worker-number", None, None,
-          "For multiple instances of the same worker, this is the identifying"
-          "number", int],
         ["system-id", None, None,
          "An identifier for a collection of Vumi workers"],
     ]
