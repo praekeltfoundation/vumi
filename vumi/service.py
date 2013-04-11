@@ -201,7 +201,7 @@ class Worker(MultiService, object):
     def routing_key_to_class_name(self, routing_key):
         return ''.join(map(lambda s: s.capitalize(), routing_key.split('.')))
 
-    def consume(self, routing_key, callback, queue_name=None,
+    def consume(self, routing_key, callback, errback=None, queue_name=None,
                 exchange_name='vumi', exchange_type='direct', durable=True,
                 message_class=None, paused=False):
 
@@ -221,7 +221,7 @@ class Worker(MultiService, object):
         klass = type(class_name, (DynamicConsumer,), kwargs)
         if message_class is not None:
             klass.message_class = message_class
-        return self.start_consumer(klass, callback)
+        return self.start_consumer(klass, callback, errback=errback)
 
     def start_consumer(self, consumer_class, *args, **kw):
         return self._amqp_client.start_consumer(consumer_class, *args, **kw)
