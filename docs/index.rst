@@ -13,9 +13,10 @@ Contents:
 
    overview.rst
    first-smpp-bind.rst
-   transports.rst
-   dispatchers.rst
-   middleware.rst
+   applications/index.rst
+   transports/index.rst
+   dispatchers/index.rst
+   middleware/index.rst
    metrics.rst
    roadmap.rst
    release-notes.rst

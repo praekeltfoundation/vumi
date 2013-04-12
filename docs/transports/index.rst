@@ -9,6 +9,6 @@ Contents
 .. toctree::
     :maxdepth: 1
 
-    transports/http-transport.rst
-    transports/smpp-transports.rst
-    transports/vas2net-transports.rst
+    http-transport.rst
+    smpp-transports.rst
+    vas2net-transports.rst

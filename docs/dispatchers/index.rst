@@ -144,5 +144,5 @@ write your own router class in the following sections:
 .. toctree::
     :maxdepth: 1
 
-    dispatchers/builtin.rst
-    dispatchers/implementing.rst
+    builtin.rst
+    implementing.rst
