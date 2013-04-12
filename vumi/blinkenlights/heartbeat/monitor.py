@@ -43,7 +43,7 @@ class WorkerInstance(object):
 
 class HeartBeatMonitor(Worker):
 
-    deadline = 30
+    DEFAULT_DEADLINE = 30
 
     # Instance vars:
     #
@@ -60,7 +60,7 @@ class HeartBeatMonitor(Worker):
     def startWorker(self):
         log.msg("Heartbeat monitor initializing")
 
-        self.deadline = self.config.get("deadline", self.deadline)
+        self.deadline = self.config.get("deadline", self.DEFAULT_DEADLINE)
 
         redis_cfg = self.config['redis_manager']
         self._redis = yield TxRedisManager.from_config(redis_cfg)
