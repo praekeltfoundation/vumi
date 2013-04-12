@@ -33,7 +33,7 @@ class WorkerInstance(object):
 
     def __eq__(self, obj):
         if not isinstance(obj, WorkerInstance):
-            return False
+            return NotImplemented
         return (self.hostname == obj.hostname and
                 self.pid == obj.pid)
 
