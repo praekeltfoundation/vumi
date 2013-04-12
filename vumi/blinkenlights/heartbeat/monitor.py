@@ -34,14 +34,11 @@ class WorkerInstance(object):
     def __eq__(self, obj):
         if not isinstance(obj, WorkerInstance):
             return False
-        if self.hostname != obj.hostname:
-            return False
-        if self.pid != obj.pid:
-            return False
-        return True
+        return (self.hostname == obj.hostname and
+                self.pid == obj.pid)
 
     def __hash__(self):
-        return hash(self.hostname + str(self.pid))
+        return hash((self.hostname, self.pid))
 
 
 class HeartBeatMonitor(Worker):
