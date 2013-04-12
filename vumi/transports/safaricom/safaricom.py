@@ -28,6 +28,7 @@ class SafaricomTransport(HttpRpcTransport):
     """
 
     transport_type = 'ussd'
+    ENCODING = 'utf-8'
 
     EXPECTED_FIELDS = set(['ORIG', 'DEST', 'SESSION_ID', 'USSD_PARAMS'])
 
@@ -120,6 +121,6 @@ class SafaricomTransport(HttpRpcTransport):
         else:
             command = 'CON'
         self.finish_request(message['in_reply_to'],
-            ('%s %s' % (command, message['content'])).encode('utf-8'))
+            ('%s %s' % (command, message['content'])).encode(self.ENCODING))
         return self.publish_ack(user_message_id=message['message_id'],
             sent_message_id=message['message_id'])

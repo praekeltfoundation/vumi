@@ -11,6 +11,8 @@ from twisted.internet.defer import inlineCallbacks
 from vumi.tests.utils import get_stubbed_worker
 from vumi.blinkenlights.heartbeat import publisher
 from vumi.blinkenlights.heartbeat import monitor
+from vumi.blinkenlights.heartbeat.storage import hostinfo_key
+from vumi.utils import generate_worker_id
 
 
 class MockHeartBeatMonitor(monitor.HeartBeatMonitor):
@@ -23,16 +25,39 @@ class MockHeartBeatMonitor(monitor.HeartBeatMonitor):
 class TestHeartBeatMonitor(TestCase):
 
     def setUp(self):
-        self.worker = get_stubbed_worker(MockHeartBeatMonitor, config={})
+        config = {
+            'redis_manager': {
+                'key_prefix': 'heartbeats',
+                'db': 5,
+                'FAKE_REDIS': True,
+            },
+            'monitored_systems': {
+                'system-1': {
+                    'system_name': 'system-1',
+                    'system_id': 'system-1',
+                    'workers': {
+                        'twitter_transport': {
+                            'name': 'twitter_transport',
+                            'min_procs': 2,
+                        }
+                    }
+                }
+            }
+        }
+        self.worker = get_stubbed_worker(monitor.HeartBeatMonitor, config)
 
     def tearDown(self):
         self.worker.stopWorker()
 
     def gen_fake_attrs(self, timestamp):
+        sys_id = 'system-1'
+        wkr_name = 'twitter_transport'
+        wkr_id = generate_worker_id(sys_id, wkr_name)
         attrs = {
             'version': publisher.HeartBeatMessage.VERSION_20130319,
-            'system_id': "system-1",
-            'worker_id': "worker-1",
+            'system_id': sys_id,
+            'worker_id': wkr_id,
+            'worker_name': wkr_name,
             'hostname': "test-host-1",
             'timestamp': timestamp,
             'pid': os.getpid(),
@@ -42,46 +67,87 @@ class TestHeartBeatMonitor(TestCase):
     @inlineCallbacks
     def test_update(self):
         """
-        Test the processing of a message
+        Test the processing of a message.
+
         """
 
         yield self.worker.startWorker()
 
-        attrs = self.gen_fake_attrs(time.time())
+        attrs1 = self.gen_fake_attrs(time.time())
+        attrs2 = self.gen_fake_attrs(time.time())
 
-        # process the fake message
-        self.worker.update(attrs)
+        # process the fake message (and process it twice to verify idempotency)
+        self.worker.update(attrs1)
+        self.worker.update(attrs1)
 
-        # retrieve the record corresponding to the worker in the fake message
-        wkr_record = self.worker._ensure(attrs['system_id'],
-                                         attrs['worker_id'])
+        # retrieve the instance set corresponding to the worker_id in the
+        # fake message
+        instance_set = self.worker._instance_sets[attrs1['worker_id']]
+        self.assertEqual(len(instance_set), 1)
+        inst = instance_set.pop()
+        instance_set.add(inst)
+        self.assertEqual(inst.hostname, "test-host-1")
+        self.assertEqual(inst.pid, os.getpid())
 
-        # and sanity test...
-        self.assertEqual(wkr_record['system_id'], attrs['system_id'])
-        self.assertEqual(wkr_record['worker_id'], attrs['worker_id'])
-        self.assertEqual(wkr_record['events'][-1].state, monitor.Event.ALIVE)
+        # now process a message from another instance of the worker
+        # and verify that there are two recorded instances
+        attrs2['hostname'] = 'test-host-2'
+        self.worker.update(attrs2)
+        self.assertEqual(len(instance_set), 2)
 
     @inlineCallbacks
-    def test_find_missing_workers(self):
-        """ Test that we correctly identify missing workers """
+    def test_verify_workers_fail(self):
+        # here we test the verification of a worker who
+        # who had less than min_procs check in
 
         yield self.worker.startWorker()
+        fkredis = self.worker._redis
 
-        deadline = 100
+        attrs = self.gen_fake_attrs(time.time())
+        wkr_id = attrs['worker_id']
+        # process the fake message ()
+        self.worker.update(attrs)
 
-        # create a fake message which is on-time
-        msg = self.gen_fake_attrs(deadline)
-        self.worker.update(msg)
+        lst_fail, lst_pass = self.worker._verify_workers()
+        # test return values
+        self.assertEqual(len(lst_fail), 1)
+        self.assertEqual(len(lst_pass), 0)
+        self.assertEqual(lst_fail[0][0], attrs['worker_id'])  # worker id
+        self.assertEqual(lst_fail[0][1], 1)  # proc count
 
-        # verify that the worker is not late
-        missing = self.worker._find_missing_workers(deadline)
-        self.assertEqual(missing, [])
+        # test that hostinfo was persisted into redis
+        key = hostinfo_key(wkr_id)
+        count = yield fkredis.hget(key, 'test-host-1')
+        self.assertEqual(count, '1')
 
-        # create a fake message which is late
-        msg = self.gen_fake_attrs(deadline - 1)
-        self.worker.update(msg)
+    @inlineCallbacks
+    def test_verify_workers_pass(self):
+        # here we test the verification of a worker who
+        # checked in more than min_procs
 
-        # verify that the worker is found to be late
-        missing = self.worker._find_missing_workers(deadline)
-        self.assertEqual(len(missing), 1)
-        self.assertEqual(missing[0]['worker_id'], msg['worker_id'])
+        yield self.worker.startWorker()
+        fkredis = self.worker._redis
+
+        attrs = self.gen_fake_attrs(time.time())
+        wkr_id = attrs['worker_id']
+        # process the fake message ()
+        self.worker.update(attrs)
+        attrs['hostname'] = 'test-host-2'
+        self.worker.update(attrs)
+        attrs['pid'] = 23
+        # and for kicks, change pid, so that 2 instances are registered
+        # as having checked in for test-host-2
+        self.worker.update(attrs)
+
+        lst_fail, lst_pass = self.worker._verify_workers()
+        # test return values
+        self.assertEqual(len(lst_fail), 0)
+        self.assertEqual(len(lst_pass), 1)
+        self.assertEqual(lst_pass[0][0], attrs['worker_id'])  # worker id
+
+        # test that hostinfo was persisted into redis
+        key = hostinfo_key(wkr_id)
+        count = yield fkredis.hget(key, 'test-host-1')
+        self.assertEqual(count, '1')
+        count = yield fkredis.hget(key, 'test-host-2')
+        self.assertEqual(count, '2')

@@ -354,6 +354,7 @@ class FakeRedisCharsetHandlingTestCase(TestCase):
         yield self.assert_redis_op(redis, 'Zo Destroyer of Ascii',
             'get', 'name')
 
+
 class FakeTxRedisTestCase(FakeRedisTestCase):
     def setUp(self):
         self.redis = FakeRedis(async=True)

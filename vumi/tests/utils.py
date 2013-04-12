@@ -114,7 +114,6 @@ def get_fake_amq_client(broker=None):
 def get_stubbed_worker(worker_class, config=None, broker=None):
     worker = worker_class({}, config)
     worker._amqp_client = get_fake_amq_client(broker)
-    worker._heartbeat_enabled = False
     return worker
 
 
@@ -442,6 +441,11 @@ class VumiWorkerTestCase(TestCase):
         :param cls: The worker class to instantiate.
         :param start: True to start the worker (default), False otherwise.
         """
+
+        # When possible, always try and enable heartbeat setup in tests.
+        # so make sure worker_name is set
+        if (config is not None) and ('worker_name' not in config):
+            config['worker_name'] = "unnamed"
 
         worker = get_stubbed_worker(cls, config, self._amqp)
         self._workers.append(worker)
