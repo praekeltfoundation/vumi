@@ -1,10 +1,16 @@
 Vumi Transports
-================================
+===============
 
-Vumi supports various transports, the internal specifics are documented
-for each separately below.
+Transports provide the means for Vumi to send and receive messages
+from people, usually via a third-party such as a mobile network
+operator or instant message service provider.
 
-Contents
+Vumi comes with support for numerous transports built-in. These
+include SMPP (SMS), SSMI (USSD), SMSSync (SMS over your Android
+phone), XMPP (Google Chat and Jabber), Twitter, IRC, telnet and
+numerous SMS and USSD transports for specific mobile network
+aggregators.
+
 
 .. toctree::
     :maxdepth: 1
