@@ -149,6 +149,8 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
             'to_addr': ['+123456'],
             'content': 'foo',
         })
+        self.assertEqual(response.headers.getRawHeaders('content-type'),
+                         ['application/json; charset=utf-8'])
         self._check_messages(response, [
             {'to_addr': '+123456', 'content':  u'foo'}])
 

@@ -54,7 +54,7 @@ class SendResource(Resource):
 
     def render_(self, request):
         log.msg("Send request: %s" % (request,))
-        request.setHeader("content-type", "application/json")
+        request.setHeader("content-type", "application/json; charset=utf-8")
         d = self.application.handle_raw_outbound_message(request)
         d.addCallback(lambda msgs: self.finish_request(request, msgs))
         d.addErrback(lambda f: self.fail_request(request, f))
