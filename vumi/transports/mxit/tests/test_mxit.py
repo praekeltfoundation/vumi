@@ -11,7 +11,6 @@ from vumi.utils import http_request_full
 class TestMxitTransportTestCase(TransportTestCase):
 
     transport_class = MxitTransport
-    timeout = 1
 
     @inlineCallbacks
     def setUp(self):
@@ -65,7 +64,8 @@ class TestMxitTransportTestCase(TransportTestCase):
         })
 
     def test_parse_profile(self):
-        self.assertEqual(self.transport.parse_profile(self.sample_profile_str),
+        self.assertEqual(
+            self.transport.parse_profile(self.sample_profile_str),
             {
                 'country_code': 'cc',
                 'date_of_birth': 'dob',
@@ -76,8 +76,8 @@ class TestMxitTransportTestCase(TransportTestCase):
             })
 
     def test_html_decode(self):
-        self.assertEqual(self.transport.html_decode(self.sample_html_str),
-            '<&>')
+        self.assertEqual(
+            self.transport.html_decode(self.sample_html_str), '<&>')
 
     def test_get_request_data(self):
         req = Request(None, True)
@@ -127,8 +127,8 @@ class TestMxitTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_request(self):
-        resp_d = http_request_full(self.url,
-            headers=self.sample_req_headers)
+        resp_d = http_request_full(
+            self.url, headers=self.sample_req_headers)
         [msg] = yield self.wait_for_dispatched_messages(1)
         reply = TransportUserMessage(**msg.payload).reply(
             self.sample_menu_resp, continue_session=True)
