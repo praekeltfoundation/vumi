@@ -80,8 +80,8 @@ class MxitTransport(HttpRpcTransport):
 
     def handle_raw_inbound_message(self, msg_id, request):
         if not self.is_mxit_request(request):
-            return self.finish_request(msg_id,
-                data=http.RESPONSES[http.BAD_REQUEST],
+            return self.finish_request(
+                msg_id, data=http.RESPONSES[http.BAD_REQUEST],
                 code=http.BAD_REQUEST)
 
         data = self.get_request_data(request)
@@ -100,14 +100,15 @@ class MxitTransport(HttpRpcTransport):
     @inlineCallbacks
     def handle_outbound_message(self, message):
         self.emit("MxitTransport consuming %s" % (message))
-        missing_fields = self.ensure_message_values(message,
-                            ['in_reply_to', 'content'])
+        missing_fields = self.ensure_message_values(
+            message, ['in_reply_to', 'content'])
         if missing_fields:
             yield self.reject_message(message, missing_fields)
         else:
             yield self.render_response(message)
-            yield self.publish_ack(user_message_id=message['message_id'],
-                    sent_message_id=message['message_id'])
+            yield self.publish_ack(
+                user_message_id=message['message_id'],
+                sent_message_id=message['message_id'])
 
     @inlineCallbacks
     def render_response(self, message):
@@ -115,5 +116,5 @@ class MxitTransport(HttpRpcTransport):
         request = self.get_request(msg_id)
         if request:
             data = yield flattenString(None, MxitResponse(message))
-            super(MxitTransport, self).finish_request(msg_id, data,
-                code=http.OK)
+            super(MxitTransport, self).finish_request(
+                msg_id, data, code=http.OK)
