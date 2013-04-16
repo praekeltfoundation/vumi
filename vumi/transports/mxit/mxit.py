@@ -47,6 +47,9 @@ class MxitTransport(HttpRpcTransport):
         ], profile.split(',')))
 
     def html_decode(self, html):
+        """
+        Turns '&lt;b&gt;foo&lt;/b&gt;' into u'<b>foo</b>'
+        """
         return HTMLParser().unescape(html)
 
     def get_request_data(self, request):
