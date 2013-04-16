@@ -36,6 +36,7 @@ class AirtelUSSDTransport(HttpRpcTransport):
 
     transport_type = 'ussd'
     content_type = 'text/plain; charset=utf-8'
+    ENCODING = 'utf-8'
     CONFIG_CLASS = AirtelUSSDTransportConfig
     EXPECTED_AUTH_FIELDS = set(['userid', 'password'])
     EXPECTED_CLEANUP_FIELDS = EXPECTED_AUTH_FIELDS.union(
@@ -181,10 +182,10 @@ class AirtelUSSDTransport(HttpRpcTransport):
         else:
             free_flow = 'FC'
         self.finish_request(message['in_reply_to'],
-            message['content'].encode('utf-8'), code=http.OK, headers={
-            'Freeflow': [free_flow],
-            'charge': [('Y' if config.airtel_charge else 'N')],
-            'amount': [config.airtel_charge_amount],
+            message['content'].encode(self.ENCODING), code=http.OK, headers={
+                'Freeflow': [free_flow],
+                'charge': [('Y' if config.airtel_charge else 'N')],
+                'amount': [str(config.airtel_charge_amount)],
             })
         return self.publish_ack(user_message_id=message['message_id'],
             sent_message_id=message['message_id'])

@@ -1,5 +1,6 @@
 """Telnet server transport."""
 
-from vumi.transports.telnet.telnet import TelnetServerTransport
+from vumi.transports.telnet.telnet import (TelnetServerTransport,
+                                            AddressedTelnetServerTransport)
 
-__all__ = ['TelnetServerTransport']
+__all__ = ['TelnetServerTransport', 'AddressedTelnetServerTransport']

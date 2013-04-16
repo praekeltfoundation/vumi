@@ -75,15 +75,17 @@ class Vas2NetsTransportTestCase(TransportTestCase):
         self.worker = yield self.get_transport(self.config)
         self.today = datetime.utcnow().date()
 
+    @inlineCallbacks
+    def tearDown(self):
+        yield self.worker.stopWorker()
+        yield super(Vas2NetsTransportTestCase, self).tearDown()
+
     def make_resource_worker(self, msg_id, msg, code=http.OK, send_id=None):
         w = get_stubbed_worker(TestResourceWorker, {})
         w.set_resources([
                 (self.path, TestResource, (msg_id, msg, code, send_id))])
         self._workers.append(w)
         return w.startWorker()
-
-    def get_dispatched(self, rkey):
-        return self._amqp.get_dispatched('vumi', rkey)
 
     def make_request(self, path, qparams):
         """
@@ -136,7 +138,6 @@ class Vas2NetsTransportTestCase(TransportTestCase):
             'timestamp': self.today.strftime('%Y-%m-%dT%H:%M:%S'),
             }
         kw.setdefault('transport_metadata', transport_metadata)
-        # kw.setdefault('message_id', 'vas2nets.abc')
         return super(Vas2NetsTransportTestCase, self).mkmsg_out(**kw)
 
     @inlineCallbacks
@@ -160,8 +161,7 @@ class Vas2NetsTransportTestCase(TransportTestCase):
         self.assertEqual(response.code, http.OK)
         msg = self.mkmsg_in()
 
-        [smsg] = self.get_dispatched('vas2nets.inbound')
-        self.assertEqual(msg, TransportMessage.from_json(smsg.body))
+        self.assertEqual([msg], self.get_dispatched_inbound())
 
     @inlineCallbacks
     def test_delivery_receipt_pending(self):
@@ -178,8 +178,7 @@ class Vas2NetsTransportTestCase(TransportTestCase):
         self.assertEqual(response.code, http.OK)
         msg = self.mkmsg_delivery(
             'pending', '1', 'Message submitted to Provider for delivery.')
-        [smsg] = self.get_dispatched('vas2nets.event')
-        self.assertEqual(msg, TransportMessage.from_json(smsg.body))
+        self.assertEqual([msg], self.get_dispatched_events())
 
     @inlineCallbacks
     def test_delivery_receipt_failed(self):
@@ -196,8 +195,7 @@ class Vas2NetsTransportTestCase(TransportTestCase):
         self.assertEqual(response.code, http.OK)
         msg = self.mkmsg_delivery(
             'failed', '-9', 'Message could not be delivered.')
-        [smsg] = self.get_dispatched('vas2nets.event')
-        self.assertEqual(msg, TransportMessage.from_json(smsg.body))
+        self.assertEqual([msg], self.get_dispatched_events())
 
     @inlineCallbacks
     def test_delivery_receipt_delivered(self):
@@ -214,8 +212,7 @@ class Vas2NetsTransportTestCase(TransportTestCase):
         self.assertEqual(response.code, http.OK)
         msg = self.mkmsg_delivery(
             'delivered', '2', 'Message delivered to MSISDN.')
-        [smsg] = self.get_dispatched('vas2nets.event')
-        self.assertEqual(msg, TransportMessage.from_json(smsg.body))
+        self.assertEqual([msg], self.get_dispatched_events())
 
     def test_validate_characters(self):
         self.assertRaises(Vas2NetsEncodingError, validate_characters,
@@ -240,9 +237,8 @@ class Vas2NetsTransportTestCase(TransportTestCase):
 
         yield self.dispatch(self.mkmsg_out())
 
-        [smsg] = self.get_dispatched('vas2nets.event')
-        self.assertEqual(self.mkmsg_ack(sent_message_id=mocked_message_id),
-                         TransportMessage.from_json(smsg.body))
+        msg = self.mkmsg_ack(sent_message_id=mocked_message_id)
+        self.assertEqual([msg], self.get_dispatched_events())
 
     @inlineCallbacks
     def test_send_sms_reply_success(self):
@@ -257,9 +253,8 @@ class Vas2NetsTransportTestCase(TransportTestCase):
 
         yield self.dispatch(self.mkmsg_out(in_reply_to=reply_to_msgid))
 
-        [smsg] = self.get_dispatched('vas2nets.event')
-        self.assertEqual(self.mkmsg_ack(sent_message_id=mocked_message_id),
-                         TransportMessage.from_json(smsg.body))
+        msg = self.mkmsg_ack(sent_message_id=mocked_message_id)
+        self.assertEqual([msg], self.get_dispatched_events())
 
     @inlineCallbacks
     def test_send_sms_fail(self):
@@ -276,8 +271,7 @@ class Vas2NetsTransportTestCase(TransportTestCase):
         failure = twisted_failure.value
         self.assertTrue("No SmsId Header" in str(failure))
 
-        [fmsg] = self.get_dispatched('vas2nets.failures')
-        fmsg = TransportMessage.from_json(fmsg.body)
+        [fmsg] = self.get_dispatched_failures()
         self.assertEqual(msg.payload, fmsg['message'])
         self.assertTrue(
             "Vas2NetsTransportError: No SmsId Header" in fmsg['reason'])
@@ -297,8 +291,7 @@ class Vas2NetsTransportTestCase(TransportTestCase):
         failure = twisted_failure.value
         self.assertTrue("connection refused" in str(failure))
 
-        [fmsg] = self.get_dispatched('vas2nets.failures')
-        fmsg = TransportMessage.from_json(fmsg.body)
+        [fmsg] = self.get_dispatched_failures()
         self.assertEqual(msg.payload, fmsg['message'])
         self.assertEqual(fmsg['failure_code'],
                          FailureMessage.FC_TEMPORARY)
@@ -317,8 +310,7 @@ class Vas2NetsTransportTestCase(TransportTestCase):
         failure = twisted_failure.value
         self.assertTrue("server error: HTTP 404:" in str(failure))
 
-        [fmsg] = self.get_dispatched('vas2nets.failures')
-        fmsg = TransportMessage.from_json(fmsg.body)
+        [fmsg] = self.get_dispatched_failures()
         self.assertEqual(msg.payload, fmsg['message'])
         self.assertEqual(fmsg['failure_code'],
                          FailureMessage.FC_PERMANENT)
