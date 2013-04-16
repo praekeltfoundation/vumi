@@ -105,7 +105,8 @@ class TestHeartBeatMonitor(TestCase):
         self.worker.update(attrs)
 
         # retrieve the record corresponding to the worker in the fake message
-        wkr_record = self.worker._ensure(attrs['system_id'], attrs['worker_id'])
+        wkr_record = self.worker._ensure(
+            attrs['system_id'], attrs['worker_id'])
 
         # and sanity test...
         self.assertEqual(wkr_record['system_id'], attrs['system_id'])

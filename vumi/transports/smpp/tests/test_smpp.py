@@ -399,10 +399,9 @@ class EsmeToSmscTestCase(TransportTestCase):
         # Finally the Server delivers a SMS to the Client
 
         pdu = DeliverSM(555,
-                short_message="SMS from server",
-                destination_addr="2772222222",
-                source_addr="2772000000",
-                )
+                        short_message="SMS from server",
+                        destination_addr="2772222222",
+                        source_addr="2772000000")
         self.service.factory.smsc.send_pdu(pdu)
 
         for expected_message in expected_pdus_3:
@@ -491,10 +490,9 @@ class EsmeToSmscTestCase(TransportTestCase):
         # Finally the Server delivers a SMS to the Client
 
         pdu = DeliverSM(555,
-                short_message="SMS from server",
-                destination_addr="2772222222",
-                source_addr="2772000000",
-                )
+                        short_message="SMS from server",
+                        destination_addr="2772222222",
+                        source_addr="2772000000")
         self.service.factory.smsc.send_pdu(pdu)
 
         # Have the server fire of an out-of-order multipart sms
@@ -572,10 +570,9 @@ class EsmeToSmscTestCase(TransportTestCase):
         # Finally the Server delivers a USSD message to the Client
 
         pdu = DeliverSM(555,
-                short_message="reply!",
-                destination_addr="2772222222",
-                source_addr="2772000000",
-                )
+                        short_message="reply!",
+                        destination_addr="2772222222",
+                        source_addr="2772000000")
         pdu._PDU__add_optional_parameter('ussd_service_op', '02')
         pdu._PDU__add_optional_parameter('its_session_info', '0000')
         self.service.factory.smsc.send_pdu(pdu)
@@ -648,10 +645,9 @@ class EsmeToSmscTestCase(TransportTestCase):
         # Finally the Server delivers a USSD message to the Client
 
         pdu = DeliverSM(555,
-                short_message="reply!",
-                destination_addr="2772222222",
-                source_addr="2772000000",
-                )
+                        short_message="reply!",
+                        destination_addr="2772222222",
+                        source_addr="2772000000")
         pdu._PDU__add_optional_parameter('ussd_service_op', '02')
         pdu._PDU__add_optional_parameter('its_session_info', '0001')
         self.service.factory.smsc.send_pdu(pdu)
@@ -899,10 +895,9 @@ class RxEsmeToSmscTestCase(TransportTestCase):
         # The Server delivers a SMS to the Client
 
         pdu = DeliverSM(555,
-                short_message="SMS from server",
-                destination_addr="2772222222",
-                source_addr="2772000000",
-                )
+                        short_message="SMS from server",
+                        destination_addr="2772222222",
+                        source_addr="2772000000")
         self.service.factory.smsc.send_pdu(pdu)
 
         [mess] = yield self.wait_for_dispatched_messages(1)
@@ -925,16 +920,14 @@ class RxEsmeToSmscTestCase(TransportTestCase):
         # The Server delivers a SMS to the Client
 
         bad_pdu = DeliverSM(555,
-                short_message="SMS from server containing \xa7",
-                destination_addr="2772222222",
-                source_addr="2772000000",
-                )
+                            short_message="SMS from server containing \xa7",
+                            destination_addr="2772222222",
+                            source_addr="2772000000")
 
         good_pdu = DeliverSM(555,
-                short_message="Next message",
-                destination_addr="2772222222",
-                source_addr="2772000000",
-                )
+                             short_message="Next message",
+                             destination_addr="2772222222",
+                             source_addr="2772000000")
 
         self.service.factory.smsc.send_pdu(bad_pdu)
         self.service.factory.smsc.send_pdu(good_pdu)

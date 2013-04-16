@@ -401,7 +401,7 @@ class Publisher(object):
             bound_routing_keys = {}
             for b in bindings:
                 if (b['vhost'] == self.vumi_options['vhost'] and
-                    b['source'] == self.exchange_name):
+                        b['source'] == self.exchange_name):
                     bound_routing_keys[b['routing_key']] = \
                             bound_routing_keys.get(b['routing_key'], []) + \
                             [b['destination']]
@@ -419,7 +419,7 @@ class Publisher(object):
         if self.exchange_name[-4:].lower() == '_rpc':
             returnValue(True)
         if (len(self.bound_routing_keys) == 1 and
-            self.bound_routing_keys.get("bindings") == "undetected"):
+                self.bound_routing_keys.get("bindings") == "undetected"):
             # The following is very noisy in the logs:
             # log.msg("No bindings detected, is the RabbitMQ Management plugin"
             #         " installed?")
@@ -428,7 +428,7 @@ class Publisher(object):
             returnValue(True)
         self.bound_routing_keys = yield self.list_bindings()
         if (len(self.bound_routing_keys) == 1 and
-            self.bound_routing_keys.get("bindings") == "undetected"):
+                self.bound_routing_keys.get("bindings") == "undetected"):
             # The following is very noisy in the logs:
             # log.msg("No bindings detected, is the RabbitMQ Management plugin"
             #         " installed?")

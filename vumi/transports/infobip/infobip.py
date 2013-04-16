@@ -10,7 +10,6 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from vumi import log
 from vumi.message import TransportUserMessage
 from vumi.transports.httprpc import HttpRpcTransport
-from vumi.transports.failures import PermanentFailure
 from vumi.components import SessionManager
 
 

@@ -7,7 +7,6 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from vumi.transports.tests.utils import TransportTestCase
 from vumi.utils import http_request
 from vumi.transports.infobip.infobip import InfobipTransport
-from vumi.transports.failures import FailureMessage, PermanentFailure
 from vumi.message import TransportUserMessage
 from vumi.tests.utils import LogCatcher
 

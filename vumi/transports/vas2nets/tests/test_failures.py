@@ -129,8 +129,8 @@ class Vas2NetsFailureWorkerTestCase(unittest.TestCase, PersistenceMixin):
             transport_name='vas2nets',
             transport_type='sms',
             transport_metadata={
-               'network_id': 'network-id',
-               },
+                'network_id': 'network-id',
+            },
             content='hello world',
             in_reply_to=in_reply_to,
             )
