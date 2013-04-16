@@ -188,6 +188,9 @@ class RapidSMSRelay(ApplicationWorker):
 
     @inlineCallbacks
     def get_avatar_id(self, creds):
+        # The ConfigContext(username=...) passed into .get_config() is to
+        # allow sub-classes to change how config.vumi_username and
+        # config.vumi_password are looked up by overriding .get_config().
         if credentials.IAnonymous.providedBy(creds):
             config = yield self.get_config(None, ConfigContext(username=None))
             # allow anonymous authentication if no username is configured
