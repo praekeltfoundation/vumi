@@ -5,7 +5,8 @@ import time
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet.task import LoopingCall
 
-from vumi.service import Worker
+from vumi.worker import BaseWorker
+from vumi.config import ConfigDict, ConfigInt
 from vumi.blinkenlights.heartbeat.publisher import HeartBeatMessage
 from vumi.blinkenlights.heartbeat.storage import Storage
 from vumi.persist.txredis_manager import TxRedisManager
@@ -14,8 +15,11 @@ from vumi.errors import ConfigError
 from vumi.log import log
 
 
-# helper to check whether a config key is defined
 def assert_field(cfg, key):
+    """
+    helper to check whether a config key is defined. Only used for
+    verifying dict fields in the new-style configs
+    """
     if key not in cfg:
         raise ConfigError("Expected '%s' field in config" % key)
 
@@ -41,9 +45,18 @@ class WorkerInstance(object):
         return hash((self.hostname, self.pid))
 
 
-class HeartBeatMonitor(Worker):
+class HeartBeatMonitor(BaseWorker):
 
     DEFAULT_DEADLINE = 30
+
+    class CONFIG_CLASS(BaseWorker.CONFIG_CLASS):
+        deadline = ConfigInt(
+            "Check-in deadline for participating workers",
+            required=True, static=True)
+        redis_manager = ConfigDict(
+            "Redis client configuration.", static=True)
+        monitored_systems = ConfigDict(
+            "Tree of systems and workers.", static=True)
 
     # Instance vars:
     #
@@ -60,12 +73,14 @@ class HeartBeatMonitor(Worker):
     def startWorker(self):
         log.msg("Heartbeat monitor initializing")
 
-        self.deadline = self.config.get("deadline", self.DEFAULT_DEADLINE)
+        self.deadline = self._static_config.deadline
 
-        redis_cfg = self.config['redis_manager']
-        self._redis = yield TxRedisManager.from_config(redis_cfg)
+        redis_config = self._static_config.redis_manager
+        self._redis = yield TxRedisManager.from_config(redis_config)
         self._storage = Storage(self._redis)
-        self._systems, self._workers = self.parse_config(self.config)
+
+        systems_config = self._static_config.monitored_systems
+        self._systems, self._workers = self.parse_config(systems_config)
 
         # synchronize with redis
         self._sync_to_redis()
@@ -87,11 +102,10 @@ class HeartBeatMonitor(Worker):
         """
         Parse configuration and populate in-memory state
         """
-        assert_field(config, 'monitored_systems')
         systems = {}
         workers = {}
         # loop over each defined system
-        for sys in config['monitored_systems'].values():
+        for sys in config.values():
             assert_field(sys, 'workers')
             assert_field(sys, 'system_id')
             system_id = sys['system_id']

@@ -5,7 +5,6 @@
 import time
 import os
 import socket
-import hashlib
 
 from twisted.internet.defer import inlineCallbacks, succeed, maybeDeferred
 from twisted.python import log

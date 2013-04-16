@@ -26,6 +26,7 @@ class TestHeartBeatMonitor(TestCase):
 
     def setUp(self):
         config = {
+            'deadline': 30,
             'redis_manager': {
                 'key_prefix': 'heartbeats',
                 'db': 5,

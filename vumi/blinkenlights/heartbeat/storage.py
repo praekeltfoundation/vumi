@@ -13,7 +13,12 @@ Storage Schema:
 from vumi.persist.redis_base import Manager
 
 
-# some redis key-making functions used by various clients
+# some redis key-making functions.
+#
+# These functions are reused by the monitoring dash,
+# which uses another redis client interface
+# Its a lot simpler for now to make these toplevel functions.
+
 def attr_key(worker_id):
     return "worker:%s:attrs" % worker_id
 
