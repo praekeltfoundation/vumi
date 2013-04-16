@@ -198,7 +198,7 @@ class RapidSMSRelay(ApplicationWorker):
             config = yield self.get_config(None,
                                            ConfigContext(username=username))
             if (username == config.vumi_username and
-                password == config.vumi_password):
+                    password == config.vumi_password):
                 returnValue(username)
         raise error.UnauthorizedLogin()
 
