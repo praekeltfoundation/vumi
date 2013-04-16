@@ -37,6 +37,11 @@ class TestMxitTransportTestCase(TransportTestCase):
             "2. option 2",
             "3. option 3",
         ])
+        # same as above but the o's are replaced with
+        # http://www.fileformat.info/info/unicode/char/f8/index.htm
+        slashed_o = '\xc3\xb8'
+        self.sample_unicode_menu_resp = unicode(
+            self.sample_menu_resp.replace('o', slashed_o), 'utf-8')
 
         self.transport = yield self.get_transport(self.config)
         self.url = self.transport.get_transport_url(self.config['web_path'])
@@ -154,3 +159,17 @@ class TestMxitTransportTestCase(TransportTestCase):
         header, items = ResponseParser.parse('foo!')
         self.assertEqual(header, 'foo!')
         self.assertEqual(items, [])
+
+    @inlineCallbacks
+    def test_unicode_rendering(self):
+        resp_d = http_request_full(
+            self.url, headers=self.sample_req_headers)
+        [msg] = yield self.wait_for_dispatched_messages(1)
+        reply = TransportUserMessage(**msg.payload).reply(
+            self.sample_unicode_menu_resp, continue_session=True)
+        self.dispatch(reply)
+        resp = yield resp_d
+        self.assertTrue(
+            'Hell\xc3\xb8' in resp.delivered_body)
+        self.assertTrue(
+            '\xc3\xb8pti\xc3\xb8n 1' in resp.delivered_body)
