@@ -105,13 +105,10 @@ class WorkerAMQClient(AMQClient):
         """
         return (max(self.channels) + 1) if self.channels else 0
 
-    def _declare_exchange(self, source, channel):
-        # get the details for AMQP
-        exchange_name = source.exchange_name
-        exchange_type = source.exchange_type
-        durable = source.durable
-        return channel.exchange_declare(exchange=exchange_name,
-                                        type=exchange_type, durable=durable)
+    def _declare_exchange(self, exchange, channel):
+        return channel.exchange_declare(exchange=exchange.name,
+                                        type=exchange.exchange_type,
+                                        durable=exchange.durable)
 
     @inlineCallbacks
     def start_consumer(self, consumer_class, *args, **kwargs):
@@ -122,18 +119,24 @@ class WorkerAMQClient(AMQClient):
         consumer.vumi_options = self.vumi_options
 
         # get the details for AMQP
-        exchange_name = consumer.exchange_name
-        durable = consumer.durable
+        exchange = consumer.exchange
         queue_name = consumer.queue_name
         routing_key = consumer.routing_key
+        arguments = {}
 
         # declare the exchange, doesn't matter if it already exists
-        yield self._declare_exchange(consumer, channel)
+        yield self._declare_exchange(consumer.exchange, channel)
+        if consumer.dead_letter_exchange is not None:
+            yield self._declare_exchange(consumer.dead_letter_exchange,
+                                         channel)
+            arguments["x-dead-letter-exchange"] = (
+                consumer.dead_letter_exchange.name)
 
         # declare the queue
-        yield channel.queue_declare(queue=queue_name, durable=durable)
+        yield channel.queue_declare(queue=queue_name, durable=exchange.durable,
+                                    arguments=arguments)
         # bind it to the exchange with the routing key
-        yield channel.queue_bind(queue=queue_name, exchange=exchange_name,
+        yield channel.queue_bind(queue=queue_name, exchange=exchange.name,
                                  routing_key=routing_key)
         # register the consumer
         reply = yield channel.basic_consume(queue=queue_name)
@@ -152,7 +155,7 @@ class WorkerAMQClient(AMQClient):
         publisher = publisher_class(*args, **kwargs)
         publisher.vumi_options = self.vumi_options
         # declare the exchange, doesn't matter if it already exists
-        yield self._declare_exchange(publisher, channel)
+        yield self._declare_exchange(publisher.exchange, channel)
         # start!
         yield publisher.start(channel)
         # return the publisher
@@ -210,13 +213,12 @@ class Worker(MultiService, object):
         # use the routing key to generate the name for the class
         # amq.routing.key -> AmqRoutingKey
         dynamic_name = self.routing_key_to_class_name(routing_key)
-        class_name = "%sDynamicConsumer" % str(dynamic_name)
+        class_name = "%sDynamicConsumer" % dynamic_name
         kwargs = {
             'routing_key': routing_key,
             'queue_name': queue_name or routing_key,
-            'exchange_name': exchange_name,
-            'exchange_type': exchange_type,
-            'durable': durable,
+            'exchange': Exchange(exchange_name, exchange_type=exchange_type,
+                                 durable=durable),
             'start_paused': paused,
         }
         log.msg('Starting %s with %s' % (class_name, kwargs))
@@ -231,15 +233,16 @@ class Worker(MultiService, object):
     def publish_to(self, routing_key,
                    exchange_name='vumi', exchange_type='direct', durable=True,
                    delivery_mode=2):
-        class_name = self.routing_key_to_class_name(routing_key)
-        publisher_class = type("%sDynamicPublisher" % class_name, (Publisher,),
-            {
-                "routing_key": routing_key,
-                "exchange_name": exchange_name,
-                "exchange_type": exchange_type,
-                "durable": durable,
-                "delivery_mode": delivery_mode,
-            })
+        dynamic_name = self.routing_key_to_class_name(routing_key)
+        class_name = "%sDynamicPublisher" % dynamic_name
+        kwargs = {
+            "routing_key": routing_key,
+            "exchange": Exchange(exchange_name, exchange_type=exchange_type,
+                                 durable=durable),
+            "delivery_mode": delivery_mode,
+        }
+        log.msg('Starting %s with %s' % (class_name, kwargs))
+        publisher_class = type(class_name, (Publisher,), kwargs)
         return self.start_publisher(publisher_class)
 
     def start_publisher(self, publisher_class, *args, **kw):
@@ -276,11 +279,20 @@ class QueueCloseMarker(object):
     "This is a marker for closing consumer queues."
 
 
+class Exchange(object):
+    def __init__(self, name, exchange_type, durable):
+        self.name = name
+        self.exchange_type = exchange_type
+        self.durable = durable
+
+
 class Consumer(object):
 
-    exchange_name = "vumi"
-    exchange_type = "direct"
-    durable = False
+    exchange = Exchange(name="vumi", exchange_type="direct", durable=False)
+
+    # set dead_letter_exchange to None to disable
+    dead_letter_exchange = Exchange(name="vumi.dead_letter",
+                                    exchange_type="direct", durable=True)
 
     queue_name = "queue"
     routing_key = "routing_key"
@@ -391,11 +403,11 @@ class RoutingKeyError(Exception):
 
 
 class Publisher(object):
-    exchange_name = "vumi"
-    exchange_type = "direct"
+
+    exchange = Exchange(name="vumi", exchange_type="direct", durable=False)
+
     routing_key = "routing_key"
     require_bind = True
-    durable = False
     auto_delete = False
     delivery_mode = 2  # save to disk
 
@@ -424,7 +436,7 @@ class Publisher(object):
             bound_routing_keys = {}
             for b in bindings:
                 if (b['vhost'] == self.vumi_options['vhost'] and
-                        b['source'] == self.exchange_name):
+                        b['source'] == self.exchange.name):
                     bound_routing_keys[b['routing_key']] = \
                             bound_routing_keys.get(b['routing_key'], []) + \
                             [b['destination']]
@@ -439,7 +451,7 @@ class Publisher(object):
         # too many http calls to RabbitMQ Management will be required,
         # and the auto-generated queues & routing_keys are unlikley to
         # result in errors where routing keys are unbound
-        if self.exchange_name[-4:].lower() == '_rpc':
+        if self.exchange.name[-4:].lower() == '_rpc':
             returnValue(True)
         if (len(self.bound_routing_keys) == 1 and
                 self.bound_routing_keys.get("bindings") == "undetected"):
@@ -470,11 +482,11 @@ class Publisher(object):
             raise RoutingKeyError("The routing_key: %s is not bound to any"
                                   " queues in vhost: %s  exchange: %s" % (
                                   routing_key, self.vumi_options['vhost'],
-                                  self.exchange_name))
+                                  self.exchange.name))
 
     @inlineCallbacks
     def publish(self, message, **kwargs):
-        exchange_name = kwargs.get('exchange_name') or self.exchange_name
+        exchange_name = kwargs.get('exchange_name') or self.exchange.name
         routing_key = kwargs.get('routing_key') or self.routing_key
         require_bind = kwargs.get('require_bind', self.require_bind)
         yield self.check_routing_key(routing_key, require_bind)

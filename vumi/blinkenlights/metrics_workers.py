@@ -11,7 +11,7 @@ from twisted.internet import reactor
 from twisted.internet.task import LoopingCall
 from twisted.internet.protocol import DatagramProtocol
 
-from vumi.service import Consumer, Publisher, Worker
+from vumi.service import Consumer, Publisher, Worker, Exchange
 from vumi.blinkenlights.metrics import (MetricsConsumer, MetricManager, Count,
                                         Metric, Timer, Aggregator)
 from vumi.blinkenlights.message20110818 import MetricMessage
@@ -27,9 +27,8 @@ class AggregatedMetricConsumer(Consumer):
         parameters are metric_name (str) and values (a list of
         timestamp and value pairs).
     """
-    exchange_name = "vumi.metrics.aggregates"
-    exchange_type = "direct"
-    durable = True
+    exchange = Exchange("vumi.metrics.aggregates",
+                        exchange_type="direct", durable=True)
     routing_key = "vumi.metrics.aggregates"
 
     def __init__(self, callback):
@@ -45,9 +44,8 @@ class AggregatedMetricConsumer(Consumer):
 class AggregatedMetricPublisher(Publisher):
     """Publishes aggregated metrics.
     """
-    exchange_name = "vumi.metrics.aggregates"
-    exchange_type = "direct"
-    durable = True
+    exchange = Exchange("vumi.metrics.aggregates",
+                        exchange_type="direct", durable=True)
     routing_key = "vumi.metrics.aggregates"
 
     def publish_aggregate(self, metric_name, timestamp, value):
@@ -70,9 +68,8 @@ class TimeBucketConsumer(Consumer):
         aggregator (list of aggregator names) and values (a
         list of timestamp and value pairs).
     """
-    exchange_name = "vumi.metrics.buckets"
-    exchange_type = "direct"
-    durable = True
+    exchange = Exchange("vumi.metrics.buckets",
+                        exchange_type="direct", durable=True)
     ROUTING_KEY_TEMPLATE = "bucket.%d"
 
     def __init__(self, bucket, callback):
@@ -97,9 +94,8 @@ class TimeBucketPublisher(Publisher):
     bucket_size : int, in seconds
         Size of each time bucket in seconds.
     """
-    exchange_name = "vumi.metrics.buckets"
-    exchange_type = "direct"
-    durable = True
+    exchange = Exchange("vumi.metrics.buckets",
+                        exchange_type="direct", durable=True)
     ROUTING_KEY_TEMPLATE = "bucket.%d"
 
     def __init__(self, buckets, bucket_size):
@@ -281,9 +277,7 @@ class MetricsCollectorWorker(Worker):
 class GraphitePublisher(Publisher):
     """Publisher for sending messages to Graphite."""
 
-    exchange_name = "graphite"
-    exchange_type = "topic"
-    durable = True
+    exchange = Exchange("graphite", exchange_type="topic", durable=True)
     auto_delete = False
     delivery_mode = 2
     require_bind = False  # Graphite uses a topic exchange

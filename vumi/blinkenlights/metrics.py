@@ -8,7 +8,7 @@ Includes a publisher, a consumer and a set of simple metrics.
 from twisted.internet.task import LoopingCall
 from twisted.python import log
 
-from vumi.service import Publisher, Consumer
+from vumi.service import Publisher, Consumer, Exchange
 from vumi.blinkenlights.message20110818 import MetricMessage
 
 import time
@@ -27,10 +27,8 @@ class MetricManager(Publisher):
     :param on_publish:
         Function to call immediately after metrics after published.
     """
-    exchange_name = "vumi.metrics"
-    exchange_type = "direct"
+    exchange = Exchange("vumi.metrics", exchange_type="direct", durable=True)
     routing_key = "vumi.metrics"
-    durable = True
     auto_delete = False
     delivery_mode = 2
 
@@ -272,10 +270,8 @@ class MetricsConsumer(Consumer):
         aggregator (list of aggregator names) and values (a
         list of timestamp and value paits).
     """
-    exchange_name = "vumi.metrics"
-    exchange_type = "direct"
+    exchange = Exchange("vumi.metrics", exchange_type="direct", durable=True)
     routing_key = "vumi.metrics"
-    durable = True
 
     def __init__(self, callback):
         self.callback = callback

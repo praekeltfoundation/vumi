@@ -326,7 +326,7 @@ class FakeAMQPChannel(object):
     def exchange_declare(self, exchange, type, durable=None):
         return self.broker.exchange_declare(exchange, type)
 
-    def queue_declare(self, queue, durable=None):
+    def queue_declare(self, queue, durable=None, arguments=None):
         return self.broker.queue_declare(queue)
 
     def queue_bind(self, queue, exchange, routing_key):

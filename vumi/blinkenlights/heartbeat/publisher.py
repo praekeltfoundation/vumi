@@ -2,7 +2,7 @@
 
 from twisted.internet.task import LoopingCall
 
-from vumi.service import Publisher
+from vumi.service import Publisher, Exchange
 from vumi.message import Message
 from vumi.log import log
 
@@ -34,10 +34,11 @@ class HeartBeatPublisher(Publisher):
 
     HEARTBEAT_PERIOD_SECS = 10
 
+    exchange = Exchange(name="vumi.health",
+                        exchange_type="direct", durable=True)
+
     def __init__(self, gen_attrs_func):
         self.routing_key = "heartbeat.inbound"
-        self.exchange_name = "vumi.health"
-        self.durable = True
         self._task = None
         self._gen_attrs_func = gen_attrs_func
 
