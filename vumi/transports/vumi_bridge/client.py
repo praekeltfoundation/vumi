@@ -1,3 +1,4 @@
+# -*- test-case-name: vumi.transports.vumi_bridge.tests.test_client -*-
 import json
 
 from twisted.internet.defer import Deferred
