@@ -309,9 +309,9 @@ class Consumer(object):
             yield self.consume_message(
                 self.message_class.from_json(message.content.body))
             self.ack(message)
-        except Exception:
+        except Exception as err:
             log.err()
-            yield self.consume_error(message.content.body)
+            yield self.consume_error(err, message)
             self.nack(message)
 
     def consume_message(self, message):
@@ -323,14 +323,14 @@ class Consumer(object):
         """
         log.msg("Received message: %s" % (message,))
 
-    def consume_error(self, message_body):
+    def consume_error(self, err, message):
         """Fallback error handling method.
 
         Logs the message body at the `info` logging level.
 
         Should be overridden by subclasses.
         """
-        log.msg("Logging failed message: %s" % (message_body,))
+        log.msg("Logging failed message: %r" % (message.content.body,))
 
     def pause(self):
         self.paused = True
@@ -365,13 +365,17 @@ class Consumer(object):
 class DynamicConsumer(Consumer):
     def __init__(self, callback, errback=None):
         self.callback = callback
-        self.errback = errback if errback is not None else log.msg
+        self.errback = (errback if errback is not None
+                        else self._default_errback)
 
     def consume_message(self, message):
         return self.callback(message)
 
-    def consume_error(self, message_body):
-        return self.errback(message_body)
+    def _default_errback(self, err, message):
+        log.msg("Logging failed message: %r" % (message.content.body,))
+
+    def consume_error(self, err, message):
+        return self.errback(err, message)
 
 
 class RoutingKeyError(Exception):
