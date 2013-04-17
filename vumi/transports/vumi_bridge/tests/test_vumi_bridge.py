@@ -15,7 +15,6 @@ from vumi.transports.vumi_bridge import GoConversationTransport
 class GoConversationTransportTestCase(TransportTestCase):
 
     transport_class = GoConversationTransport
-    timeout = 1
 
     @inlineCallbacks
     def setUp(self):
