@@ -7,8 +7,6 @@ from vumi.tests.utils import MockHttpServer
 from vumi.transports.vumi_bridge.client import StreamingClient
 from vumi.message import Message
 
-# from mock import Mock
-
 
 class ClientTestCase(TestCase):
 
