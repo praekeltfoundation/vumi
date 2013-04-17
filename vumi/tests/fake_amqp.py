@@ -327,6 +327,9 @@ class FakeAMQPChannel(object):
         return self.broker.exchange_declare(exchange, type)
 
     def queue_declare(self, queue, durable=None, arguments=None):
+        # TODO: handle arguments['x-dead-letter-exchange'] by
+        #       setting a dead-letter exchange and using it from
+        #       basic_nack / basic_reject if it exists.
         return self.broker.queue_declare(queue)
 
     def queue_bind(self, queue, exchange, routing_key):
