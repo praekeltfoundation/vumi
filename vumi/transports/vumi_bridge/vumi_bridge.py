@@ -1,4 +1,4 @@
-# -*- test-case-name: go.vumitools.transports.vumi_bridge.tests.test_vumi_bridge -*-
+# -*- test-case-name: vumi.transports.vumi_bridge.tests.test_vumi_bridge -*-
 
 import base64
 import json
@@ -8,13 +8,12 @@ from twisted.web.http_headers import Headers
 from twisted.web import http
 
 from vumi.transports import Transport
+from vumi.transports.vumi_bridge.client import StreamingClient
 from vumi.config import ConfigText, ConfigDict, ConfigInt
 from vumi.persist.txredis_manager import TxRedisManager
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.utils import http_request_full
 from vumi import log
-
-from go.apps.http_api.client import StreamingClient
 
 
 class VumiBridgeTransportConfig(Transport.CONFIG_CLASS):
@@ -128,9 +127,10 @@ class GoConversationTransport(Transport):
         if resp.code != http.OK:
             log.warning('Unexpected status code: %s, body: %s' % (
                 resp.code, resp.delivered_body))
-            yield self.publish_nack(
-                user_message_id=message['message_id'],
-                sent_message_id=message['message_id'])
+            yield self.publish_nack(message['message_id'],
+                                    reason='Unexpected status code: %s' % (
+                                        resp.code,))
+            print 'nack sent!'
             return
 
         remote_message = json.loads(resp.delivered_body)

@@ -9,12 +9,13 @@ from vumi.tests.utils import MockHttpServer
 from vumi.transports.tests.utils import TransportTestCase
 from vumi.message import TransportUserMessage
 
-from go.vumitools.transports.vumi_bridge import GoConversationTransport
+from vumi.transports.vumi_bridge import GoConversationTransport
 
 
 class GoConversationTransportTestCase(TransportTestCase):
 
     transport_class = GoConversationTransport
+    timeout = 1
 
     @inlineCallbacks
     def setUp(self):
