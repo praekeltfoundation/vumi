@@ -64,7 +64,8 @@ class ServiceTestCase(TestCase):
         self.assertEqual(len(self.flushLoggedErrors(TestError)), 1)
         self.assertEquals(logs, [Message(key="value")])
         self.assertEquals(errors, [Message(key="value")])
-        self.assertEqual(lc.messages(), ['{"key": "value"}'])
+        self.assertEqual(lc.messages(),
+                         ['Logging failed message: \'{"key": "value"}\''])
 
     @inlineCallbacks
     def test_start_publisher(self):

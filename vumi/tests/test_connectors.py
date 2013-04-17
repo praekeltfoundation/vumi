@@ -101,9 +101,9 @@ class TestBaseConnector(BaseConnectorTestCase):
     @inlineCallbacks
     def test_teardown(self):
         conn, consumer = yield self.mk_consumer()
-        self.assertTrue(consumer.keep_consuming)
+        self.assertTrue(consumer.running())
         yield conn.teardown()
-        self.assertFalse(consumer.keep_consuming)
+        self.assertFalse(consumer.running())
 
     @inlineCallbacks
     def test_paused(self):

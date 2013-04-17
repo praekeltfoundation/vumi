@@ -110,7 +110,7 @@ class TestBaseWorker(VumiWorkerTestCase):
         connector = yield self.worker.setup_ri_connector('foo')
         yield self.worker.teardown_connectors()
         self.assertTrue('foo' not in self.worker.connectors)
-        self.assertFalse(connector._consumers['inbound'].keep_consuming)
+        self.assertFalse(connector._consumers['inbound'].running())
 
     def test_setup_worker_raises(self):
         worker = get_stubbed_worker(BaseWorker, {}, None)  # None -> dummy AMQP
@@ -171,7 +171,7 @@ class TestBaseWorker(VumiWorkerTestCase):
         self.assertTrue('foo' in self.worker.connectors)
         self.assertTrue(isinstance(connector, ReceiveInboundConnector))
         # test setup happened
-        self.assertTrue(connector._consumers['inbound'].keep_consuming)
+        self.assertTrue(connector._consumers['inbound'].running())
 
     @inlineCallbacks
     def test_teardown_connector(self):
@@ -180,7 +180,7 @@ class TestBaseWorker(VumiWorkerTestCase):
         yield self.worker.teardown_connector('foo')
         self.assertFalse('foo' in self.worker.connectors)
         # test teardown happened
-        self.assertFalse(connector._consumers['inbound'].keep_consuming)
+        self.assertFalse(connector._consumers['inbound'].running())
 
     @inlineCallbacks
     def test_setup_ri_connector(self):

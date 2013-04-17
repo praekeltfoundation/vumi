@@ -349,6 +349,10 @@ class Consumer(object):
         self.channel.basic_nack(message.delivery_tag, multiple=multiple,
                                 requeue=requeue)
 
+    def running(self):
+        """Return True if the consumer loop is running and False otherwise."""
+        return self._consume_done is not None and not self._consume_done.called
+
     @inlineCallbacks
     def stop(self):
         log.msg("Consumer stopping...")
