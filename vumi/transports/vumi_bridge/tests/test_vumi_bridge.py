@@ -103,6 +103,7 @@ class GoConversationTransportTestCase(TransportTestCase):
     @inlineCallbacks
     def test_sending_messages(self):
         msg = self.mkmsg_out()
+        msg['session_event'] = TransportUserMessage.SESSION_CLOSE
         d = self.dispatch(msg)
         req = yield self.get_next_request()
         received_msg = json.loads(req.content.read())
@@ -111,6 +112,7 @@ class GoConversationTransportTestCase(TransportTestCase):
             'in_reply_to': None,
             'to_addr': msg['to_addr'],
             'message_id': msg['message_id'],
+            'session_event': TransportUserMessage.SESSION_CLOSE
         })
 
         remote_id = TransportUserMessage.generate_id()

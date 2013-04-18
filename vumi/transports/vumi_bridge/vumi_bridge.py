@@ -116,6 +116,7 @@ class GoConversationTransport(Transport):
             'content': message['content'],
             'message_id': message['message_id'],
             'in_reply_to': message['in_reply_to'],
+            'session_event': message['session_event']
         }
 
         resp = yield http_request_full(
