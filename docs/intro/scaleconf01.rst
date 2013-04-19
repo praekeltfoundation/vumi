@@ -117,8 +117,8 @@ The messages between the different components are exchanged and routed using
 RabbitMQ_ a high performance AMQP_ message broker.
 
 For data storage Redis_ is used for data that are generally temporary but and
-may potentially be lost. Riak_ is used for things that need strong guarantees
-fron availability.
+may potentially be lost. Riak_ is used for things that need strong
+availability guarantees.
 
 A sample use case of Redis_ would be to store session state whereas Riak_
 would be used to store all messages sent and received indefinitely.
