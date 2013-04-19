@@ -221,6 +221,9 @@ class MockResource(Resource):
     def render_POST(self, request):
         return self.handler(request)
 
+    def render_PUT(self, request):
+        return self.handler(request)
+
 
 class MockHttpServer(object):
 
