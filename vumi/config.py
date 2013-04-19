@@ -193,6 +193,17 @@ def generate_doc(cls, fields, header_indent='', indent=' ' * 4):
     return "\n".join(doc)
 
 
+class ConfigContext(object):
+    """Context within which a configuration object can be retrieved.
+
+    For example, configuration may depend on the message being processed
+    or on the HTTP URL being accessed.
+    """
+    def __init__(self, **kw):
+        for k, v in kw.items():
+            setattr(self, k, v)
+
+
 class ConfigMetaClass(type):
     def __new__(mcs, name, bases, dict):
         # locate Field instances
