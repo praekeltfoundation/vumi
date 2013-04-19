@@ -66,7 +66,7 @@ Vumi Message and vice-versa.
 A simple example would be an SMS, which when received is converted into a bit
 of JSON_ that looks something like this:
 
-.. literalinclude:: /transports/sample-inbound-message.json
+.. literalinclude:: ../transports/sample-inbound-message.json
 
 Applications
 ~~~~~~~~~~~~
@@ -80,7 +80,7 @@ provides a suitable reply.
 
 A reply message looks something like this:
 
-.. literalinclude:: /applications/sample-reply-to-message.json
+.. literalinclude:: ../applications/sample-reply-to-message.json
 
 Dispatchers
 ~~~~~~~~~~~
