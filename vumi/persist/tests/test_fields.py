@@ -132,9 +132,9 @@ class TestJson(TestCase):
         self.assertRaises(ValidationError, j.validate, None)
 
     def test_to_riak(self):
-        j = Json()
-        d = {"foo": 5}
-        self.assertEqual(j.to_riak(d), d)
+            j = Json()
+            d = {"foo": 5}
+            self.assertEqual(j.to_riak(d), d)
 
     def test_from_riak(self):
         j = Json()
@@ -145,3 +145,11 @@ class TestJson(TestCase):
 class TestFieldWithSubtype(TestCase):
     def test_fails_on_fancy_subtype(self):
         self.assertRaises(RuntimeError, FieldWithSubtype, Dynamic())
+
+
+class TestDynamic(TestCase):
+    def test_validate(self):
+        f = Dynamic()
+        f.validate({'a': u'foo', 'b': u'bar'})
+        self.assertRaises(ValidationError, f.validate, u'this is not a dict')
+        self.assertRaises(ValidationError, f.validate, {'a': 'foo', 'b': 2})

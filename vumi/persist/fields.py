@@ -324,7 +324,7 @@ class FieldWithSubtype(Field):
                                " that use the basic FieldDescriptor class")
         self.field_type = field_type
 
-    def validate(self, value):
+    def validate_subfield(self, value):
         self.field_type.validate(value)
 
     def to_riak(self, value):
@@ -350,8 +350,9 @@ class DynamicDescriptor(FieldDescriptor):
     def get_value(self, modelobj):
         return DynamicProxy(self, modelobj)
 
-    def set_value(self, modelobj, value):
-        raise RuntimeError("DynamicDescriptors should never be assigned to.")
+    def set_value(self, modelobj, otherdict):
+        self.clear()
+        self.update(dict)
 
     def iterkeys(self, modelobj):
         prefix_len = len(self.prefix)
@@ -380,7 +381,7 @@ class DynamicDescriptor(FieldDescriptor):
         return self.field.from_riak(modelobj._riak_object._data.get(key))
 
     def set_dynamic_value(self, modelobj, dynamic_key, value):
-        self.field.validate(value)
+        self.field.validate_subfield(value)
         key = self.prefix + dynamic_key
         modelobj._riak_object._data[key] = self.field.to_riak(value)
 
@@ -454,6 +455,13 @@ class Dynamic(FieldWithSubtype):
         super(Dynamic, self).__init__(field_type=field_type)
         self.prefix = prefix
 
+    def custom_validate(self, value):
+        if not isinstance(value, dict):
+            raise ValidationError(
+                "Value %r should be a dict of subfield name-value pairs"
+                % value)
+        map(self.validate_subfield, value.itervalues())
+
 
 class ListOfDescriptor(FieldDescriptor):
     """A field descriptor for ListOf fields."""
@@ -463,8 +471,7 @@ class ListOfDescriptor(FieldDescriptor):
 
     def __set__(self, modelobj, values):
         # override __set__ to do custom validation
-        for value in values:
-            self.field.validate(value)
+        map(self.field.validate_subfield, values)
         raw_values = [self.field.to_riak(value) for value in values]
         modelobj._riak_object._data[self.key] = raw_values
 
@@ -478,7 +485,7 @@ class ListOfDescriptor(FieldDescriptor):
         return self.field.from_riak(raw_item)
 
     def set_list_item(self, modelobj, list_idx, value):
-        self.field.validate(value)
+        self.field.validate_subfield(value)
         raw_value = self.field.to_riak(value)
         self._ensure_list(modelobj)
         modelobj._riak_object._data[self.key][list_idx] = raw_value
@@ -488,14 +495,13 @@ class ListOfDescriptor(FieldDescriptor):
         del raw_list[list_idx]
 
     def append_list_item(self, modelobj, value):
-        self.field.validate(value)
+        self.field.validate_subfield(value)
         raw_value = self.field.to_riak(value)
         self._ensure_list(modelobj)
         modelobj._riak_object._data[self.key].append(raw_value)
 
     def extend_list(self, modelobj, values):
-        for value in values:
-            self.field.validate(value)
+        map(self.field.validate_subfield, values)
         raw_values = [self.field.to_riak(value) for value in values]
         self._ensure_list(modelobj)
         modelobj._riak_object._data[self.key].extend(raw_values)
