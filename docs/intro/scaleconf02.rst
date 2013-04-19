@@ -68,7 +68,7 @@ in a file called `ussd_transport.yaml`:
 Next save the following bit in a file called `supervisord.conf` in the
 `etc` folder:
 
-.. literalinclude:: ./sample-supervisord.conf
+.. literalinclude:: ./sample-supervisord-hangman.conf
 
 When that's done we can start things up::
 
