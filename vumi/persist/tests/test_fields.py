@@ -146,10 +146,10 @@ class TestFieldWithSubtype(TestCase):
     def test_fails_on_fancy_subtype(self):
         self.assertRaises(RuntimeError, FieldWithSubtype, Dynamic())
 
-
-class TestDynamic(TestCase):
     def test_validate(self):
-        f = Dynamic()
-        f.validate({'a': u'foo', 'b': u'bar'})
+        f = FieldWithSubtype()
+        f.validate({u'a': u'foo', u'b': u'bar'})
+        self.assertRaises(ValidationError, f.validate,
+                          {u'a': 'foo', u'b': u'bar'})
         self.assertRaises(ValidationError, f.validate, u'this is not a dict')
-        self.assertRaises(ValidationError, f.validate, {'a': 'foo', 'b': 2})
+        self.assertRaises(ValidationError, f.validate, {u'a': 'foo', u'b': 2})
