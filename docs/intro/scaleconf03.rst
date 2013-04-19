@@ -48,11 +48,23 @@ What we want to do is the following:
 
 .. literalinclude:: scaleconf02.py
 
-Tell supervisord to restart the smitter application:
+Tell supervisord to restart the smitter application::
 
     $ supervisorctl -c etc/supervisord.conf restart smitter
 
 SMS '+' to the SMS longcode and you should receive a confirmation.
 Ask someone else to join and test if the broadcasting and leaving works.
 
+More Features!
+~~~~~~~~~~~~~~
+
+Now that we've got a very minimal application running, here are some features
+you could look at adding to make improve it.
+
+1.  Add the ability to form groups.
+2.  Add the ability to invite people to join the group via SMS.
+3.  Add persistence via :class:`vumi.persist.txredis_manager.TxRedisManager` to
+    allow multiple Smitter processes to run in Supervisord_ while sharing data.
+
 .. _`@imsickofmaps`: https://twitter.com/imsickofmaps
+.. _Supervisord: http://www.supervisord.org/
