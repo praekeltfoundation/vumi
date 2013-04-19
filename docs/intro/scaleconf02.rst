@@ -89,3 +89,4 @@ Javascript.
 .. _VirtualBox: http://www.virtualbox.org/
 .. _Vagrant: http://www.vagrantup.com/
 .. _Vumi: https://github.com/praekelt/vumi/
+.. _repository: https://github.com/praekelt/vumi/

@@ -54,3 +54,5 @@ Tell supervisord to restart the smitter application:
 
 SMS '+' to the SMS longcode and you should receive a confirmation.
 Ask someone else to join and test if the broadcasting and leaving works.
+
+.. _`@imsickofmaps`: https://twitter.com/imsickofmaps
