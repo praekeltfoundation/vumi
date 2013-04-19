@@ -181,8 +181,7 @@ def generate_doc(cls, fields, header_indent='', indent=' ' * 4):
     doc = cls_doc.split("\n")
     if doc and doc[-1].strip():
         doc.append("")
-    doc.append("Configuration options")
-    doc.append("=" * len(doc[-1]))
+    doc.append("Configuration options:")
     for field in fields:
         header, field_doc = field.get_doc()
         doc.append("")
