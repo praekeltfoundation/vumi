@@ -779,7 +779,8 @@ class JsSandbox(Sandbox):
     As for :class:`Sandbox` except:
 
     * `executable` defaults to searching for a `node.js` binary.
-    * `args` defaults to the JS sandbox script in :module:`vumi.application`.
+    * `args` defaults to the JS sandbox script in the `vumi.application`
+      module.
     * An instance of :class:`JsSandboxResource` is added to the sandbox
       resources under the name `js` if no `js` resource exists.
     * An instance of :class:`LoggingResource` is added to the sandbox

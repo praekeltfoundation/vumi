@@ -9,4 +9,7 @@ application worker class and a few generic application workers.
 .. toctree::
     :maxdepth: 1
 
-    builtin.rst
+    base.rst
+    http_relay.rst
+    rapidsms_relay.rst
+    sandbox.rst
