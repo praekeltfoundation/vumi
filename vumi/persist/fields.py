@@ -352,7 +352,7 @@ class DynamicDescriptor(FieldDescriptor):
 
     def set_value(self, modelobj, otherdict):
         self.clear()
-        self.update(dict)
+        self.update(otherdict)
 
     def iterkeys(self, modelobj):
         prefix_len = len(self.prefix)
