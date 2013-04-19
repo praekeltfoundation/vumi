@@ -62,7 +62,7 @@ Now that we've got a very minimal application running, here are some features
 you could look at adding to make improve it.
 
 1.  Add the ability to form groups.
-2.  Add the ability to invite people to join the group via SMS.
+2.  Add the ability to invite people to join via SMS.
 3.  Add persistence via :class:`vumi.persist.txredis_manager.TxRedisManager` to
     allow multiple Smitter processes to run in Supervisord_ while sharing data.
 
