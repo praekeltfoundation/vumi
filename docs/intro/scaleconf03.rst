@@ -27,3 +27,5 @@ Tell supervisord to add the new processes::
 
 Within a few seconds you should receive an SMS from your application.
 If you reply to this number then you'll receive "thanks" back.
+
+.. _`@imsickofmaps`: https://twitter.com/imsickofmaps
