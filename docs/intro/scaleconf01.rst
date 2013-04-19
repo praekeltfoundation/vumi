@@ -38,9 +38,6 @@ the design of Vumi, such as:
     i.e. it should `scale horizontally <http://en.wikipedia.org/wiki/
     Scalability#Horizontal_and_vertical_scaling>`_.
 
-Core concepts
-=============
-
 The above mentioned guiding principles resulted in a number of core concepts
 that make up a Vumi application.
 
@@ -98,9 +95,8 @@ and the Application and then deciding where it needs to go.
 ::
 
     +----------------+
-    | SMS Transport  |<----+
-    +----------------+     |   +------------+    +-------------+
-                           +-->|            |    |             |
+    | SMS Transport  |<----+   +------------+    +-------------+
+    +----------------+     +-->|            |    |             |
                                | Dispatcher |<-->| Application |
     +----------------+     +-->|            |    |             |
     | USSD Transport |<----+   +------------+    +-------------+
