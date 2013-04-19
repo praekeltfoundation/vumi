@@ -626,7 +626,7 @@ class SandboxConfig(ApplicationWorker.CONFIG_CLASS):
         "Dictionary of resource limits to be applied to sandboxed"
         " processes. Defaults are fairly restricted. Keys maybe"
         " names or values of the RLIMIT constants in"
-        " :module:`resource`. Values should be appropriate integers.",
+        " Python `resource` module. Values should be appropriate integers.",
         default={})
     sandbox_id = ConfigText("This is set based on individual messages.")
 
