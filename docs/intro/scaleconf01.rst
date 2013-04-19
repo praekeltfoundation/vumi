@@ -130,8 +130,9 @@ Let's get started!
 ==================
 
 As part of the workshop we will provide you with a South African USSD code
-and an SMS longcode. In the next section we'll help you get Vumi running on
-your local machine so you can start developing your first application!
+and an SMS longcode. In the next section we'll help you get Vumi
+:doc:`running on your local machine</intro/scaleconf02>` so you can
+start developing your first application!
 
 
 .. _ScaleConf: http://www.scaleconf.org/
