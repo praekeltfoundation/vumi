@@ -66,8 +66,7 @@ class ConfigTest(TestCase):
         self.assertEqual(FooConfig.__doc__, '\n'.join([
             "Test config.",
             "",
-            "Configuration options",
-            "=====================",
+            "Configuration options:",
             "",
             ":param foo:",
             "",
@@ -88,8 +87,7 @@ class ConfigTest(TestCase):
         self.assertEqual(BarConfig.__doc__, '\n'.join([
             "Test config.",
             "",
-            "Configuration options",
-            "=====================",
+            "Configuration options:",
             "",
             ":param bar:",
             "",
@@ -117,8 +115,7 @@ class ConfigTest(TestCase):
         self.assertEqual(BarConfig.__doc__, '\n'.join([
             "Another test config.",
             "",
-            "Configuration options",
-            "=====================",
+            "Configuration options:",
             "",
             ":param foo:",
             "",
