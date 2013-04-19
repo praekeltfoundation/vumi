@@ -26,6 +26,7 @@ Getting Started:
 * :doc:`installation`
 * :doc:`getting-started`
 * :doc:`Writing your first Vumi app - Part 1</intro/tutorial01>` | :doc:`Part 2</intro/tutorial02>`
+* :doc:`ScaleConf workshop instructions</intro/scaleconf01>`
 
 For developers:
 
