@@ -113,7 +113,7 @@ should be sent to. In this simple example message from both transports
 are sent to the same application worker.
 
 Other router classes will have different router configuration
-options. These are described in :doc:`dispatchers/builtin`.
+options. These are described in :doc:`builtin`.
 
 
 .. _routers-section:

@@ -1,5 +1,5 @@
-Vumi Transports
-===============
+Transports
+==========
 
 Transports provide the means for Vumi to send and receive messages
 from people, usually via a third-party such as a mobile network
@@ -15,6 +15,7 @@ aggregators.
 .. toctree::
     :maxdepth: 1
 
+    builtin.rst
     http-transport.rst
     smpp-transports.rst
     vas2net-transports.rst
