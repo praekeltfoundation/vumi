@@ -21,6 +21,12 @@ Transports for common protocols
     base.rst
     smpp.rst
     httprpc.rst
+    mxit.rst
+    smssync.rst
+    telnet.rst
+    twitter.rst
+    vumi_bridge.rst
+    xmpp.rst
     devnull.rst
     oldhttp.rst
 
@@ -34,4 +40,13 @@ Transports for specific aggregators
     airtel.rst
     apposit.rst
     cellulant.rst
+    imimobile.rst
+    infobip.rst
+    integrat.rst
+    mediaedgegsm.rst
+    mediafonemc.rst
+    mtech_ussd.rst
+    safaricom.rst
+    opera.rst
     vas2nets.rst
+    vodacom_messaging.rst
