@@ -342,11 +342,6 @@ class JsFileSandboxTestCase(JsSandboxTestCase):
 
     application_class = JsFileSandbox
 
-    def setUp(self):
-        super(JsFileSandboxTestCase, self).setUp()
-        if JsFileSandbox.find_nodejs() is None:
-            raise SkipTest("No node.js executable found.")
-
     def setup_app(self, javascript, extra_config=None):
         tmp_file_name = self.mktemp()
         tmp_file = open(tmp_file_name, 'w')
