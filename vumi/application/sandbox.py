@@ -867,6 +867,17 @@ class JsSandbox(Sandbox):
             self.resources.add_resource('log', self.get_log_resource())
 
 
+class JsFileSandbox(JsSandbox):
+
+    class CONFIG_CLASS(SandboxConfig):
+        javascript_file = ConfigText(
+            "The file containting the Javascript to run", required=True)
+        app_context = ConfigText("Custom context to execute JS with.")
+
+    def javascript_for_api(self, api):
+        return file(api.config.javascript_file).read()
+
+
 if __name__ == "__main__":
     rlimiter = SandboxProtocol.rlimiter(sys.argv, os.environ)
     rlimiter.execute()
