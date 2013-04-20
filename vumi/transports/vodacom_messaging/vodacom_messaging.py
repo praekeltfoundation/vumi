@@ -5,6 +5,8 @@ from vumi.transports.httprpc import HttpRpcTransport
 
 
 class VodacomMessagingTransport(HttpRpcTransport):
+    """Vodacom Messaging USSD over HTTP transport."""
+
     ENCODING = 'utf-8'
 
     def handle_raw_inbound_message(self, msgid, request):
