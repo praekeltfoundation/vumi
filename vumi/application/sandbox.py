@@ -626,7 +626,7 @@ class SandboxConfig(ApplicationWorker.CONFIG_CLASS):
         "Dictionary of resource limits to be applied to sandboxed"
         " processes. Defaults are fairly restricted. Keys maybe"
         " names or values of the RLIMIT constants in"
-        " :module:`resource`. Values should be appropriate integers.",
+        " Python `resource` module. Values should be appropriate integers.",
         default={})
     sandbox_id = ConfigText("This is set based on individual messages.")
 
@@ -779,7 +779,8 @@ class JsSandbox(Sandbox):
     As for :class:`Sandbox` except:
 
     * `executable` defaults to searching for a `node.js` binary.
-    * `args` defaults to the JS sandbox script in :module:`vumi.application`.
+    * `args` defaults to the JS sandbox script in the `vumi.application`
+      module.
     * An instance of :class:`JsSandboxResource` is added to the sandbox
       resources under the name `js` if no `js` resource exists.
     * An instance of :class:`LoggingResource` is added to the sandbox
@@ -864,6 +865,17 @@ class JsSandbox(Sandbox):
             self.resources.add_resource('js', self.get_js_resource())
         if 'log' not in self.resources.resources:
             self.resources.add_resource('log', self.get_log_resource())
+
+
+class JsFileSandbox(JsSandbox):
+
+    class CONFIG_CLASS(SandboxConfig):
+        javascript_file = ConfigText(
+            "The file containting the Javascript to run", required=True)
+        app_context = ConfigText("Custom context to execute JS with.")
+
+    def javascript_for_api(self, api):
+        return file(api.config.javascript_file).read()
 
 
 if __name__ == "__main__":
