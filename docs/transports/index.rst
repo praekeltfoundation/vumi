@@ -11,11 +11,10 @@ phone), XMPP (Google Chat and Jabber), Twitter, IRC, telnet and
 numerous SMS and USSD transports for specific mobile network
 aggregators.
 
-
 .. toctree::
     :maxdepth: 1
 
-    builtin.rst
-    http-transport.rst
-    smpp-transports.rst
-    vas2net-transports.rst
+    base.rst
+    smpp.rst
+    oldhttp.rst
+    vas2nets.rst
