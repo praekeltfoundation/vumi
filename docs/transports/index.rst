@@ -20,6 +20,7 @@ Transports for common protocols
 
     base.rst
     smpp.rst
+    httprpc.rst
     oldhttp.rst
 
 
