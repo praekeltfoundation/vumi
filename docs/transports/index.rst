@@ -11,10 +11,25 @@ phone), XMPP (Google Chat and Jabber), Twitter, IRC, telnet and
 numerous SMS and USSD transports for specific mobile network
 aggregators.
 
+
+Transports for common protocols
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 .. toctree::
     :maxdepth: 1
 
     base.rst
     smpp.rst
     oldhttp.rst
+
+
+Transports for specific aggregators
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. toctree::
+    :maxdepth: 1
+
+    airtel.rst
+    apposit.rst
+    cellulant.rst
     vas2nets.rst
