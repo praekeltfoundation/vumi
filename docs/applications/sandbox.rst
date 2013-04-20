@@ -20,3 +20,11 @@ Javascript Sandbox
 .. autoclass:: JsSandboxConfig
 
 .. autoclass:: JsSandbox
+
+
+Javascript File Sandbox
+^^^^^^^^^^^^^^^^^^^^^^^
+
+.. autoclass:: JsFileSandbox
+   :members:
+       CONFIG_CLASS
