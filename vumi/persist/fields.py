@@ -324,16 +324,6 @@ class FieldWithSubtype(Field):
                                " that use the basic FieldDescriptor class")
         self.field_type = field_type
 
-    def custom_validate(self, value):
-        if not isinstance(value, dict):
-            raise ValidationError(
-                "Value %r should be a dict of subfield name-value pairs"
-                % value)
-        for key, value in value.iteritems():
-            self.validate_subfield(value)
-            if not isinstance(key, unicode):
-                raise ValidationError("FieldWithSubtype needs unicode keys.")
-
     def validate_subfield(self, value):
         self.field_type.validate(value)
 
@@ -462,6 +452,16 @@ class Dynamic(FieldWithSubtype):
         super(Dynamic, self).__init__(field_type=field_type)
         self.prefix = prefix
 
+    def custom_validate(self, value):
+        if not isinstance(value, dict):
+            raise ValidationError(
+                "Value %r should be a dict of subfield name-value pairs"
+                % value)
+        for key, value in value.iteritems():
+            self.validate_subfield(value)
+            if not isinstance(key, unicode):
+                raise ValidationError("FieldWithSubtype needs unicode keys.")
+
 
 class ListOfDescriptor(FieldDescriptor):
     """A field descriptor for ListOf fields."""
@@ -546,6 +546,12 @@ class ListOf(FieldWithSubtype):
 
     def __init__(self, field_type=None):
         super(ListOf, self).__init__(field_type=field_type, default=list)
+
+    def custom_validate(self, value):
+        if not isinstance(value, list):
+            raise ValidationError(
+                "Value %r should be a list of values" % value)
+        map(self.validate_subfield, value)
 
 
 class ForeignKeyDescriptor(FieldDescriptor):
