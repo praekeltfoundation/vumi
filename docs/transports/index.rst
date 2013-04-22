@@ -20,6 +20,7 @@ Transports for common protocols
 
     base.rst
     smpp.rst
+    truteq.rst
     httprpc.rst
     mxit.rst
     smssync.rst

@@ -1,5 +1,5 @@
-HTTP API Transports
-===================
+Vumi HTTP API Transport
+=======================
 
 
 HTTP API Transport
