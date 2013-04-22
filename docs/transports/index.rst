@@ -27,7 +27,9 @@ Transports for common protocols
     twitter.rst
     vumi_bridge.rst
     xmpp.rst
+    irc.rst
     devnull.rst
+    apihttp.rst
     oldhttp.rst
 
 
