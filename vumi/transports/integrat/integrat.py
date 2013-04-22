@@ -87,6 +87,7 @@ class HealthResource(Resource):
 
 
 class IntegratTransport(Transport):
+    """Integrat USSD transport over HTTP."""
 
     def validate_config(self):
         """

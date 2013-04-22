@@ -1,5 +1,5 @@
-Old HTTP Transports
-===================
+Old Vumi HTTP Transport
+=======================
 
 A deprecated simple API for submitting Vumi messages into Vumi.
 
