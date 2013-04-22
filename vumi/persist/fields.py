@@ -350,6 +350,15 @@ class DynamicDescriptor(FieldDescriptor):
     def get_value(self, modelobj):
         return DynamicProxy(self, modelobj)
 
+    def set_value(self, modelobj, valuedict):
+        self.clear(modelobj)
+        self.update(modelobj, valuedict)
+
+    def clear(self, modelobj):
+        keys = list(self.iterkeys(modelobj))
+        for key in keys:
+            self.delete_dynamic_value(modelobj, key)
+
     def iterkeys(self, modelobj):
         prefix_len = len(self.prefix)
         return (key[prefix_len:]
@@ -418,8 +427,7 @@ class DynamicProxy(object):
         return self._descriptor.update(self._modelobj, otherdict)
 
     def clear(self):
-        for key in self.keys():
-            del self[key]
+        self._descriptor.clear(self._modelobj)
 
     def copy(self):
         return dict(self.iteritems())
@@ -452,12 +460,12 @@ class Dynamic(FieldWithSubtype):
         super(Dynamic, self).__init__(field_type=field_type)
         self.prefix = prefix
 
-    def custom_validate(self, value):
-        if not isinstance(value, dict):
+    def custom_validate(self, valuedict):
+        if not isinstance(valuedict, dict):
             raise ValidationError(
                 "Value %r should be a dict of subfield name-value pairs"
-                % value)
-        for key, value in value.iteritems():
+                % valuedict)
+        for key, value in valuedict.iteritems():
             self.validate_subfield(value)
             if not isinstance(key, unicode):
                 raise ValidationError("Dynamic field needs unicode keys.")
@@ -541,11 +549,11 @@ class ListOf(FieldWithSubtype):
     def __init__(self, field_type=None):
         super(ListOf, self).__init__(field_type=field_type, default=list)
 
-    def custom_validate(self, value):
-        if not isinstance(value, list):
+    def custom_validate(self, valuelist):
+        if not isinstance(valuelist, list):
             raise ValidationError(
-                "Value %r should be a list of values" % value)
-        map(self.validate_subfield, value)
+                "Value %r should be a list of values" % valuelist)
+        map(self.validate_subfield, valuelist)
 
 
 class ForeignKeyDescriptor(FieldDescriptor):
