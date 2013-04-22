@@ -516,6 +516,15 @@ class HttpClientResource(SandboxResource):
     def handle_get(self, api, command):
         return self._make_request_from_command('GET', command)
 
+    def handle_put(self, api, command):
+        return self._make_request_from_command('PUT', command)
+
+    def handle_delete(self, api, command):
+        return self._make_request_from_command('DELETE', command)
+
+    def handle_head(self, api, command):
+        return self._make_request_from_command('HEAD', command)
+
     def handle_post(self, api, command):
         return self._make_request_from_command('POST', command)
 

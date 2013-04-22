@@ -11,10 +11,45 @@ phone), XMPP (Google Chat and Jabber), Twitter, IRC, telnet and
 numerous SMS and USSD transports for specific mobile network
 aggregators.
 
+
+Transports for common protocols
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 .. toctree::
     :maxdepth: 1
 
     base.rst
     smpp.rst
+    truteq.rst
+    httprpc.rst
+    mxit.rst
+    smssync.rst
+    telnet.rst
+    twitter.rst
+    vumi_bridge.rst
+    xmpp.rst
+    irc.rst
+    devnull.rst
+    apihttp.rst
     oldhttp.rst
+
+
+Transports for specific aggregators
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. toctree::
+    :maxdepth: 1
+
+    airtel.rst
+    apposit.rst
+    cellulant.rst
+    imimobile.rst
+    infobip.rst
+    integrat.rst
+    mediaedgegsm.rst
+    mediafonemc.rst
+    mtech_ussd.rst
+    safaricom.rst
+    opera.rst
     vas2nets.rst
+    vodacom_messaging.rst
