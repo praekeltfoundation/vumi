@@ -14,7 +14,8 @@ from vumi.message import TransportUserMessage, TransportEvent
 from vumi.application.tests.utils import ApplicationTestCase
 from vumi.application.sandbox import (
     Sandbox, SandboxCommand, SandboxError, RedisResource, OutboundResource,
-    JsSandboxResource, LoggingResource, HttpClientResource, JsSandbox)
+    JsSandboxResource, LoggingResource, HttpClientResource, JsSandbox,
+    JsFileSandbox)
 from vumi.tests.utils import LogCatcher, PersistenceMixin
 
 
@@ -335,6 +336,25 @@ class JsSandboxTestCase(SandboxTestCaseBase):
             'We have access to path!',
             'Done.',
         ])
+
+
+class JsFileSandboxTestCase(JsSandboxTestCase):
+
+    application_class = JsFileSandbox
+
+    def setup_app(self, javascript, extra_config=None):
+        tmp_file_name = self.mktemp()
+        tmp_file = open(tmp_file_name, 'w')
+        tmp_file.write(javascript)
+        tmp_file.close()
+
+        extra_config = extra_config or {}
+        extra_config.update({
+            'javascript_file': tmp_file_name,
+        })
+
+        return super(JsSandboxTestCase, self).setup_app(
+            extra_config=extra_config)
 
 
 class DummyAppWorker(object):
