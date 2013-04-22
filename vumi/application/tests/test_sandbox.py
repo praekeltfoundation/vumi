@@ -352,6 +352,7 @@ class JsFileSandboxTestCase(JsSandboxTestCase):
         extra_config.update({
             'javascript_file': tmp_file_name,
         })
+
         return super(JsSandboxTestCase, self).setup_app(
             extra_config=extra_config)
 
