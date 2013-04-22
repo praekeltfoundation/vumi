@@ -460,7 +460,7 @@ class Dynamic(FieldWithSubtype):
         for key, value in value.iteritems():
             self.validate_subfield(value)
             if not isinstance(key, unicode):
-                raise ValidationError("FieldWithSubtype needs unicode keys.")
+                raise ValidationError("Dynamic field needs unicode keys.")
 
 
 class ListOfDescriptor(FieldDescriptor):
@@ -468,12 +468,6 @@ class ListOfDescriptor(FieldDescriptor):
 
     def get_value(self, modelobj):
         return ListProxy(self, modelobj)
-
-    def __set__(self, modelobj, values):
-        # override __set__ to do custom validation
-        map(self.field.validate_subfield, values)
-        raw_values = [self.field.subfield_to_riak(value) for value in values]
-        modelobj._riak_object._data[self.key] = raw_values
 
     def _ensure_list(self, modelobj):
         if self.key not in modelobj._riak_object._data:
