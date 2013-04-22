@@ -9,7 +9,7 @@ from twisted.web.resource import Resource
 from vumi.application.tests.test_base import ApplicationTestCase
 from vumi.tests.utils import TestResourceWorker, LogCatcher, get_stubbed_worker
 from vumi.application.rapidsms_relay import RapidSMSRelay, BadRequestError
-from vumi.utils import http_request_full, basic_auth_string
+from vumi.utils import http_request_full, basic_auth_string, to_kwargs
 from vumi.message import TransportUserMessage, from_json
 
 
@@ -59,7 +59,8 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
 
     def get_response_msgs(self, response):
         payloads = from_json(response.delivered_body)
-        return [TransportUserMessage(_process_fields=False, **payload)
+        return [TransportUserMessage(
+            _process_fields=False, **to_kwargs(payload))
                 for payload in payloads]
 
     @inlineCallbacks
