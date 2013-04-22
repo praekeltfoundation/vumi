@@ -8,6 +8,7 @@ from twisted.web import http
 from twisted.protocols import basic
 
 from vumi.message import Message
+from vumi.utils import to_kwargs
 from vumi import log
 
 
@@ -42,8 +43,12 @@ class VumiMessageReceiver(basic.LineReceiver):
         line = line.strip()
         try:
             data = json.loads(line)
-            d.callback(self.message_class(_process_fields=True, **data))
+            d.callback(self.message_class(
+                _process_fields=True, **to_kwargs(data)))
         except ValueError, e:
+            d.errback(e)
+        except Exception, e:
+            log.err()
             d.errback(e)
 
     def connectionLost(self, reason):

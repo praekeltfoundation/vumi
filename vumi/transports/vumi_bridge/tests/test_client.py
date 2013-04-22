@@ -9,6 +9,7 @@ from vumi.message import Message
 
 
 class ClientTestCase(TestCase):
+    timeout = 5
 
     @inlineCallbacks
     def setUp(self):
