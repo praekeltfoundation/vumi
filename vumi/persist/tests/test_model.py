@@ -440,6 +440,14 @@ class TestModelOnTxRiak(TestCase):
         self.assertEqual(sorted(d1.contact_info.keys()),
                          ['cellphone', 'honorific'])
 
+    def test_dynamic_field_setting(self):
+        d1 = self._create_dynamic_instance(self.manager.proxy(DynamicModel))
+        d1.contact_info = {u'cellphone': u'789', u'name': u'foo'}
+        self.assertEqual(sorted(d1.contact_info.items()), [
+            (u'cellphone', u'789'),
+            (u'name', u'foo'),
+        ])
+
     @Manager.calls_manager
     def test_listof_fields(self):
         list_model = self.manager.proxy(ListOfModel)
@@ -464,6 +472,12 @@ class TestModelOnTxRiak(TestCase):
 
         l2.items = [1]
         self.assertEqual(list(l2.items), [1])
+
+    def test_listof_setting(self):
+        list_model = self.manager.proxy(ListOfModel)
+        l1 = list_model("foo")
+        l1.items = [7, 8, 9]
+        self.assertEqual(list(l1.items), [7, 8, 9])
 
     @Manager.calls_manager
     def test_foreignkey_fields(self):
