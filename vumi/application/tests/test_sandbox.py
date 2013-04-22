@@ -352,7 +352,6 @@ class JsFileSandboxTestCase(JsSandboxTestCase):
         extra_config.update({
             'javascript_file': tmp_file_name,
         })
-
         return super(JsSandboxTestCase, self).setup_app(
             extra_config=extra_config)
 
@@ -692,6 +691,33 @@ class TestHttpClientResource(ResourceTestCaseBase):
         self.assertTrue(reply['success'])
         self.assertEqual(reply['body'], "foo")
         self.assert_http_request('http://www.example.com', method='POST')
+
+    @inlineCallbacks
+    def test_handle_head(self):
+        self.http_request_succeed("foo")
+        reply = yield self.dispatch_command('head',
+                                            url='http://www.example.com')
+        self.assertTrue(reply['success'])
+        self.assertEqual(reply['body'], "foo")
+        self.assert_http_request('http://www.example.com', method='HEAD')
+
+    @inlineCallbacks
+    def test_handle_delete(self):
+        self.http_request_succeed("foo")
+        reply = yield self.dispatch_command('delete',
+                                            url='http://www.example.com')
+        self.assertTrue(reply['success'])
+        self.assertEqual(reply['body'], "foo")
+        self.assert_http_request('http://www.example.com', method='DELETE')
+
+    @inlineCallbacks
+    def test_handle_put(self):
+        self.http_request_succeed("foo")
+        reply = yield self.dispatch_command('put',
+                                            url='http://www.example.com')
+        self.assertTrue(reply['success'])
+        self.assertEqual(reply['body'], "foo")
+        self.assert_http_request('http://www.example.com', method='PUT')
 
     @inlineCallbacks
     def test_failed_get(self):
