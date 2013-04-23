@@ -112,6 +112,8 @@ class TestTimestamp(TestCase):
     def test_validate(self):
         t = Timestamp()
         t.validate(datetime.now())
+        t.validate("2007-01-25T12:00:00Z")
+        t.validate(u"2007-01-25T12:00:00Z")
         self.assertRaises(ValidationError, t.validate, "foo")
 
     def test_to_riak(self):
