@@ -47,8 +47,6 @@ class WorkerInstance(object):
 
 class HeartBeatMonitor(BaseWorker):
 
-    DEFAULT_DEADLINE = 30
-
     class CONFIG_CLASS(BaseWorker.CONFIG_CLASS):
         deadline = ConfigInt(
             "Check-in deadline for participating workers",
