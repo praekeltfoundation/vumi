@@ -2,6 +2,7 @@
 
 """Field types for Vumi's persistence models."""
 
+import iso8601
 from datetime import datetime
 
 from vumi.message import VUMI_DATE_FORMAT
@@ -220,8 +221,17 @@ class Tag(Field):
 class Timestamp(Field):
     """Field that stores a datetime."""
     def custom_validate(self, value):
-        if not isinstance(value, datetime):
-            raise ValidationError("Timestamp field expects a datetime.")
+        if isinstance(value, datetime):
+            return
+
+        try:
+            iso8601.parse_date(value)
+            return
+        except iso8601.ParseError:
+            pass
+
+        raise ValidationError("Timestamp field expects a datetime or an "
+                              "iso8601 formatted string.")
 
     def custom_to_riak(self, value):
         return value.strftime(VUMI_DATE_FORMAT)
