@@ -1,5 +1,7 @@
 """Tests for vumi.persist.model."""
 
+from datetime import datetime
+
 from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks, returnValue
 
@@ -7,7 +9,7 @@ from vumi.persist.model import (
     Model, Manager, ModelMigrator, ModelMigrationError)
 from vumi.persist.fields import (
     ValidationError, Integer, Unicode, VumiMessage, Dynamic, ListOf,
-    ForeignKey, ManyToMany)
+    ForeignKey, ManyToMany, Timestamp)
 from vumi.message import TransportUserMessage
 from vumi.tests.utils import import_skip
 
@@ -49,6 +51,10 @@ class InheritedModel(SimpleModel):
 
 class OverriddenModel(InheritedModel):
     c = Integer(min=0, max=5)
+
+
+class TimestampModel(Model):
+    time = Timestamp(null=True)
 
 
 class VersionedModelMigrator(ModelMigrator):
@@ -696,6 +702,17 @@ class TestModelOnTxRiak(TestCase):
         s2 = yield simple_model.load("foo2")
         results = yield s2.backlinks.manytomanymodels()
         self.assertEqual(sorted(results), ["bar1"])
+
+    def test_timestamp_field_setting(self):
+        timestamp_model = self.manager.proxy(TimestampModel)
+        t = timestamp_model("foo")
+
+        now = datetime.now()
+        t.time = now
+        self.assertEqual(t.time, now)
+
+        t.time = u"2007-01-25T12:00:00Z"
+        self.assertEqual(t.time, datetime(2007, 01, 25, 12, 0))
 
     @Manager.calls_manager
     def test_inherited_model(self):
