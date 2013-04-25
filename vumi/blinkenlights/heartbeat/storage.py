@@ -1,4 +1,4 @@
-# -*- test-case-name: vumi.blinkenlights.heartbeat.tests.test_monitor -*-
+# -*- test-case-name: vumi.blinkenlights.tests.test_heartbeat -*-
 
 """
 Storage Schema:
@@ -9,6 +9,8 @@ Storage Schema:
  Worker hostinfo (hash):   key = worker:$WORKER_ID:hosts
  Worker Issue (hash):      key = worker:$WORKER_ID:issue
 """
+
+from vumi.persist.redis_base import Manager
 
 
 # some redis key-making functions.
@@ -40,45 +42,53 @@ class Storage(object):
         self._redis = redis
         self.manager = redis
 
+    @Manager.calls_manager
     def set_systems(self, system_ids):
         """ delete existing system ids and replace with new ones """
         key = "systems"
-        self._redis.delete(key)
+        yield self._redis.delete(key)
         for sys_id in system_ids:
-            self._redis.sadd(key, sys_id)
+            yield self._redis.sadd(key, sys_id)
 
+    @Manager.calls_manager
     def set_system_workers(self, system_id, worker_ids):
         """ delete existing worker ids and replace with new ones """
         key = "system:%s:workers" % system_id
-        self._redis.delete(key)
+        yield self._redis.delete(key)
         # not sure how to make sadd() accept varags :-(
         for wkr_id in worker_ids:
-            self._redis.sadd(key, wkr_id)
+            yield self._redis.sadd(key, wkr_id)
 
+    @Manager.calls_manager
     def set_worker_attrs(self, worker_id, attrs):
         key = attr_key(worker_id)
-        self._redis.hmset(key, attrs)
+        yield self._redis.hmset(key, attrs)
 
+    @Manager.calls_manager
     def set_worker_hostinfo(self, worker_id, hostinfo):
         key = hostinfo_key(worker_id)
-        self._redis.hmset(key, hostinfo)
+        yield self._redis.hmset(key, hostinfo)
 
+    @Manager.calls_manager
     def delete_worker_hostinfo(self, worker_id):
         key = hostinfo_key(worker_id)
-        self._redis.delete(key)
+        yield self._redis.delete(key)
 
+    @Manager.calls_manager
     def set_worker_issue(self, worker_id, issue):
         key = issue_key(worker_id)
-        self._redis.hmset(key, issue)
+        yield self._redis.hmset(key, issue)
 
+    @Manager.calls_manager
     def delete_worker_issue(self, worker_id):
         key = issue_key(worker_id)
-        self._redis.delete(key)
+        yield self._redis.delete(key)
 
+    @Manager.calls_manager
     def open_or_update_issue(self, worker_id, issue):
         key = issue_key(worker_id)
         # add these fields if they do not already exist
-        self._redis.hsetnx(key, 'issue_type', issue['issue_type'])
-        self._redis.hsetnx(key, 'start_time', issue['start_time'])
+        yield self._redis.hsetnx(key, 'issue_type', issue['issue_type'])
+        yield self._redis.hsetnx(key, 'start_time', issue['start_time'])
         # update current proc count
-        self._redis.hset(key, 'procs_count', issue['procs_count'])
+        yield self._redis.hset(key, 'procs_count', issue['procs_count'])
