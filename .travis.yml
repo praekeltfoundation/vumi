@@ -3,5 +3,6 @@ python:
   - "2.6"
   - "2.7"
 install:
+  - "easy_install riak_pb"
   - "pip install -r requirements.pip --use-mirrors"
 script: trial vumi
