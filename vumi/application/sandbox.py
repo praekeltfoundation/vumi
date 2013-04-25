@@ -583,7 +583,7 @@ class SandboxApi(object):
         try:
             reply = yield resource.dispatch_request(self, command)
         except Exception, e:
-            log.err(str(e))
+            log.err()
             reply = SandboxCommand(
                 reply=True,
                 cmd_id=command['cmd_id'],

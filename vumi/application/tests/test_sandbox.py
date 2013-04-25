@@ -411,23 +411,24 @@ class SandboxApiTestCase(TestCase):
     @inlineCallbacks
     def test_request_dispatching_for_uncaught_exceptions(self):
         def handle_use(api, command):
-            raise Exception("Something bad happened")
+            raise Exception('Something bad happened')
         self.resources.add_resource(
             'bad_resource',
             MockResource('bad_resource', self.app, use=handle_use))
 
         command = SandboxCommand(cmd='bad_resource.use')
-        with LogCatcher() as lc:
-            self.api.dispatch_request(command)
-            msg = yield self.sent_messages.get()
-            logged_error = lc.errors[0]['message']
+        self.api.dispatch_request(command)
+        msg = yield self.sent_messages.get()
 
         self.assertEqual(msg['cmd'], 'bad_resource.use')
         self.assertEqual(msg['cmd_id'], command['cmd_id'])
         self.assertTrue(msg['reply'])
         self.assertFalse(msg['success'])
-        self.assertEqual(msg['reason'], u"Something bad happened")
-        self.assertEqual(logged_error, ("'Something bad happened'",))
+        self.assertEqual(msg['reason'], u'Something bad happened')
+
+        logged_error = self.flushLoggedErrors()[0]
+        self.assertEqual(str(logged_error.value), 'Something bad happened')
+        self.assertEqual(logged_error.type, Exception)
 
 
 class ResourceTestCaseBase(TestCase):
