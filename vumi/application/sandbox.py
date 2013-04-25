@@ -87,15 +87,9 @@ class SandboxRlimiter(object):
             if signal.getsignal(i) == signal.SIG_IGN:
                 signal.signal(i, signal.SIG_DFL)
 
-    def _sanitize_fds(self):
-        # close everything except stdin, stdout and stderr
-        maxfds = resource.getrlimit(resource.RLIMIT_NOFILE)[1]
-        os.closerange(3, maxfds)
-
     def execute(self):
         self._apply_rlimits()
         self._restore_child_env(os.environ)
-        self._sanitize_fds()
         self._reset_signals()
         os.execvpe(self._executable, self._args, self._env)
 
