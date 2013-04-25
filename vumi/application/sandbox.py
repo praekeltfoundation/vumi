@@ -580,7 +580,16 @@ class SandboxApi(object):
         command['cmd'] = rest
         resource = self.resources.resources.get(resource_name,
                                                 self.fallback_resource)
-        reply = yield resource.dispatch_request(self, command)
+        try:
+            reply = yield resource.dispatch_request(self, command)
+        except Exception, e:
+            log.warning(str(e))
+            reply = SandboxCommand(
+                reply=True,
+                cmd_id=command['cmd_id'],
+                success=False,
+                reason=unicode(e))
+
         if reply is not None:
             reply['cmd'] = '%s%s%s' % (resource_name, sep, rest)
             self.sandbox_send(reply)
