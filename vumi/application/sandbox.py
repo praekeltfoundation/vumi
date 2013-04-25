@@ -79,6 +79,10 @@ class SandboxRlimiter(object):
         data = os.environ[self._SANDBOX_RLIMITS_]
         rlimits = json.loads(data) if data.strip() else {}
         for rlimit, (soft, hard) in rlimits.iteritems():
+            # Cap our rlimits to the maximum allowed.
+            rsoft, rhard = resource.getrlimit(int(rlimit))
+            soft = min(soft, rsoft)
+            hard = min(hard, rhard)
             resource.setrlimit(int(rlimit), (soft, hard))
 
     def _reset_signals(self):
