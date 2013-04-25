@@ -218,8 +218,22 @@ class Tag(Field):
         return tuple(value)
 
 
+class TimestampDescriptor(FieldDescriptor):
+    """A field descriptor for timestamp fields."""
+
+    def set_value(self, modelobj, value):
+        if value is not None and not isinstance(value, datetime):
+            # we can be sure that this is a iso8601 parseable string, since it
+            # passed validation
+            value = iso8601.parse_date(value)
+        super(TimestampDescriptor, self).set_value(modelobj, value)
+
+
 class Timestamp(Field):
     """Field that stores a datetime."""
+
+    descriptor_class = TimestampDescriptor
+
     def custom_validate(self, value):
         if isinstance(value, datetime):
             return
