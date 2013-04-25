@@ -2,10 +2,8 @@
 
 """An application for sandboxing message processing."""
 
-import sys
 import resource
 import os
-import signal
 import json
 import pkg_resources
 from uuid import uuid4
@@ -18,7 +16,6 @@ from twisted.internet.defer import (
 from twisted.internet.error import ProcessDone
 from twisted.python.failure import Failure
 
-import vumi
 from vumi.config import ConfigText, ConfigInt, ConfigList, ConfigDict
 from vumi.application.base import ApplicationWorker
 from vumi.message import Message
@@ -26,6 +23,7 @@ from vumi.errors import ConfigError
 from vumi.persist.txredis_manager import TxRedisManager
 from vumi.utils import load_class_by_string, http_request_full
 from vumi import log
+from vumi.application.sandbox_rlimiter import SandboxRlimiter
 
 
 class MultiDeferred(object):
@@ -58,87 +56,6 @@ class MultiDeferred(object):
 
 class SandboxError(Exception):
     """An error occurred inside the sandbox."""
-
-
-class SandboxRlimiter(object):
-    """This reads rlimits in from stdin, applies them and then execs a
-    new executable.
-
-    It's necessary because Twisted's spawnProcess has no equivalent of
-    the `preexec_fn` argument to :class:`subprocess.POpen`.
-
-    See http://twistedmatrix.com/trac/ticket/4159.
-    """
-    def __init__(self, argv, env):
-        start = argv.index('--') + 1
-        self._executable = argv[start]
-        self._args = [self._executable] + argv[start + 1:]
-        self._env = env
-
-    def _apply_rlimits(self):
-        data = os.environ[self._SANDBOX_RLIMITS_]
-        rlimits = json.loads(data) if data.strip() else {}
-        for rlimit, (soft, hard) in rlimits.iteritems():
-            # Cap our rlimits to the maximum allowed.
-            rsoft, rhard = resource.getrlimit(int(rlimit))
-            soft = min(soft, rsoft)
-            hard = min(hard, rhard)
-            resource.setrlimit(int(rlimit), (soft, hard))
-
-    def _reset_signals(self):
-        # reset all signal handlers to their defaults
-        for i in range(1, signal.NSIG):
-            if signal.getsignal(i) == signal.SIG_IGN:
-                signal.signal(i, signal.SIG_DFL)
-
-    def execute(self):
-        self._apply_rlimits()
-        self._restore_child_env(os.environ)
-        self._reset_signals()
-        os.execvpe(self._executable, self._args, self._env)
-
-    _SANDBOXED_PYTHONPATH_ = "_SANDBOXED_PYTHONPATH_"
-    _SANDBOX_RLIMITS_ = "_SANDBOX_RLIMITS_"
-
-    @classmethod
-    def _override_child_env(cls, env, rlimits):
-        """Put RLIMIT config and a suitable PYTHONPATH in the env.
-
-        The PYTHONPATH needs to be set appropriately for the child process to
-        find this module.
-        """
-        # First, add the place(s) where vumi can be found to the path.
-        python_path = [os.path.dirname(p) for p in vumi.__path__]
-        # Next, add anything from the PYTHONPATH envvar.
-        python_path.extend(os.environ.get('PYTHONPATH', '').split(os.pathsep))
-
-        if 'PYTHONPATH' in env:
-            env[cls._SANDBOXED_PYTHONPATH_] = env['PYTHONPATH']
-        env['PYTHONPATH'] = os.pathsep.join(python_path)
-        env[cls._SANDBOX_RLIMITS_] = json.dumps(rlimits)
-
-    @classmethod
-    def _restore_child_env(cls, env):
-        """Remove PYTHONPATH override and RLIMIT config."""
-        del env[cls._SANDBOX_RLIMITS_]
-        if 'PYTHONPATH' in env:
-            del env['PYTHONPATH']
-        if cls._SANDBOXED_PYTHONPATH_ in env:
-            env['PYTHONPATH'] = env.pop(cls._SANDBOXED_PYTHONPATH_)
-
-    @classmethod
-    def spawn(cls, protocol, executable, rlimits, **kwargs):
-        # spawns a SandboxRlimiter, connectionMade then passes the rlimits
-        # through to stdin and the SandboxRlimiter applies them
-        args = kwargs.pop('args', [])
-        # the -u for unbuffered I/O is important (otherwise the process
-        # execed will be very confused about where its stdin data has
-        # gone)
-        args = [sys.executable, '-u', '-m', __name__, '--'] + args
-        env = kwargs.pop('env', {})
-        cls._override_child_env(env, rlimits)
-        reactor.spawnProcess(protocol, sys.executable, args=args, env=env,
-                             **kwargs)
 
 
 class SandboxProtocol(ProcessProtocol):
@@ -177,13 +94,9 @@ class SandboxProtocol(ProcessProtocol):
         self.error_chunk = ''
         api.set_sandbox(self)
 
-    @staticmethod
-    def rlimiter(args, env):
-        return SandboxRlimiter(args, env)
-
     def spawn(self):
         SandboxRlimiter.spawn(
-            self, self.executable, self.rlimits, **self.spawn_kwargs)
+            reactor, self, self.executable, self.rlimits, **self.spawn_kwargs)
 
     def done(self):
         """Returns a deferred that will be called when the process ends."""
@@ -883,8 +796,3 @@ class JsFileSandbox(JsSandbox):
 
     def javascript_for_api(self, api):
         return file(api.config.javascript_file).read()
-
-
-if __name__ == "__main__":
-    rlimiter = SandboxProtocol.rlimiter(sys.argv, os.environ)
-    rlimiter.execute()
