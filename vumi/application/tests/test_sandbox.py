@@ -416,11 +416,14 @@ class SandboxApiTestCase(TestCase):
             'bad_resource',
             MockResource('bad_resource', self.app, use=handle_use))
 
-        self.api.dispatch_request(
-            SandboxCommand(cmd='bad_resource.use'))
+        command = SandboxCommand(cmd='bad_resource.use')
+        self.api.dispatch_request(command)
 
         msg = yield self.sent_messages.get()
-        self.assertEqual(msg['success'], False)
+        self.assertEqual(msg['cmd'], 'bad_resource.use')
+        self.assertEqual(msg['cmd_id'], command['cmd_id'])
+        self.assertTrue(msg['reply'])
+        self.assertFalse(msg['success'])
         self.assertEqual(msg['reason'], u"Something bad happened")
 
 
