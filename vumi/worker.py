@@ -145,8 +145,8 @@ class BaseWorker(Worker):
         """Return static (message independent) configuration."""
         return self._static_config
 
-    def get_config(self, msg):
-        """This should return a message-specific config object.
+    def get_config(self, msg, ctxt=None):
+        """This should return a message and context specific config object.
 
         It deliberately returns a deferred even when this isn't strictly
         necessary to ensure that workers will continue to work when per-message
