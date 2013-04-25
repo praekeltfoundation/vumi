@@ -120,13 +120,11 @@ class TestMessageStore(TestMessageStoreBase):
     def test_batch_done(self):
         tag1 = ("poolA", "tag1")
         batch_id = yield self.store.batch_start([tag1])
-        tag_info = yield self.store.get_tag_info(tag1)
-        self.assertEqual(tag_info.current_batch.key, batch_id)
-
         yield self.store.batch_done(batch_id)
         batch = yield self.store.get_batch(batch_id)
-        self.assertEqual(list(batch.tags), [tag1])
+        import time; time.sleep(0.5)
         tag_info = yield self.store.get_tag_info(tag1)
+        self.assertEqual(list(batch.tags), [tag1])
         self.assertEqual(tag_info.current_batch.key, None)
 
     @inlineCallbacks
