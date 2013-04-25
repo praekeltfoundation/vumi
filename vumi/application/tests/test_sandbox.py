@@ -3,6 +3,7 @@
 import os
 import sys
 import json
+import resource
 import pkg_resources
 from collections import defaultdict
 
@@ -107,6 +108,27 @@ class SandboxTestCase(SandboxTestCaseBase):
         self.assertEqual(status, 0)
         [sandbox_err] = self.flushLoggedErrors(SandboxError)
         self.assertEqual(str(sandbox_err.value).split(' [')[0], "err")
+
+    @inlineCallbacks
+    def test_bad_rlimit(self):
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        # This irreversibly sets limits for the current process.
+        # 10k file handles should be enough for everyone, right?
+        hard = min(hard, 10000)
+        soft = min(soft, hard)
+        resource.setrlimit(resource.RLIMIT_NOFILE, (soft, hard))
+
+        app = yield self.setup_app(
+            "import sys\n"
+            "import resource\n"
+            "rlimit_nofile = resource.getrlimit(resource.RLIMIT_NOFILE)\n"
+            "sys.stderr.write('%s %s\\n' % rlimit_nofile)\n",
+            {'rlimits': {'RLIMIT_NOFILE': [soft, hard * 2]}})
+        status = yield app.process_event_in_sandbox(self.mk_ack())
+        self.assertEqual(status, 0)
+        [sandbox_err] = self.flushLoggedErrors(SandboxError)
+        self.assertEqual(str(sandbox_err.value).split(' [')[0],
+                         "%s %s" % (soft, hard))
 
     @inlineCallbacks
     def test_resource_setup(self):
