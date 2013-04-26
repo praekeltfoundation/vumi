@@ -185,9 +185,12 @@ class MessageStore(object):
         batch = yield self.batches.load(batch_id)
         tag_keys = yield batch.backlinks.currenttags()
         # HACK: Some Riak installations (like Travis) return urlencoded keys.
+        print tag_keys
         tag_keys = [unquote(tk) for tk in tag_keys]
+        print tag_keys
         for tags_bunch in self.manager.load_all_bunches(CurrentTag, tag_keys):
             for tag in (yield tags_bunch):
+                print tag
                 tag.current_batch.set(None)
                 yield tag.save()
 
