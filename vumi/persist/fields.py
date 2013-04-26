@@ -598,9 +598,8 @@ class ForeignKeyDescriptor(FieldDescriptor):
     def reverse_lookup_keys(self, modelobj, manager=None):
         if manager is None:
             manager = modelobj.manager
-        mr = manager.mr_from_index(
+        return manager.index_keys(
             self.model_cls, self.index_name, modelobj.key)
-        return mr.get_keys()
 
     def clean(self, modelobj):
         if self.key not in modelobj._riak_object._data:
