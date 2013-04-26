@@ -4,6 +4,7 @@ python:
   - "2.7"
 services:
   - riak
+before_install: ./fix_travis_riak.sh
 install:
   - "easy_install riak_pb"
   - "pip install -r requirements.pip --use-mirrors"
