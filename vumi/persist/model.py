@@ -270,7 +270,9 @@ class Model(object):
 
         :returns: List of keys matching the index param.
         """
-        return manager.index_keys(cls, field_name, value)
+        index_name, start_value, end_value = index_vals_for_field(
+            cls, field_name, value, None)
+        return manager.index_keys(cls, index_name, start_value, end_value)
 
     @classmethod
     def index_lookup(cls, manager, field_name, value):
@@ -612,11 +614,9 @@ class Manager(object):
         raise NotImplementedError("Sub-classes of Manager should implement"
                                   " .run_map_reduce(...)")
 
-    def index_keys(self, model, field_name, start_value, end_value=None):
+    def index_keys(self, model, index_name, start_value, end_value=None):
         bucket = self.bucket_for_modelcls(model)
-        index_name, sv, ev = index_vals_for_field(
-            model, field_name, start_value, end_value)
-        return bucket.get_index(index_name, sv, ev)
+        return bucket.get_index(index_name, start_value, end_value)
 
     def mr_from_field(self, model, field_name, start_value, end_value=None):
         return VumiMapReduce.from_field(
