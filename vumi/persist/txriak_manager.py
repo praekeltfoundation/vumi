@@ -40,6 +40,8 @@ class TxRiakManager(Manager):
         client = RiakClient(host=host, port=port, prefix=prefix,
             mapred_prefix=mapred_prefix, client_id=client_id,
             transport=transport_class)
+        # XXX: Monkeypatch client to work around bug in v1.0.9
+        client._transport = client.transport
         return cls(client, bucket_prefix, load_bunch_size=load_bunch_size,
                    mapreduce_timeout=mapreduce_timeout)
 
