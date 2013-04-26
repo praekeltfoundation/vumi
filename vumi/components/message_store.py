@@ -183,6 +183,7 @@ class MessageStore(object):
     def batch_done(self, batch_id):
         batch = yield self.batches.load(batch_id)
         tag_keys = yield batch.backlinks.currenttags()
+        print tag_keys
         for tags_bunch in self.manager.load_all_bunches(CurrentTag, tag_keys):
             for tag in (yield tags_bunch):
                 tag.current_batch.set(None)
