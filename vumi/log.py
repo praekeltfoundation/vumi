@@ -9,24 +9,32 @@ should be thrown out.
 
 The log level and service PID are now also included in the output.
 
-Another feature is named loggers, which twisted doesn't really support well.
+Another feature is named loggers, so that one indicate which module
+or class logged a message.
 
 Usage:
 
   import vumi.log
 
-
+  # supports normal twisted.python.log syntax
   log.msg("foo")
+  log.err("foo")
 
-  # Or with levels
+  # With log levels
+  log.debug("foo")
   log.info("foo")
   log.error("foo")
 
-  # named loggers
-  log.name('my-subsystem').info('foo')
+  # Named loggers.
+  # The name param can be any object which can be coerced into string)
+  log.name('subsystem').info('foo')
 
-  mylog = log.name('my-subsystem')
+  # or alternatively
+  mylog = log.name('subsystem')
   mylog.info('foo')
+
+  # New style formatting
+  log.info('Window size is %s bytes. With %s ', 16, bar)
 
 """
 
@@ -44,6 +52,17 @@ from vumi.errors import VumiError
 
 # Dictionary of named loggers
 _loggers = {}
+
+# flag to enable/disable new-style formatting
+# disabled by default to preserve Vumi API compat
+_fancy_formatting = False
+
+
+def logger():
+    """
+    Our log observer factory. passed to the --logger option for twistd.
+    """
+    return VumiLogObserver(sys.stdout).emit
 
 
 class VumiLogObserver(object):
@@ -114,22 +133,60 @@ class VumiLogObserver(object):
         util.untilConcludes(self.flush)
 
 
-def logger():
-    """ Our log observer factory """
-    return VumiLogObserver(sys.stdout).emit
-
-
 class VumiLog(object):
 
     def __init__(self, name):
-        self.debug = partial(log.msg, logLevel=logging.DEBUG, system=name)
-        self.info = partial(log.msg, logLevel=logging.INFO, system=name)
-        self.warning = partial(log.msg, logLevel=logging.WARNING, system=name)
-        self.error = partial(log.err, logLevel=logging.ERROR, system=name)
-        self.critical = partial(log.err, logLevel=logging.CRITICAL,
+        self._debug = partial(log.msg, logLevel=logging.DEBUG, system=name)
+        self._info = partial(log.msg, logLevel=logging.INFO, system=name)
+        self._warning = partial(log.msg, logLevel=logging.WARNING, system=name)
+        self._error = partial(log.err, logLevel=logging.ERROR, system=name)
+        self._critical = partial(log.err, logLevel=logging.CRITICAL,
                                 system=name)
-        self.msg = self.info
-        self.err = self.error
+
+        self._msg = partial(log.msg, logLevel=logging.INFO, system=name)
+        self._err = partial(log.err, logLevel=logging.ERROR, system=name)
+
+
+    def format(self, fmt, params, kw):
+        # set message format attributes for Sentry
+        kw['sentry_message_format'] = fmt
+        kw['sentry_message_params'] = params
+        # format
+        return fmt % params
+
+    def debug(self, fmt, *params, **kw):
+        text = self.format(fmt, params, kw)
+        self._debug(text, **kw)
+
+    def info(self, fmt, *params, **kw):
+        text = self.format(fmt, params, kw)
+        self._info(text, **kw)
+
+    def warning(self, fmt, *params, **kw):
+        text = self.format(fmt, params, kw)
+        self._warning(text, **kw)
+
+    def error(self, fmt, *params, **kw):
+        text = self.format(fmt, params, kw)
+        self._error(text, **kw)
+
+    def critical(self, fmt, *params, **kw):
+        text = self.format(fmt, params, kw)
+        self._critical(text, **kw)
+
+    #
+    # Legacy shims which are compatible with the behavior of
+    # twisted.python.log.{msg,err}
+    #
+    # Since these functions don't accept message format parameters,
+    # we can't pass the sentry.interfaces.Message structured data
+    # to sentry
+
+    def msg(self, *message, **kw):
+        self._msg(*message, **kw)
+
+    def err(self, failure, why, **kw):
+        self._err(failure, why, **kw)
 
 
 def name(obj):
@@ -138,6 +195,8 @@ def name(obj):
     name = None
     if isinstance(obj, str):
         name = obj
+    elif isinstance(obj, type):
+        name = obj.__name__
     elif isinstance(obj, object):
         name = obj.__class__.__name__
     else:
@@ -147,17 +206,13 @@ def name(obj):
         _loggers[name] = log = VumiLog(name)
     return log
 
+# The default, anonymous log
+_log = VumiLog('-')
 
-try:
-    anonLog
-except NameError:
-    anonLog = VumiLog('-')
-
-
-debug = anonLog.debug
-info = anonLog.info
-warning = anonLog.warning
-error = anonLog.error
-critical = anonLog.critical
-msg = info
-err = error
+debug = _log.debug
+info = _log.info
+warning = _log.warning
+error = _log.error
+critical = _log.critical
+msg = _log.info
+err = _log.error
