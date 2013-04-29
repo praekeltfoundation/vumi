@@ -7,7 +7,6 @@ from twisted.web.client import HTTPClientFactory, _makeGetterFactory
 from twisted.internet.defer import DeferredList
 from twisted.application.service import Service
 
-
 DEFAULT_LOG_CONTEXT_SENTINEL = "_SENTRY_CONTEXT_"
 
 
@@ -138,6 +137,11 @@ class SentryLogObserver(object):
         }
         tags = {
             "worker-id": self.worker_id,
+        }
+        if 'sentry_message_format' in event:
+            data['sentry.interfaces.Message'] = {
+                "message": event['sentry_message_format'],
+                "params": event['sentry_message_params'],
         }
         failure = event.get('failure')
         if failure:
