@@ -6,7 +6,7 @@ Documentation available online at http://vumi.readthedocs.org/ and in the `docs`
 |vumi-ci|_
 
 .. |vumi-ci| image:: https://travis-ci.org/praekelt/vumi.png?branch=master
-.. _vumi-ci: https://travis-ci.org/praekepraekelpraekelt/vumi
+.. _vumi-ci: https://travis-ci.org/praekelt/vumi
 
 To build the docs locally::
 
