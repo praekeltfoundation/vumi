@@ -1,40 +1,59 @@
 # -*- test-case-name: vumi.tests.test_log -*-
 
 """
-Light wrapper around Twisted's rather unfortunate logging system
+A light wrapper around Twisted's logging system, to work around some issues,
+while still preserving compatibility.
 
 We reintroduce the concept of log levels (debug, info, warn, error, etc).
-Just because it's hard to decide between different levels doesn't mean they
-should be thrown out.
+Just because it can be hard to decide between different levels doesn't mean
+they should be done away. Having an "ERROR" token in the logs also makes
+it easier to grep for actual errors.
+
+
 
 The log level and service PID are now also included in the output.
 
 Another feature is named loggers, so that one indicate which module
-or class logged a message.
+or class logged a message. Twisted does a really bad job with this.
 
 Usage:
 
   import vumi.log
 
-  # supports normal twisted.python.log syntax
-  log.msg("foo")
-  log.err("foo")
+  # supports existing twisted.python.log API
+  log.msg('foo')
+  log.err(exc, "Connection failed")
 
-  # With log levels
-  log.debug("foo")
-  log.info("foo")
-  log.error("foo")
+  # With log levels!
+  log.debug('foo')
+  log.info('foo')
+  log.error('foo')
 
-  # Named loggers.
-  # The name param can be any object which can be coerced into string)
+  # Named loggers!
   log.name('subsystem').info('foo')
+  log.name(self).info('foo')
 
-  # or alternatively
   mylog = log.name('subsystem')
   mylog.info('foo')
 
-  # New style formatting
-  log.info('Window size is %s bytes. With %s ', 16, bar)
+  # Built-in formatting
+  #
+  # This is a good thing as it allows Sentry to rollup/aggregate error events,
+  # and also reduces verbiage in the logging statements
+  #
+  log.error('Connection failed (client_id=%s,seq=%s), id, seq)
+
+  # Exceptions and Failures
+  #
+  # The logger recognizes error objects and will create useful
+  # log messages with them
+  #
+  # When you want a log an error but also print some useful context, pass
+  # the error object using the 'cause' keyword, like below:
+  #
+  log.error('Connection failed (client_id=%s,token=%s), id, token, cause=exc)
+  log.error(cause=exc)
+  log.error(exc)
 
 """
 
@@ -45,22 +64,18 @@ import time
 from datetime import datetime
 from functools import partial
 
-from twisted.python import log
-from twisted.python import _utilpy3 as util
+from twisted.python import log as _log
+from twisted.python import failure
 
 from vumi.errors import VumiError
 
 # Dictionary of named loggers
 _loggers = {}
 
-# flag to enable/disable new-style formatting
-# disabled by default to preserve Vumi API compat
-_fancy_formatting = False
-
 
 def logger():
     """
-    Our log observer factory. passed to the --logger option for twistd.
+    Our log observer factory. Passed to the --logger option for twistd.
     """
     return VumiLogObserver(sys.stdout).emit
 
@@ -111,82 +126,140 @@ class VumiLogObserver(object):
             when.hour, when.minute, when.second,
             tzSign, tzHour, tzMin)
 
-    def emit(self, eventDict):
-        text = log.textFromEventDict(eventDict)
+    def format(event):
+        msg = event['message']
+        cause = event['cause']
+        # Handle cases where we received a cause
+        if cause:
+            elif (not msg) and isinstance(cause, failure.Failure):
+                text = ('Unhandled Error: %s\n' + cause.getErrorMessage()
+                        + cause.getErrorMessage())
+            elif not msg:
+                text = repr(cause)
+            elif msg:
+                text = msg[0] + (' <[cause=%s]>' % cause)
+        if msg:
+            text = msg
+        return text
+
+    def format_compat(event):
+        """
+        Extract text from an event dict passed to a log observer. If it cannot
+        handle the dict, it returns None.
+
+        The possible keys of eventDict are:
+        - C{message}: by default, it holds the final text. It's required, but can
+          be empty if either C{isError} or C{format} is provided (the first
+          having the priority).
+        - C{isError}: boolean indicating the nature of the event.
+        - C{failure}: L{failure.Failure} instance, required if the event is an
+          error.
+        - C{why}: if defined, used as header of the traceback in case of errors.
+        - C{format}: string format used in place of C{message} to customize
+          the event. It uses all keys present in C{eventDict} to format
+          the text.
+        Other keys will be used when applying the C{format}, or ignored.
+        """
+        msg = event['message']
+        if not msg:
+            if event['isError'] and 'failure' in event:
+                text = ((event.get('why') or 'Unhandled Error')
+                        + '\n' + event['failure'].getTraceback())
+            elif 'format' in event:
+                text = _safeFormat(event['format'], event)
+            else:
+                # we don't know how to log this
+                return
+        else:
+            text = ' '.join(map(reflect.safe_str, edm))
+        return text
+
+    def emit(self, event):
+        if 'vumi-log-v2' in event:
+            text = self.format(event)
+        else:
+            text = self.format_compat(event)
+
         if text is None:
             return
 
-        if 'logLevel' not in eventDict:
+        if 'logLevel' not in event:
             level = 'INFO'
         else:
-            level = self.level_strings.get(eventDict['logLevel'], 'INFO')
+            level = self.level_strings.get(event['logLevel'], 'INFO')
 
-        timeStr = self.formatTime(eventDict['time'])
-        fmtDict = {'system': eventDict['system'],
+        timeStr = self.formatTime(event['time'])
+        fmtDict = {'system': event['system'],
                    'level': level,
                    'pid': os.getpid(),
                    'text': text.replace("\n", "\n\t")}
         msgStr = log._safeFormat("%(pid)s %(level)s [%(system)s]: %(text)s\n",
                                  fmtDict)
 
-        util.untilConcludes(self.write, timeStr + " " + msgStr)
-        util.untilConcludes(self.flush)
+        # Don't need to do async writes here.
+        # Disk IO is orders of magnitude faster than Network IO, and
+        # the failure conditions are quite different.
+        self.write(timeStr + " " + msgStr)
+        self.flush()
 
 
 class VumiLog(object):
 
-    def __init__(self, name):
-        self._debug = partial(log.msg, logLevel=logging.DEBUG, system=name)
-        self._info = partial(log.msg, logLevel=logging.INFO, system=name)
-        self._warning = partial(log.msg, logLevel=logging.WARNING, system=name)
-        self._error = partial(log.err, logLevel=logging.ERROR, system=name)
-        self._critical = partial(log.err, logLevel=logging.CRITICAL,
-                                system=name)
+    def __init__(self, name=None):
+        self.name = (name or '-')
 
-        self._msg = partial(log.msg, logLevel=logging.INFO, system=name)
-        self._err = partial(log.err, logLevel=logging.ERROR, system=name)
+    def setup_attrs(self, obj, params, kw):
+        kw['vumi-log-v2'] = True
+        kw['system'] = self.name
+        if 'cause' in kw and isinstance(kw['cause'], Exception):
+            kw['cause'] = failure.Failure(kw['cause'])
+        if isinstance(obj, str):
+            # set message format attributes for Sentry
+            kw['sentry_message_format'] = obj
+            kw['sentry_message_params'] = params
+            msg = [fmt % params]
+        elif isinstance(obj, failure.Failure):
+            kw['cause'] = m
+            msg = []
+        elif isinstance(obj, Exception):
+            kw['cause'] = failure.Failure(obj)
+            msg = []
+        else:
+            msg = [repr(obj)]
+        return msg
 
+    def debug(self, obj, *params, **kw):
+        message = self.setup_attrs(obj, params, kw)
+        _log.msg(*message, logLevel=logging.DEBUG, **kw)
 
-    def format(self, fmt, params, kw):
-        # set message format attributes for Sentry
-        kw['sentry_message_format'] = fmt
-        kw['sentry_message_params'] = params
-        # format
-        return fmt % params
+    def info(self, obj, *params, **kw):
+        message = self.setup_attrs(obj, params, kw)
+        _log.msg(*message, logLevel=logging.INFO, **kw)
 
-    def debug(self, fmt, *params, **kw):
-        text = self.format(fmt, params, kw)
-        self._debug(text, **kw)
+    def warning(self, obj, *params, **kw):
+        message = self.setup_attrs(obj, params, kw)
+        _log.msg(*message, logLevel=logging.WARNING, **kw)
 
-    def info(self, fmt, *params, **kw):
-        text = self.format(fmt, params, kw)
-        self._info(text, **kw)
+    def error(self, obj, *params, **kw):
+        message = self.setup_attrs(obj, params, kw)
+        _log.msg(*message, logLevel=logging.ERROR, **kw)
 
-    def warning(self, fmt, *params, **kw):
-        text = self.format(fmt, params, kw)
-        self._warning(text, **kw)
-
-    def error(self, fmt, *params, **kw):
-        text = self.format(fmt, params, kw)
-        self._error(text, **kw)
-
-    def critical(self, fmt, *params, **kw):
-        text = self.format(fmt, params, kw)
-        self._critical(text, **kw)
+    def critical(self, obj, *params, **kw):
+        message = self.setup_attrs(obj, params, kw)
+        _log.msg(*message, logLevel=logging.CRITICAL, **kw)
 
     #
-    # Legacy shims which are compatible with the behavior of
-    # twisted.python.log.{msg,err}
+    # Legacy shims which are 100% API-compatible with twisted's msg() and err()
     #
     # Since these functions don't accept message format parameters,
     # we can't pass the sentry.interfaces.Message structured data
     # to sentry
-
+    #
     def msg(self, *message, **kw):
-        self._msg(*message, **kw)
+        _log.msg(*message, logLevel=logging.INFO, system=self.name)
 
-    def err(self, failure, why, **kw):
-        self._err(failure, why, **kw)
+    def err(self, _stuff=None, _why=None, **kw):
+        _log._err(_stuff, _why, **kw)
 
 
 def name(obj):
@@ -206,13 +279,13 @@ def name(obj):
         _loggers[name] = log = VumiLog(name)
     return log
 
-# The default, anonymous log
-_log = VumiLog('-')
+# The root log
+_root_log = VumiLog()
 
-debug = _log.debug
-info = _log.info
-warning = _log.warning
-error = _log.error
-critical = _log.critical
-msg = _log.info
-err = _log.error
+debug = _root_log.debug
+info = _root_log.info
+warning = _root_log.warning
+error = _root_log.error
+critical = _root_log.critical
+msg = _root_log.msg
+err = _root_log.err
