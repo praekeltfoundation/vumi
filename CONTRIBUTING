@@ -22,3 +22,6 @@ and where needed possibly request some changes, improvements or alternatives.
 
 Please ensure that your code is PEP8[1] compliant and you use 4 spaces
 for indentation instead of tabs.
+
+
+[1] http://www.python.org/dev/peps/pep-0008/
