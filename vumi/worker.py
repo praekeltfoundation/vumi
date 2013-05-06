@@ -113,7 +113,7 @@ class BaseWorker(Worker):
         return attrs
 
     def custom_heartbeat_attrs(self):
-        """ Worker subclasses can override this to add custom attributes """
+        """Worker subclasses can override this to add custom attributes"""
         return {}
 
     def teardown_connectors(self):
