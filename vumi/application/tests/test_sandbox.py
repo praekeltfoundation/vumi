@@ -3,20 +3,29 @@
 import os
 import sys
 import json
+import resource
 import pkg_resources
 from collections import defaultdict
 
-from twisted.internet.defer import inlineCallbacks, fail, succeed
+from twisted.internet.defer import (
+    inlineCallbacks, fail, succeed, DeferredQueue)
 from twisted.internet.error import ProcessTerminated
 from twisted.trial.unittest import TestCase, SkipTest
 
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.application.tests.utils import ApplicationTestCase
 from vumi.application.sandbox import (
-    Sandbox, SandboxCommand, SandboxError, RedisResource, OutboundResource,
-    JsSandboxResource, LoggingResource, HttpClientResource, JsSandbox,
-    JsFileSandbox)
+    Sandbox, SandboxApi, SandboxCommand, SandboxError, SandboxResources,
+    SandboxResource, RedisResource, OutboundResource, JsSandboxResource,
+    LoggingResource, HttpClientResource, JsSandbox, JsFileSandbox)
 from vumi.tests.utils import LogCatcher, PersistenceMixin
+
+
+class MockResource(SandboxResource):
+    def __init__(self, name, app_worker, **handlers):
+        super(MockResource, self).__init__(name, app_worker, {})
+        for name, handler in handlers.iteritems():
+            setattr(self, "handle_%s" % name, handler)
 
 
 class SandboxTestCaseBase(ApplicationTestCase):
@@ -107,6 +116,27 @@ class SandboxTestCase(SandboxTestCaseBase):
         self.assertEqual(status, 0)
         [sandbox_err] = self.flushLoggedErrors(SandboxError)
         self.assertEqual(str(sandbox_err.value).split(' [')[0], "err")
+
+    @inlineCallbacks
+    def test_bad_rlimit(self):
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        # This irreversibly sets limits for the current process.
+        # 10k file handles should be enough for everyone, right?
+        hard = min(hard, 10000)
+        soft = min(soft, hard)
+        resource.setrlimit(resource.RLIMIT_NOFILE, (soft, hard))
+
+        app = yield self.setup_app(
+            "import sys\n"
+            "import resource\n"
+            "rlimit_nofile = resource.getrlimit(resource.RLIMIT_NOFILE)\n"
+            "sys.stderr.write('%s %s\\n' % rlimit_nofile)\n",
+            {'rlimits': {'RLIMIT_NOFILE': [soft, hard * 2]}})
+        status = yield app.process_event_in_sandbox(self.mk_ack())
+        self.assertEqual(status, 0)
+        [sandbox_err] = self.flushLoggedErrors(SandboxError)
+        self.assertEqual(str(sandbox_err.value).split(' [')[0],
+                         "%s %s" % (soft, hard))
 
     @inlineCallbacks
     def test_resource_setup(self):
@@ -389,6 +419,38 @@ class DummyAppWorker(object):
         def mock_method(*args, **kw):
             self.mock_calls[name].append((args, kw))
         return mock_method
+
+
+class SandboxApiTestCase(TestCase):
+    def setUp(self):
+        self.sent_messages = DeferredQueue()
+        self.patch(SandboxApi, 'sandbox_send',
+                   staticmethod(lambda msg: self.sent_messages.put(msg)))
+        self.app = DummyAppWorker()
+        self.resources = SandboxResources(self.app, {})
+        self.api = SandboxApi(self.resources, self.app)
+
+    @inlineCallbacks
+    def test_request_dispatching_for_uncaught_exceptions(self):
+        def handle_use(api, command):
+            raise Exception('Something bad happened')
+        self.resources.add_resource(
+            'bad_resource',
+            MockResource('bad_resource', self.app, use=handle_use))
+
+        command = SandboxCommand(cmd='bad_resource.use')
+        self.api.dispatch_request(command)
+        msg = yield self.sent_messages.get()
+
+        self.assertEqual(msg['cmd'], 'bad_resource.use')
+        self.assertEqual(msg['cmd_id'], command['cmd_id'])
+        self.assertTrue(msg['reply'])
+        self.assertFalse(msg['success'])
+        self.assertEqual(msg['reason'], u'Something bad happened')
+
+        logged_error = self.flushLoggedErrors()[0]
+        self.assertEqual(str(logged_error.value), 'Something bad happened')
+        self.assertEqual(logged_error.type, Exception)
 
 
 class ResourceTestCaseBase(TestCase):
