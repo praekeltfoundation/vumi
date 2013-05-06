@@ -78,7 +78,7 @@ exec { "RabbitMQ setup":
 }
 
 file {'/etc/riak/app.config':
-    ensures   => 'present',
+    ensure    => 'present',
     source    => 'puppet:///modules/vumi/riak-app.config'
 
 }

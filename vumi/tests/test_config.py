@@ -66,8 +66,7 @@ class ConfigTest(TestCase):
         self.assertEqual(FooConfig.__doc__, '\n'.join([
             "Test config.",
             "",
-            "Configuration options",
-            "=====================",
+            "Configuration options:",
             "",
             ":param foo:",
             "",
@@ -88,8 +87,7 @@ class ConfigTest(TestCase):
         self.assertEqual(BarConfig.__doc__, '\n'.join([
             "Test config.",
             "",
-            "Configuration options",
-            "=====================",
+            "Configuration options:",
             "",
             ":param bar:",
             "",
@@ -117,8 +115,7 @@ class ConfigTest(TestCase):
         self.assertEqual(BarConfig.__doc__, '\n'.join([
             "Another test config.",
             "",
-            "Configuration options",
-            "=====================",
+            "Configuration options:",
             "",
             ":param foo:",
             "",
@@ -285,8 +282,9 @@ class ConfigFieldTest(TestCase):
 
         field = self.make_field(ConfigUrl)
         assert_url(self.field_value(field, 'foo'), path='foo')
-        assert_url(self.field_value(field, u'foo'), path=u'foo')
-        assert_url(self.field_value(field, u'foo\u1234'), path=u'foo\u1234')
+        assert_url(self.field_value(field, u'foo'), path='foo')
+        assert_url(self.field_value(field, u'foo\u1234'),
+                   path='foo\xe1\x88\xb4')
         self.assertEqual(None, self.field_value(field, None))
         self.assertEqual(None, self.field_value(field))
         self.assert_field_invalid(field, object())

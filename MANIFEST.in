@@ -14,6 +14,7 @@ prune docs/_build
 recursive-include etc *
 recursive-include puppet *
 recursive-include utils *.sh
+recursive-include vumi *.js
 
 # Python package data files.
 include twisted/plugins/*.py

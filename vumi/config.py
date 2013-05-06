@@ -172,6 +172,9 @@ class ConfigUrl(ConfigField):
             return None
         if not isinstance(value, basestring):
             self.raise_config_error("is not a URL string.")
+        # URLs must be bytes, not unicode.
+        if isinstance(value, unicode):
+            value = value.encode('utf-8')
         return urlparse.urlparse(value)
 
 
@@ -181,8 +184,7 @@ def generate_doc(cls, fields, header_indent='', indent=' ' * 4):
     doc = cls_doc.split("\n")
     if doc and doc[-1].strip():
         doc.append("")
-    doc.append("Configuration options")
-    doc.append("=" * len(doc[-1]))
+    doc.append("Configuration options:")
     for field in fields:
         header, field_doc = field.get_doc()
         doc.append("")
@@ -191,6 +193,17 @@ def generate_doc(cls, fields, header_indent='', indent=' ' * 4):
         doc.extend(textwrap.wrap(field_doc, initial_indent=indent,
                                  subsequent_indent=indent))
     return "\n".join(doc)
+
+
+class ConfigContext(object):
+    """Context within which a configuration object can be retrieved.
+
+    For example, configuration may depend on the message being processed
+    or on the HTTP URL being accessed.
+    """
+    def __init__(self, **kw):
+        for k, v in kw.items():
+            setattr(self, k, v)
 
 
 class ConfigMetaClass(type):

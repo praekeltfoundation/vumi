@@ -13,6 +13,7 @@ from vumi.persist.txredis_manager import TxRedisManager
 
 
 class TwitterTransport(Transport):
+    """Twitter transport."""
 
     transport_type = 'twitter'
 
