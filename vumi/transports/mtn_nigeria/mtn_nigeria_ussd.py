@@ -6,7 +6,8 @@ from vumi import log
 from vumi.transports.base import Transport
 from vumi.message import TransportUserMessage
 from vumi.config import ConfigText, ConfigInt
-from vumi.transports.mtn_nigeria.xml_over_tcp import XmlOverTcpClient
+from vumi.transports.mtn_nigeria.xml_over_tcp import (
+    XmlOverTcpError, CodedXmlOverTcpError, XmlOverTcpClient)
 
 
 class MtnNigeriaUssdTransportConfig(Transport.CONFIG_CLASS):
@@ -52,7 +53,7 @@ class MtnNigeriaUssdTransport(Transport):
     REQUIRED_METADATA_FIELDS = set(['session_id', 'clientId'])
 
     # errors
-    RESPONSE_FAILURE_ERROR = "Response to data request failed."
+    RESPONSE_FAILURE_ERROR = "Response failed: %s"
     METADATA_FIELDS_MISSING_ERROR = (
         "Required message transport metadata fields missing in outbound "
         "message: %s")
@@ -123,36 +124,36 @@ class MtnNigeriaUssdTransport(Transport):
             transport_type=self.transport_type,
             transport_metadata={'mtn_nigeria_ussd': params})
 
+    def send_response(self, message_id, **client_args):
+        try:
+            self.factory.client.send_data_response(**client_args)
+        except XmlOverTcpError as e:
+            return self.publish_nack(
+                message_id, self.RESPONSE_FAILURE_ERROR % e)
+
+        return self.publish_ack(user_message_id=message_id,
+                                sent_message_id=message_id)
+
     def validate_outbound_message(self, message):
         metadata = message['transport_metadata']['mtn_nigeria_ussd']
         missing_fields = (self.REQUIRED_METADATA_FIELDS - set(metadata.keys()))
         if missing_fields:
-            reason = self.METADATA_FIELDS_MISSING_ERROR % list(missing_fields)
-            return {'code': '208', 'reason': reason}
-
-        return None
-
-    def send_response(self, message_id, **client_args):
-        if self.factory.client.send_data_response(**client_args):
-            return self.publish_ack(user_message_id=message_id,
-                                    sent_message_id=message_id)
-
-        reason = self.RESPONSE_FAILURE_ERROR
-        log.msg(reason)
-        return self.publish_nack(message_id, reason)
+            raise CodedXmlOverTcpError('208',
+                self.METADATA_FIELDS_MISSING_ERROR % list(missing_fields))
 
     @inlineCallbacks
     def handle_outbound_message(self, message):
         metadata = message['transport_metadata']['mtn_nigeria_ussd']
 
-        error = self.validate_outbound_message(message)
-        if error is not None:
-            log.msg(error['reason'])
-            yield self.publish_nack(message['message_id'], error['reason'])
+        try:
+            self.validate_outbound_message(message)
+        except CodedXmlOverTcpError as e:
+            log.msg(e)
+            yield self.publish_nack(message['message_id'], "%s" % e)
             yield self.factory.client.send_error_response(
                 metadata.get('session_id'),
                 message.payload.get('in_reply_to'),
-                '208')
+                e.code)
             return
 
         end_session = (

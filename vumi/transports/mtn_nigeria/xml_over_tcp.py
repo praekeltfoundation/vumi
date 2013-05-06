@@ -9,6 +9,49 @@ from twisted.internet.protocol import Protocol
 from vumi import log
 
 
+class XmlOverTcpError(Exception):
+    """
+    Raised when an error occurs while interacting with the XmlOverTcp protocol.
+    """
+
+
+class CodedXmlOverTcpError(XmlOverTcpError):
+    """
+    Raised when an XmlOverTcpError occurs and an error code is available
+    """
+
+    ERRORS = {
+        '001': 'Invalid User Name Password',
+        '002': 'Buffer Overflow',
+        '200': 'No free dialogs',
+        '201': 'Invalid Destination  (applies for n/w initiated session only)',
+        '202': 'Subscriber Not reachable.',
+        '203': ('Timer Expiry (session with subscriber terminated due to '
+                'TimerExp)'),
+        '204': 'Subscriber is Black Listed.',
+        '205': ('Service not Configured. (some service is created but but no '
+               'menu configured for this)'),
+        '206': 'Network Error',
+        '207': 'Unknown Error',
+        '208': 'Invalid Message',
+        '209': 'Subscriber terminated Session (subscriber chose exit option)',
+        '210': 'Incomplete Menu',
+        '211': 'ER not running',
+        '212': 'Timeout waiting for response from ER',
+    }
+
+    def __init__(self, code, reason=None):
+        self.code = code
+        self.message = self.ERRORS.get(code, 'Unknown Code')
+        self.reason = reason
+
+    def __str__(self):
+        return '(%s) %s%s' % (
+            self.code,
+            self.message,
+            ': %s' % self.reason if self.reason else '')
+
+
 class XmlOverTcpClient(Protocol):
     SESSION_ID_HEADER_SIZE = 16
     LENGTH_HEADER_SIZE = 16
@@ -50,26 +93,6 @@ class XmlOverTcpClient(Protocol):
     # interactive two-way communication.
     PHASE = '2'
 
-    ERRORS = {
-        '001': 'Invalid User Name Password',
-        '002': 'Buffer Overflow',
-        '200': 'No free dialogs',
-        '201': 'Invalid Destination  (applies for n/w initiated session only)',
-        '202': 'Subscriber Not reachable.',
-        '203': ('Timer Expiry (session with subscriber terminated due to '
-                'TimerExp)'),
-        '204': 'Subscriber is Black Listed.',
-        '205': ('Service not Configured. (some service is created but but no '
-               'menu configured for this)'),
-        '206': 'Network Error',
-        '207': 'Unknown Error',
-        '208': 'Invalid Message',
-        '209': 'Subscriber terminated Session (subscriber chose exit option)',
-        '210': 'Incomplete Menu',
-        '211': 'ER not running',
-        '212': 'Timeout waiting for response from ER',
-    }
-
     def __init__(self, username, password, application_id,
                  enquire_link_interval=240, timeout_period=60):
         self.username = username
@@ -92,15 +115,16 @@ class XmlOverTcpClient(Protocol):
 
     def connectionLost(self, reason):
         self.stop_periodic_enquire_link()
+        self.cancel_scheduled_timeout()
 
     def disconnect(self):
         """For easier test stubbing."""
         self.transport.loseConnection()
 
     def cancel_scheduled_timeout(self):
-        scheduled_timeout = self.scheduled_timeout
-        if scheduled_timeout is not None and scheduled_timeout.active():
-            scheduled_timeout.cancel()
+        if (self.scheduled_timeout is not None
+            and self.scheduled_timeout.active()):
+            self.scheduled_timeout.cancel()
 
     def reset_scheduled_timeout(self):
         self.cancel_scheduled_timeout()
@@ -115,8 +139,7 @@ class XmlOverTcpClient(Protocol):
 
     def start_periodic_enquire_link(self):
         if not self.authenticated:
-            log.msg("Heartbeat could not be started, client not "
-                    "authenticated")
+            log.msg("Heartbeat could not be started, client not authenticated")
             return
 
         self.reset_scheduled_timeout()
@@ -194,8 +217,8 @@ class XmlOverTcpClient(Protocol):
                 session_id, params.get('requestId'), '208')
 
         if (not self.authenticated and
-                packet_type not in self.IGNORE_AUTH_PACKETS):
-            log.msg("'%s' packet received before client authentication "
+            packet_type not in self.IGNORE_AUTH_PACKETS):
+            log.err("'%s' packet received before client authentication "
                     "was completed" % packet_type)
             return self.send_error_response(
                 session_id, params.get('requestId'), '207')
@@ -209,63 +232,59 @@ class XmlOverTcpClient(Protocol):
         all_fields = mandatory_fields | other_fields
         unexpected_fields = packet_fields - all_fields
         if unexpected_fields:
-            reason = ("Unexpected fields in received packet: %s"
-                      % list(unexpected_fields))
-            return {'code': '208', 'reason': reason}
+            raise CodedXmlOverTcpError('208',
+                "Unexpected fields in received packet: %s"
+                % list(unexpected_fields))
 
         missing_mandatory_fields = mandatory_fields - packet_fields
         if missing_mandatory_fields:
-            reason = ("Missing mandatory fields in received packet: %s"
-                      % list(missing_mandatory_fields))
-            return {'code': '208', 'reason': reason}
-
-        return None
+            raise CodedXmlOverTcpError('208',
+                "Missing mandatory fields in received packet: %s"
+                % list(missing_mandatory_fields))
 
     def handle_error(self, session_id, request_id, error):
-        log.msg(error['reason'])
+        log.err()
         self.send_error_response(session_id, request_id, error['code'])
 
     def handle_login_response(self, session_id, params):
-        error = self.validate_packet_fields(params, self.LOGIN_RESPONSE_FIELDS)
-        if error is not None:
+        try:
+            self.validate_packet_fields(params, self.LOGIN_RESPONSE_FIELDS)
+        except CodedXmlOverTcpError as e:
             self.disconnect()
-            self.handle_error(session_id, params.get('requestId'), error)
-        else:
-            log.msg("Client authentication complete.")
-            self.authenticated = True
-            self.start_periodic_enquire_link()
+            self.handle_error(session_id, params.get('requestId'), e)
+
+        log.msg("Client authentication complete.")
+        self.authenticated = True
+        self.start_periodic_enquire_link()
 
     def handle_login_error_response(self, session_id, params):
-        error = self.validate_packet_fields(params, self.LOGIN_ERROR_FIELDS)
-        if error is not None:
-            self.handle_error(session_id, params.get('requestId'), error)
+        try:
+            self.validate_packet_fields(params, self.LOGIN_ERROR_FIELDS)
+        except CodedXmlOverTcpError as e:
+            self.handle_error(session_id, params.get('requestId'), e)
         self.disconnect()
 
     def handle_error_response(self, session_id, params):
-        error = self.validate_packet_fields(params, self.ERROR_FIELDS)
+        try:
+            self.validate_packet_fields(params, self.ERROR_FIELDS)
+        except CodedXmlOverTcpError as e:
+            self.handle_error(session_id, params.get('requestId'), e)
 
-        if error is not None:
-            self.handle_error(session_id, params.get('requestId'), error)
-        else:
-            error_code = params['errorCode']
-            error_msg = self.ERRORS.get(error_code)
-            if error_msg is not None:
-                log.msg("Server sent error message: %s" % error_msg)
-            else:
-                log.msg("Server sent an error message with an unknown code: %s"
-                        % error_code)
+        log.err("Server sent error message: %s" %
+                CodedXmlOverTcpError(params['errorCode']))
 
     def handle_data_request(self, session_id, params):
-        error = self.validate_packet_fields(params,
-            self.MANDATORY_DATA_REQUEST_FIELDS,
-            self.OTHER_DATA_REQUEST_FIELDS)
 
-        if error is not None:
-            self.handle_error(session_id, params.get('requestId'), error)
-        else:
-            # if EndofSession is not in params, assume the end of session
-            params.setdefault('EndofSession', '1')
-            self.data_request_received(session_id, params)
+        try:
+            self.validate_packet_fields(params,
+                self.MANDATORY_DATA_REQUEST_FIELDS,
+                self.OTHER_DATA_REQUEST_FIELDS)
+        except CodedXmlOverTcpError as e:
+            self.handle_error(session_id, params.get('requestId'), e)
+
+        # if EndofSession is not in params, assume the end of session
+        params.setdefault('EndofSession', '1')
+        self.data_request_received(session_id, params)
 
     def data_request_received(self, session_id, params):
         raise NotImplementedError("Subclasses should implement.")
@@ -289,15 +308,14 @@ class XmlOverTcpClient(Protocol):
         return header + body
 
     def send_packet(self, session_id, packet_type, params):
-        if (not self.authenticated and
-                packet_type not in self.IGNORE_AUTH_PACKETS):
-            log.msg("'%s' packet could not be sent, client not authenticated"
-                    % packet_type)
-            return False
+        if (not self.authenticated
+            and packet_type not in self.IGNORE_AUTH_PACKETS):
+            raise XmlOverTcpError(
+                "'%s' packet could not be sent, client not authenticated"
+                % packet_type)
 
         packet = self.serialize_packet(session_id, packet_type, params)
         self.transport.write(packet)
-        return True
 
     @classmethod
     def gen_session_id(cls):
@@ -326,12 +344,12 @@ class XmlOverTcpClient(Protocol):
         self.send_packet(self.gen_session_id(), 'AUTHRequest', params)
 
     def send_error_response(self, session_id=None, request_id=None,
-                            error_code='207'):
+                            code='207'):
         params = [
             ('requestId', request_id or self.gen_request_id()),
-            ('errorCode', error_code),
+            ('errorCode', code),
         ]
-        return self.send_packet(
+        self.send_packet(
             session_id or self.gen_session_id(), 'USSDError', params)
 
     def send_data_response(self, session_id, request_id, client_id, msisdn,
@@ -360,15 +378,16 @@ class XmlOverTcpClient(Protocol):
             ('EndofSession', end_of_session),
             ('delvrpt', '0'),
         ]
-        return self.send_packet(session_id, 'USSDResponse', packet_params)
+
+        self.send_packet(session_id, 'USSDResponse', packet_params)
 
     def handle_enquire_link_request(self, session_id, params):
-        error = self.validate_packet_fields(params, self.ENQUIRE_LINK_FIELDS)
+        try:
+            self.validate_packet_fields(params, self.ENQUIRE_LINK_FIELDS)
+        except CodedXmlOverTcpError as e:
+            self.handle_error(session_id, params.get('requestId'), e)
 
-        if error is not None:
-            self.handle_error(session_id, params.get('requestId'), error)
-        else:
-            self.send_enquire_link_response(session_id, params['requestId'])
+        self.send_enquire_link_response(session_id, params['requestId'])
 
     def send_enquire_link_request(self):
         self.send_packet(self.gen_session_id(), 'ENQRequest', [
@@ -377,12 +396,12 @@ class XmlOverTcpClient(Protocol):
         ])
 
     def handle_enquire_link_response(self, session_id, params):
-        error = self.validate_packet_fields(params, self.ENQUIRE_LINK_FIELDS)
+        try:
+            self.validate_packet_fields(params, self.ENQUIRE_LINK_FIELDS)
+        except CodedXmlOverTcpError as e:
+            self.handle_error(session_id, params.get('requestId'), e)
 
-        if error is not None:
-            self.handle_error(session_id, params.get('requestId'), error)
-        else:
-            self.reset_scheduled_timeout()
+        self.reset_scheduled_timeout()
 
     def send_enquire_link_response(self, session_id, request_id):
         self.send_packet(session_id, 'ENQResponse', [

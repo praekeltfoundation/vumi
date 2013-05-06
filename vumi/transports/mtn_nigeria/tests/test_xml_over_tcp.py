@@ -4,19 +4,17 @@ from twisted.trial import unittest
 from twisted.internet.task import Clock
 from twisted.internet.defer import inlineCallbacks
 
-from vumi import log
-from vumi.transports.mtn_nigeria.xml_over_tcp import XmlOverTcpClient
+from vumi.transports.mtn_nigeria.xml_over_tcp import (
+    XmlOverTcpError, CodedXmlOverTcpError, XmlOverTcpClient)
 from vumi.transports.mtn_nigeria.tests import utils
 
 
 class ToyXmlOverTcpClient(XmlOverTcpClient, utils.WaitForDataMixin):
     _PACKET_RECEIVED_HANDLERS = {'DummyPacket': 'dummy_packet_received'}
-    _ERRORS = {'000': 'Dummy error occured'}
 
     def __init__(self):
         XmlOverTcpClient.__init__(self, 'root', 'toor', '1029384756')
         self.PACKET_RECEIVED_HANDLERS.update(self._PACKET_RECEIVED_HANDLERS)
-        self.ERRORS.update(self._ERRORS)
 
         self.received_dummy_packets = []
         self.received_data_request_packets = []
@@ -63,9 +61,9 @@ class XmlOverTcpClientServerMixin(utils.MockClientServerMixin):
 class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
     @inlineCallbacks
     def setUp(self):
-        # stub logger
-        self.log = []
-        self.patch(log, 'msg', lambda msg: self.log.append(msg))
+        errors = dict(CodedXmlOverTcpError.ERRORS)
+        errors['000'] = 'Dummy error occured'
+        self.patch(CodedXmlOverTcpError, 'ERRORS', errors)
 
         self.session_id_nr = 0
         self.request_id_nr = 0
@@ -73,7 +71,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
         yield self.start_protocols()
 
     def tearDown(self):
-        self.stop_protocols()
+        return self.stop_protocols()
 
     def mk_session_id(self, nr):
         return self.client.session_id_from_nr(nr)
@@ -201,7 +199,6 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
 
         self.server.send_data(request_packet)
         yield self.client.wait_for_data()
-        self.assertTrue('UnknownPacket' in self.log.pop())
 
         response_packet = yield self.server.wait_for_data()
         self.assertEqual(expected_response_packet, response_packet)
@@ -229,14 +226,13 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
 
         self.server.send_data(request_packet)
         yield self.client.wait_for_data()
-        self.assertTrue('DummyPacket' in self.log.pop())
 
         response_packet = yield self.server.wait_for_data()
         self.assertEqual(expected_response_packet, response_packet)
 
     def test_packet_send_before_auth(self):
-        self.client.send_packet(self.mk_session_id(0), 'DummyPacket', [])
-        self.assertTrue('DummyPacket' in self.log.pop())
+        self.assertRaises(XmlOverTcpError,
+            self.client.send_packet, self.mk_session_id(0), 'DummyPacket', [])
 
     @inlineCallbacks
     def test_data_request_handling(self):
@@ -276,34 +272,28 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
             [(session_id, expected_params)])
 
     def test_field_validation_for_valid_cases(self):
-        self.assertEqual(None, self.client.validate_packet_fields(
-            {'a': '1', 'b': '2'}, set(['a', 'b']), set(['b', 'c'])))
+        self.client.validate_packet_fields(
+            {'a': '1', 'b': '2'},
+            set(['a', 'b']),
+            set(['b', 'c']))
 
-        self.assertEqual(None, self.client.validate_packet_fields(
-            {'a': '1', 'b': '2'}, set(['a', 'b'])))
+        self.client.validate_packet_fields(
+            {'a': '1', 'b': '2'},
+            set(['a', 'b']))
 
     def test_field_validation_for_missing_mandatory_fields(self):
-        params = {
-            'requestId': '1291850641',
-            'a': '1',
-            'b': '2'
-        }
-        error = self.client.validate_packet_fields(
-            params, set(['requestId', 'a', 'b', 'c']))
-        self.assertEqual(error['code'], '208')
-        self.assertTrue(str(['c']) in error['reason'])
+        self.assertRaises(
+            XmlOverTcpError,
+            self.client.validate_packet_fields,
+            {'requestId': '1291850641', 'a': '1', 'b': '2'},
+            set(['requestId', 'a', 'b', 'c']))
 
     def test_field_validation_for_unexpected_fields(self):
-        params = {
-            'requestId': '1291850641',
-            'a': '1',
-            'b': '2',
-            'd': '3'
-        }
-        error = self.client.validate_packet_fields(
-            params, set(['requestId', 'a', 'b']))
-        self.assertEqual(error['code'], '208')
-        self.assertTrue(str(['d']) in error['reason'])
+        self.assertRaises(
+            XmlOverTcpError,
+            self.client.validate_packet_fields,
+            {'requestId': '1291850641', 'a': '1', 'b': '2', 'd': '3'},
+            set(['requestId', 'a', 'b']))
 
     @inlineCallbacks
     def test_continuing_session_data_response(self):
@@ -500,7 +490,6 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
 
         self.server.send_data(error_packet)
         yield self.client.wait_for_data()
-        self.assertTrue('Dummy error occured' in self.log.pop())
 
     @inlineCallbacks
     def test_error_response_handling_for_unknown_codes(self):
@@ -515,5 +504,3 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
 
         self.server.send_data(error_packet)
         yield self.client.wait_for_data()
-        [error_msg] = self.log
-        self.assertTrue('1337' in error_msg)

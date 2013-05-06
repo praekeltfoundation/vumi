@@ -58,7 +58,7 @@ class MockServerMixin(object):
         self.server = yield factory.deferred_server
 
     def stop_server(self):
-        self.server_port.loseConnection()
+        return self.server_port.loseConnection()
 
     def get_server_port(self):
         return self.server_port.getHost().port
@@ -91,7 +91,7 @@ class MockClientMixin(object):
         self.client = yield self.client_creator.connectTCP('127.0.0.1', port)
 
     def stop_client(self):
-        self.client.transport.loseConnection()
+        return self.client.transport.loseConnection()
 
 
 class MockClientServerMixin(MockClientMixin, MockServerMixin):
@@ -101,6 +101,7 @@ class MockClientServerMixin(MockClientMixin, MockServerMixin):
         yield self.start_client(self.get_server_port())
         yield deferred_server  # we need to wait for the client to connect
 
+    @inlineCallbacks
     def stop_protocols(self):
-        self.stop_client()
-        self.stop_server()
+        yield self.stop_client()
+        yield self.stop_server()

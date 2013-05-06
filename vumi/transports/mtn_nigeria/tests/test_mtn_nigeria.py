@@ -1,18 +1,20 @@
 from twisted.internet.defer import Deferred, inlineCallbacks
 
-from vumi import log
 from vumi.message import TransportUserMessage
 from vumi.transports.mtn_nigeria.tests import utils
 from vumi.transports.tests.utils import TransportTestCase
 from vumi.transports.mtn_nigeria import MtnNigeriaUssdTransport
 from vumi.transports.mtn_nigeria.tests.utils import MockXmlOverTcpServerMixin
-from vumi.transports.mtn_nigeria.xml_over_tcp import XmlOverTcpClient
+from vumi.transports.mtn_nigeria.xml_over_tcp import (
+    XmlOverTcpError, CodedXmlOverTcpError, XmlOverTcpClient)
 
 
 class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
                                           MockXmlOverTcpServerMixin):
 
     transport_class = MtnNigeriaUssdTransport
+    transport_name = 'test_mtn_nigeria_ussd_transport'
+
     _session_id_header_size = XmlOverTcpClient.SESSION_ID_HEADER_SIZE
     _params = {
         'request_id': '1291850641',
@@ -59,7 +61,7 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
         'from_addr': _params['msisdn'],
         'to_addr': _params['star_code'],
         'session_event': TransportUserMessage.SESSION_RESUME,
-        'transport_name': 'sphex',
+        'transport_name': transport_name,
         'transport_type': 'ussd',
         'transport_metadata': {
             'mtn_nigeria_ussd': {
@@ -75,12 +77,9 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
     def setUp(self):
         super(TestMtnNigeriaUssdTransportTestCase, self).setUp()
 
-        # stub logger
-        self.log = []
-        self.patch(log, 'msg', lambda msg: self.log.append(msg))
-
         deferred_server = self.start_server()
         config = {
+            'transport_name': self.transport_name,
             'server_hostname': '127.0.0.1',
             'server_port': self.get_server_port(),
             'username': 'root',
@@ -88,7 +87,7 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
             'application_id': '1029384756',
             'enquire_link_interval': 240,
             'timeout_period': 120,
-            'user_termination_response': 'Bye'
+            'user_termination_response': 'Bye',
         }
         self.transport = yield self.get_transport(config)
         yield deferred_server
@@ -96,9 +95,11 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
         yield self.fake_login()
         self.client = self.transport.factory.client
 
+    @inlineCallbacks
     def tearDown(self):
-        self.transport.teardown_transport()
-        self.stop_server()
+        yield self.transport.teardown_transport()
+        yield self.stop_server()
+        yield super(TestMtnNigeriaUssdTransportTestCase, self).tearDown()
 
     def fake_login(self):
         d = Deferred()
@@ -267,15 +268,19 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
     @inlineCallbacks
     def test_outbound_response_failure(self):
         # stub the client to fake a response failure
-        self.patch(self.client, 'send_data_response', lambda *a, **kw: False)
+        def stubbed_send_data_response(*a, **kw):
+            raise XmlOverTcpError("Something bad happened")
+
+        self.patch(self.client, 'send_data_response',
+                   stubbed_send_data_response)
 
         reply = self.mk_reply(self.mk_msg(), "It's a trap!")
         self.dispatch(reply)
 
-        reason = self.transport.RESPONSE_FAILURE_ERROR
+        reason = (self.transport.RESPONSE_FAILURE_ERROR
+                  % "Something bad happened")
         [nack] = yield self.wait_for_dispatched_events(1)
         self.assert_nack(nack, reply, reason)
-        self.assertEqual(self.log.pop(), reason)
 
     @inlineCallbacks
     def test_outbound_metadata_fields_missing(self):
@@ -291,7 +296,7 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
             '208')
         self.assertEqual(response_packet, expected_response_packet)
 
-        reason = self.transport.METADATA_FIELDS_MISSING_ERROR % ['clientId']
+        reason = "%s" % CodedXmlOverTcpError(
+            '208', self.transport.METADATA_FIELDS_MISSING_ERROR % ['clientId'])
         [nack] = yield self.wait_for_dispatched_events(1)
         self.assert_nack(nack, reply, reason)
-        self.assertEqual(self.log.pop(), reason)
