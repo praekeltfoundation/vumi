@@ -49,7 +49,7 @@ class AirtelUSSDTransport(HttpRpcTransport):
     def setup_transport(self):
         super(AirtelUSSDTransport, self).setup_transport()
         config = self.get_static_config()
-        r_prefix = "vumi.transports.safaricom:%s" % self.transport_name
+        r_prefix = "vumi.transports.airtel:%s" % self.transport_name
         self.session_manager = yield SessionManager.from_redis_config(
             config.redis_manager, r_prefix,
             config.ussd_session_timeout)
