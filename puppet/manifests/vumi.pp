@@ -33,6 +33,11 @@ apt::package { "libcurl3": ensure => latest }
 apt::package { "libcurl4-openssl-dev": ensure => latest }
 apt::package { "redis-server": ensure => latest }
 apt::package { "protobuf-compiler": ensure => latest }
+# NOTE:     Vumi doesn't need the following two packages but Vumi-Go does so
+#           leaving them here to allow this puppet file to work with Vagrant
+#           for both.
+apt::package { "libpq-dev": ensure => latest }
+apt::package { "riak": ensure => latest }
 
 file {
     "/var/praekelt":
@@ -59,7 +64,7 @@ exec { "Vumi setup":
     refreshonly => true
 }
 
-exec { "RabbitMq setup":
+exec { "RabbitMQ setup":
     command => "/var/praekelt/vumi/utils/rabbitmq.setup.sh",
     user => "root",
     subscribe => [
@@ -70,4 +75,15 @@ exec { "RabbitMq setup":
         Package['rabbitmq-server'],
         Exec['Clone git repository']
     ]
+}
+
+file {'/etc/riak/app.config':
+    ensure    => 'present',
+    source    => 'puppet:///modules/vumi/riak-app.config'
+
+}
+
+service {'riak':
+    ensure    => 'running',
+    subscribe => File['/etc/riak/app.config']
 }

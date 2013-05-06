@@ -15,24 +15,17 @@ class BaseTransportTestCase(TransportTestCase):
     transport_class = Transport
 
     TEST_MIDDLEWARE_CONFIG = {
-       "middleware": [
+        "middleware": [
             {"mw1": "vumi.middleware.tests.utils.RecordingMiddleware"},
             {"mw2": "vumi.middleware.tests.utils.RecordingMiddleware"},
-            ],
-        }
+        ],
+    }
 
     @inlineCallbacks
     def test_start_transport(self):
         tr = yield self.get_transport({})
         self.assertEqual(self.transport_name, tr.transport_name)
         self.assert_basic_rkeys(tr)
-
-    @inlineCallbacks
-    def test_consumer_registry(self):
-        tr = yield self.get_transport({})
-        self.assertEqual(len(tr._consumers), 1)
-        yield tr.stopWorker()
-        self.assertEqual(len(tr._consumers), 0)
 
     @inlineCallbacks
     def test_middleware_for_inbound_messages(self):
@@ -85,18 +78,25 @@ class BaseTransportTestCase(TransportTestCase):
             ('mw2', 'outbound', self.transport_name),
             ])
 
+    def get_tx_consumers(self, tx):
+        for connector in tx.connectors.values():
+            for consumer in connector._consumers.values():
+                yield consumer
+
     @inlineCallbacks
     def test_transport_prefetch_count_custom(self):
         transport = yield self.get_transport({
             'amqp_prefetch_count': 1,
             })
-        self.assertTrue(transport._consumers)
-        for consumer in transport._consumers:
+        consumers = list(self.get_tx_consumers(transport))
+        self.assertEqual(1, len(consumers))
+        for consumer in consumers:
             self.assertEqual(consumer.channel.qos_prefetch_count, 1)
 
     @inlineCallbacks
     def test_transport_prefetch_count_default(self):
         transport = yield self.get_transport({})
-        self.assertTrue(transport._consumers)
-        for consumer in transport._consumers:
-            self.assertFalse(consumer.channel.qos_prefetch_count)
+        consumers = list(self.get_tx_consumers(transport))
+        self.assertEqual(1, len(consumers))
+        for consumer in consumers:
+            self.assertEqual(consumer.channel.qos_prefetch_count, 20)

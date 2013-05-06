@@ -77,6 +77,10 @@ class FakeRedisTestCase(TestCase):
         yield self.assert_redis_op(0, 'zadd', 'set', one=2.0)
         yield self.assert_redis_op([('one', 2.0)], 'zrange', 'set', 0, -1,
                                    withscores=True)
+        self.assertRaises(
+            Exception, self.redis.zadd, "set", one='foo')
+        self.assertRaises(
+            Exception, self.redis.zadd, "set", one=None)
 
     @inlineCallbacks
     def test_zrange(self):
@@ -349,6 +353,7 @@ class FakeRedisCharsetHandlingTestCase(TestCase):
         yield redis.set('name', u'Zoë Destroyer of Ascii')
         yield self.assert_redis_op(redis, 'Zo Destroyer of Ascii',
             'get', 'name')
+
 
 class FakeTxRedisTestCase(FakeRedisTestCase):
     def setUp(self):

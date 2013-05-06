@@ -129,6 +129,7 @@ class StartWorkerOptions(VumiOptions):
         config_class = getattr(worker_class, 'CONFIG_CLASS', None)
         if config_class is not None:
             self.emit(config_class.__doc__)
+        self.emit("")
         self.exit()
 
     def get_worker_class(self):

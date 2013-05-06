@@ -178,19 +178,20 @@ class TestDecisionTreeWorker(ApplicationTestCase):
         self.assertEqual(replys[5][0], "end")
         self.assertEqual(replys[5][1], "Thank you! Your work was"
                                     + " recorded successfully.")
-        self.assertEqual(self.replace_timestamp(self.worker.mock_result),
-                '{"msisdn": "456789", "users": '
-                '[{"userId": "user1", "name": "David", '
-                '"toys": [{"quantitySold": "10", "toyId": "toy1", '
-                '"quantityMade": "14", "name": "truck", '
-                '"recordTimestamp": "0"}, {"quantitySold": 0, '
-                '"toyId": "toy2", "quantityMade": 0, "name": "car", '
-                '"recordTimestamp": 0}]}, '
-                '{"userId": "user2", "name": "Simon", '
-                '"toys": [{"quantitySold": 0, "toyId": "toy1", '
-                '"quantityMade": 0, "name": "truck", '
-                '"recordTimestamp": 0}]}]}'
-                )
+        self.assertEqual(
+            self.replace_timestamp(self.worker.mock_result),
+            '{"msisdn": "456789", "users": '
+            '[{"userId": "user1", "name": "David", '
+            '"toys": [{"quantitySold": "10", "toyId": "toy1", '
+            '"quantityMade": "14", "name": "truck", '
+            '"recordTimestamp": "0"}, {"quantitySold": 0, '
+            '"toyId": "toy2", "quantityMade": 0, "name": "car", '
+            '"recordTimestamp": 0}]}, '
+            '{"userId": "user2", "name": "Simon", '
+            '"toys": [{"quantitySold": 0, "toyId": "toy1", '
+            '"quantityMade": 0, "name": "truck", '
+            '"recordTimestamp": 0}]}]}'
+        )
 
     @inlineCallbacks
     def test_session_complete_menu_traversal_with_bad_entries(self):
@@ -235,15 +236,16 @@ class TestDecisionTreeWorker(ApplicationTestCase):
         self.assertEqual(replys[7][0], "end")
         self.assertEqual(replys[7][1], "Thank you! Your work was"
                                     + " recorded successfully.")
-        self.assertEqual(self.replace_timestamp(self.worker.mock_result),
-                '{"msisdn": "456789", "users": '
-                '[{"userId": "user1", "name": "David", '
-                '"toys": [{"quantitySold": "0", "toyId": "toy1", '
-                '"quantityMade": "14", "name": "truck", '
-                '"recordTimestamp": "0"}, {"quantitySold": 0, '
-                '"toyId": "toy2", "quantityMade": 0, "name": "car", '
-                '"recordTimestamp": 0}]}]}'
-                )
+        self.assertEqual(
+            self.replace_timestamp(self.worker.mock_result),
+            '{"msisdn": "456789", "users": '
+            '[{"userId": "user1", "name": "David", '
+            '"toys": [{"quantitySold": "0", "toyId": "toy1", '
+            '"quantityMade": "14", "name": "truck", '
+            '"recordTimestamp": "0"}, {"quantitySold": 0, '
+            '"toyId": "toy2", "quantityMade": 0, "name": "car", '
+            '"recordTimestamp": 0}]}]}'
+        )
 
     @inlineCallbacks
     def test_session_with_long_menus(self):

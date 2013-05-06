@@ -1,5 +1,5 @@
 import re
-from  xml.etree import ElementTree
+from xml.etree import ElementTree
 
 from twisted.python import log
 from twisted.trial.unittest import TestCase

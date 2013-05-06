@@ -84,6 +84,29 @@ class WindowManagerTestCase(TestCase, PersistenceMixin):
         self.assertTrue(next_flight_key)
 
     @inlineCallbacks
+    def test_set_and_external_id(self):
+        yield self.wm.set_external_id(self.window_id, "flight_key",
+                                      "external_id")
+        self.assertEqual(
+            (yield self.wm.get_external_id(self.window_id, "flight_key")),
+            "external_id")
+        self.assertEqual(
+            (yield self.wm.get_internal_id(self.window_id, "external_id")),
+            "flight_key")
+
+    @inlineCallbacks
+    def test_remove_key_removes_external_and_internal_id(self):
+        yield self.wm.set_external_id(self.window_id, "flight_key",
+                                      "external_id")
+        yield self.wm.remove_key(self.window_id, "flight_key")
+        self.assertEqual(
+            (yield self.wm.get_external_id(self.window_id, "flight_key")),
+            None)
+        self.assertEqual(
+            (yield self.wm.get_internal_id(self.window_id, "external_id")),
+            None)
+
+    @inlineCallbacks
     def assert_count_waiting(self, window_id, amount):
         self.assertEqual((yield self.wm.count_waiting(window_id)), amount)
 
@@ -189,3 +212,48 @@ class WindowManagerTestCase(TestCase, PersistenceMixin):
         self.assertEqual(len(key_callbacks.values()[1]), 20)
         self.assertEqual((yield self.wm.get_windows()), [])
         self.assertEqual(set(cleanup_callbacks), set(window_ids))
+
+
+class ConcurrentWindowManagerTestCase(TestCase, PersistenceMixin):
+
+    @inlineCallbacks
+    def setUp(self):
+        self._persist_setUp()
+        redis = yield self.get_redis_manager()
+        self.window_id = 'window_id'
+
+        # Patch the count_waiting so we can fake the race condition
+        self.clock = Clock()
+        self.patch(WindowManager, 'count_waiting', lambda _, window_id: 100)
+
+        self.wm = WindowManager(redis, window_size=10, flight_lifetime=10)
+        yield self.wm.create_window(self.window_id)
+        self.redis = self.wm.redis
+
+    @inlineCallbacks
+    def tearDown(self):
+        yield self._persist_tearDown()
+        self.wm.stop()
+
+    @inlineCallbacks
+    def test_race_condition(self):
+        """
+        A race condition can occur when multiple window managers try and
+        access the same window at the same time.
+
+        A LoopingCall loops over the available windows, for those windows
+        it tries to get a next key. It does that by checking how many are
+        waiting to be sent out and adding however many it can still carry
+        to its own flight.
+
+        Since there are concurrent workers, between the time of checking how
+        many are available and how much room it has available, a different
+        window manager may have already beaten it to it.
+
+        If this happens Redis' `rpoplpush` method will return None since
+        there are no more available keys for the given window.
+        """
+        yield self.wm.add(self.window_id, 1)
+        yield self.wm.add(self.window_id, 2)
+        yield self.wm._monitor_windows(lambda *a: True, True)
+        self.assertEqual((yield self.wm.get_next_key(self.window_id)), None)

@@ -401,9 +401,9 @@ class VumiMapReduce(object):
         :param str end_value:
             The end value to search on. Defaults to `None`.
         """
-        mr = mgr.riak_map_reduce(
-            ).index(mgr.bucket_name(model), index_name, start_value, end_value
-            ).map("""
+        mr = mgr.riak_map_reduce().index(
+            mgr.bucket_name(model), index_name, start_value, end_value).map(
+                """
                 function(value, keyData, arg) {
                     /*
                         skip deleted values, might show up during a test
@@ -424,9 +424,9 @@ class VumiMapReduce(object):
                     }
                     return [];
                 }
-            """, {
-                'arg': query,  # Client lib turns this to JSON for us.
-            })
+                """, {
+                    'arg': query,  # Client lib turns this to JSON for us.
+                })
         return cls(mgr, mr)
 
     @classmethod
@@ -481,11 +481,15 @@ class Manager(object):
     """A wrapper around a Riak client."""
 
     DEFAULT_LOAD_BUNCH_SIZE = 100
+    DEFAULT_MAPREDUCE_TIMEOUT = 4 * 60 * 1000  # in milliseconds
 
-    def __init__(self, client, bucket_prefix, load_bunch_size=None):
+    def __init__(self, client, bucket_prefix, load_bunch_size=None,
+                 mapreduce_timeout=None):
         self.client = client
         self.bucket_prefix = bucket_prefix
         self.load_bunch_size = load_bunch_size or self.DEFAULT_LOAD_BUNCH_SIZE
+        self.mapreduce_timeout = (mapreduce_timeout or
+                                  self.DEFAULT_MAPREDUCE_TIMEOUT)
         self._bucket_cache = {}
 
     def proxy(self, modelcls):

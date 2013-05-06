@@ -1,5 +1,5 @@
-import time
 import yaml
+import itertools
 
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.trial.unittest import TestCase
@@ -13,10 +13,11 @@ class ToyMiddleware(BaseMiddleware):
 
     # simple attribute to check that setup_middleware is called
     _setup_done = False
+    _teardown_count = itertools.count(1)
 
-    def _handle(self, direction, message, endpoint):
+    def _handle(self, direction, message, connector_name):
         message = '%s.%s' % (message, self.name)
-        self.worker.processed(self.name, direction, message, endpoint)
+        self.worker.processed(self.name, direction, message, connector_name)
         return message
 
     def setup_middleware(self):
@@ -24,19 +25,19 @@ class ToyMiddleware(BaseMiddleware):
         self._teardown_done = False
 
     def teardown_middleware(self):
-        self._teardown_done = time.time()
+        self._teardown_done = next(self._teardown_count)
 
-    def handle_inbound(self, message, endpoint):
-        return self._handle('inbound', message, endpoint)
+    def handle_inbound(self, message, connector_name):
+        return self._handle('inbound', message, connector_name)
 
-    def handle_outbound(self, message, endpoint):
-        return self._handle('outbound', message, endpoint)
+    def handle_outbound(self, message, connector_name):
+        return self._handle('outbound', message, connector_name)
 
-    def handle_event(self, message, endpoint):
-        return self._handle('event', message, endpoint)
+    def handle_event(self, message, connector_name):
+        return self._handle('event', message, connector_name)
 
-    def handle_failure(self, message, endpoint):
-        return self._handle('failure', message, endpoint)
+    def handle_failure(self, message, connector_name):
+        return self._handle('failure', message, connector_name)
 
 
 class MiddlewareStackTestCase(TestCase):
@@ -56,8 +57,9 @@ class MiddlewareStackTestCase(TestCase):
         yield mw.setup_middleware()
         returnValue(mw)
 
-    def processed(self, name, direction, message, endpoint):
-        self.processed_messages.append((name, direction, message, endpoint))
+    def processed(self, name, direction, message, connector_name):
+        self.processed_messages.append(
+            (name, direction, message, connector_name))
 
     def assert_processed(self, expected):
         self.assertEqual(expected, self.processed_messages)

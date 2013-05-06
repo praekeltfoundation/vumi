@@ -63,10 +63,18 @@ class ConfigTest(TestCase):
             foo = ConfigField("A foo field.")
             bar = ConfigText("A bar field.")
 
-        self.assertEqual(FooConfig.__doc__, '\n\n'.join([
+        self.assertEqual(FooConfig.__doc__, '\n'.join([
             "Test config.",
-            " foo: A foo field.",
-            " bar (str): A bar field.",
+            "",
+            "Configuration options:",
+            "",
+            ":param foo:",
+            "",
+            "    A foo field.",
+            "",
+            ":param str bar:",
+            "",
+            "    A bar field.",
             ]))
 
         # And again with the fields defined in a different order to check that
@@ -76,10 +84,18 @@ class ConfigTest(TestCase):
             bar = ConfigField("A bar field.")
             foo = ConfigField("A foo field.")
 
-        self.assertEqual(BarConfig.__doc__, '\n\n'.join([
+        self.assertEqual(BarConfig.__doc__, '\n'.join([
             "Test config.",
-            " bar: A bar field.",
-            " foo: A foo field.",
+            "",
+            "Configuration options:",
+            "",
+            ":param bar:",
+            "",
+            "    A bar field.",
+            "",
+            ":param foo:",
+            "",
+            "    A foo field.",
             ]))
 
     def test_inheritance(self):
@@ -96,10 +112,18 @@ class ConfigTest(TestCase):
         self.assertEqual(conf.bar, 'bleh')
 
         # Inherited fields should come before local fields.
-        self.assertEqual(BarConfig.__doc__, '\n\n'.join([
+        self.assertEqual(BarConfig.__doc__, '\n'.join([
             "Another test config.",
-            " foo: From base class.",
-            " bar: New field.",
+            "",
+            "Configuration options:",
+            "",
+            ":param foo:",
+            "",
+            "    From base class.",
+            "",
+            ":param bar:",
+            "",
+            "    New field.",
             ]))
 
     def test_validation(self):
@@ -258,8 +282,9 @@ class ConfigFieldTest(TestCase):
 
         field = self.make_field(ConfigUrl)
         assert_url(self.field_value(field, 'foo'), path='foo')
-        assert_url(self.field_value(field, u'foo'), path=u'foo')
-        assert_url(self.field_value(field, u'foo\u1234'), path=u'foo\u1234')
+        assert_url(self.field_value(field, u'foo'), path='foo')
+        assert_url(self.field_value(field, u'foo\u1234'),
+                   path='foo\xe1\x88\xb4')
         self.assertEqual(None, self.field_value(field, None))
         self.assertEqual(None, self.field_value(field))
         self.assert_field_invalid(field, object())

@@ -29,7 +29,9 @@ def pack_ussd_message(message):
 
 
 class CellulantTransport(HttpRpcTransport):
+    """Cellulant USSD (via HTTP) transport."""
 
+    ENCODING = 'utf-8'
     EVENT_MAP = {
         'BEG': TransportUserMessage.SESSION_NEW,
         'ABO': TransportUserMessage.SESSION_CLOSE,
@@ -79,7 +81,7 @@ class CellulantTransport(HttpRpcTransport):
             content = request.args.get('INPUT')[0]
 
         if ((request.args.get('ABORT')[0] not in ('0', 'null'))
-            or (op_code == 'ABO')):
+                or (op_code == 'ABO')):
             # respond to phones aborting a session
             self.finish_request(message_id, '')
             event = TransportUserMessage.SESSION_CLOSE
@@ -113,6 +115,6 @@ class CellulantTransport(HttpRpcTransport):
             return self.reject_message(message, missing_fields)
 
         self.finish_request(message['in_reply_to'],
-                            pack_ussd_message(message).encode('utf-8'))
+                            pack_ussd_message(message).encode(self.ENCODING))
         return self.publish_ack(user_message_id=message['message_id'],
             sent_message_id=message['message_id'])

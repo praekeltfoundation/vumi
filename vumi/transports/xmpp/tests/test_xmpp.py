@@ -3,7 +3,7 @@ from twisted.internet.task import Clock
 from twisted.words.xish import domish
 
 from vumi.transports.tests.utils import TransportTestCase
-from vumi.message import TransportUserMessage, from_json
+from vumi.message import TransportUserMessage
 from vumi.transports.xmpp.xmpp import XMPPTransport
 from vumi.transports.xmpp.tests import test_xmpp_stubs
 
@@ -61,10 +61,7 @@ class XMPPTransportTestCase(TransportTestCase):
         message.addElement((None, 'body'), content='hello world')
         protocol = transport.xmpp_protocol
         protocol.onMessage(message)
-        dispatched_messages = self._amqp.get_dispatched('vumi',
-            'test_xmpp.inbound')
-        self.assertEqual(1, len(dispatched_messages))
-        msg = from_json(dispatched_messages[0].body)
+        [msg] = self.get_dispatched_messages()
         self.assertEqual(msg['to_addr'], self.jid.userhost())
         self.assertEqual(msg['from_addr'], 'test@case.com')
         self.assertEqual(msg['transport_name'], 'test_xmpp')
@@ -162,9 +159,6 @@ class XMPPTransportTestCase(TransportTestCase):
         message.addElement((None, 'body'), content='hello world')
         protocol = transport.xmpp_protocol
         protocol.onMessage(message)
-        dispatched_messages = self._amqp.get_dispatched('vumi',
-            'test_xmpp.inbound')
-        self.assertEqual(1, len(dispatched_messages))
-        msg = from_json(dispatched_messages[0].body)
+        [msg] = self.get_dispatched_messages()
         self.assertEqual(msg['from_addr'], 'test@case.com')
         self.assertEqual(msg['transport_metadata']['xmpp_id'], message['id'])
