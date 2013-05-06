@@ -14,7 +14,7 @@ Here's a quick guide on how to contribute to the project:
     added where necessary.
 4.  Make the tests pass.
 5.  Push to your fork and submit a pull request!
-    (For bonus points use http://defunkt.io/hub/ if you're turning an
+    (For bonus points use hub_ if you're turning an
     existing issue into a pull request)
 
 At this point you're waiting on us. We like to comment on pull-requests
@@ -25,3 +25,4 @@ for indentation, tabs are right out.
 
 
 .. _PEP8: http://www.python.org/dev/peps/pep-0008/
+.. _hub: http://defunkt.io/hub/
