@@ -82,6 +82,8 @@ class HeartBeatMonitor(BaseWorker):
     # _instance_sets: A dict which maps from a worker_id to a set. Tracks
     #                 which worker instances have checked-in the last 30s.
 
+    _task = None
+
     @inlineCallbacks
     def startWorker(self):
         log.msg("Heartbeat monitor initializing")
@@ -105,11 +107,13 @@ class HeartBeatMonitor(BaseWorker):
 
         self._start_verification_task()
 
+    @inlineCallbacks
     def stopWorker(self):
         log.msg("HeartBeat: stopping worker")
         if self._task:
             self._task.stop()
             self._task = None
+            yield self._task_done
 
     def parse_config(self, config):
         """
@@ -251,10 +255,10 @@ class HeartBeatMonitor(BaseWorker):
     def _start_verification_task(self):
         """ Create a timer task to check for missing worker """
         self._task = LoopingCall(self._run_verification)
-        done = self._task.start(self.deadline, now=False)
+        self._task_done = self._task.start(self.deadline, now=False)
         errfn = lambda failure: log.err(failure,
                                         "Heartbeat verify: timer task died")
-        done.addErrback(errfn)
+        self._task_done.addErrback(errfn)
         self._setup_instance_sets()
 
     def consume_message(self, msg):
