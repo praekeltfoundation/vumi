@@ -172,6 +172,9 @@ class ConfigUrl(ConfigField):
             return None
         if not isinstance(value, basestring):
             self.raise_config_error("is not a URL string.")
+        # URLs must be bytes, not unicode.
+        if isinstance(value, unicode):
+            value = value.encode('utf-8')
         return urlparse.urlparse(value)
 
 
