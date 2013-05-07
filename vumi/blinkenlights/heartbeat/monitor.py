@@ -196,7 +196,7 @@ class HeartBeatMonitor(BaseWorker):
             if len(hostinfo) > 0:
                 self._storage.set_worker_hostinfo(wkr_id, hostinfo)
             else:
-                self._storage.delete_worker_hostinfo(wkr_id)
+                self._storage.clear_worker_hostinfo(wkr_id)
         return lst_fail, lst_pass
 
     def _compute_hostinfo(self, instances):
