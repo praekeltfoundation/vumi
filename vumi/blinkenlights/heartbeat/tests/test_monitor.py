@@ -11,7 +11,8 @@ from twisted.internet.defer import inlineCallbacks
 from vumi.tests.utils import get_stubbed_worker
 from vumi.blinkenlights.heartbeat import publisher
 from vumi.blinkenlights.heartbeat import monitor
-from vumi.blinkenlights.heartbeat.storage import hostinfo_key
+from vumi.blinkenlights.heartbeat.storage import (hostinfo_key,
+                                                  attr_key)
 from vumi.utils import generate_worker_id
 
 
@@ -152,3 +153,25 @@ class TestHeartBeatMonitor(TestCase):
         self.assertEqual(count, '1')
         count = yield fkredis.hget(key, 'test-host-2')
         self.assertEqual(count, '2')
+
+    @inlineCallbacks
+    def test_sync_to_redis(self):
+        """
+        This covers a lot of the storage API as well the
+        Monitor's _sync_to_redis() function.
+        """
+        yield self.worker.startWorker()
+        fkredis = self.worker._redis
+
+        # Systems
+        systems = yield fkredis.get('systems')
+        self.assertEqual(tuple(systems), ('system-1',))
+
+        # Workers in System
+        workers = yield fkredis.get("system:system-1:workers")
+        self.assertEqual(tuple(workers), ('system-1:twitter_transport',))
+
+        # Worker attrs
+        wkr_id = generate_worker_id('system-1', 'twitter_transport')
+        attrs = yield fkredis.get(attr_key(wkr_id))
+        self.assertEqual(attrs['worker_name'], 'twitter_transport')
