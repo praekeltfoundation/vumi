@@ -175,3 +175,4 @@ class TestHeartBeatMonitor(TestCase):
         wkr_id = generate_worker_id('system-1', 'twitter_transport')
         attrs = yield fkredis.get(attr_key(wkr_id))
         self.assertEqual(attrs['worker_name'], 'twitter_transport')
+        self.assertEqual(attrs['min_procs'], 2)

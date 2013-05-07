@@ -60,8 +60,14 @@ class Storage(object):
             yield self._redis.sadd(key, wkr_id)
 
     @Manager.calls_manager
-    def set_worker_attrs(self, worker_id, attrs):
+    def set_worker_attrs(self, worker_id, wkr):
         key = attr_key(worker_id)
+        attrs = {
+            'system_id': wkr.system_id,
+            'worker_id': wkr.worker_id,
+            'worker_name': wkr.worker_name,
+            'min_procs': wkr.min_procs,
+        }
         yield self._redis.hmset(key, attrs)
 
     @Manager.calls_manager

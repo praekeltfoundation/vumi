@@ -10,8 +10,6 @@ from twisted.internet.defer import inlineCallbacks
 from vumi.tests.utils import get_stubbed_channel
 from vumi.tests.fake_amqp import FakeAMQPBroker
 from vumi.blinkenlights.heartbeat import publisher
-from vumi.errors import MissingMessageField
-
 
 class MockHeartBeatPublisher(publisher.HeartBeatPublisher):
 
@@ -50,17 +48,3 @@ class TestHeartBeatPublisher(TestCase):
 
         [msg] = self.broker.get_dispatched("vumi.health", "heartbeat.inbound")
         self.assertEqual(json.loads(msg.body), self.gen_fake_attrs())
-
-    def test_message_validation(self):
-        attrs = self.gen_fake_attrs()
-        attrs.pop("version")
-        self.assertRaises(MissingMessageField, publisher.HeartBeatMessage,
-                          **attrs)
-        attrs = self.gen_fake_attrs()
-        attrs.pop("system_id")
-        self.assertRaises(MissingMessageField, publisher.HeartBeatMessage,
-                          **attrs)
-        attrs = self.gen_fake_attrs()
-        attrs.pop("worker_id")
-        self.assertRaises(MissingMessageField, publisher.HeartBeatMessage,
-                          **attrs)

@@ -141,14 +141,17 @@ class HeartBeatMonitor(BaseWorker):
         """
         Process a heartbeat message.
         """
-        worker_id = msg['worker_id']
-        timestamp = msg['timestamp']
-        hostname = msg['hostname']
-        pid = msg['pid']
+        worker_id = msg.get('worker_id', None)
+        timestamp = msg.get('timestamp', None)
+        hostname = msg.get('hostname', None)
+        pid = msg.get('pid', None)
 
         # A bunch of discard rules:
-        # 1. Unknown worker (Monitored workers need to be in the config)
-        # 2. Message which are too old.
+        # 1. Missing fields
+        # 2. Unknown worker (Monitored workers need to be in the config)
+        # 3. Message which are too old.
+        if not (worker_id and timestamp and hostname and pid):
+            return
         wkr = self._workers.get(worker_id, None)
         if wkr is None:
             log.msg("Discarding message. worker '%s' is unknown" % worker_id)
@@ -213,7 +216,7 @@ class HeartBeatMonitor(BaseWorker):
         for system_id, wkrs in self._systems.iteritems():
             self._storage.set_system_workers(system_id, wkrs)
         for wkr_id, attrs in self._workers.iteritems():
-            self._storage.set_worker_attrs(wkr_id, attrs._asdict())
+            self._storage.set_worker_attrs(wkr_id, attrs)
 
     def _process_failures(self, wkrs):
         """
