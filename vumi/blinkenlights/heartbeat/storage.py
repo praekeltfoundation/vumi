@@ -47,8 +47,7 @@ class Storage(object):
         """ delete existing system ids and replace with new ones """
         key = "systems"
         yield self._redis.delete(key)
-        for sys_id in system_ids:
-            yield self._redis.sadd(key, sys_id)
+        yield self._redis.sadd(key, *system_ids)
 
     @Manager.calls_manager
     def set_system_workers(self, system_id, worker_ids):
