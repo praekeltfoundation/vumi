@@ -55,9 +55,7 @@ class Storage(object):
         """ delete existing worker ids and replace with new ones """
         key = "system:%s:workers" % system_id
         yield self._redis.delete(key)
-        # not sure how to make sadd() accept varags :-(
-        for wkr_id in worker_ids:
-            yield self._redis.sadd(key, wkr_id)
+        yield self._redis.sadd(key, *worker_ids)
 
     @Manager.calls_manager
     def set_worker_attrs(self, worker_id, wkr):
