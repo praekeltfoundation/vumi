@@ -71,7 +71,6 @@ class Storage(object):
         yield self._redis.delete(key)
         yield self._redis.hmset(key, hostinfo)
 
-
     @Manager.calls_manager
     def delete_worker_hostinfo(self, worker_id):
         key = hostinfo_key(worker_id)
