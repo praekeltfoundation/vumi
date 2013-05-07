@@ -65,11 +65,21 @@ class Storage(object):
         yield self._redis.hmset(key, attrs)
 
     @Manager.calls_manager
-    def set_worker_hostinfo(self, worker_id, hostinfo):
+    def update_worker_hostinfo(self, worker_id, hostinfo):
+        """
+        Update the hostinfo. Make sure to keep info
+        on historical hosts, even though they may no longer be
+        utilized
+        """
         key = hostinfo_key(worker_id)
-        # delete existing hosts, otherwise stale host data may remain
-        yield self._redis.delete(key)
-        yield self._redis.hmset(key, hostinfo)
+        new = {}
+        new.update(hostinfo)
+        old = yield self._redis.hgetall(key)
+        if old:
+            for host in old.keys():
+                if host not in new:
+                    new[host] = 0
+        yield self._redis.hmset(key, new)
 
     @Manager.calls_manager
     def delete_worker_hostinfo(self, worker_id):

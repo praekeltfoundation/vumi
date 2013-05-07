@@ -13,7 +13,7 @@ from vumi.blinkenlights.heartbeat.storage import Storage
 from vumi.persist.txredis_manager import TxRedisManager
 from vumi.utils import generate_worker_id
 from vumi.errors import ConfigError
-from vumi.log import log
+from vumi import log
 
 
 WorkerIssue = collections.namedtuple('WorkerIssue',
@@ -213,7 +213,7 @@ class HeartBeatMonitor(BaseWorker):
         for system_id, wkrs in self._systems.iteritems():
             self._storage.set_system_workers(system_id, wkrs)
         for wkr_id, attrs in self._workers.iteritems():
-            self._storage.set_worker_attrs(wkr_id, attrs)
+            self._storage.set_worker_attrs(wkr_id, attrs._asdict())
 
     def _process_failures(self, wkrs):
         """
