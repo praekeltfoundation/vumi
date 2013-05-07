@@ -67,6 +67,8 @@ class Storage(object):
     @Manager.calls_manager
     def set_worker_hostinfo(self, worker_id, hostinfo):
         key = hostinfo_key(worker_id)
+        # delete existing hosts, otherwise stale host data may remain
+        yield self._redis.delete(key)
         yield self._redis.hmset(key, hostinfo)
 
     @Manager.calls_manager
@@ -88,7 +90,7 @@ class Storage(object):
     def open_or_update_issue(self, worker_id, issue):
         key = issue_key(worker_id)
         # add these fields if they do not already exist
-        yield self._redis.hsetnx(key, 'issue_type', issue['issue_type'])
-        yield self._redis.hsetnx(key, 'start_time', issue['start_time'])
+        yield self._redis.hsetnx(key, 'issue_type', issue.issue_type)
+        yield self._redis.hsetnx(key, 'start_time', issue.start_time)
         # update current proc count
-        yield self._redis.hset(key, 'procs_count', issue['procs_count'])
+        yield self._redis.hset(key, 'procs_count', issue.procs_count)

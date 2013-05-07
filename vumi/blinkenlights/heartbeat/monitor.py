@@ -1,6 +1,7 @@
 # -*- test-case-name: vumi.blinkenlights.heartbeat.tests.test_monitor -*-
 
 import time
+import collections
 
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet.task import LoopingCall
@@ -13,6 +14,18 @@ from vumi.persist.txredis_manager import TxRedisManager
 from vumi.utils import generate_worker_id
 from vumi.errors import ConfigError
 from vumi.log import log
+
+
+WorkerIssue = collections.namedtuple('WorkerIssue',
+                                     ['issue_type',
+                                      'start_time',
+                                      'procs_count'])
+
+Worker = collections.namedtuple('Worker',
+                                ['system_id',
+                                 'worker_id',
+                                 'worker_name',
+                                 'min_procs'])
 
 
 def assert_field(cfg, key):
@@ -52,9 +65,11 @@ class HeartBeatMonitor(BaseWorker):
             "Check-in deadline for participating workers",
             required=True, static=True)
         redis_manager = ConfigDict(
-            "Redis client configuration.", static=True)
+            "Redis client configuration.",
+            required=True, static=True)
         monitored_systems = ConfigDict(
-            "Tree of systems and workers.", static=True)
+            "Tree of systems and workers.",
+            required=True, static=True)
 
     # Instance vars:
     #
@@ -115,11 +130,10 @@ class HeartBeatMonitor(BaseWorker):
                 worker_name = wkr_entry['name']
                 min_procs = wkr_entry['min_procs']
                 worker_id = generate_worker_id(system_id, worker_name)
-                wkr = workers[worker_id] = {}
-                wkr['system_id'] = system_id
-                wkr['worker_id'] = worker_id
-                wkr['worker_name'] = worker_name
-                wkr['min_procs'] = min_procs
+                workers[worker_id] = Worker(system_id,
+                                            worker_id,
+                                            worker_name,
+                                            min_procs)
                 systems[system_id].append(worker_id)
         return systems, workers
 
@@ -127,19 +141,14 @@ class HeartBeatMonitor(BaseWorker):
         """
         Process a heartbeat message.
         """
-        worker_id = msg.get('worker_id', None)
-        timestamp = msg.get('timestamp')
-        hostname = msg.get('hostname', None)
-        pid = msg.get('pid', None)
+        worker_id = msg['worker_id']
+        timestamp = msg['timestamp']
+        hostname = msg['hostname']
+        pid = msg['pid']
 
         # A bunch of discard rules:
-        # 1. missing fields (mostly for older message versions)
-        # 2. Unknown worker (Monitored workers need to be in the config)
-        # 3. Message which are too old.
-
-        if not (worker_id and timestamp and hostname and pid):
-            log.msg("Discarding message. mandatory fields not set")
-            return
+        # 1. Unknown worker (Monitored workers need to be in the config)
+        # 2. Message which are too old.
         wkr = self._workers.get(worker_id, None)
         if wkr is None:
             log.msg("Discarding message. worker '%s' is unknown" % worker_id)
@@ -166,7 +175,7 @@ class HeartBeatMonitor(BaseWorker):
         lst_fail = []
         lst_pass = []
         for wkr_id, instances in self._instance_sets.iteritems():
-            min_procs = self._workers[wkr_id]['min_procs']
+            min_procs = self._workers[wkr_id].min_procs
             # check whether enough workers checked in
             proc_count = len(instances)
             if proc_count < min_procs:
@@ -217,11 +226,7 @@ class HeartBeatMonitor(BaseWorker):
         for wkr in wkrs:
             log.msg("Worker %s failed min-procs verification. "
                     "%i procs checked in" % wkr)
-            issue = {
-                "issue_type": "min-procs-fail",
-                "start_time": time.time(),
-                "procs_count": wkr[1],
-            }
+            issue = WorkerIssue("min-procs-fail", time.time(), wkr[1])
             self._storage.open_or_update_issue(wkr[0], issue)
 
     def _process_passes(self, wkrs):
