@@ -34,10 +34,10 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
 
     host = ConfigText(
         'Hostname of the SMPP server.',
-        required=False, static=True)
+        required=True, static=True)
     port = ConfigInt(
         'Port the SMPP server is listening on.',
-        required=False, static=True)
+        required=True, static=True)
     system_id = ConfigText(
         'User id used to connect to the SMPP server.', required=True,
         static=True)
