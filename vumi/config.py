@@ -251,7 +251,3 @@ class Config(object):
                 # Skip non-static fields on static configs.
                 continue
             field.validate(self)
-        self.validate()
-
-    def validate(self):
-        pass
