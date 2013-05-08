@@ -221,6 +221,9 @@ class MockResource(Resource):
     def render_POST(self, request):
         return self.handler(request)
 
+    def render_PUT(self, request):
+        return self.handler(request)
+
 
 class MockHttpServer(object):
 
@@ -441,6 +444,11 @@ class VumiWorkerTestCase(TestCase):
         :param cls: The worker class to instantiate.
         :param start: True to start the worker (default), False otherwise.
         """
+
+        # When possible, always try and enable heartbeat setup in tests.
+        # so make sure worker_name is set
+        if (config is not None) and ('worker_name' not in config):
+            config['worker_name'] = "unnamed"
 
         worker = get_stubbed_worker(cls, config, self._amqp)
         self._workers.append(worker)

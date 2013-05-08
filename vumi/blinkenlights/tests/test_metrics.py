@@ -49,7 +49,7 @@ class TestMetricManager(TestCase):
                             for p in datapoint[2]),
                         "Not all datapoints near now (%f): %r"
                         % (now, datapoint))
-        self.assertEqual([p[1] for p in datapoint[2]], values)
+        self.assertEqual([dp[1] for dp in datapoint[2]], values)
 
     def test_register(self):
         mm = metrics.MetricManager("vumi.test.")
@@ -141,26 +141,37 @@ class TestAggregators(TestCase):
     def test_sum(self):
         self.assertEqual(metrics.SUM([]), 0.0)
         self.assertEqual(metrics.SUM([1.0, 2.0]), 3.0)
+        self.assertEqual(metrics.SUM([2.0, 1.0]), 3.0)
         self.assertEqual(metrics.SUM.name, "sum")
         self.assertEqual(metrics.Aggregator.from_name("sum"), metrics.SUM)
 
     def test_avg(self):
         self.assertEqual(metrics.AVG([]), 0.0)
         self.assertEqual(metrics.AVG([1.0, 2.0]), 1.5)
+        self.assertEqual(metrics.AVG([2.0, 1.0]), 1.5)
         self.assertEqual(metrics.AVG.name, "avg")
         self.assertEqual(metrics.Aggregator.from_name("avg"), metrics.AVG)
 
     def test_min(self):
         self.assertEqual(metrics.MIN([]), 0.0)
         self.assertEqual(metrics.MIN([1.0, 2.0]), 1.0)
+        self.assertEqual(metrics.MIN([2.0, 1.0]), 1.0)
         self.assertEqual(metrics.MIN.name, "min")
         self.assertEqual(metrics.Aggregator.from_name("min"), metrics.MIN)
 
     def test_max(self):
         self.assertEqual(metrics.MAX([]), 0.0)
         self.assertEqual(metrics.MAX([1.0, 2.0]), 2.0)
+        self.assertEqual(metrics.MAX([2.0, 1.0]), 2.0)
         self.assertEqual(metrics.MAX.name, "max")
         self.assertEqual(metrics.Aggregator.from_name("max"), metrics.MAX)
+
+    def test_last(self):
+        self.assertEqual(metrics.LAST([]), 0.0)
+        self.assertEqual(metrics.LAST([1.0, 2.0]), 2.0)
+        self.assertEqual(metrics.LAST([2.0, 1.0]), 1.0)
+        self.assertEqual(metrics.LAST.name, "last")
+        self.assertEqual(metrics.Aggregator.from_name("last"), metrics.LAST)
 
     def test_already_registered(self):
         self.assertRaises(metrics.AggregatorAlreadyDefinedError,
@@ -180,7 +191,7 @@ class CheckValuesMixin(object):
                         "Not all datapoints near now (%f): %r"
                         % (now, datapoints))
         self.assertTrue(all(isinstance(d[0], (int, long)) for d in datapoints))
-        actual_values = [d[1] for d in datapoints]
+        actual_values = [dp[1] for dp in datapoints]
         return actual_values
 
     def check_poll_func(self, metric, n, test):

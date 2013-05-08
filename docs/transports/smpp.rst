@@ -1,30 +1,16 @@
 SMPP
 ====
 
-An SMPP transport for version 3.4 of the protocol, operating in Transceiver mode.
+SMPP Transport
+^^^^^^^^^^^^^^
 
-Notes
-~~~~~
+.. py:module:: vumi.transports.smpp
 
-* This transport does no MSISDN normalization
-* This transport tries to guess the outbound MSISDN for any SMS sent using a operator prefix lookup.
+.. autoclass:: SmppTransport
 
-Use of Redis in the SMPP Transport
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Redis is used for all situations where temporary information must be cached where:
-
-    a. it will survive system shutdowns
-    b. it can be shared between workers
-
-One use of Redis is for mapping between SMPP sequence_numbers and long term unique id's on the ESME and the SMSC.
-The sequence_number parameter is a revolving set of integers used to pair outgoing async pdu's with their response, i.e. submit_sm & submit_sm_resp.
-Both submit_sm and the corresponding submit_sm_resp will share a single sequence_number, however, for long term storage and future reference, it is necessary to link the id of the message stored on the SMSC (message_id in the submit_sm_resp) back to the id of the sent message.  As the submit_sm_resp pdu's are received, the original id is looked up in Redis via the sequence_number and associated with the message_id in the response.
-
-Followup pdu's from the SMSC (i.e. delivery reports) will reference the original message by the message_id held by the SMSC which was returned in the submit_sm_resp.
-
-Configuration parameters
-~~~~~~~~~~~~~~~~~~~~~~~~
+Example configuration
+^^^^^^^^^^^^^^^^^^^^^
 
 ::
 
@@ -92,4 +78,37 @@ Configuration parameters
         2783: MTN
         2784: CELLC
 
+Notes
+^^^^^
 
+* This transport does no MSISDN normalization
+* This transport tries to guess the outbound MSISDN for any SMS sent
+  using a operator prefix lookup.
+
+Use of Redis in the SMPP Transport
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Redis is used for all situations where temporary information must be
+cached where:
+
+    a. it will survive system shutdowns
+    b. it can be shared between workers
+
+One use of Redis is for mapping between SMPP sequence_numbers and long
+term unique id's on the ESME and the SMSC.
+
+The sequence_number parameter is a revolving set of integers used to
+pair outgoing async pdu's with their response, i.e. submit_sm &
+submit_sm_resp.
+
+Both submit_sm and the corresponding submit_sm_resp will share a
+single sequence_number, however, for long term storage and future
+reference, it is necessary to link the id of the message stored on the
+SMSC (message_id in the submit_sm_resp) back to the id of the sent
+message.  As the submit_sm_resp pdu's are received, the original id is
+looked up in Redis via the sequence_number and associated with the
+message_id in the response.
+
+Followup pdu's from the SMSC (i.e. delivery reports) will reference
+the original message by the message_id held by the SMSC which was
+returned in the submit_sm_resp.

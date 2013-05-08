@@ -178,7 +178,7 @@ class MessageStoreCache(object):
         Increment the status for the given event_type by 1 for the given
         batch_id
         """
-        return self.redis.hincrby(self.status_key(batch_id), event_type,  1)
+        return self.redis.hincrby(self.status_key(batch_id), event_type, 1)
 
     @Manager.calls_manager
     def get_event_status(self, batch_id):

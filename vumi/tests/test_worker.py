@@ -56,19 +56,25 @@ class TestBaseWorker(VumiWorkerTestCase):
     @inlineCallbacks
     def setUp(self):
         yield super(TestBaseWorker, self).setUp()
-        self.worker = yield self.get_worker({}, DummyWorker)
+        self.worker = yield self.get_worker({}, DummyWorker, False)
 
     @inlineCallbacks
     def test_start_worker(self):
         worker, calls = self.worker, []
+        worker.setup_heartbeat = CallRecorder(worker.setup_heartbeat, calls)
         worker.setup_middleware = CallRecorder(worker.setup_middleware, calls)
         worker.setup_connectors = CallRecorder(worker.setup_connectors, calls)
         worker.setup_worker = CallRecorder(worker.setup_worker, calls)
         with LogCatcher() as lc:
             yield worker.startWorker()
-            self.assertEqual(lc.messages(), ['Starting a DummyWorker worker'
-                                             ' with config: {}'])
+            self.assertEqual(lc.messages(),
+                             ['Starting a DummyWorker worker with config: '
+                              "{'worker_name': 'unnamed'}",
+                              'Starting HeartBeat publisher with '
+                              'worker_id=unnamed',
+                              'Started the publisher'])
         self.assertEqual(calls, [
+            ('setup_heartbeat', (), {}),
             ('setup_middleware', (), {}),
             ('setup_connectors', (), {}),
             ('setup_worker', (), {}),
@@ -77,6 +83,8 @@ class TestBaseWorker(VumiWorkerTestCase):
     @inlineCallbacks
     def test_stop_worker(self):
         worker, calls = self.worker, []
+        worker.teardown_heartbeat = CallRecorder(worker.teardown_heartbeat,
+                                                 calls)
         worker.teardown_middleware = CallRecorder(worker.teardown_middleware,
                                                   calls)
         worker.teardown_connectors = CallRecorder(worker.teardown_connectors,
@@ -90,6 +98,7 @@ class TestBaseWorker(VumiWorkerTestCase):
             ('teardown_worker', (), {}),
             ('teardown_connectors', (), {}),
             ('teardown_middleware', (), {}),
+            ('teardown_heartbeat', (), {}),
         ])
 
     def test_setup_connectors_raises(self):

@@ -5,7 +5,8 @@
 from twisted.internet import reactor
 from twisted.internet.protocol import ServerFactory
 from twisted.internet.defer import inlineCallbacks
-from twisted.conch.telnet import TelnetTransport, TelnetProtocol
+from twisted.conch.telnet import (TelnetTransport, TelnetProtocol,
+                                    StatefulTelnetProtocol)
 from twisted.python import log
 
 from vumi.transports import Transport
@@ -17,6 +18,9 @@ class TelnetTransportProtocol(TelnetProtocol):
 
     def __init__(self, vumi_transport):
         self.vumi_transport = vumi_transport
+
+    def getAddress(self):
+        return self.vumi_transport._format_addr(self.transport.getPeer())
 
     def connectionMade(self):
         self.vumi_transport.register_client(self)
@@ -32,6 +36,51 @@ class TelnetTransportProtocol(TelnetProtocol):
             self.vumi_transport.handle_input(self, data)
 
 
+class AddressedTelnetTransportProtocol(StatefulTelnetProtocol):
+    state = "ToAddr"
+
+    def __init__(self, vumi_transport):
+        self.vumi_transport = vumi_transport
+        self.to_addr = None
+        self.from_addr = None
+
+    def connectionMade(self):
+        self.transport.write('Please provide "to_addr":\n')
+
+    def telnet_ToAddr(self, line):
+        if not line:
+            return "ToAddr"
+
+        self.to_addr = line
+        self.transport.write('Please provide "from_addr":\n')
+        return "FromAddr"
+
+    def telnet_FromAddr(self, line):
+        if not line:
+            return "FromAddr"
+
+        if self.from_addr is None:
+            self.from_addr = line
+            summary = "[Sending all messages to: %s and from: %s]\n" % (
+                            self.to_addr, self.from_addr)
+            self.transport.write(summary)
+
+            self.vumi_transport._to_addr = self.to_addr
+            self.vumi_transport.register_client(self)
+        return "SetupDone"
+
+    def telnet_SetupDone(self, line):
+        self.vumi_transport.handle_input(self, line.rstrip('\r\n'))
+
+    def getAddress(self):
+        return self.from_addr
+
+    def connectionLost(self, reason):
+        StatefulTelnetProtocol.connectionLost(self, reason)
+        if self.from_addr is not None:
+            self.vumi_transport.deregister_client(self)
+
+
 class TelnetServerTransport(Transport):
     """Telnet based transport.
 
@@ -43,23 +92,34 @@ class TelnetServerTransport(Transport):
     :type telnet_port: int
     :param telnet_port:
         Port for the telnet server to listen on.
+    :type to_addr: str
+    :param to_addr:
+        The to_addr to use for the telnet server.
+        Defaults to 'host:port'.
+    :param transport_type:
+        The transport_type to use for the telnet server.
+        Defaults to 'telnet'.
     """
+    protocol = TelnetTransportProtocol
 
     def validate_config(self):
         self.telnet_port = int(self.config['telnet_port'])
+        self._to_addr = self.config.get('to_addr')
+        self._transport_type = self.config.get('transport_type', 'telnet')
 
     @inlineCallbacks
     def setup_transport(self):
         self._clients = {}
 
         def protocol():
-            return TelnetTransport(TelnetTransportProtocol, self)
+            return TelnetTransport(self.protocol, self)
 
         factory = ServerFactory()
         factory.protocol = protocol
         self.telnet_server = yield reactor.listenTCP(self.telnet_port,
                                                      factory)
-        self._to_addr = self._format_addr(self.telnet_server.getHost())
+        if self._to_addr is None:
+            self._to_addr = self._format_addr(self.telnet_server.getHost())
 
     @inlineCallbacks
     def teardown_transport(self):
@@ -69,11 +129,8 @@ class TelnetServerTransport(Transport):
     def _format_addr(self, addr):
         return "%s:%s" % (addr.host, addr.port)
 
-    def _client_addr(self, client):
-        return self._format_addr(client.transport.getPeer())
-
     def register_client(self, client):
-        client_addr = self._client_addr(client)
+        client_addr = client.getAddress()
         log.msg("Registering client connected from %r" % client_addr)
         self._clients[client_addr] = client
         self.send_inbound_message(client, None,
@@ -83,23 +140,21 @@ class TelnetServerTransport(Transport):
         log.msg("Deregistering client.")
         self.send_inbound_message(client, None,
                                   TransportUserMessage.SESSION_CLOSE)
-        client_addr = self._client_addr(client)
-        del self._clients[client_addr]
+        del self._clients[client.getAddress()]
 
     def handle_input(self, client, text):
         self.send_inbound_message(client, text,
                                   TransportUserMessage.SESSION_RESUME)
 
     def send_inbound_message(self, client, text, session_event):
-        client_addr = self._client_addr(client)
         self.publish_message(
-            from_addr=client_addr,
+            from_addr=client.getAddress(),
             to_addr=self._to_addr,
             session_event=session_event,
             content=text,
             transport_name=self.transport_name,
-            transport_type="telnet",
-            )
+            transport_type=self._transport_type,
+        )
 
     def handle_outbound_message(self, message):
         text = message['content']
@@ -122,3 +177,7 @@ class TelnetServerTransport(Transport):
             client.transport.write("%s\n" % text)
             if message['session_event'] == TransportUserMessage.SESSION_CLOSE:
                 client.transport.loseConnection()
+
+
+class AddressedTelnetServerTransport(TelnetServerTransport):
+    protocol = AddressedTelnetTransportProtocol

@@ -2,6 +2,8 @@
 
 from copy import deepcopy
 from urllib2 import urlparse
+import textwrap
+import re
 
 from zope.interface import Interface
 from twisted.python.components import Adapter, registerAdapter
@@ -64,10 +66,11 @@ class ConfigField(object):
         self.static = static
 
     def get_doc(self):
-        field_type = ''
-        if self.field_type is not None:
-            field_type = ' (%s)' % (self.field_type,)
-        return ' %s%s: %s' % (self.name, field_type, self.doc)
+        if self.field_type is None:
+            header = ":param %s:" % (self.name,)
+        else:
+            header = ":param %s %s:" % (self.field_type, self.name)
+        return header, self.doc
 
     def setup(self, name):
         self.name = name
@@ -170,7 +173,46 @@ class ConfigUrl(ConfigField):
             return None
         if not isinstance(value, basestring):
             self.raise_config_error("is not a URL string.")
+        # URLs must be bytes, not unicode.
+        if isinstance(value, unicode):
+            value = value.encode('utf-8')
         return urlparse.urlparse(value)
+
+
+class ConfigRegex(ConfigText):
+    field_type = 'regex'
+
+    def clean(self, value):
+        value = super(ConfigRegex, self).clean(value)
+        return re.compile(value)
+
+
+def generate_doc(cls, fields, header_indent='', indent=' ' * 4):
+    """Generate a docstring for a cls and its fields."""
+    cls_doc = cls.__doc__ or ''
+    doc = cls_doc.split("\n")
+    if doc and doc[-1].strip():
+        doc.append("")
+    doc.append("Configuration options:")
+    for field in fields:
+        header, field_doc = field.get_doc()
+        doc.append("")
+        doc.append(header_indent + header)
+        doc.append("")
+        doc.extend(textwrap.wrap(field_doc, initial_indent=indent,
+                                 subsequent_indent=indent))
+    return "\n".join(doc)
+
+
+class ConfigContext(object):
+    """Context within which a configuration object can be retrieved.
+
+    For example, configuration may depend on the message being processed
+    or on the HTTP URL being accessed.
+    """
+    def __init__(self, **kw):
+        for k, v in kw.items():
+            setattr(self, k, v)
 
 
 class ConfigMetaClass(type):
@@ -192,9 +234,7 @@ class ConfigMetaClass(type):
         fields.sort(key=lambda f: f.creation_order)
         dict['fields'] = fields
         cls = type.__new__(mcs, name, bases, dict)
-        doc = cls.__doc__ or "Undocumented config!"
-        cls.__doc__ = '\n\n'.join(
-            [doc] + [field.get_doc() for field in fields])
+        cls.__doc__ = generate_doc(cls, fields)
         return cls
 
 

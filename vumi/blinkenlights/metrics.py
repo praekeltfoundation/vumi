@@ -129,6 +129,7 @@ AVG = Aggregator("avg",
                  lambda values: sum(values) / len(values) if values else 0.0)
 MAX = Aggregator("max", lambda values: max(values) if values else 0.0)
 MIN = Aggregator("min", lambda values: min(values) if values else 0.0)
+LAST = Aggregator("last", lambda values: values[-1] if values else 0.0)
 
 
 class MetricRegistrationError(Exception):

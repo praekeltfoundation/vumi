@@ -120,8 +120,9 @@ class MiddlewareStack(object):
             handler = getattr(middleware, method_name)
             message = yield handler(message, connector_name)
             if message is None:
-                raise MiddlewareError('Returned value of %s.%s should never ' \
-                                'be None' % (middleware, method_name,))
+                raise MiddlewareError(
+                    'Returned value of %s.%s should never be None' % (
+                        middleware, method_name,))
         returnValue(message)
 
     def apply_consume(self, handler_name, message, connector_name):
