@@ -379,6 +379,9 @@ def safe_routing_key(routing_key):
                     [('*', 's'), ('#', 'h')], routing_key)
 
 
+def generate_worker_id(system_id, worker_id):
+    return "%s:%s" % (system_id, worker_id,)
+
 ### SAMPLE CONFIG PARAMETERS - REPLACE 'x's IN OPERATOR_NUMBER
 
 """
