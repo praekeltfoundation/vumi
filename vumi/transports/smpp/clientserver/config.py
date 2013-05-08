@@ -27,10 +27,12 @@ class ClientConfig(object):
                  delivery_report_regex=None,
                  data_coding_overrides=None,
                  send_long_messages=False,
+                 twisted_endpoint=None,
                  ):
         # in SMPP system_id is the username
         self.host = host
         self.port = port
+        self.twisted_endpoint = twisted_endpoint
         self.system_id = system_id
         self.password = password
         self.system_type = system_type

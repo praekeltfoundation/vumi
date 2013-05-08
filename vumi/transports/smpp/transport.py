@@ -3,6 +3,7 @@
 from datetime import datetime
 
 from twisted.internet import reactor
+from twisted.internet.endpoints import clientFromString
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi import log
@@ -163,10 +164,22 @@ class SmppTransport(Transport):
         if not hasattr(self, 'esme_client'):
             # start the Smpp transport (if we don't have one)
             self.factory = self.make_factory()
-            reactor.connectTCP(
-                self.client_config.host,
-                self.client_config.port,
-                self.factory)
+            yield self.connect(self.factory)
+
+    def connect(self, factory):
+        if self.client_config.twisted_endpoint:
+            return self.connect_to_endpoint(
+                self.client_config.twisted_endpoint, factory)
+        else:
+            return self.connect_to_host_port(
+                self.client_config.host, self.client_config.port, factory)
+
+    def connect_to_host_port(self, host, port, factory):
+        return reactor.connectTCP(host, port, factory)
+
+    def connect_to_endpoint(self, description, factory):
+        endpoint = clientFromString(reactor, description)
+        return endpoint.connect(factory)
 
     @inlineCallbacks
     def teardown_transport(self):
