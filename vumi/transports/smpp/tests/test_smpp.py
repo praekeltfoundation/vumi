@@ -711,6 +711,31 @@ class EsmeToSmscTestCase(TransportTestCase):
                           "esme_testing_transport discarded.",))
 
 
+class TwistedEndpointsEsmeToSmscTestCase(EsmeToSmscTestCase):
+
+    @inlineCallbacks
+    def setUp(self):
+        yield super(EsmeToSmscTestCase, self).setUp()
+        self.config = {
+            "system_id": "VumiTestSMSC",
+            "password": "password",
+            "transport_name": self.transport_name,
+            # We need this because service.SmppService uses reactor.listenTCP
+            # with the config['port'] value.
+            "host": "127.0.0.1",
+            "port": 0,
+            "transport_type": "smpp",
+        }
+        self.service = SmppService(None, config=self.config)
+        yield self.service.startWorker()
+        self.service.factory.protocol = SmscTestServer
+        host = self.service.listening.getHost()
+        self.config['twisted_endpoint'] = "tcp:host=%s:%s" % (
+            host.host, host.port)
+        self.transport = yield self.get_transport(self.config, start=False)
+        self.expected_delivery_status = 'delivered'  # stat:0 means delivered
+
+
 class EsmeToSmscTestCaseDeliveryYo(EsmeToSmscTestCase):
     # This tests a slightly non-standard delivery report format for Yo!
     # the following delivery_report_regex is required as a config option

@@ -15,7 +15,6 @@ class SmppService(Worker):
         log.msg("Starting the SmppService")
 
         delivery_report_string = self.config.get('smsc_delivery_report_string')
-
         self.factory = SmscServerFactory(
             delivery_report_string=delivery_report_string)
         self.listening = reactor.listenTCP(self.config['port'], self.factory)
