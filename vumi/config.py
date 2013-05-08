@@ -3,6 +3,7 @@
 from copy import deepcopy
 from urllib2 import urlparse
 import textwrap
+import re
 
 from zope.interface import Interface
 from twisted.python.components import Adapter, registerAdapter
@@ -176,6 +177,14 @@ class ConfigUrl(ConfigField):
         if isinstance(value, unicode):
             value = value.encode('utf-8')
         return urlparse.urlparse(value)
+
+
+class ConfigRegex(ConfigText):
+    field_type = 'regex'
+
+    def clean(self, value):
+        value = super(ConfigRegex, self).clean(value)
+        return re.compile(value)
 
 
 def generate_doc(cls, fields, header_indent='', indent=' ' * 4):
