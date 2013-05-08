@@ -75,9 +75,12 @@ class ConfigField(object):
     def setup(self, name):
         self.name = name
 
+    def present(self, obj):
+        return obj._config_data.has_key(self.name)
+
     def validate(self, obj):
         if self.required:
-            if not obj._config_data.has_key(self.name):
+            if not self.present(obj):
                 raise ConfigError(
                     "Missing required config field '%s'" % (self.name))
         # This will raise an exception if the value exists, but is invalid.
@@ -228,6 +231,10 @@ class ConfigServerEndpoint(ConfigText):
             return "tcp:port=%s" % (port,)
         else:
             return "tcp:port=%s:interface=%s" % (port, host)
+
+    def present(self, obj):
+        return (self._fallbacks_present(obj) or
+                obj._config_data.has_key(self.name))
 
     def get_value(self, obj):
         if self._fallbacks_present(obj):
