@@ -80,7 +80,7 @@ class Storage(object):
     @Manager.calls_manager
     def clear_worker_hostinfo(self, worker_id):
         key = hostinfo_key(worker_id)
-        yield self._redis.hmset(key, json.dumps({}))
+        yield self._redis.set(key, json.dumps({}))
 
     def _issue_to_dict(self, issue):
         return {
