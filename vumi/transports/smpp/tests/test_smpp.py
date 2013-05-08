@@ -24,7 +24,6 @@ class SmppTransportTestCase(TransportTestCase):
     def setUp(self):
         super(SmppTransportTestCase, self).setUp()
         self.config = self.mk_config({
-            # "transport_name": self.transport_name,
             "system_id": "vumitest-vumitest-vumitest",
             "host": "host",
             "port": "0",
