@@ -308,7 +308,7 @@ class EsmeTransceiver(Protocol):
             pdu_params['short_message'] or '')
 
         if delivery_report:
-            # We have a delivery report
+            # We have a delivery report.
             yield self.esme_callbacks.delivery_report(
                 destination_addr=pdu_params['destination_addr'],
                 source_addr=pdu_params['source_addr'],
