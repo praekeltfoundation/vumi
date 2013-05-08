@@ -721,7 +721,8 @@ class TwistedEndpointsEsmeToSmscTestCase(EsmeToSmscTestCase):
             "password": "password",
             "transport_name": self.transport_name,
             # We need this because service.SmppService uses reactor.listenTCP
-            # with the config['port'] value.
+            # with the config['port'] value and ClientConfig expects a 'host'
+            # positional argument.
             "host": "127.0.0.1",
             "port": 0,
             "transport_type": "smpp",
