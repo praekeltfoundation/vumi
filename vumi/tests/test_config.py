@@ -1,9 +1,11 @@
 from twisted.trial.unittest import TestCase
+from twisted.internet.endpoints import TCP4ServerEndpoint, TCP4ClientEndpoint
 
 from vumi.errors import ConfigError
 from vumi.config import (
     Config, ConfigField, ConfigText, ConfigInt, ConfigFloat, ConfigBool,
-    ConfigList, ConfigDict, ConfigUrl, ConfigRegex)
+    ConfigList, ConfigDict, ConfigUrl, ConfigRegex, ConfigServerEndpoint,
+    ConfigClientEndpoint)
 
 
 class ConfigTest(TestCase):
@@ -173,21 +175,22 @@ class FakeModel(object):
 
 
 class ConfigFieldTest(TestCase):
-    def fake_model(self, *value):
-        config = {}
+    def fake_model(self, *value, **kw):
+        config = kw.pop('config', {})
         if value:
             assert len(value) == 1
             config['foo'] = value[0]
         return FakeModel(config)
 
-    def field_value(self, field, *value):
-        return field.get_value(self.fake_model(*value))
+    def field_value(self, field, *value, **kw):
+        return field.get_value(self.fake_model(*value, **kw))
 
     def assert_field_valid(self, field, *value):
         field.validate(self.fake_model(*value))
 
-    def assert_field_invalid(self, field, *value):
-        self.assertRaises(ConfigError, field.validate, self.fake_model(*value))
+    def assert_field_invalid(self, field, *value, **kw):
+        self.assertRaises(ConfigError, field.validate,
+                          self.fake_model(*value, **kw))
 
     def make_field(self, field_cls):
         field = field_cls("desc")
@@ -309,3 +312,36 @@ class ConfigFieldTest(TestCase):
         self.assertEqual(None, self.field_value(field))
         self.assert_field_invalid(field, object())
         self.assert_field_invalid(field, 1)
+
+    def check_endpoint(self, endpoint, endpoint_type, **kw):
+        self.assertEqual(type(endpoint), endpoint_type)
+        for name, value in kw.items():
+            self.assertEqual(getattr(endpoint, '_%s' % name), value)
+
+    def test_server_endpoint_field(self):
+        field = self.make_field(ConfigServerEndpoint)
+        self.check_endpoint(self.field_value(
+            field, 'tcp:60'),
+            TCP4ServerEndpoint, interface='', port=60)
+        self.check_endpoint(self.field_value(
+            field, config={'port': 80}),
+            TCP4ServerEndpoint, interface='', port=80)
+        self.check_endpoint(self.field_value(
+            field, config={'host': 'localhost', 'port': 80}),
+            TCP4ServerEndpoint, interface='localhost', port=80)
+
+        self.assert_field_invalid(field, config={'host': 'localhost'})
+        self.assert_field_invalid(field, 'foo')
+
+    def test_client_endpoint_field(self):
+        field = self.make_field(ConfigClientEndpoint)
+        self.check_endpoint(
+            self.field_value(field, 'tcp:127.0.0.1:60'),
+            TCP4ClientEndpoint, host='127.0.0.1', port=60)
+        self.check_endpoint(self.field_value(
+            field, config={'host': 'localhost', 'port': 80}),
+            TCP4ClientEndpoint, host='localhost', port=80)
+
+        self.assert_field_invalid(field, config={'port': 80})
+        self.assert_field_invalid(field, config={'host': 'localhost'})
+        self.assert_field_invalid(field, 'foo')
