@@ -32,19 +32,6 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
         '.*'
     )
 
-    SMPP_BIND_CONFIG_KEYS = [
-        'system_id',
-        'password',
-        'system_type',
-        'interface_version',
-        'service_type',
-        'dest_addr_ton',
-        'dest_addr_npi',
-        'source_addr_ton',
-        'source_addr_npi',
-        'registered_delivery',
-    ]
-
     host = ConfigText(
         'Hostname of the SMPP server.',
         required=False, static=True)
@@ -80,7 +67,7 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
         'How long to wait for a succesful bind', default=30, static=True)
     smpp_enquire_link_interval = ConfigInt(
         "Number of seconds to delay before reconnecting to the server after "
-        "being disconnected. Default is 5s. Some WASPs, e.g. Clickatell ",
+        "being disconnected. Default is 5s. Some WASPs, e.g. Clickatell "
         "require a 30s delay before reconnecting. In these cases a 45s "
         "initial_reconnect_delay is recommended.", default=55, static=True)
     initial_reconnect_delay = ConfigInt(
@@ -141,6 +128,22 @@ class SmppTransport(Transport):
     An SMPP Transceiver Transport.
     """
     CONFIG_CLASS = SmppTransportConfig
+
+    # Which of the keys in SmppTransportConfig are keys that are to
+    # be passed on to the ESMETransceiver base class to create a bind with.
+    SMPP_BIND_CONFIG_KEYS = [
+        'system_id',
+        'password',
+        'system_type',
+        'interface_version',
+        'service_type',
+        'dest_addr_ton',
+        'dest_addr_npi',
+        'source_addr_ton',
+        'source_addr_npi',
+        'registered_delivery',
+    ]
+
     # We only want to start this after we finish connecting to SMPP.
     start_message_consumer = False
 
