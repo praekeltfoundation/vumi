@@ -16,7 +16,7 @@ from vumi.transports.failures import FailureMessage
 from vumi.message import Message, TransportUserMessage
 from vumi.persist.txredis_manager import TxRedisManager
 from vumi.config import (ConfigText, ConfigInt, ConfigBool, ConfigDict,
-                         ConfigFloat)
+                         ConfigFloat, ConfigRegex)
 
 
 class SmppTransportConfig(Transport.CONFIG_CLASS):
@@ -79,7 +79,7 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
         'matching submit_sm_resp and delivery report messages. Defaults to '
         '1 week',
         default=(60 * 60 * 24 * 7), static=True)
-    delivery_report_regex = ConfigText(
+    delivery_report_regex = ConfigRegex(
         'What regex to use for matching delivery reports',
         default=DELIVERY_REPORT_REGEX, static=True)
     data_coding_overrides = ConfigDict(
