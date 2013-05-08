@@ -15,42 +15,90 @@ from vumi.transports.smpp.clientserver.config import ClientConfig
 from vumi.transports.failures import FailureMessage
 from vumi.message import Message, TransportUserMessage
 from vumi.persist.txredis_manager import TxRedisManager
+from vumi.config import (ConfigText, ConfigInt, ConfigBool, ConfigDict,
+                         ConfigFloat)
 
 
-class SmppTransport(Transport):
-    """
-    An SMPP transport.
+class SmppTransportConfig(Transport.CONFIG_CLASS):
 
-    The SMPP transport has many configuration parameters. These are
-    divided up into sections below.
+    DELIVERY_REPORT_REGEX = (
+        'id:(?P<id>\S{,65})'
+        ' +sub:(?P<sub>...)'
+        ' +dlvrd:(?P<dlvrd>...)'
+        ' +submit date:(?P<submit_date>\d*)'
+        ' +done date:(?P<done_date>\d*)'
+        ' +stat:(?P<stat>[A-Z]{7})'
+        ' +err:(?P<err>...)'
+        ' +[Tt]ext:(?P<text>.{,20})'
+        '.*'
+    )
 
-    SMPP server account configuration options:
-
-    :type system_id: str
-    :param system_id:
-        User id used to connect to the SMPP server.
-    :type password: str
-    :param password:
-        Password for the system id.
-    :type system_type: str, optional
-    :param system_type:
-        Additional system metadata that is passed through to the SMPP server
-        on connect.
-    :type host: str
-    :param host:
-        Hostname of the SMPP server.
-    :type port: int
-    :param port:
-        Port the SMPP server is listening on.
-    :type initial_reconnect_delay: int, optional
-    :param initial_reconnect_delay:
-        Number of seconds to delay before reconnecting to the server after
+    host = ConfigText(
+        'Hostname of the SMPP server.',
+        required=False, static=True)
+    port = ConfigInt(
+        'Port the SMPP server is listening on.',
+        required=False, static=True)
+    system_id = ConfigText(
+        'User id used to connect to the SMPP server.', required=True,
+        static=True)
+    password = ConfigText(
+        'Password for the system id.', required=True, static=True)
+    system_type = ConfigText(
+        """Additional system metadata that is passed through to the SMPP
+        server on connect.""", default="", static=True)
+    interface_version = ConfigText(
+        "SMPP protocol version. Default is '34' (i.e. version 3.4).",
+        default="34", static=True)
+    service_type = ConfigText(
+        'The SMPP service type', default="", static=True)
+    dest_addr_ton = ConfigInt(
+        'Destination TON (type of number)', default=0, static=True)
+    dest_addr_npi = ConfigInt(
+        'Destination NPI (number plan identifier). '
+        'Default 1 (ISDN/E.164/E.163)', default=1, static=True)
+    source_addr_ton = ConfigInt(
+        'Source TON (type of number)', default=0, static=True)
+    source_addr_npi = ConfigInt(
+        'Source NPI (number plan identifier)', default=0, static=True)
+    registered_delivery = ConfigBool(
+        'Whether or not to request delivery reports', default=True,
+        static=True)
+    smpp_bind_timeout = ConfigInt(
+        'How long to wait for a succesful bind', default=30, static=True)
+    smpp_enquire_link_interval = ConfigInt(
+        """Number of seconds to delay before reconnecting to the server after
         being disconnected. Default is 5s. Some WASPs, e.g. Clickatell,
         require a 30s delay before reconnecting. In these cases a 45s
-        initial_reconnect_delay is recommended.
-    :type split_bind_prefix: str, optional
-    :param split_bind_prefix:
-        This is the Redis prefix to use for storing things like sequence
+        initial_reconnect_delay is recommended.""", default=55, static=True)
+    initial_reconnect_delay = ConfigInt(
+        'How long to wait between reconnecting attempts', default=5,
+        static=True)
+    third_party_id_expiry = ConfigInt(
+        'How long (seconds) to keep 3rd party message IDs around to allow for'
+        'matching submit_sm_resp and delivery report messages. Defaults to '
+        '1 week',
+        default=(60 * 60 * 24 * 7), static=True)
+    delivery_report_regex = ConfigText(
+        'What regex to use for matching delivery reports',
+        default=DELIVERY_REPORT_REGEX, static=True)
+    data_coding_overrides = ConfigDict(
+        """
+        Overrides for data_coding character set mapping. This is useful for
+        setting the default encoding (0), adding additional undefined encodings
+        (such as 4 or 8) or overriding encodings in cases where the SMSC is
+        violating the spec (which happens a lot). Keys should be integers,
+        values should be strings containing valid Python character encoding
+        names.
+        """, default={}, static=True)
+    send_long_messages = ConfigBool(
+        """
+        If `True`, messages longer than 254 characters will be sent in the
+        `message_payload` optional field instead of the `short_message` field.
+        Default is `False`, simply because that maintains previous behaviour.
+        """, default=False, static=True)
+    split_bind_prefix = ConfigText(
+        """This is the Redis prefix to use for storing things like sequence
         numbers and message ids for delivery report handling.
         It defaults to `<system_id>@<host>:<port>`.
 
@@ -58,68 +106,39 @@ class SmppTransport(Transport):
         then make sure this is the same value for both binds.
         This _only_ needs to be done for TX & RX since messages sent via the TX
         bind are handled by the RX bind and they need to share the same prefix
-        for the lookup for message ids in delivery reports to work.
-    :type throttle_delay: float, optional
-    :param throttle_delay:
-        Delay (in seconds) before retrying a message after receiving
-        `ESME_RTHROTTLED`. Default 0.1
-
-    SMPP protocol configuration options:
-
-    :type interface_version: str, optional
-    :param interface_version:
-        SMPP protocol version. Default is '34' (i.e. version 3.4).
-    :type dest_addr_ton:
-    :param dest_addr_ton:
-        Destination TON (type of number). Default .
-    :type dest_addr_npi:
-    :param dest_addr_npi:
-        Destination NPI (number plan identifier). Default 1 (ISDN/E.164/E.163).
-    :type source_addr_ton:
-    :param source_addr_ton:
-        Source TON (type of number). Default is 0 (Unknown)
-    :type source_addr_npi:
-    :param source_addr_npi:
-        Source NPI (number plan identifier). Default is 0 (Unknown)
-    :type registered_delivery:
-    :param registered_delivery:
-        Whether to ask for delivery reports. Default 1 (request delivery
-        reports).
-
-    :param dict data_coding_overrides:
-        Overrides for data_coding character set mapping. This is useful for
-        setting the default encoding (0), adding additional undefined encodings
-        (such as 4 or 8) or overriding encodings in cases where the SMSC is
-        violating the spec (which happens a lot). Keys should be integers,
-        values should be strings containing valid Python character encoding
-        names.
-
-    :param bool send_long_messages:
-        If `True`, messages longer than 254 characters will be sent in the
-        `message_payload` optional field instead of the `short_message` field.
-        Default is `False`, simply because that maintains previous behaviour.
-
-    The list of SMPP protocol configuration options given above is not
-    exhaustive. Any other options specified are passed through to the
-    python-smpp library PDU (protocol data unit) builder.
-
-    Cellphone number routing options:
-
-    :type COUNTRY_CODE: str, optional
-    :param COUNTRY_CODE:
+        for the lookup for message ids in delivery reports to work.""",
+        default='', static=True)
+    throttle_delay = ConfigFloat(
+        """Delay (in seconds) before retrying a message after receiving
+        `ESME_RTHROTTLED`.""", default=0.1, static=True)
+    COUNTRY_CODE = ConfigText(
+        """
         Used to translate a leading zero in a destination MSISDN into a
-        country code. Default '',
-    :type OPERATOR_PREFIX: str, optional
-    :param OPERATOR_PREFIX:
+        country code. Default ''
+        """, default="", static=True)
+    OPERATOR_PREFIX = ConfigDict(
+        """
         Nested dictionary of prefix to network name mappings. Default {} (set
-        network to 'UNKNOWN'). E.g. { '27': { '27761': 'NETWORK1' }}.
-    :type OPERATOR_NUMBER:
-    :param OPERATOR_NUMBER:
+        network to 'UNKNOWN'). E.g. { '27': { '27761': 'NETWORK1' }}
+        """, default={}, static=True)
+    OPERATOR_NUMBER = ConfigDict(
+        """
         Dictionary of source MSISDN to use for each network listed in
         OPERATOR_PREFIX. If a network is not listed, the source MSISDN
         specified by the message sender is used. Default {} (always used the
         from address specified by the message sender). E.g. { 'NETWORK1':
-        '27761234567'}.
+        '27761234567'}
+        """, default={}, static=True)
+    redis_manager = ConfigDict(
+        'How to connect to Redis', default={}, static=True)
+
+
+class SmppTransport(Transport):
+    """
+    An SMPP transport.
+
+    The SMPP transport has many configuration parameters.
+
     """
 
     # We only want to start this after we finish connecting to SMPP.
