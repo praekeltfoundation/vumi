@@ -66,15 +66,15 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
     smpp_bind_timeout = ConfigInt(
         'How long to wait for a succesful bind', default=30, static=True)
     smpp_enquire_link_interval = ConfigInt(
-        """Number of seconds to delay before reconnecting to the server after
-        being disconnected. Default is 5s. Some WASPs, e.g. Clickatell,
-        require a 30s delay before reconnecting. In these cases a 45s
-        initial_reconnect_delay is recommended.""", default=55, static=True)
+        "Number of seconds to delay before reconnecting to the server after "
+        "being disconnected. Default is 5s. Some WASPs, e.g. Clickatell ",
+        "require a 30s delay before reconnecting. In these cases a 45s "
+        "initial_reconnect_delay is recommended.", default=55, static=True)
     initial_reconnect_delay = ConfigInt(
         'How long to wait between reconnecting attempts', default=5,
         static=True)
     third_party_id_expiry = ConfigInt(
-        'How long (seconds) to keep 3rd party message IDs around to allow for'
+        'How long (seconds) to keep 3rd party message IDs around to allow for '
         'matching submit_sm_resp and delivery report messages. Defaults to '
         '1 week',
         default=(60 * 60 * 24 * 7), static=True)
@@ -82,62 +82,50 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
         'What regex to use for matching delivery reports',
         default=DELIVERY_REPORT_REGEX, static=True)
     data_coding_overrides = ConfigDict(
-        """
-        Overrides for data_coding character set mapping. This is useful for
-        setting the default encoding (0), adding additional undefined encodings
-        (such as 4 or 8) or overriding encodings in cases where the SMSC is
-        violating the spec (which happens a lot). Keys should be integers,
-        values should be strings containing valid Python character encoding
-        names.
-        """, default={}, static=True)
+        "Overrides for data_coding character set mapping. This is useful for "
+        "setting the default encoding (0), adding additional undefined "
+        "encodings (such as 4 or 8) or overriding encodings in cases where "
+        "the SMSC is violating the spec (which happens a lot). Keys should "
+        "be integers, values should be strings containing valid Python "
+        "character encoding names.", default={}, static=True)
     send_long_messages = ConfigBool(
-        """
-        If `True`, messages longer than 254 characters will be sent in the
-        `message_payload` optional field instead of the `short_message` field.
-        Default is `False`, simply because that maintains previous behaviour.
-        """, default=False, static=True)
+        "If `True`, messages longer than 254 characters will be sent in the "
+        "`message_payload` optional field instead of the `short_message` "
+        "field. Default is `False`, simply because that maintains previous "
+        "behaviour.", default=False, static=True)
     split_bind_prefix = ConfigText(
-        """This is the Redis prefix to use for storing things like sequence
-        numbers and message ids for delivery report handling.
-        It defaults to `<system_id>@<host>:<port>`.
-
-        *ONLY* if the connection is split into two separate binds for RX and TX
-        then make sure this is the same value for both binds.
-        This _only_ needs to be done for TX & RX since messages sent via the TX
-        bind are handled by the RX bind and they need to share the same prefix
-        for the lookup for message ids in delivery reports to work.""",
-        default='', static=True)
+        "This is the Redis prefix to use for storing things like sequence "
+        "numbers and message ids for delivery report handling. It defaults "
+        "to `<system_id>@<host>:<port>`. "
+        "*ONLY* if the connection is split into two separate binds for RX "
+        "and TX then make sure this is the same value for both binds. "
+        "This _only_ needs to be done for TX & RX since messages sent via "
+        "the TX bind are handled by the RX bind and they need to share the "
+        "same prefix for the lookup for message ids in delivery reports to "
+        "work.", default='', static=True)
     throttle_delay = ConfigFloat(
-        """Delay (in seconds) before retrying a message after receiving
-        `ESME_RTHROTTLED`.""", default=0.1, static=True)
+        "Delay (in seconds) before retrying a message after receiving "
+        "`ESME_RTHROTTLED`.", default=0.1, static=True)
     COUNTRY_CODE = ConfigText(
-        """
-        Used to translate a leading zero in a destination MSISDN into a
-        country code. Default ''
-        """, default="", static=True)
+        "Used to translate a leading zero in a destination MSISDN into a "
+        "country code. Default ''", default="", static=True)
     OPERATOR_PREFIX = ConfigDict(
-        """
-        Nested dictionary of prefix to network name mappings. Default {} (set
-        network to 'UNKNOWN'). E.g. { '27': { '27761': 'NETWORK1' }}
-        """, default={}, static=True)
+        "Nested dictionary of prefix to network name mappings. Default {} "
+        "(set network to 'UNKNOWN'). E.g. { '27': { '27761': 'NETWORK1' }} ",
+        default={}, static=True)
     OPERATOR_NUMBER = ConfigDict(
-        """
-        Dictionary of source MSISDN to use for each network listed in
-        OPERATOR_PREFIX. If a network is not listed, the source MSISDN
-        specified by the message sender is used. Default {} (always used the
-        from address specified by the message sender). E.g. { 'NETWORK1':
-        '27761234567'}
-        """, default={}, static=True)
+        "Dictionary of source MSISDN to use for each network listed in "
+        "OPERATOR_PREFIX. If a network is not listed, the source MSISDN "
+        "specified by the message sender is used. Default {} (always used the "
+        "from address specified by the message sender). "
+        "E.g. { 'NETWORK1': '27761234567'}", default={}, static=True)
     redis_manager = ConfigDict(
         'How to connect to Redis', default={}, static=True)
 
 
 class SmppTransport(Transport):
     """
-    An SMPP transport.
-
-    The SMPP transport has many configuration parameters.
-
+    An SMPP Transceiver Transport.
     """
     CONFIG_CLASS = SmppTransportConfig
     # We only want to start this after we finish connecting to SMPP.
@@ -459,6 +447,7 @@ class SmppTransport(Transport):
 
 
 class SmppTxTransport(SmppTransport):
+    "An Smpp Transmitter Transport"
     def make_factory(self):
         return EsmeTransmitterFactory(
             self.get_static_config(), self.get_smpp_config(),
@@ -466,6 +455,7 @@ class SmppTxTransport(SmppTransport):
 
 
 class SmppRxTransport(SmppTransport):
+    "An Smpp Receiver Transport"
     def make_factory(self):
         return EsmeReceiverFactory(
             self.get_static_config(), self.get_smpp_config(),
