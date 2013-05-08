@@ -153,6 +153,19 @@ class ConfigTest(TestCase):
 
         self.assertRaises(ConfigError, FooConfig, {}, static=True)
 
+    def test_post_validate(self):
+        class FooConfig(Config):
+            foo = ConfigInt("foo", required=True)
+
+            def post_validate(self):
+                if self.foo < 0:
+                    self.raise_config_error("'foo' must be non-negative")
+
+        conf = FooConfig({'foo': 1})
+        self.assertEqual(conf.foo, 1)
+
+        self.assertRaises(ConfigError, FooConfig, {'foo': -1})
+
 
 class FakeModel(object):
     def __init__(self, config):

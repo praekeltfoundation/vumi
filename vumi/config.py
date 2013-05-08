@@ -251,3 +251,16 @@ class Config(object):
                 # Skip non-static fields on static configs.
                 continue
             field.validate(self)
+        self.post_validate()
+
+    def raise_config_error(self, message):
+        """Raise a :class:`ConfigError` with the given message."""
+        raise ConfigError(message)
+
+    def post_validate(self):
+        """Sub-classes may override this to provide cross-field validation.
+
+        Implementations should raise :class:`ConfigError` if the configuration
+        is invalid (by calling :meth:`raise_config_error`, for example).
+        """
+        pass
