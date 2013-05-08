@@ -28,8 +28,6 @@ from vumi.message import TransportUserMessage, TransportEvent
 
 class StreamingHTTPRelayConfig(ApplicationWorker.CONFIG_CLASS):
     """Streaming HTTP message relay.
-
-    TODO: Document this.
     """
     # Static setup.
     web_path = ConfigText(

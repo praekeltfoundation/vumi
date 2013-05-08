@@ -10,6 +10,7 @@ application worker class and a few generic application workers.
     :maxdepth: 1
 
     base.rst
+    streaming_http_relay.rst
     http_relay.rst
     rapidsms_relay.rst
     sandbox.rst
