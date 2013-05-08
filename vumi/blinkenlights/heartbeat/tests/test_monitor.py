@@ -4,6 +4,7 @@
 
 import os
 import time
+import json
 
 from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
@@ -119,8 +120,8 @@ class TestHeartBeatMonitor(TestCase):
 
         # test that hostinfo was persisted into redis
         key = hostinfo_key(wkr_id)
-        count = yield fkredis.hget(key, 'test-host-1')
-        self.assertEqual(count, '1')
+        hostinfo = json.loads((yield fkredis.get(key)))
+        self.assertEqual(hostinfo['test-host-1'], 1)
 
     @inlineCallbacks
     def test_verify_workers_pass(self):
@@ -149,10 +150,9 @@ class TestHeartBeatMonitor(TestCase):
 
         # test that hostinfo was persisted into redis
         key = hostinfo_key(wkr_id)
-        count = yield fkredis.hget(key, 'test-host-1')
-        self.assertEqual(count, '1')
-        count = yield fkredis.hget(key, 'test-host-2')
-        self.assertEqual(count, '2')
+        hostinfo = json.loads((yield fkredis.get(key)))
+        self.assertEqual(hostinfo['test-host-1'], 1)
+        self.assertEqual(hostinfo['test-host-2'], 2)
 
     @inlineCallbacks
     def test_sync_to_redis(self):
@@ -164,15 +164,15 @@ class TestHeartBeatMonitor(TestCase):
         fkredis = self.worker._redis
 
         # Systems
-        systems = yield fkredis.get('systems')
+        systems = json.loads((yield fkredis.get('systems')))
         self.assertEqual(tuple(systems), ('system-1',))
 
         # Workers in System
-        workers = yield fkredis.get("system:system-1:workers")
+        workers = json.loads((yield fkredis.get("system:system-1:workers")))
         self.assertEqual(tuple(workers), ('system-1:twitter_transport',))
 
         # Worker attrs
         wkr_id = generate_worker_id('system-1', 'twitter_transport')
-        attrs = yield fkredis.get(attr_key(wkr_id))
+        attrs = json.loads((yield fkredis.get(attr_key(wkr_id))))
         self.assertEqual(attrs['worker_name'], 'twitter_transport')
         self.assertEqual(attrs['min_procs'], 2)
