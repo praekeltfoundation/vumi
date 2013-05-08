@@ -11,7 +11,6 @@ from vumi.transports.base import Transport
 from vumi.transports.smpp.clientserver.client import (
     EsmeTransceiverFactory, EsmeTransmitterFactory, EsmeReceiverFactory,
     EsmeCallbacks)
-from vumi.transports.smpp.clientserver.config import ClientConfig
 from vumi.transports.failures import FailureMessage
 from vumi.message import Message, TransportUserMessage
 from vumi.persist.txredis_manager import TxRedisManager
@@ -152,7 +151,8 @@ class SmppTransport(Transport):
         log.msg("Starting the SmppTransport for %s:%s" % (
             config.host, config.port))
 
-        default_prefix = "%(system_id)s@%(host)s:%(port)s" % config
+        default_prefix = "%s@%s:%s" % (
+            config.system_id, config.host, config.port)
 
         r_config = config.redis_manager
         r_prefix = config.split_bind_prefix or default_prefix
@@ -182,9 +182,29 @@ class SmppTransport(Transport):
             self.factory.esme.transport.loseConnection()
         yield self.redis._close()
 
+    def get_smpp_config(self):
+        """Inspects the SmppTransportConfig and returns a dictionary
+        that can be passed to an EsmeTransceiver (or subclass there of)
+        to create a bind with"""
+        config = self.get_static_config()
+        smpp_config_keys = [
+            'system_id',
+            'password',
+            'system_type',
+            'interface_version',
+            'service_type',
+            'dest_addr_ton',
+            'dest_addr_npi',
+            'source_addr_ton',
+            'source_addr_npi',
+            'registered_delivery',
+        ]
+        return dict([(key, getattr(config, key)) for key in smpp_config_keys])
+
     def make_factory(self):
         return EsmeTransceiverFactory(
-            self.get_static_config(), self.redis, self.esme_callbacks)
+            self.get_static_config(), self.get_smpp_config(),
+            self.redis, self.esme_callbacks)
 
     def esme_connected(self, client):
         log.msg("ESME Connected, adding handlers")
@@ -441,10 +461,12 @@ class SmppTransport(Transport):
 class SmppTxTransport(SmppTransport):
     def make_factory(self):
         return EsmeTransmitterFactory(
-            self.get_static_config(), self.redis, self.esme_callbacks)
+            self.get_static_config(), self.get_smpp_config(),
+            self.redis, self.esme_callbacks)
 
 
 class SmppRxTransport(SmppTransport):
     def make_factory(self):
         return EsmeReceiverFactory(
-            self.get_static_config(), self.redis, self.esme_callbacks)
+            self.get_static_config(), self.get_smpp_config(),
+            self.redis, self.esme_callbacks)
