@@ -44,8 +44,8 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
     password = ConfigText(
         'Password for the system id.', required=True, static=True)
     system_type = ConfigText(
-        """Additional system metadata that is passed through to the SMPP
-        server on connect.""", default="", static=True)
+        "Additional system metadata that is passed through to the SMPP "
+        "server on connect.", default="", static=True)
     interface_version = ConfigText(
         "SMPP protocol version. Default is '34' (i.e. version 3.4).",
         default="34", static=True)
@@ -447,7 +447,7 @@ class SmppTransport(Transport):
 
 
 class SmppTxTransport(SmppTransport):
-    "An Smpp Transmitter Transport"
+    """An Smpp Transmitter Transport"""
     def make_factory(self):
         return EsmeTransmitterFactory(
             self.get_static_config(), self.get_smpp_config(),
@@ -455,7 +455,7 @@ class SmppTxTransport(SmppTransport):
 
 
 class SmppRxTransport(SmppTransport):
-    "An Smpp Receiver Transport"
+    """An Smpp Receiver Transport"""
     def make_factory(self):
         return EsmeReceiverFactory(
             self.get_static_config(), self.get_smpp_config(),
