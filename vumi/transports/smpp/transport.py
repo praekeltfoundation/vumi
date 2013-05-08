@@ -140,32 +140,23 @@ class SmppTransport(Transport):
     The SMPP transport has many configuration parameters.
 
     """
-
+    CONFIG_CLASS = SmppTransportConfig
     # We only want to start this after we finish connecting to SMPP.
     start_message_consumer = False
 
     callLater = reactor.callLater
 
-    def validate_config(self):
-        self.client_config = ClientConfig.from_config(self.config)
-        self.throttle_delay = float(self.config.get('throttle_delay', 0.1))
-
     @inlineCallbacks
     def setup_transport(self):
-        log.msg("Starting the SmppTransport with %s" % self.config)
+        config = self.get_static_config()
+        log.msg("Starting the SmppTransport for %s:%s" % (
+            config.host, config.port))
 
-        self.third_party_id_expiry = self.config.get(
-                "third_party_id_expiry",
-                60 * 60 * 24 * 7  # 1 week
-                )
+        default_prefix = "%(system_id)s@%(host)s:%(port)s" % config
 
-        r_config = self.config.get('redis_manager', {})
-        default_prefix = "%s@%s:%s" % (
-                self.client_config.system_id,
-                self.client_config.host,
-                self.client_config.port,
-                )
-        r_prefix = self.config.get('split_bind_prefix', default_prefix)
+        r_config = config.redis_manager
+        r_prefix = config.split_bind_prefix or default_prefix
+
         redis = yield TxRedisManager.from_config(r_config)
         self.redis = redis.sub_manager(r_prefix)
 
@@ -182,10 +173,7 @@ class SmppTransport(Transport):
         if not hasattr(self, 'esme_client'):
             # start the Smpp transport (if we don't have one)
             self.factory = self.make_factory()
-            reactor.connectTCP(
-                self.client_config.host,
-                self.client_config.port,
-                self.factory)
+            reactor.connectTCP(config.host, config.port, self.factory)
 
     @inlineCallbacks
     def teardown_transport(self):
@@ -196,7 +184,7 @@ class SmppTransport(Transport):
 
     def make_factory(self):
         return EsmeTransceiverFactory(
-            self.client_config, self.redis, self.esme_callbacks)
+            self.get_static_config(), self.redis, self.esme_callbacks)
 
     def esme_connected(self, client):
         log.msg("ESME Connected, adding handlers")
@@ -271,9 +259,10 @@ class SmppTransport(Transport):
 
     @inlineCallbacks
     def r_set_id_for_third_party_id(self, third_party_id, id):
+        config = self.get_static_config()
         rkey = self.r_third_party_id_key(third_party_id)
         yield self.redis.set(rkey, id)
-        yield self.redis.expire(rkey, self.third_party_id_expiry)
+        yield self.redis.expire(rkey, config.third_party_id_expiry)
 
     def _start_throttling(self):
         if self.throttled:
@@ -347,7 +336,8 @@ class SmppTransport(Transport):
             log.err("Could not retrieve throttled message:%s" % (
                 sent_sms_id))
         else:
-            self.callLater(self.throttle_delay,
+            config = self.get_static_config()
+            self.callLater(config.throttle_delay,
                            self._submit_outbound_message, message)
 
     def delivery_status(self, state):
@@ -424,18 +414,18 @@ class SmppTransport(Transport):
         text = message['content']
         continue_session = (
             message['session_event'] != TransportUserMessage.SESSION_CLOSE)
-        route = get_operator_number(to_addr,
-                self.config.get('COUNTRY_CODE', ''),
-                self.config.get('OPERATOR_PREFIX', {}),
-                self.config.get('OPERATOR_NUMBER', {})) or from_addr
+        config = self.get_static_config()
+        route = get_operator_number(to_addr, config.COUNTRY_CODE,
+                                    config.OPERATOR_PREFIX,
+                                    config.OPERATOR_NUMBER)
         return self.esme_client.submit_sm(
-                short_message=text.encode('utf-8'),
-                destination_addr=str(to_addr),
-                source_addr=route,
-                message_type=message['transport_type'],
-                continue_session=continue_session,
-                session_info=message['transport_metadata'].get('session_info'),
-                )
+            short_message=text.encode('utf-8'),
+            destination_addr=str(to_addr),
+            source_addr=route or from_addr,
+            message_type=message['transport_type'],
+            continue_session=continue_session,
+            session_info=message['transport_metadata'].get('session_info'),
+        )
 
     def stopWorker(self):
         log.msg("Stopping the SMPPTransport")
@@ -451,10 +441,10 @@ class SmppTransport(Transport):
 class SmppTxTransport(SmppTransport):
     def make_factory(self):
         return EsmeTransmitterFactory(
-            self.client_config, self.redis, self.esme_callbacks)
+            self.get_static_config(), self.redis, self.esme_callbacks)
 
 
 class SmppRxTransport(SmppTransport):
     def make_factory(self):
         return EsmeReceiverFactory(
-            self.client_config, self.redis, self.esme_callbacks)
+            self.get_static_config(), self.redis, self.esme_callbacks)
