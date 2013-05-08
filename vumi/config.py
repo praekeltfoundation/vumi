@@ -3,6 +3,7 @@
 from copy import deepcopy
 from urllib2 import urlparse
 import textwrap
+import re
 
 from zope.interface import Interface
 from twisted.python.components import Adapter, registerAdapter
@@ -178,6 +179,14 @@ class ConfigUrl(ConfigField):
         return urlparse.urlparse(value)
 
 
+class ConfigRegex(ConfigText):
+    field_type = 'regex'
+
+    def clean(self, value):
+        value = super(ConfigRegex, self).clean(value)
+        return re.compile(value)
+
+
 def generate_doc(cls, fields, header_indent='', indent=' ' * 4):
     """Generate a docstring for a cls and its fields."""
     cls_doc = cls.__doc__ or ''
@@ -242,3 +251,7 @@ class Config(object):
                 # Skip non-static fields on static configs.
                 continue
             field.validate(self)
+        self.validate()
+
+    def validate(self):
+        pass
