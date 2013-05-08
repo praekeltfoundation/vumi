@@ -145,22 +145,20 @@ class HeartBeatMonitor(BaseWorker):
         """
         Process a heartbeat message.
         """
-        worker_id = msg.get('worker_id', None)
-        timestamp = msg.get('timestamp', None)
-        hostname = msg.get('hostname', None)
-        pid = msg.get('pid', None)
+        worker_id = msg['worker_id']
+        timestamp = msg['timestamp']
+        hostname = msg['hostname']
+        pid = msg['pid']
 
         # A bunch of discard rules:
-        # 1. Missing fields
-        # 2. Unknown worker (Monitored workers need to be in the config)
-        # 3. Message which are too old.
-        if not (worker_id and timestamp and hostname and pid):
-            return
+        # 1. Unknown worker (Monitored workers need to be in the config)
+        # 2. Message which are too old.
         wkr = self._workers.get(worker_id, None)
         if wkr is None:
             log.msg("Discarding message. worker '%s' is unknown" % worker_id)
             return
         if timestamp < (time.time() - self.deadline):
+            log.msg("Discarding heartbeat from '%s'. Too old" % worker_id)
             return
 
         # Add worker instance to the instance set for the worker species

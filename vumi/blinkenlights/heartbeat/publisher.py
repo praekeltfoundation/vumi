@@ -18,6 +18,17 @@ class HeartBeatMessage(Message):
     def __init__(self, **kw):
         super(HeartBeatMessage, self).__init__(**kw)
 
+    def validate_fields(self):
+        # these basic fields must be present, irrespective of version
+        self.assert_field_present(
+            'version',
+            'system_id',
+            'worker_id',
+            'worker_name',
+            'hostname',
+            'pid',
+            )
+
 
 class HeartBeatPublisher(Publisher):
     """
