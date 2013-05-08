@@ -17,9 +17,9 @@ from twisted.internet.defer import (
     Deferred, inlineCallbacks, returnValue, maybeDeferred)
 
 from vumi import log
-from vumi.utils import http_request_full
+from vumi.utils import http_request_full, to_kwargs
 from vumi.config import (
-    ConfigUrl, ConfigText, ConfigInt, ConfigDict, ConfigList)
+    ConfigUrl, ConfigText, ConfigInt, ConfigDict, ConfigList, ConfigBool)
 from vumi.transports.httprpc import httprpc
 from vumi.application.base import ApplicationWorker
 from vumi.persist.txredis_manager import TxRedisManager
@@ -32,14 +32,20 @@ class StreamingHTTPRelayConfig(ApplicationWorker.CONFIG_CLASS):
     TODO: Document this.
     """
     # Static setup.
-    web_path = ConfigText("URL path to listen on for outbound messages.",
-                          required=True, static=True)
-    web_port = ConfigInt("TCP port to listen on for outbound messages.",
-                         required=True, static=True)
-    health_path = ConfigText("URL path to listen on for health checks.",
-                             default='/health/', static=True)
-    redis_manager = ConfigDict('Parameters to connect to Redis with.',
-                               default={}, static=True)
+    web_path = ConfigText(
+        "URL path to listen on for outbound messages.", static=True,
+        required=True)
+    web_port = ConfigInt(
+        "TCP port to listen on for outbound messages.", static=True,
+        required=True)
+    health_path = ConfigText(
+        "URL path to listen on for health checks.", static=True,
+        default='/health/')
+    redis_manager = ConfigDict(
+        "Parameters to connect to Redis with.", static=True, default={})
+    reply_requires_inbound = ConfigBool(
+        "If True, reply messages require stored inbound messages to be found.",
+        static=True, default=False)
 
     # For non-streaming mode.
     push_message_url = ConfigUrl("Optional URL to POST incoming message to.")
@@ -50,14 +56,6 @@ class StreamingHTTPRelayConfig(ApplicationWorker.CONFIG_CLASS):
     api_auth_tokens = ConfigList("List of auth tokens for API calls.")
     api_msg_options = ConfigDict(
         "(deprecated) Message options for outbound messages.")
-
-    # http_method = ConfigText(
-    #     "HTTP method for submitting messages.", default='POST', static=True)
-    # auth_method = ConfigText(
-    #     "HTTP authentication method.", default='basic', static=True)
-
-    # username = ConfigText("Username for HTTP authentication.", default='')
-    # password = ConfigText("Password for HTTP authentication.", default='')
 
 
 class StreamingHTTPRelayWorker(ApplicationWorker):
@@ -293,60 +291,60 @@ class MessageStream(StreamResource):
             request.finish()
             return
 
+        config = yield self.worker.get_api_user_config(request.getUser())
         in_reply_to = payload.get('in_reply_to')
         if in_reply_to:
-            yield self.handle_PUT_in_reply_to(request, payload, in_reply_to)
+            yield self.handle_PUT_reply(config, request, payload, in_reply_to)
         else:
-            yield self.handle_PUT_send_to(request, payload)
+            yield self.handle_PUT_send_to(config, request, payload)
 
     @inlineCallbacks
-    def handle_PUT_in_reply_to(self, request, payload, in_reply_to):
-        raise NotImplementedError("TODO: Figure out how best to do this.")
-        msg_options = self.get_msg_options(
-            payload, ['session_event', 'content'])
+    def handle_PUT_reply(self, config, request, payload, in_reply_to):
+        msg_options = self.get_msg_options(payload, ['content', 'to_addr'])
+        if config.api_msg_options:
+            msg_options.update(config.api_msg_options)
         content = msg_options.pop('content')
-        continue_session = (msg_options.pop('session_event', None)
-                            != TransportUserMessage.SESSION_CLOSE)
-        helper_metadata = msg_options.pop('helper_metadata', {})
 
-        transport_type = msg_options.pop('transport_type', None)
-        # We need to pop this out of the msg_options, should it exist
-        # because otherwise `msg.reply(...)` is unhappy
-        transport_name = msg_options.pop('transport_name', None)
-        from_addr = msg_options.pop('from_addr')
+        # Pull these out of msg_options, but keep them in case we need to build
+        # a fake message.
+        to_addr = msg_options.pop('to_addr', None),
+        from_addr = msg_options.pop('from_addr', None),
+        transport_name = msg_options.pop('transport_type', None),
+        transport_type = msg_options.pop('transport_name', None),
 
-        reply_to = yield self.worker.get_inbound_message(in_reply_to)
-        if reply_to is None:
-            # We have no stored message to compare to, so invent a fake one.
-            reply_to = TransportUserMessage(
-                to_addr=payload['from_addr'],
-                content=None,
-                transport_name=transport_name,
-                transport_type=transport_type,
-                transport_metadata=payload.get('transport_metadata', {}))
+        inbound_msg = yield self.worker.get_inbound_message(in_reply_to)
+        if inbound_msg is None:
+            # No inbound message, so build a fake one and just trust whatever
+            # we get from the client.
 
-        # NOTE:
-        #
-        # Not able to use `worker.reply_to()` because TransportUserMessage's
-        # reply() method sets the `helper_metadata` which it isn't really
-        # supposed to do. Because of this we're doing the manual call
-        # to `worker._publish_message()` instead.
-        msg = reply_to.msg.reply(content, continue_session, **msg_options)
+            if config.reply_requires_inbound:
+                # We aren't allowed to invent a fake message, so die.
+                request.setResponseCode(http.BAD_REQUEST)
+                request.write('Invalid in_reply_to value')
+                request.finish()
+                return
 
-        # These need to be set manually to ensure that stuff cannot be forged.
-        msg['helper_metadata'].update(helper_metadata)
-        msg['from_addr'] = from_addr
-        msg['transport_type'] = transport_type
-        msg['transport_name'] = transport_name
+            if ('to_addr' is None) or ('transport_metadata' not in payload):
+                request.setResponseCode(http.BAD_REQUEST, 'Invalid Message')
+                request.finish()
+                return
 
-        yield self.worker._publish_message(msg)
+            # Create a fake inbound message to reply to.
+            inbound_msg = TransportUserMessage(
+                message_id=in_reply_to, content=None,
+                from_addr=to_addr, to_addr=from_addr,
+                transport_name=transport_type, transport_type=transport_name,
+                transport_metadata=payload['transport_metadata'])
+
+        msg = yield self.worker.reply_to(
+            inbound_msg, content, endpoint='default', **to_kwargs(msg_options))
 
         request.setResponseCode(http.OK)
         request.write(msg.to_json())
         request.finish()
 
     @inlineCallbacks
-    def handle_PUT_send_to(self, request, payload):
+    def handle_PUT_send_to(self, config, request, payload):
         config = yield self.worker.get_api_user_config(request.getUser())
 
         msg_options = self.get_msg_options(payload, ['content', 'to_addr'])
