@@ -3,7 +3,7 @@ from twisted.trial.unittest import TestCase
 from vumi.errors import ConfigError
 from vumi.config import (
     Config, ConfigField, ConfigText, ConfigInt, ConfigFloat, ConfigBool,
-    ConfigList, ConfigDict, ConfigUrl)
+    ConfigList, ConfigDict, ConfigUrl, ConfigRegex)
 
 
 class ConfigTest(TestCase):
@@ -190,6 +190,13 @@ class ConfigFieldTest(TestCase):
         self.assertEqual(None, self.field_value(field))
         self.assert_field_invalid(field, object())
         self.assert_field_invalid(field, 1)
+
+    def test_regex_field(self):
+        field = self.make_field(ConfigRegex)
+        value = self.field_value(field, '^v[a-z]m[a-z]$')
+        self.assertTrue(value.match('vumi'))
+        self.assertFalse(value.match('notvumi'))
+        self.assertEqual(None, self.field_value(field, None))
 
     def test_int_field(self):
         field = self.make_field(ConfigInt)
