@@ -32,6 +32,19 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
         '.*'
     )
 
+    SMPP_BIND_CONFIG_KEYS = [
+        'system_id',
+        'password',
+        'system_type',
+        'interface_version',
+        'service_type',
+        'dest_addr_ton',
+        'dest_addr_npi',
+        'source_addr_ton',
+        'source_addr_npi',
+        'registered_delivery',
+    ]
+
     host = ConfigText(
         'Hostname of the SMPP server.',
         required=False, static=True)
@@ -170,28 +183,17 @@ class SmppTransport(Transport):
             self.factory.esme.transport.loseConnection()
         yield self.redis._close()
 
-    def get_smpp_config(self):
+    def get_smpp_bind_params(self):
         """Inspects the SmppTransportConfig and returns a dictionary
         that can be passed to an EsmeTransceiver (or subclass there of)
         to create a bind with"""
         config = self.get_static_config()
-        smpp_config_keys = [
-            'system_id',
-            'password',
-            'system_type',
-            'interface_version',
-            'service_type',
-            'dest_addr_ton',
-            'dest_addr_npi',
-            'source_addr_ton',
-            'source_addr_npi',
-            'registered_delivery',
-        ]
-        return dict([(key, getattr(config, key)) for key in smpp_config_keys])
+        return dict([(key, getattr(config, key))
+                    for key in self.SMPP_BIND_CONFIG_KEYS])
 
     def make_factory(self):
         return EsmeTransceiverFactory(
-            self.get_static_config(), self.get_smpp_config(),
+            self.get_static_config(), self.get_smpp_bind_params(),
             self.redis, self.esme_callbacks)
 
     def esme_connected(self, client):
@@ -450,7 +452,7 @@ class SmppTxTransport(SmppTransport):
     """An Smpp Transmitter Transport"""
     def make_factory(self):
         return EsmeTransmitterFactory(
-            self.get_static_config(), self.get_smpp_config(),
+            self.get_static_config(), self.get_smpp_bind_params(),
             self.redis, self.esme_callbacks)
 
 
@@ -458,5 +460,5 @@ class SmppRxTransport(SmppTransport):
     """An Smpp Receiver Transport"""
     def make_factory(self):
         return EsmeReceiverFactory(
-            self.get_static_config(), self.get_smpp_config(),
+            self.get_static_config(), self.get_smpp_bind_params(),
             self.redis, self.esme_callbacks)

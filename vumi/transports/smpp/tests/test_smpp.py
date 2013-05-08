@@ -50,7 +50,7 @@ class SmppTransportTestCase(TransportTestCase):
             deliver_sm=lambda: None)
         self.esme = EsmeTransceiver(
             self.transport.get_static_config(),
-            self.transport.get_smpp_config(),
+            self.transport.get_smpp_bind_params(),
             self.transport.redis, self.esme_callbacks)
         self.esme.sent_pdus = []
         self.esme.send_pdu = self.esme.sent_pdus.append
