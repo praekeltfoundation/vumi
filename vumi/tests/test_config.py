@@ -183,17 +183,18 @@ class ConfigFieldTest(TestCase):
         return FakeModel(config)
 
     def field_value(self, field, *value, **kw):
+        self.assert_field_valid(field, *value, **kw)
         return field.get_value(self.fake_model(*value, **kw))
 
-    def assert_field_valid(self, field, *value):
-        field.validate(self.fake_model(*value))
+    def assert_field_valid(self, field, *value, **kw):
+        field.validate(self.fake_model(*value, **kw))
 
     def assert_field_invalid(self, field, *value, **kw):
         self.assertRaises(ConfigError, field.validate,
                           self.fake_model(*value, **kw))
 
-    def make_field(self, field_cls):
-        field = field_cls("desc")
+    def make_field(self, field_cls, **kw):
+        field = field_cls("desc", **kw)
         field.setup('foo')
         return field
 
@@ -330,8 +331,21 @@ class ConfigFieldTest(TestCase):
             field, config={'host': 'localhost', 'port': 80}),
             TCP4ServerEndpoint, interface='localhost', port=80)
 
+        self.assertEqual(self.field_value(field), None)
+
         self.assert_field_invalid(field, config={'host': 'localhost'})
         self.assert_field_invalid(field, 'foo')
+
+    def test_server_endpoint_field_required(self):
+        field = self.make_field(ConfigServerEndpoint, required=True)
+        self.check_endpoint(self.field_value(
+            field, 'tcp:60'),
+            TCP4ServerEndpoint, interface='', port=60)
+        self.check_endpoint(self.field_value(
+            field, config={'port': 80}),
+            TCP4ServerEndpoint, interface='', port=80)
+
+        self.assert_field_invalid(field)
 
     def test_client_endpoint_field(self):
         field = self.make_field(ConfigClientEndpoint)
@@ -342,6 +356,19 @@ class ConfigFieldTest(TestCase):
             field, config={'host': 'localhost', 'port': 80}),
             TCP4ClientEndpoint, host='localhost', port=80)
 
+        self.assertEqual(self.field_value(field), None)
+
         self.assert_field_invalid(field, config={'port': 80})
         self.assert_field_invalid(field, config={'host': 'localhost'})
         self.assert_field_invalid(field, 'foo')
+
+    def test_client_endpoint_field_required(self):
+        field = self.make_field(ConfigClientEndpoint, required=True)
+        self.check_endpoint(
+            self.field_value(field, 'tcp:127.0.0.1:60'),
+            TCP4ClientEndpoint, host='127.0.0.1', port=60)
+        self.check_endpoint(self.field_value(
+            field, config={'host': 'localhost', 'port': 80}),
+            TCP4ClientEndpoint, host='localhost', port=80)
+
+        self.assert_field_invalid(field)
