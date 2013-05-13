@@ -64,8 +64,11 @@ class XmlOverTcpClient(Protocol):
 
     # Used to strip out the wierd bytes in the requestId field that make the
     # xml parsing break
-    REQUEST_ID_STRIP_RE = re.compile(r'(<requestId>\s+.{16})(.*)'
-                                     r'(\s+</requestId>)')
+    REQUEST_ID_SIZE = 16
+    REQUEST_ID_STRIP_RE = re.compile(
+        r'(<requestId>\s+.{%s})(.*)'
+        r'(\s+</requestId>)' % REQUEST_ID_SIZE)
+
     PACKET_RECEIVED_HANDLERS = {
         'USSDRequest': 'handle_data_request',
         'AUTHResponse': 'handle_login_response',
