@@ -69,8 +69,8 @@ class MtnNigeriaUssdTransport(Transport):
             timeout_period=config.timeout_period)
         self.client_connector = reactor.connectTCP(
             config.server_hostname, config.server_port, self.factory)
-        self.user_termination_response = (
-            config.user_termination_response)
+        log.msg('Connecting')
+        self.user_termination_response = config.user_termination_response
 
     def teardown_transport(self):
         if self.client_connector is not None:

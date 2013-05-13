@@ -1,3 +1,4 @@
+import re
 import uuid
 import struct
 from xml.etree import ElementTree as ET
@@ -58,6 +59,13 @@ class XmlOverTcpClient(Protocol):
     HEADER_SIZE = SESSION_ID_HEADER_SIZE + LENGTH_HEADER_SIZE
     HEADER_FORMAT = '!%ss%ss' % (SESSION_ID_HEADER_SIZE, LENGTH_HEADER_SIZE)
 
+    # Used to strip out whitebytes in the length header
+    LENGTH_STRIP_RE = re.compile(r'[^0-9]+$')
+
+    # Used to strip out the wierd bytes in the requestId field that make the
+    # xml parsing break
+    REQUEST_ID_STRIP_RE = re.compile(r'(<requestId>\s+.{16})(.*)'
+                                     r'(\s+</requestId>)')
     PACKET_RECEIVED_HANDLERS = {
         'USSDRequest': 'handle_data_request',
         'AUTHResponse': 'handle_login_response',
@@ -114,6 +122,7 @@ class XmlOverTcpClient(Protocol):
         self.login()
 
     def connectionLost(self, reason):
+        log.msg("Connection lost, stopping heartbeat")
         self.stop_periodic_enquire_link()
         self.cancel_scheduled_timeout()
 
@@ -178,7 +187,7 @@ class XmlOverTcpClient(Protocol):
         # The length field is 16 bytes, but integer types don't reach
         # this length. Therefore, I'm assuming the length field is a 16
         # byte ASCII string that can be converted to an integer type.
-        length = int(length) - cls.HEADER_SIZE
+        length = int(cls.LENGTH_STRIP_RE.sub('', length)) - cls.HEADER_SIZE
 
         return {
             'session_id': session_id,
@@ -193,6 +202,8 @@ class XmlOverTcpClient(Protocol):
 
     @classmethod
     def deserialize_body(cls, body):
+        # remove the wierd bytes in requestId making the xml parser break
+        body = cls.REQUEST_ID_STRIP_RE.sub(r'\g<1>\g<3>', body)
         root = ET.fromstring(body)
         return root.tag, dict((el.tag, el.text) for el in root)
 
@@ -347,6 +358,7 @@ class XmlOverTcpClient(Protocol):
             ('applicationId', self.application_id),
         ]
         self.send_packet(self.gen_session_id(), 'AUTHRequest', params)
+        log.msg('Logging in')
 
     def send_error_response(self, session_id=None, request_id=None,
                             code='207'):
