@@ -1,3 +1,7 @@
+# -*- test-case-name: vumi.transports.mtn_nigeria.tests.test_xml_over_tcp -*-
+# -*- coding: utf-8 -*-
+
+import struct
 from itertools import count
 
 from twisted.trial import unittest
@@ -76,6 +80,53 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
     def mk_session_id(self, nr):
         return self.client.session_id_from_nr(nr)
 
+    @staticmethod
+    def mk_packet(session_id, body):
+        return XmlOverTcpClient.serialize_header(session_id, body) + body
+
+    @staticmethod
+    def mk_raw_packet(session_id, length_header, body):
+        header = struct.pack(
+            XmlOverTcpClient.HEADER_FORMAT, session_id, length_header)
+        return header + body
+
+    @inlineCallbacks
+    def test_packet_parsing_for_wierd_bytes_after_request_id(self):
+        session_id = self.mk_session_id(0)
+        body = (
+            "<DummyPacket>"
+                "<requestId>123456789abcdefgϕμ☃</requestId>"
+            "</DummyPacket>"
+        )
+
+        data = self.mk_packet(session_id, body)
+        self.client.authenticated = True
+        self.server.send_data(data)
+
+        yield self.client.wait_for_data()
+        self.assertEqual(
+            self.client.received_dummy_packets, [
+                (session_id, {'requestId': '123456789abcdefg'}),
+            ])
+
+    @inlineCallbacks
+    def test_packet_parsing_for_packet_length_header_whitebytes(self):
+        session_id = self.mk_session_id(0)
+        body = "<DummyPacket><someParam>123</someParam></DummyPacket>"
+        length = len(body) + XmlOverTcpClient.HEADER_SIZE
+        length_header = "%s%s" % (
+            length, 'ϕ' * (XmlOverTcpClient.LENGTH_HEADER_SIZE - length))
+
+        data = self.mk_raw_packet(session_id, length_header, body)
+        self.client.authenticated = True
+        self.server.send_data(data)
+
+        yield self.client.wait_for_data()
+        self.assertEqual(
+            self.client.received_dummy_packets, [
+                (session_id, {'someParam': '123'})
+            ])
+
     @inlineCallbacks
     def test_contiguous_packets_received(self):
         session_id_a = self.mk_session_id(0)
@@ -84,8 +135,8 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
         session_id_b = self.mk_session_id(1)
         body_b = "<DummyPacket><someParam>456</someParam></DummyPacket>"
 
-        data = utils.mk_packet(session_id_a, body_a)
-        data += utils.mk_packet(session_id_b, body_b)
+        data = self.mk_packet(session_id_a, body_a)
+        data += self.mk_packet(session_id_b, body_b)
         self.client.authenticated = True
         self.server.send_data(data)
 
@@ -106,8 +157,8 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
 
         # add a full first packet, then concatenate a sliced version of a
         # second packet
-        data = utils.mk_packet(session_id_a, body_a)
-        data += utils.mk_packet(session_id_b, body_b)[:12]
+        data = self.mk_packet(session_id_a, body_a)
+        data += self.mk_packet(session_id_b, body_b)[:12]
         self.client.authenticated = True
         self.server.send_data(data)
 
@@ -129,7 +180,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
                 "<applicationId>1029384756</applicationId>"
             "</AUTHRequest>"
         % request_id)
-        expected_request_packet = utils.mk_packet(
+        expected_request_packet = self.mk_packet(
             session_id, request_body)
 
         response_body = (
@@ -138,7 +189,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
                 "<authMsg>SUCCESS</authMsg>"
             "</AUTHResponse>"
         % request_id)
-        response_packet = utils.mk_packet(session_id, response_body)
+        response_packet = self.mk_packet(session_id, response_body)
         self.server.responses[expected_request_packet] = response_packet
 
         self.client.login()
@@ -158,7 +209,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
                 "<applicationId>1029384756</applicationId>"
             "</AUTHRequest>"
         % request_id)
-        expected_request_packet = utils.mk_packet(
+        expected_request_packet = self.mk_packet(
             session_id, request_body)
 
         response_body = (
@@ -168,7 +219,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
                 "<errorCode>001</errorCode>"
             "</AUTHError>"
         % request_id)
-        response_packet = utils.mk_packet(session_id, response_body)
+        response_packet = self.mk_packet(session_id, response_body)
         self.server.responses[expected_request_packet] = response_packet
 
         self.client.login()
@@ -186,7 +237,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
                 "<requestId>%s</requestId>"
             "</UnknownPacket>"
         % request_id)
-        request_packet = utils.mk_packet(session_id, request_body)
+        request_packet = self.mk_packet(session_id, request_body)
 
         response_body = (
             "<USSDError>"
@@ -194,7 +245,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
                 "<errorCode>208</errorCode>"
             "</USSDError>"
         % request_id)
-        expected_response_packet = utils.mk_packet(
+        expected_response_packet = self.mk_packet(
             session_id, response_body)
 
         self.server.send_data(request_packet)
@@ -213,7 +264,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
                 "<requestId>%s</requestId>"
             "</DummyPacket>"
         % request_id)
-        request_packet = utils.mk_packet(session_id, request_body)
+        request_packet = self.mk_packet(session_id, request_body)
 
         response_body = (
             "<USSDError>"
@@ -221,7 +272,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
                 "<errorCode>207</errorCode>"
             "</USSDError>"
         % request_id)
-        expected_response_packet = utils.mk_packet(
+        expected_response_packet = self.mk_packet(
             session_id, response_body)
 
         self.server.send_data(request_packet)
@@ -251,7 +302,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
                 "<EndofSession>0</EndofSession>"
             "</USSDRequest>"
         )
-        packet = utils.mk_packet(session_id, body)
+        packet = self.mk_packet(session_id, body)
         self.client.authenticated = True
         self.server.send_data(packet)
 
@@ -312,7 +363,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
                 "<delvrpt>0</delvrpt>"
             "</USSDResponse>"
         )
-        expected_packet = utils.mk_packet(session_id, body)
+        expected_packet = self.mk_packet(session_id, body)
 
         self.client.authenticated = True
         self.client.send_data_response(
@@ -344,7 +395,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
                 "<delvrpt>0</delvrpt>"
             "</USSDResponse>"
         )
-        expected_packet = utils.mk_packet(session_id, body)
+        expected_packet = self.mk_packet(session_id, body)
 
         self.client.authenticated = True
         self.client.send_data_response(
@@ -370,7 +421,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
                 "<enqCmd>ENQUIRELINK</enqCmd>"
             "</ENQRequest>"
         % request_id_a)
-        expected_request_packet_a = utils.mk_packet(
+        expected_request_packet_a = self.mk_packet(
             session_id_a, request_body_a)
         response_body_a = (
             "<ENQResponse>"
@@ -378,7 +429,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
                 "<enqCmd>ENQUIRELINKRSP</enqCmd>"
             "</ENQResponse>"
         % request_id_a)
-        response_packet_a = utils.mk_packet(
+        response_packet_a = self.mk_packet(
             session_id_a, response_body_a)
         self.server.responses[expected_request_packet_a] = response_packet_a
 
@@ -390,7 +441,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
                 "<enqCmd>ENQUIRELINK</enqCmd>"
             "</ENQRequest>"
         % request_id_b)
-        expected_request_packet_b = utils.mk_packet(
+        expected_request_packet_b = self.mk_packet(
             session_id_b, request_body_b)
         response_body_b = (
             "<ENQResponse>"
@@ -398,7 +449,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
                 "<enqCmd>ENQUIRELINKRSP</enqCmd>"
             "</ENQResponse>"
         % request_id_b)
-        response_packet_b = utils.mk_packet(
+        response_packet_b = self.mk_packet(
             session_id_b, response_body_b)
         self.server.responses[expected_request_packet_b] = response_packet_b
 
@@ -432,7 +483,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
                 "<enqCmd>ENQUIRELINK</enqCmd>"
             "</ENQRequest>"
         % request_id)
-        expected_request_packet = utils.mk_packet(
+        expected_request_packet = self.mk_packet(
             session_id, request_body)
 
         self.client.enquire_link_interval = 120
@@ -461,7 +512,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
                 "<enqCmd>ENQUIRELINK</enqCmd>"
             "</ENQRequest>"
         % request_id)
-        request_packet = utils.mk_packet(session_id, request_body)
+        request_packet = self.mk_packet(session_id, request_body)
 
         response_body = (
             "<ENQResponse>"
@@ -469,7 +520,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
                 "<enqCmd>ENQUIRELINKRSP</enqCmd>"
             "</ENQResponse>"
         % request_id)
-        expected_response_packet = utils.mk_packet(
+        expected_response_packet = self.mk_packet(
             session_id, response_body)
 
         self.client.authenticated = True
@@ -486,7 +537,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
                 "<errorCode>000</errorCode>"
             "</USSDError>"
         )
-        error_packet = utils.mk_packet(session_id, body)
+        error_packet = self.mk_packet(session_id, body)
 
         self.server.send_data(error_packet)
         yield self.client.wait_for_data()
@@ -500,7 +551,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
                 "<errorCode>1337</errorCode>"
             "</USSDError>"
         )
-        error_packet = utils.mk_packet(session_id, body)
+        error_packet = self.mk_packet(session_id, body)
 
         self.server.send_data(error_packet)
         yield self.client.wait_for_data()

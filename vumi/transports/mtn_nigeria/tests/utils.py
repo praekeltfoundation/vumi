@@ -7,17 +7,13 @@ from twisted.internet.protocol import Factory, ClientCreator
 
 from vumi.transports.mtn_nigeria.xml_over_tcp import XmlOverTcpClient
 
-_header_size = XmlOverTcpClient.HEADER_SIZE
-_length_header_size = XmlOverTcpClient.LENGTH_HEADER_SIZE
-_header_format = XmlOverTcpClient.HEADER_FORMAT
-
 
 def mk_packet(session_id, body):
-    length = len(body) + _header_size
+    length = len(body) + XmlOverTcpClient.HEADER_SIZE
     header = struct.pack(
-        _header_format,
-        session_id.encode(),
-        str(length).zfill(_length_header_size))
+        XmlOverTcpClient.HEADER_FORMAT,
+        session_id.encode(XmlOverTcpClient.ENCODING),
+        str(length).zfill(XmlOverTcpClient.LENGTH_HEADER_SIZE))
     return header + body
 
 

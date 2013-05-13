@@ -66,8 +66,9 @@ class XmlOverTcpClient(Protocol):
     # xml parsing break
     REQUEST_ID_SIZE = 16
     REQUEST_ID_STRIP_RE = re.compile(
-        r'(<requestId>\s+.{%s})(.*)'
-        r'(\s+</requestId>)' % REQUEST_ID_SIZE)
+        r'(<requestId>\s*.{%s})(.*)'
+        r'(\s*</requestId>)' % REQUEST_ID_SIZE)
+    REQUEST_ID_STRIP_REPL = r'\g<1>\g<3>'
 
     PACKET_RECEIVED_HANDLERS = {
         'USSDRequest': 'handle_data_request',
@@ -206,7 +207,7 @@ class XmlOverTcpClient(Protocol):
     @classmethod
     def deserialize_body(cls, body):
         # remove the wierd bytes in requestId making the xml parser break
-        body = cls.REQUEST_ID_STRIP_RE.sub(r'\g<1>\g<3>', body)
+        body = cls.REQUEST_ID_STRIP_RE.sub(cls.REQUEST_ID_STRIP_REPL, body)
         root = ET.fromstring(body)
         return root.tag, dict((el.tag, el.text) for el in root)
 
@@ -309,22 +310,25 @@ class XmlOverTcpClient(Protocol):
         raise NotImplementedError("Subclasses should implement.")
 
     @classmethod
-    def serialize_packet(cls, session_id, packet_type, params):
-        # construct body
-        root = ET.Element(packet_type)
-        for param_name, param_value in params:
-            param_value = str(param_value).encode(cls.ENCODING)
-            ET.SubElement(root, param_name).text = param_value
-        body = ET.tostring(root)
-
-        # construct header
+    def serialize_header(cls, session_id, body):
         length = len(body) + cls.HEADER_SIZE
-        header = struct.pack(
+        return struct.pack(
             cls.HEADER_FORMAT,
             session_id.encode(cls.ENCODING),
             str(length).zfill(cls.LENGTH_HEADER_SIZE))
 
-        return header + body
+    @classmethod
+    def serialize_body(cls, packet_type, params):
+        root = ET.Element(packet_type)
+        for param_name, param_value in params:
+            param_value = str(param_value).encode(cls.ENCODING)
+            ET.SubElement(root, param_name).text = param_value
+        return ET.tostring(root)
+
+    @classmethod
+    def serialize_packet(cls, session_id, packet_type, params):
+        body = cls.serialize_body(packet_type, params)
+        return cls.serialize_header(session_id, body) + body
 
     def send_packet(self, session_id, packet_type, params):
         if (not self.authenticated
