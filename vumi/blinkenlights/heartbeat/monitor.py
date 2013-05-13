@@ -2,6 +2,7 @@
 
 import time
 import collections
+import json
 
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet.task import LoopingCall
@@ -58,6 +59,78 @@ class WorkerInstance(object):
         return hash((self.hostname, self.pid))
 
 
+class Worker(object):
+
+    def __init__(self, system_id, worker_name, min_procs):
+        self.system_id = system_id
+        self.worker_name = worker_name
+        self.min_procs = min_procs
+        self.worker_id = generate_worker_id(system_id, worker_name)
+
+        self._instances = None
+
+    def to_dict(self):
+        info = self._compute_host_info(self._instances)
+        hosts = []
+        for host, count in info.iteritems():
+            hosts.append({
+                    'host': host,
+                    'proc_count': count,
+            })
+        obj = {
+            'id': self.id,
+            'name': self.name,
+            'min_procs': self.min_procs,
+            'hosts': hosts,
+        }
+        return obj
+
+    def _compute_host_info(self, instances):
+        """ Compute the number of worker instances running on each host. """
+        bins = {}
+        # initialize per-host counters
+        for ins in instances:
+            bins[ins.hostname] = 0
+        # update counters for each instance
+        for ins in instances:
+            bins[ins.hostname] = bins[ins.hostname] + 1
+        return bins
+
+    def audit(self):
+        # check whether enough workers checked in
+        count = len(self._instances)
+        if count < self.min_procs:
+            issue = WorkerIssue("min-procs-fail", time.time())
+            self._storage.open_or_update_issue(self.worker_id, issue)
+
+    def reset(self):
+        self._instances = set()
+
+    def record(self, hostname, pid):
+        """ Record that process (hostname,pid) checked in """
+        self._instances.add(WorkerInstance(hostname, pid))
+
+
+class System(object):
+
+    def __init__(self, system_name, system_id, workers):
+        self.workers = workers
+
+    def to_dict(self):
+        obj = {
+            'name': self.name,
+            'id': self.id,
+            'workers': [wkr.to_dict() for wkr in self.workers],
+        }
+        return obj
+
+    def dumps(self):
+        return json.dumps(self.to_dict())
+
+    def get(self, worker_id):
+        return self._workers.get(worker_id, None)
+
+
 class HeartBeatMonitor(BaseWorker):
 
     class CONFIG_CLASS(BaseWorker.CONFIG_CLASS):
@@ -77,11 +150,6 @@ class HeartBeatMonitor(BaseWorker):
     #           worker data to redis
     #
     # _systems: Describes which workers belong to which system
-    # _workers: Worker metadata which we need to keep around in memory
-    #
-    # _instance_sets: A dict which maps from a worker_id to a set. Tracks
-    #                 which worker instances have checked-in the last 30s.
-
     _task = None
 
     @inlineCallbacks
@@ -96,9 +164,6 @@ class HeartBeatMonitor(BaseWorker):
 
         systems_config = self._static_config.monitored_systems
         self._systems, self._workers = self.parse_config(systems_config)
-
-        # synchronize with redis
-        self._sync_to_redis()
 
         # Start consuming heartbeats
         yield self.consume("heartbeat.inbound", self.consume_message,
@@ -119,26 +184,26 @@ class HeartBeatMonitor(BaseWorker):
         """
         Parse configuration and populate in-memory state
         """
-        systems = {}
+        systems = []
         workers = {}
         # loop over each defined system
         for sys in config.values():
             assert_field(sys, 'workers')
             assert_field(sys, 'system_id')
             system_id = sys['system_id']
-            systems[system_id] = []
+            system_workers = []
             # loop over each defined worker in the system
             for wkr_entry in sys['workers'].values():
                 assert_field(wkr_entry, 'name')
                 assert_field(wkr_entry, 'min_procs')
                 worker_name = wkr_entry['name']
                 min_procs = wkr_entry['min_procs']
-                worker_id = generate_worker_id(system_id, worker_name)
-                workers[worker_id] = Worker(system_id,
-                                            worker_id,
-                                            worker_name,
-                                            min_procs)
-                systems[system_id].append(worker_id)
+                wkr = Worker(system_id,
+                             worker_name,
+                             min_procs)
+                workers[wkr.worker_id] = wkr
+                system_workers.append(wkr)
+            systems.append(System(system_workers))
         return systems, workers
 
     def update(self, msg):
@@ -161,98 +226,37 @@ class HeartBeatMonitor(BaseWorker):
             log.msg("Discarding heartbeat from '%s'. Too old" % worker_id)
             return
 
-        # Add worker instance to the instance set for the worker species
-        ins = WorkerInstance(hostname, pid)
-        instances = self._instance_sets[worker_id]
-        instances.add(ins)
-
-    def _setup_instance_sets(self):
-        """ Create a set for each worker species """
-        self._instance_sets = {}
-        for wkr_id in self._workers.keys():
-            self._instance_sets[wkr_id] = set()
-
-    def _verify_workers(self):
-        """
-        For now, verify that each worker species has more than min_procs
-        running
-        """
-        lst_fail = []
-        lst_pass = []
-        for wkr_id, instances in self._instance_sets.iteritems():
-            min_procs = self._workers[wkr_id].min_procs
-            # check whether enough workers checked in
-            proc_count = len(instances)
-            if proc_count < min_procs:
-                lst_fail.append((wkr_id, proc_count))
-            else:
-                lst_pass.append((wkr_id,))
-            # update host:instance_count info for each worker
-            # if no instances checked-in, well then we just have to delete
-            # the existing hostinfo
-            hostinfo = self._compute_hostinfo(instances)
-            if len(hostinfo) > 0:
-                self._storage.set_worker_hostinfo(wkr_id, hostinfo)
-            else:
-                self._storage.clear_worker_hostinfo(wkr_id)
-        return lst_fail, lst_pass
-
-    def _compute_hostinfo(self, instances):
-        """ Compute the number of worker instances running on each host. """
-        info = {}
-        # initialize per-host counters
-        for ins in instances:
-            info[ins.hostname] = 0
-        # update counters for each instance
-        for ins in instances:
-            info[ins.hostname] = info[ins.hostname] + 1
-        return info
+        wkr.record(hostname, pid)
 
     def _sync_to_redis(self):
         """
         Persist the loaded configuration to redis, possibly overwriting
         any existing data.
         """
-        system_ids = self._systems.keys()
+        # write system ids
+        system_ids = [sys.system_id for sys in self._systems]
         self._storage.set_systems(system_ids)
-        for system_id, wkrs in self._systems.iteritems():
-            self._storage.set_system_workers(system_id, wkrs)
-        for wkr_id, attrs in self._workers.iteritems():
-            self._storage.set_worker_attrs(wkr_id, attrs)
+        # dump each system
+        for sys in self._systems:
+            self._storage.write(sys)
 
-    def _process_failures(self, wkrs):
-        """
-        For now, we only handle failures of the min_procs constraint.
-
-        For each failing worker, we record the start time of the failure
-        (if it has not already been set), and the current number of procs.
-
-        """
-        for wkr in wkrs:
-            log.msg("Worker %s failed min-procs verification. "
-                    "%i procs checked in" % wkr)
-            issue = WorkerIssue("min-procs-fail", time.time(), wkr[1])
-            self._storage.open_or_update_issue(wkr[0], issue)
-
-    def _process_passes(self, wkrs):
-        """ Just delete any open issues """
-        for wkr in wkrs:
-            self._storage.delete_worker_issue(wkr[0])
-
-    def _run_verification(self):
+    def _periodic_task(self):
         """
         Iterate over worker instance sets and check to see whether any have not
         checked-in on time.
         """
-        wkrs_fail, wkrs_pass = self._verify_workers()
-        self._process_failures(wkrs_fail)
-        self._process_passes(wkrs_pass)
-        # setup instance sets for next verification pass
-        self._setup_instance_sets()
+        # run diagnostic audits on all workers
+        for wkr in self._workers():
+            wkr.audit()
+        # write everything to redis
+        self._sync_to_redis()
+        # reset interval state
+        for wkr in self._workers:
+            wkr.reset()
 
-    def _start_verification_task(self):
+    def _start_task(self):
         """ Create a timer task to check for missing worker """
-        self._task = LoopingCall(self._run_verification)
+        self._task = LoopingCall(self._periodic_task)
         self._task_done = self._task.start(self.deadline, now=False)
         errfn = lambda failure: log.err(failure,
                                         "Heartbeat verify: timer task died")
