@@ -46,10 +46,10 @@ class EsmeTransceiver(Protocol):
 
     callLater = reactor.callLater
 
-    def __init__(self, config, redis, esme_callbacks):
+    def __init__(self, config, bind_params, redis, esme_callbacks):
         self.config = config
+        self.bind_params = bind_params
         self.esme_callbacks = esme_callbacks
-        self.defaults = config.to_dict()
         self.state = 'CLOSED'
         log.msg('STATE: %s' % (self.state,))
         self.smpp_bind_timeout = self.config.smpp_bind_timeout
@@ -157,7 +157,7 @@ class EsmeTransceiver(Protocol):
         self.state = 'OPEN'
         log.msg('STATE: %s' % (self.state))
         seq = yield self.get_next_seq()
-        pdu = self.BIND_PDU(seq, **self.defaults)
+        pdu = self.BIND_PDU(seq, **self.bind_params)
         log.msg(pdu.get_obj())
         self.send_pdu(pdu)
         self.schedule_lose_connection(self.CONNECTED_STATE)
@@ -293,7 +293,7 @@ class EsmeTransceiver(Protocol):
 
         # TODO: Only ACK messages once we've processed them?
         sequence_number = pdu['header']['sequence_number']
-        pdu_resp = DeliverSMResp(sequence_number, **self.defaults)
+        pdu_resp = DeliverSMResp(sequence_number, **self.bind_params)
         yield self.send_pdu(pdu_resp)
 
         pdu_params = pdu['body']['mandatory_parameters']
@@ -304,7 +304,7 @@ class EsmeTransceiver(Protocol):
         if message_payload is not None:
             pdu_params['short_message'] = message_payload.decode('hex')
 
-        delivery_report = self.config.delivery_report_re.search(
+        delivery_report = self.config.delivery_report_regex.search(
             pdu_params['short_message'] or '')
 
         if delivery_report:
@@ -445,7 +445,7 @@ class EsmeTransceiver(Protocol):
             returnValue(0)
 
         sequence_number = yield self.get_next_seq()
-        pdu_params = self.defaults.copy()
+        pdu_params = self.bind_params.copy()
         pdu_params.update(kwargs)
 
         pdu = SubmitSM(sequence_number, **pdu_params)
@@ -465,7 +465,7 @@ class EsmeTransceiver(Protocol):
     def enquire_link(self, **kwargs):
         if self.state in ['BOUND_TX', 'BOUND_RX', 'BOUND_TRX']:
             sequence_number = yield self.get_next_seq()
-            pdu = EnquireLink(sequence_number, **dict(self.defaults, **kwargs))
+            pdu = EnquireLink(sequence_number, **dict(self.bind_params, **kwargs))
             self.send_pdu(pdu)
             returnValue(sequence_number)
         returnValue(0)
@@ -477,7 +477,7 @@ class EsmeTransceiver(Protocol):
             pdu = QuerySM(sequence_number,
                     message_id=message_id,
                     source_addr=source_addr,
-                    **dict(self.defaults, **kwargs))
+                    **dict(self.bind_params, **kwargs))
             self.send_pdu(pdu)
             returnValue(sequence_number)
         returnValue(0)
@@ -509,8 +509,9 @@ class EsmeReceiver(EsmeTransceiver):
 
 class EsmeTransceiverFactory(ReconnectingClientFactory):
 
-    def __init__(self, config, redis, esme_callbacks):
+    def __init__(self, config, bind_params, redis, esme_callbacks):
         self.config = config
+        self.bind_params = bind_params
         self.redis = redis
         self.esme = None
         self.esme_callbacks = esme_callbacks
@@ -523,7 +524,7 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
     def buildProtocol(self, addr):
         log.msg('Connected')
         self.esme = EsmeTransceiver(
-            self.config, self.redis, self.esme_callbacks)
+            self.config, self.bind_params, self.redis, self.esme_callbacks)
         self.resetDelay()
         return self.esme
 
@@ -545,7 +546,7 @@ class EsmeTransmitterFactory(EsmeTransceiverFactory):
     def buildProtocol(self, addr):
         log.msg('Connected')
         self.esme = EsmeTransmitter(
-            self.config, self.redis, self.esme_callbacks)
+            self.config, self.bind_params, self.redis, self.esme_callbacks)
         self.resetDelay()
         return self.esme
 
@@ -554,7 +555,8 @@ class EsmeReceiverFactory(EsmeTransceiverFactory):
 
     def buildProtocol(self, addr):
         log.msg('Connected')
-        self.esme = EsmeReceiver(self.config, self.redis, self.esme_callbacks)
+        self.esme = EsmeReceiver(
+            self.config, self.bind_params, self.redis, self.esme_callbacks)
         self.resetDelay()
         return self.esme
 
@@ -582,11 +584,13 @@ class ESME(object):
         * Transmitter and/or Receiver
     but currently only Transceiver is implemented
     """
-    def __init__(self, client_config, redis, esme_callbacks):
-        self.config = client_config
+    def __init__(self, config, bind_params, redis, esme_callbacks):
+        self.config = config
+        self.bind_params = bind_params
         self.redis = redis
         self.esme_callbacks = esme_callbacks
 
     def bindTransciever(self):
-        self.factory = EsmeTransceiverFactory(self.config, self.redis,
-                                              self.esme_callbacks)
+        self.factory = EsmeTransceiverFactory(
+            self.config, self.bind_params,
+            self.redis, self.esme_callbacks)
