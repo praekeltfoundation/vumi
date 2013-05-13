@@ -1,3 +1,5 @@
+# -*- test-case-name: vumi.transports.mtn_nigeria.tests.test_mtn_nigeria -*-
+
 from twisted.internet.defer import Deferred, inlineCallbacks
 
 from vumi.message import TransportUserMessage

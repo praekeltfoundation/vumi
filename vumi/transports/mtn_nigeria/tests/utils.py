@@ -1,20 +1,7 @@
-import struct
-
 from twisted.internet.defer import Deferred, inlineCallbacks
 from twisted.internet import reactor
 from twisted.internet.protocol import Protocol
 from twisted.internet.protocol import Factory, ClientCreator
-
-from vumi.transports.mtn_nigeria.xml_over_tcp import XmlOverTcpClient
-
-
-def mk_packet(session_id, body):
-    length = len(body) + XmlOverTcpClient.HEADER_SIZE
-    header = struct.pack(
-        XmlOverTcpClient.HEADER_FORMAT,
-        session_id.encode(XmlOverTcpClient.ENCODING),
-        str(length).zfill(XmlOverTcpClient.LENGTH_HEADER_SIZE))
-    return header + body
 
 
 class WaitForDataMixin(object):
