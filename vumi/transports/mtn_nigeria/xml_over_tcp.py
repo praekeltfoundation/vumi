@@ -242,16 +242,17 @@ class XmlOverTcpClient(Protocol):
                 "Missing mandatory fields in received packet: %s"
                 % list(missing_mandatory_fields))
 
-    def handle_error(self, session_id, request_id, error):
+    def handle_error(self, session_id, request_id, code):
         log.err()
-        self.send_error_response(session_id, request_id, error['code'])
+        self.send_error_response(session_id, request_id, code)
 
     def handle_login_response(self, session_id, params):
         try:
             self.validate_packet_fields(params, self.LOGIN_RESPONSE_FIELDS)
         except CodedXmlOverTcpError as e:
             self.disconnect()
-            self.handle_error(session_id, params.get('requestId'), e)
+            self.handle_error(session_id, params.get('requestId'), e.code)
+            return
 
         log.msg("Client authentication complete.")
         self.authenticated = True
@@ -261,14 +262,17 @@ class XmlOverTcpClient(Protocol):
         try:
             self.validate_packet_fields(params, self.LOGIN_ERROR_FIELDS)
         except CodedXmlOverTcpError as e:
-            self.handle_error(session_id, params.get('requestId'), e)
+            self.handle_error(session_id, params.get('requestId'), e.code)
+            return
+
         self.disconnect()
 
     def handle_error_response(self, session_id, params):
         try:
             self.validate_packet_fields(params, self.ERROR_FIELDS)
         except CodedXmlOverTcpError as e:
-            self.handle_error(session_id, params.get('requestId'), e)
+            self.handle_error(session_id, params.get('requestId'), e.code)
+            return
 
         log.err("Server sent error message: %s" %
                 CodedXmlOverTcpError(params['errorCode']))
@@ -280,7 +284,8 @@ class XmlOverTcpClient(Protocol):
                 self.MANDATORY_DATA_REQUEST_FIELDS,
                 self.OTHER_DATA_REQUEST_FIELDS)
         except CodedXmlOverTcpError as e:
-            self.handle_error(session_id, params.get('requestId'), e)
+            self.handle_error(session_id, params.get('requestId'), e.code)
+            return
 
         # if EndofSession is not in params, assume the end of session
         params.setdefault('EndofSession', '1')
@@ -385,7 +390,8 @@ class XmlOverTcpClient(Protocol):
         try:
             self.validate_packet_fields(params, self.ENQUIRE_LINK_FIELDS)
         except CodedXmlOverTcpError as e:
-            self.handle_error(session_id, params.get('requestId'), e)
+            self.handle_error(session_id, params.get('requestId'), e.code)
+            return
 
         self.send_enquire_link_response(session_id, params['requestId'])
 
@@ -399,7 +405,8 @@ class XmlOverTcpClient(Protocol):
         try:
             self.validate_packet_fields(params, self.ENQUIRE_LINK_FIELDS)
         except CodedXmlOverTcpError as e:
-            self.handle_error(session_id, params.get('requestId'), e)
+            self.handle_error(session_id, params.get('requestId'), e.code)
+            return
 
         self.reset_scheduled_timeout()
 
