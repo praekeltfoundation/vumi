@@ -14,7 +14,7 @@ from vumi.transports.smpp.service import SmppService
 from vumi.transports.smpp.clientserver.client import unpacked_pdu_opts
 from vumi.transports.smpp.clientserver.tests.utils import SmscTestServer
 from vumi.transports.tests.utils import TransportTestCase
-from vumi.tests.utils import LogCatcher, get_stubbed_worker
+from vumi.tests.utils import LogCatcher
 
 
 class SmppTransportTestCase(TransportTestCase):
