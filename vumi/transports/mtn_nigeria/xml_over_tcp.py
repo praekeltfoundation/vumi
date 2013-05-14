@@ -2,6 +2,7 @@ import re
 import uuid
 import struct
 from xml.etree import ElementTree as ET
+from xml.parsers.expat import ExpatError
 
 from twisted.internet import reactor
 from twisted.internet.task import LoopingCall
@@ -84,14 +85,16 @@ class XmlOverTcpClient(Protocol):
         'AUTHResponse', 'AUTHError', 'AUTHRequest', 'USSDError']
 
     # received packet fields
-    MANDATORY_DATA_REQUEST_FIELDS = set([
+    DATA_REQUEST_FIELDS = set([
         'requestId', 'msisdn', 'clientId', 'starCode', 'msgtype', 'phase',
         'dcs', 'userdata'])
     OTHER_DATA_REQUEST_FIELDS = set(['EndofSession'])
     LOGIN_RESPONSE_FIELDS = set(['requestId', 'authMsg'])
     LOGIN_ERROR_FIELDS = set(['requestId', 'authMsg', 'errorCode'])
+    OTHER_LOGIN_ERROR_FIELDS = set(['errorMsg'])
     ENQUIRE_LINK_FIELDS = set(['requestId', 'enqCmd'])
     ERROR_FIELDS = set(['requestId', 'errorCode'])
+    OTHER_ERROR_FIELDS = set(['errorMsg'])
 
     # Data requests and responses need to include a 'dcs' (data coding scheme)
     # field. '15' is used for ASCII, and is the default. The documentation
@@ -126,12 +129,12 @@ class XmlOverTcpClient(Protocol):
         self.login()
 
     def connectionLost(self, reason):
-        log.msg("Connection lost")
+        log.err("Connection lost")
         self.stop_periodic_enquire_link()
         self.cancel_scheduled_timeout()
 
     def timeout(self):
-        log.msg("No enquire link response received after %s seconds, "
+        log.err("No enquire link response received after %s seconds, "
                 "disconnecting" % self.timeout_period)
         self.disconnect()
 
@@ -156,7 +159,7 @@ class XmlOverTcpClient(Protocol):
 
     def start_periodic_enquire_link(self):
         if not self.authenticated:
-            log.msg("Heartbeat could not be started, client not authenticated")
+            log.err("Heartbeat could not be started, client not authenticated")
             return
 
         self.reset_scheduled_timeout()
@@ -227,7 +230,7 @@ class XmlOverTcpClient(Protocol):
         if body:
             try:
                 packet_type, params = self.deserialize_body(body)
-            except ET.ParseError as e:
+            except ExpatError as e:
                 log.err("Error parsing packet body: %s" % e)
                 return
             self.packet_received(header['session_id'], packet_type, params)
@@ -241,7 +244,7 @@ class XmlOverTcpClient(Protocol):
         # dispatch the packet to the appropriate handler
         handler_name = self.PACKET_RECEIVED_HANDLERS.get(packet_type, None)
         if handler_name is None:
-            log.msg("Packet of an unknown type received: %s" % packet_type)
+            log.err("Packet of an unknown type received: %s" % packet_type)
             return self.send_error_response(
                 session_id, params.get('requestId'), '208')
 
@@ -289,29 +292,31 @@ class XmlOverTcpClient(Protocol):
 
     def handle_login_error_response(self, session_id, params):
         try:
-            self.validate_packet_fields(params, self.LOGIN_ERROR_FIELDS)
+            self.validate_packet_fields(
+                params, self.LOGIN_ERROR_FIELDS, self.OTHER_LOGIN_ERROR_FIELDS)
         except CodedXmlOverTcpError as e:
             self.handle_error(session_id, params.get('requestId'), e)
             return
 
-        log.msg("Login failed, disconnecting")
+        log.err("Login failed, disconnecting")
         self.disconnect()
 
     def handle_error_response(self, session_id, params):
         try:
-            self.validate_packet_fields(params, self.ERROR_FIELDS)
+            self.validate_packet_fields(
+                params, self.ERROR_FIELDS, self.OTHER_ERROR_FIELDS)
         except CodedXmlOverTcpError as e:
             self.handle_error(session_id, params.get('requestId'), e)
             return
 
         log.err("Server sent error message: %s" %
-                CodedXmlOverTcpError(params['errorCode']))
+            CodedXmlOverTcpError(params['errorCode'], params.get('errorMsg')))
 
     def handle_data_request(self, session_id, params):
 
         try:
             self.validate_packet_fields(params,
-                self.MANDATORY_DATA_REQUEST_FIELDS,
+                self.DATA_REQUEST_FIELDS,
                 self.OTHER_DATA_REQUEST_FIELDS)
         except CodedXmlOverTcpError as e:
             self.handle_error(session_id, params.get('requestId'), e)

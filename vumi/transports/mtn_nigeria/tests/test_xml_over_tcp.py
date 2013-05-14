@@ -8,6 +8,7 @@ from twisted.trial import unittest
 from twisted.internet.task import Clock
 from twisted.internet.defer import inlineCallbacks
 
+from vumi import log
 from vumi.transports.mtn_nigeria.xml_over_tcp import (
     XmlOverTcpError, CodedXmlOverTcpError, XmlOverTcpClient)
 from vumi.transports.mtn_nigeria.tests import utils
@@ -72,6 +73,13 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
         self.session_id_nr = 0
         self.request_id_nr = 0
 
+        self.logs = {'msg': [], 'err': [], 'debug': []}
+        self.patch(log, 'msg', lambda *a: self.append_to_log('msg', *a))
+        self.patch(log, 'err', lambda *a: self.append_to_log('err', *a))
+        self.patch(log, 'debug', lambda *a: self.append_to_log('debug', *a))
+
+        self.timeout = 3
+
         yield self.start_protocols()
 
     def tearDown(self):
@@ -80,11 +88,29 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
     def mk_session_id(self, nr):
         return self.client.session_id_from_nr(nr)
 
+    def append_to_log(self, log_name, *args):
+        self.logs[log_name].append(' '.join(str(a) for a in args))
+
+    def assert_in_log(self, log_name, substr):
+        log = self.logs[log_name]
+        if not any(substr in m for m in log):
+            self.fail("'%s' not in %s log" % (substr, log_name))
+
     @staticmethod
     def mk_raw_packet(session_id, length_header, body):
         header = struct.pack(
             XmlOverTcpClient.HEADER_FORMAT, session_id, length_header)
         return header + body
+
+    @inlineCallbacks
+    def test_packet_parsing_for_packets_with_wierd_bodies(self):
+        session_id = self.mk_session_id(0)
+        data = utils.mk_packet(session_id, "<BadPacket>")
+        self.client.authenticated = True
+        self.server.send_data(data)
+
+        yield self.client.wait_for_data()
+        self.assert_in_log('err', "Error parsing packet body:")
 
     @inlineCallbacks
     def test_packet_parsing_for_wierd_bytes_after_request_id(self):
@@ -222,6 +248,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
         yield self.client.wait_for_data()
         self.assertFalse(self.client.authenticated)
         self.assertTrue(self.client.disconnected)
+        self.assert_in_log('err', 'Login failed, disconnecting')
 
     @inlineCallbacks
     def test_unknown_packet_handling(self):
@@ -249,6 +276,8 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
 
         response_packet = yield self.server.wait_for_data()
         self.assertEqual(expected_response_packet, response_packet)
+        self.assert_in_log(
+            'err', "Packet of an unknown type received: UnknownPacket")
 
     @inlineCallbacks
     def test_packet_received_before_auth(self):
@@ -276,6 +305,9 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
 
         response_packet = yield self.server.wait_for_data()
         self.assertEqual(expected_response_packet, response_packet)
+        self.assert_in_log('err',
+            "'DummyPacket' packet received before client authentication was "
+            "completed")
 
     def test_packet_send_before_auth(self):
         self.assertRaises(XmlOverTcpError,
@@ -341,6 +373,126 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
             self.client.validate_packet_fields,
             {'requestId': '1291850641', 'a': '1', 'b': '2', 'd': '3'},
             set(['requestId', 'a', 'b']))
+
+    @inlineCallbacks
+    def test_login_response_validation(self):
+        session_id = self.mk_session_id(0)
+        body = "<AUTHResponse><requestId>1</requestId></AUTHResponse>"
+        bad_packet = utils.mk_packet(session_id, body)
+
+        self.server.send_data(bad_packet)
+        yield self.client.wait_for_data()
+        self.assert_in_log('err',
+            "(208) Invalid Message: Missing mandatory fields in received "
+            "packet: %s" % ['authMsg'])
+
+        received_packet = yield self.server.wait_for_data()
+        self.assertEqual(received_packet, utils.mk_packet(session_id,
+            "<USSDError>"
+                "<requestId>1</requestId>"
+                "<errorCode>208</errorCode>"
+            "</USSDError>"))
+
+    @inlineCallbacks
+    def test_login_error_response_validation(self):
+        session_id = self.mk_session_id(0)
+        bad_packet = utils.mk_packet(
+            session_id, "<AUTHError><requestId>1</requestId></AUTHError>")
+
+        self.server.send_data(bad_packet)
+        yield self.client.wait_for_data()
+        self.assert_in_log('err',
+            "(208) Invalid Message: Missing mandatory fields in received "
+            "packet: %s" % ['errorCode', 'authMsg'])
+
+        received_packet = yield self.server.wait_for_data()
+        self.assertEqual(received_packet, utils.mk_packet(session_id,
+            "<USSDError>"
+                "<requestId>1</requestId>"
+                "<errorCode>208</errorCode>"
+            "</USSDError>"))
+
+    @inlineCallbacks
+    def test_error_response_validation(self):
+        session_id = self.mk_session_id(0)
+        bad_packet = utils.mk_packet(
+            session_id, "<USSDError><requestId>1</requestId></USSDError>")
+
+        self.server.send_data(bad_packet)
+        yield self.client.wait_for_data()
+        self.assert_in_log('err',
+            "(208) Invalid Message: Missing mandatory fields in received "
+            "packet: %s" % ['errorCode'])
+
+        received_packet = yield self.server.wait_for_data()
+        self.assertEqual(received_packet, utils.mk_packet(session_id,
+            "<USSDError>"
+                "<requestId>1</requestId>"
+                "<errorCode>208</errorCode>"
+            "</USSDError>"))
+
+    @inlineCallbacks
+    def test_data_request_validation(self):
+        session_id = self.mk_session_id(0)
+        bad_packet = utils.mk_packet(
+            session_id, "<USSDRequest><requestId>1</requestId></USSDRequest>")
+
+        self.client.authenticated = True
+        self.server.send_data(bad_packet)
+        yield self.client.wait_for_data()
+
+        missing_fields = ['userdata', 'msisdn', 'clientId', 'starCode',
+                          'msgtype', 'phase', 'dcs']
+        self.assert_in_log('err',
+            "(208) Invalid Message: Missing mandatory fields in received "
+            "packet: %s" % missing_fields)
+
+        received_packet = yield self.server.wait_for_data()
+        self.assertEqual(received_packet, utils.mk_packet(session_id,
+            "<USSDError>"
+                "<requestId>1</requestId>"
+                "<errorCode>208</errorCode>"
+            "</USSDError>"))
+
+    @inlineCallbacks
+    def test_enquire_link_request_validation(self):
+        session_id = self.mk_session_id(0)
+        bad_packet = utils.mk_packet(
+            session_id, "<ENQRequest><requestId>1</requestId></ENQRequest>")
+
+        self.client.authenticated = True
+        self.server.send_data(bad_packet)
+        yield self.client.wait_for_data()
+        self.assert_in_log('err',
+            "(208) Invalid Message: Missing mandatory fields in received "
+            "packet: %s" % ['enqCmd'])
+
+        received_packet = yield self.server.wait_for_data()
+        self.assertEqual(received_packet, utils.mk_packet(session_id,
+            "<USSDError>"
+                "<requestId>1</requestId>"
+                "<errorCode>208</errorCode>"
+            "</USSDError>"))
+
+    @inlineCallbacks
+    def test_enquire_link_response_validation(self):
+        session_id = self.mk_session_id(0)
+        bad_packet = utils.mk_packet(
+            session_id, "<ENQResponse><requestId>1</requestId></ENQResponse>")
+
+        self.client.authenticated = True
+        self.server.send_data(bad_packet)
+        yield self.client.wait_for_data()
+        self.assert_in_log('err',
+            "(208) Invalid Message: Missing mandatory fields in received "
+            "packet: %s" % ['enqCmd'])
+
+        received_packet = yield self.server.wait_for_data()
+        self.assertEqual(received_packet, utils.mk_packet(session_id,
+            "<USSDError>"
+                "<requestId>1</requestId>"
+                "<errorCode>208</errorCode>"
+            "</USSDError>"))
 
     @inlineCallbacks
     def test_continuing_session_data_response(self):
@@ -496,6 +648,9 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
         # advance to just after the timeout occured
         self.client.clock.advance(20)
         self.assertTrue(self.client.disconnected)
+        self.assert_in_log('err',
+            "No enquire link response received after 20 seconds, "
+            "disconnecting")
 
     @inlineCallbacks
     def test_server_enquire_link(self):
@@ -531,12 +686,16 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
             "<USSDError>"
                 "<requestId>1</requestId>"
                 "<errorCode>000</errorCode>"
+                "<errorMsg>Some Reason</errorMsg>"
             "</USSDError>"
         )
         error_packet = utils.mk_packet(session_id, body)
 
         self.server.send_data(error_packet)
         yield self.client.wait_for_data()
+        self.assert_in_log('err',
+            "Server sent error message: (000) Dummy error occured: "
+            "Some Reason")
 
     @inlineCallbacks
     def test_error_response_handling_for_unknown_codes(self):
@@ -545,9 +704,13 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
             "<USSDError>"
                 "<requestId>1</requestId>"
                 "<errorCode>1337</errorCode>"
+                "<errorMsg>Some Reason</errorMsg>"
             "</USSDError>"
         )
         error_packet = utils.mk_packet(session_id, body)
 
         self.server.send_data(error_packet)
         yield self.client.wait_for_data()
+        self.assert_in_log('err',
+            "Server sent error message: (1337) Unknown Code: "
+            "Some Reason")

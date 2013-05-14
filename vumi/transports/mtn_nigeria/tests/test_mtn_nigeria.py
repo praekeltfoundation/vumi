@@ -279,10 +279,9 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
         reply = self.mk_reply(self.mk_msg(), "It's a trap!")
         self.dispatch(reply)
 
-        reason = (self.transport.RESPONSE_FAILURE_ERROR
-                  % "Something bad happened")
         [nack] = yield self.wait_for_dispatched_events(1)
-        self.assert_nack(nack, reply, reason)
+        self.assert_nack(
+            nack, reply, "Response failed: Something bad happened")
 
     @inlineCallbacks
     def test_outbound_metadata_fields_missing(self):
@@ -298,7 +297,9 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
             '208')
         self.assertEqual(response_packet, expected_response_packet)
 
-        reason = "%s" % CodedXmlOverTcpError(
-            '208', self.transport.METADATA_FIELDS_MISSING_ERROR % ['clientId'])
+        reason = "%s" % CodedXmlOverTcpError('208',
+            "Required message transport metadata fields missing in "
+            "outbound message: %s" % ['clientId'])
+
         [nack] = yield self.wait_for_dispatched_events(1)
         self.assert_nack(nack, reply, reason)

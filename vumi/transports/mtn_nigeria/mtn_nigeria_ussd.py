@@ -52,12 +52,6 @@ class MtnNigeriaUssdTransport(Transport):
 
     REQUIRED_METADATA_FIELDS = set(['session_id', 'clientId'])
 
-    # errors
-    RESPONSE_FAILURE_ERROR = "Response failed: %s"
-    METADATA_FIELDS_MISSING_ERROR = (
-        "Required message transport metadata fields missing in outbound "
-        "message: %s")
-
     def setup_transport(self):
         config = self.get_static_config()
         self.factory = MtnNigeriaUssdClientFactory(
@@ -127,8 +121,7 @@ class MtnNigeriaUssdTransport(Transport):
         try:
             self.factory.client.send_data_response(**client_args)
         except XmlOverTcpError as e:
-            return self.publish_nack(
-                message_id, self.RESPONSE_FAILURE_ERROR % e)
+            return self.publish_nack(message_id, "Response failed: %s" % e)
 
         return self.publish_ack(user_message_id=message_id,
                                 sent_message_id=message_id)
@@ -138,7 +131,8 @@ class MtnNigeriaUssdTransport(Transport):
         missing_fields = (self.REQUIRED_METADATA_FIELDS - set(metadata.keys()))
         if missing_fields:
             raise CodedXmlOverTcpError('208',
-                self.METADATA_FIELDS_MISSING_ERROR % list(missing_fields))
+                "Required message transport metadata fields missing in "
+                "outbound message: %s" % list(missing_fields))
 
     @inlineCallbacks
     def handle_outbound_message(self, message):
