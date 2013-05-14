@@ -99,9 +99,8 @@ class MtnNigeriaUssdTransport(Transport):
         message_id, from_addr, to_addr, content = self.pop_fields(
             params, ['requestId', 'msisdn', 'starCode', 'userdata'])
 
-        log.msg(
-            'MtnNigeriaUssdTransport receiving inbound message from %s to %s.'
-            % (from_addr, to_addr))
+        log.msg('MtnNigeriaUssdTransport receiving inbound message from %s '
+                'to %s: %s' % (from_addr, to_addr, content))
 
         session_event = self.determine_session_event(
             *self.pop_fields(params, ['msgtype', 'EndofSession']))
@@ -155,6 +154,9 @@ class MtnNigeriaUssdTransport(Transport):
                 message.payload.get('in_reply_to'),
                 e.code)
             return
+
+        log.msg(
+            'MtnNigeriaUssdTransport sending outbound message: %s' % message)
 
         end_session = (
             message['session_event'] == TransportUserMessage.SESSION_CLOSE)

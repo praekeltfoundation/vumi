@@ -126,7 +126,7 @@ class XmlOverTcpClient(Protocol):
         self.login()
 
     def connectionLost(self, reason):
-        log.msg("Connection lost, stopping heartbeat")
+        log.msg("Connection lost")
         self.stop_periodic_enquire_link()
         self.cancel_scheduled_timeout()
 
@@ -213,7 +213,10 @@ class XmlOverTcpClient(Protocol):
         # remove the wierd bytes in requestId making the xml parser break
         body = cls.REQUEST_ID_STRIP_RE.sub(cls.REQUEST_ID_STRIP_REPL, body)
         root = ET.fromstring(body)
-        return root.tag, dict((el.tag, el.text) for el in root)
+
+        packet_type = root.tag
+        params = dict((el.tag.strip(), el.text.strip()) for el in root)
+        return packet_type, params
 
     def consume_body(self):
         header = self._current_header
@@ -222,12 +225,19 @@ class XmlOverTcpClient(Protocol):
 
         body = self.pop_buffer(header['length'])
         if body:
-            packet_type, params = self.deserialize_body(body)
+            try:
+                packet_type, params = self.deserialize_body(body)
+            except ET.ParseError as e:
+                log.err("Error parsing packet body: %s" % e)
+                return
             self.packet_received(header['session_id'], packet_type, params)
             self._current_header = None
             self.consume_header()
 
     def packet_received(self, session_id, packet_type, params):
+        log.debug("Packet of type '%s' with session id '%s' received: %s"
+                  % (packet_type, session_id, params))
+
         # dispatch the packet to the appropriate handler
         handler_name = self.PACKET_RECEIVED_HANDLERS.get(packet_type, None)
         if handler_name is None:
@@ -343,6 +353,7 @@ class XmlOverTcpClient(Protocol):
                 % packet_type)
 
         packet = self.serialize_packet(session_id, packet_type, params)
+        log.debug("Sending packet: %s" % packet)
         self.transport.write(packet)
 
     @classmethod
@@ -421,6 +432,7 @@ class XmlOverTcpClient(Protocol):
         self.send_enquire_link_response(session_id, params['requestId'])
 
     def send_enquire_link_request(self):
+        log.debug("Sending enquire link request")
         self.send_packet(self.gen_session_id(), 'ENQRequest', [
             ('requestId', self.gen_request_id()),
             ('enqCmd', 'ENQUIRELINK')
