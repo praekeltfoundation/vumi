@@ -3,6 +3,7 @@
 from datetime import datetime
 
 from twisted.internet import reactor
+from twisted.internet.endpoints import clientFromString
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi import log
@@ -15,7 +16,7 @@ from vumi.transports.failures import FailureMessage
 from vumi.message import Message, TransportUserMessage
 from vumi.persist.txredis_manager import TxRedisManager
 from vumi.config import (ConfigText, ConfigInt, ConfigBool, ConfigDict,
-                         ConfigFloat, ConfigRegex)
+                         ConfigFloat, ConfigRegex, ConfigClientEndpoint)
 
 
 class SmppTransportConfig(Transport.CONFIG_CLASS):
@@ -32,11 +33,8 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
         '.*'
     )
 
-    host = ConfigText(
-        'Hostname of the SMPP server.',
-        required=True, static=True)
-    port = ConfigInt(
-        'Port the SMPP server is listening on.',
+    twisted_endpoint = ConfigClientEndpoint(
+        'The SMPP endpoint to connect to.',
         required=True, static=True)
     system_id = ConfigText(
         'User id used to connect to the SMPP server.', required=True,
@@ -152,11 +150,10 @@ class SmppTransport(Transport):
     @inlineCallbacks
     def setup_transport(self):
         config = self.get_static_config()
-        log.msg("Starting the SmppTransport for %s:%s" % (
-            config.host, config.port))
+        log.msg("Starting the SmppTransport for %s" % (
+            config.twisted_endpoint))
 
-        default_prefix = "%s@%s:%s" % (
-            config.system_id, config.host, config.port)
+        default_prefix = "%s@%s" % (config.system_id, config.transport_name)
 
         r_config = config.redis_manager
         r_prefix = config.split_bind_prefix or default_prefix
@@ -177,7 +174,7 @@ class SmppTransport(Transport):
         if not hasattr(self, 'esme_client'):
             # start the Smpp transport (if we don't have one)
             self.factory = self.make_factory()
-            reactor.connectTCP(config.host, config.port, self.factory)
+            yield config.twisted_endpoint.connect(self.factory)
 
     @inlineCallbacks
     def teardown_transport(self):
