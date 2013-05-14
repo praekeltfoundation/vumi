@@ -130,6 +130,11 @@ class XmlOverTcpClient(Protocol):
         self.stop_periodic_enquire_link()
         self.cancel_scheduled_timeout()
 
+    def timeout(self):
+        log.msg("No enquire link response received after %s seconds, "
+                "disconnecting" % self.timeout_period)
+        self.disconnect()
+
     def disconnect(self):
         """For easier test stubbing."""
         self.transport.loseConnection()
@@ -147,8 +152,7 @@ class XmlOverTcpClient(Protocol):
         delay = self.enquire_link_interval + (
             self.timeout_period % self.enquire_link_interval)
 
-        self.scheduled_timeout = self.clock.callLater(
-            delay, self.disconnect)
+        self.scheduled_timeout = self.clock.callLater(delay, self.timeout)
 
     def start_periodic_enquire_link(self):
         if not self.authenticated:
@@ -257,16 +261,16 @@ class XmlOverTcpClient(Protocol):
                 "Missing mandatory fields in received packet: %s"
                 % list(missing_mandatory_fields))
 
-    def handle_error(self, session_id, request_id, code):
-        log.err()
-        self.send_error_response(session_id, request_id, code)
+    def handle_error(self, session_id, request_id, e):
+        log.err(e)
+        self.send_error_response(session_id, request_id, e.code)
 
     def handle_login_response(self, session_id, params):
         try:
             self.validate_packet_fields(params, self.LOGIN_RESPONSE_FIELDS)
         except CodedXmlOverTcpError as e:
             self.disconnect()
-            self.handle_error(session_id, params.get('requestId'), e.code)
+            self.handle_error(session_id, params.get('requestId'), e)
             return
 
         log.msg("Client authentication complete.")
@@ -277,16 +281,17 @@ class XmlOverTcpClient(Protocol):
         try:
             self.validate_packet_fields(params, self.LOGIN_ERROR_FIELDS)
         except CodedXmlOverTcpError as e:
-            self.handle_error(session_id, params.get('requestId'), e.code)
+            self.handle_error(session_id, params.get('requestId'), e)
             return
 
+        log.msg("Login failed, disconnecting")
         self.disconnect()
 
     def handle_error_response(self, session_id, params):
         try:
             self.validate_packet_fields(params, self.ERROR_FIELDS)
         except CodedXmlOverTcpError as e:
-            self.handle_error(session_id, params.get('requestId'), e.code)
+            self.handle_error(session_id, params.get('requestId'), e)
             return
 
         log.err("Server sent error message: %s" %
@@ -299,7 +304,7 @@ class XmlOverTcpClient(Protocol):
                 self.MANDATORY_DATA_REQUEST_FIELDS,
                 self.OTHER_DATA_REQUEST_FIELDS)
         except CodedXmlOverTcpError as e:
-            self.handle_error(session_id, params.get('requestId'), e.code)
+            self.handle_error(session_id, params.get('requestId'), e)
             return
 
         # if EndofSession is not in params, assume the end of session
@@ -409,9 +414,10 @@ class XmlOverTcpClient(Protocol):
         try:
             self.validate_packet_fields(params, self.ENQUIRE_LINK_FIELDS)
         except CodedXmlOverTcpError as e:
-            self.handle_error(session_id, params.get('requestId'), e.code)
+            self.handle_error(session_id, params.get('requestId'), e)
             return
 
+        log.debug("Enquire link request received, sending response")
         self.send_enquire_link_response(session_id, params['requestId'])
 
     def send_enquire_link_request(self):
@@ -424,9 +430,11 @@ class XmlOverTcpClient(Protocol):
         try:
             self.validate_packet_fields(params, self.ENQUIRE_LINK_FIELDS)
         except CodedXmlOverTcpError as e:
-            self.handle_error(session_id, params.get('requestId'), e.code)
+            self.handle_error(session_id, params.get('requestId'), e)
             return
 
+        log.debug("Enquire link response received, sending next request in %s "
+                  "seconds" % self.enquire_link_interval)
         self.reset_scheduled_timeout()
 
     def send_enquire_link_response(self, session_id, request_id):
