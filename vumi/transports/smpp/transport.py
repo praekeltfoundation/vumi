@@ -153,7 +153,7 @@ class SmppTransport(Transport):
         log.msg("Starting the SmppTransport for %s" % (
             config.twisted_endpoint))
 
-        default_prefix = "%s@%s" % (config.system_id, config.twisted_endpoint)
+        default_prefix = "%s@%s" % (config.system_id, config.transport_name)
 
         r_config = config.redis_manager
         r_prefix = config.split_bind_prefix or default_prefix
@@ -174,8 +174,7 @@ class SmppTransport(Transport):
         if not hasattr(self, 'esme_client'):
             # start the Smpp transport (if we don't have one)
             self.factory = self.make_factory()
-            endpoint = clientFromString(reactor, config.twisted_endpoint)
-            yield endpoint.connect(self.factory)
+            yield config.twisted_endpoint.connect(self.factory)
 
     @inlineCallbacks
     def teardown_transport(self):

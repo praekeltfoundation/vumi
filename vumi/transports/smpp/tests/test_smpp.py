@@ -14,7 +14,7 @@ from vumi.transports.smpp.service import SmppService
 from vumi.transports.smpp.clientserver.client import unpacked_pdu_opts
 from vumi.transports.smpp.clientserver.tests.utils import SmscTestServer
 from vumi.transports.tests.utils import TransportTestCase
-from vumi.tests.utils import LogCatcher
+from vumi.tests.utils import LogCatcher, get_stubbed_worker
 
 
 class SmppTransportTestCase(TransportTestCase):
@@ -25,8 +25,7 @@ class SmppTransportTestCase(TransportTestCase):
         super(SmppTransportTestCase, self).setUp()
         self.config = self.mk_config({
             "system_id": "vumitest-vumitest-vumitest",
-            "host": "host",
-            "port": "0",
+            "twisted_endpoint": "tcp:host=localhost:port=0",
             "password": "password",
             "smpp_bind_timeout": 12,
             "smpp_enquire_link_interval": 123,
@@ -286,19 +285,22 @@ class EsmeToSmscTestCase(TransportTestCase):
     @inlineCallbacks
     def setUp(self):
         yield super(EsmeToSmscTestCase, self).setUp()
-        self.config = {
+        server_config = {
             "system_id": "VumiTestSMSC",
             "password": "password",
-            "host": "localhost",
-            "port": 0,
+            "twisted_endpoint": "tcp:0",
             "transport_name": self.transport_name,
             "transport_type": "smpp",
         }
-        self.service = SmppService(None, config=self.config)
+        self.service = SmppService(None, config=server_config)
         yield self.service.startWorker()
         self.service.factory.protocol = SmscTestServer
-        self.config['port'] = self.service.listening.getHost().port
-        self.transport = yield self.get_transport(self.config, start=False)
+
+        host = self.service.listening.getHost()
+        client_config = server_config.copy()
+        client_config['twisted_endpoint'] = 'tcp:host=%s:port=%s' % (
+            host.host, host.port)
+        self.transport = yield self.get_transport(client_config, start=False)
         self.expected_delivery_status = 'delivered'
 
     @inlineCallbacks
@@ -702,32 +704,6 @@ class EsmeToSmscTestCase(TransportTestCase):
                          ("Failed to retrieve message id for delivery "
                           "report. Delivery report from "
                           "esme_testing_transport discarded.",))
-
-
-class TwistedEndpointsEsmeToSmscTestCase(EsmeToSmscTestCase):
-
-    @inlineCallbacks
-    def setUp(self):
-        yield super(EsmeToSmscTestCase, self).setUp()
-        self.config = {
-            "system_id": "VumiTestSMSC",
-            "password": "password",
-            "transport_name": self.transport_name,
-            # We need this because service.SmppService uses reactor.listenTCP
-            # with the config['port'] value and ClientConfig expects a 'host'
-            # positional argument.
-            "host": "127.0.0.1",
-            "port": 0,
-            "transport_type": "smpp",
-        }
-        self.service = SmppService(None, config=self.config)
-        yield self.service.startWorker()
-        self.service.factory.protocol = SmscTestServer
-        host = self.service.listening.getHost()
-        self.config['twisted_endpoint'] = "tcp:host=%s:%s" % (
-            host.host, host.port)
-        self.transport = yield self.get_transport(self.config, start=False)
-        self.expected_delivery_status = 'delivered'  # stat:0 means delivered
 
 
 class EsmeToSmscTestCaseDeliveryYo(EsmeToSmscTestCase):

@@ -1,20 +1,34 @@
 
 from twisted.python import log
-from twisted.internet import reactor
+from twisted.internet import reactor, defer
+from twisted.internet.endpoints import serverFromString
 
-from vumi.service import Worker
+from vumi.worker import BaseWorker
 from vumi.transports.smpp.clientserver.server import SmscServerFactory
+from vumi.transports.smpp.transport import SmppTransportConfig
+from vumi.config import ConfigServerEndpoint
 
 
-class SmppService(Worker):
+class SmppServiceConfig(SmppTransportConfig):
+    twisted_endpoint = ConfigServerEndpoint(
+        'Server endpoint description', required=True, static=True)
+
+
+class SmppService(BaseWorker):
     """
     The SmppService
     """
+    CONFIG_CLASS = SmppServiceConfig
 
-    def startWorker(self):
+    def setup_connectors(self):
+        pass
+
+    @defer.inlineCallbacks
+    def setup_worker(self):
         log.msg("Starting the SmppService")
+        config = self.get_static_config()
 
         delivery_report_string = self.config.get('smsc_delivery_report_string')
         self.factory = SmscServerFactory(
             delivery_report_string=delivery_report_string)
-        self.listening = reactor.listenTCP(self.config['port'], self.factory)
+        self.listening = yield config.twisted_endpoint.listen(self.factory)
