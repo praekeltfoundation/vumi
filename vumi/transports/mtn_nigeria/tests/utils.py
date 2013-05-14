@@ -3,6 +3,12 @@ from twisted.internet import reactor
 from twisted.internet.protocol import Protocol
 from twisted.internet.protocol import Factory, ClientCreator
 
+from vumi.transports.mtn_nigeria.xml_over_tcp import XmlOverTcpClient
+
+
+def mk_packet(session_id, body):
+    return XmlOverTcpClient.serialize_header(session_id, body) + body
+
 
 class WaitForDataMixin(object):
     waiting_for_data = False
