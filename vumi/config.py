@@ -244,10 +244,10 @@ class ConfigServerEndpoint(ConfigText):
         return self.clean(value) if value is not None else None
 
     def clean(self, value):
-        from twisted.internet.endpoints import serverFromString
-        from twisted.internet import reactor
+        from twisted.internet.endpoints import _parseServer, _NO_DEFAULT
         try:
-            return serverFromString(reactor, value)
+            _parseServer(value, None, _NO_DEFAULT)
+            return value
         except ValueError:
             self.raise_config_error('is not a valid server endpoint')
 
@@ -261,10 +261,10 @@ class ConfigClientEndpoint(ConfigServerEndpoint):
         return "tcp:host=%s:port=%s" % (host, port)
 
     def clean(self, value):
-        from twisted.internet.endpoints import clientFromString
-        from twisted.internet import reactor
+        from twisted.internet.endpoints import _parse
         try:
-            return clientFromString(reactor, value)
+            _parse(value)
+            return value
         except ValueError:
             self.raise_config_error('is not a valid client endpoint')
 
