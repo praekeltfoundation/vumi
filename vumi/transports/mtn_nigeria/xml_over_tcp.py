@@ -2,7 +2,11 @@ import re
 import uuid
 import struct
 from xml.etree import ElementTree as ET
-from xml.parsers.expat import ExpatError
+
+try:
+    from xml.etree.ElementTree import ParseError
+except ImportError:
+    from xml.parsers.expat import ExpatError as ParseError
 
 from twisted.internet import reactor
 from twisted.internet.task import LoopingCall
@@ -144,7 +148,7 @@ class XmlOverTcpClient(Protocol):
 
     def cancel_scheduled_timeout(self):
         if (self.scheduled_timeout is not None
-            and self.scheduled_timeout.active()):
+                and self.scheduled_timeout.active()):
             self.scheduled_timeout.cancel()
 
     def reset_scheduled_timeout(self):
@@ -230,7 +234,7 @@ class XmlOverTcpClient(Protocol):
         if body:
             try:
                 packet_type, params = self.deserialize_body(body)
-            except ExpatError as e:
+            except ParseError as e:
                 log.err("Error parsing packet body: %s" % e)
                 return
             self.packet_received(header['session_id'], packet_type, params)
@@ -249,7 +253,7 @@ class XmlOverTcpClient(Protocol):
                 session_id, params.get('requestId'), '208')
 
         if (not self.authenticated and
-            packet_type not in self.IGNORE_AUTH_PACKETS):
+                packet_type not in self.IGNORE_AUTH_PACKETS):
             log.err("'%s' packet received before client authentication "
                     "was completed" % packet_type)
             return self.send_error_response(
@@ -264,13 +268,15 @@ class XmlOverTcpClient(Protocol):
         all_fields = mandatory_fields | other_fields
         unexpected_fields = packet_fields - all_fields
         if unexpected_fields:
-            raise CodedXmlOverTcpError('208',
+            raise CodedXmlOverTcpError(
+                '208',
                 "Unexpected fields in received packet: %s"
                 % list(unexpected_fields))
 
         missing_mandatory_fields = mandatory_fields - packet_fields
         if missing_mandatory_fields:
-            raise CodedXmlOverTcpError('208',
+            raise CodedXmlOverTcpError(
+                '208',
                 "Missing mandatory fields in received packet: %s"
                 % list(missing_mandatory_fields))
 
@@ -309,13 +315,15 @@ class XmlOverTcpClient(Protocol):
             self.handle_error(session_id, params.get('requestId'), e)
             return
 
-        log.err("Server sent error message: %s" %
+        log.err(
+            "Server sent error message: %s" %
             CodedXmlOverTcpError(params['errorCode'], params.get('errorMsg')))
 
     def handle_data_request(self, session_id, params):
 
         try:
-            self.validate_packet_fields(params,
+            self.validate_packet_fields(
+                params,
                 self.DATA_REQUEST_FIELDS,
                 self.OTHER_DATA_REQUEST_FIELDS)
         except CodedXmlOverTcpError as e:
@@ -352,7 +360,7 @@ class XmlOverTcpClient(Protocol):
 
     def send_packet(self, session_id, packet_type, params):
         if (not self.authenticated
-            and packet_type not in self.IGNORE_AUTH_PACKETS):
+                and packet_type not in self.IGNORE_AUTH_PACKETS):
             raise XmlOverTcpError(
                 "'%s' packet could not be sent, client not authenticated"
                 % packet_type)

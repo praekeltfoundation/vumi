@@ -31,29 +31,29 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
     }
     _request_body = (
         "<USSDRequest>"
-            "<requestId>%(request_id)s</requestId>"
-            "<msisdn>%(msisdn)s</msisdn>"
-            "<starCode>%(star_code)s</starCode>"
-            "<clientId>%(client_id)s</clientId>"
-            "<phase>%(phase)s</phase>"
-            "<msgtype>%(msg_type)s</msgtype>"
-            "<dcs>%(dcs)s</dcs>"
-            "<userdata>%(user_data)s</userdata>"
-            "<EndofSession>%(end_of_session)s</EndofSession>"
+        "<requestId>%(request_id)s</requestId>"
+        "<msisdn>%(msisdn)s</msisdn>"
+        "<starCode>%(star_code)s</starCode>"
+        "<clientId>%(client_id)s</clientId>"
+        "<phase>%(phase)s</phase>"
+        "<msgtype>%(msg_type)s</msgtype>"
+        "<dcs>%(dcs)s</dcs>"
+        "<userdata>%(user_data)s</userdata>"
+        "<EndofSession>%(end_of_session)s</EndofSession>"
         "</USSDRequest>"
     )
     _response_body = (
         "<USSDResponse>"
-            "<requestId>%(request_id)s</requestId>"
-            "<msisdn>%(msisdn)s</msisdn>"
-            "<starCode>%(star_code)s</starCode>"
-            "<clientId>%(client_id)s</clientId>"
-            "<phase>%(phase)s</phase>"
-            "<msgtype>%(msg_type)s</msgtype>"
-            "<dcs>%(dcs)s</dcs>"
-            "<userdata>%(user_data)s</userdata>"
-            "<EndofSession>%(end_of_session)s</EndofSession>"
-            "<delvrpt>%(delivery_report)s</delvrpt>"
+        "<requestId>%(request_id)s</requestId>"
+        "<msisdn>%(msisdn)s</msisdn>"
+        "<starCode>%(star_code)s</starCode>"
+        "<clientId>%(client_id)s</clientId>"
+        "<phase>%(phase)s</phase>"
+        "<msgtype>%(msg_type)s</msgtype>"
+        "<dcs>%(dcs)s</dcs>"
+        "<userdata>%(user_data)s</userdata>"
+        "<EndofSession>%(end_of_session)s</EndofSession>"
+        "<delvrpt>%(delivery_report)s</delvrpt>"
         "</USSDResponse>"
     )
 
@@ -127,10 +127,9 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
     def mk_error_response_packet(self, session_id, request_id, error_code):
         body = (
             "<USSDError>"
-                "<requestId>%s</requestId>"
-                "<errorCode>%s</errorCode>"
-            "</USSDError>"
-        % (request_id, error_code))
+            "<requestId>%s</requestId>"
+            "<errorCode>%s</errorCode>"
+            "</USSDError>" % (request_id, error_code))
         return utils.mk_packet(session_id, body)
 
     def mk_session_id(self, nr):
@@ -172,7 +171,8 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
         request_content = "Who are you?"
         self.send_request(session_id, user_data=request_content)
         [msg] = yield self.wait_for_dispatched_messages(1)
-        self.assert_inbound_message(msg,
+        self.assert_inbound_message(
+            msg,
             session_event=TransportUserMessage.SESSION_NEW,
             content=request_content)
 
@@ -197,7 +197,8 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
             msg_type=4,
             end_of_session=0)
         [msg] = yield self.wait_for_dispatched_messages(1)
-        self.assert_inbound_message(msg,
+        self.assert_inbound_message(
+            msg,
             session_event=TransportUserMessage.SESSION_RESUME,
             content=request_content)
 
@@ -226,7 +227,8 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
             msg_type=4,
             end_of_session=0)
         [msg] = yield self.wait_for_dispatched_messages(1)
-        self.assert_inbound_message(msg,
+        self.assert_inbound_message(
+            msg,
             session_event=TransportUserMessage.SESSION_RESUME,
             content=request_content)
 
@@ -255,7 +257,8 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
             msg_type=4,
             end_of_session=1)
         [msg] = yield self.wait_for_dispatched_messages(1)
-        self.assert_inbound_message(msg,
+        self.assert_inbound_message(
+            msg,
             session_event=TransportUserMessage.SESSION_CLOSE,
             content=request_content)
 
@@ -297,7 +300,8 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
             '208')
         self.assertEqual(response_packet, expected_response_packet)
 
-        reason = "%s" % CodedXmlOverTcpError('208',
+        reason = "%s" % CodedXmlOverTcpError(
+            '208',
             "Required message transport metadata fields missing in "
             "outbound message: %s" % ['clientId'])
 

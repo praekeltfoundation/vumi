@@ -130,7 +130,8 @@ class MtnNigeriaUssdTransport(Transport):
         metadata = message['transport_metadata']['mtn_nigeria_ussd']
         missing_fields = (self.REQUIRED_METADATA_FIELDS - set(metadata.keys()))
         if missing_fields:
-            raise CodedXmlOverTcpError('208',
+            raise CodedXmlOverTcpError(
+                '208',
                 "Required message transport metadata fields missing in "
                 "outbound message: %s" % list(missing_fields))
 
