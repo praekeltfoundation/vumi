@@ -22,12 +22,6 @@ WorkerIssue = collections.namedtuple('WorkerIssue',
                                       'start_time',
                                       'procs_count'])
 
-Worker = collections.namedtuple('Worker',
-                                ['system_id',
-                                 'worker_id',
-                                 'worker_name',
-                                 'min_procs'])
-
 
 def assert_field(cfg, key):
     """
@@ -63,22 +57,22 @@ class Worker(object):
 
     def __init__(self, system_id, worker_name, min_procs):
         self.system_id = system_id
-        self.worker_name = worker_name
+        self.name = worker_name
         self.min_procs = min_procs
         self.worker_id = generate_worker_id(system_id, worker_name)
-
         self._instances = None
+        self.procs_count = 0
 
     def to_dict(self):
-        info = self._compute_host_info(self._instances)
+        counts = self._compute_host_info(self._instances)
         hosts = []
-        for host, count in info.iteritems():
+        for host, count in counts.iteritems():
             hosts.append({
                     'host': host,
                     'proc_count': count,
             })
         obj = {
-            'id': self.id,
+            'id': self.worker_id,
             'name': self.name,
             'min_procs': self.min_procs,
             'hosts': hosts,
@@ -87,21 +81,26 @@ class Worker(object):
 
     def _compute_host_info(self, instances):
         """ Compute the number of worker instances running on each host. """
-        bins = {}
+        counts = {}
         # initialize per-host counters
         for ins in instances:
-            bins[ins.hostname] = 0
+            counts[ins.hostname] = 0
         # update counters for each instance
         for ins in instances:
-            bins[ins.hostname] = bins[ins.hostname] + 1
-        return bins
+            counts[ins.hostname] = counts[ins.hostname] + 1
+        return counts
 
-    def audit(self):
+    def audit(self, storage):
         # check whether enough workers checked in
         count = len(self._instances)
+        # if there was previously a min-procs-fail, but now enough
+        # instances checked in, then clear the worker issue
+        if (count >= self.min_procs) and (self.procs_count < self.min_procs):
+            storage.delete_worker_issue(self.worker_id)
         if count < self.min_procs:
-            issue = WorkerIssue("min-procs-fail", time.time())
-            self._storage.open_or_update_issue(self.worker_id, issue)
+            issue = WorkerIssue("min-procs-fail", time.time(), count)
+            storage.open_or_update_issue(self.worker_id, issue)
+        self.procs_count = count
 
     def reset(self):
         self._instances = set()
@@ -114,12 +113,14 @@ class Worker(object):
 class System(object):
 
     def __init__(self, system_name, system_id, workers):
+        self.name = system_name
+        self.system_id = system_id
         self.workers = workers
 
     def to_dict(self):
         obj = {
             'name': self.name,
-            'id': self.id,
+            'id': self.system_id,
             'workers': [wkr.to_dict() for wkr in self.workers],
         }
         return obj
@@ -166,11 +167,11 @@ class HeartBeatMonitor(BaseWorker):
         self._systems, self._workers = self.parse_config(systems_config)
 
         # Start consuming heartbeats
-        yield self.consume("heartbeat.inbound", self.consume_message,
+        yield self.consume("heartbeat.inbound", self._consume_message,
                            exchange_name='vumi.health',
                            message_class=HeartBeatMessage)
 
-        self._start_verification_task()
+        self._start_task()
 
     @inlineCallbacks
     def stopWorker(self):
@@ -203,7 +204,7 @@ class HeartBeatMonitor(BaseWorker):
                              min_procs)
                 workers[wkr.worker_id] = wkr
                 system_workers.append(wkr)
-            systems.append(System(system_workers))
+            systems.append(System(system_id, system_id, system_workers))
         return systems, workers
 
     def update(self, msg):
@@ -238,7 +239,7 @@ class HeartBeatMonitor(BaseWorker):
         self._storage.set_systems(system_ids)
         # dump each system
         for sys in self._systems:
-            self._storage.write(sys)
+            self._storage.write_system(sys)
 
     def _periodic_task(self):
         """
@@ -247,11 +248,11 @@ class HeartBeatMonitor(BaseWorker):
         """
         # run diagnostic audits on all workers
         for wkr in self._workers():
-            wkr.audit()
+            wkr.audit(self._storage)
         # write everything to redis
         self._sync_to_redis()
-        # reset interval state
-        for wkr in self._workers:
+        # reset instances state for next interval
+        for wkr in self._workers.values():
             wkr.reset()
 
     def _start_task(self):
@@ -261,8 +262,10 @@ class HeartBeatMonitor(BaseWorker):
         errfn = lambda failure: log.err(failure,
                                         "Heartbeat verify: timer task died")
         self._task_done.addErrback(errfn)
-        self._setup_instance_sets()
+        # reset instances state for next interval
+        for wkr in self._workers.values():
+            wkr.reset()
 
-    def consume_message(self, msg):
+    def _consume_message(self, msg):
         log.msg("Received message: %s" % msg)
         self.update(msg.payload)
