@@ -12,16 +12,8 @@ from twisted.internet.defer import inlineCallbacks
 from vumi.tests.utils import get_stubbed_worker
 from vumi.blinkenlights.heartbeat import publisher
 from vumi.blinkenlights.heartbeat import monitor
-from vumi.blinkenlights.heartbeat.storage import (hostinfo_key,
-                                                  attr_key)
+from vumi.blinkenlights.heartbeat.storage import issue_key
 from vumi.utils import generate_worker_id
-
-
-class MockHeartBeatMonitor(monitor.HeartBeatMonitor):
-
-    # stub out the LoopingCall task
-    def _start_looping_task(self):
-        self._task = None
 
 
 class TestHeartBeatMonitor(TestCase):
@@ -63,7 +55,7 @@ class TestHeartBeatMonitor(TestCase):
             'worker_name': wkr_name,
             'hostname': "test-host-1",
             'timestamp': timestamp,
-            'pid': os.getpid(),
+            'pid': 345,
         }
         return attrs
 
@@ -85,21 +77,21 @@ class TestHeartBeatMonitor(TestCase):
 
         # retrieve the instance set corresponding to the worker_id in the
         # fake message
-        instance_set = self.worker._instance_sets[attrs1['worker_id']]
-        self.assertEqual(len(instance_set), 1)
-        inst = instance_set.pop()
-        instance_set.add(inst)
+        wkr = self.worker._workers[attrs1['worker_id']]
+        self.assertEqual(len(wkr._instances), 1)
+        inst = wkr._instances.pop()
+        wkr._instances.add(inst)
         self.assertEqual(inst.hostname, "test-host-1")
-        self.assertEqual(inst.pid, os.getpid())
+        self.assertEqual(inst.pid, 345)
 
         # now process a message from another instance of the worker
         # and verify that there are two recorded instances
         attrs2['hostname'] = 'test-host-2'
         self.worker.update(attrs2)
-        self.assertEqual(len(instance_set), 2)
+        self.assertEqual(len(wkr._instances), 2)
 
     @inlineCallbacks
-    def test_verify_workers_fail(self):
+    def test_audit_fail(self):
         # here we test the verification of a worker who
         # who had less than min_procs check in
 
@@ -111,22 +103,20 @@ class TestHeartBeatMonitor(TestCase):
         # process the fake message ()
         self.worker.update(attrs)
 
-        lst_fail, lst_pass = self.worker._verify_workers()
-        # test return values
-        self.assertEqual(len(lst_fail), 1)
-        self.assertEqual(len(lst_pass), 0)
-        self.assertEqual(lst_fail[0][0], attrs['worker_id'])  # worker id
-        self.assertEqual(lst_fail[0][1], 1)  # proc count
+        wkr = self.worker._workers[attrs['worker_id']]
 
-        # test that hostinfo was persisted into redis
-        key = hostinfo_key(wkr_id)
-        hostinfo = json.loads((yield fkredis.get(key)))
-        self.assertEqual(hostinfo['test-host-1'], 1)
+        wkr.audit(self.worker._storage)
+
+        # test that an issue was opened
+        self.assertEqual(wkr.procs_count, 1)
+        key = issue_key(wkr_id)
+        issue = json.loads((yield fkredis.get(key)))
+        self.assertEqual(issue['issue_type'], 'min-procs-fail')
 
     @inlineCallbacks
-    def test_verify_workers_pass(self):
+    def test_audit_pass(self):
         # here we test the verification of a worker who
-        # checked in more than min_procs
+        # who had more than min_procs check in
 
         yield self.worker.startWorker()
         fkredis = self.worker._redis
@@ -135,24 +125,18 @@ class TestHeartBeatMonitor(TestCase):
         wkr_id = attrs['worker_id']
         # process the fake message ()
         self.worker.update(attrs)
-        attrs['hostname'] = 'test-host-2'
-        self.worker.update(attrs)
-        attrs['pid'] = 23
-        # and for kicks, change pid, so that 2 instances are registered
-        # as having checked in for test-host-2
+        attrs['pid'] = 2342
         self.worker.update(attrs)
 
-        lst_fail, lst_pass = self.worker._verify_workers()
-        # test return values
-        self.assertEqual(len(lst_fail), 0)
-        self.assertEqual(len(lst_pass), 1)
-        self.assertEqual(lst_pass[0][0], attrs['worker_id'])  # worker id
+        wkr = self.worker._workers[attrs['worker_id']]
 
-        # test that hostinfo was persisted into redis
-        key = hostinfo_key(wkr_id)
-        hostinfo = json.loads((yield fkredis.get(key)))
-        self.assertEqual(hostinfo['test-host-1'], 1)
-        self.assertEqual(hostinfo['test-host-2'], 2)
+        wkr.audit(self.worker._storage)
+
+        # verify that no issue has been opened
+        self.assertEqual(wkr.procs_count, 2)
+        key = issue_key(wkr_id)
+        issue = yield fkredis.get(key)
+        self.assertEqual(issue, None)
 
     @inlineCallbacks
     def test_sync_to_redis(self):
@@ -163,16 +147,8 @@ class TestHeartBeatMonitor(TestCase):
         yield self.worker.startWorker()
         fkredis = self.worker._redis
 
+        self.worker._sync_to_redis()
+
         # Systems
         systems = json.loads((yield fkredis.get('systems')))
         self.assertEqual(tuple(systems), ('system-1',))
-
-        # Workers in System
-        workers = json.loads((yield fkredis.get("system:system-1:workers")))
-        self.assertEqual(tuple(workers), ('system-1:twitter_transport',))
-
-        # Worker attrs
-        wkr_id = generate_worker_id('system-1', 'twitter_transport')
-        attrs = json.loads((yield fkredis.get(attr_key(wkr_id))))
-        self.assertEqual(attrs['worker_name'], 'twitter_transport')
-        self.assertEqual(attrs['min_procs'], 2)
