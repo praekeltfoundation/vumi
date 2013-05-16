@@ -4,19 +4,26 @@
 Storage Schema:
 
  List of systems (JSON list): key = systems
+ Timestamp (UNIX timestamp):  key = timestamp
  System state (JSON dict):    key = $SYSTEM_ID
  Worker issue (JSON dict):    key = worker:$WORKER_ID:issue
 """
 
+import time
 import json
 
 from vumi.persist.redis_base import Manager
 
+TIMESTAMP_KEY = "timestamp"
 SYSTEMS_KEY = "systems"
 
 
 def issue_key(worker_id):
     return "worker:%s:issue" % worker_id
+
+
+def system_key(system_id):
+    return "system:%s" % system_id
 
 
 class Storage(object):
@@ -31,12 +38,17 @@ class Storage(object):
         self.manager = redis
 
     @Manager.calls_manager
-    def set_systems(self, system_ids):
+    def write_timestamp(self):
+        yield self._redis.set(TIMESTAMP_KEY, str(int(time.time())))
+
+    @Manager.calls_manager
+    def write_system_ids(self, system_ids):
         yield self._redis.set(SYSTEMS_KEY, json.dumps(system_ids))
 
     @Manager.calls_manager
     def write_system(self, sys):
-        yield self._redis.set(sys.system_id, sys.dumps())
+        key = system_key(sys.system_id)
+        yield self._redis.set(key, sys.dumps())
 
     def _issue_to_dict(self, issue):
         return {
@@ -44,11 +56,6 @@ class Storage(object):
             'start_time': issue.start_time,
             'procs_count': issue.procs_count,
         }
-
-    @Manager.calls_manager
-    def set_worker_issue(self, worker_id, issue):
-        key = issue_key(worker_id)
-        yield self._redis.set(key, json.dumps(self._issue_to_dict(issue)))
 
     @Manager.calls_manager
     def delete_worker_issue(self, worker_id):

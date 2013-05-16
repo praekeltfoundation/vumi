@@ -64,6 +64,7 @@ class Worker(object):
         self.procs_count = 0
 
     def to_dict(self):
+        """ Serializes information into basic dicts """
         counts = self._compute_host_info(self._instances)
         hosts = []
         for host, count in counts.iteritems():
@@ -91,7 +92,7 @@ class Worker(object):
         return counts
 
     def audit(self, storage):
-        # check whether enough workers checked in
+        """ Verify whether enough workers checked in """
         count = len(self._instances)
         # if there was previously a min-procs-fail, but now enough
         # instances checked in, then clear the worker issue
@@ -103,6 +104,7 @@ class Worker(object):
         self.procs_count = count
 
     def reset(self):
+        """ Clear the set of instances which checked-in in the last interval"""
         self._instances = set()
 
     def record(self, hostname, pid):
@@ -118,6 +120,7 @@ class System(object):
         self.workers = workers
 
     def to_dict(self):
+        """ Serialize information to basic dicts """
         obj = {
             'name': self.name,
             'id': self.system_id,
@@ -126,6 +129,7 @@ class System(object):
         return obj
 
     def dumps(self):
+        """ Dump to a JSON string """
         return json.dumps(self.to_dict())
 
     def get(self, worker_id):
@@ -165,6 +169,8 @@ class HeartBeatMonitor(BaseWorker):
 
         systems_config = self._static_config.monitored_systems
         self._systems, self._workers = self.parse_config(systems_config)
+
+        self._prepare_storage()
 
         # Start consuming heartbeats
         yield self.consume("heartbeat.inbound", self._consume_message,
@@ -229,14 +235,22 @@ class HeartBeatMonitor(BaseWorker):
 
         wkr.record(hostname, pid)
 
-    def _sync_to_redis(self):
+    def _prepare_storage(self):
         """
-        Persist the loaded configuration to redis, possibly overwriting
-        any existing data.
+        Setup storage
         """
+        # write timestamp
+        self._storage.write_timestamp()
         # write system ids
         system_ids = [sys.system_id for sys in self._systems]
-        self._storage.set_systems(system_ids)
+        self._storage.write_system_ids(system_ids)
+
+    def _sync_to_storage(self):
+        """
+        Write systems data to storage
+        """
+        # update timestamp
+        self._storage.write_timestamp()
         # dump each system
         for sys in self._systems:
             self._storage.write_system(sys)
@@ -247,13 +261,11 @@ class HeartBeatMonitor(BaseWorker):
         checked-in on time.
         """
         # run diagnostic audits on all workers
-        for wkr in self._workers():
+        for wkr in self._workers.values():
             wkr.audit(self._storage)
         # write everything to redis
-        self._sync_to_redis()
-        # reset instances state for next interval
-        for wkr in self._workers.values():
-            wkr.reset()
+        self._sync_to_storage()
+        self.reset_checkin_state()
 
     def _start_task(self):
         """ Create a timer task to check for missing worker """
@@ -262,7 +274,10 @@ class HeartBeatMonitor(BaseWorker):
         errfn = lambda failure: log.err(failure,
                                         "Heartbeat verify: timer task died")
         self._task_done.addErrback(errfn)
-        # reset instances state for next interval
+        self.reset_checkin_state()
+
+    def reset_checkin_state(self):
+        """ reset check-in states for next interval """
         for wkr in self._workers.values():
             wkr.reset()
 

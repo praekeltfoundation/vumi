@@ -67,7 +67,6 @@ class TestHeartBeatMonitor(TestCase):
         """
 
         yield self.worker.startWorker()
-
         attrs1 = self.gen_fake_attrs(time.time())
         attrs2 = self.gen_fake_attrs(time.time())
 
@@ -139,16 +138,31 @@ class TestHeartBeatMonitor(TestCase):
         self.assertEqual(issue, None)
 
     @inlineCallbacks
-    def test_sync_to_redis(self):
-        """
-        This covers a lot of the storage API as well the
-        Monitor's _sync_to_redis() function.
-        """
+    def test_prepare_storage(self):
         yield self.worker.startWorker()
         fkredis = self.worker._redis
 
-        self.worker._sync_to_redis()
+        self.worker._prepare_storage()
+
+        # timestamp
+        ts = json.loads((yield fkredis.get('timestamp')))
+        self.assertEqual(type(ts), int)
 
         # Systems
         systems = json.loads((yield fkredis.get('systems')))
         self.assertEqual(tuple(systems), ('system-1',))
+
+    @inlineCallbacks
+    def test_sync_to_storage(self):
+        """
+        This covers a lot of the storage API as well the
+        Monitor's _sync_to_storage() function.
+        """
+        yield self.worker.startWorker()
+        fkredis = self.worker._redis
+
+        self.worker._sync_to_storage()
+
+        system = json.loads((yield fkredis.get('system:system-1')))
+        self.assertEqual(system['workers'][0]['name'],
+                         'twitter_transport')
