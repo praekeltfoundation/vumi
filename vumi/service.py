@@ -242,7 +242,7 @@ class Worker(MultiService, object):
         return self._amqp_client.start_publisher(publisher_class, *args, **kw)
 
     def start_web_resources(self, resources, port, site_class=None):
-        resources = [(path, resource) for resource, path in resources]
+        resources = dict((path, resource) for resource, path in resources)
         site_factory = build_web_site(resources, site_class=site_class)
         return reactor.listenTCP(port, site_factory)
 

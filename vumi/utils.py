@@ -214,10 +214,11 @@ class StringProducer(object):
 
 
 def build_web_site(resources, site_class=None):
-    """Build a Twisted web Site instance for a specified list of resources.
+    """Build a Twisted web Site instance for a specified dictionary of
+    resources.
 
-    :param list resources:
-        List of (path, resource class) tuples to add to the site.
+    :param dict resources:
+        Dictionary of path -> resource class mappings to create the site from.
     :type site_class: Sub-class of Twisted's Site
     :param site_class:
         Site class to create. Defaults to :class:`LogFilterSite`.
@@ -228,6 +229,7 @@ def build_web_site(resources, site_class=None):
     root = Resource()
     # sort by ascending path length to make sure we create
     # resources lower down in the path earlier
+    resources = resources.items()
     resources = sorted(resources, key=lambda r: len(r[0]))
 
     def create_node(node, path):
