@@ -184,6 +184,14 @@ class TestDict(TestCase):
         d.check("name", {"a": 1, "b": 2})
         self.assertRaises(RpcCheckError, d.check, "name", {"a": 1, "b": "c"})
 
+    def test_required_fields(self):
+        d = Dict(required_fields={'foo': Int(null=True), 'bar': Unicode()})
+        d.check("name", {'foo': None, 'bar': u'b'})
+        d.check("name", {'foo': 1, 'bar': u'b'})
+        d.check("name", {'foo': 1, 'bar': u'b', 'extra': 2})
+        self.assertRaises(RpcCheckError, d.check, "name", {"foo": 1})
+        self.assertRaises(RpcCheckError, d.check, "name", {"bar": u"b"})
+
 
 class TestTag(TestCase):
     def test_jsonrpc_type(self):
