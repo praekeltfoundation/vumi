@@ -12,6 +12,7 @@ from twisted.python import log
 from vumi.components.tagpool_api import TagpoolApiServer, TagpoolApiWorker
 from vumi.components.tagpool import TagpoolManager
 from vumi.tests.utils import VumiWorkerTestCase, PersistenceMixin
+from vumi.utils import http_request
 
 
 class TestTagpoolApiServer(TestCase, PersistenceMixin):
@@ -200,6 +201,8 @@ class TestTagpoolApiWorker(VumiWorkerTestCase, PersistenceMixin):
         config = {} if config is None else config
         config.setdefault('worker_name', 'test_api_worker')
         config.setdefault('twisted_endpoint', 'tcp:0')
+        config.setdefault('web_path', 'api')
+        config.setdefault('health_path', 'health')
         config = self.mk_config(config)
         worker = yield self.get_worker(config, TagpoolApiWorker, start)
         if not start:
@@ -207,7 +210,7 @@ class TestTagpoolApiWorker(VumiWorkerTestCase, PersistenceMixin):
         yield worker.startService()
         port = worker.services[0]._waitingForPort.result
         addr = port.getHost()
-        proxy = Proxy("http://%s:%d" % (addr.host, addr.port))
+        proxy = Proxy("http://%s:%d/api/" % (addr.host, addr.port))
         returnValue((worker, proxy))
 
     @inlineCallbacks
@@ -242,3 +245,11 @@ class TestTagpoolApiWorker(VumiWorkerTestCase, PersistenceMixin):
         result = yield proxy.callRemote('system.methodSignature',
                                         'acquire_tag')
         self.assertEqual(result, [[u'array', u'string', u'string', u'struct']])
+
+    @inlineCallbacks
+    def test_health_resource(self):
+        worker, proxy = yield self.get_api_worker()
+        result = yield http_request(
+            "http://%s:%s/health" % (proxy.host, proxy.port),
+            data=None, method='GET')
+        self.assertEqual(result, "OK")
