@@ -95,6 +95,21 @@ class UtilsTestCase(TestCase):
         self.assertEqual(self.get_resource('bar/b', site), resource_b)
         self.assertTrue(isinstance(site, LogFilterSite))
 
+    def test_build_web_site_with_overlapping_paths(self):
+        resource_a = Resource()
+        resource_b = Resource()
+        site = build_web_site({
+            'foo/a': resource_a,
+            'foo/b': resource_b,
+        })
+        self.assertEqual(self.get_resource('foo/a', site), resource_a)
+        self.assertEqual(self.get_resource('foo/b', site), resource_b)
+        self.assertTrue(isinstance(site, LogFilterSite))
+
+    def test_build_web_site_with_custom_site_class(self):
+        site = build_web_site({}, site_class=Site)
+        self.assertTrue(isinstance(site, Site))
+
 
 class FakeHTTP10(Protocol):
     def dataReceived(self, data):
