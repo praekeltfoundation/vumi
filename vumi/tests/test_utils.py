@@ -109,6 +109,7 @@ class UtilsTestCase(TestCase):
     def test_build_web_site_with_custom_site_class(self):
         site = build_web_site({}, site_class=Site)
         self.assertTrue(isinstance(site, Site))
+        self.assertFalse(isinstance(site, LogFilterSite))
 
 
 class FakeHTTP10(Protocol):
