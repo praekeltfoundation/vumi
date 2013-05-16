@@ -214,8 +214,10 @@ class Dict(RpcType):
         self._item_type = kw.pop('item_type', None)
         self._required_fields = kw.pop('required_fields', {})
         self._optional_fields = kw.pop('optional_fields', {})
+        self._closed = kw.pop('closed', False)
         self._no_checks = all(not x for x in (
-            self._item_type, self._required_fields, self._optional_fields))
+            self._item_type, self._required_fields, self._optional_fields,
+            self._closed))
         super(Dict, self).__init__(*args, **kw)
 
     def nonnull_check(self, name, value):
@@ -228,10 +230,17 @@ class Dict(RpcType):
             field_type = self._required_fields.get(key)
             field_type = (self._optional_fields.get(key)
                           if field_type is None else field_type)
-            field_type = (self._item_type
-                          if field_type is None else field_type)
+            if field_type is None:
+                if self._closed:
+                    raise RpcCheckError("Dict received unexpected key %s"
+                                        " (got %r)" % (key, value))
+                field_type = self._item_type
             if field_type is not None:
                 field_type.check('item %s of %s' % (key, name), value[key])
+        for key in self._required_fields:
+            if key not in value:
+                raise RpcCheckError("Dict requires key %s (got %r)"
+                                    % (key, value))
 
 
 class Tag(RpcType):
