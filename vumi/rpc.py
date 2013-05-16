@@ -212,15 +212,26 @@ class Dict(RpcType):
 
     def __init__(self, *args, **kw):
         self._item_type = kw.pop('item_type', None)
+        self._required_fields = kw.pop('required_fields', {})
+        self._optional_fields = kw.pop('optional_fields', {})
+        self._no_checks = all(not x for x in (
+            self._item_type, self._required_fields, self._optional_fields))
         super(Dict, self).__init__(*args, **kw)
 
     def nonnull_check(self, name, value):
         if not isinstance(value, dict):
             raise RpcCheckError("Dict value expected for %s (got %r)"
                                 % (name, value))
-        if self._item_type is not None:
-            for key, item in value.iteritems():
-                self._item_type.check('item %s of %s' % (key, name), item)
+        if self._no_checks:
+            return
+        for key in value:
+            field_type = self._required_fields.get(key)
+            field_type = (self._optional_fields.get(key)
+                          if field_type is None else field_type)
+            field_type = (self._item_type
+                          if field_type is None else field_type)
+            if field_type is not None:
+                field_type.check('item %s of %s' % (key, name), value[key])
 
 
 class Tag(RpcType):
