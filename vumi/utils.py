@@ -18,6 +18,7 @@ from twisted.web.server import Site
 from twisted.web.http_headers import Headers
 from twisted.web.iweb import IBodyProducer
 from twisted.web.http import PotentialDataLoss
+from twisted.web.resource import Resource
 
 from vumi.errors import VumiError
 
@@ -210,6 +211,43 @@ class StringProducer(object):
 
     def stopProducing(self):
         pass
+
+
+def build_web_site(resources, site_class=None):
+    """Build a Twisted web Site instance for a specified dictionary of
+    resources.
+
+    :param dict resources:
+        Dictionary of path -> resource class mappings to create the site from.
+    :type site_class: Sub-class of Twisted's Site
+    :param site_class:
+        Site class to create. Defaults to :class:`LogFilterSite`.
+    """
+    if site_class is None:
+        site_class = LogFilterSite
+
+    root = Resource()
+    # sort by ascending path length to make sure we create
+    # resources lower down in the path earlier
+    resources = resources.items()
+    resources = sorted(resources, key=lambda r: len(r[0]))
+
+    def create_node(node, path):
+        if path in node.children:
+            return node.children.get(path)
+        else:
+            new_node = Resource()
+            node.putChild(path, new_node)
+            return new_node
+
+    for path, resource in resources:
+        request_path = filter(None, path.split('/'))
+        nodes, leaf = request_path[0:-1], request_path[-1]
+        parent = reduce(create_node, nodes, root)
+        parent.putChild(leaf, resource)
+
+    site_factory = site_class(root)
+    return site_factory
 
 
 class LogFilterSite(Site):
