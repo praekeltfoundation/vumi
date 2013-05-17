@@ -3,9 +3,9 @@
 """
 Storage Schema:
 
- List of systems (JSON list): key = systems
  Timestamp (UNIX timestamp):  key = timestamp
- System state (JSON dict):    key = $SYSTEM_ID
+ List of systems (JSON list): key = systems
+ System state (JSON dict):    key = system:$SYSTEM_ID
  Worker issue (JSON dict):    key = worker:$WORKER_ID:issue
 """
 
