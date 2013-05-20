@@ -103,13 +103,14 @@ class SentryLogObserver(object):
     DEFAULT_LOG_LEVEL = logging.INFO
     LOG_LEVEL_THRESHOLD = logging.WARN
 
-    def __init__(self, client, logger_name, worker_id, sentinel=None):
-        if sentinel is None:
-            sentinel = DEFAULT_LOG_CONTEXT_SENTINEL
+    def __init__(self, client, logger_name, worker_id,
+                 log_context_sentinel=None):
+        if log_context_sentinel is None:
+            log_context_sentinel = DEFAULT_LOG_CONTEXT_SENTINEL
         self.client = client
         self.logger_name = logger_name
         self.worker_id = worker_id
-        self.log_context_sentinel = sentinel
+        self.log_context_sentinel = log_context_sentinel
         self.log_context = {self.log_context_sentinel: True}
 
     def level_for_event(self, event):
