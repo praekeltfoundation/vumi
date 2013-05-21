@@ -6,6 +6,7 @@ import resource
 import os
 import json
 import pkg_resources
+import logging
 from uuid import uuid4
 
 from twisted.internet import reactor
@@ -380,9 +381,37 @@ class LoggingResource(SandboxResource):
     """Resource that allows a sandbox to log messages via Twisted's
     logging framework.
     """
+    def log(self, msg, lvl):
+        from twisted.python import log
+        log.msg(msg, logLevel=lvl)
+
+    @inlineCallbacks
+    def handle_log(self, api, command, lvl=None):
+        lvl = command.get('lvl', lvl)
+        if lvl is None:
+            lvl = logging.INFO
+        msg = command.get('msg')
+        if msg is None:
+            returnValue(self.reply(command, success=False,
+                                   reason="Value expected for msg"))
+        msg = str(msg)
+        yield self.log(msg, lvl)
+        returnValue(self.reply(command, success=True))
+
+    def handle_debug(self, api, command):
+        return self.handle_log(api, command, lvl=logging.DEBUG)
+
     def handle_info(self, api, command):
-        log.info(str(command['msg']))
-        return self.reply(command, success=True)
+        return self.handle_log(api, command, lvl=logging.INFO)
+
+    def handle_warning(self, api, command):
+        return self.handle_log(api, command, lvl=logging.WARNING)
+
+    def handle_error(self, api, command):
+        return self.handle_log(api, command, lvl=logging.ERROR)
+
+    def handle_critical(self, api, command):
+        return self.handle_log(api, command, lvl=logging.CRITICAL)
 
 
 class HttpClientResource(SandboxResource):
