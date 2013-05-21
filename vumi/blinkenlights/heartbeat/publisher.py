@@ -4,7 +4,7 @@ from twisted.internet.task import LoopingCall
 
 from vumi.service import Publisher
 from vumi.message import Message
-from vumi.log import log
+from vumi import log
 
 
 class HeartBeatMessage(Message):

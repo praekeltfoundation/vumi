@@ -62,7 +62,6 @@ import sys
 import logging
 import time
 from datetime import datetime
-from functools import partial
 
 from twisted.python import log as _log
 from twisted.python import failure
@@ -131,7 +130,7 @@ class VumiLogObserver(object):
         cause = event['cause']
         # Handle cases where we received a cause
         if cause:
-            elif (not msg) and isinstance(cause, failure.Failure):
+            if (not msg) and isinstance(cause, failure.Failure):
                 text = ('Unhandled Error: %s\n' + cause.getErrorMessage()
                         + cause.getErrorMessage())
             elif not msg:
@@ -144,21 +143,7 @@ class VumiLogObserver(object):
 
     def format_compat(event):
         """
-        Extract text from an event dict passed to a log observer. If it cannot
-        handle the dict, it returns None.
-
-        The possible keys of eventDict are:
-        - C{message}: by default, it holds the final text. It's required, but can
-          be empty if either C{isError} or C{format} is provided (the first
-          having the priority).
-        - C{isError}: boolean indicating the nature of the event.
-        - C{failure}: L{failure.Failure} instance, required if the event is an
-          error.
-        - C{why}: if defined, used as header of the traceback in case of errors.
-        - C{format}: string format used in place of C{message} to customize
-          the event. It uses all keys present in C{eventDict} to format
-          the text.
-        Other keys will be used when applying the C{format}, or ignored.
+        from twisted.python.log.FileLogObserver
         """
         msg = event['message']
         if not msg:
@@ -166,12 +151,12 @@ class VumiLogObserver(object):
                 text = ((event.get('why') or 'Unhandled Error')
                         + '\n' + event['failure'].getTraceback())
             elif 'format' in event:
-                text = _safeFormat(event['format'], event)
+                text = _log._safeFormat(event['format'], event)
             else:
                 # we don't know how to log this
                 return
         else:
-            text = ' '.join(map(reflect.safe_str, edm))
+            text = ' '.join(map(str, msg))
         return text
 
     def emit(self, event):
@@ -188,38 +173,42 @@ class VumiLogObserver(object):
         else:
             level = self.level_strings.get(event['logLevel'], 'INFO')
 
-        timeStr = self.formatTime(event['time'])
-        fmtDict = {'system': event['system'],
-                   'level': level,
-                   'pid': os.getpid(),
-                   'text': text.replace("\n", "\n\t")}
-        msgStr = log._safeFormat("%(pid)s %(level)s [%(system)s]: %(text)s\n",
-                                 fmtDict)
+        time_str = self.formatTime(event['time'])
+        fmt_dict = {
+            'system': event['system'],
+            'level': level,
+            'pid': os.getpid(),
+            'text': text.replace("\n", "\n\t")
+        }
+        msg = _log._safeFormat("%(pid)s %(level)s [%(system)s]: %(text)s\n",
+                               fmt_dict)
 
         # Don't need to do async writes here.
         # Disk IO is orders of magnitude faster than Network IO, and
         # the failure conditions are quite different.
-        self.write(timeStr + " " + msgStr)
+        self.write(time_str + " " + msg)
         self.flush()
 
 
 class VumiLog(object):
 
     def __init__(self, name=None):
-        self.name = (name or '-')
+        self.name = name
 
-    def setup_attrs(self, obj, params, kw):
+    def setup(self, obj, params, kw):
         kw['vumi-log-v2'] = True
-        kw['system'] = self.name
-        if 'cause' in kw and isinstance(kw['cause'], Exception):
+        if self.name is not None:
+            kw['system'] = self.name
+        if 'cause' in kw and (isinstance(kw['cause'], Exception) or
+                              isinstance(kw['cause'], failure.Failure)):
             kw['cause'] = failure.Failure(kw['cause'])
         if isinstance(obj, str):
             # set message format attributes for Sentry
             kw['sentry_message_format'] = obj
             kw['sentry_message_params'] = params
-            msg = [fmt % params]
+            msg = [obj % params]
         elif isinstance(obj, failure.Failure):
-            kw['cause'] = m
+            kw['cause'] = obj
             msg = []
         elif isinstance(obj, Exception):
             kw['cause'] = failure.Failure(obj)
@@ -229,23 +218,23 @@ class VumiLog(object):
         return msg
 
     def debug(self, obj, *params, **kw):
-        message = self.setup_attrs(obj, params, kw)
+        message = self.setup(obj, params, kw)
         _log.msg(*message, logLevel=logging.DEBUG, **kw)
 
     def info(self, obj, *params, **kw):
-        message = self.setup_attrs(obj, params, kw)
+        message = self.setup(obj, params, kw)
         _log.msg(*message, logLevel=logging.INFO, **kw)
 
     def warning(self, obj, *params, **kw):
-        message = self.setup_attrs(obj, params, kw)
+        message = self.setup(obj, params, kw)
         _log.msg(*message, logLevel=logging.WARNING, **kw)
 
     def error(self, obj, *params, **kw):
-        message = self.setup_attrs(obj, params, kw)
+        message = self.setup(obj, params, kw)
         _log.msg(*message, logLevel=logging.ERROR, **kw)
 
     def critical(self, obj, *params, **kw):
-        message = self.setup_attrs(obj, params, kw)
+        message = self.setup(obj, params, kw)
         _log.msg(*message, logLevel=logging.CRITICAL, **kw)
 
     #
@@ -259,7 +248,7 @@ class VumiLog(object):
         _log.msg(*message, logLevel=logging.INFO, system=self.name)
 
     def err(self, _stuff=None, _why=None, **kw):
-        _log._err(_stuff, _why, **kw)
+        _log.err(_stuff, _why, **kw)
 
 
 def name(obj):
