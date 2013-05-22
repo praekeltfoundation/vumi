@@ -384,7 +384,13 @@ class LoggingResource(SandboxResource):
     """Resource that allows a sandbox to log messages via Twisted's
     logging framework.
     """
-    def log(self, msg, lvl):
+    def log(self, api, msg, lvl):
+        """Logs a message via vumi.log (i.e. Twisted logging).
+
+        Sub-class should override this if they wish to log messages
+        elsewhere. The `api` parameter is provided for use by such
+        sub-classes.
+        """
         log.msg(msg, logLevel=lvl)
 
     @inlineCallbacks
@@ -397,7 +403,7 @@ class LoggingResource(SandboxResource):
             returnValue(self.reply(command, success=False,
                                    reason="Value expected for msg"))
         msg = str(msg)
-        yield self.log(msg, lvl)
+        yield self.log(api, msg, lvl)
         returnValue(self.reply(command, success=True))
 
     def handle_debug(self, api, command):
@@ -534,7 +540,7 @@ class SandboxApi(object):
             # have a logging resource.
             log.msg(msg, logLevel=lvl)
         else:
-            self.logging_resource.log(msg, lvl=lvl)
+            self.logging_resource.log(self, msg, lvl=lvl)
 
     @inlineCallbacks
     def dispatch_request(self, command):

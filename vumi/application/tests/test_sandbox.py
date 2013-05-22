@@ -34,7 +34,7 @@ class ListLoggingResource(LoggingResource):
         super(ListLoggingResource, self).__init__(name, app_worker, config)
         self.msgs = []
 
-    def log(self, msg, lvl):
+    def log(self, api, msg, lvl):
         self.msgs.append((lvl, msg))
 
 
