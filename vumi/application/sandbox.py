@@ -384,7 +384,7 @@ class LoggingResource(SandboxResource):
     """Resource that allows a sandbox to log messages via Twisted's
     logging framework.
     """
-    def log(self, api, msg, lvl):
+    def log(self, api, msg, level):
         """Logs a message via vumi.log (i.e. Twisted logging).
 
         Sub-class should override this if they wish to log messages
@@ -393,35 +393,35 @@ class LoggingResource(SandboxResource):
 
         The `log` method should always return a deferred.
         """
-        return succeed(log.msg(msg, logLevel=lvl))
+        return succeed(log.msg(msg, logLevel=level))
 
     @inlineCallbacks
-    def handle_log(self, api, command, lvl=None):
-        lvl = command.get('lvl', lvl)
-        if lvl is None:
-            lvl = logging.INFO
+    def handle_log(self, api, command, level=None):
+        level = command.get('level', level)
+        if level is None:
+            level = logging.INFO
         msg = command.get('msg')
         if msg is None:
             returnValue(self.reply(command, success=False,
                                    reason="Value expected for msg"))
         msg = str(msg)
-        yield self.log(api, msg, lvl)
+        yield self.log(api, msg, level)
         returnValue(self.reply(command, success=True))
 
     def handle_debug(self, api, command):
-        return self.handle_log(api, command, lvl=logging.DEBUG)
+        return self.handle_log(api, command, level=logging.DEBUG)
 
     def handle_info(self, api, command):
-        return self.handle_log(api, command, lvl=logging.INFO)
+        return self.handle_log(api, command, level=logging.INFO)
 
     def handle_warning(self, api, command):
-        return self.handle_log(api, command, lvl=logging.WARNING)
+        return self.handle_log(api, command, level=logging.WARNING)
 
     def handle_error(self, api, command):
-        return self.handle_log(api, command, lvl=logging.ERROR)
+        return self.handle_log(api, command, level=logging.ERROR)
 
     def handle_critical(self, api, command):
-        return self.handle_log(api, command, lvl=logging.CRITICAL)
+        return self.handle_log(api, command, level=logging.CRITICAL)
 
 
 class HttpClientResource(SandboxResource):
@@ -536,13 +536,13 @@ class SandboxApi(object):
     def get_inbound_message(self, message_id):
         return self._inbound_messages.get(message_id)
 
-    def log(self, msg, lvl):
+    def log(self, msg, level):
         if self.logging_resource is None:
             # fallback to vumi.log logging if we don't
             # have a logging resource.
-            return succeed(log.msg(msg, logLevel=lvl))
+            return succeed(log.msg(msg, logLevel=level))
         else:
-            return self.logging_resource.log(self, msg, lvl=lvl)
+            return self.logging_resource.log(self, msg, level=level)
 
     @inlineCallbacks
     def dispatch_request(self, command):
@@ -560,7 +560,7 @@ class SandboxApi(object):
             # a failure and log via the sandbox api so that the
             # sandbox owner can be notified.
             log.error()
-            self.log(str(e), lvl=logging.ERROR)
+            self.log(str(e), level=logging.ERROR)
             reply = SandboxCommand(
                 reply=True,
                 cmd_id=command['cmd_id'],

@@ -34,8 +34,8 @@ class ListLoggingResource(LoggingResource):
         super(ListLoggingResource, self).__init__(name, app_worker, config)
         self.msgs = []
 
-    def log(self, api, msg, lvl):
-        self.msgs.append((lvl, msg))
+    def log(self, api, msg, level):
+        self.msgs.append((level, msg))
 
 
 class SandboxTestCaseBase(ApplicationTestCase):
@@ -736,7 +736,8 @@ class TestLoggingResource(ResourceTestCaseBase):
         return self.check_logs('critical', 'foo', logging.CRITICAL)
 
     def test_handle_log(self):
-        return self.check_logs('log', 'foo', logging.ERROR, lvl=logging.ERROR)
+        return self.check_logs('log', 'foo', logging.ERROR,
+                               level=logging.ERROR)
 
     def test_handle_log_defaults_to_info(self):
         return self.check_logs('log', 'foo', logging.INFO)
