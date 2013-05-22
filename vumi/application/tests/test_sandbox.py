@@ -98,11 +98,14 @@ class SandboxTestCase(SandboxTestCaseBase):
             "sys.stdout.flush()\n"
             "time.sleep(5)\n"
         )
-        status = yield app.process_event_in_sandbox(self.mk_ack())
-        [sandbox_err] = self.flushLoggedErrors(SandboxError)
-        self.assertEqual(str(sandbox_err.value).split(' [')[0],
-                         "Resource fallback: unknown command 'unknown'"
-                         " received from sandbox 'sandbox1'")
+        with LogCatcher(log_level=logging.ERROR) as lc:
+            status = yield app.process_event_in_sandbox(self.mk_ack())
+            [msg] = lc.messages()
+        self.assertTrue(msg.startswith(
+            "Resource fallback: unknown command 'unknown'"
+            " received from sandbox 'sandbox1'"
+            " [<Message payload=\"{"
+        ))
         self.assertEqual(status, None)
         [kill_err] = self.flushLoggedErrors(ProcessTerminated)
         self.assertTrue('process ended by signal' in str(kill_err.value))
@@ -113,10 +116,11 @@ class SandboxTestCase(SandboxTestCaseBase):
             "import sys\n"
             "sys.stderr.write('err\\n')\n"
         )
-        status = yield app.process_event_in_sandbox(self.mk_ack())
+        with LogCatcher(log_level=logging.ERROR) as lc:
+            status = yield app.process_event_in_sandbox(self.mk_ack())
+            msgs = lc.messages()
         self.assertEqual(status, 0)
-        [sandbox_err] = self.flushLoggedErrors(SandboxError)
-        self.assertEqual(str(sandbox_err.value).split(' [')[0], "err")
+        self.assertEqual(msgs, ["err"])
 
     @inlineCallbacks
     def test_bad_rlimit(self):
@@ -133,11 +137,11 @@ class SandboxTestCase(SandboxTestCaseBase):
             "rlimit_nofile = resource.getrlimit(resource.RLIMIT_NOFILE)\n"
             "sys.stderr.write('%s %s\\n' % rlimit_nofile)\n",
             {'rlimits': {'RLIMIT_NOFILE': [soft, hard * 2]}})
-        status = yield app.process_event_in_sandbox(self.mk_ack())
+        with LogCatcher(log_level=logging.ERROR) as lc:
+            status = yield app.process_event_in_sandbox(self.mk_ack())
+            msgs = lc.messages()
         self.assertEqual(status, 0)
-        [sandbox_err] = self.flushLoggedErrors(SandboxError)
-        self.assertEqual(str(sandbox_err.value).split(' [')[0],
-                         "%s %s" % (soft, hard))
+        self.assertEqual(msgs, ["%s %s" % (soft, hard)])
 
     @inlineCallbacks
     def test_resource_setup(self):
@@ -190,7 +194,7 @@ class SandboxTestCase(SandboxTestCaseBase):
         recv_limit = 1000
         app = yield self.setup_app(
             "import sys, time\n"
-            "sys.stderr.write(%r)\n"
+            "sys.stdout.write(%r)\n"
             "sys.stdout.write('\\n')\n"
             "sys.stdout.flush()\n"
             "time.sleep(5)\n"
@@ -198,7 +202,6 @@ class SandboxTestCase(SandboxTestCaseBase):
             {'recv_limit': str(recv_limit)})
         status = yield app.process_message_in_sandbox(self.mk_msg())
         self.assertEqual(status, None)
-        [stderr_err] = self.flushLoggedErrors(SandboxError)
         [kill_err] = self.flushLoggedErrors(ProcessTerminated)
         self.assertTrue('process ended by signal' in str(kill_err.value))
 

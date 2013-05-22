@@ -157,18 +157,23 @@ class SandboxProtocol(ProcessProtocol):
     def errReceived(self, data):
         lines = self._process_data(self.error_chunk, data)
         for i in range(len(lines) - 1):
-            log.error(Failure(SandboxError(lines[i])))
+            self.api.log(lines[i], logging.ERROR)
         self.error_chunk = lines[-1]
 
     def errConnectionLost(self):
         if self.error_chunk:
-            log.error(Failure(SandboxError(self.error_chunk)))
+            self.api.log(self.error_chunk, logging.ERROR)
             self.error_chunk = ""
 
     def _process_request_results(self, results):
         for success, result in results:
             if not success:
+                # errors here are bugs in Vumi and thus should always
+                # be logged via Twisted too.
                 log.error(result)
+                # we log them again in a simplified form via the sandbox
+                # api so that the sandbox owner gets to see them too
+                self.api.log(result.getErrorMessage(), logging.ERROR)
 
     def processEnded(self, reason):
         if self.timeout_task.active():
@@ -240,18 +245,16 @@ class SandboxResource(object):
         return SandboxCommand(cmd=command['cmd'], reply=True,
                               cmd_id=command['cmd_id'], **kwargs)
 
-    def log_error(self, error_msg):
-        log.error(Failure(SandboxError(error_msg)))
-
     def dispatch_request(self, api, command):
         handler_name = 'handle_%s' % (command['cmd'],)
         handler = getattr(self, handler_name, self.unknown_request)
         return maybeDeferred(handler, api, command)
 
     def unknown_request(self, api, command):
-        self.log_error("Resource %s: unknown command %r received from"
-                       " sandbox %r [%r]" % (self.name, command['cmd'],
-                                             api.sandbox_id, command))
+        api.log("Resource %s: unknown command %r received from"
+                " sandbox %r [%r]" % (self.name, command['cmd'],
+                                      api.sandbox_id, command),
+                logging.ERROR)
         api.sandbox_kill()  # it's a harsh world
 
 
@@ -477,6 +480,8 @@ class SandboxApi(object):
         self._inbound_messages = {}
         self.resources = resources
         self.fallback_resource = SandboxResource("fallback", None, {})
+        self.logging_resource = self.resources.resources.get(
+            config.logging_resource)
         self.config = config
 
     @property
@@ -511,6 +516,13 @@ class SandboxApi(object):
 
     def get_inbound_message(self, message_id):
         return self._inbound_messages.get(message_id)
+
+    def log(self, msg, lvl):
+        if self.logging_resource is None:
+            from twisted.python import log
+            log.msg(msg, logLevel=lvl)
+        else:
+            self.logging_resource.log(msg, lvl=lvl)
 
     @inlineCallbacks
     def dispatch_request(self, command):
@@ -586,6 +598,10 @@ class SandboxConfig(ApplicationWorker.CONFIG_CLASS):
         " names or values of the RLIMIT constants in"
         " Python `resource` module. Values should be appropriate integers.",
         default={})
+    logging_resource = ConfigText(
+        "Name of the logging resource. Set to null to disable and"
+        " use Twisted logging directly.",
+        default="log")
     sandbox_id = ConfigText("This is set based on individual messages.")
 
 
