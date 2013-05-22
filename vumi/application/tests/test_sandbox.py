@@ -102,9 +102,9 @@ class SandboxTestCase(SandboxTestCaseBase):
             status = yield app.process_event_in_sandbox(self.mk_ack())
             [msg] = lc.messages()
         self.assertTrue(msg.startswith(
-            "Resource fallback: unknown command 'unknown'"
-            " received from sandbox 'sandbox1'"
-            " [<Message payload=\"{"
+            "Resource fallback received unknown command 'unknown'"
+            " from sandbox 'sandbox1'. Killing sandbox."
+            " [Full command: <Message payload=\"{"
         ))
         self.assertEqual(status, None)
         [kill_err] = self.flushLoggedErrors(ProcessTerminated)

@@ -251,9 +251,9 @@ class SandboxResource(object):
         return maybeDeferred(handler, api, command)
 
     def unknown_request(self, api, command):
-        api.log("Resource %s: unknown command %r received from"
-                " sandbox %r [%r]" % (self.name, command['cmd'],
-                                      api.sandbox_id, command),
+        api.log("Resource %s received unknown command %r from"
+                " sandbox %r. Killing sandbox. [Full command: %r]"
+                % (self.name, command['cmd'], api.sandbox_id, command),
                 logging.ERROR)
         api.sandbox_kill()  # it's a harsh world
 
