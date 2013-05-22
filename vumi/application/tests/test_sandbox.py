@@ -288,12 +288,15 @@ class SandboxTestCase(SandboxTestCaseBase):
                  'foo': {'cls': '%s.ListLoggingResource' % __name__},
              }},
         )
-        status = yield app.process_message_in_sandbox(self.mk_msg())
+        with LogCatcher() as lc:
+            status = yield app.process_message_in_sandbox(self.mk_msg())
+            msgs = lc.messages()
         self.assertEqual(status, 0)
         logging_resource = app.resources.resources['foo']
         self.assertEqual(logging_resource.msgs, [
             (logging.INFO, 'log info')
         ])
+        self.assertEqual(msgs, [])
 
     @inlineCallbacks
     def echo_check(self, handler_name, msg, expected_cmd):
