@@ -57,7 +57,7 @@ class AirtelUSSDTransport(HttpRpcTransport):
 
     def requires_auth(self):
         config = self.get_static_config()
-        return all([config.airtel_username, config.airtel_password])
+        return (None not in (config.airtel_username, config.airtel_password))
 
     def is_authenticated(self, request):
         config = self.get_static_config()
