@@ -133,7 +133,7 @@ class SandboxProtocol(ProcessProtocol):
 
     def _process_data(self, chunk, data):
         if not self.check_recv(len(data)):
-            return [chunk]  # skip the data if it's too big
+            return ['']  # skip the data if it's too big
         line_parts = data.split("\n")
         line_parts[0] = chunk + line_parts[0]
         return line_parts
