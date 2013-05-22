@@ -608,7 +608,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
         timeout_t0 = self.client.scheduled_timeout.getTime()
 
         # advance to just after the first heartbeat is sent
-        self.client.clock.advance(120.1)
+        self.client.clock.advance(0.1)
         yield self.client.wait_for_data()
         timeout_t1 = self.client.scheduled_timeout.getTime()
         self.assertTrue(timeout_t1 > timeout_t0)
@@ -639,12 +639,16 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
         self.client.start_periodic_enquire_link()
 
         # advance to just after the first heartbeat is sent
-        self.client.clock.advance(120.1)
+        self.client.clock.advance(0.1)
         received_request_packet = yield self.server.wait_for_data()
         self.assertEqual(expected_request_packet, received_request_packet)
 
-        # advance to just after the timeout occured
-        self.client.clock.advance(20)
+        # advance to just before the timeout should occur
+        self.client.clock.advance(19.8)
+        self.assertFalse(self.client.disconnected)
+
+        # advance to just after the timeout should occur
+        self.client.clock.advance(0.1)
         self.assertTrue(self.client.disconnected)
         self.assert_in_log(
             'err',

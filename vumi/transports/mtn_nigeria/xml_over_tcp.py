@@ -113,7 +113,7 @@ class XmlOverTcpClient(Protocol):
     PHASE = '2'
 
     def __init__(self, username, password, application_id,
-                 enquire_link_interval=240, timeout_period=60):
+                 enquire_link_interval=30, timeout_period=30):
         self.username = username
         self.password = password
         self.application_id = application_id
@@ -154,11 +154,9 @@ class XmlOverTcpClient(Protocol):
     def reset_scheduled_timeout(self):
         self.cancel_scheduled_timeout()
 
-        # mod the timeout period by the enquire link interval to prevent
+        # cap the timeout period at the enquire link interval to prevent
         # skipped enquire link responses from going unnoticed.
-        delay = self.enquire_link_interval + (
-            self.timeout_period % self.enquire_link_interval)
-
+        delay = min(self.timeout_period, self.enquire_link_interval)
         self.scheduled_timeout = self.clock.callLater(delay, self.timeout)
 
     def start_periodic_enquire_link(self):
@@ -169,7 +167,7 @@ class XmlOverTcpClient(Protocol):
         self.reset_scheduled_timeout()
         self.periodic_enquire_link.clock = self.clock
         d = self.periodic_enquire_link.start(
-            self.enquire_link_interval, now=False)
+            self.enquire_link_interval, now=True)
         log.msg("Heartbeat started")
 
         return d

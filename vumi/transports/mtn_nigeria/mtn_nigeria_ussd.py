@@ -31,12 +31,13 @@ class MtnNigeriaUssdTransportConfig(Transport.CONFIG_CLASS):
     enquire_link_interval = ConfigInt(
         "The interval (in seconds) between enquire links sent to the server "
         "to check whether the connection is alive and well.",
-        default=240, static=True)
+        default=30, static=True)
     timeout_period = ConfigInt(
         "How long (in seconds) after a heartbeat the client should wait "
-        "before timing out, should the server not respond to the "
-        "heartbeat (enquire link) request.",
-        default=120, static=True)
+        "before timing out, should the server not respond to the heartbeat "
+        "(enquire link) request. NOTE: the timeout period is capped at the "
+        "enquire link interval to prevent skipped enquire link responses from "
+        "going unnoticed.", default=30, static=True)
     user_termination_response = ConfigText(
         "Response given back to the user if the user terminated the session.",
         default='Session Ended', static=True)
