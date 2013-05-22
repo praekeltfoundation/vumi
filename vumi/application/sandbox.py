@@ -123,6 +123,9 @@ class SandboxProtocol(ProcessProtocol):
             return True
         else:
             self.kill()
+            self.api.log("Sandbox %r killed for producting too much data on"
+                         " stderr and stdout." % (self.sandbox_id),
+                         level=logging.ERROR)
             return False
 
     def connectionMade(self):

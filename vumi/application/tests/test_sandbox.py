@@ -201,16 +201,25 @@ class SandboxTestCase(SandboxTestCaseBase):
     @inlineCallbacks
     def test_recv_limit(self):
         recv_limit = 1000
+        send_out = "a" * 500
+        send_err = "a" * 501
         app = yield self.setup_app(
             "import sys, time\n"
             "sys.stdout.write(%r)\n"
-            "sys.stdout.write('\\n')\n"
             "sys.stdout.flush()\n"
+            "sys.stderr.write(%r)\n"
+            "sys.stderr.flush()\n"
             "time.sleep(5)\n"
-            % ("a" * (recv_limit - 1) + "\n"),
+            % (send_out, send_err),
             {'recv_limit': str(recv_limit)})
-        status = yield app.process_message_in_sandbox(self.mk_msg())
+        with LogCatcher(log_level=logging.ERROR) as lc:
+            status = yield app.process_message_in_sandbox(self.mk_msg())
+            msgs = lc.messages()
         self.assertEqual(status, None)
+        self.assertEqual(msgs[0],
+                         "Sandbox 'sandbox1' killed for producting too much"
+                         " data on stderr and stdout.")
+        self.assertEqual(len(msgs), 2)  # 2nd message is the bad command log
         [kill_err] = self.flushLoggedErrors(ProcessTerminated)
         self.assertTrue('process ended by signal' in str(kill_err.value))
 
