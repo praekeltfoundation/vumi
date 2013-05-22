@@ -14,9 +14,9 @@ from vumi.config import ConfigInt, ConfigText, ConfigBool, ConfigDict
 
 class AirtelUSSDTransportConfig(HttpRpcTransport.CONFIG_CLASS):
     airtel_username = ConfigText('The username for this transport',
-                                 required=True, static=True)
+                                 default=None, static=True)
     airtel_password = ConfigText('The password for this transport',
-                                 required=True, static=True)
+                                 default=None, static=True)
     airtel_charge = ConfigBool(
         'Whether or not to charge for the responses sent.', required=False,
         default=False, static=True)
@@ -40,10 +40,8 @@ class AirtelUSSDTransport(HttpRpcTransport):
     ENCODING = 'utf-8'
     CONFIG_CLASS = AirtelUSSDTransportConfig
     EXPECTED_AUTH_FIELDS = set(['userid', 'password'])
-    EXPECTED_CLEANUP_FIELDS = EXPECTED_AUTH_FIELDS.union(
-        ['MSISDN', 'clean', 'status'])
-    EXPECTED_USSD_FIELDS = EXPECTED_AUTH_FIELDS.union(
-        ['MSISDN', 'MSC', 'input'])
+    EXPECTED_CLEANUP_FIELDS = set(['MSISDN', 'clean', 'status'])
+    EXPECTED_USSD_FIELDS = set(['MSISDN', 'MSC', 'input'])
 
     @inlineCallbacks
     def setup_transport(self):
@@ -56,6 +54,10 @@ class AirtelUSSDTransport(HttpRpcTransport):
 
     def is_cleanup(self, request):
         return 'clean' in request.args
+
+    def requires_auth(self):
+        config = self.get_static_config()
+        return all([config.airtel_username, config.airtel_password])
 
     def is_authenticated(self, request):
         config = self.get_static_config()
@@ -75,7 +77,7 @@ class AirtelUSSDTransport(HttpRpcTransport):
                                    code=http.BAD_REQUEST)
 
     def handle_raw_inbound_message(self, message_id, request):
-        if not self.is_authenticated(request):
+        if self.requires_auth() and not self.is_authenticated(request):
             self.finish_request(message_id, 'Forbidden', code=http.FORBIDDEN)
             return
 
@@ -85,8 +87,13 @@ class AirtelUSSDTransport(HttpRpcTransport):
 
     @inlineCallbacks
     def handle_cleanup_request(self, message_id, request):
-        values, errors = self.get_field_values(request,
-                                               self.EXPECTED_CLEANUP_FIELDS)
+        if self.requires_auth():
+            fields = self.EXPECTED_CLEANUP_FIELDS.union(
+                self.EXPECTED_AUTH_FIELDS)
+        else:
+            fields = self.EXPECTED_CLEANUP_FIELDS
+
+        values, errors = self.get_field_values(request, fields)
         if errors:
             self.handle_bad_request(message_id, request, errors)
             return
@@ -122,15 +129,23 @@ class AirtelUSSDTransport(HttpRpcTransport):
 
     @inlineCallbacks
     def handle_ussd_request(self, message_id, request):
-        values, errors = self.get_field_values(request,
-                                               self.EXPECTED_USSD_FIELDS)
+        if self.requires_auth():
+            fields = self.EXPECTED_USSD_FIELDS.union(
+                self.EXPECTED_AUTH_FIELDS)
+        else:
+            fields = self.EXPECTED_USSD_FIELDS
+
+        values, errors = self.get_field_values(request, fields)
         if errors:
             self.handle_bad_request(message_id, request, errors)
             return
 
         session_id = values['MSISDN']
         from_addr = values['MSISDN']
-        ussd_params = values['input']
+        # Airtel doesn't provide us with the full to_addr, the start *
+        # and ending # are omitted, add those again so we can use it
+        # for internal routing.
+        ussd_params = '*%s#' % (values['input'],)
 
         session = yield self.session_manager.load_session(session_id)
         if session:

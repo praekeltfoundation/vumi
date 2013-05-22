@@ -13,6 +13,9 @@ from vumi.utils import http_request_full
 class TestAirtelUSSDTransportTestCase(TransportTestCase):
 
     transport_class = AirtelUSSDTransport
+    timeout = 1
+    airtel_username = None
+    airtel_password = None
 
     @inlineCallbacks
     def setUp(self):
@@ -20,8 +23,8 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
         self.config = {
             'web_port': 0,
             'web_path': '/api/v1/airtel/ussd/',
-            'airtel_username': 'userid',
-            'airtel_password': 'password',
+            'airtel_username': self.airtel_username,
+            'airtel_password': self.airtel_password,
         }
         self.transport = yield self.get_transport(self.config)
         self.session_manager = self.transport.session_manager
@@ -35,10 +38,14 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
 
     def mk_request(self, **params):
         defaults = {
-            'userid': 'userid',
-            'password': 'password',
             'MSISDN': '27761234567',
         }
+        if all([self.airtel_username, self.airtel_password]):
+            defaults.update({
+                'userid': self.airtel_username,
+                'password': self.airtel_password,
+            })
+
         defaults.update(params)
         return self.mk_full_request(**defaults)
 
@@ -110,8 +117,8 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_inbound_resume_with_failed_to_addr_lookup(self):
-        deferred = self.mk_full_request(MSISDN='123456',
-            input='7*a', userid='userid', password='password')
+        deferred = self.mk_request(MSISDN='123456',
+                                   input='7*a')
         response = yield deferred
         self.assertEqual(json.loads(response.delivered_body), {
             'missing_parameter': ['MSC'],
@@ -119,14 +126,7 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_to_addr_handling(self):
-        defaults = {
-            'MSISDN': '12345',
-            'MSC': 'msc',
-            'userid': 'userid',
-            'password': 'password'
-        }
-
-        d1 = self.mk_full_request(input='167*7*1', **defaults)
+        d1 = self.mk_ussd_request('167*7*1')
         [msg1] = yield self.wait_for_dispatched_messages(1)
         self.assertEqual(msg1['to_addr'], '*167*7*1#')
         self.assertEqual(msg1['content'], '')
@@ -138,7 +138,7 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
         yield d1
 
         # follow up with the user submitting 'a'
-        d2 = self.mk_full_request(input='167*7*1*a', **defaults)
+        d2 = self.mk_ussd_request('167*7*1*a')
         [msg1, msg2] = yield self.wait_for_dispatched_messages(2)
         self.assertEqual(msg2['to_addr'], '*167*7*1#')
         self.assertEqual(msg2['content'], 'a')
@@ -280,8 +280,16 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
             'missing_parameter': ['status'],
             })
 
+
+class TestAirtelUSSDTransportTestCaseWithAuth(TestAirtelUSSDTransportTestCase):
+
+    transport_class = AirtelUSSDTransport
+    airtel_username = 'userid'
+    airtel_password = 'password'
+
     @inlineCallbacks
     def test_cleanup_session_invalid_auth(self):
         response = yield self.mk_cleanup_request(userid='foo', password='bar')
         self.assertEqual(response.code, http.FORBIDDEN)
         self.assertEqual(response.delivered_body, 'Forbidden')
+
