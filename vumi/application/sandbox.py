@@ -385,7 +385,6 @@ class LoggingResource(SandboxResource):
     logging framework.
     """
     def log(self, msg, lvl):
-        from twisted.python import log
         log.msg(msg, logLevel=lvl)
 
     @inlineCallbacks
@@ -480,8 +479,20 @@ class SandboxApi(object):
         self._inbound_messages = {}
         self.resources = resources
         self.fallback_resource = SandboxResource("fallback", None, {})
-        self.logging_resource = self.resources.resources.get(
-            config.logging_resource)
+        potential_logger = None
+        if config.logging_resource:
+            potential_logger = self.resources.resources.get(
+                config.logging_resource)
+            if potential_logger is None:
+                log.warning("Failed to find logging resource %r."
+                            " Falling back to Twisted logging."
+                            % (config.logging_resource,))
+            elif not hasattr(potential_logger, 'log'):
+                log.warning("Logging resource %r has no attribute 'log'."
+                            " Falling abck to Twisted logging."
+                            % (config.logging_resource,))
+                potential_logger = None
+        self.logging_resource = potential_logger
         self.config = config
 
     @property
@@ -519,7 +530,8 @@ class SandboxApi(object):
 
     def log(self, msg, lvl):
         if self.logging_resource is None:
-            from twisted.python import log
+            # fallback to vumi.log logging if we don't
+            # have a logging resource.
             log.msg(msg, logLevel=lvl)
         else:
             self.logging_resource.log(msg, lvl=lvl)
@@ -535,7 +547,12 @@ class SandboxApi(object):
         try:
             reply = yield resource.dispatch_request(self, command)
         except Exception, e:
-            log.err()
+            # errors here are bugs in Vumi so we always log them
+            # via Twisted. However, we reply to the sandbox with
+            # a failure and log via the sandbox api so that the
+            # sandbox owner can be notified.
+            log.error()
+            self.log(str(e), lvl=logging.ERROR)
             reply = SandboxCommand(
                 reply=True,
                 cmd_id=command['cmd_id'],
@@ -599,9 +616,11 @@ class SandboxConfig(ApplicationWorker.CONFIG_CLASS):
         " Python `resource` module. Values should be appropriate integers.",
         default={})
     logging_resource = ConfigText(
-        "Name of the logging resource. Set to null to disable and"
-        " use Twisted logging directly.",
-        default="log")
+        "Name of the logging resource to use to report errors detected"
+        " in sandboxed code (e.g. lines written to stderr, unexpected"
+        " process termination). Set to null to disable and report"
+        " these directly using Twisted logging instead.",
+        default=None)
     sandbox_id = ConfigText("This is set based on individual messages.")
 
 
@@ -744,6 +763,12 @@ class JsSandboxConfig(SandboxConfig):
 
     javascript = ConfigText("JavaScript code to run.", required=True)
     app_context = ConfigText("Custom context to execute JS with.")
+    logging_resource = ConfigText(
+        "Name of the logging resource to use to report errors detected"
+        " in sandboxed code (e.g. lines written to stderr, unexpected"
+        " process termination). Set to null to disable and report"
+        " these directly using Twisted logging instead.",
+        default='log')
 
 
 class JsSandbox(Sandbox):
@@ -759,6 +784,7 @@ class JsSandbox(Sandbox):
       resources under the name `js` if no `js` resource exists.
     * An instance of :class:`LoggingResource` is added to the sandbox
       resources under the name `log` if no `log` resource exists.
+    * `logging_resource` is set to `log` if it is not set.
     * An extra 'javascript' parameter specifies the javascript to execute.
     * An extra optional 'app_context' parameter specifying a custom
       context for the 'javascript' application to execute with.
