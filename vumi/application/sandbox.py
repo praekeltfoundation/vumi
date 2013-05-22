@@ -390,8 +390,10 @@ class LoggingResource(SandboxResource):
         Sub-class should override this if they wish to log messages
         elsewhere. The `api` parameter is provided for use by such
         sub-classes.
+
+        The `log` method should always return a deferred.
         """
-        log.msg(msg, logLevel=lvl)
+        return succeed(log.msg(msg, logLevel=lvl))
 
     @inlineCallbacks
     def handle_log(self, api, command, lvl=None):
@@ -538,9 +540,9 @@ class SandboxApi(object):
         if self.logging_resource is None:
             # fallback to vumi.log logging if we don't
             # have a logging resource.
-            log.msg(msg, logLevel=lvl)
+            return succeed(log.msg(msg, logLevel=lvl))
         else:
-            self.logging_resource.log(self, msg, lvl=lvl)
+            return self.logging_resource.log(self, msg, lvl=lvl)
 
     @inlineCallbacks
     def dispatch_request(self, command):
