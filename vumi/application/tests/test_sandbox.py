@@ -29,6 +29,15 @@ class MockResource(SandboxResource):
             setattr(self, "handle_%s" % name, handler)
 
 
+class ListLoggingResource(LoggingResource):
+    def __init__(self, name, app_worker, config):
+        super(ListLoggingResource, self).__init__(name, app_worker, config)
+        self.msgs = []
+
+    def log(self, msg, lvl):
+        self.msgs.append((lvl, msg))
+
+
 class SandboxTestCaseBase(ApplicationTestCase):
 
     application_class = Sandbox
@@ -265,6 +274,26 @@ class SandboxTestCase(SandboxTestCaseBase):
         path = path_str.split(':')
         self.assertTrue('/pp1' not in path)
         self.assertTrue('/pp2' not in path)
+
+    @inlineCallbacks
+    def test_custom_logging_resource(self):
+        app = yield self.setup_app(
+            "import sys, json\n"
+            "log = {'cmd': 'foo.info', 'cmd_id': '1',\n"
+            "       'reply': False, 'msg': 'log info'}\n"
+            "sys.stdout.write(json.dumps(log) + '\\n')\n",
+            {'env': {},
+             'logging_resource': 'foo',
+             'sandbox': {
+                 'foo': {'cls': '%s.ListLoggingResource' % __name__},
+             }},
+        )
+        status = yield app.process_message_in_sandbox(self.mk_msg())
+        self.assertEqual(status, 0)
+        logging_resource = app.resources.resources['foo']
+        self.assertEqual(logging_resource.msgs, [
+            (logging.INFO, 'log info')
+        ])
 
     @inlineCallbacks
     def echo_check(self, handler_name, msg, expected_cmd):
