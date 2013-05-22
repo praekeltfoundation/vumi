@@ -41,7 +41,7 @@ class AirtelUSSDTransport(HttpRpcTransport):
     CONFIG_CLASS = AirtelUSSDTransportConfig
     EXPECTED_AUTH_FIELDS = set(['userid', 'password'])
     EXPECTED_CLEANUP_FIELDS = set(['MSISDN', 'clean', 'status'])
-    EXPECTED_USSD_FIELDS = set(['MSISDN', 'MSC', 'input'])
+    EXPECTED_USSD_FIELDS = set(['SessionID', 'MSISDN', 'MSC', 'input'])
 
     @inlineCallbacks
     def setup_transport(self):

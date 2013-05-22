@@ -52,6 +52,7 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
         defaults = {
             'MSC': 'msc',
             'input': content,
+            'SessionID': 'session-id',
         }
         defaults.update(kwargs)
         return self.mk_request(**defaults)
