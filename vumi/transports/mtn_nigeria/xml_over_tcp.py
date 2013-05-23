@@ -187,22 +187,26 @@ class XmlOverTcpClient(Protocol):
 
         while self._buffer:
             header = self.peak_buffer(self.HEADER_SIZE)
+
             if not header:
                 return
 
             session_id, length = self.deserialize_header(header)
             packet = self.pop_buffer(length)
-            if packet:
-                body = packet[self.HEADER_SIZE:]
 
-                try:
-                    packet_type, params = self.deserialize_body(body)
-                except ParseError as e:
-                    log.err("Error parsing packet (%s): %s" % (e, packet))
-                    self.disconnect()
-                    return
+            if not packet:
+                return
 
-                self.packet_received(session_id, packet_type, params)
+            body = packet[self.HEADER_SIZE:]
+
+            try:
+                packet_type, params = self.deserialize_body(body)
+            except ParseError as e:
+                log.err("Error parsing packet (%s): %s" % (e, packet))
+                self.disconnect()
+                return
+
+            self.packet_received(session_id, packet_type, params)
 
     def pop_buffer(self, n):
         if n > len(self._buffer):
