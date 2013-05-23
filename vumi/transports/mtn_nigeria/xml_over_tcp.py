@@ -184,10 +184,25 @@ class XmlOverTcpClient(Protocol):
 
     def dataReceived(self, data):
         self._buffer += data
-        if self._current_header is None:
-            self.consume_header()
-        else:
-            self.consume_body()
+
+        while self._buffer:
+            header = self.peak_buffer(self.HEADER_SIZE)
+            if not header:
+                return
+
+            session_id, length = self.deserialize_header(header)
+            packet = self.pop_buffer(length)
+            if packet:
+                body = packet[self.HEADER_SIZE:]
+
+                try:
+                    packet_type, params = self.deserialize_body(body)
+                except ParseError as e:
+                    log.err("Error parsing packet (%s): %s" % (e, packet))
+                    self.disconnect()
+                    return
+
+                self.packet_received(session_id, packet_type, params)
 
     def pop_buffer(self, n):
         if n > len(self._buffer):
@@ -197,6 +212,12 @@ class XmlOverTcpClient(Protocol):
         self._buffer = buffer[n:]
         return buffer[:n]
 
+    def peak_buffer(self, n):
+        if n > len(self._buffer):
+            return []
+
+        return self._buffer[:n]
+
     @classmethod
     def deserialize_header(cls, header):
         session_id, length = struct.unpack(cls.HEADER_FORMAT, header)
@@ -204,18 +225,9 @@ class XmlOverTcpClient(Protocol):
         # The length field is 16 bytes, but integer types don't reach
         # this length. Therefore, I'm assuming the length field is a 16
         # byte ASCII string that can be converted to an integer type.
-        length = int(cls.LENGTH_STRIP_RE.sub('', length)) - cls.HEADER_SIZE
+        length = int(cls.LENGTH_STRIP_RE.sub('', length))
 
-        return {
-            'session_id': session_id,
-            'length': length
-        }
-
-    def consume_header(self):
-        header = self.pop_buffer(self.HEADER_SIZE)
-        if header:
-            self._current_header = self.deserialize_header(header)
-            self.consume_body()
+        return session_id, length
 
     @classmethod
     def deserialize_body(cls, body):
@@ -226,23 +238,6 @@ class XmlOverTcpClient(Protocol):
         packet_type = root.tag
         params = dict((el.tag.strip(), el.text.strip()) for el in root)
         return packet_type, params
-
-    def consume_body(self):
-        header = self._current_header
-        if header is None:
-            return
-
-        body = self.pop_buffer(header['length'])
-        if body:
-            try:
-                packet_type, params = self.deserialize_body(body)
-            except ParseError as e:
-                log.err("Error parsing packet body (%s): %s" % (e, body))
-                self.disconnect()
-                return
-            self.packet_received(header['session_id'], packet_type, params)
-            self._current_header = None
-            self.consume_header()
 
     def packet_received(self, session_id, packet_type, params):
         log.debug("Packet of type '%s' with session id '%s' received: %s"
