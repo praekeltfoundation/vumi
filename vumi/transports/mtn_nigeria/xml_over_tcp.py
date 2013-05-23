@@ -126,8 +126,7 @@ class XmlOverTcpClient(Protocol):
         self.periodic_enquire_link = LoopingCall(
             self.send_enquire_link_request)
 
-        self._buffer = ''
-        self._current_header = None
+        self.reset_buffer()
 
     def connectionMade(self):
         self.login()
@@ -136,6 +135,11 @@ class XmlOverTcpClient(Protocol):
         log.err("Connection lost")
         self.stop_periodic_enquire_link()
         self.cancel_scheduled_timeout()
+        self.reset_buffer()
+
+    def reset_buffer(self):
+        self._buffer = ''
+        self._current_header = None
 
     def timeout(self):
         log.err("No enquire link response received after %s seconds, "
