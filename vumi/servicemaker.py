@@ -189,8 +189,7 @@ class VumiWorkerServiceMaker(object):
 
         class_name = options.worker_class.rpartition('.')[2].lower()
         worker_name = options.worker_config.get('worker_name', class_name)
-        system_id = options.vumi_options.get('system-id',
-                                             BaseWorker.DEFAULT_SYSTEM_ID)
+        system_id = options.vumi_options.get('system-id', 'global')
 
         worker_id = generate_worker_id(system_id, worker_name)
         sentry_service = SentryLoggerService(sentry_dsn,

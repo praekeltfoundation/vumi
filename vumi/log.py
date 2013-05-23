@@ -60,7 +60,6 @@ Usage:
 import os
 import sys
 import logging
-import time
 from datetime import datetime
 
 from twisted.python import log as _log
@@ -84,9 +83,10 @@ class VumiLogObserver(object):
     Basically a reworked twisted.python.log.FileLogObserver so that we can
     format the log output
     """
-    timeFormat = None
 
-    level_strings = {
+    TIME_FORMAT = '%d-%02d-%02d %02d:%02d:%02d%s%02d%02d'
+
+    LEVEL_NAMES = {
         logging.DEBUG: 'DEBUG',
         logging.INFO: 'INFO',
         logging.WARNING: 'WARNING',
@@ -94,54 +94,58 @@ class VumiLogObserver(object):
         logging.CRITICAL: 'CRITICAL',
     }
 
+
+
     def __init__(self, f):
         self.write = f.write
         self.flush = f.flush
 
-    def getTimezoneOffset(self, when):
+    def timezone_offset(self, when):
         """
-        from twisted.python.log.FileLogObserver
+        Adapted from twisted.python.log.FileLogObserver
         """
         offset = datetime.utcfromtimestamp(when) - datetime.fromtimestamp(when)
         return offset.days * (60 * 60 * 24) + offset.seconds
 
-    def formatTime(self, when):
+    def format_time(self, when):
         """
-        from twisted.python.log.FileLogObserver
+        Adapted from twisted.python.log.FileLogObserver
         """
-        if self.timeFormat is not None:
-            return time.strftime(self.timeFormat, time.localtime(when))
-
-        tzOffset = -self.getTimezoneOffset(when)
-        when = datetime.utcfromtimestamp(when + tzOffset)
-        tzHour = abs(int(tzOffset / 60 / 60))
-        tzMin = abs(int(tzOffset / 60 % 60))
-        if tzOffset < 0:
-            tzSign = '-'
+        tzoffs = -self.timezone_offset(when)
+        when = datetime.utcfromtimestamp(when + tzoffs)
+        tzhr = abs(int(tzoffs / 60 / 60))
+        tzmin = abs(int(tzoffs / 60 % 60))
+        if tzoffs < 0:
+            tzsign = '-'
         else:
-            tzSign = '+'
-        return '%d-%02d-%02d %02d:%02d:%02d%s%02d%02d' % (
+            tzsign = '+'
+        return self.TIME_FORMAT % (
             when.year, when.month, when.day,
             when.hour, when.minute, when.second,
-            tzSign, tzHour, tzMin)
+            tzsign, tzhr, tzmin)
 
-    def format(event):
+    def format(self, event):
         msg = event['message']
         cause = event['cause']
-        # Handle cases where we received a cause
-        if cause:
+        is_error = event['isError']
+        if is_error:
             if (not msg) and isinstance(cause, failure.Failure):
-                text = ('Unhandled Error: %s\n' + cause.getErrorMessage()
-                        + cause.getErrorMessage())
+                text = ('Unhandled Error: ' + cause.getErrorMessage() + '\n'
+                        + cause.getTraceback())
             elif not msg:
                 text = repr(cause)
-            elif msg:
-                text = msg[0] + (' <[cause=%s]>' % cause)
-        if msg:
-            text = msg
+            elif msg and isinstance(cause, failure.Failure):
+                text = (msg[0] + ': ' + cause.getErrorMessage() + '\n'
+                        + cause.getTraceback())
+            else:
+                text = msg[0] + (' <[cause=%s]>' % repr(cause))
+        elif msg:
+            text = msg[0]
+        else:
+            text = None
         return text
 
-    def format_compat(event):
+    def format_compat(self, event):
         """
         from twisted.python.log.FileLogObserver
         """
@@ -164,16 +168,15 @@ class VumiLogObserver(object):
             text = self.format(event)
         else:
             text = self.format_compat(event)
-
         if text is None:
             return
 
         if 'logLevel' not in event:
             level = 'INFO'
         else:
-            level = self.level_strings.get(event['logLevel'], 'INFO')
+            level = self.LEVEL_NAMES.get(event['logLevel'], 'INFO')
 
-        time_str = self.formatTime(event['time'])
+        time_str = self.format_time(event['time'])
         fmt_dict = {
             'system': event['system'],
             'level': level,
@@ -193,28 +196,63 @@ class VumiLogObserver(object):
 class VumiLog(object):
 
     def __init__(self, name=None):
-        self.name = name
+        self.name = name or 'Root'
 
-    def setup(self, obj, params, kw):
-        kw['vumi-log-v2'] = True
-        if self.name is not None:
-            kw['system'] = self.name
-        if 'cause' in kw and (isinstance(kw['cause'], Exception) or
-                              isinstance(kw['cause'], failure.Failure)):
-            kw['cause'] = failure.Failure(kw['cause'])
+    def find_failure(self, exc=None):
+        """
+        Try and get a failure object which is attached to a traceback
+        """
+        exc_type, exc_value, exc_tb = sys.exc_info()
+        if not exc:
+            flr = failure.Failure()
+        elif exc == exc_value:
+            flr = failure.Failure(exc_value, exc_type, exc_tb)
+        else:
+            flr = failure.Failure(exc)
+        return flr
+
+    def setup(self, obj, params, kw, is_error=False):
+        """
+        Setup various parameters required by the logging backend.
+
+        A bit gnarly due to the multitude of ways in which failure objects
+        can be discovered or derived
+        """
+        msg = ()
+        cause = None
+
+        # Make a suitable message tuple based on the object passed
+        # to the logger
+        #
+        # TODO: Unicode
+        #
         if isinstance(obj, str):
             # set message format attributes for Sentry
             kw['sentry_message_format'] = obj
             kw['sentry_message_params'] = params
-            msg = [obj % params]
-        elif isinstance(obj, failure.Failure):
-            kw['cause'] = obj
-            msg = []
+            msg = (_log._safeFormat(obj, params),)
         elif isinstance(obj, Exception):
-            kw['cause'] = failure.Failure(obj)
-            msg = []
+            cause = self.find_failure(obj)
+        elif isinstance(obj, failure.Failure):
+            cause = obj
         else:
-            msg = [repr(obj)]
+            msg = (repr(obj),)
+
+        # Override cause if the user explicitly passed it down to the logger
+        if 'cause' in kw:
+            cause = kw['cause']
+            if isinstance(cause, Exception):
+                cause = self.find_failure(cause)
+
+        # If we still haven't got a cause and this log message represents
+        # an application error, then search for a failure
+        if is_error and cause is None:
+            cause = self.find_failure()
+
+        kw['vumi-log-v2'] = True
+        kw['isError'] = is_error
+        kw['system'] = self.name
+        kw['cause'] = cause
         return msg
 
     def debug(self, obj, *params, **kw):
@@ -230,11 +268,11 @@ class VumiLog(object):
         _log.msg(*message, logLevel=logging.WARNING, **kw)
 
     def error(self, obj, *params, **kw):
-        message = self.setup(obj, params, kw)
+        message = self.setup(obj, params, kw, is_error=True)
         _log.msg(*message, logLevel=logging.ERROR, **kw)
 
     def critical(self, obj, *params, **kw):
-        message = self.setup(obj, params, kw)
+        message = self.setup(obj, params, kw, is_error=True)
         _log.msg(*message, logLevel=logging.CRITICAL, **kw)
 
     #
@@ -245,7 +283,7 @@ class VumiLog(object):
     # to sentry
     #
     def msg(self, *message, **kw):
-        _log.msg(*message, logLevel=logging.INFO, system=self.name)
+        _log.msg(*message, logLevel=logging.INFO)
 
     def err(self, _stuff=None, _why=None, **kw):
         _log.err(_stuff, _why, **kw)
