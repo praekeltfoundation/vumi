@@ -237,7 +237,8 @@ class XmlOverTcpClient(Protocol):
             try:
                 packet_type, params = self.deserialize_body(body)
             except ParseError as e:
-                log.err("Error parsing packet body: %s" % e)
+                log.err("Error parsing packet body (%s): %s" % (e, body))
+                self.disconnect()
                 return
             self.packet_received(header['session_id'], packet_type, params)
             self._current_header = None
