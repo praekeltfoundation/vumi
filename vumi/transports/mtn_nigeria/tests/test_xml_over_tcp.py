@@ -102,7 +102,6 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
 
     @inlineCallbacks
     def test_packet_parsing_for_packets_with_wierd_bodies(self):
-        self.timeout = 1
         session_id = self.mk_session_id(0)
         data = utils.mk_packet(session_id, "<BadPacket>")
         self.client.authenticated = True
