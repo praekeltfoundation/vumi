@@ -44,6 +44,11 @@ class MtnNigeriaUssdTransportConfig(Transport.CONFIG_CLASS):
 
 
 class MtnNigeriaUssdTransport(Transport):
+    """
+    XXX: Integration is still ongoing for this transport, it is currently an
+    early alpha. Use with care and a bit of insanity (you'll need it).
+    """
+
     transport_type = 'ussd'
 
     CONFIG_CLASS = MtnNigeriaUssdTransportConfig
