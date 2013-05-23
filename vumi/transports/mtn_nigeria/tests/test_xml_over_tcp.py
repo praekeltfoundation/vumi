@@ -171,6 +171,25 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
             ])
 
     @inlineCallbacks
+    def test_packets_split_over_socket_reads(self):
+        session_id = self.mk_session_id(0)
+        body = "<DummyPacket><someParam>123</someParam></DummyPacket>"
+        data = utils.mk_packet(session_id, body)
+        split_position = int(len(data) / 2)
+
+        self.client.authenticated = True
+
+        self.server.send_data(data[:split_position])
+        yield self.client.wait_for_data()
+
+        self.server.send_data(data[split_position:])
+        yield self.client.wait_for_data()
+
+        self.assertEqual(
+            self.client.received_dummy_packets,
+            [(session_id, {'someParam': '123'})])
+
+    @inlineCallbacks
     def test_partial_data_received(self):
         session_id_a = self.mk_session_id(0)
         body_a = "<DummyPacket><someParam>123</someParam></DummyPacket>"
