@@ -8,7 +8,6 @@ from twisted.application.service import MultiService
 from twisted.application.internet import TCPClient
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet import protocol, reactor
-from twisted.web.resource import Resource
 import txamqp
 from txamqp.client import TwistedDelegate
 from txamqp.content import Content
@@ -17,7 +16,7 @@ from txamqp.protocol import AMQClient
 from vumi.errors import VumiError
 from vumi.message import Message
 from vumi.utils import (load_class_by_string, vumi_resource_path, http_request,
-                        basic_auth_string, LogFilterSite)
+                        basic_auth_string, build_web_site)
 
 
 SPECS = {}
@@ -163,8 +162,6 @@ class Worker(MultiService, object):
     The Worker is responsible for starting consumers & publishers
     as needed.
     """
-    # This will obviously be supplied by configuration in future
-    SYSTEM_ID = "vumi-go-prod-1"
 
     def __init__(self, options, config=None):
         super(Worker, self).__init__()
@@ -245,29 +242,8 @@ class Worker(MultiService, object):
         return self._amqp_client.start_publisher(publisher_class, *args, **kw)
 
     def start_web_resources(self, resources, port, site_class=None):
-        # start the HTTP server for receiving the receipts
-        root = Resource()
-        # sort by ascending path length to make sure we create
-        # resources lower down in the path earlier
-        resources = sorted(resources, key=lambda r: len(r[1]))
-        for resource, path in resources:
-            request_path = filter(None, path.split('/'))
-            nodes, leaf = request_path[0:-1], request_path[-1]
-
-            def create_node(node, path):
-                if path in node.children:
-                    return node.children.get(path)
-                else:
-                    new_node = Resource()
-                    node.putChild(path, new_node)
-                    return new_node
-
-            parent = reduce(create_node, nodes, root)
-            parent.putChild(leaf, resource)
-
-        if site_class is None:
-            site_class = LogFilterSite
-        site_factory = site_class(root)
+        resources = dict((path, resource) for resource, path in resources)
+        site_factory = build_web_site(resources, site_class=site_class)
         return reactor.listenTCP(port, site_factory)
 
 

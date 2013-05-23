@@ -8,12 +8,18 @@ from twisted.web.resource import Resource
 from twisted.web import http
 from twisted.internet.protocol import Protocol, Factory
 
-
 from vumi.utils import (normalize_msisdn, vumi_resource_path, cleanup_msisdn,
                         get_operator_name, http_request, http_request_full,
-                        get_first_word, redis_from_config)
+                        get_first_word, redis_from_config, build_web_site,
+                        LogFilterSite)
 from vumi.persist.fake_redis import FakeRedis
 from vumi.tests.utils import import_skip
+
+
+class DummyRequest(object):
+    def __init__(self, postpath, prepath):
+        self.postpath = postpath
+        self.prepath = prepath
 
 
 class UtilsTestCase(TestCase):
@@ -73,6 +79,37 @@ class UtilsTestCase(TestCase):
             self.assertEqual(redis_from_config(fake_redis), fake_redis)
         except ImportError, e:
             import_skip(e, 'redis')
+
+    def get_resource(self, path, site):
+        request = DummyRequest(postpath=path.split('/'), prepath=[])
+        return site.getResourceFor(request)
+
+    def test_build_web_site(self):
+        resource_a = Resource()
+        resource_b = Resource()
+        site = build_web_site({
+            'foo/a': resource_a,
+            'bar/b': resource_b,
+        })
+        self.assertEqual(self.get_resource('foo/a', site), resource_a)
+        self.assertEqual(self.get_resource('bar/b', site), resource_b)
+        self.assertTrue(isinstance(site, LogFilterSite))
+
+    def test_build_web_site_with_overlapping_paths(self):
+        resource_a = Resource()
+        resource_b = Resource()
+        site = build_web_site({
+            'foo/a': resource_a,
+            'foo/b': resource_b,
+        })
+        self.assertEqual(self.get_resource('foo/a', site), resource_a)
+        self.assertEqual(self.get_resource('foo/b', site), resource_b)
+        self.assertTrue(isinstance(site, LogFilterSite))
+
+    def test_build_web_site_with_custom_site_class(self):
+        site = build_web_site({}, site_class=Site)
+        self.assertTrue(isinstance(site, Site))
+        self.assertFalse(isinstance(site, LogFilterSite))
 
 
 class FakeHTTP10(Protocol):

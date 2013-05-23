@@ -3,6 +3,7 @@
 from copy import deepcopy
 from urllib2 import urlparse
 import textwrap
+import re
 
 from zope.interface import Interface
 from twisted.python.components import Adapter, registerAdapter
@@ -74,9 +75,12 @@ class ConfigField(object):
     def setup(self, name):
         self.name = name
 
+    def present(self, obj):
+        return obj._config_data.has_key(self.name)
+
     def validate(self, obj):
         if self.required:
-            if not obj._config_data.has_key(self.name):
+            if not self.present(obj):
                 raise ConfigError(
                     "Missing required config field '%s'" % (self.name))
         # This will raise an exception if the value exists, but is invalid.
@@ -178,6 +182,93 @@ class ConfigUrl(ConfigField):
         return urlparse.urlparse(value)
 
 
+class ConfigRegex(ConfigText):
+    field_type = 'regex'
+
+    def clean(self, value):
+        value = super(ConfigRegex, self).clean(value)
+        return re.compile(value)
+
+
+class ConfigServerEndpoint(ConfigText):
+    field_type = 'twisted_endpoint'
+
+    def __init__(self, *args, **kws):
+        fallbacks = kws.pop('fallbacks', ('host', 'port'))
+        super(ConfigServerEndpoint, self).__init__(*args, **kws)
+        self._host_fallback, self._port_fallback = fallbacks
+        self.doc += (" A TCP4 endpoint may be specified using config field"
+                     " '%s' for the host and field '%s' for the port but"
+                     " this is deprecated"
+                     % (self._host_fallback, self._port_fallback))
+
+    def raise_fallback_error(self, fallback_message):
+        message_suffix = ("was being specified using the fallback fields '%s'"
+                          " and '%s' but "
+                          % (self._host_fallback, self._port_fallback))
+        message_suffix += fallback_message
+        self.raise_config_error(message_suffix)
+
+    def _fallbacks_present(self, obj):
+        return (obj._config_data.has_key(self._host_fallback) or
+                obj._config_data.has_key(self._port_fallback))
+
+    def _endpoint_from_fallbacks(self, obj):
+        host = obj._config_data.get(self._host_fallback, None)
+        port = obj._config_data.get(self._port_fallback, None)
+        if port is None:
+            self.raise_fallback_error('port was not given')
+        try:
+            port = int(str(port))
+        except (ValueError, TypeError):
+            self.raise_fallback_error('port was not an integer')
+        return self.endpoint_for_addr(host, port)
+
+    def endpoint_for_addr(self, host, port):
+        # this does minimal validation and relies on .clean()
+        # to check the resulting string and complain if needed
+        if host is None:
+            return "tcp:port=%s" % (port,)
+        else:
+            return "tcp:port=%s:interface=%s" % (port, host)
+
+    def present(self, obj):
+        return (self._fallbacks_present(obj) or
+                obj._config_data.has_key(self.name))
+
+    def get_value(self, obj):
+        if self._fallbacks_present(obj):
+            value = self._endpoint_from_fallbacks(obj)
+        else:
+            value = obj._config_data.get(self.name, self.default)
+        return self.clean(value) if value is not None else None
+
+    def clean(self, value):
+        from twisted.internet.endpoints import serverFromString
+        from twisted.internet import reactor
+        try:
+            return serverFromString(reactor, value)
+        except ValueError:
+            self.raise_config_error('is not a valid server endpoint')
+
+
+class ConfigClientEndpoint(ConfigServerEndpoint):
+    def endpoint_for_addr(self, host, port):
+        # this does minimal validation and relies on .clean()
+        # to check the resulting string and complain if needed
+        if host is None:
+            self.raise_fallback_error('no host was specified')
+        return "tcp:host=%s:port=%s" % (host, port)
+
+    def clean(self, value):
+        from twisted.internet.endpoints import clientFromString
+        from twisted.internet import reactor
+        try:
+            return clientFromString(reactor, value)
+        except ValueError:
+            self.raise_config_error('is not a valid client endpoint')
+
+
 def generate_doc(cls, fields, header_indent='', indent=' ' * 4):
     """Generate a docstring for a cls and its fields."""
     cls_doc = cls.__doc__ or ''
@@ -242,3 +333,16 @@ class Config(object):
                 # Skip non-static fields on static configs.
                 continue
             field.validate(self)
+        self.post_validate()
+
+    def raise_config_error(self, message):
+        """Raise a :class:`ConfigError` with the given message."""
+        raise ConfigError(message)
+
+    def post_validate(self):
+        """Sub-classes may override this to provide cross-field validation.
+
+        Implementations should raise :class:`ConfigError` if the configuration
+        is invalid (by calling :meth:`raise_config_error`, for example).
+        """
+        pass
