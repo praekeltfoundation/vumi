@@ -102,13 +102,17 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
 
     @inlineCallbacks
     def test_packet_parsing_for_packets_with_wierd_bodies(self):
+        self.timeout = 1
         session_id = self.mk_session_id(0)
         data = utils.mk_packet(session_id, "<BadPacket>")
         self.client.authenticated = True
         self.server.send_data(data)
 
         yield self.client.wait_for_data()
-        self.assert_in_log('err', "Error parsing packet body:")
+        err_msg = self.logs['err'][0]
+        self.assertTrue("Error parsing packet body" in err_msg)
+        self.assertTrue("<BadPacket>" in err_msg)
+        self.assertTrue(self.client.disconnected)
 
     @inlineCallbacks
     def test_packet_parsing_for_wierd_bytes_after_request_id(self):
