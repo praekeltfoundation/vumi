@@ -15,6 +15,7 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
     transport_class = AirtelUSSDTransport
     airtel_username = None
     airtel_password = None
+    session_id = 'session-id'
 
     @inlineCallbacks
     def setUp(self):
@@ -52,7 +53,7 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
         defaults = {
             'MSC': 'msc',
             'input': content,
-            'SessionID': 'session-id',
+            'SessionID': self.session_id,
         }
         defaults.update(kwargs)
         return self.mk_request(**defaults)
@@ -60,7 +61,8 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
     def mk_cleanup_request(self, **kwargs):
         defaults = {
             'clean': 'clean-session',
-            'status': 522
+            'status': 522,
+            'SessionID': self.session_id,
         }
         defaults.update(kwargs)
         return self.mk_request(**defaults)
@@ -92,14 +94,13 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
     @inlineCallbacks
     def test_inbound_resume_and_reply_with_end(self):
         # first pre-populate the redis datastore to simulate prior BEG message
-        yield self.session_manager.create_session('27761234567',
+        yield self.session_manager.create_session(self.session_id,
                 to_addr='*167*7#', from_addr='27761234567',
-                last_ussd_params='*167*7*a*b',
                 session_event=TransportUserMessage.SESSION_RESUME)
 
         # Safaricom gives us the history of the full session in the USSD_PARAMS
         # The last submitted bit of content is the last value delimited by '*'
-        deferred = self.mk_ussd_request('167*7*a*b*c')
+        deferred = self.mk_ussd_request('c')
 
         [msg] = yield self.wait_for_dispatched_messages(1)
         self.assertEqual(msg['content'], 'c')
@@ -138,7 +139,7 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
         yield d1
 
         # follow up with the user submitting 'a'
-        d2 = self.mk_ussd_request('167*7*1*a')
+        d2 = self.mk_ussd_request('a')
         [msg1, msg2] = yield self.wait_for_dispatched_messages(2)
         self.assertEqual(msg2['to_addr'], '*167*7*1#')
         self.assertEqual(msg2['content'], 'a')
@@ -163,7 +164,7 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
         yield d1
 
         # make the exact same request again
-        d2 = self.mk_ussd_request('167*7*3')
+        d2 = self.mk_ussd_request('')
         [msg1, msg2] = yield self.wait_for_dispatched_messages(2)
         self.assertEqual(msg2['to_addr'], '*167*7*3#')
         self.assertEqual(msg2['content'], '')
@@ -176,11 +177,10 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_submitting_asterisks_as_values(self):
-        yield self.session_manager.create_session('27761234567',
-                to_addr='*167*7#', from_addr='27761234567',
-                last_ussd_params='*167*7*a*b')
+        yield self.session_manager.create_session(self.session_id,
+                to_addr='*167*7#', from_addr='27761234567')
         # we're submitting a bunch of *s
-        deferred = self.mk_ussd_request('167*7*a*b*****')
+        deferred = self.mk_ussd_request('****')
 
         [msg] = yield self.wait_for_dispatched_messages(1)
         self.assertEqual(msg['content'], '****')
@@ -189,16 +189,13 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
             continue_session=True)
         self.dispatch(reply)
         yield deferred
-        session = yield self.session_manager.load_session('27761234567')
-        self.assertEqual(session['last_ussd_params'], '*167*7*a*b*****')
 
     @inlineCallbacks
     def test_submitting_asterisks_as_values_after_asterisks(self):
-        yield self.session_manager.create_session('27761234567',
-                to_addr='*167*7#', from_addr='27761234567',
-                last_ussd_params='*167*7*a*b**')
+        yield self.session_manager.create_session(self.session_id,
+                to_addr='*167*7#', from_addr='27761234567')
         # we're submitting a bunch of *s
-        deferred = self.mk_ussd_request('167*7*a*b*****')
+        deferred = self.mk_ussd_request('**')
 
         [msg] = yield self.wait_for_dispatched_messages(1)
         self.assertEqual(msg['content'], '**')
@@ -207,8 +204,6 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
             continue_session=True)
         self.dispatch(reply)
         yield deferred
-        session = yield self.session_manager.load_session('27761234567')
-        self.assertEqual(session['last_ussd_params'], '*167*7*a*b*****')
 
     @inlineCallbacks
     def test_submitting_with_base_code_empty_ussd_params(self):
@@ -224,7 +219,7 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
         yield d1
 
         # ask for first menu
-        d2 = self.mk_ussd_request('167*1')
+        d2 = self.mk_ussd_request('1')
         [msg1, msg2] = yield self.wait_for_dispatched_messages(2)
         self.assertEqual(msg2['to_addr'], '*167#')
         self.assertEqual(msg2['content'], '1')
@@ -236,7 +231,7 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
         yield d2
 
         # ask for second menu
-        d3 = self.mk_ussd_request('167*1*1')
+        d3 = self.mk_ussd_request('1')
         [msg1, msg2, msg3] = yield self.wait_for_dispatched_messages(3)
         self.assertEqual(msg3['to_addr'], '*167#')
         self.assertEqual(msg3['content'], '1')
@@ -255,7 +250,7 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_cleanup_session(self):
-        yield self.session_manager.create_session('27761234567',
+        yield self.session_manager.create_session(self.session_id,
             to_addr='*167*7#', from_addr='27761234567')
         response = yield self.mk_cleanup_request(MSISDN='27761234567')
         self.assertEqual(response.code, http.OK)
@@ -277,7 +272,7 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
         response = yield self.mk_request(clean='clean-session')
         self.assertEqual(response.code, http.BAD_REQUEST)
         self.assertEqual(json.loads(response.delivered_body), {
-            'missing_parameter': ['status'],
+            'missing_parameter': ['status', 'SessionID'],
             })
 
 

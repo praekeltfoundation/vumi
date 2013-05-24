@@ -40,7 +40,7 @@ class AirtelUSSDTransport(HttpRpcTransport):
     ENCODING = 'utf-8'
     CONFIG_CLASS = AirtelUSSDTransportConfig
     EXPECTED_AUTH_FIELDS = set(['userid', 'password'])
-    EXPECTED_CLEANUP_FIELDS = set(['MSISDN', 'clean', 'status'])
+    EXPECTED_CLEANUP_FIELDS = set(['SessionID', 'MSISDN', 'clean', 'status'])
     EXPECTED_USSD_FIELDS = set(['SessionID', 'MSISDN', 'MSC', 'input'])
 
     @inlineCallbacks
@@ -98,7 +98,7 @@ class AirtelUSSDTransport(HttpRpcTransport):
             self.handle_bad_request(message_id, request, errors)
             return
 
-        session_id = values['MSISDN']
+        session_id = values['SessionID']
         session = yield self.session_manager.load_session(session_id)
         if not session:
             log.warning('Received cleanup for unknown session: %s' % (
@@ -140,35 +140,22 @@ class AirtelUSSDTransport(HttpRpcTransport):
             self.handle_bad_request(message_id, request, errors)
             return
 
-        session_id = values['MSISDN']
+        session_id = values['SessionID']
         from_addr = values['MSISDN']
-        # Airtel doesn't provide us with the full to_addr, the start *
-        # and ending # are omitted, add those again so we can use it
-        # for internal routing.
-        ussd_params = '*%s#' % (values['input'],)
 
         session = yield self.session_manager.load_session(session_id)
         if session:
             to_addr = session['to_addr']
-            last_ussd_params = session['last_ussd_params']
-            new_params = ussd_params[len(last_ussd_params):]
-            if new_params:
-                if last_ussd_params:
-                    content = new_params[1:].rstrip('#')
-                else:
-                    content = new_params
-            else:
-                content = ''
-
-            session['last_ussd_params'] = ussd_params.rstrip('#')
             yield self.session_manager.save_session(session_id, session)
             session_event = TransportUserMessage.SESSION_RESUME
+            content = values['input']
         else:
-            to_addr = ussd_params
+            # Airtel doesn't provide us with the full to_addr, the start *
+            # and ending # are omitted, add those again so we can use it
+            # for internal routing.
+            to_addr = '*%s#' % (values['input'],)
             yield self.session_manager.create_session(
-                session_id,
-                from_addr=from_addr, to_addr=to_addr,
-                last_ussd_params=ussd_params.rstrip('#'))
+                session_id, from_addr=from_addr, to_addr=to_addr)
             session_event = TransportUserMessage.SESSION_NEW
             content = ''
 
@@ -206,8 +193,8 @@ class AirtelUSSDTransport(HttpRpcTransport):
         }
 
         if self.noisy:
-            log.debug('in_reply_to: %s' % (in_reply_to,))
-            log.debug('content: %s' % (content,))
+            log.debug('in_reply_to: %s' % (message['in_reply_to'],))
+            log.debug('content: %s' % (message['content'],))
             log.debug('Response headers: %r' % (headers,))
 
         self.finish_request(
