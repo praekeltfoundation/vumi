@@ -109,8 +109,8 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
 
         yield self.client.wait_for_data()
         err_msg = self.logs['err'][0]
-        self.assertTrue("Error parsing packet body" in err_msg)
-        self.assertTrue("<BadPacket>" in err_msg)
+        self.assertTrue("Error parsing packet" in err_msg)
+        self.assertTrue(data in err_msg)
         self.assertTrue(self.client.disconnected)
 
     @inlineCallbacks
@@ -169,6 +169,25 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
                 (session_id_a, {'someParam': '123'}),
                 (session_id_b, {'someParam': '456'}),
             ])
+
+    @inlineCallbacks
+    def test_packets_split_over_socket_reads(self):
+        session_id = self.mk_session_id(0)
+        body = "<DummyPacket><someParam>123</someParam></DummyPacket>"
+        data = utils.mk_packet(session_id, body)
+        split_position = int(len(data) / 2)
+
+        self.client.authenticated = True
+
+        self.server.send_data(data[:split_position])
+        yield self.client.wait_for_data()
+
+        self.server.send_data(data[split_position:])
+        yield self.client.wait_for_data()
+
+        self.assertEqual(
+            self.client.received_dummy_packets,
+            [(session_id, {'someParam': '123'})])
 
     @inlineCallbacks
     def test_partial_data_received(self):
