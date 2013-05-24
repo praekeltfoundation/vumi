@@ -126,6 +126,7 @@ class System(object):
         obj = {
             'name': self.name,
             'id': self.system_id,
+            'timestamp': int(time.time()),
             'workers': [wkr.to_dict() for wkr in self.workers],
         }
         return obj
@@ -242,19 +243,15 @@ class HeartBeatMonitor(BaseWorker):
         """
         Setup storage
         """
-        # write timestamp
-        yield self._storage.write_timestamp()
         # write system ids
         system_ids = [sys.system_id for sys in self._systems]
-        yield self._storage.write_system_ids(system_ids)
+        yield self._storage.add_system_ids(system_ids)
 
     @inlineCallbacks
     def _sync_to_storage(self):
         """
         Write systems data to storage
         """
-        # update timestamp
-        yield self._storage.write_timestamp()
         # dump each system
         for sys in self._systems:
             yield self._storage.write_system(sys)

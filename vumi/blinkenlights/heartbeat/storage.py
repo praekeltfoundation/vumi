@@ -9,7 +9,6 @@ Storage Schema:
  Worker issue (JSON dict):    key = worker:$WORKER_ID:issue
 """
 
-import time
 import json
 
 from vumi.persist.redis_base import Manager
@@ -38,12 +37,8 @@ class Storage(object):
         self.manager = redis
 
     @Manager.calls_manager
-    def write_timestamp(self):
-        yield self._redis.set(TIMESTAMP_KEY, str(int(time.time())))
-
-    @Manager.calls_manager
-    def write_system_ids(self, system_ids):
-        yield self._redis.set(SYSTEMS_KEY, json.dumps(system_ids))
+    def add_system_ids(self, system_ids):
+        yield self._redis.sadd(SYSTEMS_KEY, *system_ids)
 
     @Manager.calls_manager
     def write_system(self, sys):

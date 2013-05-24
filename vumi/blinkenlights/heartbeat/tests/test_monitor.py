@@ -144,25 +144,41 @@ class TestHeartBeatMonitor(TestCase):
 
         self.worker._prepare_storage()
 
-        # timestamp
-        ts = json.loads((yield fkredis.get('timestamp')))
-        self.assertEqual(type(ts), int)
-
         # Systems
-        systems = json.loads((yield fkredis.get('systems')))
+        systems = yield fkredis.smembers('systems')
         self.assertEqual(tuple(systems), ('system-1',))
 
     @inlineCallbacks
-    def test_sync_to_storage(self):
+    def test_serialize_to_redis(self):
         """
-        This covers a lot of the storage API as well the
-        Monitor's _sync_to_storage() function.
+        This covers a lot of the serialization methods
+        as well as the _sync_to_storage() function.
         """
         yield self.worker.startWorker()
         fkredis = self.worker._redis
 
+        attrs = self.gen_fake_attrs(time.time())
+
+        # process the fake message
+        self.worker.update(attrs)
+
         self.worker._sync_to_storage()
 
+        # this blob is what should be persisted into redis (as JSON)
+        expected = {
+            u'name': u'system-1',
+            u'id': u'system-1',
+            u'timestamp': 2,
+            u'workers': [{
+                    u'id': u'system-1:twitter_transport',
+                    u'name': u'twitter_transport',
+                    u'system_id': u'system-1',
+                    u'min_procs': 2,
+                    u'hosts': [{u'host': u'test-host-1', u'proc_count': 1}]
+            }],
+        }
+
+        # verify that the system data was persisted correctly
         system = json.loads((yield fkredis.get('system:system-1')))
-        self.assertEqual(system['workers'][0]['name'],
-                         'twitter_transport')
+        system['timestamp'] = 2
+        self.assertEqual(cmp(system, expected), 0)
