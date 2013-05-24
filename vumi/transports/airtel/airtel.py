@@ -206,6 +206,8 @@ class AirtelUSSDTransport(HttpRpcTransport):
         }
 
         if self.noisy:
+            log.debug('in_reply_to: %s' % (in_reply_to,))
+            log.debug('content: %s' % (content,))
             log.debug('Response headers: %r' % (headers,))
 
         self.finish_request(
