@@ -46,7 +46,7 @@ class ToyXmlOverTcpClient(XmlOverTcpClient, utils.WaitForDataMixin):
 
     @classmethod
     def session_id_from_nr(cls, nr):
-        return str(nr).zfill(cls.SESSION_ID_HEADER_SIZE)
+        return cls.serialize_header_field(nr, cls.SESSION_ID_HEADER_SIZE)
 
     def gen_session_id(self):
         return self.session_id_from_nr(next(self.session_id_counter))
@@ -66,6 +66,7 @@ class XmlOverTcpClientServerMixin(utils.MockClientServerMixin):
 class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
     @inlineCallbacks
     def setUp(self):
+        self.timeout = 1
         errors = dict(CodedXmlOverTcpError.ERRORS)
         errors['000'] = 'Dummy error occured'
         self.patch(CodedXmlOverTcpError, 'ERRORS', errors)
@@ -113,68 +114,62 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
         self.assertTrue(data in err_msg)
         self.assertTrue(self.client.disconnected)
 
-    @inlineCallbacks
-    def test_packet_parsing_for_wierd_bytes_after_request_id(self):
-        session_id = self.mk_session_id(0)
+    def test_packet_header_serializing(self):
+        self.assertEqual(
+            XmlOverTcpClient.serialize_header('23', 'abcdef'),
+            '23\0\0\0\0\0\0\0\0\0\0\0\0\0\0'
+            '38\0\0\0\0\0\0\0\0\0\0\0\0\0\0')
+
+    def test_packet_header_deserializing(self):
+        session_id, length = XmlOverTcpClient.deserialize_header(
+            '23\0\0\0\0\0\0\0\0\0\0\0\0\0\0'
+            '38\0\0\0\0\0\0\0\0\0\0\0\0\0\0')
+
+        self.assertEqual(session_id, '23')
+        self.assertEqual(length, 38)
+
+    def test_packet_body_serializing(self):
+        body = XmlOverTcpClient.serialize_body(
+            'DummyPacket',
+            [('requestId', '123456789abcdefg')])
+        expected_body = (
+            "<DummyPacket>"
+            "<requestId>123456789abcdefg</requestId>"
+            "</DummyPacket>")
+        self.assertEqual(body, expected_body)
+
+    def test_packet_body_deserializing(self):
         body = (
             "<DummyPacket>"
-            "<requestId>123456789abcdefgϕμ☃</requestId>"
+            "<requestId>123456789abcdefg\0\0\0</requestId>"
             "</DummyPacket>"
         )
+        packet_type, params = XmlOverTcpClient.deserialize_body(body)
 
-        data = utils.mk_packet(session_id, body)
-        self.client.authenticated = True
-        self.server.send_data(data)
-
-        yield self.client.wait_for_data()
-        self.assertEqual(
-            self.client.received_dummy_packets, [
-                (session_id, {'requestId': '123456789abcdefg'}),
-            ])
-
-    @inlineCallbacks
-    def test_packet_parsing_for_packet_length_header_whitebytes(self):
-        session_id = self.mk_session_id(0)
-        body = "<DummyPacket><someParam>123</someParam></DummyPacket>"
-        length = len(body) + XmlOverTcpClient.HEADER_SIZE
-        length_header = "%s%s" % (
-            length, 'ϕ' * (XmlOverTcpClient.LENGTH_HEADER_SIZE - length))
-
-        data = self.mk_raw_packet(session_id, length_header, body)
-        self.client.authenticated = True
-        self.server.send_data(data)
-
-        yield self.client.wait_for_data()
-        self.assertEqual(
-            self.client.received_dummy_packets, [
-                (session_id, {'someParam': '123'})
-            ])
+        self.assertEqual(packet_type, 'DummyPacket')
+        self.assertEqual(params, {'requestId': '123456789abcdefg'})
 
     @inlineCallbacks
     def test_contiguous_packets_received(self):
-        session_id_a = self.mk_session_id(0)
         body_a = "<DummyPacket><someParam>123</someParam></DummyPacket>"
-
-        session_id_b = self.mk_session_id(1)
         body_b = "<DummyPacket><someParam>456</someParam></DummyPacket>"
 
-        data = utils.mk_packet(session_id_a, body_a)
-        data += utils.mk_packet(session_id_b, body_b)
+        data = utils.mk_packet('0', body_a)
+        data += utils.mk_packet('1', body_b)
         self.client.authenticated = True
         self.server.send_data(data)
 
         yield self.client.wait_for_data()
         self.assertEqual(
             self.client.received_dummy_packets, [
-                (session_id_a, {'someParam': '123'}),
-                (session_id_b, {'someParam': '456'}),
+                ('0', {'someParam': '123'}),
+                ('1', {'someParam': '456'}),
             ])
 
     @inlineCallbacks
     def test_packets_split_over_socket_reads(self):
-        session_id = self.mk_session_id(0)
         body = "<DummyPacket><someParam>123</someParam></DummyPacket>"
-        data = utils.mk_packet(session_id, body)
+        data = utils.mk_packet('0', body)
         split_position = int(len(data) / 2)
 
         self.client.authenticated = True
@@ -187,27 +182,24 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
 
         self.assertEqual(
             self.client.received_dummy_packets,
-            [(session_id, {'someParam': '123'})])
+            [('0', {'someParam': '123'})])
 
     @inlineCallbacks
     def test_partial_data_received(self):
-        session_id_a = self.mk_session_id(0)
         body_a = "<DummyPacket><someParam>123</someParam></DummyPacket>"
-
-        session_id_b = self.mk_session_id(1)
         body_b = "<DummyPacket><someParam>456</someParam></DummyPacket>"
 
         # add a full first packet, then concatenate a sliced version of a
         # second packet
-        data = utils.mk_packet(session_id_a, body_a)
-        data += utils.mk_packet(session_id_b, body_b)[:12]
+        data = utils.mk_packet('0', body_a)
+        data += utils.mk_packet('1', body_b)[:12]
         self.client.authenticated = True
         self.server.send_data(data)
 
         yield self.client.wait_for_data()
         self.assertEqual(
             self.client.received_dummy_packets,
-            [(session_id_a, {'someParam': '123'})])
+            [('0', {'someParam': '123'})])
 
     @inlineCallbacks
     def test_authentication(self):
@@ -328,8 +320,6 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
 
     @inlineCallbacks
     def test_data_request_handling(self):
-        session_id = self.mk_session_id(0)
-
         body = (
             "<USSDRequest>"
             "<requestId>1291850641</requestId>"
@@ -343,7 +333,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
             "<EndofSession>0</EndofSession>"
             "</USSDRequest>"
         )
-        packet = utils.mk_packet(session_id, body)
+        packet = utils.mk_packet('0', body)
         self.client.authenticated = True
         self.server.send_data(packet)
 
@@ -361,7 +351,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
         }
         self.assertEqual(
             self.client.received_data_request_packets,
-            [(session_id, expected_params)])
+            [('0', expected_params)])
 
     def test_field_validation_for_valid_cases(self):
         self.client.validate_packet_fields(
