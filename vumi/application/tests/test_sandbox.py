@@ -217,7 +217,7 @@ class SandboxTestCase(SandboxTestCaseBase):
             msgs = lc.messages()
         self.assertEqual(status, None)
         self.assertEqual(msgs[0],
-                         "Sandbox 'sandbox1' killed for producting too much"
+                         "Sandbox 'sandbox1' killed for producing too much"
                          " data on stderr and stdout.")
         self.assertEqual(len(msgs), 2)  # 2nd message is the bad command log
         [kill_err] = self.flushLoggedErrors(ProcessTerminated)
