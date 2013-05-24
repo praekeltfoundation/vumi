@@ -218,11 +218,17 @@ class XmlOverTcpClient(Protocol):
     def deserialize_header(cls, header):
         session_id, length = struct.unpack(cls.HEADER_FORMAT, header)
 
+        # The headers appear to be padded with trailing nullbytes, so we need
+        # to remove these before doing any other parsing
         return (cls.remove_nullbytes(session_id.decode(cls.ENCODING)),
                 int(cls.remove_nullbytes(length.decode(cls.ENCODING))))
 
     @classmethod
     def deserialize_body(cls, body):
+        # The 'requestId' field often has nullbytes in it. We suspect this
+        # happens when the requestId length is shorter that 16 bytes, so they
+        # just pad it with trailing nullbytes. We need to remove the nullbytes
+        # before parsing the xml to prevent parse errors
         root = ET.fromstring(cls.remove_nullbytes(body))
 
         packet_type = root.tag
