@@ -142,33 +142,20 @@ class AirtelUSSDTransport(HttpRpcTransport):
 
         session_id = values['SessionID']
         from_addr = values['MSISDN']
-        # Airtel doesn't provide us with the full to_addr, the start *
-        # and ending # are omitted, add those again so we can use it
-        # for internal routing.
-        ussd_params = '*%s#' % (values['input'],)
 
         session = yield self.session_manager.load_session(session_id)
         if session:
             to_addr = session['to_addr']
-            last_ussd_params = session['last_ussd_params']
-            new_params = ussd_params[len(last_ussd_params):]
-            if new_params:
-                if last_ussd_params:
-                    content = new_params[1:].rstrip('#')
-                else:
-                    content = new_params
-            else:
-                content = ''
-
-            session['last_ussd_params'] = ussd_params.rstrip('#')
             yield self.session_manager.save_session(session_id, session)
             session_event = TransportUserMessage.SESSION_RESUME
+            content = values['input']
         else:
-            to_addr = ussd_params
+            # Airtel doesn't provide us with the full to_addr, the start *
+            # and ending # are omitted, add those again so we can use it
+            # for internal routing.
+            to_addr = '*%s#' % (values['input'],)
             yield self.session_manager.create_session(
-                session_id,
-                from_addr=from_addr, to_addr=to_addr,
-                last_ussd_params=ussd_params.rstrip('#'))
+                session_id, from_addr=from_addr, to_addr=to_addr)
             session_event = TransportUserMessage.SESSION_NEW
             content = ''
 
