@@ -75,6 +75,7 @@ class Worker(object):
         obj = {
             'id': self.worker_id,
             'name': self.name,
+            'system_id': self.system_id,
             'min_procs': self.min_procs,
             'hosts': hosts,
         }
@@ -91,16 +92,17 @@ class Worker(object):
             counts[ins.hostname] = counts[ins.hostname] + 1
         return counts
 
+    @inlineCallbacks
     def audit(self, storage):
         """ Verify whether enough workers checked in """
         count = len(self._instances)
         # if there was previously a min-procs-fail, but now enough
         # instances checked in, then clear the worker issue
         if (count >= self.min_procs) and (self.procs_count < self.min_procs):
-            storage.delete_worker_issue(self.worker_id)
+            yield storage.delete_worker_issue(self.worker_id)
         if count < self.min_procs:
             issue = WorkerIssue("min-procs-fail", time.time(), count)
-            storage.open_or_update_issue(self.worker_id, issue)
+            yield storage.open_or_update_issue(self.worker_id, issue)
         self.procs_count = count
 
     def reset(self):
@@ -170,7 +172,7 @@ class HeartBeatMonitor(BaseWorker):
         systems_config = self._static_config.monitored_systems
         self._systems, self._workers = self.parse_config(systems_config)
 
-        self._prepare_storage()
+        yield self._prepare_storage()
 
         # Start consuming heartbeats
         yield self.consume("heartbeat.inbound", self._consume_message,
@@ -235,26 +237,29 @@ class HeartBeatMonitor(BaseWorker):
 
         wkr.record(hostname, pid)
 
+    @inlineCallbacks
     def _prepare_storage(self):
         """
         Setup storage
         """
         # write timestamp
-        self._storage.write_timestamp()
+        yield self._storage.write_timestamp()
         # write system ids
         system_ids = [sys.system_id for sys in self._systems]
-        self._storage.write_system_ids(system_ids)
+        yield self._storage.write_system_ids(system_ids)
 
+    @inlineCallbacks
     def _sync_to_storage(self):
         """
         Write systems data to storage
         """
         # update timestamp
-        self._storage.write_timestamp()
+        yield self._storage.write_timestamp()
         # dump each system
         for sys in self._systems:
-            self._storage.write_system(sys)
+            yield self._storage.write_system(sys)
 
+    @inlineCallbacks
     def _periodic_task(self):
         """
         Iterate over worker instance sets and check to see whether any have not
@@ -262,9 +267,9 @@ class HeartBeatMonitor(BaseWorker):
         """
         # run diagnostic audits on all workers
         for wkr in self._workers.values():
-            wkr.audit(self._storage)
+            yield wkr.audit(self._storage)
         # write everything to redis
-        self._sync_to_storage()
+        yield self._sync_to_storage()
         self.reset_checkin_state()
 
     def _start_task(self):
