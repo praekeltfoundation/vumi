@@ -333,9 +333,7 @@ class XmlOverTcpClient(Protocol):
 
     @classmethod
     def serialize_header_field(cls, header, header_size):
-        header = str(header)
-        padding = '\0' * (header_size - len(header))
-        return (header + padding).encode(cls.ENCODING)
+        return str(header).ljust(header_size, '\0').encode(cls.ENCODING)
 
     @classmethod
     def serialize_header(cls, session_id, body):
