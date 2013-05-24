@@ -340,12 +340,18 @@ class XmlOverTcpClient(Protocol):
         raise NotImplementedError("Subclasses should implement.")
 
     @classmethod
+    def serialize_header_field(cls, header, header_size):
+        header = str(header)
+        padding = '\0' * (header_size - len(header))
+        return (header + padding).encode(cls.ENCODING)
+
+    @classmethod
     def serialize_header(cls, session_id, body):
         length = len(body) + cls.HEADER_SIZE
         return struct.pack(
             cls.HEADER_FORMAT,
-            session_id.encode(cls.ENCODING),
-            str(length).zfill(cls.LENGTH_HEADER_SIZE))
+            cls.serialize_header_field(session_id, cls.SESSION_ID_HEADER_SIZE),
+            cls.serialize_header_field(length, cls.LENGTH_HEADER_SIZE))
 
     @classmethod
     def serialize_body(cls, packet_type, params):
