@@ -198,13 +198,21 @@ class AirtelUSSDTransport(HttpRpcTransport):
             free_flow = 'FB'
         else:
             free_flow = 'FC'
+
+        headers = {
+            'Freeflow': [free_flow],
+            'charge': [('Y' if config.airtel_charge else 'N')],
+            'amount': [str(config.airtel_charge_amount)],
+        }
+
+        if self.noisy:
+            log.debug('Response headers: %r' % (headers,))
+
         self.finish_request(
             message['in_reply_to'],
-            message['content'].encode(self.ENCODING), code=http.OK, headers={
-                'Freeflow': [free_flow],
-                'charge': [('Y' if config.airtel_charge else 'N')],
-                'amount': [str(config.airtel_charge_amount)],
-            })
+            message['content'].encode(self.ENCODING),
+            code=http.OK,
+            headers=headers)
         return self.publish_ack(
             user_message_id=message['message_id'],
             sent_message_id=message['message_id'])
