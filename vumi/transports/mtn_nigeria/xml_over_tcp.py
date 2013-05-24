@@ -210,7 +210,7 @@ class XmlOverTcpClient(Protocol):
 
     def pop_buffer(self, n):
         if n > len(self._buffer):
-            return []
+            return None
 
         buffer = self._buffer
         self._buffer = buffer[n:]
@@ -218,7 +218,7 @@ class XmlOverTcpClient(Protocol):
 
     def peak_buffer(self, n):
         if n > len(self._buffer):
-            return []
+            return None
 
         return self._buffer[:n]
 
