@@ -15,6 +15,7 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
     transport_class = AirtelUSSDTransport
     airtel_username = None
     airtel_password = None
+    session_id = 'session-id'
 
     @inlineCallbacks
     def setUp(self):
@@ -52,7 +53,7 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
         defaults = {
             'MSC': 'msc',
             'input': content,
-            'SessionID': 'session-id',
+            'SessionID': self.session_id,
         }
         defaults.update(kwargs)
         return self.mk_request(**defaults)
@@ -60,7 +61,8 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
     def mk_cleanup_request(self, **kwargs):
         defaults = {
             'clean': 'clean-session',
-            'status': 522
+            'status': 522,
+            'SessionID': self.session_id,
         }
         defaults.update(kwargs)
         return self.mk_request(**defaults)
@@ -92,7 +94,7 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
     @inlineCallbacks
     def test_inbound_resume_and_reply_with_end(self):
         # first pre-populate the redis datastore to simulate prior BEG message
-        yield self.session_manager.create_session('27761234567',
+        yield self.session_manager.create_session(self.session_id,
                 to_addr='*167*7#', from_addr='27761234567',
                 last_ussd_params='*167*7*a*b',
                 session_event=TransportUserMessage.SESSION_RESUME)
@@ -176,7 +178,7 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_submitting_asterisks_as_values(self):
-        yield self.session_manager.create_session('27761234567',
+        yield self.session_manager.create_session(self.session_id,
                 to_addr='*167*7#', from_addr='27761234567',
                 last_ussd_params='*167*7*a*b')
         # we're submitting a bunch of *s
@@ -189,12 +191,12 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
             continue_session=True)
         self.dispatch(reply)
         yield deferred
-        session = yield self.session_manager.load_session('27761234567')
+        session = yield self.session_manager.load_session(self.session_id)
         self.assertEqual(session['last_ussd_params'], '*167*7*a*b*****')
 
     @inlineCallbacks
     def test_submitting_asterisks_as_values_after_asterisks(self):
-        yield self.session_manager.create_session('27761234567',
+        yield self.session_manager.create_session(self.session_id,
                 to_addr='*167*7#', from_addr='27761234567',
                 last_ussd_params='*167*7*a*b**')
         # we're submitting a bunch of *s
@@ -207,7 +209,7 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
             continue_session=True)
         self.dispatch(reply)
         yield deferred
-        session = yield self.session_manager.load_session('27761234567')
+        session = yield self.session_manager.load_session(self.session_id)
         self.assertEqual(session['last_ussd_params'], '*167*7*a*b*****')
 
     @inlineCallbacks
@@ -255,7 +257,7 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_cleanup_session(self):
-        yield self.session_manager.create_session('27761234567',
+        yield self.session_manager.create_session(self.session_id,
             to_addr='*167*7#', from_addr='27761234567')
         response = yield self.mk_cleanup_request(MSISDN='27761234567')
         self.assertEqual(response.code, http.OK)
@@ -277,7 +279,7 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
         response = yield self.mk_request(clean='clean-session')
         self.assertEqual(response.code, http.BAD_REQUEST)
         self.assertEqual(json.loads(response.delivered_body), {
-            'missing_parameter': ['status'],
+            'missing_parameter': ['status', 'SessionID'],
             })
 
 

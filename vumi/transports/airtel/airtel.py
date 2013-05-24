@@ -40,7 +40,7 @@ class AirtelUSSDTransport(HttpRpcTransport):
     ENCODING = 'utf-8'
     CONFIG_CLASS = AirtelUSSDTransportConfig
     EXPECTED_AUTH_FIELDS = set(['userid', 'password'])
-    EXPECTED_CLEANUP_FIELDS = set(['MSISDN', 'clean', 'status'])
+    EXPECTED_CLEANUP_FIELDS = set(['SessionID', 'MSISDN', 'clean', 'status'])
     EXPECTED_USSD_FIELDS = set(['SessionID', 'MSISDN', 'MSC', 'input'])
 
     @inlineCallbacks
@@ -98,7 +98,7 @@ class AirtelUSSDTransport(HttpRpcTransport):
             self.handle_bad_request(message_id, request, errors)
             return
 
-        session_id = values['MSISDN']
+        session_id = values['SessionID']
         session = yield self.session_manager.load_session(session_id)
         if not session:
             log.warning('Received cleanup for unknown session: %s' % (
@@ -140,7 +140,7 @@ class AirtelUSSDTransport(HttpRpcTransport):
             self.handle_bad_request(message_id, request, errors)
             return
 
-        session_id = values['MSISDN']
+        session_id = values['SessionID']
         from_addr = values['MSISDN']
         # Airtel doesn't provide us with the full to_addr, the start *
         # and ending # are omitted, add those again so we can use it
