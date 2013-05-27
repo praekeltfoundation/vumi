@@ -109,7 +109,6 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
 
     @inlineCallbacks
     def setUp(self):
-        self.timeout = 1
         super(TestMtnNigeriaUssdTransportTestCase, self).setUp()
 
         deferred_server = self.start_server()
