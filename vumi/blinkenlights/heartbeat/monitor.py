@@ -64,7 +64,7 @@ class Worker(object):
         self.procs_count = 0
 
     def to_dict(self):
-        """ Serializes information into basic dicts """
+        """Serializes information into basic dicts"""
         counts = self._compute_host_info(self._instances)
         hosts = []
         for host, count in counts.iteritems():
@@ -82,7 +82,7 @@ class Worker(object):
         return obj
 
     def _compute_host_info(self, instances):
-        """ Compute the number of worker instances running on each host. """
+        """Compute the number of worker instances running on each host."""
         counts = {}
         # initialize per-host counters
         for ins in instances:
@@ -94,7 +94,7 @@ class Worker(object):
 
     @inlineCallbacks
     def audit(self, storage):
-        """ Verify whether enough workers checked in """
+        """Verify whether enough workers checked in"""
         count = len(self._instances)
         # if there was previously a min-procs-fail, but now enough
         # instances checked in, then clear the worker issue
@@ -106,11 +106,11 @@ class Worker(object):
         self.procs_count = count
 
     def reset(self):
-        """ Clear the set of instances which checked-in in the last interval"""
+        """Clear the set of instances which checked-in in the last interval"""
         self._instances = set()
 
     def record(self, hostname, pid):
-        """ Record that process (hostname,pid) checked in """
+        """Record that process (hostname,pid) checked in."""
         self._instances.add(WorkerInstance(hostname, pid))
 
 
@@ -122,7 +122,7 @@ class System(object):
         self.workers = workers
 
     def to_dict(self):
-        """ Serialize information to basic dicts """
+        """Serialize information to basic dicts"""
         obj = {
             'name': self.name,
             'id': self.system_id,
@@ -132,7 +132,7 @@ class System(object):
         return obj
 
     def dumps(self):
-        """ Dump to a JSON string """
+        """Dump to a JSON string"""
         return json.dumps(self.to_dict())
 
     def get(self, worker_id):
@@ -270,7 +270,7 @@ class HeartBeatMonitor(BaseWorker):
         self.reset_checkin_state()
 
     def _start_task(self):
-        """ Create a timer task to check for missing worker """
+        """Create a timer task to check for missing worker"""
         self._task = LoopingCall(self._periodic_task)
         self._task_done = self._task.start(self.deadline, now=False)
         errfn = lambda failure: log.err(failure,
@@ -279,7 +279,7 @@ class HeartBeatMonitor(BaseWorker):
         self.reset_checkin_state()
 
     def reset_checkin_state(self):
-        """ reset check-in states for next interval """
+        """reset check-in states for next interval"""
         for wkr in self._workers.values():
             wkr.reset()
 
