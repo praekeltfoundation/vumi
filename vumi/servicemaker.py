@@ -182,27 +182,23 @@ class VumiWorkerServiceMaker(object):
     # what command line options does this service expose
     options = StartWorkerOptions
 
-    def configure_sentry(self, worker, options):
-        """ Add a Sentry log observer """
-        sentry_dsn = options.vumi_options.pop('sentry', None)
-        if sentry_dsn is None:
-            return
-
-        class_name = options.worker_class.rpartition('.')[2].lower()
-        worker_name = options.worker_config.get('worker_name', class_name)
-        system_id = options.vumi_options.get('system-id', 'global')
-
-        worker_id = generate_worker_id(system_id, worker_name)
-        sentry_service = SentryLoggerService(sentry_dsn,
-                                             worker_name,
-                                             worker_id)
-        worker.addService(sentry_service)
-
     def makeService(self, options):
+        sentry_dsn = options.vumi_options.pop('sentry', None)
+        class_name = options.worker_class.rpartition('.')[2].lower()
+        logger_name = options.worker_config.get('worker_name', class_name)
+        system_id = options.vumi_options.get('system-id', 'global')
+        worker_id = generate_worker_id(system_id, logger_name)
+
         worker_creator = WorkerCreator(options.vumi_options)
         worker = worker_creator.create_worker(options.worker_class,
                                               options.worker_config)
-        self.configure_sentry(worker, options)
+
+        if sentry_dsn is not None:
+            sentry_service = SentryLoggerService(sentry_dsn,
+                                                 logger_name,
+                                                 worker_id)
+            worker.addService(sentry_service)
+
         return worker
 
 
