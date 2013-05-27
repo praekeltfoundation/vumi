@@ -44,10 +44,10 @@ class MtnNigeriaUssdTransportConfig(Transport.CONFIG_CLASS):
         default='Session Ended', static=True)
     redis_manager = ConfigDict(
         "Parameters to connect to Redis with",
-        default={}, required=False, static=True)
+        default={}, static=True)
     session_timeout_period = ConfigInt(
         "Max length (in seconds) of a USSD session",
-        default=600, required=False, static=True)
+        default=600, static=True)
 
 
 class MtnNigeriaUssdTransport(Transport):
