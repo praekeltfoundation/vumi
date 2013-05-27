@@ -1,5 +1,6 @@
 import uuid
 import struct
+from random import randint
 from xml.etree import ElementTree as ET
 
 try:
@@ -62,6 +63,8 @@ class XmlOverTcpClient(Protocol):
     LENGTH_HEADER_SIZE = 16
     HEADER_SIZE = SESSION_ID_HEADER_SIZE + LENGTH_HEADER_SIZE
     HEADER_FORMAT = '!%ss%ss' % (SESSION_ID_HEADER_SIZE, LENGTH_HEADER_SIZE)
+
+    REQUEST_ID_LENGTH = 10
 
     PACKET_RECEIVED_HANDLERS = {
         'USSDRequest': 'handle_data_request',
@@ -378,11 +381,11 @@ class XmlOverTcpClient(Protocol):
         return uuid.uuid4().hex[:cls.SESSION_ID_HEADER_SIZE]
 
     @staticmethod
-    def gen_request_id():
-        """
-        Generates request id. Used for packets needing a dummy request id.
-        """
-        return uuid.uuid4().hex
+    def gen_request_id(cls):
+        # XXX: The protocol requeres request ids to be number only ids. With a
+        # request id length of 10 digits, generating ids using randint could
+        # well cause collisions to occur, although this should be unlikely.
+        return randint(0, (10 ** cls.REQUEST_ID_LENGTH) - 1)
 
     def login(self):
         params = [
