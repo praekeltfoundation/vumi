@@ -109,7 +109,7 @@ class MtnNigeriaUssdTransport(Transport):
     def handle_raw_inbound_message(self, session_id, params):
         # ensure the params are in the encoding we use internally
         params['session_id'] = session_id
-        params = dict((k, str(v).decode(self.ENCODING))
+        params = dict((k, v.decode(self.ENCODING))
                       for k, v in params.iteritems())
 
         session_event = self.determine_session_event(
