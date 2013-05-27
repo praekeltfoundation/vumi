@@ -311,8 +311,6 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
 
     @inlineCallbacks
     def test_outbound_response_failure(self):
-        yield self.mk_session('0', '*123#')
-
         # stub the client to fake a response failure
         def stubbed_send_data_response(*a, **kw):
             raise XmlOverTcpError("Something bad happened")
@@ -331,8 +329,6 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
 
     @inlineCallbacks
     def test_outbound_metadata_fields_missing(self):
-        yield self.mk_session('0', '*123#')
-
         reply = self.mk_reply(self.mk_msg(), "It's a trap!").copy()
         reply_metadata = reply['transport_metadata']['mtn_nigeria_ussd']
         del reply_metadata['clientId']
