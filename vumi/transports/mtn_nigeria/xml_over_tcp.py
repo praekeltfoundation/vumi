@@ -375,14 +375,14 @@ class XmlOverTcpClient(Protocol):
         """
         Generates session id. Used for packets needing a dummy session id.
         """
-        # XXX: Slicing the generated uuid is probably a bad idea, and will
+        # NOTE: Slicing the generated uuid is probably a bad idea, and will
         # affect collision resistence, but I can't think of a simpler way to
         # generate a unique 16 char alphanumeric.
         return uuid.uuid4().hex[:cls.SESSION_ID_HEADER_SIZE]
 
     @staticmethod
     def gen_request_id(cls):
-        # XXX: The protocol requeres request ids to be number only ids. With a
+        # NOTE: The protocol requires request ids to be number only ids. With a
         # request id length of 10 digits, generating ids using randint could
         # well cause collisions to occur, although this should be unlikely.
         return randint(0, (10 ** cls.REQUEST_ID_LENGTH) - 1)
