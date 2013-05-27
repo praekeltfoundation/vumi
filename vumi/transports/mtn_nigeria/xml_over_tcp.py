@@ -380,7 +380,7 @@ class XmlOverTcpClient(Protocol):
         # generate a unique 16 char alphanumeric.
         return uuid.uuid4().hex[:cls.SESSION_ID_HEADER_SIZE]
 
-    @staticmethod
+    @classmethod
     def gen_request_id(cls):
         # NOTE: The protocol requires request ids to be number only ids. With a
         # request id length of 10 digits, generating ids using randint could
