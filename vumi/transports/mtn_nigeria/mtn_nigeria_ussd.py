@@ -86,13 +86,12 @@ class MtnNigeriaUssdTransport(Transport):
             config.server_hostname, config.server_port, self.factory)
         log.msg('Connecting')
 
-    @inlineCallbacks
     def teardown_transport(self):
         if self.client_connector is not None:
             self.factory.stopTrying()
             self.client_connector.disconnect()
 
-        yield self.session_manager.stop()
+        return self.session_manager.stop()
 
     @staticmethod
     def pop_fields(params, *fields):
