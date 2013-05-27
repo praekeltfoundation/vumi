@@ -2,7 +2,6 @@
 
 """Tests for vumi.blinkenlights.heartbeat.monitor"""
 
-import os
 import time
 import json
 
@@ -14,6 +13,74 @@ from vumi.blinkenlights.heartbeat import publisher
 from vumi.blinkenlights.heartbeat import monitor
 from vumi.blinkenlights.heartbeat.storage import issue_key
 from vumi.utils import generate_worker_id
+
+
+def expected_wkr_dict():
+    wkr = {
+        'id': 'system-1:foo',
+        'name': 'foo',
+        'system_id': 'system-1',
+        'min_procs': 1,
+        'hosts': [{'host': 'host-1', 'proc_count': 1}],
+    }
+    return wkr
+
+
+def expected_sys_dict():
+    sys = {
+        'name': 'system-1',
+        'id': 'system-1',
+        'timestamp': int(435),
+        'workers': [expected_wkr_dict()],
+    }
+    return sys
+
+
+class TestWorkerInstance(TestCase):
+
+    def test_equiv(self):
+        self.assertEqual(monitor.WorkerInstance('foo', 34),
+                         monitor.WorkerInstance('foo', 34))
+        self.failIfEqual(monitor.WorkerInstance('foo', 4),
+                         monitor.WorkerInstance('foo', 34))
+        self.failIfEqual(monitor.WorkerInstance('fo', 34),
+                         monitor.WorkerInstance('foo', 34))
+
+
+class TestWorker(TestCase):
+
+    def test_to_dict(self):
+        wkr = monitor.Worker('system-1', 'foo', 1)
+        wkr.reset()
+        wkr.record('host-1', 34)
+
+        obj = wkr.to_dict()
+        self.assertEqual(cmp(obj, expected_wkr_dict()), 0,
+                         "Assertion equal(obj,expected) failed. "
+                         "obj=%s expected=%s" % (obj, expected_wkr_dict()))
+
+    def test_compute_host_info(self):
+        wkr = monitor.Worker('system-1', 'foo', 1)
+        wkr.reset()
+        wkr.record('host-1', 34)
+        wkr.record('host-1', 546)
+
+        counts = wkr._compute_host_info(wkr._instances)
+        self.assertEqual(counts['host-1'], 2)
+
+
+class TestSystem(TestCase):
+
+    def test_to_dict(self):
+        wkr = monitor.Worker('system-1', 'foo', 1)
+        sys = monitor.System('system-1', 'system-1', [wkr])
+        wkr.reset()
+        wkr.record('host-1', 34)
+        obj = sys.to_dict()
+        obj['timestamp'] = int(435)
+        self.assertEqual(cmp(obj, expected_sys_dict()), 0,
+                         "Assertion equal(obj,expected) failed. "
+                         "obj=%s expected=%s" % (obj, expected_sys_dict()))
 
 
 class TestHeartBeatMonitor(TestCase):
@@ -181,4 +248,6 @@ class TestHeartBeatMonitor(TestCase):
         # verify that the system data was persisted correctly
         system = json.loads((yield fkredis.get('system:system-1')))
         system['timestamp'] = 2
-        self.assertEqual(cmp(system, expected), 0)
+        self.assertEqual(cmp(system, expected), 0,
+                         "Assertion equal(system, expected) failed. "
+                         "obj=%s expected=%s" % (system, expected))
