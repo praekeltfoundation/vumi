@@ -618,7 +618,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
         self.client.clock.advance(0.1)
         self.assertTrue(self.client.disconnected)
         self.assert_in_log(
-            'err',
+            'msg',
             "No enquire link response received after 20 seconds, "
             "disconnecting")
 

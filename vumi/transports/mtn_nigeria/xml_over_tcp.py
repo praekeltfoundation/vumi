@@ -123,7 +123,7 @@ class XmlOverTcpClient(Protocol):
         self.login()
 
     def connectionLost(self, reason):
-        log.err("Connection lost")
+        log.msg("Connection lost")
         self.stop_periodic_enquire_link()
         self.cancel_scheduled_timeout()
         self.reset_buffer()
@@ -133,7 +133,7 @@ class XmlOverTcpClient(Protocol):
         self._current_header = None
 
     def timeout(self):
-        log.err("No enquire link response received after %s seconds, "
+        log.msg("No enquire link response received after %s seconds, "
                 "disconnecting" % self.timeout_period)
         self.disconnect()
 
@@ -156,7 +156,7 @@ class XmlOverTcpClient(Protocol):
 
     def start_periodic_enquire_link(self):
         if not self.authenticated:
-            log.err("Heartbeat could not be started, client not authenticated")
+            log.msg("Heartbeat could not be started, client not authenticated")
             return
 
         self.reset_scheduled_timeout()
