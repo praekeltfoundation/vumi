@@ -64,7 +64,6 @@ class XmlOverTcpClientServerMixin(utils.MockClientServerMixin):
 
 
 class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
-    @inlineCallbacks
     def setUp(self):
         errors = dict(CodedXmlOverTcpError.ERRORS)
         errors['000'] = 'Dummy error occured'
@@ -75,7 +74,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
         self.patch(log, 'err', lambda *a: self.append_to_log('err', *a))
         self.patch(log, 'debug', lambda *a: self.append_to_log('debug', *a))
 
-        yield self.start_protocols()
+        return self.start_protocols()
 
     def tearDown(self):
         return self.stop_protocols()
