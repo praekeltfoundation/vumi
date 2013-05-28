@@ -82,6 +82,8 @@ class ApplicationWorker(BaseWorker):
     SEND_TO_TAGS = None
     ALLOWED_ENDPOINTS = frozenset(['default'])
 
+    WORKER_TYPE = 'application'
+
     def _check_for_deprecated_method(self, method_name):
         """Check whether a subclass overrides a deprecated method."""
         current_method = getattr(type(self), method_name)

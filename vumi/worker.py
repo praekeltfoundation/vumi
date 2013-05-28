@@ -45,6 +45,8 @@ class BaseWorker(Worker):
 
     CONFIG_CLASS = BaseConfig
 
+    WORKER_TYPE = 'generic'
+
     def __init__(self, options, config=None):
         super(BaseWorker, self).__init__(options, config=config)
         self.connectors = {}
@@ -108,6 +110,7 @@ class BaseWorker(Worker):
             'hostname': socket.gethostname(),
             'timestamp': time.time(),
             'pid': os.getpid(),
+            'type': self.WORKER_TYPE,
         }
         attrs.update(self.custom_heartbeat_attrs())
         return attrs
