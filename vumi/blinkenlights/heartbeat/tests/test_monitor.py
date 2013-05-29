@@ -89,6 +89,15 @@ class TestSystem(TestCase):
         obj['timestamp'] = 435
         self.assertEqual(obj, expected_sys_dict())
 
+    def test_dumps(self):
+        wkr = monitor.Worker('system-1', 'foo', 1)
+        sys = monitor.System('system-1', 'system-1', [wkr])
+        wkr.record('host-1', 34)
+        obj_json = sys.dumps()
+        obj = json.loads(obj_json)
+        obj['timestamp'] = 435
+        self.assertEqual(obj, expected_sys_dict())
+
 
 class TestHeartBeatMonitor(TestCase):
 
