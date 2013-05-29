@@ -2,8 +2,9 @@
 
 import sys
 import warnings
-
+import logging
 import yaml
+
 from zope.interface import implements
 from twisted.python import usage
 from twisted.application.service import IServiceMaker
@@ -14,7 +15,6 @@ from vumi.utils import (load_class_by_string,
                         generate_worker_id)
 from vumi.errors import VumiError
 from vumi.sentry import SentryLoggerService
-from vumi.worker import BaseWorker
 
 
 def overlay_configs(*configs):
@@ -182,6 +182,21 @@ class VumiWorkerServiceMaker(object):
     # what command line options does this service expose
     options = StartWorkerOptions
 
+    PYTHON_LOGGING_FMT = ('%(asctime)s %(process)d %(levelname)s '
+                          '[%(name)s]: %(message)s')
+
+    def configure_raven_logging(self):
+        """
+        The sentry client uses the python logging module,
+        so we'll need to set that up.
+        """
+        for name in ('raven', 'sentry'):
+            logger = logging.getLogger(name)
+            hdlr = logging.StreamHandler(sys.stdout)
+            hdlr.setFormatter(logging.Formatter(self.PYTHON_LOGGING_FMT))
+            logger.addHandler(hdlr)
+            logger.setLevel(logging.INFO)
+
     def makeService(self, options):
         sentry_dsn = options.vumi_options.pop('sentry', None)
         class_name = options.worker_class.rpartition('.')[2].lower()
@@ -194,6 +209,7 @@ class VumiWorkerServiceMaker(object):
                                               options.worker_config)
 
         if sentry_dsn is not None:
+            self.configure_raven_logging()
             sentry_service = SentryLoggerService(sentry_dsn,
                                                  logger_name,
                                                  worker_id)
