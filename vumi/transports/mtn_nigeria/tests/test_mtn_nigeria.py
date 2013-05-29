@@ -124,12 +124,13 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
             'user_termination_response': 'Bye',
         }
         self.transport = yield self.get_transport(config)
+        deferred_login = self.fake_login(self.transport.factory)
         yield deferred_server
 
         self.session_manager = self.transport.session_manager
         yield self.session_manager.redis._purge_all()
 
-        yield self.fake_login()
+        yield deferred_login
         self.client = self.transport.factory.client
 
     @inlineCallbacks
@@ -138,13 +139,15 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
         yield self.stop_server()
         yield super(TestMtnNigeriaUssdTransportTestCase, self).tearDown()
 
-    def fake_login(self):
+    def fake_login(self, factory):
         d = Deferred()
 
-        def stubbed_login(self):
-            self.authenticated = True
-            d.callback(None)
-        self.patch(self.transport.factory.protocol, 'login', stubbed_login)
+        def connection_made_hook(protocol):
+            def stubbed_login():
+                protocol.authenticated = True
+                d.callback(None)
+            self.patch(protocol, 'login', stubbed_login)
+        self.patch(factory, 'connection_made_hook', connection_made_hook)
         return d
 
     @inlineCallbacks
