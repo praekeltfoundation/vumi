@@ -275,6 +275,18 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
             'missing_parameter': ['status', 'SessionID'],
             })
 
+    @inlineCallbacks
+    def test_cleanup_as_seen_in_production(self):
+        """what's a technical spec between friends?"""
+        query_string = ("msisdn=254XXXXXXXXX&clean=cleann&error=523"
+                        "&SessionID=13697502734175597&MSC=254XXXXXXXXX"
+                        "&=&=en&=9031510005344&=&=&=postpaid"
+                        "&=20130528171235405&=200220130528171113956582")
+        response = yield http_request_full(
+            '%s?%s' % (self.transport_url, query_string),
+            data='', method='GET')
+        print response.delivered_body
+
 
 class TestAirtelUSSDTransportTestCaseWithAuth(TestAirtelUSSDTransportTestCase):
 
