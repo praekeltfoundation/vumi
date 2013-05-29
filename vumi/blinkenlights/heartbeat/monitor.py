@@ -59,7 +59,7 @@ class Worker(object):
         self.name = worker_name
         self.min_procs = min_procs
         self.worker_id = generate_worker_id(system_id, worker_name)
-        self._instances = None
+        self._instances = set()
         self.procs_count = 0
 
     def to_dict(self):

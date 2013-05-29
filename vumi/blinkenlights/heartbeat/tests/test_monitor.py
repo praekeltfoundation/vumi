@@ -65,7 +65,6 @@ class TestWorker(TestCase):
 
     def test_to_dict(self):
         wkr = monitor.Worker('system-1', 'foo', 1)
-        wkr.reset()
         wkr.record('host-1', 34)
 
         obj = wkr.to_dict()
@@ -73,7 +72,6 @@ class TestWorker(TestCase):
 
     def test_compute_host_info(self):
         wkr = monitor.Worker('system-1', 'foo', 1)
-        wkr.reset()
         wkr.record('host-1', 34)
         wkr.record('host-1', 546)
 
@@ -86,7 +84,6 @@ class TestSystem(TestCase):
     def test_to_dict(self):
         wkr = monitor.Worker('system-1', 'foo', 1)
         sys = monitor.System('system-1', 'system-1', [wkr])
-        wkr.reset()
         wkr.record('host-1', 34)
         obj = sys.to_dict()
         obj['timestamp'] = 435
