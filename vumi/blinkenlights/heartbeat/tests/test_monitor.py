@@ -69,9 +69,7 @@ class TestWorker(TestCase):
         wkr.record('host-1', 34)
 
         obj = wkr.to_dict()
-        self.assertEqual(cmp(obj, expected_wkr_dict()), 0,
-                         "Assertion equal(obj,expected) failed. "
-                         "obj=%s expected=%s" % (obj, expected_wkr_dict()))
+        self.assertEqual(obj, expected_wkr_dict())
 
     def test_compute_host_info(self):
         wkr = monitor.Worker('system-1', 'foo', 1)
@@ -92,9 +90,7 @@ class TestSystem(TestCase):
         wkr.record('host-1', 34)
         obj = sys.to_dict()
         obj['timestamp'] = int(435)
-        self.assertEqual(cmp(obj, expected_sys_dict()), 0,
-                         "Assertion equal(obj,expected) failed. "
-                         "obj=%s expected=%s" % (obj, expected_sys_dict()))
+        self.assertEqual(obj, expected_sys_dict())
 
 
 class TestHeartBeatMonitor(TestCase):
@@ -262,6 +258,4 @@ class TestHeartBeatMonitor(TestCase):
         # verify that the system data was persisted correctly
         system = json.loads((yield fkredis.get('system:system-1')))
         system['timestamp'] = 2
-        self.assertEqual(cmp(system, expected), 0,
-                         "Assertion equal(system, expected) failed. "
-                         "obj=%s expected=%s" % (system, expected))
+        self.assertEqual(system, expected)
