@@ -44,44 +44,23 @@ def vumi_raven_client(dsn, log_context_sentinel=None):
     from raven.transport.base import TwistedHTTPTransport
     from raven.transport.registry import TransportRegistry
 
-    remaining_deferreds = set()
-    if log_context_sentinel is None:
-        log_context_sentinel = DEFAULT_LOG_CONTEXT_SENTINEL
-    log_context = {log_context_sentinel: True}
+    deferreds = set()
 
     class VumiRavenHTTPTransport(TwistedHTTPTransport):
 
         scheme = ['http', 'https']
 
-        def _get_page(self, data, headers):
-            d = quiet_get_page(self._url, method='POST', postdata=data,
-                               headers=headers)
-            self._track_deferred(d)
-            self._track_client_state(d)
-            return d
-
-        def _track_deferred(self, d):
-            remaining_deferreds.add(d)
+        def async_send(self, data, headers, success_cb, failure_cb):
+            d = quiet_get_page(self._url, method='POST',
+                               postdata=data, headers=headers)
+            deferreds.add(d)
             d.addBoth(self._untrack_deferred, d)
+            d.addCallback(lambda r: success_cb())
+            d.addErrback(lambda f: failure_cb(f.value))
 
         def _untrack_deferred(self, result, d):
-            remaining_deferreds.discard(d)
+            deferreds.discard(d)
             return result
-
-        def _track_client_state(self, d):
-            d.addCallbacks(self._set_client_success, self._set_client_fail)
-
-        def _set_client_success(self, result):
-            client.state.set_success()
-            return result
-
-        def _set_client_fail(self, result):
-            client.state.set_fail()
-            return result
-
-        def send(self, data, headers):
-            d = self._get_page(data, headers)
-            d.addErrback(lambda f: log.err(f, **log_context))
 
     class VumiRavenClient(raven.Client):
 
@@ -89,11 +68,10 @@ def vumi_raven_client(dsn, log_context_sentinel=None):
             VumiRavenHTTPTransport
         ])
 
-        def teardown(self):
-            return DeferredList(remaining_deferreds)
+        def wait(self):
+            return DeferredList(deferreds)
 
-    client = VumiRavenClient(dsn)
-    return client
+    return VumiRavenClient(dsn)
 
 
 class SentryLogObserver(object):
@@ -172,7 +150,7 @@ class SentryLoggerService(Service):
     def stopService(self):
         if self.running:
             self.logger.removeObserver(self.sentry_log_observer)
-            return self.client.teardown()
+            return self.client.wait()
         return Service.stopService(self)
 
     def registered(self):
