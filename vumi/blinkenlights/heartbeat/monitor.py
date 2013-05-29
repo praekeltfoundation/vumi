@@ -267,7 +267,6 @@ class HeartBeatMonitor(BaseWorker):
         errfn = lambda failure: log.err(failure,
                                         "Heartbeat verify: timer task died")
         self._task_done.addErrback(errfn)
-        self.reset_checkin_state()
 
     def reset_checkin_state(self):
         """reset check-in states for next interval"""
