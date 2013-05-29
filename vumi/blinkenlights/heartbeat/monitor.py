@@ -153,15 +153,16 @@ class HeartBeatMonitor(BaseWorker):
     @inlineCallbacks
     def startWorker(self):
         log.msg("Heartbeat monitor initializing")
+        config = self.get_static_config()
 
-        self.deadline = self._static_config.deadline
+        self.deadline = config.deadline
 
-        redis_config = self._static_config.redis_manager
+        redis_config = config.redis_manager
         self._redis = yield TxRedisManager.from_config(redis_config)
         self._storage = Storage(self._redis)
 
-        systems_config = self._static_config.monitored_systems
-        self._systems, self._workers = self.parse_config(systems_config)
+        self._systems, self._workers = self.parse_config(
+            config.monitored_systems)
 
         yield self._prepare_storage()
 
