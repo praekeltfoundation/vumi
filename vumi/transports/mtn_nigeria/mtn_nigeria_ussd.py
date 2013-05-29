@@ -5,7 +5,8 @@ from twisted.internet.protocol import ReconnectingClientFactory
 from vumi import log
 from vumi.transports.base import Transport
 from vumi.message import TransportUserMessage
-from vumi.config import ConfigText, ConfigInt
+from vumi.config import ConfigInt, ConfigText,  ConfigDict
+from vumi.components.session import SessionManager
 from vumi.transports.mtn_nigeria.xml_over_tcp import (
     XmlOverTcpError, CodedXmlOverTcpError, XmlOverTcpClient)
 
@@ -41,6 +42,12 @@ class MtnNigeriaUssdTransportConfig(Transport.CONFIG_CLASS):
     user_termination_response = ConfigText(
         "Response given back to the user if the user terminated the session.",
         default='Session Ended', static=True)
+    redis_manager = ConfigDict(
+        "Parameters to connect to Redis with",
+        default={}, static=True)
+    session_timeout_period = ConfigInt(
+        "Max length (in seconds) of a USSD session",
+        default=600, static=True)
 
 
 class MtnNigeriaUssdTransport(Transport):
@@ -58,8 +65,16 @@ class MtnNigeriaUssdTransport(Transport):
 
     REQUIRED_METADATA_FIELDS = set(['session_id', 'clientId'])
 
+    @inlineCallbacks
     def setup_transport(self):
         config = self.get_static_config()
+        self.user_termination_response = config.user_termination_response
+
+        r_prefix = "vumi.transports.mtn_nigeria:%s" % self.transport_name
+        self.session_manager = yield SessionManager.from_redis_config(
+            config.redis_manager, r_prefix,
+            config.session_timeout_period)
+
         self.factory = MtnNigeriaUssdClientFactory(
             vumi_transport=self,
             username=config.username,
@@ -70,15 +85,16 @@ class MtnNigeriaUssdTransport(Transport):
         self.client_connector = reactor.connectTCP(
             config.server_hostname, config.server_port, self.factory)
         log.msg('Connecting')
-        self.user_termination_response = config.user_termination_response
 
     def teardown_transport(self):
         if self.client_connector is not None:
             self.factory.stopTrying()
             self.client_connector.disconnect()
 
+        return self.session_manager.stop()
+
     @staticmethod
-    def pop_fields(params, fields):
+    def pop_fields(params, *fields):
         return (params.pop(k, None) for k in fields)
 
     @staticmethod
@@ -89,31 +105,50 @@ class MtnNigeriaUssdTransport(Transport):
             return TransportUserMessage.SESSION_RESUME
         return TransportUserMessage.SESSION_CLOSE
 
+    @inlineCallbacks
     def handle_raw_inbound_message(self, session_id, params):
         # ensure the params are in the encoding we use internally
         params['session_id'] = session_id
-        params = dict(
-            (k, str(v).decode(self.ENCODING)) for k, v in params.iteritems())
+        params = dict((k, v.decode(self.ENCODING))
+                      for k, v in params.iteritems())
 
-        # pop needed fields (the rest is left as metadata)
-        message_id, from_addr, to_addr, content = self.pop_fields(
-            params, ['requestId', 'msisdn', 'starCode', 'userdata'])
+        session_event = self.determine_session_event(
+            *self.pop_fields(params, 'msgtype', 'EndofSession'))
+
+        # For the first message of a session, the `user_data` field is the ussd
+        # code. For subsequent messages, 'user_data' is the user's content.  We
+        # need to keep track of the ussd code we get in in the first session
+        # message so we can link the correct `to_addr` to subsequent messages
+        if session_event == TransportUserMessage.SESSION_NEW:
+            # Set the content to none if this the start of the session.
+            # Prevents this inbound message being mistaken as a user message.
+            content = None
+
+            to_addr = params.pop('userdata')
+            session = yield self.session_manager.create_session(
+                session_id, ussd_code=to_addr)
+        else:
+            session = yield self.session_manager.load_session(session_id)
+            to_addr = session['ussd_code']
+            content = params.pop('userdata')
+
+        # pop the remaining needed fields (the rest is left as metadata)
+        message_id, from_addr = self.pop_fields(params, 'requestId', 'msisdn')
 
         log.msg('MtnNigeriaUssdTransport receiving inbound message from %s '
                 'to %s: %s' % (from_addr, to_addr, content))
 
-        session_event = self.determine_session_event(
-            *self.pop_fields(params, ['msgtype', 'EndofSession']))
         if session_event == TransportUserMessage.SESSION_CLOSE:
             self.factory.client.send_data_response(
                 session_id=session_id,
                 request_id=message_id,
-                star_code=to_addr,
+                star_code=params['starCode'],
                 client_id=params['clientId'],
                 msisdn=from_addr,
                 user_data=self.user_termination_response,
                 end_session=True)
-        return self.publish_message(
+
+        yield self.publish_message(
             message_id=message_id,
             content=content,
             to_addr=to_addr,
@@ -165,7 +200,7 @@ class MtnNigeriaUssdTransport(Transport):
             message_id=message['message_id'],
             session_id=metadata['session_id'],
             request_id=message['in_reply_to'],
-            star_code=message['from_addr'],
+            star_code=metadata['starCode'],
             client_id=metadata['clientId'],
             msisdn=message['to_addr'],
             user_data=message['content'].encode(self.ENCODING),

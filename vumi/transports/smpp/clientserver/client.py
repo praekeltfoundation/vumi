@@ -536,7 +536,7 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
                 self, connector, reason)
 
     def clientConnectionFailed(self, connector, reason):
-        log.msg('Connection failed. Reason:', reason)
+        log.err(reason, 'Connection failed')
         ReconnectingClientFactory.clientConnectionFailed(
                 self, connector, reason)
 

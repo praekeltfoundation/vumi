@@ -1,6 +1,6 @@
-import re
 import uuid
 import struct
+from random import randint
 from xml.etree import ElementTree as ET
 
 try:
@@ -64,16 +64,7 @@ class XmlOverTcpClient(Protocol):
     HEADER_SIZE = SESSION_ID_HEADER_SIZE + LENGTH_HEADER_SIZE
     HEADER_FORMAT = '!%ss%ss' % (SESSION_ID_HEADER_SIZE, LENGTH_HEADER_SIZE)
 
-    # Used to strip out whitebytes in the length header
-    LENGTH_STRIP_RE = re.compile(r'[^0-9]+$')
-
-    # Used to strip out the wierd bytes in the requestId field that make the
-    # xml parsing break
-    REQUEST_ID_SIZE = 16
-    REQUEST_ID_STRIP_RE = re.compile(
-        r'(<requestId>\s*.{%s})(.*)'
-        r'(\s*</requestId>)' % REQUEST_ID_SIZE)
-    REQUEST_ID_STRIP_REPL = r'\g<1>\g<3>'
+    REQUEST_ID_LENGTH = 10
 
     PACKET_RECEIVED_HANDLERS = {
         'USSDRequest': 'handle_data_request',
@@ -132,7 +123,7 @@ class XmlOverTcpClient(Protocol):
         self.login()
 
     def connectionLost(self, reason):
-        log.err("Connection lost")
+        log.msg("Connection lost")
         self.stop_periodic_enquire_link()
         self.cancel_scheduled_timeout()
         self.reset_buffer()
@@ -142,7 +133,7 @@ class XmlOverTcpClient(Protocol):
         self._current_header = None
 
     def timeout(self):
-        log.err("No enquire link response received after %s seconds, "
+        log.msg("No enquire link response received after %s seconds, "
                 "disconnecting" % self.timeout_period)
         self.disconnect()
 
@@ -165,7 +156,7 @@ class XmlOverTcpClient(Protocol):
 
     def start_periodic_enquire_link(self):
         if not self.authenticated:
-            log.err("Heartbeat could not be started, client not authenticated")
+            log.msg("Heartbeat could not be started, client not authenticated")
             return
 
         self.reset_scheduled_timeout()
@@ -223,21 +214,25 @@ class XmlOverTcpClient(Protocol):
         return self._buffer[:n]
 
     @classmethod
+    def remove_nullbytes(cls, str):
+        return str.replace('\0', '')
+
+    @classmethod
     def deserialize_header(cls, header):
         session_id, length = struct.unpack(cls.HEADER_FORMAT, header)
 
-        # The length field is 16 bytes, but integer types don't reach
-        # this length. Therefore, I'm assuming the length field is a 16
-        # byte ASCII string that can be converted to an integer type.
-        length = int(cls.LENGTH_STRIP_RE.sub('', length))
-
-        return session_id, length
+        # The headers appear to be padded with trailing nullbytes, so we need
+        # to remove these before doing any other parsing
+        return (cls.remove_nullbytes(session_id.decode(cls.ENCODING)),
+                int(cls.remove_nullbytes(length.decode(cls.ENCODING))))
 
     @classmethod
     def deserialize_body(cls, body):
-        # remove the wierd bytes in requestId making the xml parser break
-        body = cls.REQUEST_ID_STRIP_RE.sub(cls.REQUEST_ID_STRIP_REPL, body)
-        root = ET.fromstring(body)
+        # The 'requestId' field often has nullbytes in it. We suspect this
+        # happens when the requestId length is shorter that 16 bytes, so they
+        # just pad it with trailing nullbytes. We need to remove the nullbytes
+        # before parsing the xml to prevent parse errors
+        root = ET.fromstring(cls.remove_nullbytes(body))
 
         packet_type = root.tag
         params = dict((el.tag.strip(), el.text.strip()) for el in root)
@@ -340,12 +335,16 @@ class XmlOverTcpClient(Protocol):
         raise NotImplementedError("Subclasses should implement.")
 
     @classmethod
+    def serialize_header_field(cls, header, header_size):
+        return str(header).ljust(header_size, '\0').encode(cls.ENCODING)
+
+    @classmethod
     def serialize_header(cls, session_id, body):
         length = len(body) + cls.HEADER_SIZE
         return struct.pack(
             cls.HEADER_FORMAT,
-            session_id.encode(cls.ENCODING),
-            str(length).zfill(cls.LENGTH_HEADER_SIZE))
+            cls.serialize_header_field(session_id, cls.SESSION_ID_HEADER_SIZE),
+            cls.serialize_header_field(length, cls.LENGTH_HEADER_SIZE))
 
     @classmethod
     def serialize_body(cls, packet_type, params):
@@ -376,17 +375,17 @@ class XmlOverTcpClient(Protocol):
         """
         Generates session id. Used for packets needing a dummy session id.
         """
-        # XXX: Slicing the generated uuid is probably a bad idea, and will
+        # NOTE: Slicing the generated uuid is probably a bad idea, and will
         # affect collision resistence, but I can't think of a simpler way to
         # generate a unique 16 char alphanumeric.
         return uuid.uuid4().hex[:cls.SESSION_ID_HEADER_SIZE]
 
-    @staticmethod
-    def gen_request_id():
-        """
-        Generates request id. Used for packets needing a dummy request id.
-        """
-        return uuid.uuid4().hex
+    @classmethod
+    def gen_request_id(cls):
+        # NOTE: The protocol requires request ids to be number only ids. With a
+        # request id length of 10 digits, generating ids using randint could
+        # well cause collisions to occur, although this should be unlikely.
+        return randint(0, (10 ** cls.REQUEST_ID_LENGTH) - 1)
 
     def login(self):
         params = [
