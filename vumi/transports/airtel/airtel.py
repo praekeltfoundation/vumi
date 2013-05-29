@@ -40,7 +40,7 @@ class AirtelUSSDTransport(HttpRpcTransport):
     ENCODING = 'utf-8'
     CONFIG_CLASS = AirtelUSSDTransportConfig
     EXPECTED_AUTH_FIELDS = set(['userid', 'password'])
-    EXPECTED_CLEANUP_FIELDS = set(['SessionID', 'MSISDN', 'clean', 'status'])
+    EXPECTED_CLEANUP_FIELDS = set(['SessionID', 'msisdn', 'clean', 'error'])
     EXPECTED_USSD_FIELDS = set(['SessionID', 'MSISDN', 'MSC', 'input'])
 
     @inlineCallbacks
@@ -106,10 +106,9 @@ class AirtelUSSDTransport(HttpRpcTransport):
             self.finish_request(message_id, 'Unknown Session', code=http.OK)
             return
 
-        from_addr = values['MSISDN']
+        from_addr = values['msisdn']
         to_addr = session['to_addr']
         session_event = TransportUserMessage.SESSION_CLOSE
-
         yield self.session_manager.clear_session(session_id)
         yield self.publish_message(
             message_id=message_id,
@@ -122,7 +121,7 @@ class AirtelUSSDTransport(HttpRpcTransport):
             transport_metadata={
                 'airtel': {
                     'clean': values['clean'],
-                    'status': values['status'],
+                    'error': values['error'],
                 },
             })
         self.finish_request(message_id, '', code=http.OK)

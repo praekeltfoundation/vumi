@@ -25,6 +25,7 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
             'web_path': '/api/v1/airtel/ussd/',
             'airtel_username': self.airtel_username,
             'airtel_password': self.airtel_password,
+            'validation_mode': 'permissive',
         }
         self.transport = yield self.get_transport(self.config)
         self.session_manager = self.transport.session_manager
@@ -278,6 +279,8 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
     @inlineCallbacks
     def test_cleanup_as_seen_in_production(self):
         """what's a technical spec between friends?"""
+        yield self.session_manager.create_session('13697502734175597',
+            to_addr='*167*7#', from_addr='254XXXXXXXXX')
         query_string = ("msisdn=254XXXXXXXXX&clean=cleann&error=523"
                         "&SessionID=13697502734175597&MSC=254XXXXXXXXX"
                         "&=&=en&=9031510005344&=&=&=postpaid"
@@ -285,7 +288,19 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
         response = yield http_request_full(
             '%s?%s' % (self.transport_url, query_string),
             data='', method='GET')
-        print response.delivered_body
+        self.assertEqual(response.code, http.OK)
+        self.assertEqual(response.delivered_body, '')
+        [msg] = yield self.wait_for_dispatched_messages(1)
+        self.assertEqual(msg['session_event'],
+                         TransportUserMessage.SESSION_CLOSE)
+        self.assertEqual(msg['to_addr'], '*167*7#')
+        self.assertEqual(msg['from_addr'], '254XXXXXXXXX')
+        self.assertEqual(msg['transport_metadata'], {
+            'airtel': {
+                'clean': 'cleann',
+                'error': '523',
+            }
+        })
 
 
 class TestAirtelUSSDTransportTestCaseWithAuth(TestAirtelUSSDTransportTestCase):
