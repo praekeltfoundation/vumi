@@ -53,7 +53,7 @@ class DummySentryClient(object):
     def captureException(self, *args, **kwargs):
         self.exceptions.append((args, kwargs))
 
-    def teardown(self):
+    def wait(self):
         self.teardowns += 1
 
 
@@ -181,6 +181,7 @@ class TestRavenUtilityFunctions(TestCase):
         with mock_page:
             client = vumi_raven_client(dsn)
             client.captureMessage("my message")
+        print mock_page.called
         [sentry_call] = mock_page.history
         sentry_data = self.parse_call(sentry_call)
         self.assertEqual(sentry_data['message'], "my message")
