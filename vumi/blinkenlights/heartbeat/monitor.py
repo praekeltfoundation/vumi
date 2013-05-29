@@ -33,10 +33,9 @@ def assert_field(cfg, key):
 
 
 class WorkerInstance(object):
-    """
-    A hostname, port pair which uniquely identifies a worker instance.
-    Made this into an object since we need to be able to perform identity
-    operations on the pair. hash(), eq() for example.
+    """Represents a worker instance.
+
+    A hostname, process id pair uniquely identify a worker instance.
     """
 
     def __init__(self, hostname, pid):
