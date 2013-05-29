@@ -89,7 +89,7 @@ class TestSystem(TestCase):
         wkr.reset()
         wkr.record('host-1', 34)
         obj = sys.to_dict()
-        obj['timestamp'] = int(435)
+        obj['timestamp'] = 435
         self.assertEqual(obj, expected_sys_dict())
 
 
