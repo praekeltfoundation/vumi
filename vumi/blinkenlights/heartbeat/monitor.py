@@ -148,12 +148,6 @@ class HeartBeatMonitor(BaseWorker):
             "Tree of systems and workers.",
             required=True, static=True)
 
-    # Instance vars:
-    #
-    # _storage: Thin wrapper around TxRedisManager. Used to persist
-    #           worker data to redis
-    #
-    # _systems: Describes which workers belong to which system
     _task = None
 
     @inlineCallbacks
