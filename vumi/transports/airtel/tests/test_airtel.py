@@ -62,7 +62,7 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
     def mk_cleanup_request(self, **kwargs):
         defaults = {
             'clean': 'clean-session',
-            'status': 522,
+            'error': 522,
             'SessionID': self.session_id,
         }
         defaults.update(kwargs)
@@ -245,7 +245,7 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_cleanup_unknown_session(self):
-        response = yield self.mk_cleanup_request()
+        response = yield self.mk_cleanup_request(msisdn='foo')
         self.assertEqual(response.code, http.OK)
         self.assertEqual(response.delivered_body, 'Unknown Session')
 
@@ -253,7 +253,7 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
     def test_cleanup_session(self):
         yield self.session_manager.create_session(self.session_id,
             to_addr='*167*7#', from_addr='27761234567')
-        response = yield self.mk_cleanup_request(MSISDN='27761234567')
+        response = yield self.mk_cleanup_request(msisdn='27761234567')
         self.assertEqual(response.code, http.OK)
         self.assertEqual(response.delivered_body, '')
         [msg] = yield self.wait_for_dispatched_messages(1)
@@ -263,7 +263,7 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
         self.assertEqual(msg['from_addr'], '27761234567')
         self.assertEqual(msg['transport_metadata'], {
             'airtel': {
-                'status': '522',
+                'error': '522',
                 'clean': 'clean-session',
             }
             })
@@ -272,9 +272,9 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
     def test_cleanup_session_missing_params(self):
         response = yield self.mk_request(clean='clean-session')
         self.assertEqual(response.code, http.BAD_REQUEST)
-        self.assertEqual(json.loads(response.delivered_body), {
-            'missing_parameter': ['status', 'SessionID'],
-            })
+        json_response = json.loads(response.delivered_body)
+        self.assertEqual(set(json_response['missing_parameter']),
+                         set(['msisdn', 'SessionID', 'error']))
 
     @inlineCallbacks
     def test_cleanup_as_seen_in_production(self):
@@ -315,3 +315,30 @@ class TestAirtelUSSDTransportTestCaseWithAuth(TestAirtelUSSDTransportTestCase):
         self.assertEqual(response.code, http.FORBIDDEN)
         self.assertEqual(response.delivered_body, 'Forbidden')
 
+    @inlineCallbacks
+    def test_cleanup_as_seen_in_production(self):
+        """what's a technical spec between friends?"""
+        yield self.session_manager.create_session('13697502734175597',
+            to_addr='*167*7#', from_addr='254XXXXXXXXX')
+        query_string = ("msisdn=254XXXXXXXXX&clean=cleann&error=523"
+                        "&SessionID=13697502734175597&MSC=254XXXXXXXXX"
+                        "&=&=en&=9031510005344&=&=&=postpaid"
+                        "&=20130528171235405&=200220130528171113956582"
+                        "&userid=%s&password=%s" % (self.airtel_username,
+                                                    self.airtel_password))
+        response = yield http_request_full(
+            '%s?%s' % (self.transport_url, query_string),
+            data='', method='GET')
+        self.assertEqual(response.code, http.OK)
+        self.assertEqual(response.delivered_body, '')
+        [msg] = yield self.wait_for_dispatched_messages(1)
+        self.assertEqual(msg['session_event'],
+                         TransportUserMessage.SESSION_CLOSE)
+        self.assertEqual(msg['to_addr'], '*167*7#')
+        self.assertEqual(msg['from_addr'], '254XXXXXXXXX')
+        self.assertEqual(msg['transport_metadata'], {
+            'airtel': {
+                'clean': 'cleann',
+                'error': '523',
+            }
+        })
