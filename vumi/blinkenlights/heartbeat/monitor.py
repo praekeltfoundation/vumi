@@ -134,9 +134,6 @@ class System(object):
         """Dump to a JSON string"""
         return json.dumps(self.to_dict())
 
-    def get(self, worker_id):
-        return self._workers.get(worker_id, None)
-
 
 class HeartBeatMonitor(BaseWorker):
 
