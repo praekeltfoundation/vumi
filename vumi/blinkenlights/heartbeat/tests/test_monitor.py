@@ -138,10 +138,7 @@ class TestHeartBeatMonitor(TestCase):
 
     @inlineCallbacks
     def test_update(self):
-        """
-        Test the processing of a message.
-
-        """
+        # Test the processing of a message.
 
         yield self.worker.startWorker()
         attrs1 = self.gen_fake_attrs(time.time())
@@ -227,10 +224,9 @@ class TestHeartBeatMonitor(TestCase):
 
     @inlineCallbacks
     def test_serialize_to_redis(self):
-        """
-        This covers a lot of the serialization methods
-        as well as the _sync_to_storage() function.
-        """
+        # This covers a lot of the serialization methods
+        # as well as the _sync_to_storage() function.
+
         yield self.worker.startWorker()
         fkredis = self.worker._redis
 
