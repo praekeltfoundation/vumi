@@ -38,6 +38,11 @@ def expected_sys_dict():
 
 class TestWorkerInstance(TestCase):
 
+    def test_create(self):
+        worker = monitor.WorkerInstance('foo', 34)
+        self.assertEqual(worker.hostname, 'foo')
+        self.assertEqual(worker.pid, 34)
+
     def test_equiv(self):
         self.assertEqual(monitor.WorkerInstance('foo', 34),
                          monitor.WorkerInstance('foo', 34))
@@ -45,6 +50,15 @@ class TestWorkerInstance(TestCase):
                          monitor.WorkerInstance('foo', 34))
         self.failIfEqual(monitor.WorkerInstance('fo', 34),
                          monitor.WorkerInstance('foo', 34))
+
+    def test_hash(self):
+        worker1 = monitor.WorkerInstance('foo', 34)
+        worker2 = monitor.WorkerInstance('foo', 34)
+        worker3 = monitor.WorkerInstance('foo', 35)
+        worker4 = monitor.WorkerInstance('bar', 34)
+        self.assertEqual(hash(worker1), hash(worker2))
+        self.assertNotEqual(hash(worker1), hash(worker3))
+        self.assertNotEqual(hash(worker1), hash(worker4))
 
 
 class TestWorker(TestCase):
