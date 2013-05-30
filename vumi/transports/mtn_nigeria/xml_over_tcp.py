@@ -48,13 +48,13 @@ class CodedXmlOverTcpError(XmlOverTcpError):
 
     def __init__(self, code, reason=None):
         self.code = code
-        self.message = self.ERRORS.get(code, 'Unknown Code')
+        self.msg = self.ERRORS.get(code, 'Unknown Code')
         self.reason = reason
 
     def __str__(self):
         return '(%s) %s%s' % (
             self.code,
-            self.message,
+            self.msg,
             ': %s' % self.reason if self.reason else '')
 
 
