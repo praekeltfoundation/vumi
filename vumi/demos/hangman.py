@@ -24,11 +24,11 @@ class HangmanGame(object):
            Message set in reply to last user action. Defaults to 'New game!'.
        """
 
-    UI_TEMPLATE = \
-        u"%(msg)s\n" \
-        u"Word: %(word)s\n" \
-        u"Letters guessed so far: %(guesses)s\n" \
-        u"%(prompt)s (0 to quit):\n"
+    UI_TEMPLATE = (
+        u"%(msg)s\n"
+        u"Word: %(word)s\n"
+        u"Letters guessed so far: %(guesses)s\n"
+        u"%(prompt)s (0 to quit):\n")
 
     # exit codes
     NOT_DONE, DONE, DONE_WANTS_NEW = range(3)
@@ -90,12 +90,11 @@ class HangmanGame(object):
         uniques = len(set(self.word))
         guesses = len(self.guesses)
         for factor, msg in [
-            (1, u"Flawless victory!"),
-            (1.5, u"Epic victory!"),
-            (2, u"Standard victory!"),
-            (3, u"Sub-par victory!"),
-            (4, u"Random victory!"),
-            ]:
+                (1, u"Flawless victory!"),
+                (1.5, u"Epic victory!"),
+                (2, u"Standard victory!"),
+                (3, u"Sub-par victory!"),
+                (4, u"Random victory!")]:
             if guesses <= uniques * factor:
                 return msg
         return u"Button mashing!"

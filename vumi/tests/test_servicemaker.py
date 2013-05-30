@@ -64,7 +64,7 @@ class OldConfigWorker(object):
 
 
 class DummyConfigClass(object):
-    """Extra bit of doc string for testing --worker-hellp."""
+    """Extra bit of doc string for testing --worker-help."""
 
 
 class NewConfigWorker(object):
@@ -151,12 +151,13 @@ class StartWorkerOptionsTestCase(OptionsTestCase):
 
     def test_old_style_config_worker_help(self):
         self.check_worker_help('vumi.tests.test_servicemaker.OldConfigWorker',
-                               [OldConfigWorker.__doc__])
+                               [OldConfigWorker.__doc__, ""])
 
     def test_new_style_config_worker_help(self):
         self.check_worker_help('vumi.tests.test_servicemaker.NewConfigWorker',
                                [NewConfigWorker.__doc__,
-                                NewConfigWorker.CONFIG_CLASS.__doc__])
+                                NewConfigWorker.CONFIG_CLASS.__doc__,
+                                ""])
 
 
 class DummyService(object):
@@ -193,6 +194,8 @@ class VumiWorkerServiceMakerTestCase(OptionsTestCase):
         maker = VumiWorkerServiceMaker()
         worker = maker.makeService(options)
         self.assertEqual(services, [
-                (('http://1:2@example.com/2/', 'echoworker'), {})
+                (('http://1:2@example.com/2/',
+                  'echoworker',
+                  'global:echoworker'), {})
         ])
         self.assertTrue(dummy_service in worker.services)

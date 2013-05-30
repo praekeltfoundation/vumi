@@ -149,7 +149,7 @@ class VumiBotProtocol(irc.IRCClient):
 
 
 class VumiBotFactory(protocol.ReconnectingClientFactory):
-    """A factory for :class:`VumiBotClient`s.
+    """A factory for :class:`VumiBotClient` instances.
 
     A new protocol instance will be created each time we connect to
     the server.

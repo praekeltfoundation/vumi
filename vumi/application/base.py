@@ -74,7 +74,7 @@ class ApplicationWorker(BaseWorker):
     """
 
     transport_name = None
-    start_message_consumer = True
+    UNPAUSE_CONNECTORS = True
 
     CONFIG_CLASS = ApplicationConfig
     SEND_TO_TAGS = None
@@ -123,7 +123,7 @@ class ApplicationWorker(BaseWorker):
         }
         d = maybeDeferred(self.setup_application)
 
-        if self.start_message_consumer:
+        if self.UNPAUSE_CONNECTORS:
             d.addCallback(lambda r: self.unpause_connectors())
 
         return d

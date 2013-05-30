@@ -1,7 +1,7 @@
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.dispatchers.endpoint_dispatchers import RoutingTableDispatcher
-from vumi.tests.utils import VumiWorkerTestCase, LogCatcher
+from vumi.tests.utils import VumiWorkerTestCase
 
 
 class TestRoutingTableDispatcher(VumiWorkerTestCase):
@@ -113,7 +113,8 @@ class TestRoutingTableDispatcher(VumiWorkerTestCase):
         yield self.dispatch_event(msg, 'transport2')
         self.assert_rkeys_used('transport2.event', 'app1.event')
         self.assertEqual(
-            [self.with_endpoint(msg, 'ep1')], self.get_dispatched_events('app1'))
+            [self.with_endpoint(msg, 'ep1')],
+            self.get_dispatched_events('app1'))
 
     def get_dispatcher_consumers(self, dispatcher):
         consumers = []

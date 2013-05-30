@@ -8,7 +8,8 @@ from twisted.protocols.basic import LineReceiver
 from twisted.internet import reactor, protocol
 
 from vumi.message import TransportUserMessage
-from vumi.transports.telnet import TelnetServerTransport
+from vumi.transports.telnet import (TelnetServerTransport,
+                                    AddressedTelnetServerTransport)
 from vumi.transports.tests.utils import TransportTestCase
 
 
@@ -27,7 +28,7 @@ class ClientProtocol(LineReceiver):
         self.queue.put("DONE")
 
 
-class TelnetServerTransportTestCase(TransportTestCase):
+class BaseTelnetServerTransortTestCase(TransportTestCase):
 
     transport_name = 'test'
     transport_type = 'telnet'
@@ -35,7 +36,7 @@ class TelnetServerTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        super(TelnetServerTransportTestCase, self).setUp()
+        super(BaseTelnetServerTransortTestCase, self).setUp()
         self.worker = yield self.get_transport({'telnet_port': 0})
         self.client = yield self.make_client()
         yield self.wait_for_client_start()
@@ -43,11 +44,11 @@ class TelnetServerTransportTestCase(TransportTestCase):
     @inlineCallbacks
     def tearDown(self):
         if self.client.transport.connected:
-            self.clear_dispatched_messages()
             self.client.transport.loseConnection()
+            self.clear_dispatched_messages()
             # Wait for all registered clients to get their disconnects.
             yield self.wait_for_dispatched_messages(len(self.worker._clients))
-        yield super(TelnetServerTransportTestCase, self).tearDown()
+        yield super(BaseTelnetServerTransortTestCase, self).tearDown()
 
     def wait_for_client_start(self):
         """Wait for first message from client to be ready."""
@@ -55,7 +56,7 @@ class TelnetServerTransportTestCase(TransportTestCase):
 
     def get_dispatched_messages(self):
         return [TransportUserMessage.from_json(m.to_json())
-                for m in super(TelnetServerTransportTestCase,
+                for m in super(BaseTelnetServerTransortTestCase,
                                self).get_dispatched_messages()]
 
     @inlineCallbacks
@@ -64,6 +65,9 @@ class TelnetServerTransportTestCase(TransportTestCase):
         cc = protocol.ClientCreator(reactor, ClientProtocol)
         client = yield cc.connectTCP("127.0.0.1", addr.port)
         returnValue(client)
+
+
+class TelnetServerTransportTestCase(BaseTelnetServerTransortTestCase):
 
     @inlineCallbacks
     def test_client_register(self):
@@ -147,3 +151,67 @@ class TelnetServerTransportTestCase(TransportTestCase):
         line = yield self.client.transport.protocol.queue.get()
         self.assertEqual(line, "send_foo")
         self.assertTrue(self.client.transport.connected)
+
+    @inlineCallbacks
+    def test_to_addr_override(self):
+        old_worker = self.worker
+        self.assertEqual(old_worker._to_addr,
+            old_worker._format_addr(old_worker.telnet_server.getHost()))
+        worker = yield self.get_transport({
+            'telnet_port': 0,
+            'to_addr': 'foo'
+        })
+        self.assertEqual(worker._to_addr, 'foo')
+
+    @inlineCallbacks
+    def test_transport_type_override(self):
+        self.assertEqual(self.worker._transport_type, 'telnet')
+        self.worker = yield self.get_transport({
+            'telnet_port': 0,
+            'transport_type': 'foo',
+        })
+        self.assertEqual(self.worker._transport_type, 'foo')
+        # Clean up existing unused client.
+        self.client.transport.loseConnection()
+
+        self.client = yield self.make_client()
+        yield self.wait_for_client_start()
+        self.client.transport.write("foo\n")
+        [r1, r2, msg] = yield self.wait_for_dispatched_messages(3)
+        self.assertEqual(msg['transport_type'], 'foo')
+
+
+class AddressedTelnetServerTransportTestCase(BaseTelnetServerTransortTestCase):
+
+    transport_class = AddressedTelnetServerTransport
+
+    @inlineCallbacks
+    def setUp(self):
+        super(BaseTelnetServerTransortTestCase, self).setUp()
+        self.worker = yield self.get_transport({'telnet_port': 0})
+        self.client = yield self.make_client()
+
+    def wait_for_server(self):
+        """Wait for first message from client to be ready."""
+        return self.client.queue.get()
+
+    @inlineCallbacks
+    def test_handle_input(self):
+        to_addr_prompt = yield self.wait_for_server()
+        self.assertEqual('Please provide "to_addr":', to_addr_prompt)
+        self.client.transport.write('to_addr\n')
+        from_addr_prompt = yield self.wait_for_server()
+        self.assertEqual('Please provide "from_addr":', from_addr_prompt)
+        self.client.transport.write('from_addr\n')
+        summary = yield self.wait_for_server()
+        self.assertEqual(summary,
+            "[Sending all messages to: to_addr and from: from_addr]")
+        self.client.transport.write('foo!\n')
+        [reg, msg] = yield self.wait_for_dispatched_messages(2)
+
+        self.assertEqual(reg['from_addr'], 'from_addr')
+        self.assertEqual(reg['to_addr'], 'to_addr')
+
+        self.assertEqual(msg['from_addr'], 'from_addr')
+        self.assertEqual(msg['to_addr'], 'to_addr')
+        self.assertEqual(msg['content'], 'foo!')

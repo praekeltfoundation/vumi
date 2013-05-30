@@ -3,7 +3,6 @@ from twisted.internet.defer import gatherResults, inlineCallbacks, returnValue
 from vumi import log
 from vumi.message import TransportMessage, TransportEvent, TransportUserMessage
 from vumi.middleware import MiddlewareStack
-from vumi.errors import UnhandledConsumerType
 
 
 class BaseConnector(object):

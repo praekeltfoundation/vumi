@@ -24,7 +24,3 @@ class ConfigError(VumiError):
 
 class DuplicateConnectorError(VumiError):
     pass
-
-
-class UnhandledConsumerType(VumiError):
-    pass

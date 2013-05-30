@@ -6,7 +6,6 @@ from urllib import urlencode
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.utils import http_request_full
-from vumi.errors import ConfigError
 from vumi import log
 from vumi.config import ConfigDict, ConfigText
 from vumi.transports.httprpc import HttpRpcTransport

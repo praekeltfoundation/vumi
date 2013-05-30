@@ -171,12 +171,17 @@ class LogCatcher(object):
         constructed by joining the elements in the 'message' value
         with a space (the same way Twisted does). Default: None
         (i.e. keep all log events).
+
+    :param int log_level:
+        Only log events whose logLevel is equal to the given level
+        will be gathered. Default: None (i.e. keep all log events).
     """
 
-    def __init__(self, system=None, message=None):
+    def __init__(self, system=None, message=None, log_level=None):
         self.logs = []
         self.system = re.compile(system) if system is not None else None
         self.message = re.compile(message) if message is not None else None
+        self.log_level = log_level
 
     @property
     def errors(self):
@@ -193,6 +198,9 @@ class LogCatcher(object):
         if self.message is not None:
             log_message = " ".join(event_dict.get('message', []))
             if not self.message.search(log_message):
+                return False
+        if self.log_level is not None:
+            if event_dict.get('logLevel', None) != self.log_level:
                 return False
         return True
 
@@ -219,6 +227,9 @@ class MockResource(Resource):
         return self.handler(request)
 
     def render_POST(self, request):
+        return self.handler(request)
+
+    def render_PUT(self, request):
         return self.handler(request)
 
 
@@ -441,6 +452,11 @@ class VumiWorkerTestCase(TestCase):
         :param cls: The worker class to instantiate.
         :param start: True to start the worker (default), False otherwise.
         """
+
+        # When possible, always try and enable heartbeat setup in tests.
+        # so make sure worker_name is set
+        if (config is not None) and ('worker_name' not in config):
+            config['worker_name'] = "unnamed"
 
         worker = get_stubbed_worker(cls, config, self._amqp)
         self._workers.append(worker)

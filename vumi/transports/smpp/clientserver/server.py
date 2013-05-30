@@ -56,8 +56,7 @@ class SmscServer(Protocol):
             sequence_number = pdu['header']['sequence_number']
             system_id = pdu['body']['mandatory_parameters']['system_id']
             pdu_resp = BindTransceiverResp(sequence_number,
-                    system_id=system_id
-                    )
+                                           system_id=system_id)
             self.send_pdu(pdu_resp)
 
     def handle_bind_transmitter(self, pdu):
@@ -65,8 +64,7 @@ class SmscServer(Protocol):
             sequence_number = pdu['header']['sequence_number']
             system_id = pdu['body']['mandatory_parameters']['system_id']
             pdu_resp = BindTransmitterResp(sequence_number,
-                    system_id=system_id
-                    )
+                                           system_id=system_id)
             self.send_pdu(pdu_resp)
 
     def handle_bind_receiver(self, pdu):
@@ -74,8 +72,7 @@ class SmscServer(Protocol):
             sequence_number = pdu['header']['sequence_number']
             system_id = pdu['body']['mandatory_parameters']['system_id']
             pdu_resp = BindReceiverResp(sequence_number,
-                    system_id=system_id
-                    )
+                                        system_id=system_id)
             self.send_pdu(pdu_resp)
 
     def handle_enquire_link(self, pdu):
@@ -112,7 +109,7 @@ class SmscServer(Protocol):
     def dataReceived(self, data):
         self.datastream += data
         data = self.pop_data()
-        while data != None:
+        while data is not None:
             self.handle_data(data)
             data = self.pop_data()
 

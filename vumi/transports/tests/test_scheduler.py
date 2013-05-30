@@ -29,7 +29,7 @@ class SchedulerTestCase(TestCase):
         delivered_messages = [TransportUserMessage(**to_kwargs(payload))
                                 for _, payload in self._delivery_history]
         self.assertIn(message['message_id'],
-            [message['message_id'] for message in delivered_messages])
+            [msg['message_id'] for msg in delivered_messages])
 
     def assertNumDelivered(self, number):
         self.assertEqual(number, len(self._delivery_history))

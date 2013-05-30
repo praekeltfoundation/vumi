@@ -63,7 +63,8 @@ class Dispatcher(BaseWorker):
 
     def _mkhandler(self, handler_func, connector_name):
         def errback(f):
-            log.error("Error routing message for %s" % (connector_name,), f)
+            log.error("Error routing message for %s" % (connector_name,))
+            log.error(f)
 
         def handler(msg):
             d = self.get_config(msg)

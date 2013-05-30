@@ -46,5 +46,5 @@ Further reading:
 .. toctree::
     :maxdepth: 1
 
-    middleware/builtin.rst
-    middleware/implementing.rst
+    builtin.rst
+    implementing.rst

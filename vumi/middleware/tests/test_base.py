@@ -1,5 +1,5 @@
-import time
 import yaml
+import itertools
 
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.trial.unittest import TestCase
@@ -13,6 +13,7 @@ class ToyMiddleware(BaseMiddleware):
 
     # simple attribute to check that setup_middleware is called
     _setup_done = False
+    _teardown_count = itertools.count(1)
 
     def _handle(self, direction, message, connector_name):
         message = '%s.%s' % (message, self.name)
@@ -24,7 +25,7 @@ class ToyMiddleware(BaseMiddleware):
         self._teardown_done = False
 
     def teardown_middleware(self):
-        self._teardown_done = time.time()
+        self._teardown_done = next(self._teardown_count)
 
     def handle_inbound(self, message, connector_name):
         return self._handle('inbound', message, connector_name)

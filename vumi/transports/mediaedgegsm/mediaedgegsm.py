@@ -38,6 +38,7 @@ class MediaEdgeGSMTransport(HttpRpcTransport):
     transport_type = 'sms'
     content_type = 'text/plain; charset=utf-8'
 
+    ENCODING = 'utf-8'
     EXPECTED_FIELDS = set(['USN', 'PWD', 'PhoneNumber',
         'ServiceNumber', 'Operator', 'SMSBODY'])
 
