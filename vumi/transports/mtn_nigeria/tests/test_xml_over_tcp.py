@@ -539,6 +539,13 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
         received_packet = yield self.server.wait_for_data()
         self.assertEqual(expected_packet, received_packet)
 
+    def assert_next_timeout(self, t):
+        return self.assertAlmostEqual(
+            self.client.scheduled_timeout.getTime(), t, 1)
+
+    def assert_timeout_cancelled(self):
+        self.assertFalse(self.client.scheduled_timeout.active())
+
     @inlineCallbacks
     def test_periodic_client_enquire_link(self):
         request_body_a = (
@@ -571,24 +578,29 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
         response_packet_b = utils.mk_packet('1', response_body_b)
         self.server.responses[expected_request_packet_b] = response_packet_b
 
+        clock = Clock()
+        t0 = clock.seconds()
+        self.client.clock = clock
         self.client.enquire_link_interval = 120
         self.client.timeout_period = 20
-        self.client.clock = Clock()
         self.client.authenticated = True
         self.client.start_periodic_enquire_link()
-        timeout_t0 = self.client.scheduled_timeout.getTime()
 
-        # advance to just after the first heartbeat is sent
-        self.client.clock.advance(0.1)
-        yield self.client.wait_for_data()
-        timeout_t1 = self.client.scheduled_timeout.getTime()
-        self.assertTrue(timeout_t1 > timeout_t0)
+        # advance to just after the first enquire link request
+        clock.advance(0.01)
+        self.assert_next_timeout(t0 + 20)
 
-        # advance to just after the second heartbeat is sent
-        self.client.clock.advance(120)
+        # wait for the first enquire link response
         yield self.client.wait_for_data()
-        timeout_t2 = self.client.scheduled_timeout.getTime()
-        self.assertTrue(timeout_t2 > timeout_t1)
+        self.assert_timeout_cancelled()
+
+        # advance to just after the second enquire link request
+        clock.advance(120.01)
+        self.assert_next_timeout(t0 + 140)
+
+        # wait for the second enquire link response
+        yield self.client.wait_for_data()
+        self.assert_timeout_cancelled()
 
     @inlineCallbacks
     def test_timeout(self):
@@ -599,23 +611,23 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
             "</ENQRequest>")
         expected_request_packet = utils.mk_packet('0', request_body)
 
+        clock = Clock()
+        self.client.clock = clock
         self.client.enquire_link_interval = 120
         self.client.timeout_period = 20
-        self.client.clock = Clock()
         self.client.authenticated = True
         self.client.start_periodic_enquire_link()
 
-        # advance to just after the first heartbeat is sent
-        self.client.clock.advance(0.1)
+        # wait for the first enquire link request
         received_request_packet = yield self.server.wait_for_data()
         self.assertEqual(expected_request_packet, received_request_packet)
 
         # advance to just before the timeout should occur
-        self.client.clock.advance(19.8)
+        clock.advance(19.9)
         self.assertFalse(self.client.disconnected)
 
         # advance to just after the timeout should occur
-        self.client.clock.advance(0.1)
+        clock.advance(0.1)
         self.assertTrue(self.client.disconnected)
         self.assert_in_log(
             'msg',
