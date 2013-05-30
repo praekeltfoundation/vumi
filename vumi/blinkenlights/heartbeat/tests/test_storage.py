@@ -57,7 +57,6 @@ class TestStorage(TestCase):
         res = yield self.redis.get(storage.issue_key('worker-1'))
         self.assertEqual(res, None)
 
-
     @inlineCallbacks
     def test_open_or_update_issue(self):
         obj = {
