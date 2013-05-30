@@ -120,7 +120,6 @@ class XmlOverTcpClient(Protocol):
         self.reset_buffer()
 
     def connectionMade(self):
-        self.factory.connection_made_hook(self)
         self.login()
 
     def connectionLost(self, reason):

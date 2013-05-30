@@ -233,7 +233,3 @@ class MtnNigeriaUssdClientFactory(ReconnectingClientFactory):
         client.factory = self
         self.client = client
         return client
-
-    def connection_made_hook(self, protocol):
-        # This is used in tests.
-        pass

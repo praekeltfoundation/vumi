@@ -6,6 +6,7 @@ from vumi.message import TransportUserMessage
 from vumi.transports.mtn_nigeria.tests import utils
 from vumi.transports.tests.utils import TransportTestCase
 from vumi.transports.mtn_nigeria import MtnNigeriaUssdTransport
+from vumi.transports.mtn_nigeria import mtn_nigeria_ussd
 from vumi.transports.mtn_nigeria.tests.utils import MockXmlOverTcpServerMixin
 from vumi.transports.mtn_nigeria.xml_over_tcp import (
     XmlOverTcpError, CodedXmlOverTcpError)
@@ -111,7 +112,10 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
     def setUp(self):
         super(TestMtnNigeriaUssdTransportTestCase, self).setUp()
 
+        deferred_login = self.fake_login(
+            mtn_nigeria_ussd.MtnNigeriaUssdClientFactory.protocol)
         deferred_server = self.start_server()
+
         config = {
             'transport_name': self.transport_name,
             'server_hostname': '127.0.0.1',
@@ -124,7 +128,6 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
             'user_termination_response': 'Bye',
         }
         self.transport = yield self.get_transport(config)
-        deferred_login = self.fake_login(self.transport.factory)
         yield deferred_server
 
         self.session_manager = self.transport.session_manager
@@ -139,15 +142,14 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
         yield self.stop_server()
         yield super(TestMtnNigeriaUssdTransportTestCase, self).tearDown()
 
-    def fake_login(self, factory):
+    def fake_login(self, protocol_cls):
         d = Deferred()
 
-        def connection_made_hook(protocol):
-            def stubbed_login():
-                protocol.authenticated = True
+        def stubbed_login(self):
+            self.authenticated = True
+            if not d.called:
                 d.callback(None)
-            self.patch(protocol, 'login', stubbed_login)
-        self.patch(factory, 'connection_made_hook', connection_made_hook)
+        self.patch(protocol_cls, 'login', stubbed_login)
         return d
 
     @inlineCallbacks
