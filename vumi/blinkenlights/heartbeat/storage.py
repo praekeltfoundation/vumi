@@ -1,4 +1,4 @@
-# -*- test-case-name: vumi.blinkenlights.tests.test_heartbeat -*-
+# -*- test-case-name: vumi.blinkenlights.tests.test_storage -*-
 
 """
 Storage Schema:
