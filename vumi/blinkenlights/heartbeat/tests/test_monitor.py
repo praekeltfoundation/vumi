@@ -67,6 +67,8 @@ class TestWorker(TestCase):
         wkr = monitor.Worker('system-1', 'foo', 1)
         wkr.record('host-1', 34)
 
+        wkr.snapshot()
+
         obj = wkr.to_dict()
         self.assertEqual(obj, expected_wkr_dict())
 
@@ -75,8 +77,25 @@ class TestWorker(TestCase):
         wkr.record('host-1', 34)
         wkr.record('host-1', 546)
 
+        wkr.snapshot()
+
         counts = wkr._compute_host_info(wkr._instances)
         self.assertEqual(counts['host-1'], 2)
+
+    def test_snapshot(self):
+        wkr = monitor.Worker('system-1', 'foo', 1)
+
+        wkr.record('host-1', 34)
+        wkr.record('host-1', 546)
+
+        self.assertEqual(len(wkr._instances_active), 2)
+        self.assertEqual(len(wkr._instances), 0)
+
+        wkr.snapshot()
+
+        self.assertEqual(len(wkr._instances_active), 0)
+        self.assertEqual(len(wkr._instances), 2)
+
 
 
 class TestSystem(TestCase):
@@ -85,6 +104,7 @@ class TestSystem(TestCase):
         wkr = monitor.Worker('system-1', 'foo', 1)
         sys = monitor.System('system-1', 'system-1', [wkr])
         wkr.record('host-1', 34)
+        wkr.snapshot()
         obj = sys.to_dict()
         obj['timestamp'] = 435
         self.assertEqual(obj, expected_sys_dict())
@@ -93,6 +113,7 @@ class TestSystem(TestCase):
         wkr = monitor.Worker('system-1', 'foo', 1)
         sys = monitor.System('system-1', 'system-1', [wkr])
         wkr.record('host-1', 34)
+        wkr.snapshot()
         obj_json = sys.dumps()
         obj = json.loads(obj_json)
         obj['timestamp'] = 435
@@ -142,6 +163,7 @@ class TestHeartBeatMonitor(TestCase):
         }
         return attrs
 
+
     @inlineCallbacks
     def test_update(self):
         # Test the processing of a message.
@@ -157,9 +179,9 @@ class TestHeartBeatMonitor(TestCase):
         # retrieve the instance set corresponding to the worker_id in the
         # fake message
         wkr = self.worker._workers[attrs1['worker_id']]
-        self.assertEqual(len(wkr._instances), 1)
-        inst = wkr._instances.pop()
-        wkr._instances.add(inst)
+        self.assertEqual(len(wkr._instances_active), 1)
+        inst = wkr._instances_active.pop()
+        wkr._instances_active.add(inst)
         self.assertEqual(inst.hostname, "test-host-1")
         self.assertEqual(inst.pid, 345)
 
@@ -167,7 +189,7 @@ class TestHeartBeatMonitor(TestCase):
         # and verify that there are two recorded instances
         attrs2['hostname'] = 'test-host-2'
         self.worker.update(attrs2)
-        self.assertEqual(len(wkr._instances), 2)
+        self.assertEqual(len(wkr._instances_active), 2)
 
     @inlineCallbacks
     def test_audit_fail(self):
@@ -183,6 +205,7 @@ class TestHeartBeatMonitor(TestCase):
         self.worker.update(attrs)
 
         wkr = self.worker._workers[attrs['worker_id']]
+        wkr.snapshot()
 
         wkr.audit(self.worker._storage)
 
@@ -208,6 +231,7 @@ class TestHeartBeatMonitor(TestCase):
         self.worker.update(attrs)
 
         wkr = self.worker._workers[attrs['worker_id']]
+        wkr.snapshot()
 
         wkr.audit(self.worker._storage)
 
@@ -241,7 +265,7 @@ class TestHeartBeatMonitor(TestCase):
         # process the fake message
         self.worker.update(attrs)
 
-        self.worker._sync_to_storage()
+        self.worker._periodic_task()
 
         # this blob is what should be persisted into redis (as JSON)
         expected = {

@@ -60,6 +60,7 @@ class Worker(object):
         self.min_procs = min_procs
         self.worker_id = generate_worker_id(system_id, worker_name)
         self._instances = set()
+        self._instances_active = set()
         self.procs_count = 0
 
     def to_dict(self):
@@ -104,13 +105,13 @@ class Worker(object):
             yield storage.open_or_update_issue(self.worker_id, issue)
         self.procs_count = count
 
-    def reset(self):
-        """Clear the set of instances which checked-in in the last interval"""
-        self._instances = set()
+    def snapshot(self):
+        self._instances = self._instances_active
+        self._instances_active = set()
 
     def record(self, hostname, pid):
         """Record that process (hostname,pid) checked in."""
-        self._instances.add(WorkerInstance(hostname, pid))
+        self._instances_active.add(WorkerInstance(hostname, pid))
 
 
 class System(object):
@@ -163,8 +164,6 @@ class HeartBeatMonitor(BaseWorker):
 
         self._systems, self._workers = self.parse_config(
             config.monitored_systems)
-
-        yield self._prepare_storage()
 
         # Start consuming heartbeats
         yield self.consume("heartbeat.inbound", self._consume_message,
@@ -230,19 +229,13 @@ class HeartBeatMonitor(BaseWorker):
         wkr.record(hostname, pid)
 
     @inlineCallbacks
-    def _prepare_storage(self):
-        """
-        Setup storage
-        """
-        # write system ids
-        system_ids = [sys.system_id for sys in self._systems]
-        yield self._storage.add_system_ids(system_ids)
-
-    @inlineCallbacks
     def _sync_to_storage(self):
         """
         Write systems data to storage
         """
+        # write system ids
+        system_ids = [sys.system_id for sys in self._systems]
+        yield self._storage.add_system_ids(system_ids)
         # dump each system
         for sys in self._systems:
             yield self._storage.write_system(sys)
@@ -253,12 +246,14 @@ class HeartBeatMonitor(BaseWorker):
         Iterate over worker instance sets and check to see whether any have not
         checked-in on time.
         """
+        # snapshot the the set of checked-in instances
+        for wkr in self._workers.values():
+            wkr.snapshot()
         # run diagnostic audits on all workers
         for wkr in self._workers.values():
             yield wkr.audit(self._storage)
         # write everything to redis
         yield self._sync_to_storage()
-        self.reset_checkin_state()
 
     def _start_task(self):
         """Create a timer task to check for missing worker"""
@@ -267,11 +262,6 @@ class HeartBeatMonitor(BaseWorker):
         errfn = lambda failure: log.err(failure,
                                         "Heartbeat verify: timer task died")
         self._task_done.addErrback(errfn)
-
-    def reset_checkin_state(self):
-        """reset check-in states for next interval"""
-        for wkr in self._workers.values():
-            wkr.reset()
 
     def _consume_message(self, msg):
         log.msg("Received message: %s" % msg)
