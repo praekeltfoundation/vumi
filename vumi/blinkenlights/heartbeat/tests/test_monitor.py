@@ -242,17 +242,6 @@ class TestHeartBeatMonitor(TestCase):
         self.assertEqual(issue, None)
 
     @inlineCallbacks
-    def test_prepare_storage(self):
-        yield self.worker.startWorker()
-        fkredis = self.worker._redis
-
-        self.worker._prepare_storage()
-
-        # Systems
-        systems = yield fkredis.smembers('systems')
-        self.assertEqual(tuple(systems), ('system-1',))
-
-    @inlineCallbacks
     def test_serialize_to_redis(self):
         # This covers a lot of the serialization methods
         # as well as the _sync_to_storage() function.
