@@ -64,6 +64,8 @@ class XmlOverTcpClientServerMixin(utils.MockClientServerMixin):
 
 
 class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
+    timeout = 5
+
     def setUp(self):
         errors = dict(CodedXmlOverTcpError.ERRORS)
         errors['000'] = 'Dummy error occured'

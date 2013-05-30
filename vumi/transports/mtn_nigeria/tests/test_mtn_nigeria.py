@@ -6,6 +6,7 @@ from vumi.message import TransportUserMessage
 from vumi.transports.mtn_nigeria.tests import utils
 from vumi.transports.tests.utils import TransportTestCase
 from vumi.transports.mtn_nigeria import MtnNigeriaUssdTransport
+from vumi.transports.mtn_nigeria import mtn_nigeria_ussd
 from vumi.transports.mtn_nigeria.tests.utils import MockXmlOverTcpServerMixin
 from vumi.transports.mtn_nigeria.xml_over_tcp import (
     XmlOverTcpError, CodedXmlOverTcpError)
@@ -111,7 +112,10 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
     def setUp(self):
         super(TestMtnNigeriaUssdTransportTestCase, self).setUp()
 
+        deferred_login = self.fake_login(
+            mtn_nigeria_ussd.MtnNigeriaUssdClientFactory.protocol)
         deferred_server = self.start_server()
+
         config = {
             'transport_name': self.transport_name,
             'server_hostname': '127.0.0.1',
@@ -129,7 +133,7 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
         self.session_manager = self.transport.session_manager
         yield self.session_manager.redis._purge_all()
 
-        yield self.fake_login()
+        yield deferred_login
         self.client = self.transport.factory.client
 
     @inlineCallbacks
@@ -138,13 +142,14 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
         yield self.stop_server()
         yield super(TestMtnNigeriaUssdTransportTestCase, self).tearDown()
 
-    def fake_login(self):
+    def fake_login(self, protocol_cls):
         d = Deferred()
 
         def stubbed_login(self):
             self.authenticated = True
-            d.callback(None)
-        self.patch(self.transport.factory.protocol, 'login', stubbed_login)
+            if not d.called:
+                d.callback(None)
+        self.patch(protocol_cls, 'login', stubbed_login)
         return d
 
     @inlineCallbacks
