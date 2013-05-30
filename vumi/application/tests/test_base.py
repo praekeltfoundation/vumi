@@ -38,12 +38,6 @@ class DummyApplicationWorker(ApplicationWorker):
         self.record.append(('close_session', message))
 
 
-class DeprApplicationWorker(DummyApplicationWorker):
-
-    SEND_TO_TAGS = frozenset(['default', 'outbound1'])
-    start_message_consumer = True
-
-
 class EchoApplicationWorker(ApplicationWorker):
     def consume_user_message(self, message):
         self.reply_to(message, message['content'])
@@ -220,13 +214,13 @@ class TestApplicationWorker(ApplicationTestCase):
             self.assertFalse(consumer.channel.qos_prefetch_count)
 
 
-class TestDeprApplicationWorker(ApplicationTestCase):
+class TestApplicationWorkerWithSendToConfig(ApplicationTestCase):
 
-    application_class = DeprApplicationWorker
+    application_class = DummyApplicationWorker
 
     @inlineCallbacks
     def setUp(self):
-        yield super(TestDeprApplicationWorker, self).setUp()
+        yield super(TestApplicationWorkerWithSendToConfig, self).setUp()
         self.transport_name = 'test'
         self.config = {
             'transport_name': self.transport_name,
@@ -239,9 +233,7 @@ class TestDeprApplicationWorker(ApplicationTestCase):
                     },
                 },
             }
-        with warnings.catch_warnings(record=True) as warns:
-            self.worker = yield self.get_application(self.config)
-        self.warns = warns[:]
+        self.worker = yield self.get_application(self.config)
 
     def assert_msgs_match(self, msgs, expected_msgs):
         for key in ['timestamp', 'message_id']:
@@ -255,14 +247,9 @@ class TestDeprApplicationWorker(ApplicationTestCase):
             self.assertEqual(msg, expected_msg)
         self.assertEqual(len(msgs), len(expected_msgs))
 
-    def assert_no_warnings(self):
-        self.assertEqual([], self.warns)
-
     @inlineCallbacks
     def send_to(self, *args, **kw):
-        with warnings.catch_warnings(record=True) as warns:
-            sent_msg = yield self.worker.send_to(*args, **kw)
-        self.warns.extend(warns)
+        sent_msg = yield self.worker.send_to(*args, **kw)
         returnValue(sent_msg)
 
     @inlineCallbacks
@@ -273,7 +260,6 @@ class TestDeprApplicationWorker(ApplicationTestCase):
                 transport_name='default_transport')]
         self.assert_msgs_match(sends, expecteds)
         self.assert_msgs_match(sends, [sent_msg])
-        self.assert_no_warnings()
 
     @inlineCallbacks
     def test_send_to_with_options(self):
@@ -285,10 +271,9 @@ class TestDeprApplicationWorker(ApplicationTestCase):
                 transport_name='default_transport')]
         self.assert_msgs_match(sends, expecteds)
         self.assert_msgs_match(sends, [sent_msg])
-        self.assert_no_warnings()
 
     @inlineCallbacks
-    def test_send_to_with_tag(self):
+    def test_send_to_with_endpoint(self):
         sent_msg = yield self.send_to('+12345', "Hi!", "outbound1",
                 transport_type=TransportUserMessage.TT_USSD)
         sends = self.get_dispatched_messages()
@@ -298,46 +283,11 @@ class TestDeprApplicationWorker(ApplicationTestCase):
         expecteds[0].set_routing_endpoint("outbound1")
         self.assert_msgs_match(sends, expecteds)
         self.assert_msgs_match(sends, [sent_msg])
-        self.assert_no_warnings()
 
     @inlineCallbacks
-    def test_send_to_with_bad_tag(self):
+    def test_send_to_with_bad_endpoint(self):
         yield self.assertFailure(
             self.send_to('+12345', "Hi!", "outbound_unknown"), ValueError)
-        self.assert_no_warnings()
-
-    @inlineCallbacks
-    def test_send_to_with_no_send_to_tags(self):
-        config = {'transport_name': 'badconfig_app', 'send_to': {}}
-        with warnings.catch_warnings(record=True) as warns:
-            with LogCatcher(message=r'is required\.$') as lc:
-                yield self.get_application(config)
-                def_log, out1_log = sorted(lc.messages())
-        self.assertTrue(def_log.startswith(
-            "No configuration for send_to tag 'default'."))
-        self.assertTrue(out1_log.startswith(
-            "No configuration for send_to tag 'outbound1'."))
-        self.warns.extend(warns)
-        self.assert_no_warnings()
-
-    @inlineCallbacks
-    def test_send_to_with_bad_config(self):
-        config = {'transport_name': 'badconfig_app',
-                  'send_to': {
-                      'default': {},  # missing transport_name
-                      'outbound1': {},  # also missing transport_name
-                      },
-                  }
-        with warnings.catch_warnings(record=True) as warns:
-            with LogCatcher(message=r'is required\.$') as lc:
-                yield self.get_application(config)
-                def_log, out1_log = sorted(lc.messages())
-        self.assertTrue(def_log.startswith(
-            "No transport_name configured for send_to tag 'default'."))
-        self.assertTrue(out1_log.startswith(
-            "No transport_name configured for send_to tag 'outbound1'."))
-        self.warns.extend(warns)
-        self.assert_no_warnings()
 
 
 class TestApplicationMiddlewareHooks(ApplicationTestCase):
