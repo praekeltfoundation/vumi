@@ -680,7 +680,7 @@ class TestOutboundResource(ResourceTestCaseBase):
                                             tag='default')
         self.assertEqual(reply, None)
         self.assertEqual(self.app_worker.mock_calls['send_to'],
-                         [(('1234', 'hello'), {'tag': 'default'})])
+                         [(('1234', 'hello'), {'endpoint': 'default'})])
 
 
 class JsDummyAppWorker(DummyAppWorker):

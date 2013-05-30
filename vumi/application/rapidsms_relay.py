@@ -99,11 +99,7 @@ class RapidSMSRelayAccessChecker(object):
 
 
 class RapidSMSRelayConfig(ApplicationWorker.CONFIG_CLASS):
-    """RapidSMS relay configuration.
-
-    A RapidSMS relay requires a `send_to` configuration section for the
-    `default` send_to tag.
-    """
+    """RapidSMS relay configuration."""
 
     web_path = ConfigText(
         "Path to listen for outbound messages from RapidSMS on.",
@@ -152,7 +148,6 @@ class RapidSMSRelay(ApplicationWorker):
     """Application that relays messages to RapidSMS."""
 
     CONFIG_CLASS = RapidSMSRelayConfig
-    SEND_TO_TAGS = frozenset(['default'])
 
     def validate_config(self):
         self.supported_auth_methods = {
