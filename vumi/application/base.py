@@ -40,16 +40,17 @@ class ApplicationWorker(BaseWorker):
     :meth:`reply_to` (for replies to incoming messages) or
     :meth:`send_to` (for messages that are not replies).
 
-    :meth:`send_to` can take either an `endpoint` parameter or a deprecated
-    `tag` parameter.
+    :meth:`send_to` can take either an `endpoint` parameter to specify the
+    endpoint to send on (and optionally add additional message data from
+    application configuration).
 
     :attr:`ALLOWED_ENDPOINTS` lists the endpoints this application is allowed
     to send messages to using the :meth:`send_to` method. If it is set to
     `None`, any endpoint is allowed.
 
-    (DEPRECATED) Messages sent via :meth:`send_to` pass optional additional
-    data from configuration to the TransportUserMessage constructor, based on
-    the tag parameter passed to send_to. This usually contains information
+    Messages sent via :meth:`send_to` pass optional additional data from
+    configuration to the TransportUserMessage constructor, based on the
+    endpoint parameter passed to send_to. This usually contains information
     useful for routing the message.
 
     An example :meth:`send_to` configuration might look like::
@@ -62,38 +63,22 @@ class ApplicationWorker(BaseWorker):
     defined for each send_to section since dispatchers rely on this for routing
     outbound messages.
 
-    (DEPRECATED) The available tags are defined by the :attr:`SEND_TO_TAGS`
-    class attribute. Subclasses must override this attribute with a set of tag
-    names if they wish to use :meth:`send_to`. If applications have only a
-    single tag, it is suggested to name that tag `default` (this makes calling
-    `send_to` easier since the value of the tag parameter may be omitted).
-
-    (DEPRECATED) By default :attr:`SEND_TO_TAGS` is empty and all calls to
-    :meth:`send_to` will fail (this is to make it easy to identify which tags
-    an application requires `send_to` configuration for).
+    The available set of endpoints defaults to just the single endpoint named
+    `default`. If applications wish to define their own set of available
+    endpoints they should override :attr:`ALLOWED_ENDPOINTS`. Setting
+    :attr:`ALLOWED_ENDPOINTS` to `None` allows the application to send on
+    arbitrary endpoint names.
     """
 
     transport_name = None
     UNPAUSE_CONNECTORS = True
 
     CONFIG_CLASS = ApplicationConfig
-    SEND_TO_TAGS = None
     ALLOWED_ENDPOINTS = frozenset(['default'])
 
     def _validate_config(self):
         config = self.get_static_config()
         self.transport_name = config.transport_name
-        for tag in (self.SEND_TO_TAGS or []):
-            if tag not in config.send_to:
-                log.warning(
-                    "No configuration for send_to tag %r. If you are using"
-                    " (deprecated) non-endpoint routing, at least a"
-                    " transport_name is required." % (tag,))
-            elif 'transport_name' not in config.send_to[tag]:
-                log.warning(
-                    "No transport_name configured for send_to tag %r. If you"
-                    " are using (deprecated) non-endpoint routing, one is"
-                    " required." % (tag,))
         self.validate_config()
 
     def setup_connectors(self):
