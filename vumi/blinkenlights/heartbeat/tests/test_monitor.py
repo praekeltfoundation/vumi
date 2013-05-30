@@ -97,7 +97,6 @@ class TestWorker(TestCase):
         self.assertEqual(len(wkr._instances), 2)
 
 
-
 class TestSystem(TestCase):
 
     def test_to_dict(self):
@@ -162,7 +161,6 @@ class TestHeartBeatMonitor(TestCase):
             'pid': 345,
         }
         return attrs
-
 
     @inlineCallbacks
     def test_update(self):
