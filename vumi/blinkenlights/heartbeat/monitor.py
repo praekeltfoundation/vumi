@@ -94,7 +94,10 @@ class Worker(object):
 
     @inlineCallbacks
     def audit(self, storage):
-        """Verify whether enough workers checked in"""
+        """
+        Verify whether enough workers checked in.
+        Make sure to call snapshot() before running this method
+        """
         count = len(self._instances)
         # if there was previously a min-procs-fail, but now enough
         # instances checked in, then clear the worker issue
@@ -106,6 +109,15 @@ class Worker(object):
         self.procs_count = count
 
     def snapshot(self):
+        """
+        This method must be run before any diagnostic audit and analyses
+
+        What it does is clear the instances_active set in preparation for
+        all the instances which will check-in in the next interval.
+
+        All diagnostics are based on the _instances_active set, which
+        holds all the instances which checked-in the previous interval.
+        """
         self._instances = self._instances_active
         self._instances_active = set()
 
@@ -245,6 +257,9 @@ class HeartBeatMonitor(BaseWorker):
         """
         Iterate over worker instance sets and check to see whether any have not
         checked-in on time.
+
+        We call snapshot() first, since the execution of tasks here is interleaved
+        with the processing of worker heartbeat messages.
         """
         # snapshot the the set of checked-in instances
         for wkr in self._workers.values():
