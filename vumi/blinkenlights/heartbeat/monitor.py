@@ -258,8 +258,8 @@ class HeartBeatMonitor(BaseWorker):
         Iterate over worker instance sets and check to see whether any have not
         checked-in on time.
 
-        We call snapshot() first, since the execution of tasks here is interleaved
-        with the processing of worker heartbeat messages.
+        We call snapshot() first, since the execution of tasks here is
+        interleaved with the processing of worker heartbeat messages.
         """
         # snapshot the the set of checked-in instances
         for wkr in self._workers.values():
