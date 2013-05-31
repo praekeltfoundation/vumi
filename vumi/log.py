@@ -9,8 +9,6 @@ Just because it can be hard to decide between different levels doesn't mean
 they should be done away. Having an "ERROR" token in the logs also makes
 it easier to grep for actual errors.
 
-
-
 The log level and service PID are now also included in the output.
 
 Another feature is named loggers, so that one indicate which module
@@ -93,8 +91,6 @@ class VumiLogObserver(object):
         logging.ERROR: 'ERROR',
         logging.CRITICAL: 'CRITICAL',
     }
-
-
 
     def __init__(self, f):
         self.write = f.write
@@ -186,26 +182,24 @@ class VumiLogObserver(object):
         msg = _log._safeFormat("%(pid)s %(level)s [%(system)s]: %(text)s\n",
                                fmt_dict)
 
-        # Don't need to do async writes here.
-        # Disk IO is orders of magnitude faster than Network IO, and
-        # the failure conditions are quite different.
+        # Don't need to do async writes here since we are writing to local disk
         self.write(time_str + " " + msg)
         self.flush()
 
 
 class VumiLog(object):
 
-    def __init__(self, name=None):
-        self.name = name or 'Root'
+    ROOT_NAME = "Root"
 
-    def find_failure(self, exc=None):
+    def __init__(self, name=None):
+        self.name = name or self.ROOT_NAME
+
+    def make_failure(self, exc):
         """
         Try and get a failure object which is attached to a traceback
         """
         exc_type, exc_value, exc_tb = sys.exc_info()
-        if not exc:
-            flr = failure.Failure()
-        elif exc == exc_value:
+        if exc == exc_value:
             flr = failure.Failure(exc_value, exc_type, exc_tb)
         else:
             flr = failure.Failure(exc)
@@ -215,7 +209,7 @@ class VumiLog(object):
         """
         Setup various parameters required by the logging backend.
 
-        A bit gnarly due to the multitude of ways in which failure objects
+        Very gnarly due to the multitude of ways in which failure objects
         can be discovered or derived
         """
         msg = ()
@@ -231,23 +225,19 @@ class VumiLog(object):
             kw['sentry_message_format'] = obj
             kw['sentry_message_params'] = params
             msg = (_log._safeFormat(obj, params),)
-        elif isinstance(obj, Exception):
-            cause = self.find_failure(obj)
-        elif isinstance(obj, failure.Failure):
+        elif isinstance(obj, Exception) and is_error:
+            cause = self.make_failure(obj)
+        elif isinstance(obj, failure.Failure) and is_error:
             cause = obj
         else:
+            # pathological case
             msg = (repr(obj),)
 
         # Override cause if the user explicitly passed it down to the logger
         if 'cause' in kw:
             cause = kw['cause']
             if isinstance(cause, Exception):
-                cause = self.find_failure(cause)
-
-        # If we still haven't got a cause and this log message represents
-        # an application error, then search for a failure
-        if is_error and cause is None:
-            cause = self.find_failure()
+                cause = self.make_failure(cause)
 
         kw['vumi-log-v2'] = True
         kw['isError'] = is_error
@@ -276,22 +266,17 @@ class VumiLog(object):
         _log.msg(*message, logLevel=logging.CRITICAL, **kw)
 
     #
-    # Legacy shims which are 100% API-compatible with twisted's msg() and err()
-    #
-    # Since these functions don't accept message format parameters,
-    # we can't pass the sentry.interfaces.Message structured data
-    # to sentry
+    # Legacy shims which are 100% API-compatible with twisted.python.log
     #
     def msg(self, *message, **kw):
-        _log.msg(*message, logLevel=logging.INFO)
+        _log.msg(*message)
 
     def err(self, _stuff=None, _why=None, **kw):
         _log.err(_stuff, _why, **kw)
 
 
 def name(obj):
-    """ Returns a named logger """
-    global _loggers
+    """Returns a named logger"""
     name = None
     if isinstance(obj, str):
         name = obj
