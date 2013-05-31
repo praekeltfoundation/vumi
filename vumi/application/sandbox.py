@@ -6,6 +6,7 @@ import resource
 import os
 import json
 import pkg_resources
+import logging
 from uuid import uuid4
 
 from twisted.internet import reactor
@@ -122,6 +123,9 @@ class SandboxProtocol(ProcessProtocol):
             return True
         else:
             self.kill()
+            self.api.log("Sandbox %r killed for producing too much data on"
+                         " stderr and stdout." % (self.sandbox_id),
+                         level=logging.ERROR)
             return False
 
     def connectionMade(self):
@@ -129,7 +133,7 @@ class SandboxProtocol(ProcessProtocol):
 
     def _process_data(self, chunk, data):
         if not self.check_recv(len(data)):
-            return [chunk]  # skip the data if it's too big
+            return ['']  # skip the data if it's too big
         line_parts = data.split("\n")
         line_parts[0] = chunk + line_parts[0]
         return line_parts
@@ -156,18 +160,23 @@ class SandboxProtocol(ProcessProtocol):
     def errReceived(self, data):
         lines = self._process_data(self.error_chunk, data)
         for i in range(len(lines) - 1):
-            log.error(Failure(SandboxError(lines[i])))
+            self.api.log(lines[i], logging.ERROR)
         self.error_chunk = lines[-1]
 
     def errConnectionLost(self):
         if self.error_chunk:
-            log.error(Failure(SandboxError(self.error_chunk)))
+            self.api.log(self.error_chunk, logging.ERROR)
             self.error_chunk = ""
 
     def _process_request_results(self, results):
         for success, result in results:
             if not success:
+                # errors here are bugs in Vumi and thus should always
+                # be logged via Twisted too.
                 log.error(result)
+                # we log them again in a simplified form via the sandbox
+                # api so that the sandbox owner gets to see them too
+                self.api.log(result.getErrorMessage(), logging.ERROR)
 
     def processEnded(self, reason):
         if self.timeout_task.active():
@@ -239,18 +248,16 @@ class SandboxResource(object):
         return SandboxCommand(cmd=command['cmd'], reply=True,
                               cmd_id=command['cmd_id'], **kwargs)
 
-    def log_error(self, error_msg):
-        log.error(Failure(SandboxError(error_msg)))
-
     def dispatch_request(self, api, command):
         handler_name = 'handle_%s' % (command['cmd'],)
         handler = getattr(self, handler_name, self.unknown_request)
         return maybeDeferred(handler, api, command)
 
     def unknown_request(self, api, command):
-        self.log_error("Resource %s: unknown command %r received from"
-                       " sandbox %r [%r]" % (self.name, command['cmd'],
-                                             api.sandbox_id, command))
+        api.log("Resource %s received unknown command %r from"
+                " sandbox %r. Killing sandbox. [Full command: %r]"
+                % (self.name, command['cmd'], api.sandbox_id, command),
+                logging.ERROR)
         api.sandbox_kill()  # it's a harsh world
 
 
@@ -356,8 +363,8 @@ class OutboundResource(SandboxResource):
     def handle_send_to(self, api, command):
         content = command['content']
         to_addr = command['to_addr']
-        tag = command.get('tag', 'default')
-        self.app_worker.send_to(to_addr, content, tag=tag)
+        endpoint = command.get('endpoint', 'default')
+        self.app_worker.send_to(to_addr, content, endpoint=endpoint)
 
 
 class JsSandboxResource(SandboxResource):
@@ -380,9 +387,44 @@ class LoggingResource(SandboxResource):
     """Resource that allows a sandbox to log messages via Twisted's
     logging framework.
     """
+    def log(self, api, msg, level):
+        """Logs a message via vumi.log (i.e. Twisted logging).
+
+        Sub-class should override this if they wish to log messages
+        elsewhere. The `api` parameter is provided for use by such
+        sub-classes.
+
+        The `log` method should always return a deferred.
+        """
+        return succeed(log.msg(msg, logLevel=level))
+
+    @inlineCallbacks
+    def handle_log(self, api, command, level=None):
+        level = command.get('level', level)
+        if level is None:
+            level = logging.INFO
+        msg = command.get('msg')
+        if msg is None:
+            returnValue(self.reply(command, success=False,
+                                   reason="Value expected for msg"))
+        msg = str(msg)
+        yield self.log(api, msg, level)
+        returnValue(self.reply(command, success=True))
+
+    def handle_debug(self, api, command):
+        return self.handle_log(api, command, level=logging.DEBUG)
+
     def handle_info(self, api, command):
-        log.info(str(command['msg']))
-        return self.reply(command, success=True)
+        return self.handle_log(api, command, level=logging.INFO)
+
+    def handle_warning(self, api, command):
+        return self.handle_log(api, command, level=logging.WARNING)
+
+    def handle_error(self, api, command):
+        return self.handle_log(api, command, level=logging.ERROR)
+
+    def handle_critical(self, api, command):
+        return self.handle_log(api, command, level=logging.CRITICAL)
 
 
 class HttpClientResource(SandboxResource):
@@ -448,6 +490,20 @@ class SandboxApi(object):
         self._inbound_messages = {}
         self.resources = resources
         self.fallback_resource = SandboxResource("fallback", None, {})
+        potential_logger = None
+        if config.logging_resource:
+            potential_logger = self.resources.resources.get(
+                config.logging_resource)
+            if potential_logger is None:
+                log.warning("Failed to find logging resource %r."
+                            " Falling back to Twisted logging."
+                            % (config.logging_resource,))
+            elif not hasattr(potential_logger, 'log'):
+                log.warning("Logging resource %r has no attribute 'log'."
+                            " Falling abck to Twisted logging."
+                            % (config.logging_resource,))
+                potential_logger = None
+        self.logging_resource = potential_logger
         self.config = config
 
     @property
@@ -483,6 +539,14 @@ class SandboxApi(object):
     def get_inbound_message(self, message_id):
         return self._inbound_messages.get(message_id)
 
+    def log(self, msg, level):
+        if self.logging_resource is None:
+            # fallback to vumi.log logging if we don't
+            # have a logging resource.
+            return succeed(log.msg(msg, logLevel=level))
+        else:
+            return self.logging_resource.log(self, msg, level=level)
+
     @inlineCallbacks
     def dispatch_request(self, command):
         resource_name, sep, rest = command['cmd'].partition('.')
@@ -494,7 +558,12 @@ class SandboxApi(object):
         try:
             reply = yield resource.dispatch_request(self, command)
         except Exception, e:
-            log.err()
+            # errors here are bugs in Vumi so we always log them
+            # via Twisted. However, we reply to the sandbox with
+            # a failure and log via the sandbox api so that the
+            # sandbox owner can be notified.
+            log.error()
+            self.log(str(e), level=logging.ERROR)
             reply = SandboxCommand(
                 reply=True,
                 cmd_id=command['cmd_id'],
@@ -557,6 +626,12 @@ class SandboxConfig(ApplicationWorker.CONFIG_CLASS):
         " names or values of the RLIMIT constants in"
         " Python `resource` module. Values should be appropriate integers.",
         default={})
+    logging_resource = ConfigText(
+        "Name of the logging resource to use to report errors detected"
+        " in sandboxed code (e.g. lines written to stderr, unexpected"
+        " process termination). Set to null to disable and report"
+        " these directly using Twisted logging instead.",
+        default=None)
     sandbox_id = ConfigText("This is set based on individual messages.")
 
 
@@ -699,6 +774,12 @@ class JsSandboxConfig(SandboxConfig):
 
     javascript = ConfigText("JavaScript code to run.", required=True)
     app_context = ConfigText("Custom context to execute JS with.")
+    logging_resource = ConfigText(
+        "Name of the logging resource to use to report errors detected"
+        " in sandboxed code (e.g. lines written to stderr, unexpected"
+        " process termination). Set to null to disable and report"
+        " these directly using Twisted logging instead.",
+        default='log')
 
 
 class JsSandbox(Sandbox):
@@ -714,6 +795,7 @@ class JsSandbox(Sandbox):
       resources under the name `js` if no `js` resource exists.
     * An instance of :class:`LoggingResource` is added to the sandbox
       resources under the name `log` if no `log` resource exists.
+    * `logging_resource` is set to `log` if it is not set.
     * An extra 'javascript' parameter specifies the javascript to execute.
     * An extra optional 'app_context' parameter specifying a custom
       context for the 'javascript' application to execute with.

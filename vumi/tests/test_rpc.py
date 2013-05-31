@@ -184,6 +184,44 @@ class TestDict(TestCase):
         d.check("name", {"a": 1, "b": 2})
         self.assertRaises(RpcCheckError, d.check, "name", {"a": 1, "b": "c"})
 
+    def test_required_fields(self):
+        d = Dict(required_fields={'foo': Int(null=True), 'bar': Unicode()})
+        d.check("name", {'foo': None, 'bar': u'b'})
+        d.check("name", {'foo': 1, 'bar': u'b'})
+        d.check("name", {'foo': 1, 'bar': u'b', 'extra': 2})
+        self.assertRaises(RpcCheckError, d.check, "name", {"foo": 1})
+        self.assertRaises(RpcCheckError, d.check, "name", {"bar": u"b"})
+        self.assertRaises(RpcCheckError, d.check, "name",
+                          {'foo': u'b', 'bar': u'b'})
+
+    def test_optional_fields(self):
+        d = Dict(optional_fields={'foo': Int(null=True), 'bar': Unicode()})
+        d.check("name", {'foo': None, 'bar': u'b'})
+        d.check("name", {'foo': 1, 'bar': u'b'})
+        d.check("name", {'foo': 1, 'bar': u'b', 'extra': 2})
+        d.check("name", {"foo": 1})
+        d.check("name", {"bar": u"b"})
+        self.assertRaises(RpcCheckError, d.check, "name", {"foo": u'b'})
+
+    def test_fallback_to_item_type(self):
+        d = Dict(required_fields={'foo': Int()},
+                 optional_fields={'bar': Int()},
+                 item_type=Unicode())
+        d.check("name", {'foo': 1})
+        d.check("name", {'foo': 1, 'bar': 2})
+        d.check("name", {'foo': 1, 'bar': 2, 'extra': u'foo'})
+        self.assertRaises(RpcCheckError, d.check, "name",
+                          {'foo': 1, 'bar': 2, 'extra': 3})
+
+    def test_closed(self):
+        d = Dict(required_fields={'foo': Int()},
+                 optional_fields={'bar': Int()},
+                 closed=True)
+        d.check("name", {'foo': 1})
+        d.check("name", {'foo': 1, 'bar': 2})
+        self.assertRaises(RpcCheckError, d.check, "name",
+                          {'foo': 1, 'bar': 2, 'extra': 3})
+
 
 class TestTag(TestCase):
     def test_jsonrpc_type(self):
