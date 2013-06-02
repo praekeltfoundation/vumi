@@ -149,6 +149,8 @@ class ReconnectingClientService(Service):
 
 
     def clientConnected(self, protocol):
+        # TODO: do we want to provide a hook for the protocol
+        #       to call resetDelay itself?
         self.resetDelay()
 
 
