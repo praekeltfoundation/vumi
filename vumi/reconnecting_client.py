@@ -14,6 +14,7 @@
 import random
 
 from twisted.application.service import Service
+from twisted.python import log
 
 
 class _RestartableProtocolProxy(object):
@@ -108,6 +109,7 @@ class ReconnectingClientService(Service):
     retries = 0
     maxRetries = None
     clock = None
+    noisy = False
 
     continueTrying = 1
 
@@ -125,16 +127,25 @@ class ReconnectingClientService(Service):
 
 
     def startService(self):
-        self.startTrying()
+        self.continueTrying = 1
+        self.retry()
 
 
     def stopService(self):
-        return self.stopTrying()
+        """
+        Stop attempting to reconnect and close any existing connections.
+        """
+        # XXX: Return a deferred that fires once connecting
+        #      attempts have stopped.
+        self.continueTrying = 0
 
+        if self._delayedRetryDeferred is not None:
+            self._delayedRetryDeferred.cancel()
+            self._delayedRetryDeferred = None
 
-    def startTrying(self):
-        self.continueTrying = 1
-        self.retry()
+        if self._connectingDeferred is not None:
+            self._connectingDeferred.cancel()
+            self._connectingDeferred = None
 
 
     def clientConnected(self, protocol):
@@ -157,14 +168,14 @@ class ReconnectingClientService(Service):
         """
         if not self.continueTrying:
             if self.noisy:
-                log.msg("Abandoning %s on explicit request" % (connector,))
+                log.msg("Abandoning %s on explicit request" % (self.endpoint,))
             return
 
         self.retries += 1
         if self.maxRetries is not None and (self.retries > self.maxRetries):
             if self.noisy:
                 log.msg("Abandoning %s after %d retries." %
-                        (connector, self.retries))
+                        (self.endpoint, self.retries))
             return
 
         self.delay = min(self.delay * self.factor, self.maxDelay)
@@ -173,7 +184,8 @@ class ReconnectingClientService(Service):
                                               self.delay * self.jitter)
 
         if self.noisy:
-            log.msg("%s will retry in %d seconds" % (connector, self.delay,))
+            log.msg("%s will retry in %d seconds"
+                    % (self.endpoint, self.delay))
 
         def reconnector():
             proxied_factory = _RestartableProtocolFactoryProxy(
@@ -184,21 +196,6 @@ class ReconnectingClientService(Service):
 
         self._delayedRetryDeferred = self.clock.callLater(
             self.delay, reconnector)
-
-
-    def stopTrying(self):
-        """
-        Put a stop to any attempt to reconnect in progress.
-        """
-        self.continueTrying = 0
-
-        if self._delayedRetryDeferred is not None:
-            self._delayedRetryDeferred.cancel()
-            self._delayedRetryDeferred = None
-
-        if self._connectingDeferred is not None:
-            self._connectingDeferred.cancel()
-            self._connectingDeferred = None
 
 
     def resetDelay(self):
