@@ -5,6 +5,7 @@ import sys
 import json
 import resource
 import pkg_resources
+import logging
 from collections import defaultdict
 
 from twisted.internet.defer import (
@@ -26,6 +27,15 @@ class MockResource(SandboxResource):
         super(MockResource, self).__init__(name, app_worker, {})
         for name, handler in handlers.iteritems():
             setattr(self, "handle_%s" % name, handler)
+
+
+class ListLoggingResource(LoggingResource):
+    def __init__(self, name, app_worker, config):
+        super(ListLoggingResource, self).__init__(name, app_worker, config)
+        self.msgs = []
+
+    def log(self, api, msg, level):
+        self.msgs.append((level, msg))
 
 
 class SandboxTestCaseBase(ApplicationTestCase):
@@ -97,11 +107,14 @@ class SandboxTestCase(SandboxTestCaseBase):
             "sys.stdout.flush()\n"
             "time.sleep(5)\n"
         )
-        status = yield app.process_event_in_sandbox(self.mk_ack())
-        [sandbox_err] = self.flushLoggedErrors(SandboxError)
-        self.assertEqual(str(sandbox_err.value).split(' [')[0],
-                         "Resource fallback: unknown command 'unknown'"
-                         " received from sandbox 'sandbox1'")
+        with LogCatcher(log_level=logging.ERROR) as lc:
+            status = yield app.process_event_in_sandbox(self.mk_ack())
+            [msg] = lc.messages()
+        self.assertTrue(msg.startswith(
+            "Resource fallback received unknown command 'unknown'"
+            " from sandbox 'sandbox1'. Killing sandbox."
+            " [Full command: <Message payload=\"{"
+        ))
         self.assertEqual(status, None)
         [kill_err] = self.flushLoggedErrors(ProcessTerminated)
         self.assertTrue('process ended by signal' in str(kill_err.value))
@@ -112,10 +125,11 @@ class SandboxTestCase(SandboxTestCaseBase):
             "import sys\n"
             "sys.stderr.write('err\\n')\n"
         )
-        status = yield app.process_event_in_sandbox(self.mk_ack())
+        with LogCatcher(log_level=logging.ERROR) as lc:
+            status = yield app.process_event_in_sandbox(self.mk_ack())
+            msgs = lc.messages()
         self.assertEqual(status, 0)
-        [sandbox_err] = self.flushLoggedErrors(SandboxError)
-        self.assertEqual(str(sandbox_err.value).split(' [')[0], "err")
+        self.assertEqual(msgs, ["err"])
 
     @inlineCallbacks
     def test_bad_rlimit(self):
@@ -132,11 +146,11 @@ class SandboxTestCase(SandboxTestCaseBase):
             "rlimit_nofile = resource.getrlimit(resource.RLIMIT_NOFILE)\n"
             "sys.stderr.write('%s %s\\n' % rlimit_nofile)\n",
             {'rlimits': {'RLIMIT_NOFILE': [soft, hard * 2]}})
-        status = yield app.process_event_in_sandbox(self.mk_ack())
+        with LogCatcher(log_level=logging.ERROR) as lc:
+            status = yield app.process_event_in_sandbox(self.mk_ack())
+            msgs = lc.messages()
         self.assertEqual(status, 0)
-        [sandbox_err] = self.flushLoggedErrors(SandboxError)
-        self.assertEqual(str(sandbox_err.value).split(' [')[0],
-                         "%s %s" % (soft, hard))
+        self.assertEqual(msgs, ["%s %s" % (soft, hard)])
 
     @inlineCallbacks
     def test_resource_setup(self):
@@ -187,17 +201,25 @@ class SandboxTestCase(SandboxTestCaseBase):
     @inlineCallbacks
     def test_recv_limit(self):
         recv_limit = 1000
+        send_out = "a" * 500
+        send_err = "a" * 501
         app = yield self.setup_app(
             "import sys, time\n"
-            "sys.stderr.write(%r)\n"
-            "sys.stdout.write('\\n')\n"
+            "sys.stdout.write(%r)\n"
             "sys.stdout.flush()\n"
+            "sys.stderr.write(%r)\n"
+            "sys.stderr.flush()\n"
             "time.sleep(5)\n"
-            % ("a" * (recv_limit - 1) + "\n"),
+            % (send_out, send_err),
             {'recv_limit': str(recv_limit)})
-        status = yield app.process_message_in_sandbox(self.mk_msg())
+        with LogCatcher(log_level=logging.ERROR) as lc:
+            status = yield app.process_message_in_sandbox(self.mk_msg())
+            msgs = lc.messages()
         self.assertEqual(status, None)
-        [stderr_err] = self.flushLoggedErrors(SandboxError)
+        self.assertEqual(msgs[0],
+                         "Sandbox 'sandbox1' killed for producing too much"
+                         " data on stderr and stdout.")
+        self.assertEqual(len(msgs), 2)  # 2nd message is the bad command log
         [kill_err] = self.flushLoggedErrors(ProcessTerminated)
         self.assertTrue('process ended by signal' in str(kill_err.value))
 
@@ -261,6 +283,29 @@ class SandboxTestCase(SandboxTestCaseBase):
         path = path_str.split(':')
         self.assertTrue('/pp1' not in path)
         self.assertTrue('/pp2' not in path)
+
+    @inlineCallbacks
+    def test_custom_logging_resource(self):
+        app = yield self.setup_app(
+            "import sys, json\n"
+            "log = {'cmd': 'foo.info', 'cmd_id': '1',\n"
+            "       'reply': False, 'msg': 'log info'}\n"
+            "sys.stdout.write(json.dumps(log) + '\\n')\n",
+            {'env': {},
+             'logging_resource': 'foo',
+             'sandbox': {
+                 'foo': {'cls': '%s.ListLoggingResource' % __name__},
+             }},
+        )
+        with LogCatcher() as lc:
+            status = yield app.process_message_in_sandbox(self.mk_msg())
+            msgs = lc.messages()
+        self.assertEqual(status, 0)
+        logging_resource = app.resources.resources['foo']
+        self.assertEqual(logging_resource.msgs, [
+            (logging.INFO, 'log info')
+        ])
+        self.assertEqual(msgs, [])
 
     @inlineCallbacks
     def echo_check(self, handler_name, msg, expected_cmd):
@@ -635,7 +680,7 @@ class TestOutboundResource(ResourceTestCaseBase):
                                             tag='default')
         self.assertEqual(reply, None)
         self.assertEqual(self.app_worker.mock_calls['send_to'],
-                         [(('1234', 'hello'), {'tag': 'default'})])
+                         [(('1234', 'hello'), {'endpoint': 'default'})])
 
 
 class JsDummyAppWorker(DummyAppWorker):
@@ -677,12 +722,34 @@ class TestLoggingResource(ResourceTestCaseBase):
         yield self.create_resource({})
 
     @inlineCallbacks
-    def test_handle_info(self):
-        with LogCatcher() as lc:
-            reply = yield self.dispatch_command('info', msg='foo')
+    def check_logs(self, cmd_name, msg, log_level, **kw):
+        with LogCatcher(log_level=log_level) as lc:
+            reply = yield self.dispatch_command(cmd_name, msg=msg, **kw)
             msgs = lc.messages()
         self.assertEqual(reply['success'], True)
-        self.assertEqual(msgs, ['foo'])
+        self.assertEqual(msgs, [msg])
+
+    def test_handle_debug(self):
+        return self.check_logs('debug', 'foo', logging.DEBUG)
+
+    def test_handle_info(self):
+        return self.check_logs('info', 'foo', logging.INFO)
+
+    def test_handle_warning(self):
+        return self.check_logs('warning', 'foo', logging.WARNING)
+
+    def test_handle_error(self):
+        return self.check_logs('error', 'foo', logging.ERROR)
+
+    def test_handle_critical(self):
+        return self.check_logs('critical', 'foo', logging.CRITICAL)
+
+    def test_handle_log(self):
+        return self.check_logs('log', 'foo', logging.ERROR,
+                               level=logging.ERROR)
+
+    def test_handle_log_defaults_to_info(self):
+        return self.check_logs('log', 'foo', logging.INFO)
 
 
 class TestHttpClientResource(ResourceTestCaseBase):

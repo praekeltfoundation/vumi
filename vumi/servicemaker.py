@@ -10,9 +10,11 @@ from twisted.application.service import IServiceMaker
 from twisted.plugin import IPlugin
 
 from vumi.service import WorkerCreator
-from vumi.utils import load_class_by_string
+from vumi.utils import (load_class_by_string,
+                        generate_worker_id)
 from vumi.errors import VumiError
 from vumi.sentry import SentryLoggerService
+from vumi.worker import BaseWorker
 
 
 def overlay_configs(*configs):
@@ -54,6 +56,8 @@ class VumiOptions(usage.Options):
         ["vumi-config", None, None,
          "YAML config file for setting core vumi options (any command-line"
          " parameter marked with an asterisk)"],
+        ["system-id", None, None,
+         "An identifier for a collection of Vumi workers"],
     ]
 
     default_vumi_options = {
@@ -182,13 +186,17 @@ class VumiWorkerServiceMaker(object):
         sentry_dsn = options.vumi_options.pop('sentry', None)
         class_name = options.worker_class.rpartition('.')[2].lower()
         logger_name = options.worker_config.get('worker_name', class_name)
+        system_id = options.vumi_options.get('system-id', 'global')
+        worker_id = generate_worker_id(system_id, logger_name)
 
         worker_creator = WorkerCreator(options.vumi_options)
         worker = worker_creator.create_worker(options.worker_class,
                                               options.worker_config)
 
         if sentry_dsn is not None:
-            sentry_service = SentryLoggerService(sentry_dsn, logger_name)
+            sentry_service = SentryLoggerService(sentry_dsn,
+                                                 logger_name,
+                                                 worker_id)
             worker.addService(sentry_service)
 
         return worker

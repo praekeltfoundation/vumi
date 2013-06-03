@@ -34,20 +34,12 @@ class ApplicationTestCase(VumiWorkerTestCase, PersistenceMixin):
         interests of reducing boilerplate:
 
         * ``transport_name`` defaults to :attr:`self.transport_name`
-        * ``send_to`` defaults to a dictionary with config for each tag
-          defined in worker's SEND_TO_TAGS attribute. Each tag's config
-          contains a transport_name set to ``<tag>_outbound``.
         """
 
         if cls is None:
             cls = self.application_class
         config = self.mk_config(config)
         config.setdefault('transport_name', self.transport_name)
-        if 'send_to' not in config and cls.SEND_TO_TAGS:
-            config['send_to'] = {}
-            for tag in cls.SEND_TO_TAGS:
-                config['send_to'][tag] = {
-                    'transport_name': '%s_outbound' % tag}
         return self.get_worker(config, cls, start)
 
     def get_dispatched_messages(self):

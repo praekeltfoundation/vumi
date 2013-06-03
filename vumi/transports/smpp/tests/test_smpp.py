@@ -11,7 +11,6 @@ from vumi.transports.smpp.transport import (SmppTransport,
                                             SmppTxTransport,
                                             SmppRxTransport)
 from vumi.transports.smpp.service import SmppService
-from vumi.transports.smpp.clientserver.config import ClientConfig
 from vumi.transports.smpp.clientserver.client import unpacked_pdu_opts
 from vumi.transports.smpp.clientserver.tests.utils import SmscTestServer
 from vumi.transports.tests.utils import TransportTestCase
@@ -24,17 +23,14 @@ class SmppTransportTestCase(TransportTestCase):
     @inlineCallbacks
     def setUp(self):
         super(SmppTransportTestCase, self).setUp()
-        self.config = {
-                "transport_name": self.transport_name,
-                "system_id": "vumitest-vumitest-vumitest",
-                "host": "host",
-                "port": "port",
-                "password": "password",
-                "smpp_bind_timeout": 12,
-                "smpp_enquire_link_interval": 123,
-                "third_party_id_expiry": 3600,  # just 1 hour
-                }
-        self.clientConfig = ClientConfig.from_config(self.config)
+        self.config = self.mk_config({
+            "system_id": "vumitest-vumitest-vumitest",
+            "twisted_endpoint": "tcp:host=localhost:port=0",
+            "password": "password",
+            "smpp_bind_timeout": 12,
+            "smpp_enquire_link_interval": 123,
+            "third_party_id_expiry": 3600,  # just 1 hour
+        })
 
         # hack a lot of transport setup
         self.transport = yield self.get_transport(self.config, start=False)
@@ -52,7 +48,9 @@ class SmppTransportTestCase(TransportTestCase):
             delivery_report=self.transport.delivery_report,
             deliver_sm=lambda: None)
         self.esme = EsmeTransceiver(
-            self.clientConfig, self.transport.redis, self.esme_callbacks)
+            self.transport.get_static_config(),
+            self.transport.get_smpp_bind_params(),
+            self.transport.redis, self.esme_callbacks)
         self.esme.sent_pdus = []
         self.esme.send_pdu = self.esme.sent_pdus.append
         self.esme.state = 'BOUND_TRX'
@@ -61,13 +59,6 @@ class SmppTransportTestCase(TransportTestCase):
         pdu_contents = [p.obj['body']['mandatory_parameters']['short_message']
                         for p in self.esme.sent_pdus]
         self.assertEqual(expected, pdu_contents)
-
-    def test_bind_and_enquire_config(self):
-        self.assertEqual(12, self.transport.client_config.smpp_bind_timeout)
-        self.assertEqual(123,
-                self.transport.client_config.smpp_enquire_link_interval)
-        self.assertEqual(repr(123.0),
-                repr(self.transport.client_config.smpp_enquire_link_interval))
 
     @inlineCallbacks
     def test_message_persistence(self):
@@ -94,7 +85,8 @@ class SmppTransportTestCase(TransportTestCase):
     @inlineCallbacks
     def test_redis_third_party_id_persistence(self):
         # Testing: set -> get -> delete, for redis third party id mapping
-        self.assertEqual(self.transport.third_party_id_expiry, 3600)
+        self.assertEqual(
+            self.transport.get_static_config().third_party_id_expiry, 3600)
         our_id = "blergh34534545433454354"
         their_id = "omghesvomitingnumbers"
         yield self.transport.r_set_id_for_third_party_id(their_id, our_id)
@@ -293,19 +285,22 @@ class EsmeToSmscTestCase(TransportTestCase):
     @inlineCallbacks
     def setUp(self):
         yield super(EsmeToSmscTestCase, self).setUp()
-        self.config = {
+        server_config = {
             "system_id": "VumiTestSMSC",
             "password": "password",
-            "host": "localhost",
-            "port": 0,
+            "twisted_endpoint": "tcp:0",
             "transport_name": self.transport_name,
             "transport_type": "smpp",
         }
-        self.service = SmppService(None, config=self.config)
+        self.service = SmppService(None, config=server_config)
         yield self.service.startWorker()
         self.service.factory.protocol = SmscTestServer
-        self.config['port'] = self.service.listening.getHost().port
-        self.transport = yield self.get_transport(self.config, start=False)
+
+        host = self.service.listening.getHost()
+        client_config = server_config.copy()
+        client_config['twisted_endpoint'] = 'tcp:host=%s:port=%s' % (
+            host.host, host.port)
+        self.transport = yield self.get_transport(client_config, start=False)
         self.expected_delivery_status = 'delivered'
 
     @inlineCallbacks

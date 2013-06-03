@@ -38,12 +38,6 @@ class DummyApplicationWorker(ApplicationWorker):
         self.record.append(('close_session', message))
 
 
-class DeprApplicationWorker(DummyApplicationWorker):
-
-    SEND_TO_TAGS = frozenset(['default', 'outbound1'])
-    start_message_consumer = True
-
-
 class EchoApplicationWorker(ApplicationWorker):
     def consume_user_message(self, message):
         self.reply_to(message, message['content'])
@@ -219,28 +213,14 @@ class TestApplicationWorker(ApplicationTestCase):
         for consumer in self.get_app_consumers(app):
             self.assertFalse(consumer.channel.qos_prefetch_count)
 
-    @inlineCallbacks
-    def test_deprecated_methods_warning(self):
-        class DeprApp(ApplicationWorker):
-            def _setup_transport_publisher(self):
-                return super(DeprApp, self)._setup_transport_publisher()
 
-        with warnings.catch_warnings(record=True) as warns:
-            yield self.get_application({})
-        self.assertEqual(warns, [])
+class TestApplicationWorkerWithSendToConfig(ApplicationTestCase):
 
-        with warnings.catch_warnings(record=True) as warns:
-            yield self.get_application({}, DeprApp)
-        self.assertEqual(len(warns), 2)
-
-
-class TestDeprApplicationWorker(ApplicationTestCase):
-
-    application_class = DeprApplicationWorker
+    application_class = DummyApplicationWorker
 
     @inlineCallbacks
     def setUp(self):
-        yield super(TestDeprApplicationWorker, self).setUp()
+        yield super(TestApplicationWorkerWithSendToConfig, self).setUp()
         self.transport_name = 'test'
         self.config = {
             'transport_name': self.transport_name,
@@ -253,9 +233,7 @@ class TestDeprApplicationWorker(ApplicationTestCase):
                     },
                 },
             }
-        with warnings.catch_warnings(record=True) as warns:
-            self.worker = yield self.get_application(self.config)
-        self.warns = warns[:]
+        self.worker = yield self.get_application(self.config)
 
     def assert_msgs_match(self, msgs, expected_msgs):
         for key in ['timestamp', 'message_id']:
@@ -269,24 +247,9 @@ class TestDeprApplicationWorker(ApplicationTestCase):
             self.assertEqual(msg, expected_msg)
         self.assertEqual(len(msgs), len(expected_msgs))
 
-    def assert_warnings(self, warning_strs):
-        warning_strs = [
-            "SEND_TO_TAGS is deprecated.",
-            "'send_to' configuration is deprecated.",
-            "The 'start_message_consumer' attribute is deprecated.",
-        ] + warning_strs
-        self.assertEqual(len(self.warns), len(warning_strs))
-        for warning_obj, warning_str in zip(self.warns, warning_strs):
-            self.assertTrue(
-                warning_str in str(warning_obj.message),
-                "Warning message %r does not contain %r." % (
-                    str(warning_obj.message), warning_str))
-
     @inlineCallbacks
     def send_to(self, *args, **kw):
-        with warnings.catch_warnings(record=True) as warns:
-            sent_msg = yield self.worker.send_to(*args, **kw)
-        self.warns.extend(warns)
+        sent_msg = yield self.worker.send_to(*args, **kw)
         returnValue(sent_msg)
 
     @inlineCallbacks
@@ -297,8 +260,6 @@ class TestDeprApplicationWorker(ApplicationTestCase):
                 transport_name='default_transport')]
         self.assert_msgs_match(sends, expecteds)
         self.assert_msgs_match(sends, [sent_msg])
-        self.assert_warnings([
-            "The 'tag' parameter to send_to() is deprecated."])
 
     @inlineCallbacks
     def test_send_to_with_options(self):
@@ -310,11 +271,9 @@ class TestDeprApplicationWorker(ApplicationTestCase):
                 transport_name='default_transport')]
         self.assert_msgs_match(sends, expecteds)
         self.assert_msgs_match(sends, [sent_msg])
-        self.assert_warnings([
-            "The 'tag' parameter to send_to() is deprecated."])
 
     @inlineCallbacks
-    def test_send_to_with_tag(self):
+    def test_send_to_with_endpoint(self):
         sent_msg = yield self.send_to('+12345', "Hi!", "outbound1",
                 transport_type=TransportUserMessage.TT_USSD)
         sends = self.get_dispatched_messages()
@@ -324,54 +283,11 @@ class TestDeprApplicationWorker(ApplicationTestCase):
         expecteds[0].set_routing_endpoint("outbound1")
         self.assert_msgs_match(sends, expecteds)
         self.assert_msgs_match(sends, [sent_msg])
-        self.assert_warnings([
-            "The 'tag' parameter to send_to() is deprecated."])
 
     @inlineCallbacks
-    def test_send_to_with_bad_tag(self):
+    def test_send_to_with_bad_endpoint(self):
         yield self.assertFailure(
             self.send_to('+12345', "Hi!", "outbound_unknown"), ValueError)
-        self.assert_warnings([])
-
-    @inlineCallbacks
-    def test_send_to_with_no_send_to_tags(self):
-        config = {'transport_name': 'badconfig_app', 'send_to': {}}
-        with warnings.catch_warnings(record=True) as warns:
-            with LogCatcher(message=r'is required\.$') as lc:
-                yield self.get_application(config)
-                def_log, out1_log = sorted(lc.messages())
-        self.assertTrue(def_log.startswith(
-            "No configuration for send_to tag 'default'."))
-        self.assertTrue(out1_log.startswith(
-            "No configuration for send_to tag 'outbound1'."))
-        self.warns.extend(warns)
-        self.assert_warnings([
-            "SEND_TO_TAGS is deprecated.",
-            "The 'start_message_consumer' attribute is deprecated.",
-        ])
-
-    @inlineCallbacks
-    def test_send_to_with_bad_config(self):
-        config = {'transport_name': 'badconfig_app',
-                  'send_to': {
-                      'default': {},  # missing transport_name
-                      'outbound1': {},  # also missing transport_name
-                      },
-                  }
-        with warnings.catch_warnings(record=True) as warns:
-            with LogCatcher(message=r'is required\.$') as lc:
-                yield self.get_application(config)
-                def_log, out1_log = sorted(lc.messages())
-        self.assertTrue(def_log.startswith(
-            "No transport_name configured for send_to tag 'default'."))
-        self.assertTrue(out1_log.startswith(
-            "No transport_name configured for send_to tag 'outbound1'."))
-        self.warns.extend(warns)
-        self.assert_warnings([
-            "SEND_TO_TAGS is deprecated.",
-            "'send_to' configuration is deprecated.",
-            "The 'start_message_consumer' attribute is deprecated.",
-        ])
 
 
 class TestApplicationMiddlewareHooks(ApplicationTestCase):

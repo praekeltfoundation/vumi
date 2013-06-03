@@ -103,11 +103,13 @@ class SentryLogObserver(object):
     DEFAULT_LOG_LEVEL = logging.INFO
     LOG_LEVEL_THRESHOLD = logging.WARN
 
-    def __init__(self, client, logger_name, log_context_sentinel=None):
+    def __init__(self, client, logger_name, worker_id,
+                 log_context_sentinel=None):
         if log_context_sentinel is None:
             log_context_sentinel = DEFAULT_LOG_CONTEXT_SENTINEL
         self.client = client
         self.logger_name = logger_name
+        self.worker_id = worker_id
         self.log_context_sentinel = log_context_sentinel
         self.log_context = {self.log_context_sentinel: True}
 
@@ -135,13 +137,16 @@ class SentryLogObserver(object):
             "logger": self.logger_for_event(event),
             "level": level,
         }
+        tags = {
+            "worker-id": self.worker_id,
+        }
         failure = event.get('failure')
         if failure:
             exc_info = (failure.type, failure.value, failure.tb)
-            self.client.captureException(exc_info, data=data)
+            self.client.captureException(exc_info, data=data, tags=tags)
         else:
             msg = log.textFromEventDict(event)
-            self.client.captureMessage(msg, data=data)
+            self.client.captureMessage(msg, data=data, tags=tags)
 
     def __call__(self, event):
         if self.log_context_sentinel in event:
@@ -151,11 +156,13 @@ class SentryLogObserver(object):
 
 class SentryLoggerService(Service):
 
-    def __init__(self, dsn, logger_name, logger=None):
+    def __init__(self, dsn, logger_name, worker_id, logger=None):
         self.setName('Sentry Logger')
         self.dsn = dsn
         self.client = vumi_raven_client(dsn=dsn)
-        self.sentry_log_observer = SentryLogObserver(self.client, logger_name)
+        self.sentry_log_observer = SentryLogObserver(self.client,
+                                                     logger_name,
+                                                     worker_id)
         self.logger = logger if logger is not None else log.theLogPublisher
 
     def startService(self):

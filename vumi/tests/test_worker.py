@@ -71,7 +71,7 @@ class TestBaseWorker(VumiWorkerTestCase):
                              ['Starting a DummyWorker worker with config: '
                               "{'worker_name': 'unnamed'}",
                               'Starting HeartBeat publisher with '
-                              'worker_id=unnamed',
+                              'worker_name=unnamed',
                               'Started the publisher'])
         self.assertEqual(calls, [
             ('setup_heartbeat', (), {}),

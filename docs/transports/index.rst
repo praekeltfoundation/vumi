@@ -53,3 +53,4 @@ Transports for specific aggregators
     opera.rst
     vas2nets.rst
     vodacom_messaging.rst
+    mtn_nigeria.rst

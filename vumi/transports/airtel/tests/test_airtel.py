@@ -13,6 +13,9 @@ from vumi.utils import http_request_full
 class TestAirtelUSSDTransportTestCase(TransportTestCase):
 
     transport_class = AirtelUSSDTransport
+    airtel_username = None
+    airtel_password = None
+    session_id = 'session-id'
 
     @inlineCallbacks
     def setUp(self):
@@ -20,8 +23,9 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
         self.config = {
             'web_port': 0,
             'web_path': '/api/v1/airtel/ussd/',
-            'airtel_username': 'userid',
-            'airtel_password': 'password',
+            'airtel_username': self.airtel_username,
+            'airtel_password': self.airtel_password,
+            'validation_mode': 'permissive',
         }
         self.transport = yield self.get_transport(self.config)
         self.session_manager = self.transport.session_manager
@@ -35,10 +39,14 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
 
     def mk_request(self, **params):
         defaults = {
-            'userid': 'userid',
-            'password': 'password',
             'MSISDN': '27761234567',
         }
+        if all([self.airtel_username, self.airtel_password]):
+            defaults.update({
+                'userid': self.airtel_username,
+                'password': self.airtel_password,
+            })
+
         defaults.update(params)
         return self.mk_full_request(**defaults)
 
@@ -46,6 +54,7 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
         defaults = {
             'MSC': 'msc',
             'input': content,
+            'SessionID': self.session_id,
         }
         defaults.update(kwargs)
         return self.mk_request(**defaults)
@@ -53,7 +62,8 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
     def mk_cleanup_request(self, **kwargs):
         defaults = {
             'clean': 'clean-session',
-            'status': 522
+            'error': 522,
+            'SessionID': self.session_id,
         }
         defaults.update(kwargs)
         return self.mk_request(**defaults)
@@ -61,7 +71,7 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
     @inlineCallbacks
     def test_inbound_begin(self):
         # Second connect is the actual start of the session
-        deferred = self.mk_ussd_request('*121#')
+        deferred = self.mk_ussd_request('121')
         [msg] = yield self.wait_for_dispatched_messages(1)
         self.assertEqual(msg['content'], '')
         self.assertEqual(msg['to_addr'], '*121#')
@@ -85,14 +95,13 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
     @inlineCallbacks
     def test_inbound_resume_and_reply_with_end(self):
         # first pre-populate the redis datastore to simulate prior BEG message
-        yield self.session_manager.create_session('27761234567',
+        yield self.session_manager.create_session(self.session_id,
                 to_addr='*167*7#', from_addr='27761234567',
-                last_ussd_params='*167*7*a*b',
                 session_event=TransportUserMessage.SESSION_RESUME)
 
         # Safaricom gives us the history of the full session in the USSD_PARAMS
         # The last submitted bit of content is the last value delimited by '*'
-        deferred = self.mk_ussd_request('*167*7*a*b*c#')
+        deferred = self.mk_ussd_request('c')
 
         [msg] = yield self.wait_for_dispatched_messages(1)
         self.assertEqual(msg['content'], 'c')
@@ -110,8 +119,8 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_inbound_resume_with_failed_to_addr_lookup(self):
-        deferred = self.mk_full_request(MSISDN='123456',
-            input='7*a', userid='userid', password='password')
+        deferred = self.mk_request(MSISDN='123456',
+                                   input='7*a', SessionID='foo')
         response = yield deferred
         self.assertEqual(json.loads(response.delivered_body), {
             'missing_parameter': ['MSC'],
@@ -119,14 +128,7 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_to_addr_handling(self):
-        defaults = {
-            'MSISDN': '12345',
-            'MSC': 'msc',
-            'userid': 'userid',
-            'password': 'password'
-        }
-
-        d1 = self.mk_full_request(input='*167*7*1#', **defaults)
+        d1 = self.mk_ussd_request('167*7*1')
         [msg1] = yield self.wait_for_dispatched_messages(1)
         self.assertEqual(msg1['to_addr'], '*167*7*1#')
         self.assertEqual(msg1['content'], '')
@@ -138,7 +140,7 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
         yield d1
 
         # follow up with the user submitting 'a'
-        d2 = self.mk_full_request(input='*167*7*1*a#', **defaults)
+        d2 = self.mk_ussd_request('a')
         [msg1, msg2] = yield self.wait_for_dispatched_messages(2)
         self.assertEqual(msg2['to_addr'], '*167*7*1#')
         self.assertEqual(msg2['content'], 'a')
@@ -151,7 +153,7 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_hitting_url_twice_without_content(self):
-        d1 = self.mk_ussd_request('*167*7*3#')
+        d1 = self.mk_ussd_request('167*7*3')
         [msg1] = yield self.wait_for_dispatched_messages(1)
         self.assertEqual(msg1['to_addr'], '*167*7*3#')
         self.assertEqual(msg1['content'], '')
@@ -163,7 +165,7 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
         yield d1
 
         # make the exact same request again
-        d2 = self.mk_ussd_request('*167*7*3#')
+        d2 = self.mk_ussd_request('')
         [msg1, msg2] = yield self.wait_for_dispatched_messages(2)
         self.assertEqual(msg2['to_addr'], '*167*7*3#')
         self.assertEqual(msg2['content'], '')
@@ -176,11 +178,10 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_submitting_asterisks_as_values(self):
-        yield self.session_manager.create_session('27761234567',
-                to_addr='*167*7#', from_addr='27761234567',
-                last_ussd_params='*167*7*a*b')
+        yield self.session_manager.create_session(self.session_id,
+                to_addr='*167*7#', from_addr='27761234567')
         # we're submitting a bunch of *s
-        deferred = self.mk_ussd_request('*167*7*a*b*****#')
+        deferred = self.mk_ussd_request('****')
 
         [msg] = yield self.wait_for_dispatched_messages(1)
         self.assertEqual(msg['content'], '****')
@@ -189,16 +190,13 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
             continue_session=True)
         self.dispatch(reply)
         yield deferred
-        session = yield self.session_manager.load_session('27761234567')
-        self.assertEqual(session['last_ussd_params'], '*167*7*a*b*****')
 
     @inlineCallbacks
     def test_submitting_asterisks_as_values_after_asterisks(self):
-        yield self.session_manager.create_session('27761234567',
-                to_addr='*167*7#', from_addr='27761234567',
-                last_ussd_params='*167*7*a*b**')
+        yield self.session_manager.create_session(self.session_id,
+                to_addr='*167*7#', from_addr='27761234567')
         # we're submitting a bunch of *s
-        deferred = self.mk_ussd_request('*167*7*a*b*****#')
+        deferred = self.mk_ussd_request('**')
 
         [msg] = yield self.wait_for_dispatched_messages(1)
         self.assertEqual(msg['content'], '**')
@@ -207,12 +205,10 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
             continue_session=True)
         self.dispatch(reply)
         yield deferred
-        session = yield self.session_manager.load_session('27761234567')
-        self.assertEqual(session['last_ussd_params'], '*167*7*a*b*****')
 
     @inlineCallbacks
     def test_submitting_with_base_code_empty_ussd_params(self):
-        d1 = self.mk_ussd_request('*167#')
+        d1 = self.mk_ussd_request('167')
         [msg1] = yield self.wait_for_dispatched_messages(1)
         self.assertEqual(msg1['to_addr'], '*167#')
         self.assertEqual(msg1['content'], '')
@@ -224,7 +220,7 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
         yield d1
 
         # ask for first menu
-        d2 = self.mk_ussd_request('*167*1#')
+        d2 = self.mk_ussd_request('1')
         [msg1, msg2] = yield self.wait_for_dispatched_messages(2)
         self.assertEqual(msg2['to_addr'], '*167#')
         self.assertEqual(msg2['content'], '1')
@@ -236,7 +232,7 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
         yield d2
 
         # ask for second menu
-        d3 = self.mk_ussd_request('*167*1*1#')
+        d3 = self.mk_ussd_request('1')
         [msg1, msg2, msg3] = yield self.wait_for_dispatched_messages(3)
         self.assertEqual(msg3['to_addr'], '*167#')
         self.assertEqual(msg3['content'], '1')
@@ -249,15 +245,15 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_cleanup_unknown_session(self):
-        response = yield self.mk_cleanup_request()
+        response = yield self.mk_cleanup_request(msisdn='foo')
         self.assertEqual(response.code, http.OK)
         self.assertEqual(response.delivered_body, 'Unknown Session')
 
     @inlineCallbacks
     def test_cleanup_session(self):
-        yield self.session_manager.create_session('27761234567',
+        yield self.session_manager.create_session(self.session_id,
             to_addr='*167*7#', from_addr='27761234567')
-        response = yield self.mk_cleanup_request(MSISDN='27761234567')
+        response = yield self.mk_cleanup_request(msisdn='27761234567')
         self.assertEqual(response.code, http.OK)
         self.assertEqual(response.delivered_body, '')
         [msg] = yield self.wait_for_dispatched_messages(1)
@@ -267,7 +263,7 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
         self.assertEqual(msg['from_addr'], '27761234567')
         self.assertEqual(msg['transport_metadata'], {
             'airtel': {
-                'status': '522',
+                'error': '522',
                 'clean': 'clean-session',
             }
             })
@@ -276,12 +272,73 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
     def test_cleanup_session_missing_params(self):
         response = yield self.mk_request(clean='clean-session')
         self.assertEqual(response.code, http.BAD_REQUEST)
-        self.assertEqual(json.loads(response.delivered_body), {
-            'missing_parameter': ['status'],
-            })
+        json_response = json.loads(response.delivered_body)
+        self.assertEqual(set(json_response['missing_parameter']),
+                         set(['msisdn', 'SessionID', 'error']))
+
+    @inlineCallbacks
+    def test_cleanup_as_seen_in_production(self):
+        """what's a technical spec between friends?"""
+        yield self.session_manager.create_session('13697502734175597',
+            to_addr='*167*7#', from_addr='254XXXXXXXXX')
+        query_string = ("msisdn=254XXXXXXXXX&clean=cleann&error=523"
+                        "&SessionID=13697502734175597&MSC=254XXXXXXXXX"
+                        "&=&=en&=9031510005344&=&=&=postpaid"
+                        "&=20130528171235405&=200220130528171113956582")
+        response = yield http_request_full(
+            '%s?%s' % (self.transport_url, query_string),
+            data='', method='GET')
+        self.assertEqual(response.code, http.OK)
+        self.assertEqual(response.delivered_body, '')
+        [msg] = yield self.wait_for_dispatched_messages(1)
+        self.assertEqual(msg['session_event'],
+                         TransportUserMessage.SESSION_CLOSE)
+        self.assertEqual(msg['to_addr'], '*167*7#')
+        self.assertEqual(msg['from_addr'], '254XXXXXXXXX')
+        self.assertEqual(msg['transport_metadata'], {
+            'airtel': {
+                'clean': 'cleann',
+                'error': '523',
+            }
+        })
+
+
+class TestAirtelUSSDTransportTestCaseWithAuth(TestAirtelUSSDTransportTestCase):
+
+    transport_class = AirtelUSSDTransport
+    airtel_username = 'userid'
+    airtel_password = 'password'
 
     @inlineCallbacks
     def test_cleanup_session_invalid_auth(self):
         response = yield self.mk_cleanup_request(userid='foo', password='bar')
         self.assertEqual(response.code, http.FORBIDDEN)
         self.assertEqual(response.delivered_body, 'Forbidden')
+
+    @inlineCallbacks
+    def test_cleanup_as_seen_in_production(self):
+        """what's a technical spec between friends?"""
+        yield self.session_manager.create_session('13697502734175597',
+            to_addr='*167*7#', from_addr='254XXXXXXXXX')
+        query_string = ("msisdn=254XXXXXXXXX&clean=cleann&error=523"
+                        "&SessionID=13697502734175597&MSC=254XXXXXXXXX"
+                        "&=&=en&=9031510005344&=&=&=postpaid"
+                        "&=20130528171235405&=200220130528171113956582"
+                        "&userid=%s&password=%s" % (self.airtel_username,
+                                                    self.airtel_password))
+        response = yield http_request_full(
+            '%s?%s' % (self.transport_url, query_string),
+            data='', method='GET')
+        self.assertEqual(response.code, http.OK)
+        self.assertEqual(response.delivered_body, '')
+        [msg] = yield self.wait_for_dispatched_messages(1)
+        self.assertEqual(msg['session_event'],
+                         TransportUserMessage.SESSION_CLOSE)
+        self.assertEqual(msg['to_addr'], '*167*7#')
+        self.assertEqual(msg['from_addr'], '254XXXXXXXXX')
+        self.assertEqual(msg['transport_metadata'], {
+            'airtel': {
+                'clean': 'cleann',
+                'error': '523',
+            }
+        })
