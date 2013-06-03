@@ -14,7 +14,7 @@
 import random
 
 from twisted.application.service import Service
-from twisted.internet.defer import gatherResults
+from twisted.internet.defer import gatherResults, Deferred
 from twisted.python import log
 
 
@@ -117,6 +117,7 @@ class ReconnectingClientService(Service):
     _delayedRetry = None
     _connectingDeferred = None
     _protocol = None
+    _protocolStoppingDeferred = None
 
 
     def __init__(self, endpoint, factory):
@@ -147,14 +148,13 @@ class ReconnectingClientService(Service):
 
         if self._connectingDeferred is not None:
             waitFor.append(self._connectingDeferred)
+            self._connectingDeferred.cancel()
             self._connectingDeferred = None
 
         if self._protocol is not None:
-            d = self._protocol.transport.loseConnection()
-            # TODO: is loseConnection guaranteed to return a deferred?
-            #       If not, I assume we have to hook something up to
-            #       the proxy protocol. :/
-            waitFor.append(d)
+            self._protocolStoppingDeferred = Deferred()
+            self._protocol.transport.loseConnection()
+            waitFor.append(self._protocolStoppingDeferred)
 
         return gatherResults(waitFor)
 
@@ -173,6 +173,11 @@ class ReconnectingClientService(Service):
 
     def clientConnectionLost(self, unused_reason):
         # TODO: log the reason?
+        self._protocol = None
+        if self._protocolStoppingDeferred is not None:
+            d = self._protocolStoppingDeferred
+            self._protocolStoppingDeferred = None
+            d.callback(None)
         self.retry()
 
 
@@ -184,9 +189,6 @@ class ReconnectingClientService(Service):
             if self.noisy:
                 log.msg("Abandoning %s on explicit request" % (self.endpoint,))
             return
-
-        # any protocol we have at this point should already be disconnected
-        self._protocol = None
 
         self.retries += 1
         if self.maxRetries is not None and (self.retries > self.maxRetries):
