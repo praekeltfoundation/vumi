@@ -14,6 +14,7 @@
 import random
 
 from twisted.application.service import Service
+from twisted.internet.defer import gatherResults
 from twisted.python import log
 
 
@@ -113,8 +114,9 @@ class ReconnectingClientService(Service):
 
     continueTrying = 1
 
-    _delayedRetryDeferred = None
+    _delayedRetry = None
     _connectingDeferred = None
+    _protocol = None
 
 
     def __init__(self, endpoint, factory):
@@ -135,20 +137,30 @@ class ReconnectingClientService(Service):
         """
         Stop attempting to reconnect and close any existing connections.
         """
-        # XXX: Return a deferred that fires once connecting
-        #      attempts have stopped.
         self.continueTrying = 0
 
-        if self._delayedRetryDeferred is not None:
-            self._delayedRetryDeferred.cancel()
-            self._delayedRetryDeferred = None
+        waitFor = []
+
+        if self._delayedRetry is not None and self._delayedRetry.active():
+            self._delayedRetry.cancel()
+            self._delayedRetry = None
 
         if self._connectingDeferred is not None:
-            self._connectingDeferred.cancel()
+            waitFor.append(self._connectingDeferred)
             self._connectingDeferred = None
+
+        if self._protocol is not None:
+            d = self._protocol.transport.loseConnection()
+            # TODO: is loseConnection guaranteed to return a deferred?
+            #       If not, I assume we have to hook something up to
+            #       the proxy protocol. :/
+            waitFor.append(d)
+
+        return gatherResults(waitFor)
 
 
     def clientConnected(self, protocol):
+        self._protocol = protocol
         # TODO: do we want to provide a hook for the protocol
         #       to call resetDelay itself?
         self.resetDelay()
@@ -173,6 +185,9 @@ class ReconnectingClientService(Service):
                 log.msg("Abandoning %s on explicit request" % (self.endpoint,))
             return
 
+        # any protocol we have at this point should already be disconnected
+        self._protocol = None
+
         self.retries += 1
         if self.maxRetries is not None and (self.retries > self.maxRetries):
             if self.noisy:
@@ -196,8 +211,7 @@ class ReconnectingClientService(Service):
             self._connectingDeferred.addCallback(self.clientConnected)
             self._connectingDeferred.errBack(self.clientConnectionFailed)
 
-        self._delayedRetryDeferred = self.clock.callLater(
-            self.delay, reconnector)
+        self._delayedRetry = self.clock.callLater(self.delay, reconnector)
 
 
     def resetDelay(self):
