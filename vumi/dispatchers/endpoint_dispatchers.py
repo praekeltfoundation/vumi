@@ -23,8 +23,6 @@ class Dispatcher(BaseWorker):
 
     CONFIG_CLASS = DispatcherConfig
 
-    WORKER_TYPE = 'dispatcher'
-
     def setup_worker(self):
         d = maybeDeferred(self.setup_dispatcher)
         d.addCallback(lambda r: self.unpause_connectors())

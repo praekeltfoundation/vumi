@@ -37,8 +37,6 @@ class Transport(BaseWorker):
       it in this case.
     """
 
-    WORKER_TYPE = 'transport'
-
     SUPPRESS_FAILURE_EXCEPTIONS = True
     CONFIG_CLASS = TransportConfig
 
