@@ -32,11 +32,11 @@ class HeartBeatMessage(Message):
 
 class HeartBeatPublisher(Publisher):
     """
-    A publisher which sends periodic heartbeat messages to the AMQP
+    A publisher which send periodic heartbeat messages to the AMQP
     heartbeat.inbound queue
     """
 
-    HEARTBEAT_PERIOD_SECS = 20
+    HEARTBEAT_PERIOD_SECS = 10
 
     def __init__(self, gen_attrs_func):
         self.routing_key = "heartbeat.inbound"
