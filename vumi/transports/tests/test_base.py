@@ -101,6 +101,7 @@ class BaseTransportTestCase(TransportTestCase):
         for consumer in consumers:
             self.assertEqual(consumer.channel.qos_prefetch_count, 20)
 
+    @inlineCallbacks
     def test_metadata(self):
         transport = yield self.get_transport({})
         md = transport._hb_metadata.produce()

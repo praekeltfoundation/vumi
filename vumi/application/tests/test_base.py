@@ -213,9 +213,12 @@ class TestApplicationWorker(ApplicationTestCase):
         for consumer in self.get_app_consumers(app):
             self.assertFalse(consumer.channel.qos_prefetch_count)
 
+    @inlineCallbacks
     def test_metadata(self):
-        worker = self.worker
-        md = worker._hb_metadata.produce()
+        app = yield self.get_application({
+                'transport_name': 'test',
+        })
+        md = app._hb_metadata.produce()
         self.assertEqual(md, {'type': 'application'})
 
 
