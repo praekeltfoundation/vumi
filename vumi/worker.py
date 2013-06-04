@@ -16,7 +16,8 @@ from vumi.config import Config, ConfigInt
 from vumi.errors import DuplicateConnectorError
 from vumi.utils import generate_worker_id
 from vumi.blinkenlights.heartbeat import (HeartBeatPublisher,
-                                          HeartBeatMessage)
+                                          HeartBeatMessage,
+                                          HeartBeatMetadata)
 
 
 def then_call(d, func, *args, **kw):
@@ -45,14 +46,13 @@ class BaseWorker(Worker):
 
     CONFIG_CLASS = BaseConfig
 
-    WORKER_TYPE = 'generic'
-
     def __init__(self, options, config=None):
         super(BaseWorker, self).__init__(options, config=config)
         self.connectors = {}
         self.middlewares = []
         self._static_config = self.CONFIG_CLASS(self.config, static=True)
         self._hb_pub = None
+        self._hb_metadata = HeartBeatMetadata.create_producer(self)
         self._worker_id = None
 
     def startWorker(self):
@@ -112,6 +112,7 @@ class BaseWorker(Worker):
             'pid': os.getpid(),
             'type': self.WORKER_TYPE,
         }
+        attrs.update(self._hb_metadata.produce())
         attrs.update(self.custom_heartbeat_attrs())
         return attrs
 
