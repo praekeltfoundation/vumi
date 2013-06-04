@@ -100,3 +100,8 @@ class BaseTransportTestCase(TransportTestCase):
         self.assertEqual(1, len(consumers))
         for consumer in consumers:
             self.assertEqual(consumer.channel.qos_prefetch_count, 20)
+
+    def test_metadata(self):
+        transport = yield self.get_transport({})
+        md = transport._hb_metadata.produce()
+        self.assertEqual(md, {'type': 'transport'})

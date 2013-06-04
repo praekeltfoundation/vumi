@@ -142,3 +142,9 @@ class TestRoutingTableDispatcher(VumiWorkerTestCase):
         consumers = self.get_dispatcher_consumers(dp)
         for consumer in consumers:
             self.assertFalse(consumer.channel.qos_prefetch_count)
+
+    @inlineCallbacks
+    def test_metadata(self):
+        dp = yield self.get_dispatcher(amqp_prefetch_count=None)
+        md = dp._hb_metadata.produce()
+        self.assertEqual(md, {'type': 'dispatcher'})

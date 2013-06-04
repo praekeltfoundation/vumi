@@ -213,6 +213,11 @@ class TestApplicationWorker(ApplicationTestCase):
         for consumer in self.get_app_consumers(app):
             self.assertFalse(consumer.channel.qos_prefetch_count)
 
+    def test_metadata(self):
+        worker = self.worker
+        md = worker._hb_metadata.produce()
+        self.assertEqual(md, {'type': 'application'})
+
 
 class TestApplicationWorkerWithSendToConfig(ApplicationTestCase):
 

@@ -207,3 +207,21 @@ class TestBaseWorker(VumiWorkerTestCase):
         connector.pause()
         self.worker.unpause_connectors()
         self.assertFalse(connector.paused)
+
+    def test_metadata(self):
+        worker = self.worker
+        md = worker._hb_metadata.produce()
+        self.assertEqual(md, {'type': 'generic'})
+
+    @inlineCallbacks
+    def test_gen_heartbeat_attrs(self):
+        worker = self.worker
+
+        yield worker.setup_heartbeat()
+        attrs = worker._gen_heartbeat_attrs()
+
+        self.assertEqual(type(attrs), dict)
+        self.assertEqual(attrs['worker_id'], 'global:unnamed')
+        self.assertEqual(attrs['worker_name'], 'unnamed')
+        self.assertEqual(attrs['system_id'], 'global')
+        self.assertEqual(attrs['type'], 'generic')
