@@ -13,6 +13,11 @@ from vumi.config import ConfigText
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.worker import BaseWorker, then_call
 from vumi.transports.failures import FailureMessage
+from vumi.blinkenlights.heartbeat.metadata import HeartBeatMetadata
+
+
+class TransportMetadata(HeartBeatMetadata):
+    TYPE_NAME = "transport"
 
 
 class TransportConfig(BaseWorker.CONFIG_CLASS):
@@ -42,6 +47,8 @@ class Transport(BaseWorker):
 
     transport_name = None
     start_message_consumer = True
+
+    METADATA_CLASS = TransportMetadata
 
     def _validate_config(self):
         config = self.get_static_config()

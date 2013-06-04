@@ -7,6 +7,11 @@ from twisted.internet.defer import gatherResults, maybeDeferred
 from vumi.worker import BaseWorker
 from vumi.config import ConfigDict, ConfigList
 from vumi import log
+from vumi.blinkenlights.heartbeat.metadata import HeartBeatMetadata
+
+
+class DispatcherMetadata(HeartBeatMetadata):
+    TYPE_NAME = "dispatcher"
 
 
 class DispatcherConfig(BaseWorker.CONFIG_CLASS):
@@ -22,6 +27,8 @@ class Dispatcher(BaseWorker):
     """Base class for a dispatcher."""
 
     CONFIG_CLASS = DispatcherConfig
+
+    METADATA_CLASS = DispatcherMetadata
 
     def setup_worker(self):
         d = maybeDeferred(self.setup_dispatcher)

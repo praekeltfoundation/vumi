@@ -24,6 +24,10 @@ def then_call(d, func, *args, **kw):
     return d.addCallback(lambda r: func(*args, **kw))
 
 
+class BaseMetadata(HeartBeatMetadata):
+    TYPE_NAME = "generic"
+
+
 class BaseConfig(Config):
     """Base config definition for workers.
 
@@ -46,13 +50,15 @@ class BaseWorker(Worker):
 
     CONFIG_CLASS = BaseConfig
 
+    METADATA_CLASS = BaseMetadata
+
     def __init__(self, options, config=None):
         super(BaseWorker, self).__init__(options, config=config)
         self.connectors = {}
         self.middlewares = []
         self._static_config = self.CONFIG_CLASS(self.config, static=True)
         self._hb_pub = None
-        self._hb_metadata = HeartBeatMetadata.create_producer(self)
+        self._hb_metadata = self.METADATA_CLASS(self)
         self._worker_id = None
 
     def startWorker(self):
@@ -110,15 +116,9 @@ class BaseWorker(Worker):
             'hostname': socket.gethostname(),
             'timestamp': time.time(),
             'pid': os.getpid(),
-            'type': self.WORKER_TYPE,
         }
         attrs.update(self._hb_metadata.produce())
-        attrs.update(self.custom_heartbeat_attrs())
         return attrs
-
-    def custom_heartbeat_attrs(self):
-        """Worker subclasses can override this to add custom attributes"""
-        return {}
 
     def teardown_connectors(self):
         d = succeed(None)

@@ -10,11 +10,16 @@ from vumi.config import ConfigText, ConfigDict
 from vumi.worker import BaseWorker
 from vumi import log
 from vumi.message import TransportUserMessage
+from vumi.blinkenlights.heartbeat.metadata import HeartBeatMetadata
 
 
 SESSION_NEW = TransportUserMessage.SESSION_NEW
 SESSION_CLOSE = TransportUserMessage.SESSION_CLOSE
 SESSION_RESUME = TransportUserMessage.SESSION_RESUME
+
+
+class ApplicationMetadata(HeartBeatMetadata):
+    TYPE_NAME = "application"
 
 
 class ApplicationConfig(BaseWorker.CONFIG_CLASS):
@@ -75,6 +80,8 @@ class ApplicationWorker(BaseWorker):
 
     CONFIG_CLASS = ApplicationConfig
     ALLOWED_ENDPOINTS = frozenset(['default'])
+
+    METADATA_CLASS = ApplicationMetadata
 
     def _validate_config(self):
         config = self.get_static_config()
