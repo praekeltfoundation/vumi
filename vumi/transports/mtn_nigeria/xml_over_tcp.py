@@ -48,13 +48,13 @@ class CodedXmlOverTcpError(XmlOverTcpError):
 
     def __init__(self, code, reason=None):
         self.code = code
-        self.message = self.ERRORS.get(code, 'Unknown Code')
+        self.msg = self.ERRORS.get(code, 'Unknown Code')
         self.reason = reason
 
     def __str__(self):
         return '(%s) %s%s' % (
             self.code,
-            self.message,
+            self.msg,
             ': %s' % self.reason if self.reason else '')
 
 
@@ -149,8 +149,7 @@ class XmlOverTcpClient(Protocol):
     def reset_scheduled_timeout(self):
         self.cancel_scheduled_timeout()
 
-        # cap the timeout period at the enquire link interval to prevent
-        # skipped enquire link responses from going unnoticed.
+        # cap the timeout period at the enquire link interval
         delay = min(self.timeout_period, self.enquire_link_interval)
         self.scheduled_timeout = self.clock.callLater(delay, self.timeout)
 
@@ -159,7 +158,6 @@ class XmlOverTcpClient(Protocol):
             log.msg("Heartbeat could not be started, client not authenticated")
             return
 
-        self.reset_scheduled_timeout()
         self.periodic_enquire_link.clock = self.clock
         d = self.periodic_enquire_link.start(
             self.enquire_link_interval, now=True)
@@ -451,6 +449,7 @@ class XmlOverTcpClient(Protocol):
             ('requestId', self.gen_request_id()),
             ('enqCmd', 'ENQUIRELINK')
         ])
+        self.reset_scheduled_timeout()
 
     def handle_enquire_link_response(self, session_id, params):
         try:
@@ -461,7 +460,7 @@ class XmlOverTcpClient(Protocol):
 
         log.debug("Enquire link response received, sending next request in %s "
                   "seconds" % self.enquire_link_interval)
-        self.reset_scheduled_timeout()
+        self.cancel_scheduled_timeout()
 
     def send_enquire_link_response(self, session_id, request_id):
         self.send_packet(session_id, 'ENQResponse', [

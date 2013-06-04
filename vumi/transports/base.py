@@ -6,8 +6,6 @@ Common infrastructure for transport workers.
 This is likely to get used heavily fast, so try get your changes in early.
 """
 
-import warnings
-
 from twisted.internet.defer import maybeDeferred
 
 from vumi import log
@@ -193,44 +191,3 @@ class Transport(BaseWorker):
         Generate a message id.
         """
         return TransportUserMessage.generate_id()
-
-    # Deprecated methods
-
-    def get_rkey(self, mtype):
-        warnings.warn(
-            "get_rkey() is deprecated. Use connectors and"
-            " endpoints instead.", category=DeprecationWarning)
-        return '%s.%s' % (self.transport_name, mtype)
-
-    def publish_rkey(self, name):
-        warnings.warn(
-            "publish_rkey() is deprecated. Use connectors and"
-            " endpoints instead.", category=DeprecationWarning)
-        return self.publish_to(self.get_rkey(name))
-
-    def setup_transport_connection(self):
-        warnings.warn(
-            "setup_transport_connection() is deprecated. Use connectors and"
-            " endpoints instead.", category=DeprecationWarning)
-
-        d = self.setup_connectors()
-
-        def cb(connector):
-            connector_pubs = self.connectors[self.transport_name]._publishers
-            # Set up publishers
-            self.message_publisher = connector_pubs['inbound']
-            self.event_publisher = connector_pubs['event']
-
-        return d.addCallback(cb)
-
-    def pause_transport_connector(self):
-        warnings.warn(
-            "pause_transport_connector() is deprecated. Use"
-            " pause_connectors() instead", category=DeprecationWarning)
-        self.pause_connectors()
-
-    def unpause_transport_connector(self):
-        warnings.warn(
-            "unpause_transport_connector() is deprecated. Use"
-            " unpause_connectors() instead", category=DeprecationWarning)
-        self.unpause_connectors()

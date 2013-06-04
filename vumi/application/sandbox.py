@@ -363,8 +363,8 @@ class OutboundResource(SandboxResource):
     def handle_send_to(self, api, command):
         content = command['content']
         to_addr = command['to_addr']
-        tag = command.get('tag', 'default')
-        self.app_worker.send_to(to_addr, content, tag=tag)
+        endpoint = command.get('endpoint', 'default')
+        self.app_worker.send_to(to_addr, content, endpoint=endpoint)
 
 
 class JsSandboxResource(SandboxResource):
