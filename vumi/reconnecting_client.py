@@ -131,7 +131,7 @@ class ReconnectingClientService(Service):
 
     def startService(self):
         self.continueTrying = 1
-        self.retry()
+        self.retry(delay=0.0)
 
 
     def stopService(self):
@@ -181,7 +181,7 @@ class ReconnectingClientService(Service):
         self.retry()
 
 
-    def retry(self):
+    def retry(self, delay=None):
         """
         Have this connector connect again, after a suitable delay.
         """
@@ -197,10 +197,12 @@ class ReconnectingClientService(Service):
                         (self.endpoint, self.retries))
             return
 
-        self.delay = min(self.delay * self.factor, self.maxDelay)
-        if self.jitter:
-            self.delay = random.normalvariate(self.delay,
-                                              self.delay * self.jitter)
+        if delay is None:
+            self.delay = min(self.delay * self.factor, self.maxDelay)
+            if self.jitter:
+                self.delay = random.normalvariate(self.delay,
+                                                  self.delay * self.jitter)
+            delay = self.delay
 
         if self.noisy:
             log.msg("%s will retry in %d seconds"
@@ -211,7 +213,7 @@ class ReconnectingClientService(Service):
                 self.factory, self)
             self._connectingDeferred = self.endpoint.connect(proxied_factory)
             self._connectingDeferred.addCallback(self.clientConnected)
-            self._connectingDeferred.errBack(self.clientConnectionFailed)
+            self._connectingDeferred.addErrback(self.clientConnectionFailed)
 
         self._delayedRetry = self.clock.callLater(self.delay, reconnector)
 
