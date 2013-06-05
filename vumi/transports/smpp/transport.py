@@ -3,10 +3,10 @@
 from datetime import datetime
 
 from twisted.internet import reactor
-from twisted.internet.endpoints import clientFromString
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi import log
+from vumi.reconnecting_client import ReconnectingClientService
 from vumi.utils import get_operator_number
 from vumi.transports.base import Transport
 from vumi.transports.smpp.clientserver.client import (
@@ -171,16 +171,18 @@ class SmppTransport(Transport):
             delivery_report=self.delivery_report,
             deliver_sm=self.deliver_sm)
 
+        self._reconn_service = None
         if not hasattr(self, 'esme_client'):
             # start the Smpp transport (if we don't have one)
             self.factory = self.make_factory()
-            yield config.twisted_endpoint.connect(self.factory)
+            self._reconn_service = ReconnectingClientService(
+                config.twisted_endpoint, self.factory)
+            self._reconn_service.startService()
 
     @inlineCallbacks
     def teardown_transport(self):
-        if hasattr(self, 'factory'):
-            self.factory.stopTrying()
-            self.factory.esme.transport.loseConnection()
+        if self._reconn_service is not None:
+            yield self._reconn_service.stopService()
         yield self.redis._close()
 
     def get_smpp_bind_params(self):
