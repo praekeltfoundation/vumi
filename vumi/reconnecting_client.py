@@ -14,7 +14,8 @@
 import random
 
 from twisted.application.service import Service
-from twisted.internet.defer import gatherResults, Deferred
+from twisted.internet.defer import (
+    gatherResults, Deferred, maybeDeferred, succeed)
 from twisted.python import log
 
 
@@ -120,9 +121,10 @@ class ReconnectingClientService(Service):
     _protocolStoppingDeferred = None
 
 
-    def __init__(self, endpoint, factory):
+    def __init__(self, endpoint, factory, whenConnected=None):
         self.endpoint = endpoint
         self.factory = factory
+        self._whenConnected = whenConnected
 
         if self.clock is None:
             from twisted.internet import reactor
@@ -159,11 +161,20 @@ class ReconnectingClientService(Service):
         return gatherResults(waitFor)
 
 
-    def clientConnected(self, protocol):
+    def _fullyConnected(self, protocol):
         self._protocol = protocol
         # TODO: do we want to provide a hook for the protocol
         #       to call resetDelay itself?
         self.resetDelay()
+
+
+    def clientConnected(self, protocol):
+        if self._whenConnected is not None:
+            d = maybeDeferred(self._whenConnected(protocol))
+        else:
+            d = succeed(protocol)
+        d.addCallback(lambda r: self._fullyConnected(protocol))
+        return d
 
 
     def clientConnectionFailed(self, unused_reason):
