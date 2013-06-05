@@ -7,7 +7,8 @@ from vumi import log
 
 
 class ParlayXTransportConfig(Transport.CONFIG_CLASS):
-    extra_config = ConfigText('Some Config var', default='foo')
+    extra_config = ConfigText('Some Config var', default='foo',
+                              static=True)
 
 
 class ParlayXTransport(Transport):
