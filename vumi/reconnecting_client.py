@@ -112,7 +112,7 @@ class ReconnectingClientService(Service):
     clock = None
     noisy = False
 
-    continueTrying = 1
+    continueTrying = False
 
     _delayedRetry = None
     _connectingDeferred = None
@@ -130,7 +130,7 @@ class ReconnectingClientService(Service):
 
 
     def startService(self):
-        self.continueTrying = 1
+        self.continueTrying = True
         self.retry(delay=0.0)
 
 
@@ -138,7 +138,7 @@ class ReconnectingClientService(Service):
         """
         Stop attempting to reconnect and close any existing connections.
         """
-        self.continueTrying = 0
+        self.continueTrying = False
 
         waitFor = []
 
