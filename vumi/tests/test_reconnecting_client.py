@@ -1,5 +1,7 @@
 """Tests for vumi.reconnecting_client."""
 
+import random
+
 from twisted.internet import interfaces
 from twisted.internet.defer import inlineCallbacks, Deferred, CancelledError
 from twisted.internet.protocol import Protocol
@@ -9,6 +11,7 @@ from twisted.trial.unittest import TestCase
 from zope.interface import implementer
 
 from vumi.reconnecting_client import ReconnectingClientService
+from vumi.tests.utils import LogCatcher
 
 
 @implementer(interfaces.IStreamClientEndpoint)
@@ -37,15 +40,20 @@ class DummyTransport(object):
 
 
 class MockRecorder(object):
-    def __init__(self, test_case):
+    def __init__(self, test_case, result=None):
         self._test_case = test_case
         self._calls = []
+        self._result = result
 
     def assertCalledOnce(self, *args, **kw):
         self._test_case.assertEqual(self._calls, [(args, kw)])
 
+    def assertNotCalled(self):
+        self._test_case.assertEqual(self._calls, [])
+
     def __call__(self, *args, **kw):
         self._calls.append((args, kw))
+        return self._result
 
 
 class ReconnectingClientServiceTestCase(TestCase):
@@ -136,9 +144,134 @@ class ReconnectingClientServiceTestCase(TestCase):
         retry.assertCalledOnce()
         self.assertTrue(d.called)
 
-    def test_retry(self):
-        # TODO: ...
-        pass
+    def test_retry_aborts_when_stopping(self):
+        s, e, f = self.make_reconnector()
+        s.continueTrying = False
+        s.retry()
+        self.assertEqual(s.retries, 0)
+
+    def test_noisy_retry_aborts_when_stopping(self):
+        s, e, f = self.make_reconnector()
+        s.noisy = True
+        s.continueTrying = False
+        with LogCatcher() as lc:
+            s.retry()
+            [msg] = lc.messages()
+        self.assertEqual(s.retries, 0)
+        self.assertSubstring("Abandoning <vumi.tests.test_reconnecting_client"
+                             ".ClientTestEndpoint object at", msg)
+        self.assertSubstring("on explicit request", msg)
+
+    def test_retry_aborts_when_max_retries_exceeded(self):
+        s, e, f = self.make_reconnector()
+        s.continueTrying = True
+        s.maxRetries, s.retries = 5, 5
+        s.retry()
+        self.assertEqual(s.retries, 5)
+
+    def test_noisy_retry_aborts_when_max_retries_exceeded(self):
+        s, e, f = self.make_reconnector()
+        s.noisy = True
+        s.continueTrying = True
+        s.maxRetries, s.retries = 5, 5
+        with LogCatcher() as lc:
+            s.retry()
+            [msg] = lc.messages()
+        self.assertEqual(s.retries, 5)
+        self.assertSubstring("Abandoning <vumi.tests.test_reconnecting_client"
+                             ".ClientTestEndpoint object at", msg)
+        self.assertSubstring("after 5 retries", msg)
+
+    def test_retry_with_explicit_delay(self):
+        s, e, f = self.make_reconnector()
+        s.continueTrying = True
+        s.clock = Clock()
+        s.retry(delay=1.5)
+        [delayed] = s.clock.calls
+        self.assertEqual(delayed.time, 1.5)
+
+    def test_noisy_retry_with_explicit_delay(self):
+        s, e, f = self.make_reconnector()
+        s.noisy = True
+        s.continueTrying = True
+        s.clock = Clock()
+        with LogCatcher() as lc:
+            s.retry(delay=1.5)
+            [msg] = lc.messages()
+        [delayed] = s.clock.calls
+        self.assertEqual(delayed.time, 1.5)
+        self.assertSubstring("Will retry <vumi.tests.test_reconnecting_client"
+                             ".ClientTestEndpoint object at", msg)
+        self.assertSubstring("in 1.5 seconds", msg)
+
+    def test_retry_delay_advances(self):
+        s, e, f = self.make_reconnector()
+        s.continueTrying = True
+        s.clock = Clock()
+        s.jitter = None
+        s.retry()
+        [delayed] = s.clock.calls
+        self.assertAlmostEqual(delayed.time, s.factor)
+        self.assertAlmostEqual(s.delay, s.factor)
+
+    def test_retry_delay_is_capped_by_maxDelay(self):
+        s, e, f = self.make_reconnector()
+        s.continueTrying = True
+        s.clock = Clock()
+        s.jitter = None
+        s.maxDelay = 1.5
+        s.retry()
+        [delayed] = s.clock.calls
+        self.assertAlmostEqual(delayed.time, 1.5)
+        self.assertAlmostEqual(s.delay, 1.5)
+
+    def test_retry_with_jitter(self):
+        normal = MockRecorder(self, result=2.0)
+        self.patch(random, 'normalvariate', normal)
+        s, e, f = self.make_reconnector()
+        s.continueTrying = True
+        s.clock = Clock()
+        s.retry()
+        [delayed] = s.clock.calls
+        self.assertAlmostEqual(delayed.time, 2.0)
+        self.assertAlmostEqual(s.delay, 2.0)
+        normal.assertCalledOnce(s.factor, s.factor * s.jitter)
+
+    def test_retry_when_connection_succeeds(self):
+        connected = self.patch_reconnector('clientConnected')
+        s, e, f = self.make_reconnector()
+        s.continueTrying = True
+        s.clock = Clock()
+
+        s.retry()
+        connected.assertNotCalled()
+
+        s.clock.advance(1.0)
+        wrapped_f = yield e.connect_called
+        self.assertEqual(wrapped_f.protocolFactory, f)
+        connected.assertNotCalled()
+
+        p = DummyProtocol()
+        e.connected.callback(p)
+        connected.assertCalledOnce(p)
+
+    def test_retry_when_connection_fails(self):
+        connection_failed = self.patch_reconnector('clientConnectionFailed')
+        s, e, f = self.make_reconnector()
+        s.continueTrying = True
+        s.clock = Clock()
+
+        s.retry()
+        connection_failed.assertNotCalled()
+
+        s.clock.advance(1.0)
+        wrapped_f = yield e.connect_called
+        self.assertEqual(wrapped_f.protocolFactory, f)
+        connection_failed.assertNotCalled()
+
+        failure = Failure(Exception())
+        e.connected.errback(failure)
+        connection_failed.assertCalledOnce(failure)
 
     def test_resetDelay(self):
         initial_delay = ReconnectingClientService.initialDelay
