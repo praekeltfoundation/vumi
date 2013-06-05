@@ -1,7 +1,8 @@
 """Tests for vumi.reconnecting_client."""
 
 from twisted.internet import interfaces
-from twisted.internet.defer import inlineCallbacks, succeed, Deferred
+from twisted.internet.defer import inlineCallbacks, Deferred, CancelledError
+from twisted.internet.protocol import Protocol
 from twisted.internet.task import Clock
 from twisted.python.failure import Failure
 from twisted.trial.unittest import TestCase
@@ -19,6 +20,20 @@ class ClientTestEndpoint(object):
     def connect(self, factory):
         self.connect_called.callback(factory)
         return self.connected
+
+
+class DummyProtocol(Protocol):
+    pass
+
+
+@implementer(interfaces.ITransport)
+class DummyTransport(object):
+
+    def __init__(self):
+        self.lose_connection_called = Deferred()
+
+    def loseConnection(self):
+        self.lose_connection_called.callback(None)
 
 
 class MockRecorder(object):
@@ -53,9 +68,41 @@ class ReconnectingClientServiceTestCase(TestCase):
         self.assertTrue(s.continueTrying)
         retry.assertCalledOnce(delay=0.0)
 
+    @inlineCallbacks
     def test_stopService(self):
-        # TODO: ...
-        pass
+        s, e, f = self.make_reconnector()
+        s.continueTrying = True
+        yield s.stopService()
+        self.assertEqual(s.continueTrying, False)
+
+    @inlineCallbacks
+    def test_stopService_while_retrying(self):
+        s, e, f = self.make_reconnector()
+        clock = Clock()
+        r = s._delayedRetry = clock.callLater(1.0, lambda: None)
+        yield s.stopService()
+        self.assertTrue(r.cancelled)
+        self.assertIdentical(s._delayedRetry, None)
+
+    @inlineCallbacks
+    def test_stopService_while_connecting(self):
+        errs = []
+        s, e, f = self.make_reconnector()
+        s._connectingDeferred = Deferred().addErrback(errs.append)
+        yield s.stopService()
+        [failure] = errs
+        self.assertTrue(failure.check(CancelledError))
+
+    @inlineCallbacks
+    def test_stopService_while_connected(self):
+        s, e, f = self.make_reconnector()
+        s._protocol = DummyProtocol()
+        s._protocol.transport = DummyTransport()
+        d = s.stopService()
+        self.assertFalse(d.called)
+        self.assertTrue(s._protocol.transport.lose_connection_called.called)
+        s.clientConnectionLost(Failure(Exception()))
+        yield d
 
     def test_clientConnected(self):
         reset = self.patch_reconnector('resetDelay')
@@ -100,62 +147,6 @@ class ReconnectingClientServiceTestCase(TestCase):
         s.resetDelay()
         self.assertEqual(s.delay, initial_delay)
         self.assertEqual(s.retries, 0)
-
-    def __test_stopTryingWhenConnected(self):
-        """
-        If a L{ReconnectingClientFactory} has C{stopTrying} called while it is
-        connected, it does not subsequently attempt to reconnect if the
-        connection is later lost.
-        """
-        class NoConnectConnector(object):
-            def stopConnecting(self):
-                raise RuntimeError("Shouldn't be called, we're connected.")
-            def connect(self):
-                raise RuntimeError("Shouldn't be reconnecting.")
-
-        c = ReconnectingClientFactory()
-        c.protocol = Protocol
-        # Let's pretend we've connected:
-        c.buildProtocol(None)
-        # Now we stop trying, then disconnect:
-        c.stopTrying()
-        c.clientConnectionLost(NoConnectConnector(), None)
-        self.assertFalse(c.continueTrying)
-
-
-    def __test_stopTryingDoesNotReconnect(self):
-        """
-        Calling stopTrying on a L{ReconnectingClientFactory} doesn't attempt a
-        retry on any active connector.
-        """
-        class FactoryAwareFakeConnector(FakeConnector):
-            attemptedRetry = False
-
-            def stopConnecting(self):
-                """
-                Behave as though an ongoing connection attempt has now
-                failed, and notify the factory of this.
-                """
-                f.clientConnectionFailed(self, None)
-
-            def connect(self):
-                """
-                Record an attempt to reconnect, since this is what we
-                are trying to avoid.
-                """
-                self.attemptedRetry = True
-
-        f = ReconnectingClientFactory()
-        f.clock = Clock()
-
-        # simulate an active connection - stopConnecting on this connector should
-        # be triggered when we call stopTrying
-        f.connector = FactoryAwareFakeConnector()
-        f.stopTrying()
-
-        # make sure we never attempted to retry
-        self.assertFalse(f.connector.attemptedRetry)
-        self.assertFalse(f.clock.getDelayedCalls())
 
     def test_parametrizedClock(self):
         """
