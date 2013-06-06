@@ -311,8 +311,6 @@ class EsmeToSmscTestCase(TransportTestCase):
     @inlineCallbacks
     def tearDown(self):
         yield super(EsmeToSmscTestCase, self).tearDown()
-        self.transport.factory.stopTrying()
-        self.transport.factory.esme.transport.loseConnection()
         yield self.service.listening.stopListening()
         yield self.service.listening.loseConnection()
 
@@ -443,9 +441,6 @@ class EsmeToSmscTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_submit_and_deliver(self):
-
-        self._block_till_bind = Deferred()
-
         # Startup
         yield self.startTransport()
         yield self.transport._block_till_bind
@@ -511,9 +506,6 @@ class EsmeToSmscTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_submit_and_deliver_ussd_continue(self):
-
-        self._block_till_bind = Deferred()
-
         # Startup
         yield self.startTransport()
         yield self.transport._block_till_bind
@@ -585,9 +577,6 @@ class EsmeToSmscTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_submit_and_deliver_ussd_close(self):
-
-        self._block_till_bind = Deferred()
-
         # Startup
         yield self.startTransport()
         yield self.transport._block_till_bind
@@ -664,8 +653,6 @@ class EsmeToSmscTestCase(TransportTestCase):
         def r_failing_get(third_party_id):
             return succeed(None)
         self.transport.r_get_id_for_third_party_id = r_failing_get
-
-        self._block_till_bind = Deferred()
 
         # Startup
         yield self.startTransport()
@@ -787,16 +774,11 @@ class TxEsmeToSmscTestCase(TransportTestCase):
     @inlineCallbacks
     def tearDown(self):
         yield super(TxEsmeToSmscTestCase, self).tearDown()
-        self.transport.factory.stopTrying()
-        self.transport.factory.esme.transport.loseConnection()
         yield self.service.listening.stopListening()
         yield self.service.listening.loseConnection()
 
     @inlineCallbacks
     def test_submit(self):
-
-        self._block_till_bind = Deferred()
-
         # Startup
         yield self.startTransport()
         yield self.transport._block_till_bind
@@ -874,21 +856,16 @@ class RxEsmeToSmscTestCase(TransportTestCase):
     @inlineCallbacks
     def tearDown(self):
         yield super(RxEsmeToSmscTestCase, self).tearDown()
-        self.transport.factory.stopTrying()
-        self.transport.factory.esme.transport.loseConnection()
         yield self.service.listening.stopListening()
         yield self.service.listening.loseConnection()
 
     @inlineCallbacks
     def test_deliver(self):
-
-        self._block_till_bind = Deferred()
-
         # Startup
         yield self.startTransport()
         yield self.transport._block_till_bind
-        # The Server delivers a SMS to the Client
 
+        # The Server delivers a SMS to the Client
         pdu = DeliverSM(555,
                         short_message="SMS from server",
                         destination_addr="2772222222",
@@ -906,9 +883,6 @@ class RxEsmeToSmscTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_deliver_bad_encoding(self):
-
-        self._block_till_bind = Deferred()
-
         # Startup
         yield self.startTransport()
         yield self.transport._block_till_bind
@@ -944,9 +918,6 @@ class RxEsmeToSmscTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_deliver_ussd_start(self):
-
-        self._block_till_bind = Deferred()
-
         # Startup
         yield self.startTransport()
         yield self.transport._block_till_bind
