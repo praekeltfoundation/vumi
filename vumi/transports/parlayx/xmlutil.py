@@ -282,8 +282,8 @@ def elemfind(elem, path):
 
 def split_qualified(fqname):
     """
-    Split a Clark's notation fully qualified element name into its URI and local
-    name components.
+    Split a fully qualified element name, in Clark's notation, into its URI and
+    local name components.
 
     :param fqname: Fully qualified name in Clark's notation.
     :return: 2-tuple containing the namespace URI and local tag name.
