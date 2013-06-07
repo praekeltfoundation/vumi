@@ -1,11 +1,9 @@
-from xml.etree import ElementTree as etree
-
 from twisted.python.constants import Names, NamedConstant
 from twisted.trial.unittest import TestCase
 
 from vumi.transports.parlayx.xmlutil import (
     Namespace, QualifiedName, ElementMaker, LocalNamespace, split_qualified,
-    gettext)
+    gettext, tostring)
 
 
 
@@ -127,16 +125,16 @@ class QualifiedNameTests(TestCase):
         qname = QualifiedName('tag')
         self.assertEqual(
             '<tag />',
-            etree.tostring(qname()))
+            tostring(qname()))
         self.assertEqual(
             '<tag>hello</tag>',
-            etree.tostring(qname(u'hello')))
+            tostring(qname(u'hello')))
         self.assertEqual(
             '<tag key="value">hello</tag>',
-            etree.tostring(qname('hello', key='value')))
+            tostring(qname('hello', key='value')))
         self.assertEqual(
             '<tag key="value">hello</tag>',
-            etree.tostring(qname('hello', dict(key='value'))))
+            tostring(qname('hello', dict(key='value'))))
 
 
 
@@ -162,16 +160,16 @@ class ElementMakerTests(TestCase):
         E = ElementMaker()
         self.assertEqual(
             '<tag />',
-            etree.tostring(E('tag')))
+            tostring(E('tag')))
         self.assertEqual(
             '<tag>hello</tag>',
-            etree.tostring(E('tag', 'hello')))
+            tostring(E('tag', 'hello')))
         self.assertEqual(
             '<tag key="value">hello</tag>',
-            etree.tostring(E('tag', 'hello', key='value')))
+            tostring(E('tag', 'hello', key='value')))
         self.assertEqual(
             '<tag key="value">hello</tag>',
-            etree.tostring(E('tag', 'hello', dict(key='value'))))
+            tostring(E('tag', 'hello', dict(key='value'))))
 
 
     def test_callable(self):
@@ -182,10 +180,10 @@ class ElementMakerTests(TestCase):
         E = ElementMaker()
         self.assertEqual(
             '<tag><child /></tag>',
-            etree.tostring(E('tag', LocalNamespace.child)))
+            tostring(E('tag', LocalNamespace.child)))
         self.assertEqual(
             '<tag>hello</tag>',
-            etree.tostring(E('tag', lambda: 'hello')))
+            tostring(E('tag', lambda: 'hello')))
 
 
     def test_nested(self):
@@ -196,16 +194,16 @@ class ElementMakerTests(TestCase):
         E = ElementMaker()
         self.assertEqual(
             '<tag><child /></tag>',
-            etree.tostring(E('tag', E('child'))))
+            tostring(E('tag', E('child'))))
         self.assertEqual(
             '<tag><child>hello</child></tag>',
-            etree.tostring(E('tag', E('child', 'hello'))))
+            tostring(E('tag', E('child', 'hello'))))
         self.assertEqual(
             '<tag><child key="value">hello</child></tag>',
-            etree.tostring(E('tag', E('child', 'hello', key='value'))))
+            tostring(E('tag', E('child', 'hello', key='value'))))
         self.assertEqual(
             '<tag><child key="value">hello</child></tag>',
-            etree.tostring(E('tag', E('child', 'hello', dict(key='value')))))
+            tostring(E('tag', E('child', 'hello', dict(key='value')))))
 
 
     def test_namespaced(self):
@@ -216,14 +214,14 @@ class ElementMakerTests(TestCase):
         E = ElementMaker()
         self.assertEqual(
             '<ns0:tag xmlns:ns0="http://example.com" />',
-            etree.tostring(E('{http://example.com}tag')))
+            tostring(E('{http://example.com}tag')))
         self.assertEqual(
             '<ns0:tag xmlns:ns0="http://example.com" />',
-            etree.tostring(QualifiedName('http://example.com', 'tag')()))
+            tostring(QualifiedName('http://example.com', 'tag')()))
         ns = Namespace('http://example.com', 'ex')
         self.assertEqual(
             '<ex:tag xmlns:ex="http://example.com" />',
-            etree.tostring(ns.tag()))
+            tostring(ns.tag()))
 
 
     def test_namespaced_attributes(self):
@@ -235,11 +233,11 @@ class ElementMakerTests(TestCase):
         attrib = {ns.key: 'value'}
         self.assertEqual(
             '<ex:tag xmlns:ex="http://example.com" ex:key="value" />',
-            etree.tostring(ns.tag(attrib)))
+            tostring(ns.tag(attrib)))
         attrib = {'{http://example.com}key': 'value'}
         self.assertEqual(
             '<ex:tag xmlns:ex="http://example.com" ex:key="value" />',
-            etree.tostring(ns.tag(attrib)))
+            tostring(ns.tag(attrib)))
 
 
     def test_typemap(self):
@@ -252,10 +250,10 @@ class ElementMakerTests(TestCase):
             int: lambda e, v: LocalNamespace.int(str(v))})
         self.assertEqual(
             '<tag>2.50</tag>',
-            etree.tostring(E('tag', 2.5)))
+            tostring(E('tag', 2.5)))
         self.assertEqual(
             '<tag><int>42</int></tag>',
-            etree.tostring(E('tag', 42)))
+            tostring(E('tag', 42)))
 
 
 

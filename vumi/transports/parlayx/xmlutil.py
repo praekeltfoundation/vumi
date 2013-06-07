@@ -331,9 +331,13 @@ def gettext(elem, path, default=None, parse=None):
 
 LocalNamespace = Namespace(None)
 Element = ElementMaker()
+parse_document = etree.parse
+fromstring = etree.fromstring
+tostring = etree.tostring
 
 
 
 __all__ = [
     'Namespace', 'QualifiedName', 'ElementMaker', 'elemfind',
-    'split_qualified', 'gettext', 'LocalNamespace', 'Element']
+    'split_qualified', 'gettext', 'LocalNamespace', 'Element',
+    'parse_document', 'fromstring', 'tostring']
