@@ -189,11 +189,20 @@ class ElementMaker(object):
         """
         self._makeelement = etree.Element
         self._typemap = {
+            list: self._add_children,
             dict: self._set_attributes,
             unicode: self._add_text,
             str: self._add_text}
         if typemap is not None:
             self._typemap.update(typemap)
+
+
+    def _add_children(self, elem, children):
+        """
+        Add children to an element.
+        """
+        for child in children:
+            self._handle_child(elem, child)
 
 
     def _set_attributes(self, elem, attrib):
@@ -228,6 +237,31 @@ class ElementMaker(object):
             elem.text = (elem.text or '') + text
 
 
+    def _handle_child(self, parent, child):
+        """
+        Add a child element to a parent element.
+
+        Child elements can be any of the following:
+
+        * A callable, that will be called with no parameters;
+        * An ElementTree element;
+        * `str` or `unicode` text content;
+        * A `list` containing any of the above.
+        """
+        if callable(child):
+            child = child()
+        t = self._typemap.get(type(child))
+        if t is None:
+            if etree.iselement(child):
+                parent.append(child)
+                return
+            raise TypeError('Unknown child type: %r' % (child,))
+
+        v = t(parent, child)
+        if v is not None:
+            self._handle_child(parent, v)
+
+
     def element(self, tag, *children, **attrib):
         """
         Create an ElementTree element.
@@ -237,19 +271,6 @@ class ElementMaker(object):
         :param **attrib: Element XML attributes.
         :return: ElementTree element.
         """
-        def _handle_child(parent, child):
-            if callable(child):
-                child = child()
-            t = self._typemap.get(type(child))
-            if t is None:
-                if etree.iselement(child):
-                    parent.append(child)
-                    return
-                raise TypeError('Unknown child type: %r' % (child,))
-
-            v = t(parent, child)
-            if v is not None:
-                _handle_child(parent, v)
 
         if isinstance(tag, etree.QName):
             tag = tag.text
@@ -260,7 +281,7 @@ class ElementMaker(object):
             self._set_attributes(elem, attrib)
 
         for child in children:
-            _handle_child(elem, child)
+            self._handle_child(elem, child)
 
         return elem
 

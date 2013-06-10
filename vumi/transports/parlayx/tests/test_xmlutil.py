@@ -186,6 +186,20 @@ class ElementMakerTests(TestCase):
             tostring(E('tag', lambda: 'hello')))
 
 
+    def test_list(self):
+        """
+        Providing a list child will result in all the elements of the list
+        added individually.
+        """
+        E = ElementMaker()
+        self.assertEqual(
+            '<tag><child1 /><child2 /></tag>',
+            tostring(E('tag', [L.child1, L.child2])))
+        self.assertEqual(
+            '<tag>text1text2</tag>',
+            tostring(E('tag', ['text1', 'text2'])))
+
+
     def test_nested(self):
         """
         Children can themselves be ElementTree elements, resulting in nested
