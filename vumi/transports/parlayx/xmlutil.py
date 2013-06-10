@@ -295,9 +295,18 @@ def elemfind(elem, path):
     Helper version of `xml.etree.ElementTree.Element.find` that understands
     `xml.etree.ElementTree.QName`.
     """
+    return next(iter(elemfindall(elem, path)), None)
+
+
+
+def elemfindall(elem, path):
+    """
+    Helper version of `xml.etree.ElementTree.Element.findall` that understands
+    `xml.etree.ElementTree.QName`.
+    """
     if isinstance(path, etree.QName):
         path = path.text
-    return elem.find(path)
+    return elem.findall(path)
 
 
 
@@ -337,16 +346,43 @@ def gettext(elem, path, default=None, parse=None):
     :param parse:
         A callable to transform the found element's text.
     """
-    e = elemfind(elem, path)
-    if e is None or e.text is None:
-        result = default
-    else:
-        result = unicode(e.text).strip()
+    return next(gettextall(elem, path, default, parse), default)
 
-    if result is not None and parse is not None:
-        result = parse(result)
 
-    return result
+
+def gettextall(elem, path, default=None, parse=None):
+    """
+    Get the text of an `ElementTree` element and optionally transform it.
+
+    If `default` and `parse` are not `None`, `parse` will be called with
+    `default`.
+
+    :param elem:
+        ElementTree element to find `path` on.
+
+    :type path: unicode
+    :param path:
+        Path to the sub-element.
+
+    :param default:
+        A default value to use if the `text` attribute on the found element
+        is `None`, or the element is not found; defaults to `None`.
+
+    :type  parse: callable
+    :param parse:
+        A callable to transform the found element's text.
+    """
+    es = elemfindall(elem, path)
+    for e in es:
+        if e is None or e.text is None:
+            result = default
+        else:
+            result = unicode(e.text).strip()
+
+        if result is not None and parse is not None:
+            result = parse(result)
+
+        yield result
 
 
 

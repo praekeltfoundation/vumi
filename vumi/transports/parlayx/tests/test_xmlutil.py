@@ -2,8 +2,8 @@ from twisted.python.constants import Names, NamedConstant
 from twisted.trial.unittest import TestCase
 
 from vumi.transports.parlayx.xmlutil import (
-    Namespace, QualifiedName, ElementMaker, LocalNamespace, split_qualified,
-    gettext, tostring)
+    Namespace, QualifiedName, ElementMaker, LocalNamespace as L,
+    split_qualified, gettext, gettextall, tostring, elemfind, elemfindall)
 
 
 
@@ -180,7 +180,7 @@ class ElementMakerTests(TestCase):
         E = ElementMaker()
         self.assertEqual(
             '<tag><child /></tag>',
-            tostring(E('tag', LocalNamespace.child)))
+            tostring(E('tag', L.child)))
         self.assertEqual(
             '<tag>hello</tag>',
             tostring(E('tag', lambda: 'hello')))
@@ -261,7 +261,7 @@ class ElementMakerTests(TestCase):
         """
         E = ElementMaker(typemap={
             float: lambda e, v: '%0.2f' % (v,),
-            int: lambda e, v: LocalNamespace.int(str(v))})
+            int: lambda e, v: L.int(str(v))})
         self.assertEqual(
             '<tag>2.50</tag>',
             tostring(E('tag', 2.5)))
@@ -284,14 +284,16 @@ class GetTextTests(TestCase):
     Tests for `vumi.transports.parlayx.xmlutil.gettext`.
     """
     def setUp(self):
-        self.root = LocalNamespace.top(
-            LocalNamespace.a('hello'),
-            LocalNamespace.b('42'),
-            LocalNamespace.c('Foo'),
-            LocalNamespace.d,
-            LocalNamespace.sub(
-                LocalNamespace.e('world'),
-                LocalNamespace.f))
+        self.root = L.top(
+            L.a('hello'),
+            L.b('42'),
+            L.b('24'),
+            L.c('Foo'),
+            L.d,
+            L.sub(
+                L.e('world'),
+                L.e('all'),
+                L.f))
 
 
     def test_simple(self):
@@ -301,11 +303,11 @@ class GetTextTests(TestCase):
         """
         res = gettext(self.root, u'a')
         self.assertIdentical(unicode, type(res))
-        self.assertEquals(res, u'hello')
+        self.assertEqual(res, u'hello')
 
         res = gettext(self.root, u'sub/e')
         self.assertIdentical(unicode, type(res))
-        self.assertEquals(res, u'world')
+        self.assertEqual(res, u'world')
 
 
     def test_default(self):
@@ -315,15 +317,15 @@ class GetTextTests(TestCase):
         to `gettext` being used, defaulting to `None`.
         """
         self.assertIdentical(gettext(self.root, u'd'), None)
-        self.assertEquals(gettext(self.root, u'd', default=42), 42)
+        self.assertEqual(gettext(self.root, u'd', default=42), 42)
 
         self.assertIdentical(gettext(self.root, u'sub/f'), None)
         res = gettext(self.root, u'sub/f', default='a')
         self.assertIdentical(str, type(res))
-        self.assertEquals(res, 'a')
+        self.assertEqual(res, 'a')
 
         self.assertIdentical(gettext(self.root, u'haha_what'), None)
-        self.assertEquals(gettext(self.root, u'haha_what', default=42), 42)
+        self.assertEqual(gettext(self.root, u'haha_what', default=42), 42)
 
 
     def test_parse(self):
@@ -331,10 +333,10 @@ class GetTextTests(TestCase):
         Specifying a `parse` callable results in that being called to transform
         the element text.
         """
-        self.assertEquals(
+        self.assertEqual(
             42,
             gettext(self.root, u'b', parse=int))
-        self.assertEquals(
+        self.assertEqual(
             MetasyntacticVariables.Foo,
             gettext(self.root, u'c',
                     parse=MetasyntacticVariables.lookupByName))
@@ -348,14 +350,30 @@ class GetTextTests(TestCase):
         given, and the default value is used, the default value will be passed
         to the callable.
         """
-        self.assertEquals(
+        self.assertEqual(
             42,
             gettext(self.root, u'b', default=3.1415, parse=int))
-        self.assertEquals(
+        self.assertEqual(
             21,
             gettext(self.root, u'd', default=21, parse=int))
         self.assertRaises(ValueError,
             gettext, self.root, u'd', default='foo', parse=int)
+
+
+    def test_gettextall(self):
+        """
+        `gettextall` is like `gettext` except it uses `elemfindall` instead of
+        `elemfind`, returning a ``list`` of results.
+        """
+        self.assertEqual(
+            [42, 24],
+            list(gettextall(self.root, u'b', parse=int)))
+        self.assertEqual(
+            ['world', 'all'],
+            list(gettextall(self.root, u'sub/e')))
+        self.assertEqual(
+            [],
+            list(gettextall(self.root, u'what')))
 
 
 
@@ -367,7 +385,7 @@ class SplitQualifiedTests(TestCase):
         """
         `split_qualified` splits a local XML name into `None` and the tag name.
         """
-        self.assertEquals((None, 'tag'), split_qualified('tag'))
+        self.assertEqual((None, 'tag'), split_qualified('tag'))
 
 
     def test_qualified(self):
@@ -375,6 +393,57 @@ class SplitQualifiedTests(TestCase):
         `split_qualified` splits a qualified XML name into a URI and the tag
         name.
         """
-        self.assertEquals(
+        self.assertEqual(
             ('http://example.com', 'tag'),
             split_qualified('{http://example.com}tag'))
+
+
+
+class FindTests(TestCase):
+    """
+    Tests for `vumi.transports.parlayx.xmlutil.elemfind`.
+    """
+    def setUp(self):
+        self.root = L.parent(
+            L.child1, L.child2, L.child2, L.child3)
+
+
+    def test_elemfind(self):
+        """
+        `elemfind` finds the first `QualifiedName` or path specified.
+        """
+        self.assertEqual(
+            '<child1 />',
+            tostring(elemfind(self.root, 'child1')))
+        self.assertEqual(
+            '<child2 />',
+            tostring(elemfind(self.root, L.child2)))
+
+
+    def test_elemfind_none(self):
+        """
+        `elemfind` returns ``None`` if the `QualifiedName` or path specified
+        cannot be found.
+        """
+        self.assertIdentical(None, elemfind(self.root, L.what))
+
+
+    def test_elemfindall(self):
+        """
+        `elemfind` finds all sub-elements with the `QualifiedName` or path
+        specified.
+        """
+        self.assertEqual(
+            ['<child1 />'],
+            map(tostring, elemfindall(self.root, L.child1)))
+        self.assertEqual(
+            ['<child2 />', '<child2 />'],
+            map(tostring, elemfindall(self.root, 'child2')))
+
+
+    def test_elemfindall_none(self):
+        """
+        `elemfind` returns an empty list if the `QualifiedName` or path
+        specified cannot be found.
+        """
+        self.assertEqual([], elemfindall(self.root, L.what))
