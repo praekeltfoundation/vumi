@@ -1,3 +1,4 @@
+# -*- test-case-name: vumi.transports.parlayx.tests.test_xmlutil -*-
 """
 XML convenience types and functions.
 
