@@ -85,6 +85,7 @@ XML attributes may be qualified too:
     ... NS.parent({NS.attr: 'value'}))
     '<ex:parent xmlns:ex="http://example.com" ex:attr="value" />'
 """
+from collections import defaultdict
 from xml.etree import ElementTree as etree
 
 
@@ -384,6 +385,49 @@ def gettextall(elem, path, default=None, parse=None):
             result = parse(result)
 
         yield result
+
+
+
+def element_to_dict(root):
+    """
+    Convert an ElementTree element into a dictionary structure.
+
+    Text content is stored against a special key, ``#text``, unless the element
+    contains only text and no attributes.
+
+    Attributes are converted into dictionaries of the attribute name, prefixed
+    with ``@``, keyed against the attribute value, which are keyed against the
+    root element's name.
+
+    Child elements are recursively turned into dictionaries. Child elements
+    with the same name are coalesced into a ``list``.
+
+    :param root: ElementTree element root to convert into a ``dict``.
+    :return: ``dict`` representation of `root`.
+    """
+    d = {root.tag: {} if root.attrib else None}
+    children = root.getchildren()
+    if children:
+        dd = defaultdict(list)
+        for child_dict in map(element_to_dict, children):
+            for k, v in child_dict.iteritems():
+                dd[k].append(v)
+        d = {root.tag: dict((k, v[0] if len(v) == 1 else v)
+                            for k, v in dd.iteritems())}
+
+    if root.attrib:
+        d[root.tag].update(
+            ('@' + str(k), v) for k, v in root.attrib.iteritems())
+
+    if root.text:
+        text = root.text.strip()
+        if children or root.attrib:
+            if text:
+              d[root.tag]['#text'] = text
+        else:
+            d[root.tag] = text
+
+    return d
 
 
 

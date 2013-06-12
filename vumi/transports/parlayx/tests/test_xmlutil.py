@@ -3,7 +3,8 @@ from twisted.trial.unittest import TestCase
 
 from vumi.transports.parlayx.xmlutil import (
     Namespace, QualifiedName, ElementMaker, LocalNamespace as L,
-    split_qualified, gettext, gettextall, tostring, elemfind, elemfindall)
+    split_qualified, gettext, gettextall, tostring, elemfind, elemfindall,
+    element_to_dict)
 
 
 
@@ -447,3 +448,118 @@ class FindTests(TestCase):
         specified cannot be found.
         """
         self.assertEqual([], elemfindall(self.root, L.what))
+
+
+
+class ElementToDictTests(TestCase):
+    """
+    Tests for `vumi.transports.parlayx.xmlutil.element_to_dict`.
+    """
+    def test_empty(self):
+        """
+        An empty element produces a ``None`` value keyed against its tag name.
+        """
+        self.assertEqual(
+            {'root': None},
+            element_to_dict(L.root()))
+
+
+    def test_empty_attributes(self):
+        """
+        An element containing only attributes, and no content, has its
+        attributes, prefixed with an ``@`` keyed against its tag name.
+        """
+        self.assertEqual(
+            {'root': {'@attr': 'value'}},
+            element_to_dict(L.root(attr='value')))
+
+
+    def test_text(self):
+        """
+        An element containing only text content, has its text keyed against its
+        tag name.
+        """
+        self.assertEqual(
+            {'root': 'hello'},
+            element_to_dict(L.root('hello')))
+
+
+    def test_text_attributes(self):
+        """
+        An element containing attributes and text content, has its
+        attributes, prefixed with an ``@`` keyed against its tag name and its
+        text keyed against ``#text``.
+        """
+        self.assertEqual(
+            {'root': {'#text': 'hello', '@attr': 'value'}},
+            element_to_dict(L.root('hello', attr='value')))
+
+
+    def test_children_text(self):
+        """
+        Child elements are recursively nested.
+
+        An element containing only text content, has its text keyed against its
+        tag name.
+        """
+        self.assertEqual(
+            {'root': {'child': 'hello'}},
+            element_to_dict(
+                L.root(L.child('hello'))))
+
+
+    def test_children_attributes(self):
+        """
+        Child elements are recursively nested.
+
+        An element containing only attributes, and no content, has its
+        attributes, prefixed with an ``@`` keyed against its tag name.
+        """
+        self.assertEqual(
+            {'root': {'child': {'@attr': 'value'}}},
+            element_to_dict(
+                L.root(L.child(attr='value'))))
+
+
+    def test_children_text_attributes(self):
+        """
+        Child elements are recursively nested.
+
+        An element containing attributes and text content, has its
+        attributes, prefixed with an ``@`` keyed against its tag name and its
+        text keyed against ``#text``.
+        """
+        self.assertEqual(
+            {'root': {'child': {'#text': 'hello', '@attr': 'value'}}},
+            element_to_dict(L.root(L.child('hello', attr='value'))))
+
+
+    def test_children_multiple(self):
+        """
+        Multiple child elements with the same tag name are coalesced into
+        a ``list``.
+        """
+        self.assertEqual(
+            {'root': {'child': [{'@attr': 'value'}, 'hello']}},
+            element_to_dict(
+                L.root(L.child(attr='value'), L.child('hello'))))
+
+
+    def test_namespaced(self):
+        """
+        `element_to_dict` supports namespaced element names and namespaced
+        attributes.
+        """
+        ns = Namespace('http://example.com', 'ex')
+        self.assertEqual(
+            {str(ns.root): {
+                'child': [
+                    {'@' + str(ns.attr): 'value'},
+                    {'@attr2': 'value2',
+                     '#text': 'hello'},
+                    'world']}},
+            element_to_dict(
+                ns.root(
+                    L.child({ns.attr: 'value'}),
+                    L.child('hello', attr2='value2'),
+                    L.child('world'))))
