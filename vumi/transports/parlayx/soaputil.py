@@ -232,8 +232,11 @@ class SoapFault(RuntimeError):
         """
         Serialize this SOAP fault to an ElementTree element.
         """
+        detail = self.detail
+        if detail is not None:
+            detail = self.detail.getchildren()
         return soap_fault(
-            self.code, self.string, self.actor, self.detail.getchildren())
+            self.code, self.string, self.actor, detail)
 
 
 

@@ -153,6 +153,22 @@ class SoapFaultTests(TestCase):
             element_to_dict(fault.to_element()))
 
 
+    def test_to_element_no_detail(self):
+        """
+        `SoapFault.to_element` serializes the fault to a SOAP ``Fault``
+        ElementTree element, omitting the ``detail`` element if
+        `SoapFault.detail` is None.
+        """
+        fault = SoapFault.from_element(_make_fault(
+            'soapenv:Client', 'message', 'actor'))
+        self.assertEqual(
+            {str(SOAP_ENV.Fault): {
+                'faultcode': fault.code,
+                'faultstring': fault.string,
+                'faultactor': fault.actor}},
+            element_to_dict(fault.to_element()))
+
+
     def test_expected_faults(self):
         """
         `SoapFault.from_element` creates an instance of a specified `SoapFault`
