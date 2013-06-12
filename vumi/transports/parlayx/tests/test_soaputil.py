@@ -10,7 +10,7 @@ from vumi.transports.parlayx.soaputil import (
     SOAP_ENV, soap_envelope, unwrap_soap_envelope, soap_fault, tostring,
     perform_soap_request, SoapFault)
 from vumi.transports.parlayx.xmlutil import (
-    gettext, Element, LocalNamespace as L)
+    gettext, Element, LocalNamespace as L, element_to_dict)
 
 
 
@@ -129,6 +129,28 @@ class SoapFaultTests(TestCase):
             ('soapenv:Client', 'message', 'actor'),
             (fault.code, fault.string, fault.actor))
         self.assertIdentical(None, fault.parsed_detail)
+
+
+    def test_to_element(self):
+        """
+        `SoapFault.to_element` serializes the fault to a SOAP ``Fault``
+        ElementTree element.
+        """
+        detail = L.TestFaultDetail(
+                L.foo('a'),
+                L.bar('b'))
+
+        fault = SoapFault.from_element(_make_fault(
+            'soapenv:Client', 'message', 'actor', detail=detail))
+        self.assertEqual(
+            {str(SOAP_ENV.Fault): {
+                'faultcode': fault.code,
+                'faultstring': fault.string,
+                'faultactor': fault.actor,
+                'detail': {
+                    'TestFaultDetail': {'foo': 'a',
+                                        'bar': 'b'}}}},
+            element_to_dict(fault.to_element()))
 
 
     def test_expected_faults(self):

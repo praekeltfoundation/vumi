@@ -228,6 +228,14 @@ class SoapFault(RuntimeError):
             faultcode, faultstring, faultactor, detail, parsed_detail)
 
 
+    def to_element(self):
+        """
+        Serialize this SOAP fault to an ElementTree element.
+        """
+        return soap_fault(
+            self.code, self.string, self.actor, self.detail.getchildren())
+
+
 
 __all__ = [
     'perform_soap_request', 'soap_envelope', 'unwrap_soap_envelope',
