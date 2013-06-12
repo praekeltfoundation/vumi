@@ -4,7 +4,7 @@ import json
 import uuid
 
 from twisted.internet import reactor
-from twisted.internet.protocol import Protocol, ReconnectingClientFactory
+from twisted.internet.protocol import Protocol, ClientFactory
 from twisted.internet.task import LoopingCall
 from twisted.internet.defer import inlineCallbacks, returnValue, DeferredQueue
 
@@ -507,7 +507,7 @@ class EsmeReceiver(EsmeTransceiver):
         log.msg('STATE: %s' % (self.state))
 
 
-class EsmeTransceiverFactory(ReconnectingClientFactory):
+class EsmeTransceiverFactory(ClientFactory):
 
     def __init__(self, config, bind_params, redis, esme_callbacks):
         self.config = config
@@ -525,20 +525,17 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
         log.msg('Connected')
         self.esme = EsmeTransceiver(
             self.config, self.bind_params, self.redis, self.esme_callbacks)
-        self.resetDelay()
         return self.esme
 
     @inlineCallbacks
     def clientConnectionLost(self, connector, reason):
         log.msg('Lost connection.  Reason:', reason)
         yield self.esme_callbacks.disconnect()
-        ReconnectingClientFactory.clientConnectionLost(
-                self, connector, reason)
+        ClientFactory.clientConnectionLost(self, connector, reason)
 
     def clientConnectionFailed(self, connector, reason):
         log.err(reason, 'Connection failed')
-        ReconnectingClientFactory.clientConnectionFailed(
-                self, connector, reason)
+        ClientFactory.clientConnectionFailed(self, connector, reason)
 
 
 class EsmeTransmitterFactory(EsmeTransceiverFactory):
@@ -547,7 +544,6 @@ class EsmeTransmitterFactory(EsmeTransceiverFactory):
         log.msg('Connected')
         self.esme = EsmeTransmitter(
             self.config, self.bind_params, self.redis, self.esme_callbacks)
-        self.resetDelay()
         return self.esme
 
 
@@ -557,7 +553,6 @@ class EsmeReceiverFactory(EsmeTransceiverFactory):
         log.msg('Connected')
         self.esme = EsmeReceiver(
             self.config, self.bind_params, self.redis, self.esme_callbacks)
-        self.resetDelay()
         return self.esme
 
 
