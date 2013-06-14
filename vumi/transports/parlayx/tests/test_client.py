@@ -113,9 +113,9 @@ class ParlayXClientTests(TestCase):
         self.requests = []
 
 
-    def _http_request(self, response, uri, body, headers):
+    def _http_request_full(self, response, uri, body, headers):
         """
-        A mock for `vumi.utils.http_request`.
+        A mock for `vumi.utils.http_request_full`.
 
         Store an HTTP request's information and return a canned response.
         """
@@ -128,7 +128,8 @@ class ParlayXClientTests(TestCase):
         Perform a SOAP request with a canned response.
         """
         return perform_soap_request(
-            http_request=partial(self._http_request, response), *a, **kw)
+            http_request_full=partial(
+                self._http_request_full, response), *a, **kw)
 
 
     def _make_client(self, response=''):

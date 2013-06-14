@@ -6,7 +6,7 @@ SOAP responses and parsing and constructing SOAP faults.
 from twisted.web import http
 from twisted.python import log
 
-from vumi.utils import http_request
+from vumi.utils import http_request_full
 from vumi.transports.parlayx.xmlutil import (
     Namespace, LocalNamespace, elemfind, gettext, fromstring, tostring)
 
@@ -18,7 +18,7 @@ SOAP_ENV = Namespace('http://schemas.xmlsoap.org/soap/envelope/', 'soapenv')
 
 def perform_soap_request(uri, action, body, header=None,
                          expected_faults=None,
-                         http_request=http_request):
+                         http_request_full=http_request_full):
     """
     Perform a SOAP request.
 
@@ -36,8 +36,9 @@ def perform_soap_request(uri, action, body, header=None,
     :param expected_faults:
         A `list` of `SoapFault` subclasses to be used to extract fault details
         from SOAP faults.
-    :param http_request:
-        Callable to perform an HTTP request, see `vumi.utils.http_request`.
+    :param http_request_full:
+        Callable to perform an HTTP request, see
+        `vumi.utils.http_request_full`.
     :return:
         `Deferred` that fires with the response, in the case of success, or
         a `SoapFault` in the case of failure.
@@ -53,7 +54,7 @@ def perform_soap_request(uri, action, body, header=None,
     headers = {
         'SOAPAction': action,
         'Content-Type': 'text/xml; charset="utf-8"'}
-    d = http_request(uri, tostring(envelope), headers)
+    d = http_request_full(uri, tostring(envelope), headers)
     d.addCallback(_parse_soap_response)
     return d
 
