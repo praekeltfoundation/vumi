@@ -197,7 +197,7 @@ class SoapFaultTests(TestCase):
 
 
 
-class PerformSoapRequestTests(TestCase, _FailureResultOfMixin):
+class PerformSoapRequestTests(_FailureResultOfMixin, TestCase):
     """
     Tests for `vumi.transports.parlayx.soaputil.perform_soap_request`.
     """

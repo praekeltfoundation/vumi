@@ -106,7 +106,7 @@ class PolicyExceptionDetailTests(TestCase):
 
 
 
-class ParlayXClientTests(TestCase, _FailureResultOfMixin):
+class ParlayXClientTests(_FailureResultOfMixin, TestCase):
     """
     Tests for `vumi.transports.parlayx.client.ParlayXClient`.
     """

@@ -1,5 +1,7 @@
 from collections import namedtuple
 
+from twisted.python import failure
+
 from vumi.transports.parlayx.client import format_address
 from vumi.transports.parlayx.soaputil import soap_envelope
 from vumi.transports.parlayx.server import NOTIFICATION_NS, normalize_address
