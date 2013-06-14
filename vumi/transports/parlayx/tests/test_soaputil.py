@@ -11,6 +11,7 @@ from vumi.transports.parlayx.soaputil import (
     perform_soap_request, SoapFault)
 from vumi.transports.parlayx.xmlutil import (
     gettext, Element, LocalNamespace as L, element_to_dict)
+from vumi.transports.parlayx.tests.utils import MockResponse
 
 
 
@@ -192,21 +193,6 @@ class SoapFaultTests(TestCase):
         self.assertEqual(
             ('c', 'd'),
             (parsed_detail.foo, parsed_detail.bar))
-
-
-
-class MockResponse(namedtuple('MockResponse', ['code', 'delivered_body'])):
-    """
-    Mock response from ``http_request_full``.
-    """
-    @classmethod
-    def build(cls, code, body, header=None):
-        """
-        Build a `MockResponse` containing a SOAP envelope.
-        """
-        return cls(
-            code=code,
-            delivered_body=tostring(soap_envelope(body, header)))
 
 
 

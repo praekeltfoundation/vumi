@@ -13,6 +13,8 @@ from vumi.transports.parlayx.server import (
 from vumi.transports.parlayx.soaputil import SoapFault, SOAP_ENV, soap_envelope
 from vumi.transports.parlayx.xmlutil import (
     LocalNamespace as L, tostring, fromstring, element_to_dict)
+from vumi.transports.parlayx.tests.utils import (
+    create_sms_reception_element, create_sms_delivery_receipt)
 
 
 
@@ -164,12 +166,8 @@ class SmsNotificationServiceTests(TestCase):
         service = SmsNotificationService(callback, None)
         self.successResultOf(service.process(None,
             SOAP_ENV.Body(
-                NOTIFICATION_NS.notifySmsReception(
-                    NOTIFICATION_NS.correlator('1234'),
-                    NOTIFICATION_NS.message(
-                        L.message('message'),
-                        L.senderAddress('tel:27117654321'),
-                        L.smsServiceActivationNumber('54321'))))))
+                create_sms_reception_element(
+                    '1234', 'message', '+27117654321', '54321'))))
 
         self.assertEqual(1, len(self.callbacks))
         correlator, msg = self.callbacks[0]
@@ -191,11 +189,10 @@ class SmsNotificationServiceTests(TestCase):
         service = SmsNotificationService(None, callback)
         self.successResultOf(service.process(None,
             SOAP_ENV.Body(
-                NOTIFICATION_NS.notifySmsDeliveryReceipt(
-                    NOTIFICATION_NS.correlator('1234'),
-                    NOTIFICATION_NS.deliveryStatus(
-                        L.address('tel:27117654321'),
-                        L.deliveryStatus('DeliveryUncertain'))))))
+                create_sms_delivery_receipt(
+                    '1234',
+                    '+27117654321',
+                    DeliveryStatus.DeliveryUncertain))))
 
         self.assertEqual(1, len(self.callbacks))
         correlator, status = self.callbacks[0]

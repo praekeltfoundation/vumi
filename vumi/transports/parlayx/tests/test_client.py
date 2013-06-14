@@ -12,7 +12,7 @@ from vumi.transports.parlayx.soaputil import (
     perform_soap_request, unwrap_soap_envelope, soap_fault)
 from vumi.transports.parlayx.xmlutil import (
     LocalNamespace as L, elemfind, fromstring, element_to_dict)
-from vumi.transports.parlayx.tests.test_soaputil import MockResponse
+from vumi.transports.parlayx.tests.utils import MockResponse
 
 
 
