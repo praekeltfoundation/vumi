@@ -105,6 +105,6 @@ def create_sms_delivery_receipt(correlator, address, delivery_status):
 
 
 
-__all__ [
+__all__ = [
     'MockResponse', 'create_sms_reception_element',
     'create_sms_delivery_receipt']
