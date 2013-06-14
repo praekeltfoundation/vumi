@@ -88,6 +88,14 @@ XML attributes may be qualified too:
 from collections import defaultdict
 from xml.etree import ElementTree as etree
 
+try:
+    from xml.etree.ElementTree import register_namespace
+except ImportError:
+    # This doesn't exist before Python 2.7, see
+    # <http://effbot.org/zone/element-namespaces.htm#element-tree-representation>.
+    def register_namespace(prefix, uri):
+        etree._namespace_map[uri] = prefix
+
 
 
 class Namespace(object):
@@ -107,7 +115,7 @@ class Namespace(object):
         self.__uri = uri
         self.__prefix = prefix
         if self.__prefix is not None:
-            etree.register_namespace(self.__prefix, self.__uri)
+            register_namespace(self.__prefix, self.__uri)
 
 
     def __str__(self):
