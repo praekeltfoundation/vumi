@@ -11,7 +11,8 @@ from vumi.transports.parlayx.soaputil import (
     perform_soap_request, SoapFault)
 from vumi.transports.parlayx.xmlutil import (
     gettext, Element, LocalNamespace as L, element_to_dict)
-from vumi.transports.parlayx.tests.utils import MockResponse
+from vumi.transports.parlayx.tests.utils import (
+    MockResponse, _FailureResultOfMixin)
 
 
 
@@ -196,7 +197,7 @@ class SoapFaultTests(TestCase):
 
 
 
-class PerformSoapRequestTests(TestCase):
+class PerformSoapRequestTests(TestCase, _FailureResultOfMixin):
     """
     Tests for `vumi.transports.parlayx.soaputil.perform_soap_request`.
     """
