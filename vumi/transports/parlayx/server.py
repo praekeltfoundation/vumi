@@ -168,8 +168,6 @@ class SmsNotificationService(Resource):
         correlator = gettext(root, NOTIFICATION_NS.correlator)
         message = SmsMessage.from_element(
             elemfind(root, NOTIFICATION_NS.message))
-        # XXX: Debugging.
-        print [name, correlator, message]
         d = maybeDeferred(self.callback_message_received, correlator, message)
         d.addCallback(
             lambda ignored: NOTIFICATION_NS.notifySmsReceptionResponse())
@@ -183,8 +181,6 @@ class SmsNotificationService(Resource):
         correlator = gettext(root, NOTIFICATION_NS.correlator)
         delivery_info = DeliveryInformation.from_element(
             elemfind(root, NOTIFICATION_NS.deliveryStatus))
-        # XXX: Debugging.
-        print [name, correlator, delivery_info]
         d = maybeDeferred(self.callback_message_delivered,
             correlator, delivery_info.delivery_status.value)
         d.addCallback(
