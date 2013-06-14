@@ -247,12 +247,14 @@ class ElementMakerTests(TestCase):
         ns = Namespace('http://example.com', 'ex')
         attrib = {ns.key: 'value'}
         self.assertEqual(
-            '<ex:tag xmlns:ex="http://example.com" ex:key="value" />',
-            tostring(ns.tag(attrib)))
+            {'{http://example.com}tag': {
+                '@{http://example.com}key': 'value'}},
+            element_to_dict(ns.tag(attrib)))
         attrib = {'{http://example.com}key': 'value'}
         self.assertEqual(
-            '<ex:tag xmlns:ex="http://example.com" ex:key="value" />',
-            tostring(ns.tag(attrib)))
+            {'{http://example.com}tag': {
+                '@{http://example.com}key': 'value'}},
+            element_to_dict(ns.tag(attrib)))
 
 
     def test_typemap(self):

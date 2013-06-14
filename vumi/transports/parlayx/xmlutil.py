@@ -151,7 +151,7 @@ class Namespace(object):
 
 
 
-class QualifiedName(etree.QName):
+class QualifiedName(etree.QName, object):
     """
     A qualified XML name.
 
