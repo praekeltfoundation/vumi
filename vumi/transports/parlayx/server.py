@@ -198,3 +198,9 @@ class Root(Resource):
         if request.postpath == ['services', 'SmsNotification']:
             return SmsNotificationService(noop, noop)
         return None
+
+
+
+__all__ = [
+    'normalize_address', 'DeliveryStatus', 'SmsMessage', 'DeliveryInformation',
+    'SmsNotificationService']

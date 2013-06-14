@@ -354,7 +354,8 @@ def gettext(elem, path, default=None, parse=None):
 
 def gettextall(elem, path, default=None, parse=None):
     """
-    Get the text of an `ElementTree` element and optionally transform it.
+    Get the text of all matching `ElementTree` elements and optionally
+    transform them.
 
     If `default` and `parse` are not `None`, `parse` will be called with
     `default`.
@@ -364,11 +365,11 @@ def gettextall(elem, path, default=None, parse=None):
 
     :type path: unicode
     :param path:
-        Path to the sub-element.
+        Path to the sub-elements.
 
     :param default:
-        A default value to use if the `text` attribute on the found element
-        is `None`, or the element is not found; defaults to `None`.
+        A default value to use if the `text` attribute found on an element
+        is `None`, or an element is not found; defaults to `None`.
 
     :type  parse: callable
     :param parse:
@@ -440,6 +441,6 @@ tostring = etree.tostring
 
 
 __all__ = [
-    'Namespace', 'QualifiedName', 'ElementMaker', 'elemfind',
-    'split_qualified', 'gettext', 'LocalNamespace', 'Element',
-    'parse_document', 'fromstring', 'tostring']
+    'Namespace', 'QualifiedName', 'ElementMaker', 'elemfind', 'elemfindall',
+    'split_qualified', 'gettext', 'gettextall', 'LocalNamespace', 'Element',
+    'parse_document', 'fromstring', 'tostring', 'element_to_dict']

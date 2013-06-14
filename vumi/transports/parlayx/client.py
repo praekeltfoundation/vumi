@@ -28,7 +28,7 @@ def format_address(msisdn):
 
 
 
-class ParlayXFaultDetail(namedtuple('ParlayXFaultDetail',
+class _ParlayXFaultDetail(namedtuple('_ParlayXFaultDetail',
                                    ['message_id', 'text', 'variables'])):
     """
     Generic ParlayX SOAP fault detail.
@@ -47,7 +47,7 @@ class ParlayXFaultDetail(namedtuple('ParlayXFaultDetail',
 
 
 
-class ServiceExceptionDetail(ParlayXFaultDetail):
+class ServiceExceptionDetail(_ParlayXFaultDetail):
     """
     ParlayX service exception detail.
     """
@@ -63,7 +63,7 @@ class ServiceException(SoapFault):
 
 
 
-class PolicyExceptionDetail(ParlayXFaultDetail):
+class PolicyExceptionDetail(_ParlayXFaultDetail):
     """
     ParlayX policy exception detail.
     """
@@ -161,3 +161,9 @@ class ParlayXClient(object):
             expected_faults=[PolicyException, ServiceException])
         d.addCallback(_extractRequestIdentifier)
         return d
+
+
+
+__all__ = [
+    'format_address', 'ServiceExceptionDetail', 'ServiceException',
+    'PolicyExceptionDetail', 'PolicyException', 'ParlayXClient']
