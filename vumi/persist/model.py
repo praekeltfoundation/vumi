@@ -341,8 +341,8 @@ def index_vals_for_field(model, field_name, start_value, end_value):
     # The Riak client library does silly things under the hood.
     start_value = descriptor.field.to_riak(start_value)
     if start_value is None:
-        # We should be raising an exceoption here, but we still rely on this
-        # having the value "None" in places. :-(
+        # FIXME: We should be raising an exception here, but we still rely on
+        # this having the value "None" in places. :-(
         start_value = 'None'
     else:
         start_value = str(start_value)
