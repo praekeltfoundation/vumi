@@ -315,6 +315,22 @@ class TestModelOnTxRiak(TestCase):
         self.assertEqual(s, None)
 
     @Manager.calls_manager
+    def test_index_keys(self):
+        indexed_model = self.manager.proxy(IndexedModel)
+        yield indexed_model("foo1", a=1, b=u"one").save()
+        yield indexed_model("foo2", a=2, b=u"one").save()
+        yield indexed_model("foo3", a=2, b=None).save()
+
+        keys = yield indexed_model.index_keys('a', 1)
+        self.assertEqual(keys, ["foo1"])
+
+        keys = yield indexed_model.index_keys('b', u"one")
+        self.assertEqual(sorted(keys), ["foo1", "foo2"])
+
+        keys = yield indexed_model.index_keys('b', None)
+        self.assertEqual(keys, ["foo3"])
+
+    @Manager.calls_manager
     def test_index_lookup(self):
         indexed_model = self.manager.proxy(IndexedModel)
         yield indexed_model("foo1", a=1, b=u"one").save()
