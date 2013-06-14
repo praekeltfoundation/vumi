@@ -1,7 +1,6 @@
 import iso8601
 from datetime import datetime
 from StringIO import StringIO
-from xml.etree.ElementTree import ParseError
 
 from twisted.trial.unittest import TestCase
 from twisted.web import http
@@ -12,7 +11,7 @@ from vumi.transports.parlayx.server import (
     DeliveryStatus, SmsNotificationService)
 from vumi.transports.parlayx.soaputil import SoapFault, SOAP_ENV, soap_envelope
 from vumi.transports.parlayx.xmlutil import (
-    LocalNamespace as L, tostring, fromstring, element_to_dict)
+    ParseError, LocalNamespace as L, tostring, fromstring, element_to_dict)
 from vumi.transports.parlayx.tests.utils import (
     create_sms_reception_element, create_sms_delivery_receipt)
 

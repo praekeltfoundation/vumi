@@ -1,6 +1,5 @@
 from collections import namedtuple
 from functools import partial
-from xml.etree.ElementTree import ParseError
 
 from twisted.internet.defer import succeed
 from twisted.trial.unittest import TestCase
@@ -10,7 +9,7 @@ from vumi.transports.parlayx.soaputil import (
     SOAP_ENV, soap_envelope, unwrap_soap_envelope, soap_fault, tostring,
     perform_soap_request, SoapFault)
 from vumi.transports.parlayx.xmlutil import (
-    gettext, Element, LocalNamespace as L, element_to_dict)
+    ParseError, gettext, Element, LocalNamespace as L, element_to_dict)
 from vumi.transports.parlayx.tests.utils import (
     MockResponse, _FailureResultOfMixin)
 

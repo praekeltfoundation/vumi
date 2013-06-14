@@ -97,6 +97,12 @@ except ImportError:
         etree._namespace_map[uri] = prefix
 
 
+try:
+    from xml.etree.ElementTree import ParseError
+except ImportError:
+    from xml.parsers.expat import ExpatError as ParseError
+
+
 
 class Namespace(object):
     """
