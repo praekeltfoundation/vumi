@@ -9,6 +9,7 @@ from twisted.web import http
 from twisted.web.resource import Resource
 from twisted.web.server import NOT_DONE_YET
 
+from vumi.transports.parlayx.client import PARLAYX_COMMON_NS
 from vumi.transports.parlayx.soaputil import (
     soap_envelope, unwrap_soap_envelope, soap_fault, SoapFault)
 from vumi.transports.parlayx.xmlutil import (
@@ -140,29 +141,34 @@ class SmsNotificationService(Resource):
             # switch on the root element's name. Yuck.
             localname = split_qualified(child.tag)[1]
             meth = getattr(self, 'process_' + localname, self.process_unknown)
-            return meth(child, localname)
+            return meth(child, header, localname)
 
         raise SoapFault(u'soapenv:Client', u'No actionable items')
 
-    def process_unknown(self, root, name):
+    def process_unknown(self, root, header, name):
         """
         Process unknown notification deliverables.
         """
         raise SoapFault(u'soapenv:Server', u'No handler for %s' % (name,))
 
-    def process_notifySmsReception(self, root, name):
+    def process_notifySmsReception(self, root, header, name):
         """
         Process a received text message.
         """
+        linkid = None
+        if header is not None:
+            linkid = gettext(header, './/' + str(PARLAYX_COMMON_NS.linkid))
+
         correlator = gettext(root, NOTIFICATION_NS.correlator)
         message = SmsMessage.from_element(
             elemfind(root, NOTIFICATION_NS.message))
-        d = maybeDeferred(self.callback_message_received, correlator, message)
+        d = maybeDeferred(
+            self.callback_message_received, correlator, linkid, message)
         d.addCallback(
             lambda ignored: NOTIFICATION_NS.notifySmsReceptionResponse())
         return d
 
-    def process_notifySmsDeliveryReceipt(self, root, name):
+    def process_notifySmsDeliveryReceipt(self, root, header, name):
         """
         Process a text message delivery receipt.
         """

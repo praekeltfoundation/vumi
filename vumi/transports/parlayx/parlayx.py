@@ -82,10 +82,12 @@ class ParlayXTransport(Transport):
         Send a text message via the ParlayX client.
         """
         log.info('Sending SMS via ParlayX: %r' % (message.to_json(),))
+        transport_metadata = message.get('transport_metadata', {})
         d = self._parlayx_client.send_sms(
             message['to_addr'],
             message['content'],
-            unique_correlator(message['message_id']))
+            unique_correlator(message['message_id']),
+            transport_metadata.get('linkid'))
         d.addErrback(self.handle_outbound_message_failure, message)
         d.addCallback(
             lambda requestIdentifier: self.publish_ack(
@@ -119,7 +121,7 @@ class ParlayXTransport(Transport):
             raise PermanentFailure(f)
         returnValue(f)
 
-    def handle_raw_inbound_message(self, correlator, inbound_message):
+    def handle_raw_inbound_message(self, correlator, linkid, inbound_message):
         """
         Handle incoming text messages from `SmsNotificationService` callbacks.
         """
@@ -132,7 +134,8 @@ class ParlayXTransport(Transport):
             to_addr=inbound_message.service_activation_number,
             from_addr=inbound_message.sender_address,
             provider='parlayx',
-            transport_type=self.transport_type)
+            transport_type=self.transport_type,
+            transport_metadata=dict(linkid=linkid))
 
 
 def unique_correlator(message_id, _uuid=None):

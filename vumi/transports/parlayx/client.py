@@ -137,7 +137,7 @@ class ParlayXClient(object):
         """
         return datetime.now()
 
-    def _make_header(self, service_subscription_address=None):
+    def _make_header(self, service_subscription_address=None, linkid=None):
         """
         Create a ``RequestSOAPHeader`` element.
 
@@ -148,8 +148,10 @@ class ParlayXClient(object):
         NS = PARLAYX_HEAD_NS
         other = []
         timestamp = format_timestamp(self._now())
-        if service_subscription_address:
+        if service_subscription_address is not None:
             other.append(NS.OA(format_address(service_subscription_address)))
+        if linkid is not None:
+            other.append(NS.linkid(linkid))
         return NS.RequestSOAPHeader(
             NS.spId(self.service_provider_id),
             NS.spPassword(
@@ -195,7 +197,7 @@ class ParlayXClient(object):
             header=header,
             expected_faults=[ServiceException])
 
-    def send_sms(self, to_addr, content, message_id):
+    def send_sms(self, to_addr, content, message_id, linkid=None):
         """
         Send an SMS.
         """
@@ -209,7 +211,9 @@ class ParlayXClient(object):
                 L.endpoint(self.endpoint),
                 L.interfaceName(u'SmsNotification'),
                 L.correlator(message_id)))
-        header = self._make_header(to_addr)
+        header = self._make_header(
+            service_subscription_address=to_addr,
+            linkid=linkid)
         d = self.perform_soap_request(
             uri=self.send_uri,
             action='',

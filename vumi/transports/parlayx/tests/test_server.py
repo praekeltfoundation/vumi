@@ -7,8 +7,8 @@ from twisted.web import http
 from twisted.web.test.requesthelper import DummyRequest
 
 from vumi.transports.parlayx.server import (
-    NOTIFICATION_NS, normalize_address, SmsMessage, DeliveryInformation,
-    DeliveryStatus, SmsNotificationService)
+    NOTIFICATION_NS, PARLAYX_COMMON_NS, normalize_address, SmsMessage,
+    DeliveryInformation, DeliveryStatus, SmsNotificationService)
 from vumi.transports.parlayx.soaputil import SoapFault, SOAP_ENV, soap_envelope
 from vumi.transports.parlayx.xmlutil import (
     ParseError, LocalNamespace as L, tostring, fromstring, element_to_dict)
@@ -157,13 +157,16 @@ class SmsNotificationServiceTests(TestCase):
         self.successResultOf(service.process(None,
             SOAP_ENV.Body(
                 create_sms_reception_element(
-                    '1234', 'message', '+27117654321', '54321'))))
+                    '1234', 'message', '+27117654321', '54321')),
+            SOAP_ENV.Header(
+                PARLAYX_COMMON_NS.NotifySOAPHeader(
+                    PARLAYX_COMMON_NS.linkid('linkid')))))
 
         self.assertEqual(1, len(self.callbacks))
-        correlator, msg = self.callbacks[0]
+        correlator, linkid, msg = self.callbacks[0]
         self.assertEqual(
-            ('1234', 'message', '+27117654321', '54321', None),
-            (correlator, msg.message, msg.sender_address,
+            ('1234', 'linkid', 'message', '+27117654321', '54321', None),
+            (correlator, linkid, msg.message, msg.sender_address,
              msg.service_activation_number, msg.timestamp))
 
     def test_process_notifySmsDeliveryReceipt(self):

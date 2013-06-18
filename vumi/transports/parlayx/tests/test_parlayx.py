@@ -49,9 +49,9 @@ class MockParlayXClient(object):
     def stop_sms_notification(self):
         return self._invoke_response('stop_sms_notification', [])
 
-    def send_sms(self, to_addr, content, message_id):
+    def send_sms(self, to_addr, content, linkid, message_id):
         return self._invoke_response(
-            'send_sms', [to_addr, content, message_id])
+            'send_sms', [to_addr, content, linkid, message_id])
 
 
 class ParlayXTransportTestCase(TransportTestCase):
@@ -92,6 +92,30 @@ class ParlayXTransportTestCase(TransportTestCase):
         [event] = yield self.wait_for_dispatched_events(1)
         self.assertEqual(event['event_type'], 'ack')
         self.assertEqual(event['user_message_id'], msg['message_id'])
+
+        client = self.transport._parlayx_client
+        self.assertEqual(1, len(client.calls))
+        linkid = client.calls[0][1][3]
+        self.assertIdentical(None, linkid)
+
+    @inlineCallbacks
+    def test_ack_linkid(self):
+        """
+        Basic message delivery uses stored ``linkid`` from transport metadata
+        if available.
+        """
+        yield self.transport.startWorker()
+        msg = self.mkmsg_out()
+        msg['transport_metadata'] = dict(linkid='linkid')
+        yield self.dispatch(msg)
+        [event] = yield self.wait_for_dispatched_events(1)
+        self.assertEqual(event['event_type'], 'ack')
+        self.assertEqual(event['user_message_id'], msg['message_id'])
+
+        client = self.transport._parlayx_client
+        self.assertEqual(1, len(client.calls))
+        linkid = client.calls[0][1][3]
+        self.assertEqual('linkid', linkid)
 
     @inlineCallbacks
     def test_nack(self):

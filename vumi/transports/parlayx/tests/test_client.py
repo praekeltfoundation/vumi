@@ -282,7 +282,7 @@ class ParlayXClientTests(_FailureResultOfMixin, TestCase):
                 http.OK, SEND_NS.sendSmsResponse(SEND_NS.result('reference'))))
         client._now = partial(datetime, 2013, 6, 18, 10, 59, 33)
         response = self.successResultOf(
-            client.send_sms('+27117654321', 'content', 'message_id'))
+            client.send_sms('+27117654321', 'content', 'message_id', 'linkid'))
         self.assertEqual('reference', response)
         self.assertEqual(1, len(self.requests))
         self.assertEqual('send', self.requests[0][0])
@@ -304,6 +304,7 @@ class ParlayXClientTests(_FailureResultOfMixin, TestCase):
                 str(PARLAYX_HEAD_NS.spPassword):
                     '1f2e67e642b16f6623459fa76dc3894f',
                 str(PARLAYX_HEAD_NS.timeStamp): '20130618105933',
+                str(PARLAYX_HEAD_NS.linkid): 'linkid',
                 str(PARLAYX_HEAD_NS.OA): 'tel:27117654321'}},
             element_to_dict(
                 elemfind(header, PARLAYX_HEAD_NS.RequestSOAPHeader)))
