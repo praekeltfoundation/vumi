@@ -2,7 +2,7 @@
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi import log
-from vumi.config import ConfigText, ConfigInt
+from vumi.config import ConfigText, ConfigInt, ConfigBool
 from vumi.transports.base import Transport
 from vumi.transports.failures import TemporaryFailure, PermanentFailure
 from vumi.transports.parlayx.client import (
@@ -27,6 +27,8 @@ class ParlayXTransportConfig(Transport.CONFIG_CLASS):
         'URI of the remote ParlayX SendSmsService', static=True)
     remote_notification_uri = ConfigText(
         'URI of the remote ParlayX SmsNotificationService', static=True)
+    start_notifications = ConfigBool(
+        'Start (and stop) the ParlayX notification service?', static=True)
 
 
 class ParlayXTransport(Transport):
@@ -50,13 +52,16 @@ class ParlayXTransport(Transport):
               config.web_notification_path)],
             config.web_notification_port)
         self._parlayx_client = self._create_client(config)
-        yield self._parlayx_client.start_sms_notification()
+        if config.start_notifications:
+            yield self._parlayx_client.start_sms_notification()
 
+    @inlineCallbacks
     def teardown_transport(self):
+        config = self.get_static_config()
         log.info('Stopping ParlayX transport: %s' % (self.transport_name,))
-        d = self.web_resource.loseConnection()
-        d.addBoth(lambda ignored: self._parlayx_client.stop_sms_notification())
-        return d
+        yield self.web_resource.loseConnection()
+        if config.start_notifications:
+            yield self._parlayx_client.stop_sms_notification()
 
     def handle_outbound_message(self, message):
         """
