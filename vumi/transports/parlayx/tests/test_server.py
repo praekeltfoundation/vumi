@@ -16,7 +16,6 @@ from vumi.transports.parlayx.tests.utils import (
     create_sms_reception_element, create_sms_delivery_receipt)
 
 
-
 class NormalizeAddressTests(TestCase):
     """
     Tests for `vumi.transports.parlayx.server.normalize_address`.
@@ -31,7 +30,6 @@ class NormalizeAddressTests(TestCase):
         self.assertEqual(
             '54321', normalize_address('54321'))
 
-
     def test_prefixed(self):
         """
         `normalize_address` strips any ``tel:`` prefix and normalizes the
@@ -43,7 +41,6 @@ class NormalizeAddressTests(TestCase):
             '+27117654321', normalize_address('tel:27117654321'))
         self.assertEqual(
             '54321', normalize_address('tel:54321'))
-
 
 
 class SmsMessageTests(TestCase):
@@ -68,7 +65,6 @@ class SmsMessageTests(TestCase):
             (msg.message, msg.sender_address, msg.service_activation_number,
              msg.timestamp))
 
-
     def test_from_element_missing_timestamp(self):
         """
         `SmsMessage.from_element` parses a ParlayX ``SmsMessage`` complex type,
@@ -83,7 +79,6 @@ class SmsMessageTests(TestCase):
             ('message', '+27117654321', '54321', None),
             (msg.message, msg.sender_address, msg.service_activation_number,
              msg.timestamp))
-
 
 
 class DeliveryInformationTests(TestCase):
@@ -105,7 +100,6 @@ class DeliveryInformationTests(TestCase):
             ('+27117654321', DeliveryStatus.DeliveredToNetwork),
             (info.address, info.delivery_status))
 
-
     def test_from_element_unknown_status(self):
         """
         `DeliveryInformation.from_element` raises ``ValueError`` if an unknown
@@ -118,7 +112,6 @@ class DeliveryInformationTests(TestCase):
                 L.deliveryStatus('WhatIsThis')))
         self.assertEqual(
             "No such delivery status enumeration value: 'WhatIsThis'", str(e))
-
 
 
 class SmsNotificationServiceTests(TestCase):
@@ -137,7 +130,6 @@ class SmsNotificationServiceTests(TestCase):
             ('soapenv:Client', 'No actionable items'),
             (exc.code, str(exc)))
 
-
     def test_process_unknown(self):
         """
         `SmsNotificationService.process` invokes
@@ -150,7 +142,6 @@ class SmsNotificationServiceTests(TestCase):
         self.assertEqual(
             ('soapenv:Server', 'No handler for WhatIsThis'),
             (exc.code, str(exc)))
-
 
     def test_process_notifySmsReception(self):
         """
@@ -175,7 +166,6 @@ class SmsNotificationServiceTests(TestCase):
             (correlator, msg.message, msg.sender_address,
              msg.service_activation_number, msg.timestamp))
 
-
     def test_process_notifySmsDeliveryReceipt(self):
         """
         `SmsNotificationService.process_notifySmsDeliveryReceipt` invokes the
@@ -197,7 +187,6 @@ class SmsNotificationServiceTests(TestCase):
         correlator, status = self.callbacks[0]
         self.assertEqual(('1234', 'pending'), self.callbacks[0])
 
-
     def test_render(self):
         """
         `SmsNotificationService.render_POST` parses a SOAP request and
@@ -216,7 +205,6 @@ class SmsNotificationServiceTests(TestCase):
                 str(SOAP_ENV.Body): {
                     'done': None}}},
             element_to_dict(fromstring(''.join(request.written))))
-
 
     def test_render_soap_fault(self):
         """
@@ -244,7 +232,6 @@ class SmsNotificationServiceTests(TestCase):
                         'faultstring': 'Malformed SOAP request'}}}},
             element_to_dict(fromstring(''.join(request.written))))
 
-
     def test_render_exceptions(self):
         """
         `SmsNotificationService.render_POST` logs any exceptions that occur
@@ -270,7 +257,6 @@ class SmsNotificationServiceTests(TestCase):
                         'faultcode': 'soapenv:Server',
                         'faultstring': 'What is this'}}}},
             element_to_dict(fromstring(''.join(request.written))))
-
 
     def test_render_invalid_xml(self):
         """

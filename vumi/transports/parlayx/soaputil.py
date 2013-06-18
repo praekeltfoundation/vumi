@@ -11,9 +11,7 @@ from vumi.transports.parlayx.xmlutil import (
     Namespace, LocalNamespace, elemfind, gettext, fromstring, tostring)
 
 
-
 SOAP_ENV = Namespace('http://schemas.xmlsoap.org/soap/envelope/', 'soapenv')
-
 
 
 def perform_soap_request(uri, action, body, header=None,
@@ -59,7 +57,6 @@ def perform_soap_request(uri, action, body, header=None,
     return d
 
 
-
 def soap_envelope(body, header=None):
     """
     Wrap an element or text in a SOAP envelope.
@@ -68,7 +65,6 @@ def soap_envelope(body, header=None):
     if header is not None:
         parts.insert(0, SOAP_ENV.Header(header))
     return SOAP_ENV.Envelope(*parts)
-
 
 
 def unwrap_soap_envelope(root):
@@ -80,7 +76,6 @@ def unwrap_soap_envelope(root):
     if body is None:
         raise SoapFault(u'soapenv:Client', u'Malformed SOAP request')
     return body, header
-
 
 
 def soap_fault(faultcode, faultstring=None, faultactor=None, detail=None):
@@ -100,7 +95,6 @@ def soap_fault(faultcode, faultstring=None, faultactor=None, detail=None):
     # filter(None, xs) doesn't do what we want because of weird implicit
     # truthiness with ElementTree elements.
     return SOAP_ENV.Fault(*[x for x in xs if x is not None])
-
 
 
 def _parse_expected_faults(detail, expected_faults):
@@ -136,7 +130,6 @@ def _parse_expected_faults(detail, expected_faults):
     return None
 
 
-
 def parse_soap_fault(body, expected_faults=None):
     """
     Parse a SOAP fault element and its details.
@@ -165,7 +158,6 @@ def parse_soap_fault(body, expected_faults=None):
     return parsed, (faultcode, faultstring, faultactor, detail)
 
 
-
 class SoapFault(RuntimeError):
     """
     An exception that constitutes a SOAP fault.
@@ -183,7 +175,6 @@ class SoapFault(RuntimeError):
     """
     detail_type = None
 
-
     def __init__(self, code, string, actor=None, detail=None,
                  parsed_detail=None):
         self.code = code
@@ -193,7 +184,6 @@ class SoapFault(RuntimeError):
         self.parsed_detail = parsed_detail
         RuntimeError.__init__(self, string)
 
-
     def __repr__(self):
         return '<%s code=%r string=%r actor=%r parsed_detail=%r>' % (
             type(self).__name__,
@@ -201,7 +191,6 @@ class SoapFault(RuntimeError):
             self.string,
             self.actor,
             self.parsed_detail)
-
 
     @classmethod
     def from_element(cls, root, expected_faults=None):
@@ -228,7 +217,6 @@ class SoapFault(RuntimeError):
         return exc_type(
             faultcode, faultstring, faultactor, detail, parsed_detail)
 
-
     def to_element(self):
         """
         Serialize this SOAP fault to an ElementTree element.
@@ -238,7 +226,6 @@ class SoapFault(RuntimeError):
             detail = self.detail.getchildren()
         return soap_fault(
             self.code, self.string, self.actor, detail)
-
 
 
 __all__ = [

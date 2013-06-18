@@ -8,7 +8,6 @@ from vumi.transports.parlayx.server import NOTIFICATION_NS, normalize_address
 from vumi.transports.parlayx.xmlutil import LocalNamespace as L, tostring
 
 
-
 # XXX: This can be deleted as soon as we're using Twisted > 13.0.0.
 class _FailureResultOfMixin(object):
     """
@@ -65,7 +64,6 @@ class _FailureResultOfMixin(object):
             return result[0]
 
 
-
 class MockResponse(namedtuple('MockResponse', ['code', 'delivered_body'])):
     """
     Mock response from ``http_request_full``.
@@ -78,7 +76,6 @@ class MockResponse(namedtuple('MockResponse', ['code', 'delivered_body'])):
         return cls(
             code=code,
             delivered_body=tostring(soap_envelope(body, header)))
-
 
 
 def create_sms_reception_element(correlator, message, sender_address,
@@ -94,7 +91,6 @@ def create_sms_reception_element(correlator, message, sender_address,
             L.smsServiceActivationNumber(service_activation_number)))
 
 
-
 def create_sms_delivery_receipt(correlator, address, delivery_status):
     """
     Helper for creating an ``notifySmsDeliveryReceipt`` element.
@@ -104,7 +100,6 @@ def create_sms_delivery_receipt(correlator, address, delivery_status):
         NOTIFICATION_NS.deliveryStatus(
             L.address(format_address(normalize_address(address))),
             L.deliveryStatus(delivery_status.name)))
-
 
 
 __all__ = [

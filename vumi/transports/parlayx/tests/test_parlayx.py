@@ -12,7 +12,6 @@ from vumi.transports.parlayx.tests.utils import (
 from vumi.transports.tests.utils import TransportTestCase
 
 
-
 class MockParlayXClient(object):
     """
     A mock ``ParlayXClient`` that doesn't involve real HTTP requests but
@@ -33,7 +32,6 @@ class MockParlayXClient(object):
             'send_sms': send_sms}
         self.calls = []
 
-
     def _invoke_response(self, name, args):
         """
         Invoke the canned response for the method name ``name`` and log the
@@ -42,19 +40,15 @@ class MockParlayXClient(object):
         self.calls.append((name, args))
         return self.responses[name]()
 
-
     def start_sms_notification(self):
         return self._invoke_response('start_sms_notification', [])
-
 
     def stop_sms_notification(self):
         return self._invoke_response('stop_sms_notification', [])
 
-
     def send_sms(self, to_addr, content, message_id):
         return self._invoke_response(
             'send_sms', [to_addr, content, message_id])
-
 
 
 class ParlayXTransportTestCase(TransportTestCase):
@@ -63,7 +57,6 @@ class ParlayXTransportTestCase(TransportTestCase):
     """
     transport_class = ParlayXTransport
     timeout = 1
-
 
     @inlineCallbacks
     def setUp(self):
@@ -85,7 +78,6 @@ class ParlayXTransportTestCase(TransportTestCase):
         self.patch(self.transport_class, '_create_client', _create_client)
         self.transport = yield self.get_transport(config, start=False)
 
-
     @inlineCallbacks
     def test_ack(self):
         """
@@ -97,7 +89,6 @@ class ParlayXTransportTestCase(TransportTestCase):
         [event] = yield self.wait_for_dispatched_events(1)
         self.assertEqual(event['event_type'], 'ack')
         self.assertEqual(event['user_message_id'], msg['message_id'])
-
 
     @inlineCallbacks
     def test_nack(self):
@@ -121,7 +112,6 @@ class ParlayXTransportTestCase(TransportTestCase):
         failures = self.flushLoggedErrors(ValueError)
         # Logged once by the transport and once by Twisted for being unhandled.
         self.assertEqual(2, len(failures))
-
 
     @inlineCallbacks
     def _test_nack_permanent(self, expected_exception):
@@ -147,7 +137,6 @@ class ParlayXTransportTestCase(TransportTestCase):
         failures = self.flushLoggedErrors(expected_exception, PermanentFailure)
         self.assertEqual(2, len(failures))
 
-
     def test_nack_service_exception(self):
         """
         When `ServiceException` is raised in an outbound message handler, it
@@ -155,14 +144,12 @@ class ParlayXTransportTestCase(TransportTestCase):
         """
         return self._test_nack_permanent(ServiceException)
 
-
     def test_nack_policy_exception(self):
         """
         When `PolicyException` is raised in an outbound message handler, it
         results in a `PermanentFailure` exception.
         """
         return self._test_nack_permanent(PolicyException)
-
 
     @inlineCallbacks
     def test_receive_sms(self):
@@ -181,7 +168,6 @@ class ParlayXTransportTestCase(TransportTestCase):
             ('1234', 'message', '+27117654321', '54321'),
             (msg['message_id'], msg['content'], msg['from_addr'],
              msg['to_addr']))
-
 
     @inlineCallbacks
     def test_delivery_receipt(self):

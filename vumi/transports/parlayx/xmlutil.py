@@ -53,7 +53,8 @@ the `QualifiedName.element` method. While this bears some similarity to
     >>> tostring(
     ... QualifiedName('{http://example.com}parent')(
     ...     QualifiedName('child1', 'content')))
-    '<ns0:parent xmlns:ns0="http://example.com"><child1>content</child1></ns0:parent>'
+    '<ns0:parent xmlns:ns0="http://example.com"><child1>content</child1>'
+    '</ns0:parent>'
 
 
 -------------
@@ -75,7 +76,8 @@ in the local XML namespace.
     ... NS.parent({'attr': 'value'},
     ...     NS.child1('content'),
     ...     LocalNamespace.child2('content2')))
-    '<ex:parent xmlns:ex="http://example.com" attr="value"><ex:child1>content</ex:child1><child2>content2</child2></ex:parent>'
+    '<ex:parent xmlns:ex="http://example.com" attr="value">'
+    '<ex:child1>content</ex:child1><child2>content2</child2></ex:parent>'
 
 XML attributes may be qualified too:
 
@@ -91,17 +93,19 @@ from xml.etree import ElementTree as etree
 try:
     from xml.etree.ElementTree import register_namespace
 except ImportError:
+    register_namespace  # For Pyflakes.
     # This doesn't exist before Python 2.7, see
-    # <http://effbot.org/zone/element-namespaces.htm#element-tree-representation>.
+    # http://effbot.org/zone/element-namespaces.htm#element-tree-representation
+
     def register_namespace(prefix, uri):
         etree._namespace_map[uri] = prefix
 
-
 try:
     from xml.etree.ElementTree import ParseError
+    ParseError  # For Pyflakes.
 except ImportError:
     from xml.parsers.expat import ExpatError as ParseError
-
+    ParseError  # For Pyflakes.
 
 
 class Namespace(object):
@@ -123,21 +127,17 @@ class Namespace(object):
         if self.__prefix is not None:
             register_namespace(self.__prefix, self.__uri)
 
-
     def __str__(self):
         return self.__uri
-
 
     def __repr__(self):
         return '<%s uri=%r prefix=%r>' % (
             type(self).__name__, self.__uri, self.__prefix)
 
-
     def __eq__(self, other):
         if not isinstance(other, Namespace):
             return False
         return other.__uri == self.__uri and other.__prefix == self.__prefix
-
 
     def __getattr__(self, tag):
         if self.__uri is None:
@@ -148,7 +148,6 @@ class Namespace(object):
         # same result.
         setattr(self, tag, qname)
         return qname
-
 
 
 class QualifiedName(etree.QName, object):
@@ -164,12 +163,10 @@ class QualifiedName(etree.QName, object):
         xmlns, local = split_qualified(self.text)
         return '<%s xmlns=%r local=%r>' % (type(self).__name__, xmlns, local)
 
-
     def __eq__(self, other):
         if not isinstance(other, etree.QName):
             return False
         return other.text == self.text
-
 
     def element(self, *children, **attrib):
         """
@@ -184,9 +181,7 @@ class QualifiedName(etree.QName, object):
         """
         return Element(self.text, *children, **attrib)
 
-
     __call__ = element
-
 
 
 class ElementMaker(object):
@@ -212,14 +207,12 @@ class ElementMaker(object):
         if typemap is not None:
             self._typemap.update(typemap)
 
-
     def _add_children(self, elem, children):
         """
         Add children to an element.
         """
         for child in children:
             self._handle_child(elem, child)
-
 
     def _set_attributes(self, elem, attrib):
         """
@@ -236,7 +229,6 @@ class ElementMaker(object):
             # transformation stuff.
             elem.set(k, v)
 
-
     def _add_text(self, elem, text):
         """
         Add text content to an element.
@@ -251,7 +243,6 @@ class ElementMaker(object):
             elem[-1] = (elem[-1].tail or '') + text
         else:
             elem.text = (elem.text or '') + text
-
 
     def _handle_child(self, parent, child):
         """
@@ -277,7 +268,6 @@ class ElementMaker(object):
         if v is not None:
             self._handle_child(parent, v)
 
-
     def element(self, tag, *children, **attrib):
         """
         Create an ElementTree element.
@@ -287,7 +277,6 @@ class ElementMaker(object):
         :param **attrib: Element XML attributes.
         :return: ElementTree element.
         """
-
         if isinstance(tag, etree.QName):
             tag = tag.text
 
@@ -301,9 +290,7 @@ class ElementMaker(object):
 
         return elem
 
-
     __call__ = element
-
 
 
 def elemfind(elem, path):
@@ -314,7 +301,6 @@ def elemfind(elem, path):
     return next(iter(elemfindall(elem, path)), None)
 
 
-
 def elemfindall(elem, path):
     """
     Helper version of `xml.etree.ElementTree.Element.findall` that understands
@@ -323,7 +309,6 @@ def elemfindall(elem, path):
     if isinstance(path, etree.QName):
         path = path.text
     return elem.findall(path)
-
 
 
 def split_qualified(fqname):
@@ -337,7 +322,6 @@ def split_qualified(fqname):
     if fqname and fqname[0] == '{':
         return tuple(fqname[1:].split('}'))
     return None, fqname
-
 
 
 def gettext(elem, path, default=None, parse=None):
@@ -363,7 +347,6 @@ def gettext(elem, path, default=None, parse=None):
         A callable to transform the found element's text.
     """
     return next(gettextall(elem, path, default, parse), default)
-
 
 
 def gettextall(elem, path, default=None, parse=None):
@@ -402,7 +385,6 @@ def gettextall(elem, path, default=None, parse=None):
         yield result
 
 
-
 def element_to_dict(root):
     """
     Convert an ElementTree element into a dictionary structure.
@@ -438,12 +420,11 @@ def element_to_dict(root):
         text = root.text.strip()
         if children or root.attrib:
             if text:
-              d[root.tag]['#text'] = text
+                d[root.tag]['#text'] = text
         else:
             d[root.tag] = text
 
     return d
-
 
 
 LocalNamespace = Namespace(None)
@@ -451,7 +432,6 @@ Element = ElementMaker()
 parse_document = etree.parse
 fromstring = etree.fromstring
 tostring = etree.tostring
-
 
 
 __all__ = [

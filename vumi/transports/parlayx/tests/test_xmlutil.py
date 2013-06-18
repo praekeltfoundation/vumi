@@ -7,7 +7,6 @@ from vumi.transports.parlayx.xmlutil import (
     element_to_dict)
 
 
-
 class NamespaceTests(TestCase):
     """
     Tests for `vumi.transports.parlayx.xmlutil.Namespace`.
@@ -18,7 +17,6 @@ class NamespaceTests(TestCase):
         """
         uri = 'http://example.com'
         self.assertEqual(uri, str(Namespace(uri)))
-
 
     def test_repr(self):
         """
@@ -33,7 +31,6 @@ class NamespaceTests(TestCase):
         self.assertEqual(
             "<Namespace uri='http://example.com' prefix='ex'>",
             repr(Namespace('http://example.com', 'ex')))
-
 
     def test_equality(self):
         """
@@ -53,7 +50,6 @@ class NamespaceTests(TestCase):
             Namespace('http://example.com/'),
             Namespace('http://example.com'))
 
-
     def test_qualified_name(self):
         """
         `Namespace.__getattr__` produces qualified `QualifiedName` instances if
@@ -65,7 +61,6 @@ class NamespaceTests(TestCase):
             QualifiedName(uri, 'foo'),
             ns.foo)
 
-
     def test_local_name(self):
         """
         `Namespace.__getattr__` produces local `QualifiedName` instances if
@@ -75,7 +70,6 @@ class NamespaceTests(TestCase):
         self.assertEqual(
             QualifiedName('foo'),
             ns.foo)
-
 
 
 class QualifiedNameTests(TestCase):
@@ -93,7 +87,6 @@ class QualifiedNameTests(TestCase):
         self.assertEqual(
             "<QualifiedName xmlns='http://example.com' local='tag'>",
             repr(QualifiedName('http://example.com', 'tag')))
-
 
     def test_equality(self):
         """
@@ -117,7 +110,6 @@ class QualifiedNameTests(TestCase):
             QualifiedName('http://example.com/', 'tag'),
             QualifiedName('http://example.com', 'tag'))
 
-
     def test_element(self):
         """
         `QualifiedName` instances are callable and produce ElementTree
@@ -138,7 +130,6 @@ class QualifiedNameTests(TestCase):
             tostring(qname('hello', dict(key='value'))))
 
 
-
 class ElementMakerTests(TestCase):
     """
     Tests for `vumi.transports.parlayx.xmlutil.ElementMaker`.
@@ -151,7 +142,6 @@ class ElementMakerTests(TestCase):
         E = ElementMaker()
         exc = self.assertRaises(TypeError, E, 'tag', None)
         self.assertEqual('Unknown child type: None', str(exc))
-
 
     def test_simple(self):
         """
@@ -172,7 +162,6 @@ class ElementMakerTests(TestCase):
             '<tag key="value">hello</tag>',
             tostring(E('tag', 'hello', dict(key='value'))))
 
-
     def test_callable(self):
         """
         Providing a callable child will result in that child being called, with
@@ -186,7 +175,6 @@ class ElementMakerTests(TestCase):
             '<tag>hello</tag>',
             tostring(E('tag', lambda: 'hello')))
 
-
     def test_list(self):
         """
         Providing a list child will result in all the elements of the list
@@ -199,7 +187,6 @@ class ElementMakerTests(TestCase):
         self.assertEqual(
             '<tag>text1text2</tag>',
             tostring(E('tag', ['text1', 'text2'])))
-
 
     def test_nested(self):
         """
@@ -220,7 +207,6 @@ class ElementMakerTests(TestCase):
             '<tag><child key="value">hello</child></tag>',
             tostring(E('tag', E('child', 'hello', dict(key='value')))))
 
-
     def test_namespaced(self):
         """
         Tags that are `QualifiedName` instances or use Clark notation produce
@@ -237,7 +223,6 @@ class ElementMakerTests(TestCase):
         self.assertEqual(
             '<ex:tag xmlns:ex="http://example.com" />',
             tostring(ns.tag()))
-
 
     def test_namespaced_attributes(self):
         """
@@ -256,7 +241,6 @@ class ElementMakerTests(TestCase):
                 '@{http://example.com}key': 'value'}},
             element_to_dict(ns.tag(attrib)))
 
-
     def test_typemap(self):
         """
         Providing a type map to `ElementMaker` allows the caller to specify how
@@ -273,13 +257,11 @@ class ElementMakerTests(TestCase):
             tostring(E('tag', 42)))
 
 
-
 class MetasyntacticVariables(Names):
     """
     Metasyntactic variable names.
     """
     Foo = NamedConstant()
-
 
 
 class GetTextTests(TestCase):
@@ -298,7 +280,6 @@ class GetTextTests(TestCase):
                 L.e('all'),
                 L.f))
 
-
     def test_simple(self):
         """
         Getting a sub-element with a `text` attribute returns the text as a
@@ -311,7 +292,6 @@ class GetTextTests(TestCase):
         res = gettext(self.root, u'sub/e')
         self.assertIdentical(unicode, type(res))
         self.assertEqual(res, u'world')
-
 
     def test_default(self):
         """
@@ -330,7 +310,6 @@ class GetTextTests(TestCase):
         self.assertIdentical(gettext(self.root, u'haha_what'), None)
         self.assertEqual(gettext(self.root, u'haha_what', default=42), 42)
 
-
     def test_parse(self):
         """
         Specifying a `parse` callable results in that being called to transform
@@ -346,7 +325,6 @@ class GetTextTests(TestCase):
         self.assertRaises(ValueError,
             gettext, self.root, u'c', parse=int)
 
-
     def test_parseWithDefault(self):
         """
         In the event that a default value is specified and a `parse` callable
@@ -361,7 +339,6 @@ class GetTextTests(TestCase):
             gettext(self.root, u'd', default=21, parse=int))
         self.assertRaises(ValueError,
             gettext, self.root, u'd', default='foo', parse=int)
-
 
     def test_gettextall(self):
         """
@@ -379,7 +356,6 @@ class GetTextTests(TestCase):
             list(gettextall(self.root, u'what')))
 
 
-
 class SplitQualifiedTests(TestCase):
     """
     Tests for `vumi.transports.parlayx.xmlutil.split_qualified`.
@@ -389,7 +365,6 @@ class SplitQualifiedTests(TestCase):
         `split_qualified` splits a local XML name into `None` and the tag name.
         """
         self.assertEqual((None, 'tag'), split_qualified('tag'))
-
 
     def test_qualified(self):
         """
@@ -401,7 +376,6 @@ class SplitQualifiedTests(TestCase):
             split_qualified('{http://example.com}tag'))
 
 
-
 class FindTests(TestCase):
     """
     Tests for `vumi.transports.parlayx.xmlutil.elemfind`.
@@ -409,7 +383,6 @@ class FindTests(TestCase):
     def setUp(self):
         self.root = L.parent(
             L.child1, L.child2, L.child2, L.child3)
-
 
     def test_elemfind(self):
         """
@@ -422,14 +395,12 @@ class FindTests(TestCase):
             '<child2 />',
             tostring(elemfind(self.root, L.child2)))
 
-
     def test_elemfind_none(self):
         """
         `elemfind` returns ``None`` if the `QualifiedName` or path specified
         cannot be found.
         """
         self.assertIdentical(None, elemfind(self.root, L.what))
-
 
     def test_elemfindall(self):
         """
@@ -443,14 +414,12 @@ class FindTests(TestCase):
             ['<child2 />', '<child2 />'],
             map(tostring, elemfindall(self.root, 'child2')))
 
-
     def test_elemfindall_none(self):
         """
         `elemfind` returns an empty list if the `QualifiedName` or path
         specified cannot be found.
         """
         self.assertEqual([], elemfindall(self.root, L.what))
-
 
 
 class ElementToDictTests(TestCase):
@@ -465,7 +434,6 @@ class ElementToDictTests(TestCase):
             {'root': None},
             element_to_dict(L.root()))
 
-
     def test_empty_attributes(self):
         """
         An element containing only attributes, and no content, has its
@@ -474,7 +442,6 @@ class ElementToDictTests(TestCase):
         self.assertEqual(
             {'root': {'@attr': 'value'}},
             element_to_dict(L.root(attr='value')))
-
 
     def test_text(self):
         """
@@ -485,7 +452,6 @@ class ElementToDictTests(TestCase):
             {'root': 'hello'},
             element_to_dict(L.root('hello')))
 
-
     def test_text_attributes(self):
         """
         An element containing attributes and text content, has its
@@ -495,7 +461,6 @@ class ElementToDictTests(TestCase):
         self.assertEqual(
             {'root': {'#text': 'hello', '@attr': 'value'}},
             element_to_dict(L.root('hello', attr='value')))
-
 
     def test_children_text(self):
         """
@@ -509,7 +474,6 @@ class ElementToDictTests(TestCase):
             element_to_dict(
                 L.root(L.child('hello'))))
 
-
     def test_children_attributes(self):
         """
         Child elements are recursively nested.
@@ -521,7 +485,6 @@ class ElementToDictTests(TestCase):
             {'root': {'child': {'@attr': 'value'}}},
             element_to_dict(
                 L.root(L.child(attr='value'))))
-
 
     def test_children_text_attributes(self):
         """
@@ -535,7 +498,6 @@ class ElementToDictTests(TestCase):
             {'root': {'child': {'#text': 'hello', '@attr': 'value'}}},
             element_to_dict(L.root(L.child('hello', attr='value'))))
 
-
     def test_children_multiple(self):
         """
         Multiple child elements with the same tag name are coalesced into
@@ -545,7 +507,6 @@ class ElementToDictTests(TestCase):
             {'root': {'child': [{'@attr': 'value'}, 'hello']}},
             element_to_dict(
                 L.root(L.child(attr='value'), L.child('hello'))))
-
 
     def test_namespaced(self):
         """

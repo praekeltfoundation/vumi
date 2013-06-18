@@ -16,7 +16,6 @@ from vumi.transports.parlayx.tests.utils import (
     MockResponse, _FailureResultOfMixin)
 
 
-
 class FormatAddressTests(TestCase):
     """
     Tests for `vumi.transports.parlayx.client.format_address`.
@@ -28,7 +27,6 @@ class FormatAddressTests(TestCase):
         self.assertRaises(ValueError, format_address, '12345')
         self.assertRaises(ValueError, format_address, 'nope')
 
-
     def test_format(self):
         """
         `format_address` formats MSISDNs in a way that ParlayX services will
@@ -38,7 +36,6 @@ class FormatAddressTests(TestCase):
             'tel:27117654321', format_address('+27117654321'))
         self.assertEqual(
             'tel:264117654321', format_address('+264117654321'))
-
 
 
 class ServiceExceptionDetailTests(TestCase):
@@ -54,7 +51,6 @@ class ServiceExceptionDetailTests(TestCase):
             L.foo('a'),
             L.bar('b'))
         self.assertIdentical(None, ServiceExceptionDetail.from_element(elem))
-
 
     def test_from_element(self):
         """
@@ -73,7 +69,6 @@ class ServiceExceptionDetailTests(TestCase):
             (detail.message_id, detail.text, detail.variables))
 
 
-
 class PolicyExceptionDetailTests(TestCase):
     """
     Tests for `vumi.transports.parlayx.client.PolicyExceptionDetail`.
@@ -87,7 +82,6 @@ class PolicyExceptionDetailTests(TestCase):
             L.foo('a'),
             L.bar('b'))
         self.assertIdentical(None, PolicyExceptionDetail.from_element(elem))
-
 
     def test_from_element(self):
         """
@@ -105,14 +99,12 @@ class PolicyExceptionDetailTests(TestCase):
             (detail.message_id, detail.text, detail.variables))
 
 
-
 class ParlayXClientTests(_FailureResultOfMixin, TestCase):
     """
     Tests for `vumi.transports.parlayx.client.ParlayXClient`.
     """
     def setUp(self):
         self.requests = []
-
 
     def _http_request_full(self, response, uri, body, headers):
         """
@@ -123,7 +115,6 @@ class ParlayXClientTests(_FailureResultOfMixin, TestCase):
         self.requests.append((uri, body, headers))
         return succeed(response)
 
-
     def _perform_soap_request(self, response, *a, **kw):
         """
         Perform a SOAP request with a canned response.
@@ -131,7 +122,6 @@ class ParlayXClientTests(_FailureResultOfMixin, TestCase):
         return perform_soap_request(
             http_request_full=partial(
                 self._http_request_full, response), *a, **kw)
-
 
     def _make_client(self, response=''):
         """
@@ -141,7 +131,6 @@ class ParlayXClientTests(_FailureResultOfMixin, TestCase):
         return ParlayXClient(
             'short', 'endpoint', 'send', 'notification',
             perform_soap_request=partial(self._perform_soap_request, response))
-
 
     def test_start_sms_notification(self):
         """
@@ -168,7 +157,6 @@ class ParlayXClientTests(_FailureResultOfMixin, TestCase):
             element_to_dict(
                 elemfind(body, NOTIFICATION_MANAGER_NS.startSmsNotification)))
 
-
     def test_start_sms_notification_service_fault(self):
         """
         `ParlayXClient.start_sms_notification` expects `ServiceExceptionDetail`
@@ -191,7 +179,6 @@ class ParlayXClientTests(_FailureResultOfMixin, TestCase):
             ('a', 'b', ['c', 'd']),
             (detail.message_id, detail.text, detail.variables))
 
-
     def test_stop_sms_notification(self):
         """
         `ParlayXClient.stop_sms_notification` performs a SOAP request to the
@@ -211,7 +198,6 @@ class ParlayXClientTests(_FailureResultOfMixin, TestCase):
                 'correlator': client._service_correlator}},
             element_to_dict(
                 elemfind(body, NOTIFICATION_MANAGER_NS.stopSmsNotification)))
-
 
     def test_stop_sms_notification_service_fault(self):
         """
@@ -234,7 +220,6 @@ class ParlayXClientTests(_FailureResultOfMixin, TestCase):
         self.assertEqual(
             ('a', 'b', ['c', 'd']),
             (detail.message_id, detail.text, detail.variables))
-
 
     def test_send_sms(self):
         """
@@ -261,7 +246,6 @@ class ParlayXClientTests(_FailureResultOfMixin, TestCase):
                     'interfaceName': 'SmsNotification'}}},
             element_to_dict(elemfind(body, SEND_NS.sendSms)))
 
-
     def test_send_sms_service_fault(self):
         """
         `ParlayXClient.send_sms` expects `ServiceExceptionDetail` fault details
@@ -283,7 +267,6 @@ class ParlayXClientTests(_FailureResultOfMixin, TestCase):
         self.assertEqual(
             ('a', 'b', ['c', 'd']),
             (detail.message_id, detail.text, detail.variables))
-
 
     def test_send_sms_policy_fault(self):
         """

@@ -14,7 +14,6 @@ from vumi.transports.parlayx.tests.utils import (
     MockResponse, _FailureResultOfMixin)
 
 
-
 class SoapWrapperTests(TestCase):
     """
     Tests for `vumi.transports.parlayx.soaputil.soap_envelope`,
@@ -26,12 +25,15 @@ class SoapWrapperTests(TestCase):
         `soap_envelope` wraps content in a SOAP envelope element.
         """
         self.assertEqual(
-            '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"><soapenv:Body>hello</soapenv:Body></soapenv:Envelope>',
+            '<soapenv:Envelope xmlns:soapenv='
+            '"http://schemas.xmlsoap.org/soap/envelope/"><soapenv:Body>'
+            'hello</soapenv:Body></soapenv:Envelope>',
             tostring(soap_envelope('hello')))
         self.assertEqual(
-            '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"><soapenv:Body><tag>hello</tag></soapenv:Body></soapenv:Envelope>',
+            '<soapenv:Envelope xmlns:soapenv='
+            '"http://schemas.xmlsoap.org/soap/envelope/"><soapenv:Body>'
+            '<tag>hello</tag></soapenv:Body></soapenv:Envelope>',
             tostring(soap_envelope(Element('tag', 'hello'))))
-
 
     def test_unwrap_soap_envelope(self):
         """
@@ -42,9 +44,10 @@ class SoapWrapperTests(TestCase):
             soap_envelope(Element('tag', 'hello')))
         self.assertIdentical(None, header)
         self.assertEqual(
-            '<soapenv:Body xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"><tag>hello</tag></soapenv:Body>',
+            '<soapenv:Body xmlns:soapenv='
+            '"http://schemas.xmlsoap.org/soap/envelope/"><tag>hello</tag>'
+            '</soapenv:Body>',
             tostring(body))
-
 
     def test_unwrap_soap_envelope_header(self):
         """
@@ -56,12 +59,15 @@ class SoapWrapperTests(TestCase):
                 Element('tag', 'hello'),
                 Element('header', 'value')))
         self.assertEqual(
-            '<soapenv:Header xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"><header>value</header></soapenv:Header>',
+            '<soapenv:Header xmlns:soapenv='
+            '"http://schemas.xmlsoap.org/soap/envelope/">'
+            '<header>value</header></soapenv:Header>',
             tostring(header))
         self.assertEqual(
-            '<soapenv:Body xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"><tag>hello</tag></soapenv:Body>',
+            '<soapenv:Body xmlns:soapenv='
+            '"http://schemas.xmlsoap.org/soap/envelope/">'
+            '<tag>hello</tag></soapenv:Body>',
             tostring(body))
-
 
     def test_soap_fault(self):
         """
@@ -69,9 +75,11 @@ class SoapWrapperTests(TestCase):
         description.
         """
         self.assertEqual(
-            '<soapenv:Fault xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"><faultcode>soapenv:Client</faultcode><faultstring>Oops.</faultstring></soapenv:Fault>',
+            '<soapenv:Fault xmlns:soapenv='
+            '"http://schemas.xmlsoap.org/soap/envelope/">'
+            '<faultcode>soapenv:Client</faultcode>'
+            '<faultstring>Oops.</faultstring></soapenv:Fault>',
             tostring(soap_fault('soapenv:Client', 'Oops.')))
-
 
 
 class TestFaultDetail(namedtuple('TestFaultDetail', ['foo', 'bar'])):
@@ -85,7 +93,6 @@ class TestFaultDetail(namedtuple('TestFaultDetail', ['foo', 'bar'])):
         return cls(gettext(elem, 'foo'), gettext(elem, 'bar'))
 
 
-
 class TestFault(SoapFault):
     """
     A SOAP fault used for tests.
@@ -93,13 +100,11 @@ class TestFault(SoapFault):
     detail_type = TestFaultDetail
 
 
-
 def _make_fault(*a, **kw):
     """
     Create a SOAP body containing a SOAP fault.
     """
     return SOAP_ENV.Body(soap_fault(*a, **kw))
-
 
 
 class SoapFaultTests(TestCase):
@@ -113,7 +118,6 @@ class SoapFaultTests(TestCase):
         """
         self.assertRaises(ValueError,
             SoapFault.from_element, Element('tag'))
-
 
     def test_from_element(self):
         """
@@ -130,7 +134,6 @@ class SoapFaultTests(TestCase):
             ('soapenv:Client', 'message', 'actor'),
             (fault.code, fault.string, fault.actor))
         self.assertIdentical(None, fault.parsed_detail)
-
 
     def test_to_element(self):
         """
@@ -153,7 +156,6 @@ class SoapFaultTests(TestCase):
                                         'bar': 'b'}}}},
             element_to_dict(fault.to_element()))
 
-
     def test_to_element_no_detail(self):
         """
         `SoapFault.to_element` serializes the fault to a SOAP ``Fault``
@@ -168,7 +170,6 @@ class SoapFaultTests(TestCase):
                 'faultstring': fault.string,
                 'faultactor': fault.actor}},
             element_to_dict(fault.to_element()))
-
 
     def test_expected_faults(self):
         """
@@ -195,14 +196,12 @@ class SoapFaultTests(TestCase):
             (parsed_detail.foo, parsed_detail.bar))
 
 
-
 class PerformSoapRequestTests(_FailureResultOfMixin, TestCase):
     """
     Tests for `vumi.transports.parlayx.soaputil.perform_soap_request`.
     """
     def setUp(self):
         self.requests = []
-
 
     def _http_request_full(self, response, uri, body, headers):
         """
@@ -213,7 +212,6 @@ class PerformSoapRequestTests(_FailureResultOfMixin, TestCase):
         self.requests.append((uri, body, headers))
         return succeed(response)
 
-
     def _perform_soap_request(self, response, *a, **kw):
         """
         Perform a SOAP request with a canned response.
@@ -221,7 +219,6 @@ class PerformSoapRequestTests(_FailureResultOfMixin, TestCase):
         return perform_soap_request(
             http_request_full=partial(
                 self._http_request_full, response), *a, **kw)
-
 
     def test_success(self):
         """
@@ -242,7 +239,6 @@ class PerformSoapRequestTests(_FailureResultOfMixin, TestCase):
         self.assertEqual(SOAP_ENV.Header.text, header.tag)
         self.assertEqual('response_header', header.text)
 
-
     def test_response_not_xml(self):
         """
         `perform_soap_request` raises `xml.etree.ElementTree.ParseError` if the
@@ -252,7 +248,6 @@ class PerformSoapRequestTests(_FailureResultOfMixin, TestCase):
         self.failureResultOf(
             self._perform_soap_request(response, 'uri', 'action', 'request'),
             ParseError)
-
 
     def test_response_no_body(self):
         """
@@ -265,7 +260,6 @@ class PerformSoapRequestTests(_FailureResultOfMixin, TestCase):
             SoapFault)
         self.assertEqual('soapenv:Client', f.value.code)
         self.assertEqual('Malformed SOAP request', f.getErrorMessage())
-
 
     def test_fault(self):
         """
@@ -281,7 +275,6 @@ class PerformSoapRequestTests(_FailureResultOfMixin, TestCase):
         self.assertEqual(
             ('soapenv:Server', 'Whoops'),
             (f.value.code, f.getErrorMessage()))
-
 
     def test_expected_fault(self):
         """

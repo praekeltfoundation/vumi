@@ -16,10 +16,8 @@ from vumi.transports.parlayx.xmlutil import (
 from vumi.utils import normalize_msisdn
 
 
-
 NOTIFICATION_NS = Namespace(
     'http://www.csapi.org/schema/parlayx/sms/notification/v2_2/local', 'loc')
-
 
 
 def normalize_address(address):
@@ -29,7 +27,6 @@ def normalize_address(address):
     if address.startswith('tel:'):
         address = address[4:]
     return normalize_msisdn(address)
-
 
 
 class DeliveryStatus(Values):
@@ -42,7 +39,6 @@ class DeliveryStatus(Values):
     MessageWaiting = ValueConstant('pending')
     DeliveredToTerminal = ValueConstant('delivered')
     DeliveryNotificationNotSupported = ValueConstant('failed')
-
 
 
 class SmsMessage(namedtuple('SmsMessage',
@@ -63,7 +59,6 @@ class SmsMessage(namedtuple('SmsMessage',
             service_activation_number=gettext(
                 root, 'smsServiceActivationNumber', parse=normalize_address),
             timestamp=gettext(root, 'dateTime', parse=iso8601.parse_date))
-
 
 
 class DeliveryInformation(namedtuple('DeliveryInformation',
@@ -88,7 +83,6 @@ class DeliveryInformation(namedtuple('DeliveryInformation',
                 delivery_status=delivery_status)
 
 
-
 class SmsNotificationService(Resource):
     """
     Web resource to handle SOAP requests for ParlayX SMS deliveries and
@@ -96,12 +90,10 @@ class SmsNotificationService(Resource):
     """
     isLeaf = True
 
-
     def __init__(self, callback_message_received, callback_message_delivered):
         self.callback_message_received = callback_message_received
         self.callback_message_delivered = callback_message_delivered
         Resource.__init__(self)
-
 
     def render_POST(self, request):
         """
@@ -138,7 +130,6 @@ class SmsNotificationService(Resource):
         d.addCallback(_writeResponse)
         return NOT_DONE_YET
 
-
     def process(self, request, body, header=None):
         """
         Process a SOAP request.
@@ -153,13 +144,11 @@ class SmsNotificationService(Resource):
 
         raise SoapFault(u'soapenv:Client', u'No actionable items')
 
-
     def process_unknown(self, root, name):
         """
         Process unknown notification deliverables.
         """
         raise SoapFault(u'soapenv:Server', u'No handler for %s' % (name,))
-
 
     def process_notifySmsReception(self, root, name):
         """
@@ -172,7 +161,6 @@ class SmsNotificationService(Resource):
         d.addCallback(
             lambda ignored: NOTIFICATION_NS.notifySmsReceptionResponse())
         return d
-
 
     def process_notifySmsDeliveryReceipt(self, root, name):
         """
@@ -188,7 +176,6 @@ class SmsNotificationService(Resource):
         return d
 
 
-
 # XXX: Only used for debugging with SoapUI:
 # twistd web --class=vumi.transports.parlayx.server.Root --port=9080
 class Root(Resource):
@@ -198,7 +185,6 @@ class Root(Resource):
         if request.postpath == ['services', 'SmsNotification']:
             return SmsNotificationService(noop, noop)
         return None
-
 
 
 __all__ = [

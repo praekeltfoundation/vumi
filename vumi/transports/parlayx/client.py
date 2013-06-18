@@ -7,7 +7,6 @@ from vumi.transports.parlayx.xmlutil import (
     gettext, gettextall, Namespace, LocalNamespace as L)
 
 
-
 PARLAYX_COMMON_NS = Namespace(
     'http://www.csapi.org/schema/parlayx/common/v2_1', 'parlayx_common')
 SEND_NS = Namespace(
@@ -15,7 +14,6 @@ SEND_NS = Namespace(
 NOTIFICATION_MANAGER_NS = Namespace(
     'http://www.csapi.org/schema/parlayx/sms/notification_manager/v2_3/local',
     'nm')
-
 
 
 def format_address(msisdn):
@@ -27,14 +25,12 @@ def format_address(msisdn):
     return 'tel:' + msisdn[1:]
 
 
-
 class _ParlayXFaultDetail(namedtuple('_ParlayXFaultDetail',
                                    ['message_id', 'text', 'variables'])):
     """
     Generic ParlayX SOAP fault detail.
     """
     tag = None
-
 
     @classmethod
     def from_element(cls, element):
@@ -46,13 +42,11 @@ class _ParlayXFaultDetail(namedtuple('_ParlayXFaultDetail',
             variables=list(gettextall(element, 'variables')))
 
 
-
 class ServiceExceptionDetail(_ParlayXFaultDetail):
     """
     ParlayX service exception detail.
     """
     tag = PARLAYX_COMMON_NS.ServiceExceptionDetail
-
 
 
 class ServiceException(SoapFault):
@@ -62,7 +56,6 @@ class ServiceException(SoapFault):
     detail_type = ServiceExceptionDetail
 
 
-
 class PolicyExceptionDetail(_ParlayXFaultDetail):
     """
     ParlayX policy exception detail.
@@ -70,13 +63,11 @@ class PolicyExceptionDetail(_ParlayXFaultDetail):
     tag = PARLAYX_COMMON_NS.PolicyExceptionDetail
 
 
-
 class PolicyException(SoapFault):
     """
     ParlayX policy exception.
     """
     detail_type = PolicyExceptionDetail
-
 
 
 class ParlayXClient(object):
@@ -107,7 +98,6 @@ class ParlayXClient(object):
         self.perform_soap_request = perform_soap_request
         self._service_correlator = uuid.uuid4().hex
 
-
     def start_sms_notification(self):
         """
         Register a notification delivery endpoint with the remote ParlayX
@@ -126,7 +116,6 @@ class ParlayXClient(object):
             body=body,
             expected_faults=[ServiceException])
 
-
     def stop_sms_notification(self):
         """
         Deregister notification delivery with the remote ParlayX service.
@@ -138,7 +127,6 @@ class ParlayXClient(object):
             action='',
             body=body,
             expected_faults=[ServiceException])
-
 
     def send_sms(self, to_addr, content, message_id):
         """
@@ -161,7 +149,6 @@ class ParlayXClient(object):
             expected_faults=[PolicyException, ServiceException])
         d.addCallback(_extractRequestIdentifier)
         return d
-
 
 
 __all__ = [
