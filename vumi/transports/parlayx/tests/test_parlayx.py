@@ -208,4 +208,4 @@ class TransportUtilsTests(TestCase):
         message identifier and a UUID.
         """
         self.assertEqual(
-            ['arst', '12341234'], extract_message_id('arst:12341234'))
+            'arst', extract_message_id('arst:12341234'))

@@ -125,7 +125,7 @@ class ParlayXTransport(Transport):
         """
         log.info('Receiving SMS via ParlayX: %r: %r' % (
             correlator, inbound_message,))
-        message_id = extract_message_id(correlator)[0]
+        message_id = extract_message_id(correlator)
         return self.publish_message(
             message_id=message_id,
             content=inbound_message.message,
@@ -149,8 +149,8 @@ def unique_correlator(message_id, _uuid=None):
     return '%s:%s' % (message_id, _uuid)
 
 
-def extract_message_id(message_id):
+def extract_message_id(correlator):
     """
     Extract the Vumi message identifier from a ParlayX correlator.
     """
-    return message_id.split(':', 1)
+    return correlator.split(':', 1)[0]
