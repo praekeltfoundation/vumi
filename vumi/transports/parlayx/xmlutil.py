@@ -92,8 +92,8 @@ from xml.etree import ElementTree as etree
 
 try:
     from xml.etree.ElementTree import register_namespace
-except ImportError:
     register_namespace  # For Pyflakes.
+except ImportError:
     # This doesn't exist before Python 2.7, see
     # http://effbot.org/zone/element-namespaces.htm#element-tree-representation
 
