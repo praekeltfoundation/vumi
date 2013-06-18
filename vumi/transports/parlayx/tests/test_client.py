@@ -54,7 +54,6 @@ class FormatTimestampTests(TestCase):
             format_timestamp(datetime(2013, 6, 18, 10, 59, 33)))
 
 
-
 class MakePasswordTests(TestCase):
     """
     Tests for `vumi.transports.parlayx.client.make_password`.

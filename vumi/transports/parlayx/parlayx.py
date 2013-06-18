@@ -1,4 +1,6 @@
 # -*- test-case-name: vumi.transports.parlayx.tests.test_parlayx -*-
+import uuid
+
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi import log
@@ -48,7 +50,7 @@ class ParlayXTransport(Transport):
         return ParlayXClient(
             service_provider_service_id=config.service_provider_service_id,
             service_provider_id=config.service_provider_id,
-            service_provider_password=confnig.service_provider_password,
+            service_provider_password=config.service_provider_password,
             short_code=config.short_code,
             endpoint=config.notification_endpoint_uri,
             send_uri=config.remote_send_uri,
@@ -83,7 +85,7 @@ class ParlayXTransport(Transport):
         d = self._parlayx_client.send_sms(
             message['to_addr'],
             message['content'],
-            message['message_id'])
+            unique_correlator(message['message_id']))
         d.addErrback(self.handle_outbound_message_failure, message)
         d.addCallback(
             lambda requestIdentifier: self.publish_ack(
@@ -117,12 +119,13 @@ class ParlayXTransport(Transport):
             raise PermanentFailure(f)
         returnValue(f)
 
-    def handle_raw_inbound_message(self, message_id, inbound_message):
+    def handle_raw_inbound_message(self, correlator, inbound_message):
         """
         Handle incoming text messages from `SmsNotificationService` callbacks.
         """
         log.info('Receiving SMS via ParlayX: %r: %r' % (
-            message_id, inbound_message,))
+            correlator, inbound_message,))
+        message_id = extract_message_id(correlator)[0]
         return self.publish_message(
             message_id=message_id,
             content=inbound_message.message,
@@ -130,3 +133,24 @@ class ParlayXTransport(Transport):
             from_addr=inbound_message.sender_address,
             provider='parlayx',
             transport_type=self.transport_type)
+
+
+def unique_correlator(message_id, _uuid=None):
+    """
+    Construct a unique message identifier from an existing message
+    identifier.
+
+    This is necessary for the cases where a ``TransportMessage`` needs to
+    be transmitted, since ParlayX wants unique identifiers for all sent
+    messages.
+    """
+    if _uuid is None:
+        _uuid = uuid.uuid4()
+    return '%s:%s' % (message_id, _uuid)
+
+
+def extract_message_id(message_id):
+    """
+    Extract the Vumi message identifier from a ParlayX correlator.
+    """
+    return message_id.split(':', 1)

@@ -1,9 +1,12 @@
 from functools import partial
 
 from twisted.internet.defer import inlineCallbacks, succeed, fail
+from twisted.trial.unittest import TestCase
 
 from vumi.transports.failures import PermanentFailure
 from vumi.transports.parlayx import ParlayXTransport
+from vumi.transports.parlayx.parlayx import (
+    unique_correlator, extract_message_id)
 from vumi.transports.parlayx.client import PolicyException, ServiceException
 from vumi.transports.parlayx.server import DeliveryStatus
 from vumi.transports.parlayx.soaputil import perform_soap_request
@@ -185,3 +188,24 @@ class ParlayXTransportTestCase(TransportTestCase):
         self.assertEqual(
             ('1234', 'delivered'),
             (event['user_message_id'], event['delivery_status']))
+
+
+class TransportUtilsTests(TestCase):
+    """
+    Tests for miscellaneous functions in `vumi.transports.parlayx`.
+    """
+    def test_unique_correlator(self):
+        """
+        `unique_correlator` combines a Vumi transport message identifier and
+        a UUID.
+        """
+        self.assertEqual(
+            'arst:12341234', unique_correlator('arst', '12341234'))
+
+    def test_extract_message_id(self):
+        """
+        `extract_message_id` splits a ParlayX correlator into a Vumi transport
+        message identifier and a UUID.
+        """
+        self.assertEqual(
+            ['arst', '12341234'], extract_message_id('arst:12341234'))
