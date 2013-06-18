@@ -33,34 +33,23 @@ class ParlayXTransport(Transport):
     CONFIG_CLASS = ParlayXTransportConfig
     transport_type = 'sms'
 
-    def validate_config(self):
-        self.web_notification_path = self.config['web_notification_path']
-        self.web_notification_port = int(self.config['web_notification_port'])
-        self.notification_endpoint_uri = \
-            self.config['notification_endpoint_uri']
-        self.short_code = self.config['short_code']
-        self.remote_send_uri = self.config['remote_send_uri']
-        self.remote_notification_uri = self.config['remote_notification_uri']
-        # XXX: check these things?
-
-    def _create_client(self):
+    def _create_client(self, config):
         return ParlayXClient(
-            short_code=self.short_code,
-            endpoint=self.notification_endpoint_uri,
-            send_uri=self.remote_send_uri,
-            notification_uri=self.remote_notification_uri)
+            short_code=config.short_code,
+            endpoint=config.notification_endpoint_uri,
+            send_uri=config.remote_send_uri,
+            notification_uri=config.remote_notification_uri)
 
     @inlineCallbacks
     def setup_transport(self):
-        # XXX: ???
-        #config = self.get_static_config()
+        config = self.get_static_config()
         log.info('Starting ParlayX transport: %s' % (self.transport_name,))
         self.web_resource = yield self.start_web_resources(
             [(SmsNotificationService(self.handle_raw_inbound_message,
                                      self.publish_delivery_report),
-              self.web_notification_path)],
-            self.web_notification_port)
-        self._parlayx_client = self._create_client()
+              config.web_notification_path)],
+            config.web_notification_port)
+        self._parlayx_client = self._create_client(config)
         yield self._parlayx_client.start_sms_notification()
 
     def teardown_transport(self):

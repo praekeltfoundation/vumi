@@ -73,7 +73,7 @@ class ParlayXTransportTestCase(TransportTestCase):
         self.uri = 'http://localhost:%s%s' % (
             self.port, config['web_notification_path'])
 
-        def _create_client(transport):
+        def _create_client(transport, config):
             return MockParlayXClient()
         self.patch(self.transport_class, '_create_client', _create_client)
         self.transport = yield self.get_transport(config, start=False)
@@ -96,7 +96,7 @@ class ParlayXTransportTestCase(TransportTestCase):
         Exceptions raised in an outbound message handler result in the message
         delivery failing, and a failure event being logged.
         """
-        def _create_client(transport):
+        def _create_client(transport, config):
             return MockParlayXClient(
                 send_sms=partial(fail, ValueError('failed')))
         self.patch(self.transport_class, '_create_client', _create_client)
@@ -120,7 +120,7 @@ class ParlayXTransportTestCase(TransportTestCase):
         results in a `PermanentFailure` and is logged along with the original
         exception.
         """
-        def _create_client(transport):
+        def _create_client(transport, config):
             return MockParlayXClient(
                 send_sms=partial(
                     fail, expected_exception('soapenv:Client', 'failed')))
