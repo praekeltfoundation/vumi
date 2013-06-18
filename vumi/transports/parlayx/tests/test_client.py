@@ -1,3 +1,4 @@
+from datetime import datetime
 from functools import partial
 
 from twisted.internet.defer import succeed
@@ -5,9 +6,10 @@ from twisted.trial.unittest import TestCase
 from twisted.web import http
 
 from vumi.transports.parlayx.client import (
-    PARLAYX_COMMON_NS, NOTIFICATION_MANAGER_NS, SEND_NS, format_address,
-    ServiceExceptionDetail, ServiceException, PolicyExceptionDetail,
-    PolicyException, ParlayXClient)
+    PARLAYX_COMMON_NS, PARLAYX_HEAD_NS, NOTIFICATION_MANAGER_NS, SEND_NS,
+    format_address, ServiceExceptionDetail, ServiceException,
+    PolicyExceptionDetail, PolicyException, ParlayXClient, format_timestamp,
+    make_password)
 from vumi.transports.parlayx.soaputil import (
     perform_soap_request, unwrap_soap_envelope, soap_fault)
 from vumi.transports.parlayx.xmlutil import (
@@ -36,6 +38,35 @@ class FormatAddressTests(TestCase):
             'tel:27117654321', format_address('+27117654321'))
         self.assertEqual(
             'tel:264117654321', format_address('+264117654321'))
+
+
+class FormatTimestampTests(TestCase):
+    """
+    Tests for `vumi.transports.parlayx.client.format_timestamp`.
+    """
+    def test_format(self):
+        """
+        Format a `datetime` instance timestamp according to ParlayX
+        requirements.
+        """
+        self.assertEqual(
+            '20130618105933',
+            format_timestamp(datetime(2013, 6, 18, 10, 59, 33)))
+
+
+
+class MakePasswordTests(TestCase):
+    """
+    Tests for `vumi.transports.parlayx.client.make_password`.
+    """
+    def test_make_password(self):
+        """
+        Build a time-sensitive password for a request.
+        """
+        timestamp = format_timestamp(datetime(2013, 6, 18, 10, 59, 33))
+        self.assertEqual(
+            '1f2e67e642b16f6623459fa76dc3894f',
+            make_password('user', 'password', timestamp))
 
 
 class ServiceExceptionDetailTests(TestCase):
@@ -129,7 +160,8 @@ class ParlayXClientTests(_FailureResultOfMixin, TestCase):
         `perform_soap_request` function.
         """
         return ParlayXClient(
-            'short', 'endpoint', 'send', 'notification',
+            'service_id', 'user', 'password', 'short', 'endpoint', 'send',
+            'notification',
             perform_soap_request=partial(self._perform_soap_request, response))
 
     def test_start_sms_notification(self):
@@ -142,6 +174,7 @@ class ParlayXClientTests(_FailureResultOfMixin, TestCase):
         client = self._make_client(
             MockResponse.build(
                 http.OK, NOTIFICATION_MANAGER_NS.startSmsNotificationResponse))
+        client._now = partial(datetime, 2013, 6, 18, 10, 59, 33)
         self.successResultOf(client.start_sms_notification())
         self.assertEqual(1, len(self.requests))
         self.assertEqual('notification', self.requests[0][0])
@@ -156,6 +189,15 @@ class ParlayXClientTests(_FailureResultOfMixin, TestCase):
                     'short'}},
             element_to_dict(
                 elemfind(body, NOTIFICATION_MANAGER_NS.startSmsNotification)))
+        self.assertEqual(
+            {str(PARLAYX_HEAD_NS.RequestSOAPHeader): {
+                str(PARLAYX_HEAD_NS.serviceId): 'service_id',
+                str(PARLAYX_HEAD_NS.spId): 'user',
+                str(PARLAYX_HEAD_NS.spPassword):
+                    '1f2e67e642b16f6623459fa76dc3894f',
+                str(PARLAYX_HEAD_NS.timeStamp): '20130618105933'}},
+            element_to_dict(
+                elemfind(header, PARLAYX_HEAD_NS.RequestSOAPHeader)))
 
     def test_start_sms_notification_service_fault(self):
         """
@@ -189,6 +231,7 @@ class ParlayXClientTests(_FailureResultOfMixin, TestCase):
         client = self._make_client(
             MockResponse.build(
                 http.OK, NOTIFICATION_MANAGER_NS.stopSmsNotificationResponse))
+        client._now = partial(datetime, 2013, 6, 18, 10, 59, 33)
         self.successResultOf(client.stop_sms_notification())
         self.assertEqual(1, len(self.requests))
         self.assertEqual('notification', self.requests[0][0])
@@ -198,6 +241,15 @@ class ParlayXClientTests(_FailureResultOfMixin, TestCase):
                 'correlator': client._service_correlator}},
             element_to_dict(
                 elemfind(body, NOTIFICATION_MANAGER_NS.stopSmsNotification)))
+        self.assertEqual(
+            {str(PARLAYX_HEAD_NS.RequestSOAPHeader): {
+                str(PARLAYX_HEAD_NS.serviceId): 'service_id',
+                str(PARLAYX_HEAD_NS.spId): 'user',
+                str(PARLAYX_HEAD_NS.spPassword):
+                    '1f2e67e642b16f6623459fa76dc3894f',
+                str(PARLAYX_HEAD_NS.timeStamp): '20130618105933'}},
+            element_to_dict(
+                elemfind(header, PARLAYX_HEAD_NS.RequestSOAPHeader)))
 
     def test_stop_sms_notification_service_fault(self):
         """
@@ -229,6 +281,7 @@ class ParlayXClientTests(_FailureResultOfMixin, TestCase):
         client = self._make_client(
             MockResponse.build(
                 http.OK, SEND_NS.sendSmsResponse(SEND_NS.result('reference'))))
+        client._now = partial(datetime, 2013, 6, 18, 10, 59, 33)
         response = self.successResultOf(
             client.send_sms('+27117654321', 'content', 'message_id'))
         self.assertEqual('reference', response)
@@ -245,6 +298,16 @@ class ParlayXClientTests(_FailureResultOfMixin, TestCase):
                     'endpoint': 'endpoint',
                     'interfaceName': 'SmsNotification'}}},
             element_to_dict(elemfind(body, SEND_NS.sendSms)))
+        self.assertEqual(
+            {str(PARLAYX_HEAD_NS.RequestSOAPHeader): {
+                str(PARLAYX_HEAD_NS.serviceId): 'service_id',
+                str(PARLAYX_HEAD_NS.spId): 'user',
+                str(PARLAYX_HEAD_NS.spPassword):
+                    '1f2e67e642b16f6623459fa76dc3894f',
+                str(PARLAYX_HEAD_NS.timeStamp): '20130618105933',
+                str(PARLAYX_HEAD_NS.OA): 'tel:27117654321'}},
+            element_to_dict(
+                elemfind(header, PARLAYX_HEAD_NS.RequestSOAPHeader)))
 
     def test_send_sms_service_fault(self):
         """

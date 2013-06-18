@@ -29,6 +29,12 @@ class ParlayXTransportConfig(Transport.CONFIG_CLASS):
         'URI of the remote ParlayX SmsNotificationService', static=True)
     start_notifications = ConfigBool(
         'Start (and stop) the ParlayX notification service?', static=True)
+    service_provider_service_id = ConfigText(
+        'Provisioned service provider service identifier', static=True)
+    service_provider_id = ConfigText(
+        'Provisioned service provider identifier/username', static=True)
+    service_provider_password = ConfigText(
+        'Provisioned service provider password', static=True)
 
 
 class ParlayXTransport(Transport):
@@ -36,7 +42,13 @@ class ParlayXTransport(Transport):
     transport_type = 'sms'
 
     def _create_client(self, config):
+        """
+        Create a `ParlayXClient` instance.
+        """
         return ParlayXClient(
+            service_provider_service_id=config.service_provider_service_id,
+            service_provider_id=config.service_provider_id,
+            service_provider_password=confnig.service_provider_password,
             short_code=config.short_code,
             endpoint=config.notification_endpoint_uri,
             send_uri=config.remote_send_uri,

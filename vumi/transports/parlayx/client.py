@@ -1,6 +1,8 @@
 # -*- test-case-name: vumi.transports.parlayx.tests.test_client -*-
+import hashlib
 import uuid
 from collections import namedtuple
+from datetime import datetime
 
 from vumi.transports.parlayx.soaputil import perform_soap_request, SoapFault
 from vumi.transports.parlayx.xmlutil import (
@@ -14,6 +16,8 @@ SEND_NS = Namespace(
 NOTIFICATION_MANAGER_NS = Namespace(
     'http://www.csapi.org/schema/parlayx/sms/notification_manager/v2_3/local',
     'nm')
+PARLAYX_HEAD_NS = Namespace(
+    'http://www.huawei.com.cn/schema/common/v2_1', 'parlayx_head')
 
 
 def format_address(msisdn):
@@ -23,6 +27,25 @@ def format_address(msisdn):
     if not msisdn.startswith('+'):
         raise ValueError('Only international format addresses are supported')
     return 'tel:' + msisdn[1:]
+
+
+def format_timestamp(when):
+    """
+    Format a `datetime` instance timestamp according to ParlayX
+    requirements.
+    """
+    return when.strftime('%Y%m%d%H%M%S')
+
+
+def make_password(service_provider_id, service_provider_password,
+                   timestamp):
+    """
+    Build a time-sensitive password for a request.
+    """
+    return hashlib.md5(
+        service_provider_id +
+        service_provider_password +
+        timestamp).hexdigest()
 
 
 class _ParlayXFaultDetail(namedtuple('_ParlayXFaultDetail',
@@ -78,9 +101,16 @@ class ParlayXClient(object):
         A unique identifier for this service, used when registering and
         deregistering for SMS notifications.
     """
-    def __init__(self, short_code, endpoint, send_uri, notification_uri,
-                 perform_soap_request=perform_soap_request):
+    def __init__(self, service_provider_service_id, service_provider_id,
+                 service_provider_password, short_code, endpoint, send_uri,
+                 notification_uri, perform_soap_request=perform_soap_request):
         """
+        :param service_provider_service_id:
+            Provisioned service provider service identifier.
+        :param service_provider_id:
+            Provisioned service provider identifier/username.
+        :param service_provider_password:
+            Provisioned service provider password.
         :param short_code:
             SMS shortcode or service activation number.
         :param endpoint:
@@ -91,12 +121,45 @@ class ParlayXClient(object):
         :param notification_uri:
             URI for the ParlayX ``SmsNotificationService`` SOAP endpoint.
         """
+        self.service_provider_service_id = service_provider_service_id
+        self.service_provider_id = service_provider_id
+        self.service_provider_password = service_provider_password
         self.short_code = short_code
         self.endpoint = endpoint
         self.send_uri = send_uri
         self.notification_uri = notification_uri
         self.perform_soap_request = perform_soap_request
         self._service_correlator = uuid.uuid4().hex
+
+    def _now(self):
+        """
+        The current date and time.
+        """
+        return datetime.now()
+
+    def _make_header(self, service_subscription_address=None):
+        """
+        Create a ``RequestSOAPHeader`` element.
+
+        :param service_subscription_address:
+            Service subscription address for the ``OA`` header field, this
+            field is omitted if its value is ``None``.
+        """
+        NS = PARLAYX_HEAD_NS
+        other = []
+        timestamp = format_timestamp(self._now())
+        if service_subscription_address:
+            other.append(NS.OA(format_address(service_subscription_address)))
+        return NS.RequestSOAPHeader(
+            NS.spId(self.service_provider_id),
+            NS.spPassword(
+                make_password(
+                    self.service_provider_id,
+                    self.service_provider_password,
+                    timestamp)),
+            NS.serviceId(self.service_provider_service_id),
+            NS.timeStamp(timestamp),
+            *other)
 
     def start_sms_notification(self):
         """
@@ -110,10 +173,12 @@ class ParlayXClient(object):
                 L.correlator(self._service_correlator)),
             NOTIFICATION_MANAGER_NS.smsServiceActivationNumber(
                 self.short_code))
+        header = self._make_header()
         return self.perform_soap_request(
             uri=self.notification_uri,
             action='',
             body=body,
+            header=header,
             expected_faults=[ServiceException])
 
     def stop_sms_notification(self):
@@ -122,10 +187,12 @@ class ParlayXClient(object):
         """
         body = NOTIFICATION_MANAGER_NS.stopSmsNotification(
             L.correlator(self._service_correlator))
+        header = self._make_header()
         return self.perform_soap_request(
             uri=self.notification_uri,
             action='',
             body=body,
+            header=header,
             expected_faults=[ServiceException])
 
     def send_sms(self, to_addr, content, message_id):
@@ -142,10 +209,12 @@ class ParlayXClient(object):
                 L.endpoint(self.endpoint),
                 L.interfaceName(u'SmsNotification'),
                 L.correlator(message_id)))
+        header = self._make_header(to_addr)
         d = self.perform_soap_request(
             uri=self.send_uri,
             action='',
             body=body,
+            header=header,
             expected_faults=[PolicyException, ServiceException])
         d.addCallback(_extractRequestIdentifier)
         return d
