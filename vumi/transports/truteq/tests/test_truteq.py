@@ -208,13 +208,13 @@ class TestTruteqTransport(TransportTestCase):
 
     @inlineCallbacks
     def test_ussd_addr_retains_asterisks_and_hashes(self):
-        yield self._incoming_ussd(ussd_type=SSMI_NEW, message="+6*7*8#")
-        yield self._check_msg(to_addr="+6*7*8#", session_event=SESSION_NEW)
+        yield self._incoming_ussd(ussd_type=SSMI_NEW, message="*6*7*8#")
+        yield self._check_msg(to_addr="*6*7*8#", session_event=SESSION_NEW)
 
     @inlineCallbacks
     def test_ussd_addr_appends_hashes_if_missing(self):
-        yield self._incoming_ussd(ussd_type=SSMI_NEW, message="+6*7*8")
-        yield self._check_msg(to_addr="+6*7*8#", session_event=SESSION_NEW)
+        yield self._incoming_ussd(ussd_type=SSMI_NEW, message="*6*7*8")
+        yield self._check_msg(to_addr="*6*7*8#", session_event=SESSION_NEW)
 
     def test_ssmi_reconnect(self):
         d_fired = Deferred()
