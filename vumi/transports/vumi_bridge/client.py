@@ -6,10 +6,20 @@ from twisted.internet import reactor
 from twisted.web.client import Agent, ResponseDone, ResponseFailed
 from twisted.web import http
 from twisted.protocols import basic
+from twisted.python.failure import Failure
 
 from vumi.message import Message
 from vumi.utils import to_kwargs
 from vumi import log
+from vumi.errors import VumiError
+
+
+class VumiBridgeError(VumiError):
+    """Raised by errors encountered by VumiBridge."""
+
+
+class VumiBridgeInvalidJsonError(VumiError):
+    """Raised when invalid JSON is received."""
 
 
 class VumiMessageReceiver(basic.LineReceiver):
@@ -46,10 +56,12 @@ class VumiMessageReceiver(basic.LineReceiver):
             d.callback(self.message_class(
                 _process_fields=True, **to_kwargs(data)))
         except ValueError, e:
-            d.errback(e)
+            f = Failure(VumiBridgeInvalidJsonError(line))
+            d.errback(f)
         except Exception, e:
             log.err()
-            d.errback(e)
+            f = Failure(e)
+            d.errback(f)
 
     def connectionLost(self, reason):
         # the PotentialDataLoss here is because Twisted didn't receive a
