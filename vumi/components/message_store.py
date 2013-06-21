@@ -262,32 +262,31 @@ class MessageStore(object):
         return self.cache.get_event_status(batch_id)
 
     def batch_outbound_keys(self, batch_id):
-        mr = self.manager.mr_from_field(OutboundMessage, 'batch', batch_id)
-        return mr.get_keys()
+        return self.outbound_messages.index_keys('batch', batch_id)
 
     def batch_outbound_keys_matching(self, batch_id, query):
         mr = self.outbound_messages.index_match(query, 'batch', batch_id)
         return mr.get_keys()
 
     def batch_inbound_keys(self, batch_id):
-        mr = self.manager.mr_from_field(InboundMessage, 'batch', batch_id)
-        return mr.get_keys()
+        return self.inbound_messages.index_keys('batch', batch_id)
 
     def batch_inbound_keys_matching(self, batch_id, query):
         mr = self.inbound_messages.index_match(query, 'batch', batch_id)
         return mr.get_keys()
 
     def message_event_keys(self, msg_id):
-        mr = self.manager.mr_from_field(Event, 'message', msg_id)
-        return mr.get_keys()
+        return self.events.index_keys('message', msg_id)
 
+    @Manager.calls_manager
     def batch_inbound_count(self, batch_id):
-        return self.inbound_messages.index_lookup(
-            'batch', batch_id).get_count()
+        keys = yield self.batch_inbound_keys(batch_id)
+        returnValue(len(keys))
 
+    @Manager.calls_manager
     def batch_outbound_count(self, batch_id):
-        return self.outbound_messages.index_lookup(
-            'batch', batch_id).get_count()
+        keys = yield self.batch_outbound_keys(batch_id)
+        returnValue(len(keys))
 
     @inlineCallbacks
     def find_inbound_keys_matching(self, batch_id, query, ttl=None,

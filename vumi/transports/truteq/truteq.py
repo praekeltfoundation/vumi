@@ -135,6 +135,9 @@ class TruteqTransport(Transport):
 
         if session_event == TransportUserMessage.SESSION_NEW:
             # If it's a new session then store the message as the USSD code
+            if not message.endswith('#'):
+                message = '%s#' % (message,)
+
             session = yield self.session_manager.create_session(
                 msisdn, ussd_code=message)
             text = None

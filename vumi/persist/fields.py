@@ -2,6 +2,7 @@
 
 """Field types for Vumi's persistence models."""
 
+import iso8601
 from datetime import datetime
 
 from vumi.message import VUMI_DATE_FORMAT
@@ -217,11 +218,34 @@ class Tag(Field):
         return tuple(value)
 
 
+class TimestampDescriptor(FieldDescriptor):
+    """A field descriptor for timestamp fields."""
+
+    def set_value(self, modelobj, value):
+        if value is not None and not isinstance(value, datetime):
+            # we can be sure that this is a iso8601 parseable string, since it
+            # passed validation
+            value = iso8601.parse_date(value)
+        super(TimestampDescriptor, self).set_value(modelobj, value)
+
+
 class Timestamp(Field):
     """Field that stores a datetime."""
+
+    descriptor_class = TimestampDescriptor
+
     def custom_validate(self, value):
-        if not isinstance(value, datetime):
-            raise ValidationError("Timestamp field expects a datetime.")
+        if isinstance(value, datetime):
+            return
+
+        try:
+            iso8601.parse_date(value)
+            return
+        except iso8601.ParseError:
+            pass
+
+        raise ValidationError("Timestamp field expects a datetime or an "
+                              "iso8601 formatted string.")
 
     def custom_to_riak(self, value):
         return value.strftime(VUMI_DATE_FORMAT)
@@ -324,13 +348,13 @@ class FieldWithSubtype(Field):
                                " that use the basic FieldDescriptor class")
         self.field_type = field_type
 
-    def validate(self, value):
+    def validate_subfield(self, value):
         self.field_type.validate(value)
 
-    def to_riak(self, value):
+    def subfield_to_riak(self, value):
         return self.field_type.to_riak(value)
 
-    def from_riak(self, value):
+    def subfield_from_riak(self, value):
         return self.field_type.from_riak(value)
 
 
@@ -350,8 +374,14 @@ class DynamicDescriptor(FieldDescriptor):
     def get_value(self, modelobj):
         return DynamicProxy(self, modelobj)
 
-    def set_value(self, modelobj, value):
-        raise RuntimeError("DynamicDescriptors should never be assigned to.")
+    def set_value(self, modelobj, valuedict):
+        self.clear(modelobj)
+        self.update(modelobj, valuedict)
+
+    def clear(self, modelobj):
+        keys = list(self.iterkeys(modelobj))
+        for key in keys:
+            self.delete_dynamic_value(modelobj, key)
 
     def iterkeys(self, modelobj):
         prefix_len = len(self.prefix)
@@ -361,7 +391,7 @@ class DynamicDescriptor(FieldDescriptor):
 
     def iteritems(self, modelobj):
         prefix_len = len(self.prefix)
-        from_riak = self.field.from_riak
+        from_riak = self.field.subfield_from_riak
         return ((key[prefix_len:], from_riak(value))
                 for key, value in modelobj._riak_object._data.iteritems()
                 if key.startswith(self.prefix))
@@ -370,19 +400,20 @@ class DynamicDescriptor(FieldDescriptor):
         # this is a separate method so it can succeed or fail
         # somewhat atomically in the case where otherdict contains
         # bad keys or values
-        items = [(self.prefix + key, self.field.to_riak(value))
+        items = [(self.prefix + key, self.field.subfield_to_riak(value))
                   for key, value in otherdict.iteritems()]
         for key, value in items:
             modelobj._riak_object._data[key] = value
 
     def get_dynamic_value(self, modelobj, dynamic_key):
         key = self.prefix + dynamic_key
-        return self.field.from_riak(modelobj._riak_object._data.get(key))
+        return self.field.subfield_from_riak(
+            modelobj._riak_object._data.get(key))
 
     def set_dynamic_value(self, modelobj, dynamic_key, value):
-        self.field.validate(value)
+        self.field.validate_subfield(value)
         key = self.prefix + dynamic_key
-        modelobj._riak_object._data[key] = self.field.to_riak(value)
+        modelobj._riak_object._data[key] = self.field.subfield_to_riak(value)
 
     def delete_dynamic_value(self, modelobj, dynamic_key):
         key = self.prefix + dynamic_key
@@ -420,8 +451,7 @@ class DynamicProxy(object):
         return self._descriptor.update(self._modelobj, otherdict)
 
     def clear(self):
-        for key in self.keys():
-            del self[key]
+        self._descriptor.clear(self._modelobj)
 
     def copy(self):
         return dict(self.iteritems())
@@ -454,19 +484,22 @@ class Dynamic(FieldWithSubtype):
         super(Dynamic, self).__init__(field_type=field_type)
         self.prefix = prefix
 
+    def custom_validate(self, valuedict):
+        if not isinstance(valuedict, dict):
+            raise ValidationError(
+                "Value %r should be a dict of subfield name-value pairs"
+                % valuedict)
+        for key, value in valuedict.iteritems():
+            self.validate_subfield(value)
+            if not isinstance(key, unicode):
+                raise ValidationError("Dynamic field needs unicode keys.")
+
 
 class ListOfDescriptor(FieldDescriptor):
     """A field descriptor for ListOf fields."""
 
     def get_value(self, modelobj):
         return ListProxy(self, modelobj)
-
-    def __set__(self, modelobj, values):
-        # override __set__ to do custom validation
-        for value in values:
-            self.field.validate(value)
-        raw_values = [self.field.to_riak(value) for value in values]
-        modelobj._riak_object._data[self.key] = raw_values
 
     def _ensure_list(self, modelobj):
         if self.key not in modelobj._riak_object._data:
@@ -475,11 +508,11 @@ class ListOfDescriptor(FieldDescriptor):
     def get_list_item(self, modelobj, list_idx):
         raw_list = modelobj._riak_object._data.get(self.key, [])
         raw_item = raw_list[list_idx]
-        return self.field.from_riak(raw_item)
+        return self.field.subfield_from_riak(raw_item)
 
     def set_list_item(self, modelobj, list_idx, value):
-        self.field.validate(value)
-        raw_value = self.field.to_riak(value)
+        self.field.validate_subfield(value)
+        raw_value = self.field.subfield_to_riak(value)
         self._ensure_list(modelobj)
         modelobj._riak_object._data[self.key][list_idx] = raw_value
 
@@ -488,22 +521,21 @@ class ListOfDescriptor(FieldDescriptor):
         del raw_list[list_idx]
 
     def append_list_item(self, modelobj, value):
-        self.field.validate(value)
-        raw_value = self.field.to_riak(value)
+        self.field.validate_subfield(value)
+        raw_value = self.field.subfield_to_riak(value)
         self._ensure_list(modelobj)
         modelobj._riak_object._data[self.key].append(raw_value)
 
     def extend_list(self, modelobj, values):
-        for value in values:
-            self.field.validate(value)
-        raw_values = [self.field.to_riak(value) for value in values]
+        map(self.field.validate_subfield, values)
+        raw_values = [self.field.subfield_to_riak(value) for value in values]
         self._ensure_list(modelobj)
         modelobj._riak_object._data[self.key].extend(raw_values)
 
     def iter_list(self, modelobj):
         raw_list = modelobj._riak_object._data.get(self.key, [])
         for raw_value in raw_list:
-            yield self.field.from_riak(raw_value)
+            yield self.field.subfield_from_riak(raw_value)
 
 
 class ListProxy(object):
@@ -541,6 +573,12 @@ class ListOf(FieldWithSubtype):
     def __init__(self, field_type=None):
         super(ListOf, self).__init__(field_type=field_type, default=list)
 
+    def custom_validate(self, valuelist):
+        if not isinstance(valuelist, list):
+            raise ValidationError(
+                "Value %r should be a list of values" % valuelist)
+        map(self.validate_subfield, valuelist)
+
 
 class ForeignKeyDescriptor(FieldDescriptor):
     def setup(self, model_cls):
@@ -560,9 +598,8 @@ class ForeignKeyDescriptor(FieldDescriptor):
     def reverse_lookup_keys(self, modelobj, manager=None):
         if manager is None:
             manager = modelobj.manager
-        mr = manager.mr_from_index(
+        return manager.index_keys(
             self.model_cls, self.index_name, modelobj.key)
-        return mr.get_keys()
 
     def clean(self, modelobj):
         if self.key not in modelobj._riak_object._data:

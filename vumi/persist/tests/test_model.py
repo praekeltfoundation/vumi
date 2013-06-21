@@ -1,5 +1,7 @@
 """Tests for vumi.persist.model."""
 
+from datetime import datetime
+
 from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks, returnValue
 
@@ -7,7 +9,7 @@ from vumi.persist.model import (
     Model, Manager, ModelMigrator, ModelMigrationError)
 from vumi.persist.fields import (
     ValidationError, Integer, Unicode, VumiMessage, Dynamic, ListOf,
-    ForeignKey, ManyToMany)
+    ForeignKey, ManyToMany, Timestamp)
 from vumi.message import TransportUserMessage
 from vumi.tests.utils import import_skip
 
@@ -49,6 +51,10 @@ class InheritedModel(SimpleModel):
 
 class OverriddenModel(InheritedModel):
     c = Integer(min=0, max=5)
+
+
+class TimestampModel(Model):
+    time = Timestamp(null=True)
 
 
 class VersionedModelMigrator(ModelMigrator):
@@ -309,6 +315,22 @@ class TestModelOnTxRiak(TestCase):
         self.assertEqual(s, None)
 
     @Manager.calls_manager
+    def test_index_keys(self):
+        indexed_model = self.manager.proxy(IndexedModel)
+        yield indexed_model("foo1", a=1, b=u"one").save()
+        yield indexed_model("foo2", a=2, b=u"one").save()
+        yield indexed_model("foo3", a=2, b=None).save()
+
+        keys = yield indexed_model.index_keys('a', 1)
+        self.assertEqual(keys, ["foo1"])
+
+        keys = yield indexed_model.index_keys('b', u"one")
+        self.assertEqual(sorted(keys), ["foo1", "foo2"])
+
+        keys = yield indexed_model.index_keys('b', None)
+        self.assertEqual(keys, ["foo3"])
+
+    @Manager.calls_manager
     def test_index_lookup(self):
         indexed_model = self.manager.proxy(IndexedModel)
         yield indexed_model("foo1", a=1, b=u"one").save()
@@ -440,6 +462,14 @@ class TestModelOnTxRiak(TestCase):
         self.assertEqual(sorted(d1.contact_info.keys()),
                          ['cellphone', 'honorific'])
 
+    def test_dynamic_field_setting(self):
+        d1 = self._create_dynamic_instance(self.manager.proxy(DynamicModel))
+        d1.contact_info = {u'cellphone': u'789', u'name': u'foo'}
+        self.assertEqual(sorted(d1.contact_info.items()), [
+            (u'cellphone', u'789'),
+            (u'name', u'foo'),
+        ])
+
     @Manager.calls_manager
     def test_listof_fields(self):
         list_model = self.manager.proxy(ListOfModel)
@@ -464,6 +494,12 @@ class TestModelOnTxRiak(TestCase):
 
         l2.items = [1]
         self.assertEqual(list(l2.items), [1])
+
+    def test_listof_setting(self):
+        list_model = self.manager.proxy(ListOfModel)
+        l1 = list_model("foo")
+        l1.items = [7, 8, 9]
+        self.assertEqual(list(l1.items), [7, 8, 9])
 
     @Manager.calls_manager
     def test_foreignkey_fields(self):
@@ -682,6 +718,17 @@ class TestModelOnTxRiak(TestCase):
         s2 = yield simple_model.load("foo2")
         results = yield s2.backlinks.manytomanymodels()
         self.assertEqual(sorted(results), ["bar1"])
+
+    def test_timestamp_field_setting(self):
+        timestamp_model = self.manager.proxy(TimestampModel)
+        t = timestamp_model("foo")
+
+        now = datetime.now()
+        t.time = now
+        self.assertEqual(t.time, now)
+
+        t.time = u"2007-01-25T12:00:00Z"
+        self.assertEqual(t.time, datetime(2007, 01, 25, 12, 0))
 
     @Manager.calls_manager
     def test_inherited_model(self):

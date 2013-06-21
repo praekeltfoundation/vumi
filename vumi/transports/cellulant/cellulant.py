@@ -29,6 +29,7 @@ def pack_ussd_message(message):
 
 
 class CellulantTransport(HttpRpcTransport):
+    """Cellulant USSD (via HTTP) transport."""
 
     ENCODING = 'utf-8'
     EVENT_MAP = {

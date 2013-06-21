@@ -1,10 +1,10 @@
-# -*- test-case-name: vumi.blinkenlights.tests.test_heartbeat -*-
+# -*- test-case-name: vumi.blinkenlights.heartbeat.tests.test_publisher -*-
 
 from twisted.internet.task import LoopingCall
 
 from vumi.service import Publisher, Exchange
 from vumi.message import Message
-from vumi.log import log
+from vumi import log
 
 
 class HeartBeatMessage(Message):
@@ -19,10 +19,14 @@ class HeartBeatMessage(Message):
         super(HeartBeatMessage, self).__init__(**kw)
 
     def validate_fields(self):
+        # these basic fields must be present, irrespective of version
         self.assert_field_present(
             'version',
             'system_id',
             'worker_id',
+            'worker_name',
+            'hostname',
+            'pid',
             )
 
 

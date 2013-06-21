@@ -265,6 +265,16 @@ class Model(object):
         return manager.load_all_bunches(cls, keys)
 
     @classmethod
+    def index_keys(cls, manager, field_name, value):
+        """Find objects by index.
+
+        :returns: List of keys matching the index param.
+        """
+        index_name, start_value, end_value = index_vals_for_field(
+            cls, field_name, value, None)
+        return manager.index_keys(cls, index_name, start_value, end_value)
+
+    @classmethod
     def index_lookup(cls, manager, field_name, value):
         """Find objects by index.
 
@@ -322,6 +332,26 @@ class Model(object):
         return manager.riak_enable_search(cls)
 
 
+def index_vals_for_field(model, field_name, start_value, end_value):
+    descriptor = model.field_descriptors[field_name]
+    if descriptor.index_name is None:
+        raise ValueError("%s.%s is not indexed" % (
+            model.__name__, field_name))
+
+    # The Riak client library does silly things under the hood.
+    start_value = descriptor.field.to_riak(start_value)
+    if start_value is None:
+        # FIXME: We should be raising an exception here, but we still rely on
+        # this having the value "None" in places. :-(
+        start_value = 'None'
+    else:
+        start_value = str(start_value)
+
+    if end_value is not None:
+        end_value = str(descriptor.field.to_riak(end_value))
+    return descriptor.index_name, start_value, end_value
+
+
 class VumiMapReduceError(Exception):
     pass
 
@@ -333,29 +363,9 @@ class VumiMapReduce(object):
         self._riak_mapreduce_obj = riak_mapreduce_obj
 
     @classmethod
-    def _index_vals_for_field(clr, model, field_name, start_value, end_value):
-        descriptor = model.field_descriptors[field_name]
-        if descriptor.index_name is None:
-            raise ValueError("%s.%s is not indexed" % (
-                    model.__name__, field_name))
-
-        # The Riak client library does silly things under the hood.
-        start_value = descriptor.field.to_riak(start_value)
-        if start_value is None:
-            start_value = ''
-            # We still rely on this having the value "None" in places. :-(
-            start_value = 'None'
-        else:
-            start_value = str(start_value)
-
-        if end_value is not None:
-            end_value = str(descriptor.field.to_riak(end_value))
-        return descriptor.index_name, start_value, end_value
-
-    @classmethod
     def from_field(cls, mgr, model, field_name, start_value, end_value=None):
-        index_name, sv, ev = cls._index_vals_for_field(model, field_name,
-                                                        start_value, end_value)
+        index_name, sv, ev = index_vals_for_field(
+            model, field_name, start_value, end_value)
         return cls.from_index(mgr, model, index_name, sv, ev)
 
     @classmethod
@@ -371,8 +381,8 @@ class VumiMapReduce(object):
     @classmethod
     def from_field_match(cls, mgr, model, query, field_name, start_value,
                             end_value=None):
-        index_name, sv, ev = cls._index_vals_for_field(model, field_name,
-                                                        start_value, end_value)
+        index_name, sv, ev = index_vals_for_field(
+            model, field_name, start_value, end_value)
         return cls.from_index_match(mgr, model, query, index_name, sv, ev)
 
     @classmethod
@@ -604,6 +614,10 @@ class Manager(object):
         raise NotImplementedError("Sub-classes of Manager should implement"
                                   " .run_map_reduce(...)")
 
+    def index_keys(self, model, index_name, start_value, end_value=None):
+        bucket = self.bucket_for_modelcls(model)
+        return bucket.get_index(index_name, start_value, end_value)
+
     def mr_from_field(self, model, field_name, start_value, end_value=None):
         return VumiMapReduce.from_field(
             self, model, field_name, start_value, end_value)
@@ -657,6 +671,10 @@ class ModelProxy(object):
 
     def load_all_bunches(self, *args, **kw):
         return self._modelcls.load_all_bunches(self._manager, *args, **kw)
+
+    def index_keys(self, field_name, value):
+        return self._modelcls.index_keys(
+            self._manager, field_name, value)
 
     def index_lookup(self, field_name, value):
         return self._modelcls.index_lookup(self._manager, field_name, value)

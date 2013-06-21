@@ -4,17 +4,10 @@ Exec {
     user => 'vagrant',
 }
 
-# Adding repo to sources list for riak
-exec { "add-basho-repo":
-    command => "curl http://apt.basho.com/gpg/basho.apt.key | sudo apt-key add - && bash -c \"echo deb http://apt.basho.com $(lsb_release -sc) main > /etc/apt/sources.list.d/basho.list\"",
-    user => "root",
-}
-
 # Make sure package index is updated (when referenced by require)
 exec { "apt-get update":
     command => "apt-get update",
     user => "root",
-    require => Exec["add-basho-repo"]
 }
 
 # Install these packages after apt-get update

@@ -3,19 +3,39 @@
 import os
 import sys
 import json
+import resource
 import pkg_resources
+import logging
 from collections import defaultdict
 
-from twisted.internet.defer import inlineCallbacks, fail, succeed
+from twisted.internet.defer import (
+    inlineCallbacks, fail, succeed, DeferredQueue)
 from twisted.internet.error import ProcessTerminated
 from twisted.trial.unittest import TestCase, SkipTest
 
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.application.tests.utils import ApplicationTestCase
 from vumi.application.sandbox import (
-    Sandbox, SandboxCommand, SandboxError, RedisResource, OutboundResource,
-    JsSandboxResource, LoggingResource, HttpClientResource, JsSandbox)
+    Sandbox, SandboxApi, SandboxCommand, SandboxError, SandboxResources,
+    SandboxResource, RedisResource, OutboundResource, JsSandboxResource,
+    LoggingResource, HttpClientResource, JsSandbox, JsFileSandbox)
 from vumi.tests.utils import LogCatcher, PersistenceMixin
+
+
+class MockResource(SandboxResource):
+    def __init__(self, name, app_worker, **handlers):
+        super(MockResource, self).__init__(name, app_worker, {})
+        for name, handler in handlers.iteritems():
+            setattr(self, "handle_%s" % name, handler)
+
+
+class ListLoggingResource(LoggingResource):
+    def __init__(self, name, app_worker, config):
+        super(ListLoggingResource, self).__init__(name, app_worker, config)
+        self.msgs = []
+
+    def log(self, api, msg, level):
+        self.msgs.append((level, msg))
 
 
 class SandboxTestCaseBase(ApplicationTestCase):
@@ -87,11 +107,14 @@ class SandboxTestCase(SandboxTestCaseBase):
             "sys.stdout.flush()\n"
             "time.sleep(5)\n"
         )
-        status = yield app.process_event_in_sandbox(self.mk_ack())
-        [sandbox_err] = self.flushLoggedErrors(SandboxError)
-        self.assertEqual(str(sandbox_err.value).split(' [')[0],
-                         "Resource fallback: unknown command 'unknown'"
-                         " received from sandbox 'sandbox1'")
+        with LogCatcher(log_level=logging.ERROR) as lc:
+            status = yield app.process_event_in_sandbox(self.mk_ack())
+            [msg] = lc.messages()
+        self.assertTrue(msg.startswith(
+            "Resource fallback received unknown command 'unknown'"
+            " from sandbox 'sandbox1'. Killing sandbox."
+            " [Full command: <Message payload=\"{"
+        ))
         self.assertEqual(status, None)
         [kill_err] = self.flushLoggedErrors(ProcessTerminated)
         self.assertTrue('process ended by signal' in str(kill_err.value))
@@ -102,10 +125,32 @@ class SandboxTestCase(SandboxTestCaseBase):
             "import sys\n"
             "sys.stderr.write('err\\n')\n"
         )
-        status = yield app.process_event_in_sandbox(self.mk_ack())
+        with LogCatcher(log_level=logging.ERROR) as lc:
+            status = yield app.process_event_in_sandbox(self.mk_ack())
+            msgs = lc.messages()
         self.assertEqual(status, 0)
-        [sandbox_err] = self.flushLoggedErrors(SandboxError)
-        self.assertEqual(str(sandbox_err.value).split(' [')[0], "err")
+        self.assertEqual(msgs, ["err"])
+
+    @inlineCallbacks
+    def test_bad_rlimit(self):
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        # This irreversibly sets limits for the current process.
+        # 10k file handles should be enough for everyone, right?
+        hard = min(hard, 10000)
+        soft = min(soft, hard)
+        resource.setrlimit(resource.RLIMIT_NOFILE, (soft, hard))
+
+        app = yield self.setup_app(
+            "import sys\n"
+            "import resource\n"
+            "rlimit_nofile = resource.getrlimit(resource.RLIMIT_NOFILE)\n"
+            "sys.stderr.write('%s %s\\n' % rlimit_nofile)\n",
+            {'rlimits': {'RLIMIT_NOFILE': [soft, hard * 2]}})
+        with LogCatcher(log_level=logging.ERROR) as lc:
+            status = yield app.process_event_in_sandbox(self.mk_ack())
+            msgs = lc.messages()
+        self.assertEqual(status, 0)
+        self.assertEqual(msgs, ["%s %s" % (soft, hard)])
 
     @inlineCallbacks
     def test_resource_setup(self):
@@ -156,17 +201,25 @@ class SandboxTestCase(SandboxTestCaseBase):
     @inlineCallbacks
     def test_recv_limit(self):
         recv_limit = 1000
+        send_out = "a" * 500
+        send_err = "a" * 501
         app = yield self.setup_app(
             "import sys, time\n"
-            "sys.stderr.write(%r)\n"
-            "sys.stdout.write('\\n')\n"
+            "sys.stdout.write(%r)\n"
             "sys.stdout.flush()\n"
+            "sys.stderr.write(%r)\n"
+            "sys.stderr.flush()\n"
             "time.sleep(5)\n"
-            % ("a" * (recv_limit - 1) + "\n"),
+            % (send_out, send_err),
             {'recv_limit': str(recv_limit)})
-        status = yield app.process_message_in_sandbox(self.mk_msg())
+        with LogCatcher(log_level=logging.ERROR) as lc:
+            status = yield app.process_message_in_sandbox(self.mk_msg())
+            msgs = lc.messages()
         self.assertEqual(status, None)
-        [stderr_err] = self.flushLoggedErrors(SandboxError)
+        self.assertEqual(msgs[0],
+                         "Sandbox 'sandbox1' killed for producing too much"
+                         " data on stderr and stdout.")
+        self.assertEqual(len(msgs), 2)  # 2nd message is the bad command log
         [kill_err] = self.flushLoggedErrors(ProcessTerminated)
         self.assertTrue('process ended by signal' in str(kill_err.value))
 
@@ -230,6 +283,29 @@ class SandboxTestCase(SandboxTestCaseBase):
         path = path_str.split(':')
         self.assertTrue('/pp1' not in path)
         self.assertTrue('/pp2' not in path)
+
+    @inlineCallbacks
+    def test_custom_logging_resource(self):
+        app = yield self.setup_app(
+            "import sys, json\n"
+            "log = {'cmd': 'foo.info', 'cmd_id': '1',\n"
+            "       'reply': False, 'msg': 'log info'}\n"
+            "sys.stdout.write(json.dumps(log) + '\\n')\n",
+            {'env': {},
+             'logging_resource': 'foo',
+             'sandbox': {
+                 'foo': {'cls': '%s.ListLoggingResource' % __name__},
+             }},
+        )
+        with LogCatcher() as lc:
+            status = yield app.process_message_in_sandbox(self.mk_msg())
+            msgs = lc.messages()
+        self.assertEqual(status, 0)
+        logging_resource = app.resources.resources['foo']
+        self.assertEqual(logging_resource.msgs, [
+            (logging.INFO, 'log info')
+        ])
+        self.assertEqual(msgs, [])
 
     @inlineCallbacks
     def echo_check(self, handler_name, msg, expected_cmd):
@@ -337,6 +413,25 @@ class JsSandboxTestCase(SandboxTestCaseBase):
         ])
 
 
+class JsFileSandboxTestCase(JsSandboxTestCase):
+
+    application_class = JsFileSandbox
+
+    def setup_app(self, javascript, extra_config=None):
+        tmp_file_name = self.mktemp()
+        tmp_file = open(tmp_file_name, 'w')
+        tmp_file.write(javascript)
+        tmp_file.close()
+
+        extra_config = extra_config or {}
+        extra_config.update({
+            'javascript_file': tmp_file_name,
+        })
+
+        return super(JsSandboxTestCase, self).setup_app(
+            extra_config=extra_config)
+
+
 class DummyAppWorker(object):
 
     class DummyApi(object):
@@ -369,6 +464,38 @@ class DummyAppWorker(object):
         def mock_method(*args, **kw):
             self.mock_calls[name].append((args, kw))
         return mock_method
+
+
+class SandboxApiTestCase(TestCase):
+    def setUp(self):
+        self.sent_messages = DeferredQueue()
+        self.patch(SandboxApi, 'sandbox_send',
+                   staticmethod(lambda msg: self.sent_messages.put(msg)))
+        self.app = DummyAppWorker()
+        self.resources = SandboxResources(self.app, {})
+        self.api = SandboxApi(self.resources, self.app)
+
+    @inlineCallbacks
+    def test_request_dispatching_for_uncaught_exceptions(self):
+        def handle_use(api, command):
+            raise Exception('Something bad happened')
+        self.resources.add_resource(
+            'bad_resource',
+            MockResource('bad_resource', self.app, use=handle_use))
+
+        command = SandboxCommand(cmd='bad_resource.use')
+        self.api.dispatch_request(command)
+        msg = yield self.sent_messages.get()
+
+        self.assertEqual(msg['cmd'], 'bad_resource.use')
+        self.assertEqual(msg['cmd_id'], command['cmd_id'])
+        self.assertTrue(msg['reply'])
+        self.assertFalse(msg['success'])
+        self.assertEqual(msg['reason'], u'Something bad happened')
+
+        logged_error = self.flushLoggedErrors()[0]
+        self.assertEqual(str(logged_error.value), 'Something bad happened')
+        self.assertEqual(logged_error.type, Exception)
 
 
 class ResourceTestCaseBase(TestCase):
@@ -553,7 +680,7 @@ class TestOutboundResource(ResourceTestCaseBase):
                                             tag='default')
         self.assertEqual(reply, None)
         self.assertEqual(self.app_worker.mock_calls['send_to'],
-                         [(('1234', 'hello'), {'tag': 'default'})])
+                         [(('1234', 'hello'), {'endpoint': 'default'})])
 
 
 class JsDummyAppWorker(DummyAppWorker):
@@ -595,12 +722,34 @@ class TestLoggingResource(ResourceTestCaseBase):
         yield self.create_resource({})
 
     @inlineCallbacks
-    def test_handle_info(self):
-        with LogCatcher() as lc:
-            reply = yield self.dispatch_command('info', msg='foo')
+    def check_logs(self, cmd_name, msg, log_level, **kw):
+        with LogCatcher(log_level=log_level) as lc:
+            reply = yield self.dispatch_command(cmd_name, msg=msg, **kw)
             msgs = lc.messages()
         self.assertEqual(reply['success'], True)
-        self.assertEqual(msgs, ['foo'])
+        self.assertEqual(msgs, [msg])
+
+    def test_handle_debug(self):
+        return self.check_logs('debug', 'foo', logging.DEBUG)
+
+    def test_handle_info(self):
+        return self.check_logs('info', 'foo', logging.INFO)
+
+    def test_handle_warning(self):
+        return self.check_logs('warning', 'foo', logging.WARNING)
+
+    def test_handle_error(self):
+        return self.check_logs('error', 'foo', logging.ERROR)
+
+    def test_handle_critical(self):
+        return self.check_logs('critical', 'foo', logging.CRITICAL)
+
+    def test_handle_log(self):
+        return self.check_logs('log', 'foo', logging.ERROR,
+                               level=logging.ERROR)
+
+    def test_handle_log_defaults_to_info(self):
+        return self.check_logs('log', 'foo', logging.INFO)
 
 
 class TestHttpClientResource(ResourceTestCaseBase):
@@ -672,6 +821,33 @@ class TestHttpClientResource(ResourceTestCaseBase):
         self.assertTrue(reply['success'])
         self.assertEqual(reply['body'], "foo")
         self.assert_http_request('http://www.example.com', method='POST')
+
+    @inlineCallbacks
+    def test_handle_head(self):
+        self.http_request_succeed("foo")
+        reply = yield self.dispatch_command('head',
+                                            url='http://www.example.com')
+        self.assertTrue(reply['success'])
+        self.assertEqual(reply['body'], "foo")
+        self.assert_http_request('http://www.example.com', method='HEAD')
+
+    @inlineCallbacks
+    def test_handle_delete(self):
+        self.http_request_succeed("foo")
+        reply = yield self.dispatch_command('delete',
+                                            url='http://www.example.com')
+        self.assertTrue(reply['success'])
+        self.assertEqual(reply['body'], "foo")
+        self.assert_http_request('http://www.example.com', method='DELETE')
+
+    @inlineCallbacks
+    def test_handle_put(self):
+        self.http_request_succeed("foo")
+        reply = yield self.dispatch_command('put',
+                                            url='http://www.example.com')
+        self.assertTrue(reply['success'])
+        self.assertEqual(reply['body'], "foo")
+        self.assert_http_request('http://www.example.com', method='PUT')
 
     @inlineCallbacks
     def test_failed_get(self):

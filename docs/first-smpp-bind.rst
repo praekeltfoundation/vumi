@@ -66,7 +66,7 @@ The SMPP Transport publishes inbound messages in Vumi's common message format an
 
 Here is a sample message:
 
-.. literalinclude:: transports/sample-message.json
+.. literalinclude:: transports/sample-inbound-message.json
 
 HTTP Relay Application
 ~~~~~~~~~~~~~~~~~~~~~~

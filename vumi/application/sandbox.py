@@ -2,12 +2,11 @@
 
 """An application for sandboxing message processing."""
 
-import sys
 import resource
 import os
-import signal
 import json
 import pkg_resources
+import logging
 from uuid import uuid4
 
 from twisted.internet import reactor
@@ -18,7 +17,6 @@ from twisted.internet.defer import (
 from twisted.internet.error import ProcessDone
 from twisted.python.failure import Failure
 
-import vumi
 from vumi.config import ConfigText, ConfigInt, ConfigList, ConfigDict
 from vumi.application.base import ApplicationWorker
 from vumi.message import Message
@@ -26,6 +24,7 @@ from vumi.errors import ConfigError
 from vumi.persist.txredis_manager import TxRedisManager
 from vumi.utils import load_class_by_string, http_request_full
 from vumi import log
+from vumi.application.sandbox_rlimiter import SandboxRlimiter
 
 
 class MultiDeferred(object):
@@ -58,89 +57,6 @@ class MultiDeferred(object):
 
 class SandboxError(Exception):
     """An error occurred inside the sandbox."""
-
-
-class SandboxRlimiter(object):
-    """This reads rlimits in from stdin, applies them and then execs a
-    new executable.
-
-    It's necessary because Twisted's spawnProcess has no equivalent of
-    the `preexec_fn` argument to :class:`subprocess.POpen`.
-
-    See http://twistedmatrix.com/trac/ticket/4159.
-    """
-    def __init__(self, argv, env):
-        start = argv.index('--') + 1
-        self._executable = argv[start]
-        self._args = [self._executable] + argv[start + 1:]
-        self._env = env
-
-    def _apply_rlimits(self):
-        data = os.environ[self._SANDBOX_RLIMITS_]
-        rlimits = json.loads(data) if data.strip() else {}
-        for rlimit, (soft, hard) in rlimits.iteritems():
-            resource.setrlimit(int(rlimit), (soft, hard))
-
-    def _reset_signals(self):
-        # reset all signal handlers to their defaults
-        for i in range(1, signal.NSIG):
-            if signal.getsignal(i) == signal.SIG_IGN:
-                signal.signal(i, signal.SIG_DFL)
-
-    def _sanitize_fds(self):
-        # close everything except stdin, stdout and stderr
-        maxfds = resource.getrlimit(resource.RLIMIT_NOFILE)[1]
-        os.closerange(3, maxfds)
-
-    def execute(self):
-        self._apply_rlimits()
-        self._restore_child_env(os.environ)
-        self._sanitize_fds()
-        self._reset_signals()
-        os.execvpe(self._executable, self._args, self._env)
-
-    _SANDBOXED_PYTHONPATH_ = "_SANDBOXED_PYTHONPATH_"
-    _SANDBOX_RLIMITS_ = "_SANDBOX_RLIMITS_"
-
-    @classmethod
-    def _override_child_env(cls, env, rlimits):
-        """Put RLIMIT config and a suitable PYTHONPATH in the env.
-
-        The PYTHONPATH needs to be set appropriately for the child process to
-        find this module.
-        """
-        # First, add the place(s) where vumi can be found to the path.
-        python_path = [os.path.dirname(p) for p in vumi.__path__]
-        # Next, add anything from the PYTHONPATH envvar.
-        python_path.extend(os.environ.get('PYTHONPATH', '').split(os.pathsep))
-
-        if 'PYTHONPATH' in env:
-            env[cls._SANDBOXED_PYTHONPATH_] = env['PYTHONPATH']
-        env['PYTHONPATH'] = os.pathsep.join(python_path)
-        env[cls._SANDBOX_RLIMITS_] = json.dumps(rlimits)
-
-    @classmethod
-    def _restore_child_env(cls, env):
-        """Remove PYTHONPATH override and RLIMIT config."""
-        del env[cls._SANDBOX_RLIMITS_]
-        if 'PYTHONPATH' in env:
-            del env['PYTHONPATH']
-        if cls._SANDBOXED_PYTHONPATH_ in env:
-            env['PYTHONPATH'] = env.pop(cls._SANDBOXED_PYTHONPATH_)
-
-    @classmethod
-    def spawn(cls, protocol, executable, rlimits, **kwargs):
-        # spawns a SandboxRlimiter, connectionMade then passes the rlimits
-        # through to stdin and the SandboxRlimiter applies them
-        args = kwargs.pop('args', [])
-        # the -u for unbuffered I/O is important (otherwise the process
-        # execed will be very confused about where its stdin data has
-        # gone)
-        args = [sys.executable, '-u', '-m', __name__, '--'] + args
-        env = kwargs.pop('env', {})
-        cls._override_child_env(env, rlimits)
-        reactor.spawnProcess(protocol, sys.executable, args=args, env=env,
-                             **kwargs)
 
 
 class SandboxProtocol(ProcessProtocol):
@@ -179,13 +95,9 @@ class SandboxProtocol(ProcessProtocol):
         self.error_chunk = ''
         api.set_sandbox(self)
 
-    @staticmethod
-    def rlimiter(args, env):
-        return SandboxRlimiter(args, env)
-
     def spawn(self):
         SandboxRlimiter.spawn(
-            self, self.executable, self.rlimits, **self.spawn_kwargs)
+            reactor, self, self.executable, self.rlimits, **self.spawn_kwargs)
 
     def done(self):
         """Returns a deferred that will be called when the process ends."""
@@ -211,6 +123,9 @@ class SandboxProtocol(ProcessProtocol):
             return True
         else:
             self.kill()
+            self.api.log("Sandbox %r killed for producing too much data on"
+                         " stderr and stdout." % (self.sandbox_id),
+                         level=logging.ERROR)
             return False
 
     def connectionMade(self):
@@ -218,7 +133,7 @@ class SandboxProtocol(ProcessProtocol):
 
     def _process_data(self, chunk, data):
         if not self.check_recv(len(data)):
-            return [chunk]  # skip the data if it's too big
+            return ['']  # skip the data if it's too big
         line_parts = data.split("\n")
         line_parts[0] = chunk + line_parts[0]
         return line_parts
@@ -245,18 +160,23 @@ class SandboxProtocol(ProcessProtocol):
     def errReceived(self, data):
         lines = self._process_data(self.error_chunk, data)
         for i in range(len(lines) - 1):
-            log.error(Failure(SandboxError(lines[i])))
+            self.api.log(lines[i], logging.ERROR)
         self.error_chunk = lines[-1]
 
     def errConnectionLost(self):
         if self.error_chunk:
-            log.error(Failure(SandboxError(self.error_chunk)))
+            self.api.log(self.error_chunk, logging.ERROR)
             self.error_chunk = ""
 
     def _process_request_results(self, results):
         for success, result in results:
             if not success:
+                # errors here are bugs in Vumi and thus should always
+                # be logged via Twisted too.
                 log.error(result)
+                # we log them again in a simplified form via the sandbox
+                # api so that the sandbox owner gets to see them too
+                self.api.log(result.getErrorMessage(), logging.ERROR)
 
     def processEnded(self, reason):
         if self.timeout_task.active():
@@ -328,18 +248,16 @@ class SandboxResource(object):
         return SandboxCommand(cmd=command['cmd'], reply=True,
                               cmd_id=command['cmd_id'], **kwargs)
 
-    def log_error(self, error_msg):
-        log.error(Failure(SandboxError(error_msg)))
-
     def dispatch_request(self, api, command):
         handler_name = 'handle_%s' % (command['cmd'],)
         handler = getattr(self, handler_name, self.unknown_request)
         return maybeDeferred(handler, api, command)
 
     def unknown_request(self, api, command):
-        self.log_error("Resource %s: unknown command %r received from"
-                       " sandbox %r [%r]" % (self.name, command['cmd'],
-                                             api.sandbox_id, command))
+        api.log("Resource %s received unknown command %r from"
+                " sandbox %r. Killing sandbox. [Full command: %r]"
+                % (self.name, command['cmd'], api.sandbox_id, command),
+                logging.ERROR)
         api.sandbox_kill()  # it's a harsh world
 
 
@@ -445,8 +363,8 @@ class OutboundResource(SandboxResource):
     def handle_send_to(self, api, command):
         content = command['content']
         to_addr = command['to_addr']
-        tag = command.get('tag', 'default')
-        self.app_worker.send_to(to_addr, content, tag=tag)
+        endpoint = command.get('endpoint', 'default')
+        self.app_worker.send_to(to_addr, content, endpoint=endpoint)
 
 
 class JsSandboxResource(SandboxResource):
@@ -469,9 +387,44 @@ class LoggingResource(SandboxResource):
     """Resource that allows a sandbox to log messages via Twisted's
     logging framework.
     """
+    def log(self, api, msg, level):
+        """Logs a message via vumi.log (i.e. Twisted logging).
+
+        Sub-class should override this if they wish to log messages
+        elsewhere. The `api` parameter is provided for use by such
+        sub-classes.
+
+        The `log` method should always return a deferred.
+        """
+        return succeed(log.msg(msg, logLevel=level))
+
+    @inlineCallbacks
+    def handle_log(self, api, command, level=None):
+        level = command.get('level', level)
+        if level is None:
+            level = logging.INFO
+        msg = command.get('msg')
+        if msg is None:
+            returnValue(self.reply(command, success=False,
+                                   reason="Value expected for msg"))
+        msg = str(msg)
+        yield self.log(api, msg, level)
+        returnValue(self.reply(command, success=True))
+
+    def handle_debug(self, api, command):
+        return self.handle_log(api, command, level=logging.DEBUG)
+
     def handle_info(self, api, command):
-        log.info(str(command['msg']))
-        return self.reply(command, success=True)
+        return self.handle_log(api, command, level=logging.INFO)
+
+    def handle_warning(self, api, command):
+        return self.handle_log(api, command, level=logging.WARNING)
+
+    def handle_error(self, api, command):
+        return self.handle_log(api, command, level=logging.ERROR)
+
+    def handle_critical(self, api, command):
+        return self.handle_log(api, command, level=logging.CRITICAL)
 
 
 class HttpClientResource(SandboxResource):
@@ -516,6 +469,15 @@ class HttpClientResource(SandboxResource):
     def handle_get(self, api, command):
         return self._make_request_from_command('GET', command)
 
+    def handle_put(self, api, command):
+        return self._make_request_from_command('PUT', command)
+
+    def handle_delete(self, api, command):
+        return self._make_request_from_command('DELETE', command)
+
+    def handle_head(self, api, command):
+        return self._make_request_from_command('HEAD', command)
+
     def handle_post(self, api, command):
         return self._make_request_from_command('POST', command)
 
@@ -528,6 +490,20 @@ class SandboxApi(object):
         self._inbound_messages = {}
         self.resources = resources
         self.fallback_resource = SandboxResource("fallback", None, {})
+        potential_logger = None
+        if config.logging_resource:
+            potential_logger = self.resources.resources.get(
+                config.logging_resource)
+            if potential_logger is None:
+                log.warning("Failed to find logging resource %r."
+                            " Falling back to Twisted logging."
+                            % (config.logging_resource,))
+            elif not hasattr(potential_logger, 'log'):
+                log.warning("Logging resource %r has no attribute 'log'."
+                            " Falling abck to Twisted logging."
+                            % (config.logging_resource,))
+                potential_logger = None
+        self.logging_resource = potential_logger
         self.config = config
 
     @property
@@ -563,6 +539,14 @@ class SandboxApi(object):
     def get_inbound_message(self, message_id):
         return self._inbound_messages.get(message_id)
 
+    def log(self, msg, level):
+        if self.logging_resource is None:
+            # fallback to vumi.log logging if we don't
+            # have a logging resource.
+            return succeed(log.msg(msg, logLevel=level))
+        else:
+            return self.logging_resource.log(self, msg, level=level)
+
     @inlineCallbacks
     def dispatch_request(self, command):
         resource_name, sep, rest = command['cmd'].partition('.')
@@ -571,7 +555,21 @@ class SandboxApi(object):
         command['cmd'] = rest
         resource = self.resources.resources.get(resource_name,
                                                 self.fallback_resource)
-        reply = yield resource.dispatch_request(self, command)
+        try:
+            reply = yield resource.dispatch_request(self, command)
+        except Exception, e:
+            # errors here are bugs in Vumi so we always log them
+            # via Twisted. However, we reply to the sandbox with
+            # a failure and log via the sandbox api so that the
+            # sandbox owner can be notified.
+            log.error()
+            self.log(str(e), level=logging.ERROR)
+            reply = SandboxCommand(
+                reply=True,
+                cmd_id=command['cmd_id'],
+                success=False,
+                reason=unicode(e))
+
         if reply is not None:
             reply['cmd'] = '%s%s%s' % (resource_name, sep, rest)
             self.sandbox_send(reply)
@@ -626,8 +624,14 @@ class SandboxConfig(ApplicationWorker.CONFIG_CLASS):
         "Dictionary of resource limits to be applied to sandboxed"
         " processes. Defaults are fairly restricted. Keys maybe"
         " names or values of the RLIMIT constants in"
-        " :module:`resource`. Values should be appropriate integers.",
+        " Python `resource` module. Values should be appropriate integers.",
         default={})
+    logging_resource = ConfigText(
+        "Name of the logging resource to use to report errors detected"
+        " in sandboxed code (e.g. lines written to stderr, unexpected"
+        " process termination). Set to null to disable and report"
+        " these directly using Twisted logging instead.",
+        default=None)
     sandbox_id = ConfigText("This is set based on individual messages.")
 
 
@@ -644,7 +648,7 @@ class Sandbox(ApplicationWorker):
         resource.RLIMIT_DATA: (32 * MB, 32 * MB),
         resource.RLIMIT_STACK: (1 * MB, 1 * MB),
         resource.RLIMIT_RSS: (10 * MB, 10 * MB),
-        resource.RLIMIT_NOFILE: (10, 10),
+        resource.RLIMIT_NOFILE: (15, 15),
         resource.RLIMIT_MEMLOCK: (64 * KB, 64 * KB),
         resource.RLIMIT_AS: (196 * MB, 196 * MB),
     }
@@ -770,6 +774,12 @@ class JsSandboxConfig(SandboxConfig):
 
     javascript = ConfigText("JavaScript code to run.", required=True)
     app_context = ConfigText("Custom context to execute JS with.")
+    logging_resource = ConfigText(
+        "Name of the logging resource to use to report errors detected"
+        " in sandboxed code (e.g. lines written to stderr, unexpected"
+        " process termination). Set to null to disable and report"
+        " these directly using Twisted logging instead.",
+        default='log')
 
 
 class JsSandbox(Sandbox):
@@ -779,11 +789,13 @@ class JsSandbox(Sandbox):
     As for :class:`Sandbox` except:
 
     * `executable` defaults to searching for a `node.js` binary.
-    * `args` defaults to the JS sandbox script in :module:`vumi.application`.
+    * `args` defaults to the JS sandbox script in the `vumi.application`
+      module.
     * An instance of :class:`JsSandboxResource` is added to the sandbox
       resources under the name `js` if no `js` resource exists.
     * An instance of :class:`LoggingResource` is added to the sandbox
       resources under the name `log` if no `log` resource exists.
+    * `logging_resource` is set to `log` if it is not set.
     * An extra 'javascript' parameter specifies the javascript to execute.
     * An extra optional 'app_context' parameter specifying a custom
       context for the 'javascript' application to execute with.
@@ -866,6 +878,12 @@ class JsSandbox(Sandbox):
             self.resources.add_resource('log', self.get_log_resource())
 
 
-if __name__ == "__main__":
-    rlimiter = SandboxProtocol.rlimiter(sys.argv, os.environ)
-    rlimiter.execute()
+class JsFileSandbox(JsSandbox):
+
+    class CONFIG_CLASS(SandboxConfig):
+        javascript_file = ConfigText(
+            "The file containting the Javascript to run", required=True)
+        app_context = ConfigText("Custom context to execute JS with.")
+
+    def javascript_for_api(self, api):
+        return file(api.config.javascript_file).read()
