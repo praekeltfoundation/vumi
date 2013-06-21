@@ -8,7 +8,7 @@ from twisted.trial.unittest import TestCase
 
 from vumi.persist.fields import (
     ValidationError, Field, Integer, Unicode, Tag, Timestamp, Json,
-    Dynamic, FieldWithSubtype, Boolean)
+    ListOf, Dynamic, FieldWithSubtype, Boolean)
 
 
 class TestBaseField(TestCase):
@@ -112,6 +112,8 @@ class TestTimestamp(TestCase):
     def test_validate(self):
         t = Timestamp()
         t.validate(datetime.now())
+        t.validate("2007-01-25T12:00:00Z")
+        t.validate(u"2007-01-25T12:00:00Z")
         self.assertRaises(ValidationError, t.validate, "foo")
 
     def test_to_riak(self):
@@ -145,3 +147,24 @@ class TestJson(TestCase):
 class TestFieldWithSubtype(TestCase):
     def test_fails_on_fancy_subtype(self):
         self.assertRaises(RuntimeError, FieldWithSubtype, Dynamic())
+
+
+class TestDynamic(TestCase):
+    def test_validate(self):
+        dynamic = Dynamic()
+        dynamic.validate({u'a': u'foo', u'b': u'bar'})
+        self.assertRaises(ValidationError, dynamic.validate,
+                          {u'a': 'foo', u'b': u'bar'})
+        self.assertRaises(ValidationError, dynamic.validate,
+                          u'this is not a dict')
+        self.assertRaises(ValidationError, dynamic.validate,
+                          {u'a': 'foo', u'b': 2})
+
+
+class TestListOf(TestCase):
+    def test_validate(self):
+        listof = ListOf()
+        listof.validate([u'foo', u'bar'])
+        self.assertRaises(ValidationError, listof.validate,
+                          u'this is not a list')
+        self.assertRaises(ValidationError, listof.validate, ['a', 2])

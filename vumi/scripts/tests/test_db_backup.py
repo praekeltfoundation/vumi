@@ -211,9 +211,10 @@ class RestoreDbCmdTestCase(DbBackupBaseTestCase):
             'Restoring dbs ...',
             '2 keys successfully restored.',
         ])
-        redis_data = sorted((k, self.redis.get(k)) for k in self.redis.keys())
+        redis_data = sorted(
+            (key, self.redis.get(key)) for key in self.redis.keys())
         expected_data = [tuple(x.items()[0]) for x in self.RESTORED_DATA]
-        expected_data = [("bar:%s" % k, v) for k, v in expected_data]
+        expected_data = [("bar:%s" % (k,), v) for k, v in expected_data]
         self.assertEqual(redis_data, expected_data)
 
     def test_restore_with_purge(self):
@@ -235,7 +236,7 @@ class RestoreDbCmdTestCase(DbBackupBaseTestCase):
                             [self.mkdbconfig(key_prefix),
                              self.mkdbbackup(backup_data)])
         cfg.run()
-        redis_data = sorted((k, redis_get(k)) for k in self.redis.keys())
+        redis_data = sorted((key, redis_get(key)) for key in self.redis.keys())
         restored_data = sorted([("%s:%s" % (key_prefix, k), v)
                                 for k, v in restored_data.items()])
         self.assertEqual(redis_data, restored_data)

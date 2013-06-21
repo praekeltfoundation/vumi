@@ -83,10 +83,10 @@ class TestOldSimpleHttpTransport(TransportTestCase):
             transport.get_transport_url(),
             self.config['web_path'],
             urlencode({
-            'to_msisdn': '123',
-            'from_msisdn': '456',
-            'message': 'hello',
-        }))
+                'to_msisdn': '123',
+                'from_msisdn': '456',
+                'message': 'hello',
+            }))
 
         response = yield http_request_full(url, '', method='GET')
         self.assertEqual(response.code, http.UNAUTHORIZED)
@@ -148,15 +148,15 @@ class TestOldTemplateHttpTransport(TransportTestCase):
         self.assertEqual(payload2['content'], "hello Foo Bar")
         self.assertEqual(json.loads(response), [
             {
-            'id': payload1['message_id'],
-            'message': payload1['content'],
-            'from_msisdn': payload1['from_addr'],
-            'to_msisdn': payload1['to_addr'],
+                'id': payload1['message_id'],
+                'message': payload1['content'],
+                'from_msisdn': payload1['from_addr'],
+                'to_msisdn': payload1['to_addr'],
             },
             {
-            'id': payload2['message_id'],
-            'message': payload2['content'],
-            'from_msisdn': payload2['from_addr'],
-            'to_msisdn': payload2['to_addr'],
+                'id': payload2['message_id'],
+                'message': payload2['content'],
+                'from_msisdn': payload2['from_addr'],
+                'to_msisdn': payload2['to_addr'],
             },
-            ])
+        ])

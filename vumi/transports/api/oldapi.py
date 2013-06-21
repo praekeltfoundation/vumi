@@ -14,8 +14,8 @@ class OldSimpleHttpTransport(HttpRpcTransport):
     Maintains the API used by the old Django based
     method of loading SMS's into VUMI over HTTP
 
-    Configuration Values
-    --------------------
+    Configuration options:
+
     web_path : str
         The path relative to the host where this listens
     web_port : int

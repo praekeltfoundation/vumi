@@ -132,10 +132,9 @@ class TestTicTacToeWorker(ApplicationTestCase):
                             session_event=TransportUserMessage.SESSION_NEW))
 
         for user, content in [
-            (user1, '1'), (user2, '4'),
-            (user1, '2'), (user2, '5'),
-            (user1, '3'),
-            ]:
+                (user1, '1'), (user2, '4'),
+                (user1, '2'), (user2, '5'),
+                (user1, '3')]:
             yield self.dispatch(self.mkmsg_in(from_addr=user, content=content))
 
         self.assertEqual('X', game.check_win())

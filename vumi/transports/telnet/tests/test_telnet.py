@@ -163,6 +163,23 @@ class TelnetServerTransportTestCase(BaseTelnetServerTransortTestCase):
         })
         self.assertEqual(worker._to_addr, 'foo')
 
+    @inlineCallbacks
+    def test_transport_type_override(self):
+        self.assertEqual(self.worker._transport_type, 'telnet')
+        self.worker = yield self.get_transport({
+            'telnet_port': 0,
+            'transport_type': 'foo',
+        })
+        self.assertEqual(self.worker._transport_type, 'foo')
+        # Clean up existing unused client.
+        self.client.transport.loseConnection()
+
+        self.client = yield self.make_client()
+        yield self.wait_for_client_start()
+        self.client.transport.write("foo\n")
+        [r1, r2, msg] = yield self.wait_for_dispatched_messages(3)
+        self.assertEqual(msg['transport_type'], 'foo')
+
 
 class AddressedTelnetServerTransportTestCase(BaseTelnetServerTransortTestCase):
 

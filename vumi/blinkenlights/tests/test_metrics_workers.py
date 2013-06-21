@@ -122,6 +122,44 @@ class TestMetricAggregator(TestCase):
         self.assertEqual(recv(), expected)
 
     @inlineCallbacks
+    def test_aggregating_last(self):
+        config = {'bucket': 3, 'bucket_size': 5}
+        worker = self.get_worker(metrics_workers.MetricAggregator,
+                                 config=config)
+        worker._time = self.fake_time
+        broker = BrokerWrapper(worker._amqp_client.broker)
+        yield worker.startWorker()
+
+        datapoints = [
+            ("vumi.test.foo", ("last",), [(1235, 1.5), (1236, 2.0)]),
+            ("vumi.test.bar", ("last",), [(1241, 1.0), (1240, 2.0)]),
+            ]
+        broker.send_datapoints("vumi.metrics.buckets", "bucket.3", datapoints)
+        broker.send_datapoints("vumi.metrics.buckets", "bucket.3", datapoints)
+        broker.send_datapoints("vumi.metrics.buckets", "bucket.2", datapoints)
+        yield broker.kick_delivery()
+
+        def recv():
+            return broker.recv_datapoints("vumi.metrics.aggregates",
+                                          "vumi.metrics.aggregates")
+
+        expected = []
+        self.now = 1241
+        worker.check_buckets()
+        self.assertEqual(recv(), expected)
+
+        expected.append([["vumi.test.foo.last", [], [[1235, 2.0]]]])
+        self.now = 1246
+        worker.check_buckets()
+        self.assertEqual(recv(), expected)
+
+        # skip a few checks
+        expected.append([["vumi.test.bar.last", [], [[1240, 1.0]]]])
+        self.now = 1261
+        worker.check_buckets()
+        self.assertEqual(recv(), expected)
+
+    @inlineCallbacks
     def test_aggregating_lag(self):
         config = {'bucket': 3, 'bucket_size': 5, 'lag': 1}
         worker = self.get_worker(metrics_workers.MetricAggregator,

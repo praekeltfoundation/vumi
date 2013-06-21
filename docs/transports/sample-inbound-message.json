@@ -1,0 +1,12 @@
+{
+    "message_id": "message1",
+    "to_addr": "1234",
+    "from_addr": "27761234567",
+    "content": "This is an incoming SMS!",
+    "transport_name": "smpp_transport",
+    "transport_type": "sms",
+    "transport_metadata": {
+        // this is a dictionary containing
+        // transport specific data
+    }
+}

@@ -55,8 +55,10 @@ class TestAppositTransport(TransportTestCase):
 
     def send_full_inbound_request(self, **params):
         return http_request_full(
-            '%s%s?%s' % (self.transport_url, self.web_path, urlencode(params)),
-            '', method='POST')
+            '%s%s' % (self.transport_url, self.web_path),
+            data=urlencode(params),
+            method='POST',
+            headers={'Content-Type': self.transport.CONTENT_TYPE})
 
     def send_inbound_request(self, **kwargs):
         params = {
@@ -90,19 +92,22 @@ class TestAppositTransport(TransportTestCase):
 
     def assert_outbound_request(self, request, **kwargs):
         expected_args = {
-            'username': ['root'],
-            'password': ['toor'],
-            'serviceId': ['service-id-1'],
-            'fromAddress': ['8123'],
-            'toAddress': ['251911223344'],
-            'content': ['so many dynamos'],
-            'channel': ['SMS'],
+            'username': 'root',
+            'password': 'toor',
+            'serviceId': 'service-id-1',
+            'fromAddress': '8123',
+            'toAddress': '251911223344',
+            'content': 'so many dynamos',
+            'channel': 'SMS',
         }
         expected_args.update(kwargs)
 
         self.assertEqual(request.path, '/')
         self.assertEqual(request.method, 'POST')
-        self.assertEqual(expected_args, request.args)
+        self.assertEqual(dict((k, [v]) for k, v in expected_args.iteritems()),
+                         request.args)
+        self.assertEqual(request.getHeader('Content-Type'),
+                         self.transport.CONTENT_TYPE)
 
     def assert_message_fields(self, msg, **kwargs):
         fields = {
@@ -163,13 +168,13 @@ class TestAppositTransport(TransportTestCase):
 
         request = yield self.outbound_requests.get()
         self.assert_outbound_request(request, **{
-            'username': ['root'],
-            'password': ['toor'],
-            'serviceId': ['service-id-1'],
-            'content': ['racecar'],
-            'fromAddress': ['8123'],
-            'toAddress': ['251911223344'],
-            'channel': ['SMS']
+            'username': 'root',
+            'password': 'toor',
+            'serviceId': 'service-id-1',
+            'content': 'racecar',
+            'fromAddress': '8123',
+            'toAddress': '251911223344',
+            'channel': 'SMS'
         })
 
         [ack] = yield self.wait_for_dispatched_events(1)
@@ -177,7 +182,8 @@ class TestAppositTransport(TransportTestCase):
 
     @inlineCallbacks
     def test_inbound_requests_for_non_ascii_content(self):
-        response = yield self.send_inbound_request(content='Hliðskjálf')
+        response = yield self.send_inbound_request(
+            content=u'Hliðskjálf'.encode('UTF-8'))
         [msg] = self.get_dispatched_messages()
         self.assert_message_fields(msg, content=u'Hliðskjálf')
 
@@ -233,19 +239,19 @@ class TestAppositTransport(TransportTestCase):
         yield self.dispatch(msg1)
         request1 = yield self.outbound_requests.get()
         self.assert_outbound_request(request1,
-            fromAddress=['8123'],
-            username=['root'],
-            password=['toor'],
-            serviceId=['service-id-1'])
+            fromAddress='8123',
+            username='root',
+            password='toor',
+            serviceId='service-id-1')
 
         msg2 = self.mk_outbound_message(from_addr='8124')
         yield self.dispatch(msg2)
         request2 = yield self.outbound_requests.get()
         self.assert_outbound_request(request2,
-            fromAddress=['8124'],
-            username=['admin'],
-            password=['nimda'],
-            serviceId=['service-id-2'])
+            fromAddress='8124',
+            username='admin',
+            password='nimda',
+            serviceId='service-id-2')
 
         [ack1, ack2] = yield self.wait_for_dispatched_events(2)
         self.assert_ack(ack1, msg1)
@@ -256,7 +262,7 @@ class TestAppositTransport(TransportTestCase):
         msg = self.mk_outbound_message(content=u'Hliðskjálf')
         yield self.dispatch(msg)
         request = yield self.outbound_requests.get()
-        self.assert_outbound_request(request, content=['Hliðskjálf'])
+        self.assert_outbound_request(request, content='Hliðskjálf')
 
         [ack] = yield self.wait_for_dispatched_events(1)
         self.assert_ack(ack, msg)

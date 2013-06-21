@@ -29,6 +29,7 @@ class MtechUssdTransport(HttpRpcTransport):
           At the time of writing, vumi has no suitable message format for
           specifying USSD menus. This may change in the future.
     """
+    ENCODING = 'utf-8'
 
     @inlineCallbacks
     def setup_transport(self):
@@ -50,7 +51,7 @@ class MtechUssdTransport(HttpRpcTransport):
 
     def handle_status_message(self, msgid, session_id):
         mur = MtechUssdResponse(session_id)
-        response_body = unicode(mur).encode('utf-8')
+        response_body = unicode(mur).encode(self.ENCODING)
         log.msg("Outbound message: %r" % (response_body,))
         return self.finish_request(msgid, response_body)
 
@@ -120,7 +121,7 @@ class MtechUssdTransport(HttpRpcTransport):
         mur.add_text(message['content'])
         if message['session_event'] != TransportUserMessage.SESSION_CLOSE:
             mur.add_freetext_option()
-        response_body = unicode(mur).encode('utf-8')
+        response_body = unicode(mur).encode(self.ENCODING)
         log.msg("Outbound message: %r" % (response_body,))
         self.finish_request(message['in_reply_to'], response_body)
         return self.publish_ack(user_message_id=message['message_id'],

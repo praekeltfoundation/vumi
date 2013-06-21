@@ -8,7 +8,7 @@ from vumi.tests.utils import LogCatcher, PersistenceMixin
 from vumi.transports.smpp.clientserver.client import (
     EsmeTransceiver, EsmeReceiver, EsmeTransmitter, EsmeCallbacks, ESME,
     unpacked_pdu_opts)
-from vumi.transports.smpp.clientserver.config import ClientConfig
+from vumi.transports.smpp.transport import SmppTransportConfig
 
 
 class FakeTransport(object):
@@ -69,9 +69,18 @@ class EsmeTestCaseBase(unittest.TestCase, PersistenceMixin):
         self.assertEqual(self._expected_callbacks, [], "Uncalled callbacks.")
         return self._persist_tearDown()
 
-    def get_unbound_esme(self, **callbacks):
-        config = ClientConfig(host="127.0.0.1", port="0",
-                              system_id="1234", password="password")
+    def get_unbound_esme(self, host="127.0.0.1", port="0",
+                         system_id="1234", password="password",
+                         callbacks={}, extra_config={}):
+        config_data = {
+            "transport_name": "transport_name",
+            "host": host,
+            "port": port,
+            "system_id": system_id,
+            "password": password,
+        }
+        config_data.update(extra_config)
+        config = SmppTransportConfig(config_data)
         esme_callbacks = EsmeCallbacks(**callbacks)
 
         def purge_manager(redis_manager):
@@ -82,11 +91,15 @@ class EsmeTestCaseBase(unittest.TestCase, PersistenceMixin):
         redis_d = self.get_redis_manager()
         redis_d.addCallback(purge_manager)
         return redis_d.addCallback(
-            lambda r: self.ESME_CLASS(config, r, esme_callbacks))
+            lambda r: self.ESME_CLASS(config, {
+                'system_id': system_id,
+                'password': password
+            }, r, esme_callbacks))
 
     @inlineCallbacks
-    def get_esme(self, **callbacks):
-        esme = yield self.get_unbound_esme(**callbacks)
+    def get_esme(self, config={}, **callbacks):
+        esme = yield self.get_unbound_esme(extra_config=config,
+                                           callbacks=callbacks)
         yield esme.connectionMade()
         esme.fake_sent_pdus.pop()  # Clear bind PDU.
         esme.state = esme.CONNECTED_STATE
@@ -175,8 +188,9 @@ class EsmeTransmitterMixin(EsmeGenericMixin):
     @inlineCallbacks
     def test_submit_sm_sms_long(self):
         """Submit a USSD message with a session continue flag."""
-        esme = yield self.get_esme()
-        esme.config.send_long_messages = True
+        esme = yield self.get_esme(config={
+            'send_long_messages': True,
+        })
         long_message = 'This is a long message.' * 20
         yield esme.submit_sm(short_message=long_message)
         [sm_pdu] = esme.fake_sent_pdus
@@ -245,15 +259,20 @@ class EsmeReceiverMixin(EsmeGenericMixin):
     @inlineCallbacks
     def test_deliver_sm_data_coding_override(self):
         """A simple message should be delivered."""
-        esme = yield self.get_esme(
-            deliver_sm=self.assertion_cb(u'hello', 'short_message'))
-        esme.config.data_coding_overrides = {0: 'utf-16be'}
+        esme = yield self.get_esme(config={
+            'data_coding_overrides': {
+                0: 'utf-16be'
+            }
+        }, deliver_sm=self.assertion_cb(u'hello', 'short_message'))
+
         yield esme.handle_deliver_sm(
             self.get_sm('\x00h\x00e\x00l\x00l\x00o', 0))
 
-        esme = yield self.get_esme(
-            deliver_sm=self.assertion_cb(u'hello', 'short_message'))
-        esme.config.data_coding_overrides = {0: 'ascii'}
+        esme = yield self.get_esme(config={
+            'data_coding_overrides': {
+                0: 'ascii'
+            }
+        }, deliver_sm=self.assertion_cb(u'hello', 'short_message'))
         yield esme.handle_deliver_sm(
             self.get_sm('hello', 0))
 
@@ -362,16 +381,19 @@ class EsmeReceiverTestCase(EsmeTestCaseBase, EsmeReceiverMixin):
 class ESMETestCase(unittest.TestCase):
 
     def setUp(self):
-        self.client_config = ClientConfig(
-                host='localhost',
-                port=2775,
-                system_id='test_system',
-                password='password',
-                )
+        config = SmppTransportConfig({
+            "transport_name": "transport_name",
+            "host": 'localhost',
+            "port": 2775,
+            "system_id": 'test_system',
+            "password": 'password',
+        })
         self.kvs = None
         self.esme_callbacks = None
-        self.esme = ESME(self.client_config, self.kvs,
-                         self.esme_callbacks)
+        self.esme = ESME(config, {
+            'system_id': 'test_system',
+            'password': 'password',
+        }, self.kvs, self.esme_callbacks)
 
     def test_bind_as_transceiver(self):
         return self.esme.bindTransciever()

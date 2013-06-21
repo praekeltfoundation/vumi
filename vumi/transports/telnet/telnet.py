@@ -96,12 +96,16 @@ class TelnetServerTransport(Transport):
     :param to_addr:
         The to_addr to use for the telnet server.
         Defaults to 'host:port'.
+    :param transport_type:
+        The transport_type to use for the telnet server.
+        Defaults to 'telnet'.
     """
     protocol = TelnetTransportProtocol
 
     def validate_config(self):
         self.telnet_port = int(self.config['telnet_port'])
         self._to_addr = self.config.get('to_addr')
+        self._transport_type = self.config.get('transport_type', 'telnet')
 
     @inlineCallbacks
     def setup_transport(self):
@@ -149,7 +153,7 @@ class TelnetServerTransport(Transport):
             session_event=session_event,
             content=text,
             transport_name=self.transport_name,
-            transport_type="telnet",
+            transport_type=self._transport_type,
         )
 
     def handle_outbound_message(self, message):
