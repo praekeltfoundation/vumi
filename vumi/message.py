@@ -351,14 +351,19 @@ class TransportEvent(TransportMessage):
     def process_fields(self, fields):
         fields = super(TransportEvent, self).process_fields(fields)
         fields.setdefault('event_id', self.generate_id())
+        fields.setdefault('helper_metadata', {})
         return fields
 
     def validate_fields(self):
         super(TransportEvent, self).validate_fields()
+        # We might get older message versions without the `helper_metadata`
+        # field.
+        self.payload.setdefault('helper_metadata', {})
         self.assert_field_present(
             'user_message_id',
             'event_id',
             'event_type',
+            'helper_metadata',
             )
         event_type = self.payload['event_type']
         if event_type not in self.EVENT_TYPES:
