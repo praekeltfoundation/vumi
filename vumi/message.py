@@ -134,13 +134,18 @@ class TransportMessage(Message):
         fields.setdefault('message_type', self.MESSAGE_TYPE)
         fields.setdefault('timestamp', datetime.utcnow())
         fields.setdefault('routing_metadata', {})
+        fields.setdefault('helper_metadata', {})
         return fields
 
     def validate_fields(self):
         self.assert_field_value('message_version', self.MESSAGE_VERSION)
+        # We might get older event messages without the `helper_metadata`
+        # field.
+        self.payload.setdefault('helper_metadata', {})
         self.assert_field_present(
             'message_type',
             'timestamp',
+            'helper_metadata',
             )
         if self['message_type'] is None:
             raise InvalidMessageField('message_type')
@@ -211,7 +216,6 @@ class TransportUserMessage(TransportMessage):
         fields.setdefault('session_event', None)
         fields.setdefault('content', None)
         fields.setdefault('transport_metadata', {})
-        fields.setdefault('helper_metadata', {})
         fields.setdefault('group', None)
         return fields
 
@@ -229,7 +233,6 @@ class TransportUserMessage(TransportMessage):
             'transport_name',
             'transport_type',
             'transport_metadata',
-            'helper_metadata',
             'group',
             )
         if self['session_event'] not in self.SESSION_EVENTS:
@@ -351,19 +354,14 @@ class TransportEvent(TransportMessage):
     def process_fields(self, fields):
         fields = super(TransportEvent, self).process_fields(fields)
         fields.setdefault('event_id', self.generate_id())
-        fields.setdefault('helper_metadata', {})
         return fields
 
     def validate_fields(self):
         super(TransportEvent, self).validate_fields()
-        # We might get older message versions without the `helper_metadata`
-        # field.
-        self.payload.setdefault('helper_metadata', {})
         self.assert_field_present(
             'user_message_id',
             'event_id',
             'event_type',
-            'helper_metadata',
             )
         event_type = self.payload['event_type']
         if event_type not in self.EVENT_TYPES:
