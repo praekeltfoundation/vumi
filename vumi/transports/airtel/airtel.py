@@ -6,7 +6,7 @@ from twisted.internet.defer import inlineCallbacks
 from twisted.web import http
 
 from vumi.transports.httprpc import HttpRpcTransport
-from vumi.components import SessionManager
+from vumi.components.session import SessionManager
 from vumi.message import TransportUserMessage
 from vumi import log
 from vumi.config import ConfigInt, ConfigText, ConfigBool, ConfigDict
