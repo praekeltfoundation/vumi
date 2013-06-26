@@ -4,11 +4,10 @@ from datetime import datetime, timedelta
 from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
 
-from vumi.components.message_store_api import (MatchResource,
-                                                MessageStoreAPIWorker)
 from vumi.utils import http_request_full
 from vumi.tests.utils import PersistenceMixin, VumiWorkerTestCase
 from vumi.message import TransportUserMessage
+from vumi.tests.utils import import_skip
 
 
 class MessageStoreAPITestCase(VumiWorkerTestCase, PersistenceMixin):
@@ -23,6 +22,12 @@ class MessageStoreAPITestCase(VumiWorkerTestCase, PersistenceMixin):
     def setUp(self):
         yield super(MessageStoreAPITestCase, self).setUp()
         self._persist_setUp()
+        try:
+            from vumi.components.message_store_api import (
+                MatchResource, MessageStoreAPIWorker)
+        except ImportError, e:
+            import_skip(e, 'riakasaurus', 'riakasaurus.riak')
+        self.match_resource = MatchResource
         self.base_path = '/api/v1/'
         self.worker = yield self.get_worker(self.mk_config({
                 'web_path': self.base_path,
@@ -87,7 +92,7 @@ class MessageStoreAPITestCase(VumiWorkerTestCase, PersistenceMixin):
         def check(d):
             response = yield http_request_full(url, method='GET')
             [progress_status] = response.headers.getRawHeaders(
-                MatchResource.RESP_IN_PROGRESS_HEADER)
+                self.match_resource.RESP_IN_PROGRESS_HEADER)
             if progress_status == '0':
                 d.callback(response)
             else:
@@ -106,7 +111,7 @@ class MessageStoreAPITestCase(VumiWorkerTestCase, PersistenceMixin):
             'flags': flags,
         }]
         if wait:
-            headers = {MatchResource.REQ_WAIT_HEADER: '1'}
+            headers = {self.match_resource.REQ_WAIT_HEADER: '1'}
         else:
             headers = {}
 
@@ -114,14 +119,15 @@ class MessageStoreAPITestCase(VumiWorkerTestCase, PersistenceMixin):
         response = yield self.do_post('batch/%s/%s/match/' % (
             self.batch_id, direction), query, headers=headers)
         [token] = response.headers.getRawHeaders(
-                                            MatchResource.RESP_TOKEN_HEADER)
+            self.match_resource.RESP_TOKEN_HEADER)
         self.assertEqual(token, expected_token)
         self.assertEqual(response.code, 200)
         returnValue(token)
 
     def assertResultCount(self, response, count):
         self.assertEqual(
-            response.headers.getRawHeaders(MatchResource.RESP_COUNT_HEADER),
+            response.headers.getRawHeaders(
+                self.match_resource.RESP_COUNT_HEADER),
             [str(count)])
 
     def assertJSONResultEqual(self, json_blob, messages):
@@ -165,7 +171,7 @@ class MessageStoreAPITestCase(VumiWorkerTestCase, PersistenceMixin):
         response = yield self.do_get('batch/%s/inbound/match/?token=%s' % (
             self.batch_id, token))
         self.assertResultCount(response, 22)
-        current_page = messages[:MatchResource.DEFAULT_RESULT_SIZE]
+        current_page = messages[:self.match_resource.DEFAULT_RESULT_SIZE]
         self.assertJSONResultEqual(response.delivered_body, current_page)
         self.assertEqual(response.code, 200)
 
@@ -179,7 +185,7 @@ class MessageStoreAPITestCase(VumiWorkerTestCase, PersistenceMixin):
             'batch/%s/inbound/match/?token=%s&keys=1' % (
                 self.batch_id, token))
         self.assertResultCount(response, 22)
-        current_page = messages[:MatchResource.DEFAULT_RESULT_SIZE]
+        current_page = messages[:self.match_resource.DEFAULT_RESULT_SIZE]
         self.assertEqual(json.loads(response.delivered_body),
             [msg['message_id'] for msg in current_page])
         self.assertEqual(response.code, 200)
@@ -214,7 +220,7 @@ class MessageStoreAPITestCase(VumiWorkerTestCase, PersistenceMixin):
         response = yield self.do_get('batch/%s/outbound/match/?token=%s' % (
             self.batch_id, token))
         self.assertResultCount(response, 22)
-        current_page = messages[:MatchResource.DEFAULT_RESULT_SIZE]
+        current_page = messages[:self.match_resource.DEFAULT_RESULT_SIZE]
         self.assertJSONResultEqual(response.delivered_body, current_page)
         self.assertEqual(response.code, 200)
 
@@ -228,7 +234,7 @@ class MessageStoreAPITestCase(VumiWorkerTestCase, PersistenceMixin):
             'batch/%s/outbound/match/?token=%s&keys=1' % (
                 self.batch_id, token))
         self.assertResultCount(response, 22)
-        current_page = messages[:MatchResource.DEFAULT_RESULT_SIZE]
+        current_page = messages[:self.match_resource.DEFAULT_RESULT_SIZE]
         self.assertEqual(json.loads(response.delivered_body),
             [msg['message_id'] for msg in current_page])
         self.assertEqual(response.code, 200)

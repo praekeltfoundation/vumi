@@ -8,7 +8,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.message import TransportMessage
 from vumi.application.tests.test_base import ApplicationTestCase
-from vumi.components.message_store import MessageStore
+from vumi.tests.utils import import_skip
 
 
 class TestMessageStoreCache(ApplicationTestCase):
@@ -17,6 +17,10 @@ class TestMessageStoreCache(ApplicationTestCase):
     @inlineCallbacks
     def setUp(self):
         yield super(TestMessageStoreCache, self).setUp()
+        try:
+            from vumi.components.message_store import MessageStore
+        except ImportError, e:
+            import_skip(e, 'riakasaurus', 'riakasaurus.riak')
         self.redis = yield self.get_redis_manager()
         self.manager = yield self.get_riak_manager()
         self.store = yield MessageStore(self.manager, self.redis)
