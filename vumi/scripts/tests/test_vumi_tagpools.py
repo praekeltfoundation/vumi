@@ -3,6 +3,7 @@
 from pkg_resources import resource_filename
 
 from twisted.trial.unittest import TestCase
+from twisted.python import usage
 
 from vumi.tests.utils import PersistenceMixin
 
@@ -167,3 +168,32 @@ class ListPoolsCmdTestCase(TagPoolBaseTestCase):
             'Pools only in tagpool:',
             '   other',
             ])
+
+
+class ReleaseTagCmdTestCase(TagPoolBaseTestCase):
+
+    def setUp(self):
+        super(ReleaseTagCmdTestCase, self).setUp()
+        self.test_tags = [("foo", "tag%d" % i) for
+                          i in [1, 2, 3, 5, 6, 7, 9]]
+
+    def test_release_tag_not_in_use(self):
+        cfg = make_cfg(["release-tag", "foo", "tag1"])
+        cfg.tagpool.declare_tags(self.test_tags)
+        self.assertRaisesRegexp(usage.UsageError,
+                                "Tag \('foo', 'tag1'\) not in use.",
+                                cfg.run)
+
+    def test_release_unknown_tag(self):
+        cfg = make_cfg(["release-tag", "foo", "tag1"])
+        self.assertRaisesRegexp(usage.UsageError,
+                                "Unknown tag \('foo', 'tag1'\).",
+                                cfg.run)
+
+    def test_release_tag(self):
+        cfg = make_cfg(["release-tag", "foo", "tag1"])
+        cfg.tagpool.declare_tags(self.test_tags)
+        cfg.tagpool.acquire_specific_tag(('foo', 'tag1'))
+        self.assertEqual(cfg.tagpool.inuse_tags('foo'), [('foo', 'tag1')])
+        cfg.run()
+        self.assertEqual(cfg.tagpool.inuse_tags('foo'), [])
