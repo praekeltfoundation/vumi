@@ -130,11 +130,12 @@ class ReleaseTagCmd(usage.Options):
         tag_tuple = (self.pool, self.tag)
         if tag_tuple not in inuse_tags:
             if tag_tuple not in free_tags:
-                raise usage.UsageError('Unknown tag %s.' % (tag_tuple,))
+                cfg.emit('Unknown tag %s.' % (tag_tuple,))
             else:
-                raise usage.UsageError('Tag %s not in use.' % (tag_tuple,))
-        cfg.tagpool.release_tag(tag_tuple)
-        cfg.emit('Released %s' % (tag_tuple,))
+                cfg.emit('Tag %s not in use.' % (tag_tuple,))
+        else:
+            cfg.tagpool.release_tag(tag_tuple)
+            cfg.emit('Released %s.' % (tag_tuple,))
 
 
 class Options(usage.Options):

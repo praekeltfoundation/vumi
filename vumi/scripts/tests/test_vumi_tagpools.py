@@ -180,15 +180,15 @@ class ReleaseTagCmdTestCase(TagPoolBaseTestCase):
     def test_release_tag_not_in_use(self):
         cfg = make_cfg(["release-tag", "foo", "tag1"])
         cfg.tagpool.declare_tags(self.test_tags)
-        self.assertRaisesRegexp(usage.UsageError,
-                                "Tag \('foo', 'tag1'\) not in use.",
-                                cfg.run)
+        cfg.run()
+        self.assertEqual(cfg.output,
+                         ["Tag ('foo', 'tag1') not in use."])
 
     def test_release_unknown_tag(self):
         cfg = make_cfg(["release-tag", "foo", "tag1"])
-        self.assertRaisesRegexp(usage.UsageError,
-                                "Unknown tag \('foo', 'tag1'\).",
-                                cfg.run)
+        cfg.run()
+        self.assertEqual(cfg.output,
+                         ["Unknown tag ('foo', 'tag1')."])
 
     def test_release_tag(self):
         cfg = make_cfg(["release-tag", "foo", "tag1"])
@@ -197,3 +197,4 @@ class ReleaseTagCmdTestCase(TagPoolBaseTestCase):
         self.assertEqual(cfg.tagpool.inuse_tags('foo'), [('foo', 'tag1')])
         cfg.run()
         self.assertEqual(cfg.tagpool.inuse_tags('foo'), [])
+        self.assertEqual(cfg.output, ["Released ('foo', 'tag1')."])
