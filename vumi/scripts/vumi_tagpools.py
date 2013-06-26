@@ -6,7 +6,7 @@ import itertools
 import yaml
 from twisted.python import usage
 
-from vumi.components import TagpoolManager
+from vumi.components.tagpool import TagpoolManager
 from vumi.persist.redis_manager import RedisManager
 
 

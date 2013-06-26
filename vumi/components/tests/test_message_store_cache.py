@@ -8,7 +8,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.message import TransportMessage
 from vumi.application.tests.test_base import ApplicationTestCase
-from vumi.components import MessageStore
+from vumi.components.message_store import MessageStore
 
 
 class TestMessageStoreCache(ApplicationTestCase):
