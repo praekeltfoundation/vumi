@@ -21,17 +21,28 @@ class MTNRwandaUSSDTransport(Transport):
 
     CONFIG_CLASS = MTNRwandaUSSDTransportConfig
 
+    def validate_config(self):
+        # Hard-coded for now.
+        # TODO: self.config.get()
+        self.port = 7080
+
+
+    @inlineCallbacks
     def setup_transport(self):
         """
-        Transport specific setup.
+        Transport specific setup - it initiates things, sets up a
+        connection, for example.
         """
+        r = MTNRwandaXMLRPCResource()
+        self.xmlrpc_server = yield reactor.listenTCP(self.port, server.Site(r))
+
 
     def teardown_transport(self):
         """
         Clean-up of setup done in setup_transport.
         """
 
-    def handle_outbound_message(self):
+    def handle_outbound_message(self, message):
         """
         Read outbound message and do what needs to be done with them.
         """
@@ -60,7 +71,7 @@ class MTNRwandaXMLRPCResource(xmlrpc.XMLRPC):
         self.transport.handle_raw_inbound_message(request_id, request)
         return server.NOT_DONE_YET
 
-    def xmlrpc_heathResource(self, request):
+    def xmlrpc_healthResource(self, request):
         request.setResponseCode(http.OK)
         request.do_not_log = True
         return self.transport.get_health_response()
