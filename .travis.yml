@@ -7,7 +7,7 @@ services:
 before_install: ./fix_travis_riak.sh
 install:
   # We easy_install a binary riak_pb package because pip install needs `protoc'.
-  - "easy_install riak_pb<1.3.0"
+  - "easy_install 'riak_pb<1.3.0'"
   - "pip install -r requirements.pip --use-mirrors"
   - "python setup.py install"
 script: trial vumi
