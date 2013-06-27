@@ -5,6 +5,7 @@ from vumi import log
 from vumi.transports.base import Transport
 from vumi.config import ConfigText
 
+
 class MTNRwandaUSSDTransportConfig(Transport.CONFIG_CLASS):
     """
     MTN Rwanda USSD transport configuration.
@@ -71,17 +72,4 @@ class MTNRwandaXMLRPCResource(xmlrpc.XMLRPC):
     """
 
     def __init__(self, transport):
-        self.transport = transport
         xmlrpc.XMLRPC.__init__(self)
-
-    def xmlrpc_(self, request, request_id=None):
-        request_id = request_id or Transport.generate_message_id()
-        request.setHeader("content-type", self.transport.content_type)
-        self.transport.set_request(request_id, request)
-        self.transport.handle_raw_inbound_message(request_id, request)
-        return server.NOT_DONE_YET
-
-    def xmlrpc_healthResource(self, request):
-        request.setResponseCode(http.OK)
-        request.do_not_log = True
-        return self.transport.get_health_response()
