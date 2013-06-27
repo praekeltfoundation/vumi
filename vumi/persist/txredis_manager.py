@@ -135,8 +135,8 @@ class TxRedisManager(Manager):
         d = factory.deferred.addCallback(lambda client: client.connected_d)
         d.addCallback(lambda client: cls(client, key_prefix, key_separator))
         d.addCallback(cls._attach_reconnector)
+        return d
 
-    @inlineCallbacks
     def _attach_reconnector(cls, manager):
         def set_client(client):
             manager._client = client
