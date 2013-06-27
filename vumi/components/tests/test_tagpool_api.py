@@ -193,6 +193,8 @@ class TestTagpoolApiWorker(VumiWorkerTestCase, PersistenceMixin):
     def tearDown(self):
         for worker in self._workers:
             if worker.running:
+                yield worker.redis_manager._purge_all()
+                yield worker.redis_manager.close_manager()
                 yield worker.stopService()
         yield super(TestTagpoolApiWorker, self).tearDown()
 
