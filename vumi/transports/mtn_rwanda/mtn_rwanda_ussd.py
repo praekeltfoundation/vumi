@@ -18,6 +18,8 @@ class MTNRwandaUSSDTransport(Transport):
     """
 
     transport_type = 'ussd'
+    xmlrpc_server = None
+
 
     CONFIG_CLASS = MTNRwandaUSSDTransportConfig
 
@@ -32,20 +34,28 @@ class MTNRwandaUSSDTransport(Transport):
         """
         Transport specific setup - it initiates things, sets up a
         connection, for example.
+
+        :self.xmlrpc_server: An IListeningPort instance.
         """
         r = MTNRwandaXMLRPCResource()
-        self.xmlrpc_server = yield reactor.listenTCP(self.port, server.Site(r))
+        factory = server.Site(r)
+        self.xmlrpc_server = yield reactor.listenTCP(self.port, factory)
 
 
+    @inlineCallbacks
     def teardown_transport(self):
         """
         Clean-up of setup done in setup_transport.
         """
+        if self.xmlrpc_server is not None:
+            yield self.xmlrpc_server.stopListening()
+
 
     def handle_outbound_message(self, message):
         """
         Read outbound message and do what needs to be done with them.
         """
+
 
     def handle_raw_inbound_message(self):
         """
