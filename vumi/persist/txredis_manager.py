@@ -141,10 +141,10 @@ class TxRedisManager(Manager):
     def _attach_reconnector(manager):
         def set_client(client):
             manager._client = client
-            manager._client.factory.deferred.addCallback(reconnect)
             return client
 
         def reconnect(client):
+            client.factory.deferred.addCallback(reconnect)
             return client.connected_d.addCallback(set_client)
 
         manager._client.factory.deferred.addCallback(reconnect)
