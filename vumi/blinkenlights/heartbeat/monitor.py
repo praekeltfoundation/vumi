@@ -191,6 +191,7 @@ class HeartBeatMonitor(BaseWorker):
             self._task.stop()
             self._task = None
             yield self._task_done
+        self._redis.close_manager()
 
     def parse_config(self, config):
         """

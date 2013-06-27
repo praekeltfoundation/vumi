@@ -32,6 +32,9 @@ class TestStorage(TestCase):
         self.redis = yield TxRedisManager.from_config(config)
         self.stg = storage.Storage(self.redis)
 
+    def tearDown(self):
+        return self.redis.close_manager()
+
     @inlineCallbacks
     def test_add_system_ids(self):
         yield self.stg.add_system_ids(['foo', 'bar'])
