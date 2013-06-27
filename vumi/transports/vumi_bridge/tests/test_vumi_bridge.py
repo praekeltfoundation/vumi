@@ -46,8 +46,13 @@ class GoConversationTransportTestCase(TransportTestCase):
     def tearDown(self):
         yield super(GoConversationTransportTestCase, self).tearDown()
         for req in self._pending_reqs:
-            if not req.finished:
+            # Race condition possible
+            try:
                 yield req.finish()
+            except RuntimeError:
+                pass
+        yield self.transport.redis._purge_all()
+        yield self.transport.redis.close_manager()
         yield self.mock_server.stop()
 
     def handle_inbound_request(self, request):
@@ -89,7 +94,7 @@ class GoConversationTransportTestCase(TransportTestCase):
     @inlineCallbacks
     def test_receiving_events(self):
         # prime the mapping
-        self.transport.map_message_id('remote', 'local')
+        yield self.transport.map_message_id('remote', 'local')
         ack = self.mkmsg_ack()
         ack['event_id'] = 'event-id'
         ack['user_message_id'] = 'remote'
