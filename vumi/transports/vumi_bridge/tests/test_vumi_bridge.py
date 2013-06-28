@@ -45,7 +45,8 @@ class GoConversationTransportTestCase(TransportTestCase):
     @inlineCallbacks
     def tearDown(self):
         for req in self._pending_reqs:
-            yield req.finish()
+            if not req.finished:
+                yield req.finish()
         yield super(GoConversationTransportTestCase, self).tearDown()
         yield self.transport.redis._purge_all()
         yield self.transport.redis.close_manager()
