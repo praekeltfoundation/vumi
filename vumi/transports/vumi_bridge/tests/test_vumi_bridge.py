@@ -44,13 +44,9 @@ class GoConversationTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def tearDown(self):
-        yield super(GoConversationTransportTestCase, self).tearDown()
         for req in self._pending_reqs:
-            # Race condition possible
-            try:
-                yield req.finish()
-            except RuntimeError:
-                pass
+            yield req.finish()
+        yield super(GoConversationTransportTestCase, self).tearDown()
         yield self.transport.redis._purge_all()
         yield self.transport.redis.close_manager()
         yield self.mock_server.stop()
