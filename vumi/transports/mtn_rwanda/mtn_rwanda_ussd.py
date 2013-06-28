@@ -27,14 +27,7 @@ class MTNRwandaUSSDTransport(Transport):
     transport_type = 'ussd'
     xmlrpc_server = None
 
-
     CONFIG_CLASS = MTNRwandaUSSDTransportConfig
-
-    def validate_config(self):
-        # Hard-coded for now.
-        # TODO: self.config.get()
-        self.port = 7080
-
 
     @inlineCallbacks
     def setup_transport(self):
@@ -42,8 +35,11 @@ class MTNRwandaUSSDTransport(Transport):
         Transport specific setup - it initiates things, sets up a
         connection, for example.
 
-        :self.xmlrpc_server: An IListeningPort instance.
+        self.xmlrpc_server: An IListeningPort instance.
         """
+
+        config = self.get_static_config()
+        self.port = config.server_port
         r = MTNRwandaXMLRPCResource(self)
         factory = server.Site(r)
         self.xmlrpc_server = yield reactor.listenTCP(self.port, factory)
