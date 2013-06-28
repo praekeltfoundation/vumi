@@ -350,15 +350,11 @@ class TestMessageStore(TestMessageStoreBase):
 
 class TestMessageStoreCache(TestMessageStoreBase):
 
-    @inlineCallbacks
     def clear_cache(self, message_store):
         # FakeRedis provides a flushdb() function but TxRedisManager doesn't
         # and I'm not sure what the intended behaviour of flushdb on a
         # submanager is
-        redis = message_store.cache.redis
-        keys = yield redis.keys()
-        for key in keys:
-            yield redis.delete(key)
+        return message_store.cache.redis._purge_all()
 
     @inlineCallbacks
     def test_cache_batch_start(self):
