@@ -102,6 +102,14 @@ class VumiRedis(txr.Redis):
 class VumiRedisClientFactory(txr.RedisClientFactory):
     protocol = VumiRedis
 
+    def buildProtocol(self, addr):
+        self.client = self.protocol(*self._args, **self._kwargs)
+        self.client.factory = self
+        self.resetDelay()
+        prev_d, self.deferred = self.deferred, Deferred()
+        prev_d.callback(self.client)
+        return self.client
+
 
 class TxRedisManager(Manager):
 
