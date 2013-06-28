@@ -11,7 +11,12 @@ class MTNRwandaUSSDTransportConfig(Transport.CONFIG_CLASS):
     """
     MTN Rwanda USSD transport configuration.
     """
-    # TODO: Configure elements described in chapter 8 of the spec
+    server_hostname = ConfigText(
+            "Hostname of the server the transport's client should connect to.",
+            required=True, static=True)
+
+    server_port = ConfigInt("Port that the server is listening on.",
+            required=True, static=True)
 
 
 class MTNRwandaUSSDTransport(Transport):
