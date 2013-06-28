@@ -71,14 +71,7 @@ class MessageStoreAPITestCase(VumiWorkerTestCase, PersistenceMixin):
         yield super(MessageStoreAPITestCase, self).tearDown()
         yield self._persist_tearDown()
         redis = self.store.cache.redis  # yoink!
-        try:
-            yield redis.close_manager()
-        except RuntimeError:
-            # this can happen because some tests don't access Redis at
-            # all and so there's not connection made. Trying to tear down
-            # a non-connected Redis manager raises a RuntimeError
-            # unfortunately.
-            pass
+        yield redis._close()
 
     def do_get(self, path, headers={}):
         url = '%s%s' % (self.url, path)
