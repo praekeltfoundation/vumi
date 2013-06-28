@@ -188,10 +188,23 @@ class MessageStore(object):
                 tag.current_batch.set(None)
                 yield tag.save()
 
+    def _get_inbound_message(self, msg_id):
+        return self.inbound_messages.load(msg_id)
+
+    def _get_outbound_message(self, msg_id):
+        return self.outbound_messages.load(msg_id)
+
+    def _get_event(self, event_id):
+        return self.events.load(event_id)
+
     @Manager.calls_manager
     def add_outbound_message(self, msg, tag=None, batch_id=None):
         msg_id = msg['message_id']
-        msg_record = self.outbound_messages(msg_id, msg=msg)
+        msg_record = yield self._get_outbound_message(msg_id)
+        if msg_record is None:
+            msg_record = self.outbound_messages(msg_id, msg=msg)
+        else:
+            msg_record.msg = msg
 
         if batch_id is None and tag is not None:
             tag_record = yield self.current_tags.load(tag)
@@ -206,14 +219,18 @@ class MessageStore(object):
 
     @Manager.calls_manager
     def get_outbound_message(self, msg_id):
-        msg = yield self.outbound_messages.load(msg_id)
+        msg = yield self._get_outbound_message(msg_id)
         returnValue(msg.msg if msg is not None else None)
 
     @Manager.calls_manager
     def add_event(self, event):
         event_id = event['event_id']
         msg_id = event['user_message_id']
-        event_record = self.events(event_id, event=event, message=msg_id)
+        event_record = yield self._get_event(event_id)
+        if event_record is None:
+            event_record = self.events(event_id, event=event, message=msg_id)
+        else:
+            event_record.event = event
         yield event_record.save()
 
         msg_record = yield self.outbound_messages.load(msg_id)
@@ -224,13 +241,17 @@ class MessageStore(object):
 
     @Manager.calls_manager
     def get_event(self, event_id):
-        event = yield self.events.load(event_id)
+        event = yield self._get_event(event_id)
         returnValue(event.event if event is not None else None)
 
     @Manager.calls_manager
     def add_inbound_message(self, msg, tag=None, batch_id=None):
         msg_id = msg['message_id']
-        msg_record = self.inbound_messages(msg_id, msg=msg)
+        msg_record = yield self._get_inbound_message(msg_id)
+        if msg_record is None:
+            msg_record = self.inbound_messages(msg_id, msg=msg)
+        else:
+            msg_record.msg = msg
 
         if batch_id is None and tag is not None:
             tag_record = yield self.current_tags.load(tag)
@@ -245,7 +266,7 @@ class MessageStore(object):
 
     @Manager.calls_manager
     def get_inbound_message(self, msg_id):
-        msg = yield self.inbound_messages.load(msg_id)
+        msg = yield self._get_inbound_message(msg_id)
         returnValue(msg.msg if msg is not None else None)
 
     def get_batch(self, batch_id):
