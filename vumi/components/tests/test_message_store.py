@@ -354,7 +354,7 @@ class TestMessageStoreCache(TestMessageStoreBase):
         # FakeRedis provides a flushdb() function but TxRedisManager doesn't
         # and I'm not sure what the intended behaviour of flushdb on a
         # submanager is
-        message_store.cache.redis._client._data = {}
+        return message_store.cache.redis._purge_all()
 
     @inlineCallbacks
     def test_cache_batch_start(self):
@@ -429,7 +429,7 @@ class TestMessageStoreCache(TestMessageStoreBase):
                 sent_message_id=msg['message_id'])
             yield self.store.add_event(ack)
 
-        self.clear_cache(self.store)
+        yield self.clear_cache(self.store)
         batch_status = yield self.store.batch_status(batch_id)
         self.assertEqual(batch_status, {})
         # Default reconciliation delta should return True

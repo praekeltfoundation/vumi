@@ -70,6 +70,8 @@ class MessageStoreAPITestCase(VumiWorkerTestCase, PersistenceMixin):
     def tearDown(self):
         yield super(MessageStoreAPITestCase, self).tearDown()
         yield self._persist_tearDown()
+        redis = self.store.cache.redis  # yoink!
+        yield redis._close()
 
     def do_get(self, path, headers={}):
         url = '%s%s' % (self.url, path)

@@ -33,6 +33,11 @@ class TestStorage(TestCase):
         self.stg = storage.Storage(self.redis)
 
     @inlineCallbacks
+    def tearDown(self):
+        yield self.redis._purge_all()
+        yield self.redis.close_manager()
+
+    @inlineCallbacks
     def test_add_system_ids(self):
         yield self.stg.add_system_ids(['foo', 'bar'])
         yield self.stg.add_system_ids(['bar'])
@@ -48,12 +53,12 @@ class TestStorage(TestCase):
     @inlineCallbacks
     def test_delete_issue(self):
         iss = monitor.WorkerIssue('min-procs-fail', 5, 78)
-        self.stg.open_or_update_issue('worker-1', iss)
+        yield self.stg.open_or_update_issue('worker-1', iss)
 
         res = yield self.redis.get(storage.issue_key('worker-1'))
         self.assertEqual(type(res), str)
 
-        self.stg.delete_worker_issue('worker-1')
+        yield self.stg.delete_worker_issue('worker-1')
         res = yield self.redis.get(storage.issue_key('worker-1'))
         self.assertEqual(res, None)
 
@@ -65,13 +70,13 @@ class TestStorage(TestCase):
             'procs_count': 78,
         }
         iss = monitor.WorkerIssue('min-procs-fail', 5, 78)
-        self.stg.open_or_update_issue('foo', iss)
+        yield self.stg.open_or_update_issue('foo', iss)
         res = yield self.redis.get(storage.issue_key('foo'))
         self.assertEqual(res, json.dumps(obj))
 
         # now update the issue
         iss = monitor.WorkerIssue('min-procs-fail', 5, 77)
         obj['procs_count'] = 77
-        self.stg.open_or_update_issue('foo', iss)
+        yield self.stg.open_or_update_issue('foo', iss)
         res = yield self.redis.get(storage.issue_key('foo'))
         self.assertEqual(res, json.dumps(obj))
