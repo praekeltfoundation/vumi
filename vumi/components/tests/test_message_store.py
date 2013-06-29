@@ -140,6 +140,19 @@ class TestMessageStore(TestMessageStoreBase):
         self.assertEqual(event_keys, [])
 
     @inlineCallbacks
+    def test_add_outbound_message_again(self):
+        msg_id, msg, _batch_id = yield self._create_outbound(tag=None)
+
+        old_stored_msg = yield self.store.get_outbound_message(msg_id)
+        self.assertEqual(old_stored_msg, msg)
+
+        msg['helper_metadata']['foo'] = {'bar': 'baz'}
+        yield self.store.add_outbound_message(msg)
+        new_stored_msg = yield self.store.get_outbound_message(msg_id)
+        self.assertEqual(new_stored_msg, msg)
+        self.assertNotEqual(old_stored_msg, new_stored_msg)
+
+    @inlineCallbacks
     def test_add_outbound_message_with_batch_id(self):
         msg_id, msg, batch_id = yield self._create_outbound(by_batch=True)
 
@@ -179,6 +192,27 @@ class TestMessageStore(TestMessageStoreBase):
         batch_status = yield self.store.batch_status(batch_id)
 
         self.assertEqual(stored_ack, ack)
+        self.assertEqual(event_keys, [ack_id])
+        self.assertEqual(batch_status, self._batch_status(sent=1, ack=1))
+
+    @inlineCallbacks
+    def test_add_ack_event_again(self):
+        msg_id, msg, batch_id = yield self._create_outbound()
+        ack = self.mkmsg_ack(user_message_id=msg_id)
+        ack_id = ack['event_id']
+        yield self.store.add_event(ack)
+        old_stored_ack = yield self.store.get_event(ack_id)
+        self.assertEqual(old_stored_ack, ack)
+
+        ack['helper_metadata']['foo'] = {'bar': 'baz'}
+        yield self.store.add_event(ack)
+        new_stored_ack = yield self.store.get_event(ack_id)
+        self.assertEqual(new_stored_ack, ack)
+        self.assertNotEqual(old_stored_ack, new_stored_ack)
+
+        event_keys = yield self.store.message_event_keys(msg_id)
+        batch_status = yield self.store.batch_status(batch_id)
+
         self.assertEqual(event_keys, [ack_id])
         self.assertEqual(batch_status, self._batch_status(sent=1, ack=1))
 
@@ -249,6 +283,19 @@ class TestMessageStore(TestMessageStoreBase):
         msg_id, msg, _batch_id = yield self._create_inbound(tag=None)
         stored_msg = yield self.store.get_inbound_message(msg_id)
         self.assertEqual(stored_msg, msg)
+
+    @inlineCallbacks
+    def test_add_inbound_message_again(self):
+        msg_id, msg, _batch_id = yield self._create_inbound(tag=None)
+
+        old_stored_msg = yield self.store.get_inbound_message(msg_id)
+        self.assertEqual(old_stored_msg, msg)
+
+        msg['helper_metadata']['foo'] = {'bar': 'baz'}
+        yield self.store.add_inbound_message(msg)
+        new_stored_msg = yield self.store.get_inbound_message(msg_id)
+        self.assertEqual(new_stored_msg, msg)
+        self.assertNotEqual(old_stored_msg, new_stored_msg)
 
     @inlineCallbacks
     def test_add_inbound_message_with_batch_id(self):
