@@ -1,4 +1,4 @@
-from twisted.internet.defer import Deferred, inlineCallbacks
+from twisted.internet.defer import inlineCallbacks
 
 from vumi.transports.mtn_rwanda.mtn_rwanda_ussd import MTNRwandaUSSDTransport
 from vumi.transports.tests.utils import TransportTestCase
@@ -15,7 +15,7 @@ class TestMTNRwandaUSSDTransportTestCase(TransportTestCase):
         'msisdn': '',
         'response_flag': '',
         'transaction_time': '1994-11-05T08:15:30-05:00',
-        }
+    }
 
     REQUEST_BODY = (
         "<USSDRequest>"
@@ -25,15 +25,15 @@ class TestMTNRwandaUSSDTransportTestCase(TransportTestCase):
         "<MSISDN>%(msisdn)s</MSISDN>"
         "<response>%(response_flag)s</response>"
         "<TransactionTime>%(transaction_time)s</TransactionTime>"
-        )
+    )
 
     RESPONSE_PARAMS = {
         'transaction_id': '0',
-        'transaction_time': '1994-11-05T08:15:30-05:00'
+        'transaction_time': '1994-11-05T08:15:30-05:00',
         'ussd_response_string': '',
         'response_code': '',
         'action': '',
-        }
+    }
 
     RESPONSE_BODY = (
         "<USSDResponse>"
@@ -42,7 +42,7 @@ class TestMTNRwandaUSSDTransportTestCase(TransportTestCase):
         "<USSDResponseString>%(ussd_response_string)s</USSDResponseString>"
         "<ResponseCode>%(response_code)s</ResponseCode>"
         "<action>%(action)s</action>"
-        )
+    )
 
     # XXX: Expected Inbound Payload
     # XXX: Expected Outbound Payload
@@ -57,7 +57,7 @@ class TestMTNRwandaUSSDTransportTestCase(TransportTestCase):
         config = {
             'server_hostname': '127.0.0.1',
             'server_port': self.get_server_port(),
-            }
+        }
         self.transport = yield self.get_transport(config)
 
         @inlineCallbacks
