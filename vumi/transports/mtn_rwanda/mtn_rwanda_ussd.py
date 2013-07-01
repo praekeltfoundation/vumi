@@ -1,3 +1,5 @@
+# -*- test-case-name: vumi.transports.mtn_rwanda.tests.test_mtn_rwanda_ussd -*-
+
 from twisted.internet import reactor
 from twisted.web import xmlrpc, server, http
 from twisted.internet.defer import inlineCallbacks
