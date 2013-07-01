@@ -5,19 +5,15 @@ from twisted.web import xmlrpc, server, http
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.transports.base import Transport
-from vumi.config import ConfigText, ConfigInt
+from vumi.config import ConfigServerEndpoint
 
 
 class MTNRwandaUSSDTransportConfig(Transport.CONFIG_CLASS):
     """
     MTN Rwanda USSD transport configuration.
     """
-    server_hostname = ConfigText(
-        "Hostname of the server the transport's client should connect to.",
-        required=True, static=True)
-
-    server_port = ConfigInt(
-        "Port that the server is listening on.",
+    server_endpoint = ConfigServerEndpoint(
+        "The listening endpoint that the remote client will connect to.",
         required=True, static=True)
 
 
