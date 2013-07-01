@@ -1,10 +1,9 @@
 from twisted.internet import reactor
-from twisted.web import xmlrpc, server
+from twisted.web import xmlrpc, server, http
 from twisted.internet.defer import inlineCallbacks
 
-from vumi import log
 from vumi.transports.base import Transport
-from vumi.config import ConfigText
+from vumi.config import ConfigText, ConfigInt
 
 
 class MTNRwandaUSSDTransportConfig(Transport.CONFIG_CLASS):
@@ -12,11 +11,12 @@ class MTNRwandaUSSDTransportConfig(Transport.CONFIG_CLASS):
     MTN Rwanda USSD transport configuration.
     """
     server_hostname = ConfigText(
-            "Hostname of the server the transport's client should connect to.",
-            required=True, static=True)
+        "Hostname of the server the transport's client should connect to.",
+        required=True, static=True)
 
-    server_port = ConfigInt("Port that the server is listening on.",
-            required=True, static=True)
+    server_port = ConfigInt(
+        "Port that the server is listening on.",
+        required=True, static=True)
 
 
 class MTNRwandaUSSDTransport(Transport):
@@ -44,7 +44,6 @@ class MTNRwandaUSSDTransport(Transport):
         factory = server.Site(r)
         self.xmlrpc_server = yield reactor.listenTCP(self.port, factory)
 
-
     @inlineCallbacks
     def teardown_transport(self):
         """
@@ -53,12 +52,10 @@ class MTNRwandaUSSDTransport(Transport):
         if self.xmlrpc_server is not None:
             yield self.xmlrpc_server.stopListening()
 
-
     def handle_outbound_message(self, message):
         """
         Read outbound message and do what needs to be done with them.
         """
-
 
     def handle_raw_inbound_message(self):
         """
