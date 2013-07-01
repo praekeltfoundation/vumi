@@ -40,7 +40,7 @@ class MTNRwandaUSSDTransport(Transport):
         self.port = config.server_port
         r = MTNRwandaXMLRPCResource(self)
         factory = server.Site(r)
-        self.xmlrpc_server = yield reactor.listenTCP(self.port, factory)
+        self.xmlrpc_server = yield self.port.listen(factory)
 
     @inlineCallbacks
     def teardown_transport(self):
@@ -50,16 +50,42 @@ class MTNRwandaUSSDTransport(Transport):
         if self.xmlrpc_server is not None:
             yield self.xmlrpc_server.stopListening()
 
-    def handle_outbound_message(self, message):
-        """
-        Read outbound message and do what needs to be done with them.
-        """
-
-    def handle_raw_inbound_message(self):
+    def handle_raw_inbound_request(self, message_id, request):
         """
         Called by the XML-RPC server when it receives a payload that
         needs processing.
         """
+        # this should be called when the relevant XML-RPC function
+        # is called by the XML-RPC client at MTN.
+        #
+        # The tricky bit here is that the XML-RPC interface is synchronous
+        # while our internal architecture is async. This means we need to
+        # hold on to the connection (and keep a UUID reference to it)
+        # so we can map the async-reply arriving over AMQP back to the
+        # HTTP-request that's still open and waiting for a response.
+        #
+        # When this is called the resource holding on to the request
+        # w/ NOT_DONE_YET generates the message_id and links the message_id
+        # in memory to the actual request object.
+        #
+        # In the message we publish over AMQP we use this message_id.
+        # When a reply arrives via AMQP on `handle_outbound_message` it refers
+        # back to that message_id again in the `in_reply_to` field.
+        #
+        # That way you can map the reply to the HTTP request still waiting
+        # a response. You generate the correct XML-RPC reply from the
+        # message that arrived over AMQP and then you close the HTTP Request.
+
+    def handle_outbound_message(self, message):
+        """
+        Read outbound message and do what needs to be done with them.
+        """
+        # here we look up the message['in_reply_to'] field and determine
+        # which of the /n/ pending requests it needs to be given to.
+        #
+        # You will need to determine whether that should happen here
+        # or inside the resource itself.
+
 
 
 class MTNRwandaXMLRPCResource(xmlrpc.XMLRPC):
