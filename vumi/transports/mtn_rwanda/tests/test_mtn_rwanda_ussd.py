@@ -86,12 +86,10 @@ class TestMTNRwandaUSSDTransportTestCase(TransportTestCase):
         super(TestMTNRwandaUSSDTransportTestCase, self).setUp()
 
         config = {
-            'server_hostname': '127.0.0.1',
-            'server_port': self.get_server_port(),
+            'server_endpoint': 'tcp:host=localhost:port=80'
         }
         self.transport = yield self.get_transport(config)
 
         @inlineCallbacks
         def tearDown(self):
             yield self.transport.teardown_transport()
-            yield

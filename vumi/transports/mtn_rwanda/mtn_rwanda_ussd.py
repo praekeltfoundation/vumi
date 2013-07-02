@@ -57,12 +57,13 @@ class MTNRwandaUSSDTransport(Transport):
 
     def get_request(self, request_id):
         if request_id in self._requests:
-            request = self._requests[request_id]    # XXX: else: ?
+            request = self._requests[request_id]
         return request
 
     def remote_request(self, request_id):
         del self._requests[request_id]
 
+    @inlineCallbacks
     def handle_raw_inbound_request(self, message_id, request):
         """
         Called by the XML-RPC server when it receives a payload that
@@ -89,13 +90,32 @@ class MTNRwandaUSSDTransport(Transport):
         # a response. You generate the correct XML-RPC reply from the
         # message that arrived over AMQP and then you close the HTTP Request.
 
+        values = {}
+
+        for field in request.args:
+            values[field] = request.args.get(field)[0].decode(self.ENCODING)
+
+        metadata = {
+                'transaction_id': values['TransactionId'],
+                'transaction_time': values['TransactionTime'],
+                'response_flag':values['response'],
+                }
+
+        yield self.publish_message(
+                message_id=message_id,
+                content=values['USSDRequestString'],
+                from_addr=values['MSISDN'],
+                to_addr=values['USSDServiceCode'],
+                transport_metadata={'mtn_rwanda_ussd': metadata}
+                )
+
     def finish_request(self, request_id, data):
         request = self.get_request(request_id)
         request.write(data)
-        request.finish()    # ??
+        request.finish()
         self.remove_request(args[request_id])
         response_id = "%s:%s" % (self.endpoint,
-                                    Transport.generate_message_id())
+                                 Transport.generate_message_id())
         return response_id
 
     def handle_outbound_message(self, message):
@@ -125,14 +145,8 @@ class MTNRwandaXMLRPCResource(xmlrpc.XMLRPC):
         self.transport = transport
         xmlrpc.XMLRPC.__init__(self)
 
-    def xmlrpc_(self, request, request_id=None):
+    def xmlrpc_handleUSSD(self, request, request_id=None):
         request_id = request_id or Transport.generate_message_id()
-        request.setHeader("content-type", self.transport.content_type)
         self.transport.set_request(request_id, request)
         self.transport.handle_raw_inbound_message(request_id, request)
         return server.NOT_DONE_YET
-
-    def xmlrpc_healthResource(self, request):
-        request.setResponseCode(http.OK)
-        request.do_not_log = True
-        return self.transport.get_health_response()
