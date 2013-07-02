@@ -26,6 +26,7 @@ class MTNRwandaUSSDTransport(Transport):
     xmlrpc_server = None
 
     CONFIG_CLASS = MTNRwandaUSSDTransportConfig
+    ENCODING = 'UTF-8'
 
     @inlineCallbacks
     def setup_transport(self):
@@ -37,10 +38,10 @@ class MTNRwandaUSSDTransport(Transport):
         """
 
         config = self.get_static_config()
-        self.port = config.server_port
+        self.endpoint = config.server_endpoint
         r = MTNRwandaXMLRPCResource(self)
-        factory = server.Site(r)
-        self.xmlrpc_server = yield self.port.listen(factory)
+        self.factory = server.Site(r)
+        self.xmlrpc_server = yield self.endpoint.listen(self.factory)
 
     @inlineCallbacks
     def teardown_transport(self):
@@ -76,6 +77,11 @@ class MTNRwandaUSSDTransport(Transport):
         # a response. You generate the correct XML-RPC reply from the
         # message that arrived over AMQP and then you close the HTTP Request.
 
+    def send_response(self, message_id, **args):
+        # TODO
+
+
+    @inlineCallbacks
     def handle_outbound_message(self, message):
         """
         Read outbound message and do what needs to be done with them.
@@ -85,6 +91,19 @@ class MTNRwandaUSSDTransport(Transport):
         #
         # You will need to determine whether that should happen here
         # or inside the resource itself.
+
+        metadata = message['transport_metadata']['mtn_rwanda_ussd']
+
+        yield self.send_response(
+                message_id=message['message_id'],
+                request_id=message['in_reply_to'],
+                transaction_id=metadata['transaction_id'],
+                transaction_time=metadata['transaction_time'],
+                response_code=metadata['response_code'],
+                action=metadata['action'],
+                msisdn=message['to_addr'],
+                ussd_response_string=message['content'].encode(self.ENCODING))
+
 
 
 
