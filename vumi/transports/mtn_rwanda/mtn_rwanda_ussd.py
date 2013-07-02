@@ -36,6 +36,7 @@ class MTNRwandaUSSDTransport(Transport):
 
         self.xmlrpc_server: An IListeningPort instance.
         """
+        self._requests = {}
 
         config = self.get_static_config()
         self.endpoint = config.server_endpoint
@@ -50,6 +51,17 @@ class MTNRwandaUSSDTransport(Transport):
         """
         if self.xmlrpc_server is not None:
             yield self.xmlrpc_server.stopListening()
+
+    def set_request(self, request_id, request_object):
+        self._requests[request_id] = request_object
+
+    def get_request(self, request_id):
+        if request_id in self._requests:
+            request = self._requests[request_id]    # XXX: else: ?
+        return request
+
+    def remote_request(self, request_id):
+        del self._requests[request_id]
 
     def handle_raw_inbound_request(self, message_id, request):
         """
@@ -77,11 +89,15 @@ class MTNRwandaUSSDTransport(Transport):
         # a response. You generate the correct XML-RPC reply from the
         # message that arrived over AMQP and then you close the HTTP Request.
 
-    def send_response(self, message_id, **args):
-        # TODO
+    def finish_request(self, request_id, data):
+        request = self.get_request(request_id)
+        request.write(data)
+        request.finish()    # ??
+        self.remove_request(args[request_id])
+        response_id = "%s:%s" % (self.endpoint,
+                                    Transport.generate_message_id())
+        return response_id
 
-
-    @inlineCallbacks
     def handle_outbound_message(self, message):
         """
         Read outbound message and do what needs to be done with them.
@@ -92,19 +108,11 @@ class MTNRwandaUSSDTransport(Transport):
         # You will need to determine whether that should happen here
         # or inside the resource itself.
 
-        metadata = message['transport_metadata']['mtn_rwanda_ussd']
-
-        yield self.send_response(
-                message_id=message['message_id'],
-                request_id=message['in_reply_to'],
-                transaction_id=metadata['transaction_id'],
-                transaction_time=metadata['transaction_time'],
-                response_code=metadata['response_code'],
-                action=metadata['action'],
-                msisdn=message['to_addr'],
-                ussd_response_string=message['content'].encode(self.ENCODING))
-
-
+        request_id = message['in_reply_to']
+        self.finish_request(request_id,
+                data=message['content'].encode(self.ENCODING))
+        return self.publish_ack(user_message_id=message['message_id'],
+                sent_message_id=message['message_id'])
 
 
 class MTNRwandaXMLRPCResource(xmlrpc.XMLRPC):
