@@ -7,13 +7,14 @@ from vumi.transports.tests.utils import TransportTestCase
 class TestMTNRwandaUSSDTransportTestCase(TransportTestCase):
 
     transport_class = MTNRwandaUSSDTransport
+    transport_name = 'test_mtn_rwanda_ussd_transport'
 
     REQUEST_PARAMS = {
         'transaction_id': '0',
         'ussd_service_code': '100',
         'ussd_request_string': '',
         'msisdn': '',
-        'response_flag': '',
+        'response_flag': 'false',
         'transaction_time': '1994-11-05T08:15:30-05:00',
     }
 
@@ -31,8 +32,8 @@ class TestMTNRwandaUSSDTransportTestCase(TransportTestCase):
         'transaction_id': '0',
         'transaction_time': '1994-11-05T08:15:30-05:00',
         'ussd_response_string': '',
-        'response_code': '',
-        'action': '',
+        'response_code': '0',
+        'action': 'end',
     }
 
     RESPONSE_BODY = (
@@ -44,8 +45,38 @@ class TestMTNRwandaUSSDTransportTestCase(TransportTestCase):
         "<action>%(action)s</action>"
     )
 
-    # XXX: Expected Inbound Payload
-    # XXX: Expected Outbound Payload
+    EXPECTED_INBOUND_PAYLOAD = {
+            'message_id': '0',
+            'content': '',
+            'from_addr': '', # msisdn
+            'to_addr': '', # service code
+            'transport_name': transport_name,
+            'transport_type': 'ussd',
+            'transport_metadata': {
+                'mtn_rwanda_ussd': {
+                    'transaction_id': '0',
+                    'transaction_time': '1994-11-05T08:15:30-05:00',
+                    'response_flag': 'false',
+                    },
+                },
+            }
+
+    OUTBOUND_PAYLOAD = {
+            'message_id': '0',
+            'content': '',
+            'from_addr': '', # Service code
+            'to_addr': '', # msisdn
+            'transport_name': transport_name,
+            'transport_type':'ussd',
+            'transport_metadata': {
+                'mtn_rwanda_ussd': {
+                    'transaction_id': '0',
+                    'transaction_time': '1994-11-05T08:15:30-05:00',
+                    'response_code': '0',
+                    'action': 'end',
+                    },
+                },
+            }
 
     @inlineCallbacks
     def setUp(self):
