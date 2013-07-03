@@ -1,3 +1,4 @@
+import xmlrpclib
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet import endpoints, tcp, defer
 
@@ -91,6 +92,7 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
             'timeout': '30',
         })
         self.transport = yield self.get_transport(config)
+        print self.transport.xmlrpc_server.getHost()
 
     def test_transport_creation(self):
         self.assertIsInstance(self.transport, MTNRwandaUSSDTransport)
@@ -103,3 +105,8 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
         self.assertTrue(self.transport.xmlrpc_server.disconnecting)
         return d
 
+    def test_inbound_request(self):
+        address = self.transport.xmlrpc_server.getHost()
+        hostname = 'http://'+address.host+':'+str(address.port)+'/'
+        s = xmlrpclib.Server(hostname)
+        s.handleUSSD(self.REQUEST_BODY)
