@@ -1,10 +1,11 @@
 from twisted.internet.defer import inlineCallbacks
+from twisted.internet import endpoints, tcp, defer
 
-from vumi.transports.mtn_rwanda.mtn_rwanda_ussd import MTNRwandaUSSDTransport
+from vumi.transports.mtn_rwanda.mtn_rwanda_ussd import MTNRwandaUSSDTransport, MTNRwandaXMLRPCResource
 from vumi.transports.tests.utils import TransportTestCase
 
 
-class TestMTNRwandaUSSDTransportTestCase(TransportTestCase):
+class MTNRwandaUSSDTransportTestCase(TransportTestCase):
 
     transport_class = MTNRwandaUSSDTransport
     transport_name = 'test_mtn_rwanda_ussd_transport'
@@ -83,13 +84,22 @@ class TestMTNRwandaUSSDTransportTestCase(TransportTestCase):
         """
         Create the server (i.e. vumi transport instance)
         """
-        super(TestMTNRwandaUSSDTransportTestCase, self).setUp()
+        super(MTNRwandaUSSDTransportTestCase, self).setUp()
 
-        config = {
-            'server_endpoint': 'tcp:host=localhost:port=80'
-        }
+        config = self.mk_config({
+            'twisted_endpoint': 'tcp:port=0',
+            'timeout': '30',
+        })
         self.transport = yield self.get_transport(config)
 
-        @inlineCallbacks
-        def tearDown(self):
-            yield self.transport.teardown_transport()
+    def test_transport_creation(self):
+        self.assertIsInstance(self.transport, MTNRwandaUSSDTransport)
+        self.assertIsInstance(self.transport.endpoint, endpoints.TCP4ServerEndpoint)
+        self.assertIsInstance(self.transport.xmlrpc_server, tcp.Port)
+        self.assertIsInstance(self.transport.r, MTNRwandaXMLRPCResource)
+
+    def test_transport_teardown(self):
+        d = self.transport.teardown_transport()
+        self.assertTrue(self.transport.xmlrpc_server.disconnecting)
+        return d
+

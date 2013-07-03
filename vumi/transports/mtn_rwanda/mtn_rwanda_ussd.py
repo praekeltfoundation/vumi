@@ -12,7 +12,7 @@ class MTNRwandaUSSDTransportConfig(Transport.CONFIG_CLASS):
     """
     MTN Rwanda USSD transport configuration.
     """
-    server_endpoint = ConfigServerEndpoint(
+    twisted_endpoint = ConfigServerEndpoint(
         "The listening endpoint that the remote client will connect to.",
         required=True, static=True)
     timeout = ConfigInt(
@@ -39,10 +39,10 @@ class MTNRwandaUSSDTransport(Transport):
         self.callLater = reactor.callLater
 
         config = self.get_static_config()
-        self.endpoint = config.server_endpoint
+        self.endpoint = config.twisted_endpoint
         self.timeout = config.timeout
-        r = MTNRwandaXMLRPCResource(self)
-        self.factory = server.Site(r)
+        self.r = MTNRwandaXMLRPCResource(self)
+        self.factory = server.Site(self.r)
         self.xmlrpc_server = yield self.endpoint.listen(self.factory)
 
     @inlineCallbacks
