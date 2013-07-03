@@ -58,9 +58,9 @@ class MTNRwandaUSSDTransport(Transport):
     def get_request(self, request_id):
         if request_id in self._requests:
             request = self._requests[request_id]
-        return request
+            return request
 
-    def remote_request(self, request_id):
+    def remove_request(self, request_id):
         del self._requests[request_id]
 
     @inlineCallbacks
@@ -113,10 +113,7 @@ class MTNRwandaUSSDTransport(Transport):
         request = self.get_request(request_id)
         request.write(data)
         request.finish()
-        self.remove_request(args[request_id])
-        response_id = "%s:%s" % (self.endpoint,
-                                 Transport.generate_message_id())
-        return response_id
+        self.remove_request(request_id)
 
     def handle_outbound_message(self, message):
         """
