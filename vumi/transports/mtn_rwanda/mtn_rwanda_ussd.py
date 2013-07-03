@@ -94,8 +94,8 @@ class MTNRwandaUSSDTransport(Transport):
         values = {}
         print "inside handle_raw_inbound_request"
 
-        for field in request.args:
-            values[field] = request.args.get(field)[0].decode(self.ENCODING)
+        for field in request:      # XXX: This doesn't work - need to parse.
+            values[field] = request[field].decode(self.ENCODING)
 
         metadata = {
                 'transaction_id': values['TransactionId'],
@@ -150,5 +150,5 @@ class MTNRwandaXMLRPCResource(xmlrpc.XMLRPC):
     def xmlrpc_handleUSSD(self, request):
         request_id = Transport.generate_message_id()
         self.transport.set_request(request_id, request)
-        print "inside handleUSSD...\n\t request_id and Request:", request_id, request
+        print "inside handleUSSD...\n request_id :", request_id, "\nrequest string :", request
         return self.transport.handle_raw_inbound_request(request_id, request)

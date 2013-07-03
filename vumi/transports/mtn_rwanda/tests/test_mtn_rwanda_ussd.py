@@ -1,6 +1,7 @@
 import xmlrpclib
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet import endpoints, tcp, defer
+from twisted.web.xmlrpc import Proxy
 
 from vumi.transports.mtn_rwanda.mtn_rwanda_ussd import MTNRwandaUSSDTransport, MTNRwandaXMLRPCResource
 from vumi.transports.tests.utils import TransportTestCase
@@ -10,6 +11,8 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
 
     transport_class = MTNRwandaUSSDTransport
     transport_name = 'test_mtn_rwanda_ussd_transport'
+
+    ''' Irrelevant for now
 
     REQUEST_PARAMS = {
         'transaction_id': '0',
@@ -79,7 +82,7 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
                     },
                 },
             }
-
+    '''
     @inlineCallbacks
     def setUp(self):
         """
@@ -92,7 +95,6 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
             'timeout': '30',
         })
         self.transport = yield self.get_transport(config)
-        print self.transport.xmlrpc_server.getHost()
 
     def test_transport_creation(self):
         self.assertIsInstance(self.transport, MTNRwandaUSSDTransport)
@@ -107,6 +109,6 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
 
     def test_inbound_request(self):
         address = self.transport.xmlrpc_server.getHost()
-        hostname = 'http://'+address.host+':'+str(address.port)+'/'
-        s = xmlrpclib.Server(hostname)
-        s.handleUSSD(self.REQUEST_BODY)
+        url = 'http://'+address.host+':'+str(address.port)+'/'
+        proxy = Proxy(url)
+        res = proxy.callRemote('handleUSSD', '<USSDRequest><TransactionId>123</TransactionId>')
