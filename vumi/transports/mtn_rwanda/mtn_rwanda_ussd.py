@@ -1,11 +1,11 @@
 # -*- test-case-name: vumi.transports.mtn_rwanda.tests.test_mtn_rwanda_ussd -*-
 
 from twisted.internet import reactor
-from twisted.web import xmlrpc, server, http
+from twisted.web import xmlrpc, server
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.transports.base import Transport
-from vumi.config import ConfigServerEndpoint
+from vumi.config import ConfigServerEndpoint, ConfigInt
 
 
 class MTNRwandaUSSDTransportConfig(Transport.CONFIG_CLASS):
@@ -22,9 +22,6 @@ class MTNRwandaUSSDTransportConfig(Transport.CONFIG_CLASS):
 
 
 class MTNRwandaUSSDTransport(Transport):
-    """
-
-    """
 
     transport_type = 'ussd'
     xmlrpc_server = None
@@ -37,8 +34,6 @@ class MTNRwandaUSSDTransport(Transport):
         """
         Transport specific setup - it initiates things, sets up a
         connection, for example.
-
-        :self.xmlrpc_server: An IListeningPort instance.
         """
         self._requests = {}
         self.callLater = reactor.callLater
@@ -104,7 +99,7 @@ class MTNRwandaUSSDTransport(Transport):
         metadata = {
                 'transaction_id': values['TransactionId'],
                 'transaction_time': values['TransactionTime'],
-                'response_flag':values['response'],
+                'response_flag': values['response'],
                 }
 
         yield self.publish_message(
@@ -114,7 +109,8 @@ class MTNRwandaUSSDTransport(Transport):
                 to_addr=values['USSDServiceCode'],
                 transport_metadata={'mtn_rwanda_ussd': metadata}
                 )
-        self.timeout_request = self.callLater(timeout, remove_request, message_id)
+        self.timeout_request = self.callLater(self.timeout,
+                                              self.remove_request, message_id)
         yield server.NOT_DONE_YET
 
     def finish_request(self, request_id, data):
