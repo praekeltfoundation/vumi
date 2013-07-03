@@ -15,6 +15,10 @@ class MTNRwandaUSSDTransportConfig(Transport.CONFIG_CLASS):
     server_endpoint = ConfigServerEndpoint(
         "The listening endpoint that the remote client will connect to.",
         required=True, static=True)
+    timeout = ConfigInt(
+        "No. of seconds to wait before removing a request that hasn't "
+        "received a response yet.",
+        default=30, static=True)
 
 
 class MTNRwandaUSSDTransport(Transport):
@@ -34,12 +38,14 @@ class MTNRwandaUSSDTransport(Transport):
         Transport specific setup - it initiates things, sets up a
         connection, for example.
 
-        self.xmlrpc_server: An IListeningPort instance.
+        :self.xmlrpc_server: An IListeningPort instance.
         """
         self._requests = {}
+        self.callLater = reactor.callLater
 
         config = self.get_static_config()
         self.endpoint = config.server_endpoint
+        self.timeout = config.timeout
         r = MTNRwandaXMLRPCResource(self)
         self.factory = server.Site(r)
         self.xmlrpc_server = yield self.endpoint.listen(self.factory)
@@ -108,6 +114,7 @@ class MTNRwandaUSSDTransport(Transport):
                 to_addr=values['USSDServiceCode'],
                 transport_metadata={'mtn_rwanda_ussd': metadata}
                 )
+        self.timeout_request = self.callLater(timeout, remove_request, message_id)
         yield server.NOT_DONE_YET
 
     def finish_request(self, request_id, data):
@@ -125,7 +132,7 @@ class MTNRwandaUSSDTransport(Transport):
         #
         # You will need to determine whether that should happen here
         # or inside the resource itself.
-
+        self.timeout_request.cancel()
         request_id = message['in_reply_to']
         self.finish_request(request_id,
                 data=message['content'].encode(self.ENCODING))
