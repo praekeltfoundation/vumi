@@ -108,6 +108,7 @@ class MTNRwandaUSSDTransport(Transport):
                 to_addr=values['USSDServiceCode'],
                 transport_metadata={'mtn_rwanda_ussd': metadata}
                 )
+        yield server.NOT_DONE_YET
 
     def finish_request(self, request_id, data):
         request = self.get_request(request_id)
@@ -142,8 +143,7 @@ class MTNRwandaXMLRPCResource(xmlrpc.XMLRPC):
         self.transport = transport
         xmlrpc.XMLRPC.__init__(self)
 
-    def xmlrpc_handleUSSD(self, request, request_id=None):
-        request_id = request_id or Transport.generate_message_id()
+    def xmlrpc_handleUSSD(self, request):
+        request_id = Transport.generate_message_id()
         self.transport.set_request(request_id, request)
-        self.transport.handle_raw_inbound_message(request_id, request)
-        return server.NOT_DONE_YET
+        return self.transport.handle_raw_inbound_message(request_id, request)
