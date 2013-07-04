@@ -116,6 +116,14 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
         for field, expected_value in expected_payload.iteritems():
             self.assertEqual(msg[field], expected_value)
 
+    def assert_inbound_message(self, msg, **field_values):
+        expected_payload = self.EXPECTED_INBOUND_PAYLOAD.copy()
+        field_values['message_id'] = msg['message_id']
+        expected_payload.update(field_values)
+        for field, expected_value in expected_payload.iteritems():
+            self.assertEqual(msg[field], expected_value)
+
+
     @inlineCallbacks
     def test_inbound_request(self):
         address = self.transport.xmlrpc_server.getHost()
@@ -135,3 +143,22 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
                                           to_addr='543',
                                           content='14321*1000#')
 
+    '''
+    @inlineCallbacks
+    def test_inbound_request_missing_params(self):
+        address = self.transport.xmlrpc_server.getHost()
+        url = 'http://'+address.host+':'+str(address.port)+'/'
+        proxy = Proxy(url)
+        proxy.callRemote('handleUSSD',
+                         'TransactionId', '0001',
+                         'USSDServiceCode', '543',
+                         'USSDRequestString', '14321*1000#',
+                         'USSDEncoding', 'GSM0338',      # Optional
+                         'response', 'false',            # Optional
+                         'TransactionTime', '20060723T14:08:55')
+        [msg]= yield self.wait_for_dispatched_messages(1)
+    	yield self.assert_inbound_message(msg,
+                                          from_addr='275551234',
+                                          to_addr='543',
+                                          content='14321*1000#')
+    '''
