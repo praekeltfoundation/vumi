@@ -2,6 +2,7 @@
 import xmlrpclib
 from twisted.internet import reactor
 from twisted.web import xmlrpc, server
+from twisted.web.xmlrpc import withRequest
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.transports.base import Transport
@@ -53,10 +54,10 @@ class MTNRwandaUSSDTransport(Transport):
         if self.xmlrpc_server is not None:
             yield self.xmlrpc_server.stopListening()
 
-    def set_request(self, obj, request_id):
+    def set_request(self, request_id, request_args):
 #        print "Stuff I got is:", stuff, request_id
-        self._requests[request_id] = obj
-        return obj
+        self._requests[request_id] = request_args
+        return request_args
 
     def get_request(self, request_id):
         if request_id in self._requests:
@@ -77,17 +78,38 @@ class MTNRwandaUSSDTransport(Transport):
         else:
             return True
 
-    def send_fault_response(self, request_id):
+    def send_fault_response(self, request_id, reply):
         # TODO: doesn't work yet, needs fixing.
         self.timeout_request.cancel()
-        request_id = message['in_reply_to']
-        request = self.get_request(request_id)
-        request.write(data)
-        request.finish()
+#        request = self.get_request(request_id)
+#        request.write(data)
+#        request.finish()
         self.remove_request(request_id)
-        return self.publish_ack(user_message_id=message['message_id'],
+        self.publish_ack(user_message_id=message['message_id'],
                 sent_message_id=message['message_id'])
+        return data
 
+    def generate_outbound_payload(self, message_id, data):
+        """
+        Get something of the form:
+        message = {
+            'message_id': message_id,
+            'content': data,
+            'from_addr': , 
+            'to_addr': '543', # msisdn
+            'transport_name': transport_name,
+            'transport_type':'ussd',
+            'transport_metadata': {
+                'mtn_rwanda_ussd': {
+                    'transaction_id': '0001',
+                    'transaction_time': '1994-11-05T08:15:30-05:00',
+                    'response_code': '0',
+                    'action': 'end',
+                    },
+                },
+            }
+          and send it.
+          """
 
 #    @inlineCallbacks
     def handle_raw_inbound_request(self, message_id, request_data):
@@ -116,8 +138,7 @@ class MTNRwandaUSSDTransport(Transport):
         # a response. You generate the correct XML-RPC reply from the
         # message that arrived over AMQP and then you close the HTTP Request.
         values = {}
-#        print "inside handle_raw_inbound_request"
-        # TODO: check for incorrect request data - validate request
+        print "inside handle_raw_inbound_request, _requests = ", self._requests
         self.timeout_request = self.callLater(self.timeout,
                                               self.remove_request, message_id)
         params = request_data[::2]
@@ -133,8 +154,8 @@ class MTNRwandaUSSDTransport(Transport):
                 'fault_code': '4001',
                 'fault_string': 'Missing parameters'
                 }
-            self.send_fault_response(message_id)
-            return
+            reply = metadata
+            return self.send_fault_response(message_id, reply)
 
         metadata = {
                 'transaction_id': values['TransactionId'],
@@ -156,10 +177,12 @@ class MTNRwandaUSSDTransport(Transport):
 
 
     def finish_request(self, request_id, data):
-        request = self.get_request(request_id)
-        request.write(data)
-        request.finish()
+#        request = self.get_request(request_id)
+#       request.write(data)
+#        request.finish()
+        reply = self.generate_outbound_payload(request_id, data)
         self.remove_request(request_id)
+        return reply
 
     def handle_outbound_message(self, message):
         """
@@ -190,12 +213,14 @@ class MTNRwandaXMLRPCResource(xmlrpc.XMLRPC):
 
     def xmlrpc_handleUSSD(self, *args):
         request_id = Transport.generate_message_id()
-        request = args
-#        self.transport.set_request(request_id, request)
+        print "args = ", args
+        self.transport.set_request(request_id, args)
+        print "_requests = ", self.transport._requests
 
 #        self.transport.timeout_request = self.transport.callLater(self.transport.timeout,
 #                                              self.transport.remove_request, request_id)
  #       print "inside handleUSSD..."
-        d = self.transport.handle_raw_inbound_request(request_id, request)
-        d.addCallback(self.transport.set_request, request_id)
+        d = self.transport.handle_raw_inbound_request(request_id, args)
+#        d.addCallback(self.transport.set_request, request_id)
+#        d.addCallback(self.transport.get_request, request_id)
         return d
