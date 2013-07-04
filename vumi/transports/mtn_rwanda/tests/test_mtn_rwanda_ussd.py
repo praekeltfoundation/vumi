@@ -146,7 +146,7 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
         address = self.transport.xmlrpc_server.getHost()
         url = 'http://'+address.host+':'+str(address.port)+'/'
         proxy = Proxy(url)
-        x = yield proxy.callRemote('handleUSSD',
+        x =  proxy.callRemote('handleUSSD',
                          'TransactionId', '0001',
                          'USSDServiceCode', '543',
                          'USSDRequestString', '14321*1000#',
@@ -159,7 +159,8 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
         y = self.dispatch(reply)
 #        response = yield self.server.wait_for_data()
 #        print response
-        print y         # sad.
+        result = yield x
+        print "\n finally: ", result # sad.
 
     '''
     @inlineCallbacks

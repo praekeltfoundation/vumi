@@ -69,7 +69,8 @@ class MTNRwandaUSSDTransport(Transport):
 
     def get_request_and_remove(self, obj, request_id):
         request = self.get_request(request_id)
-        self.remove_request(request_id)
+        print "I should return: ", request
+#        self.remove_request(request_id)
         return request
 
     REQUIRED_INBOUND_MESSAGE_FIELDS = set([
@@ -145,6 +146,7 @@ class MTNRwandaUSSDTransport(Transport):
     def finish_request(self, request_id, data):
         request = self.get_request(request_id)
         del request['USSDRequestString']
+        print "Received reply:", data
         request['USSDResponseString'] = data
         self.set_request(request_id, request)
 
