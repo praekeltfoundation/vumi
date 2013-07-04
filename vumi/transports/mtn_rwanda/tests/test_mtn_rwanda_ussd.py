@@ -49,7 +49,7 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
         "<ResponseCode>%(response_code)s</ResponseCode>"
         "<action>%(action)s</action>"
     )
-
+    '''
     EXPECTED_INBOUND_PAYLOAD = {
             'message_id': '0',
             'content': '',
@@ -59,23 +59,23 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
             'transport_type': 'ussd',
             'transport_metadata': {
                 'mtn_rwanda_ussd': {
-                    'transaction_id': '0',
-                    'transaction_time': '1994-11-05T08:15:30-05:00',
+                    'transaction_id': '0001',
+                    'transaction_time': '20060723T14:08:55',
                     'response_flag': 'false',
                     },
                 },
             }
-
+    '''
     OUTBOUND_PAYLOAD = {
             'message_id': '0',
             'content': '',
             'from_addr': '', # Service code
-            'to_addr': '', # msisdn
+            'to_addr': '543', # msisdn
             'transport_name': transport_name,
             'transport_type':'ussd',
             'transport_metadata': {
                 'mtn_rwanda_ussd': {
-                    'transaction_id': '0',
+                    'transaction_id': '0001',
                     'transaction_time': '1994-11-05T08:15:30-05:00',
                     'response_code': '0',
                     'action': 'end',
@@ -107,8 +107,38 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
         self.assertTrue(self.transport.xmlrpc_server.disconnecting)
         return d
 
+    def assert_inbound_message(self, msg, **field_values):
+        expected_payload = self.EXPECTED_INBOUND_PAYLOAD.copy()
+        field_values['message_id'] = msg['message_id']
+        expected_payload.update(field_values)
+        
+        for field, expected_value in expected_payload.iteritems():
+            self.assertEqual(msg[field], expected_value)
+        print "this test passed!!!!!"
+
+    @inlineCallbacks
     def test_inbound_request(self):
         address = self.transport.xmlrpc_server.getHost()
         url = 'http://'+address.host+':'+str(address.port)+'/'
         proxy = Proxy(url)
-        res = proxy.callRemote('handleUSSD', '<USSDRequest><TransactionId>123</TransactionId>')
+#        published_message = {}
+#        def stub_publish_message(**kwargs):
+#            published_message = kwargs.copy()
+#        self.transport.publish_message = stub_publish_message
+
+        proxy.callRemote('handleUSSD',
+                               'TransactionId', '0001',
+                               'USSDServiceCode', '543',
+                               'USSDRequestString', '14321*1000#',
+                               'MSISDN', '275551234',
+                               'USSDEncoding', 'GSM0338',      # Optional
+                               'response', 'false',            # Optional
+                               'TransactionTime', '20060723T14:08:55')
+        [msg]= yield self.wait_for_dispatched_messages(1)
+        print "Message:\n\n", msg
+    	self.assert_inbound_message(
+            msg,
+            from_addr='275551234',
+            to_addr='543',
+            content='14321*1000#')
+        [ack] = yield self.wait_for_dispatched_events(1)

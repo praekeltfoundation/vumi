@@ -1,5 +1,5 @@
 # -*- test-case-name: vumi.transports.mtn_rwanda.tests.test_mtn_rwanda_ussd -*-
-
+import xmlrpclib
 from twisted.internet import reactor
 from twisted.web import xmlrpc, server
 from twisted.internet.defer import inlineCallbacks
@@ -65,7 +65,7 @@ class MTNRwandaUSSDTransport(Transport):
         del self._requests[request_id]
 
     @inlineCallbacks
-    def handle_raw_inbound_request(self, message_id, request):
+    def handle_raw_inbound_request(self, message_id, request_data):
         """
         Called by the XML-RPC server when it receives a payload that
         needs processing.
@@ -90,12 +90,14 @@ class MTNRwandaUSSDTransport(Transport):
         # That way you can map the reply to the HTTP request still waiting
         # a response. You generate the correct XML-RPC reply from the
         # message that arrived over AMQP and then you close the HTTP Request.
-
         values = {}
         print "inside handle_raw_inbound_request"
+        # TODO: check for incorrect request data - validate request
+        params = request_data[::2]
+        body = request_data[1::2]
 
-        for field in request:      # XXX: This doesn't work - need to parse.
-            values[field] = request[field].decode(self.ENCODING)
+        for index in range(len(params)):
+            values[params[index]] = body[index].decode(self.ENCODING)
 
         metadata = {
                 'transaction_id': values['TransactionId'],
@@ -108,10 +110,12 @@ class MTNRwandaUSSDTransport(Transport):
                 content=values['USSDRequestString'],
                 from_addr=values['MSISDN'],
                 to_addr=values['USSDServiceCode'],
+                transport_type=self.transport_type,
                 transport_metadata={'mtn_rwanda_ussd': metadata}
                 )
-        self.timeout_request = self.callLater(self.timeout,
-                                              self.remove_request, message_id)
+
+#        self.timeout_request = self.callLater(self.timeout,
+#                                              self.remove_request, message_id)
         yield server.NOT_DONE_YET
 
     def finish_request(self, request_id, data):
@@ -147,8 +151,12 @@ class MTNRwandaXMLRPCResource(xmlrpc.XMLRPC):
         self.transport = transport
         xmlrpc.XMLRPC.__init__(self)
 
-    def xmlrpc_handleUSSD(self, request):
+    def xmlrpc_handleUSSD(self, *args):
         request_id = Transport.generate_message_id()
+        request = args
         self.transport.set_request(request_id, request)
-        print "inside handleUSSD...\n request_id :", request_id, "\nrequest string :", request
+
+ #       self.transport.timeout_request = self.transport.callLater(self.transport.timeout,
+ #                                             self.transport.remove_request, request_id)
+        print "inside handleUSSD..."
         return self.transport.handle_raw_inbound_request(request_id, request)
