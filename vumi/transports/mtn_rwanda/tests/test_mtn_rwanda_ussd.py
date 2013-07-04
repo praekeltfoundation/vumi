@@ -1,6 +1,7 @@
 import xmlrpclib
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet import endpoints, tcp, defer
+from twisted.internet.task import Clock
 from twisted.web.xmlrpc import Proxy
 
 from vumi.transports.mtn_rwanda.mtn_rwanda_ussd import MTNRwandaUSSDTransport, MTNRwandaXMLRPCResource
@@ -89,12 +90,13 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
         Create the server (i.e. vumi transport instance)
         """
         super(MTNRwandaUSSDTransportTestCase, self).setUp()
-
+        self.clock = Clock()
         config = self.mk_config({
             'twisted_endpoint': 'tcp:port=0',
             'timeout': '30',
         })
         self.transport = yield self.get_transport(config)
+        self.transport.callLater = self.clock.callLater
 
     def test_transport_creation(self):
         self.assertIsInstance(self.transport, MTNRwandaUSSDTransport)
@@ -111,7 +113,7 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
         expected_payload = self.EXPECTED_INBOUND_PAYLOAD.copy()
         field_values['message_id'] = msg['message_id']
         expected_payload.update(field_values)
-        
+
         for field, expected_value in expected_payload.iteritems():
             self.assertEqual(msg[field], expected_value)
         print "this test passed!!!!!"
@@ -135,10 +137,11 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
                                'response', 'false',            # Optional
                                'TransactionTime', '20060723T14:08:55')
         [msg]= yield self.wait_for_dispatched_messages(1)
-        print "Message:\n\n", msg
-    	self.assert_inbound_message(
+#        print "Message:\n\n", msg
+    	yield self.assert_inbound_message(
             msg,
             from_addr='275551234',
             to_addr='543',
             content='14321*1000#')
-        [ack] = yield self.wait_for_dispatched_events(1)
+#        [ack] = yield self.wait_for_dispatched_events(1)
+
