@@ -53,8 +53,10 @@ class MTNRwandaUSSDTransport(Transport):
         if self.xmlrpc_server is not None:
             yield self.xmlrpc_server.stopListening()
 
-    def set_request(self, request_id, request_object):
-        self._requests[request_id] = request_object
+    def set_request(self, obj, request_id):
+#        print "Stuff I got is:", stuff, request_id
+        self._requests[request_id] = obj
+        return obj
 
     def get_request(self, request_id):
         if request_id in self._requests:
@@ -87,7 +89,7 @@ class MTNRwandaUSSDTransport(Transport):
                 sent_message_id=message['message_id'])
 
 
-    @inlineCallbacks
+#    @inlineCallbacks
     def handle_raw_inbound_request(self, message_id, request_data):
         """
         Called by the XML-RPC server when it receives a payload that
@@ -123,7 +125,6 @@ class MTNRwandaUSSDTransport(Transport):
         for index in range(len(params)):
             values[params[index]] = body[index].decode(self.ENCODING)
 
-
         if not self.validate_inbound_data(params):
             # XXX: Doesn't work yet.
             metadata = {
@@ -132,16 +133,7 @@ class MTNRwandaUSSDTransport(Transport):
                 'fault_code': '4001',
                 'fault_string': 'Missing parameters'
                 }
-
             self.send_fault_response(message_id)
-#           yield self.publish_message(
-#               message_id=message_id,
-#               content=values['USSDRequestString'],
-#               from_addr=values['MSISDN'],
-#               to_addr=values['USSDServiceCode'],
-#               transport_type=self.transport_type,
-#               transport_metadata={'mtn_rwanda_ussd': metadata}
-#               )
             return
 
         metadata = {
@@ -149,7 +141,7 @@ class MTNRwandaUSSDTransport(Transport):
                 'transaction_time': values['TransactionTime'],
                 'response_flag': values['response'],
                 }
-        yield self.publish_message(
+        d = self.publish_message(
                 message_id=message_id,
                 content=values['USSDRequestString'],
                 from_addr=values['MSISDN'],
@@ -157,7 +149,10 @@ class MTNRwandaUSSDTransport(Transport):
                 transport_type=self.transport_type,
                 transport_metadata={'mtn_rwanda_ussd': metadata}
                 )
-        yield server.NOT_DONE_YET
+        def set_not_done(obj):
+		return server.NOT_DONE_YET
+	d.addCallback(set_not_done)
+	return d
 
 
     def finish_request(self, request_id, data):
@@ -196,9 +191,11 @@ class MTNRwandaXMLRPCResource(xmlrpc.XMLRPC):
     def xmlrpc_handleUSSD(self, *args):
         request_id = Transport.generate_message_id()
         request = args
-        self.transport.set_request(request_id, request)
+#        self.transport.set_request(request_id, request)
 
 #        self.transport.timeout_request = self.transport.callLater(self.transport.timeout,
 #                                              self.transport.remove_request, request_id)
  #       print "inside handleUSSD..."
-        return self.transport.handle_raw_inbound_request(request_id, request)
+        d = self.transport.handle_raw_inbound_request(request_id, request)
+        d.addCallback(self.transport.set_request, request_id)
+        return d
