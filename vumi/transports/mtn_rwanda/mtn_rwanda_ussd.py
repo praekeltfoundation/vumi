@@ -67,6 +67,11 @@ class MTNRwandaUSSDTransport(Transport):
     def remove_request(self, request_id):
         del self._requests[request_id]
 
+    def get_request_and_remove(self, obj, request_id):
+        request = self.get_request(request_id)
+        self.remove_request(request_id)
+        return request
+
     REQUIRED_INBOUND_MESSAGE_FIELDS = set([
         'TransactionId', 'TransactionTime', 'MSISDN', 'USSDServiceCode',
         'USSDRequestString'])
@@ -77,39 +82,6 @@ class MTNRwandaUSSDTransport(Transport):
             return False
         else:
             return True
-
-    def send_fault_response(self, request_id, reply):
-        # TODO: doesn't work yet, needs fixing.
-        self.timeout_request.cancel()
-#        request = self.get_request(request_id)
-#        request.write(data)
-#        request.finish()
-        self.remove_request(request_id)
-        self.publish_ack(user_message_id=message['message_id'],
-                sent_message_id=message['message_id'])
-        return data
-
-    def generate_outbound_payload(self, message_id, data):
-        """
-        Get something of the form:
-        message = {
-            'message_id': message_id,
-            'content': data,
-            'from_addr': , 
-            'to_addr': '543', # msisdn
-            'transport_name': transport_name,
-            'transport_type':'ussd',
-            'transport_metadata': {
-                'mtn_rwanda_ussd': {
-                    'transaction_id': '0001',
-                    'transaction_time': '1994-11-05T08:15:30-05:00',
-                    'response_code': '0',
-                    'action': 'end',
-                    },
-                },
-            }
-          and send it.
-          """
 
 #    @inlineCallbacks
     def handle_raw_inbound_request(self, message_id, request_data):
@@ -138,24 +110,19 @@ class MTNRwandaUSSDTransport(Transport):
         # a response. You generate the correct XML-RPC reply from the
         # message that arrived over AMQP and then you close the HTTP Request.
         values = {}
-        print "inside handle_raw_inbound_request, _requests = ", self._requests
+#        print "inside handle_raw_inbound_request, _requests = ", self._requests
         self.timeout_request = self.callLater(self.timeout,
                                               self.remove_request, message_id)
         params = request_data[::2]
         body = request_data[1::2]
         for index in range(len(params)):
             values[params[index]] = body[index].decode(self.ENCODING)
+        self._requests[message_id] = values
 
         if not self.validate_inbound_data(params):
             # XXX: Doesn't work yet.
-            metadata = {
-                'transaction_id': values['TransactionId'],
-                'transaction_time': values['TransactionTime'],
-                'fault_code': '4001',
-                'fault_string': 'Missing parameters'
-                }
-            reply = metadata
-            return self.send_fault_response(message_id, reply)
+            # TODO: Send a response with a fauld code
+           return
 
         metadata = {
                 'transaction_id': values['TransactionId'],
@@ -175,14 +142,11 @@ class MTNRwandaUSSDTransport(Transport):
 	d.addCallback(set_not_done)
 	return d
 
-
     def finish_request(self, request_id, data):
-#        request = self.get_request(request_id)
-#       request.write(data)
-#        request.finish()
-        reply = self.generate_outbound_payload(request_id, data)
-        self.remove_request(request_id)
-        return reply
+        request = self.get_request(request_id)
+        del request['USSDRequestString']
+        request['USSDResponseString'] = data
+        self.set_request(request_id, request)
 
     def handle_outbound_message(self, message):
         """
@@ -195,8 +159,7 @@ class MTNRwandaUSSDTransport(Transport):
         # or inside the resource itself.
         self.timeout_request.cancel()
         request_id = message['in_reply_to']
-        self.finish_request(request_id,
-                data=message['content'].encode(self.ENCODING))
+        self.finish_request(request_id, message.payload['content'].encode('utf-8'))
         return self.publish_ack(user_message_id=message['message_id'],
                 sent_message_id=message['message_id'])
 
@@ -213,14 +176,14 @@ class MTNRwandaXMLRPCResource(xmlrpc.XMLRPC):
 
     def xmlrpc_handleUSSD(self, *args):
         request_id = Transport.generate_message_id()
-        print "args = ", args
+#        print "args = ", args
         self.transport.set_request(request_id, args)
-        print "_requests = ", self.transport._requests
+#        print "_requests = ", self.transport._requests
 
 #        self.transport.timeout_request = self.transport.callLater(self.transport.timeout,
 #                                              self.transport.remove_request, request_id)
  #       print "inside handleUSSD..."
         d = self.transport.handle_raw_inbound_request(request_id, args)
 #        d.addCallback(self.transport.set_request, request_id)
-#        d.addCallback(self.transport.get_request, request_id)
+        d.addCallback(self.transport.get_request_and_remove, request_id)
         return d

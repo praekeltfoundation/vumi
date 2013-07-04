@@ -116,20 +116,12 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
         for field, expected_value in expected_payload.iteritems():
             self.assertEqual(msg[field], expected_value)
 
-    def assert_inbound_message(self, msg, **field_values):
-        expected_payload = self.EXPECTED_INBOUND_PAYLOAD.copy()
-        field_values['message_id'] = msg['message_id']
-        expected_payload.update(field_values)
-        for field, expected_value in expected_payload.iteritems():
-            self.assertEqual(msg[field], expected_value)
-
-
     @inlineCallbacks
     def test_inbound_request(self):
         address = self.transport.xmlrpc_server.getHost()
         url = 'http://'+address.host+':'+str(address.port)+'/'
         proxy = Proxy(url)
-        proxy.callRemote('handleUSSD',
+        x = yield proxy.callRemote('handleUSSD',
                          'TransactionId', '0001',
                          'USSDServiceCode', '543',
                          'USSDRequestString', '14321*1000#',
@@ -143,13 +135,17 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
                                           to_addr='543',
                                           content='14321*1000#')
 
+#        print "From handleUSSD, I got: ", x
+
+
+
     '''
     @inlineCallbacks
     def test_inbound_request_missing_params(self):
         address = self.transport.xmlrpc_server.getHost()
         url = 'http://'+address.host+':'+str(address.port)+'/'
         proxy = Proxy(url)
-        proxy.callRemote('handleUSSD',
+        x = yield proxy.callRemote('handleUSSD',
                          'TransactionId', '0001',
                          'USSDServiceCode', '543',
                          'USSDRequestString', '14321*1000#',
@@ -161,4 +157,5 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
                                           from_addr='275551234',
                                           to_addr='543',
                                           content='14321*1000#')
+        print "On missing params, I got:", x
     '''
