@@ -91,7 +91,7 @@ class MTNRwandaUSSDTransport(Transport):
         # a response. You generate the correct XML-RPC reply from the
         # message that arrived over AMQP and then you close the HTTP Request.
         values = {}
-        print "inside handle_raw_inbound_request"
+#        print "inside handle_raw_inbound_request"
         # TODO: check for incorrect request data - validate request
         params = request_data[::2]
         body = request_data[1::2]
@@ -149,7 +149,7 @@ class MTNRwandaXMLRPCResource(xmlrpc.XMLRPC):
 
     def __init__(self, transport):
         self.transport = transport
-        xmlrpc.XMLRPC.__init__(self)
+        xmlrpc.XMLRPC.__init__(self, allowNone=True)
 
     def xmlrpc_handleUSSD(self, *args):
         request_id = Transport.generate_message_id()
@@ -158,5 +158,5 @@ class MTNRwandaXMLRPCResource(xmlrpc.XMLRPC):
 
  #       self.transport.timeout_request = self.transport.callLater(self.transport.timeout,
  #                                             self.transport.remove_request, request_id)
-        print "inside handleUSSD..."
+ #       print "inside handleUSSD..."
         return self.transport.handle_raw_inbound_request(request_id, request)
