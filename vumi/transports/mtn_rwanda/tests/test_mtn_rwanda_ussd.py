@@ -29,6 +29,20 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
                 },
             }
 
+    EXPECTED_INBOUND_FAULT_PAYLOAD = {
+            'message_id': '',
+            'content': '',
+            'from_addr': '',    # msisdn
+            'to_addr': '',      # service code
+            'transport_name': transport_name,
+            'transport_type': 'ussd',
+            'transport_metadata': {
+                'mtn_rwanda_ussd': {
+                    'fault_code': '',
+                    'fault_string': '',
+                    },
+                },
+            }
     @inlineCallbacks
     def setUp(self):
         """
@@ -55,7 +69,7 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
         self.assertTrue(self.transport.xmlrpc_server.disconnecting)
         return d
 
-    def assert_inbound_message(self, msg, **field_values):
+    def assert_inbound_message(self, expected_payload, msg, **field_values):
         expected_payload = self.EXPECTED_INBOUND_PAYLOAD.copy()
         field_values['message_id'] = msg['message_id']
         expected_payload.update(field_values)
@@ -79,7 +93,8 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
                          'USSDEncoding', 'GSM0338',      # Optional
                          'TransactionTime', '20060723T14:08:55')
         [msg] = yield self.wait_for_dispatched_messages(1)
-        yield self.assert_inbound_message(msg,
+        yield self.assert_inbound_message(self.EXPECTED_INBOUND_PAYLOAD.copy(),
+                                          msg,
                                           from_addr='275551234',
                                           to_addr='543',
                                           content='14321*1000#')
@@ -96,7 +111,32 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
         received_text = yield x
         self.assertEqual(expected_reply, received_text)
 
+    @inlineCallbacks
+    def test_inbound_faulty_request(self):
+        address = self.transport.xmlrpc_server.getHost()
+        url = 'http://' + address.host + ':' + str(address.port) + '/'
+        proxy = Proxy(url)
+        proxy.callRemote('handleUSSD',
+                         'TransactionId', '0001',
+                         'USSDServiceCode', '543',
+                         'USSDRequestString', '14321*1000#',
+                         'MSISDN', '275551234',
+                         'USSDEncoding', 'GSM0338',      # Optional
+#                         'TransactionTime', '20060723T14:08:55'
+                         )
 
+        [msg] = yield self.wait_for_dispatched_messages(1)
+        metadata = {
+                'fault_code': '4001',
+                'fault_string': 'Missing parameters'
+                }
+        yield self.assert_inbound_message(self.EXPECTED_INBOUND_FAULT_PAYLOAD.copy(),
+                                          msg,
+                                          from_addr='275551234',
+                                          to_addr='543',
+                                          content='14321*1000#',
+                                          transport_metadata={'mtn_rwanda_ussd' : metadata}
+                                          )
 
     '''
     @inlineCallbacks

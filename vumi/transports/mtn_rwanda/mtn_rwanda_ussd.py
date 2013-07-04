@@ -94,12 +94,27 @@ class MTNRwandaUSSDTransport(Transport):
         if not self.validate_inbound_data(params):
             # XXX: Doesn't work yet.
             # TODO: Send a response with a fault code
-            return
+            metadata = {
+                'fault_code': '4001',
+                'fault_string': 'Missing parameters'
+                }
+            self.timeout_request.cancel()
+            self._requests_deferreds[message_id].callback(self.get_request(message_id))
+            self.remove_request(message_id)
+            return self.publish_message(
+                message_id=message_id,
+                content=values['USSDRequestString'],
+                from_addr=values['MSISDN'],
+                to_addr=values['USSDServiceCode'],
+                transport_type=self.transport_type,
+                transport_metadata={'mtn_rwanda_ussd': metadata}
+                )
 
         metadata = {
                 'transaction_id': values['TransactionId'],
                 'transaction_time': values['TransactionTime'],
                 }
+
         d = self.publish_message(
                 message_id=message_id,
                 content=values['USSDRequestString'],
@@ -151,5 +166,5 @@ class MTNRwandaXMLRPCResource(xmlrpc.XMLRPC):
         self.transport.set_request(request_id, args)
         d = Deferred()
         self.transport._requests_deferreds[request_id] = d
-        self.transport.handle_raw_inbound_request(request_id, args)
+        res = self.transport.handle_raw_inbound_request(request_id, args)
         return d
