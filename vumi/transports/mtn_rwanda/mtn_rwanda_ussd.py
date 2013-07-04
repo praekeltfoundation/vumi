@@ -20,6 +20,10 @@ class MTNRwandaUSSDTransportConfig(Transport.CONFIG_CLASS):
         default=30, static=True)
 
 
+class RequestTimedOutError(Exception):
+    pass
+
+
 class MTNRwandaUSSDTransport(Transport):
 
     transport_type = 'ussd'
@@ -65,6 +69,11 @@ class MTNRwandaUSSDTransport(Transport):
     def remove_request(self, request_id):
         del self._requests[request_id]
 
+    def timed_out(self, request_id):
+        d = self._requests_deferreds[request_id]
+        self.remove_request(request_id)
+        d.errback(RequestTimedOutError)
+
     REQUIRED_INBOUND_MESSAGE_FIELDS = set([
         'TransactionId', 'TransactionTime', 'MSISDN', 'USSDServiceCode',
         'USSDRequestString'])
@@ -84,7 +93,7 @@ class MTNRwandaUSSDTransport(Transport):
         """
         values = {}
         self.timeout_request = self.callLater(self.timeout,
-                                              self.remove_request, message_id)
+                                              self.timed_out, message_id)
         params = request_data[::2]
         body = request_data[1::2]
         for index in range(len(params)):
@@ -92,14 +101,13 @@ class MTNRwandaUSSDTransport(Transport):
         self._requests[message_id] = values
 
         if not self.validate_inbound_data(params):
-            # XXX: Doesn't work yet.
-            # TODO: Send a response with a fault code
             metadata = {
                 'fault_code': '4001',
                 'fault_string': 'Missing parameters'
                 }
             self.timeout_request.cancel()
-            self._requests_deferreds[message_id].callback(self.get_request(message_id))
+            self._requests_deferreds[message_id].callback(
+                    self.get_request(message_id))
             self.remove_request(message_id)
             return self.publish_message(
                 message_id=message_id,
@@ -115,7 +123,7 @@ class MTNRwandaUSSDTransport(Transport):
                 'transaction_time': values['TransactionTime'],
                 }
 
-        d = self.publish_message(
+        return self.publish_message(
                 message_id=message_id,
                 content=values['USSDRequestString'],
                 from_addr=values['MSISDN'],
@@ -123,12 +131,6 @@ class MTNRwandaUSSDTransport(Transport):
                 transport_type=self.transport_type,
                 transport_metadata={'mtn_rwanda_ussd': metadata}
                 )
-
-        def set_not_done(obj):
-            return server.NOT_DONE_YET
-
-        d.addCallback(set_not_done)
-        return d
 
     def finish_request(self, request_id, data):
         request = self.get_request(request_id)
@@ -166,5 +168,5 @@ class MTNRwandaXMLRPCResource(xmlrpc.XMLRPC):
         self.transport.set_request(request_id, args)
         d = Deferred()
         self.transport._requests_deferreds[request_id] = d
-        res = self.transport.handle_raw_inbound_request(request_id, args)
+        self.transport.handle_raw_inbound_request(request_id, args)
         return d

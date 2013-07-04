@@ -1,11 +1,11 @@
 from twisted.internet.defer import inlineCallbacks
-from twisted.internet import endpoints, tcp
+from twisted.internet import endpoints, tcp, defer
 from twisted.internet.task import Clock
 from twisted.web.xmlrpc import Proxy
 
 from vumi.message import TransportUserMessage
 from vumi.transports.mtn_rwanda.mtn_rwanda_ussd import (
-        MTNRwandaUSSDTransport, MTNRwandaXMLRPCResource)
+        MTNRwandaUSSDTransport, MTNRwandaXMLRPCResource, RequestTimedOutError)
 from vumi.transports.tests.utils import TransportTestCase
 
 
@@ -121,8 +121,7 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
                          'USSDServiceCode', '543',
                          'USSDRequestString', '14321*1000#',
                          'MSISDN', '275551234',
-                         'USSDEncoding', 'GSM0338',      # Optional
-#                         'TransactionTime', '20060723T14:08:55'
+                         'USSDEncoding', 'GSM0338',
                          )
 
         [msg] = yield self.wait_for_dispatched_messages(1)
@@ -138,23 +137,20 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
                                           transport_metadata={'mtn_rwanda_ussd' : metadata}
                                           )
 
-    '''
     @inlineCallbacks
-    def test_inbound_request_missing_params(self):
+    def test_timeout(self):
         address = self.transport.xmlrpc_server.getHost()
-        url = 'http://'+address.host+':'+str(address.port)+'/'
+        url = 'http://' + address.host + ':' + str(address.port) + '/'
         proxy = Proxy(url)
-        x = yield proxy.callRemote('handleUSSD',
+        x = proxy.callRemote('handleUSSD',
                          'TransactionId', '0001',
                          'USSDServiceCode', '543',
                          'USSDRequestString', '14321*1000#',
+                         'MSISDN', '275551234',
                          'USSDEncoding', 'GSM0338',      # Optional
-                         'response', 'false',            # Optional
                          'TransactionTime', '20060723T14:08:55')
-        [msg]= yield self.wait_for_dispatched_messages(1)
-        yield self.assert_inbound_message(msg,
-                                          from_addr='275551234',
-                                          to_addr='543',
-                                          content='14321*1000#')
-        print "On missing params, I got:", x
-    '''
+        [msg] = yield self.wait_for_dispatched_messages(1)
+        self.clock.advance(30)
+        yield x
+#        self.failureResultOf(x).trap(RequestTimedOutError)
+
