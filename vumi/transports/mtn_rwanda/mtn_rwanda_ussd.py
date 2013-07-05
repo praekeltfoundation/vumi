@@ -86,7 +86,7 @@ class MTNRwandaUSSDTransport(Transport):
         else:
             return True
 
-    def handle_raw_inbound_request(self, message_id, values):
+    def handle_raw_inbound_request(self, message_id, values, d):
         """
         Called by the XML-RPC server when it receives a payload that
         needs processing.
@@ -94,6 +94,7 @@ class MTNRwandaUSSDTransport(Transport):
         self.timeout_request = self.callLater(self.timeout,
                                               self.timed_out, message_id)
         self._requests[message_id] = values
+        self._requests_deferreds[message_id] = d
         if not self.validate_inbound_data(values.keys()):
             metadata = {
                 'fault_code': '4001',
@@ -159,8 +160,6 @@ class MTNRwandaXMLRPCResource(xmlrpc.XMLRPC):
 
     def xmlrpc_handleUSSD(self, request_data):
         request_id = Transport.generate_message_id()
-        self.transport.set_request(request_id, request_data)
         d = Deferred()
-        self.transport._requests_deferreds[request_id] = d
-        self.transport.handle_raw_inbound_request(request_id, request_data)
+        self.transport.handle_raw_inbound_request(request_id, request_data, d)
         return d
