@@ -142,10 +142,15 @@ class MTNRwandaUSSDTransport(Transport):
         """
         self.timeout_request.cancel()
         request_id = message['in_reply_to']
+
+        if self.get_request(request_id) is None:
+            return self.publish_nack(user_message_id=request_id,
+                    sent_message_id=request_id, reason='Request not found')
+
         self.finish_request(request_id,
                 message.payload['content'].encode('utf-8'))
-        return self.publish_ack(user_message_id=message['message_id'],
-                sent_message_id=message['message_id'])
+        return self.publish_ack(user_message_id=request_id,
+                sent_message_id=request_id)
 
 
 class MTNRwandaXMLRPCResource(xmlrpc.XMLRPC):
