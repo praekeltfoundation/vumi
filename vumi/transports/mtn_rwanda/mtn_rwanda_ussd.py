@@ -71,7 +71,8 @@ class MTNRwandaUSSDTransport(Transport):
     def timed_out(self, request_id):
         d = self._requests_deferreds[request_id]
         self.remove_request(request_id)
-        d.errback(RequestTimedOutError)
+        d.errback(RequestTimedOutError(
+            "Request %r timed out." % (request_id,)))
 
     REQUIRED_INBOUND_MESSAGE_FIELDS = set([
         'TransactionId', 'TransactionTime', 'MSISDN', 'USSDServiceCode',

@@ -142,23 +142,24 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_timeout(self):
-        flushed = self.flushLoggedErrors(RequestTimedOutError)
+        address = self.transport.xmlrpc_server.getHost()
+        url = 'http://' + address.host + ':' + str(address.port) + '/'
+        proxy = Proxy(url)
+        x = proxy.callRemote('handleUSSD',
+                     'TransactionId', '0001',
+                     'USSDServiceCode', '543',
+                     'USSDRequestString', '14321*1000#',
+                     'MSISDN', '275551234',
+                     'TransactionTime', '20060723T14:08:55')
+        [msg] = yield self.wait_for_dispatched_messages(1)
+        self.clock.advance(30)
         try:
-            address = self.transport.xmlrpc_server.getHost()
-            url = 'http://' + address.host + ':' + str(address.port) + '/'
-            proxy = Proxy(url)
-            x = proxy.callRemote('handleUSSD',
-                         'TransactionId', '0001',
-                         'USSDServiceCode', '543',
-                         'USSDRequestString', '14321*1000#',
-                         'MSISDN', '275551234',
-                         'TransactionTime', '20060723T14:08:55')
-            [msg] = yield self.wait_for_dispatched_messages(1)
-            self.clock.advance(30)
             yield x
-        except Exception as e:
-            self.assertIsInstance(e, xmlrpclib.Fault)
-            print "flushed = ", flushed
-            # It doesn't flush RequestTimedOutError like it should.
+        except xmlrpclib.Fault, e:
+            self.assertEqual(e.faultCode, 8002)
+            self.assertEqual(e.faultString, 'error')
         else:
-            self.fail("We expected an error")
+            self.fail("We expected a timeout error.")
+        [failure] = self.flushLoggedErrors(RequestTimedOutError)
+        err = failure.value
+        self.assertTrue(str(err).endswith('timed out.'))
