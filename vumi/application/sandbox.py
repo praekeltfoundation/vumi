@@ -677,6 +677,17 @@ class Sandbox(ApplicationWorker):
     def teardown_application(self):
         return self.resources.teardown_resources()
 
+    def setup_connectors(self):
+        # Set the default event handler so we can handle events from any
+        # endpoint.
+        d = super(Sandbox, self).setup_connectors()
+
+        def cb(connector):
+            connector.set_default_event_handler(self.dispatch_event)
+            return connector
+
+        return d.addCallback(cb)
+
     def create_sandbox_resources(self, config):
         return SandboxResources(self, config)
 

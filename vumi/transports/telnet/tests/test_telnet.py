@@ -162,6 +162,7 @@ class TelnetServerTransportTestCase(BaseTelnetServerTransortTestCase):
             'to_addr': 'foo'
         })
         self.assertEqual(worker._to_addr, 'foo')
+        yield worker.stopWorker()
 
     @inlineCallbacks
     def test_transport_type_override(self):

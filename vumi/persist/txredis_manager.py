@@ -102,6 +102,14 @@ class VumiRedis(txr.Redis):
 class VumiRedisClientFactory(txr.RedisClientFactory):
     protocol = VumiRedis
 
+    def buildProtocol(self, addr):
+        self.client = self.protocol(*self._args, **self._kwargs)
+        self.client.factory = self
+        self.resetDelay()
+        prev_d, self.deferred = self.deferred, Deferred()
+        prev_d.callback(self.client)
+        return self.client
+
 
 class TxRedisManager(Manager):
 
@@ -130,9 +138,25 @@ class TxRedisManager(Manager):
         port = config.pop('port', 6379)
 
         factory = VumiRedisClientFactory(**config)
-        d = factory.deferred.addCallback(lambda r: r.connected_d)
         reactor.connectTCP(host, port, factory)
-        return d.addCallback(lambda r: cls(r, key_prefix, key_separator))
+
+        d = factory.deferred.addCallback(lambda client: client.connected_d)
+        d.addCallback(lambda client: cls(client, key_prefix, key_separator))
+        d.addCallback(cls._attach_reconnector)
+        return d
+
+    @staticmethod
+    def _attach_reconnector(manager):
+        def set_client(client):
+            manager._client = client
+            return client
+
+        def reconnect(client):
+            client.factory.deferred.addCallback(reconnect)
+            return client.connected_d.addCallback(set_client)
+
+        manager._client.factory.deferred.addCallback(reconnect)
+        return manager
 
     @inlineCallbacks
     def _close(self):

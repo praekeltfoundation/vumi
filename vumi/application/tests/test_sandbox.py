@@ -349,6 +349,37 @@ class SandboxTestCase(SandboxTestCaseBase):
         return self.echo_check('consume_delivery_report',
             self.mk_delivery_report(), 'inbound-event')
 
+    @inlineCallbacks
+    def event_dispatch_check(self, event):
+        yield self.setup_app(
+            "import sys, json\n"
+            "cmd = sys.stdin.readline()\n"
+            "log = {'cmd': 'log.info', 'cmd_id': '1',\n"
+            "       'reply': False, 'msg': cmd}\n"
+            "sys.stdout.write(json.dumps(log) + '\\n')\n",
+            {'sandbox': {
+                'log': {'cls': 'vumi.application.sandbox.LoggingResource'},
+            }},
+        )
+        with LogCatcher() as lc:
+            yield self.dispatch_event(event)
+            [cmd_json] = lc.messages()
+
+        if not cmd_json.startswith('{'):
+            self.fail(cmd_json)
+        echoed_cmd = json.loads(cmd_json)
+        self.assertEqual(echoed_cmd['cmd'], 'inbound-event')
+        echoed_cmd['msg']['timestamp'] = event['timestamp']
+        self.assertEqual(echoed_cmd['msg'], event.payload)
+
+    def test_event_dispatch_default(self):
+        return self.event_dispatch_check(self.mk_ack())
+
+    def test_event_dispatch_non_default(self):
+        ack = self.mk_ack()
+        ack.set_routing_endpoint('foo')
+        return self.event_dispatch_check(ack)
+
 
 class JsSandboxTestCase(SandboxTestCaseBase):
 

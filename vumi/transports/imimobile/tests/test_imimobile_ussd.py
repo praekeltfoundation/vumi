@@ -172,7 +172,7 @@ class TestImiMobileUssdTransportTestCase(TransportTestCase):
     @inlineCallbacks
     def test_inbound_close_and_reply(self):
         from_addr = '9221234567'
-        self.mk_session(from_addr=from_addr)
+        yield self.mk_session(from_addr=from_addr)
 
         user_content = "Farewell, sweet Concorde!"
         d = self.mk_request('some-suffix', msg=user_content)

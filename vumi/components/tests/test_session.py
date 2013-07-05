@@ -5,7 +5,7 @@ import time
 from twisted.internet.defer import inlineCallbacks
 from twisted.trial.unittest import TestCase
 
-from vumi.components import SessionManager
+from vumi.components.session import SessionManager
 from vumi.tests.utils import PersistenceMixin
 
 

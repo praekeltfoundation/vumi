@@ -132,8 +132,8 @@ class TagpoolApiWorker(BaseWorker):
     @inlineCallbacks
     def setup_worker(self):
         config = self.get_static_config()
-        redis_manager = yield TxRedisManager.from_config(config.redis_manager)
-        tagpool = TagpoolManager(redis_manager)
+        self.redis_manager = yield TxRedisManager.from_config(config.redis_manager)
+        tagpool = TagpoolManager(self.redis_manager)
         rpc = TagpoolApiServer(tagpool)
         addIntrospection(rpc)
         site = build_web_site({

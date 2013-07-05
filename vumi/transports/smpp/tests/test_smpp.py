@@ -196,12 +196,14 @@ class SmppTransportTestCase(TransportTestCase):
         assert_throttled_status(True, ["Heimlich"], [])
         # Still waiting to resend
         clock.advance(0.05)
+        yield self.transport.redis.exists('wait for redis')
         assert_throttled_status(True, ["Heimlich"], [])
         message2 = self.mkmsg_out("Other", message_id="448")
         yield self.dispatch(message2)
         assert_throttled_status(True, ["Heimlich"], [])
         # Resent
         clock.advance(0.05)
+        yield self.transport.redis.exists('wait for redis')
         assert_throttled_status(True, ["Heimlich", "Heimlich"], [])
         # And acknowledged by the other side
         yield self.esme.handle_data(SubmitSMResp(2, "3rd_party_5").get_bin())

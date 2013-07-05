@@ -13,7 +13,7 @@ from vumi.message import TransportUserMessage, TransportEvent
 from vumi.utils import load_class_by_string, get_first_word
 from vumi.middleware import MiddlewareStack, setup_middlewares_from_config
 from vumi import log
-from vumi.components import SessionManager
+from vumi.components.session import SessionManager
 from vumi.persist.txredis_manager import TxRedisManager
 
 
