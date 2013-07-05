@@ -1,6 +1,6 @@
 import xmlrpclib
 from twisted.internet.defer import inlineCallbacks
-from twisted.internet import endpoints, tcp, defer
+from twisted.internet import endpoints, tcp
 from twisted.internet.task import Clock
 from twisted.web.xmlrpc import Proxy
 
@@ -44,6 +44,7 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
                     },
                 },
             }
+
     @inlineCallbacks
     def setUp(self):
         """
@@ -130,13 +131,14 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
                 'fault_code': '4001',
                 'fault_string': 'Missing parameters'
                 }
-        yield self.assert_inbound_message(self.EXPECTED_INBOUND_FAULT_PAYLOAD.copy(),
-                                          msg,
-                                          from_addr='275551234',
-                                          to_addr='543',
-                                          content='14321*1000#',
-                                          transport_metadata={'mtn_rwanda_ussd' : metadata}
-                                          )
+        yield self.assert_inbound_message(
+                self.EXPECTED_INBOUND_FAULT_PAYLOAD.copy(),
+                msg,
+                from_addr='275551234',
+                to_addr='543',
+                content='14321*1000#',
+                transport_metadata={'mtn_rwanda_ussd': metadata}
+                )
 
     @inlineCallbacks
     def test_timeout(self):

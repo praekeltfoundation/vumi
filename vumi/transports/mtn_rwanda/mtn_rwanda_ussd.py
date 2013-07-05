@@ -35,8 +35,7 @@ class MTNRwandaUSSDTransport(Transport):
     @inlineCallbacks
     def setup_transport(self):
         """
-        Transport specific setup - it initiates things, sets up a
-        connection, for example.
+        Transport specific setup - it sets up a connection.
         """
         self._requests = {}
         self._requests_deferreds = {}
