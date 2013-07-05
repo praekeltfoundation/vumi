@@ -1,4 +1,5 @@
 import xmlrpclib
+from datetime import datetime
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet import endpoints, tcp
 from twisted.internet.task import Clock
@@ -26,22 +27,7 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
             'transport_metadata': {
                 'mtn_rwanda_ussd': {
                     'transaction_id': '0001',
-                    'transaction_time': '20060723T14:08:55',
-                    },
-                },
-            }
-
-    EXPECTED_INBOUND_FAULT_PAYLOAD = {
-            'message_id': '',
-            'content': '',
-            'from_addr': '',    # msisdn
-            'to_addr': '',      # service code
-            'transport_name': transport_name,
-            'transport_type': 'ussd',
-            'transport_metadata': {
-                'mtn_rwanda_ussd': {
-                    'fault_code': '',
-                    'fault_string': '',
+                    'transaction_time': '2013-07-05T22:58:47.565596',
                     },
                 },
             }
@@ -94,7 +80,7 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
             'USSDRequestString': '14321*1000#',
             'MSISDN': '275551234',
             'USSDEncoding': 'GSM0338',      # Optional
-            'TransactionTime': '20060723T14:08:55'
+            'TransactionTime': '2013-07-05T22:58:47.565596'
             })
         [msg] = yield self.wait_for_dispatched_messages(1)
         yield self.assert_inbound_message(self.EXPECTED_INBOUND_PAYLOAD.copy(),
@@ -104,7 +90,7 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
                                           content='14321*1000#')
         expected_reply = {'MSISDN': '275551234',
                           'TransactionId': '0001',
-                          'TransactionTime': '20060723T14:08:55',
+                          'TransactionTime': datetime.now().isoformat(),
                           'USSDEncoding': 'GSM0338',
                           'USSDResponseString': 'Test message',
                           'USSDServiceCode': '543'}
@@ -113,7 +99,12 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
 
         self.dispatch(reply)
         received_text = yield x
-        self.assertEqual(expected_reply, received_text)
+        for key in received_text.keys():
+            if key == 'TransactionTime':
+                self.assertEqual(len(received_text[key]),
+                        len(expected_reply[key]))
+            else:
+                self.assertEqual(expected_reply[key], received_text[key])
 
     @inlineCallbacks
     def test_inbound_faulty_request(self):
@@ -128,7 +119,6 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
             'MSISDN': '275551234',
             'USSDEncoding': 'GSM0338',
             })
-
             [msg] = yield self.wait_for_dispatched_messages(1)
         except xmlrpclib.Fault, e:
             self.assertEqual(e.faultCode, 8002)
@@ -149,7 +139,7 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
             'USSDServiceCode': '543',
             'USSDRequestString': '14321*1000#',
             'MSISDN': '275551234',
-            'TransactionTime': '20060723T14:08:55'
+            'TransactionTime': '2013-07-05T22:58:47.565596'
             })
         [msg] = yield self.wait_for_dispatched_messages(1)
         self.clock.advance(30)

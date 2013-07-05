@@ -1,8 +1,10 @@
 # -*- test-case-name: vumi.transports.mtn_rwanda.tests.test_mtn_rwanda_ussd -*-
+from datetime import datetime
 from twisted.internet import reactor
 from twisted.web import xmlrpc, server
 from twisted.internet.defer import inlineCallbacks, Deferred
 
+from vumi.message import TransportUserMessage
 from vumi.transports.base import Transport
 from vumi.config import ConfigServerEndpoint, ConfigInt
 
@@ -119,10 +121,17 @@ class MTNRwandaUSSDTransport(Transport):
                 transport_metadata={'mtn_rwanda_ussd': metadata}
                 )
 
-    def finish_request(self, request_id, data):
+    def finish_request(self, request_id, data, session_event):
         request = self.get_request(request_id)
         del request['USSDRequestString']
         request['USSDResponseString'] = data
+        request['TransactionTime'] = datetime.now().isoformat()
+        if session_event == TransportUserMessage.SESSION_NEW:
+            request['action'] = 'request'
+        elif session_event == TransportUserMessage.SESSION_CLOSE:
+            request['action'] = 'end'
+        elif session_event == TransportUserMessage.SESSION_RESUME:
+            request['action'] = 'notify'
         self.set_request(request_id, request)
         d = self._requests_deferreds[request_id]
         self.remove_request(request_id)
@@ -140,7 +149,8 @@ class MTNRwandaUSSDTransport(Transport):
                     sent_message_id=request_id, reason='Request not found')
 
         self.finish_request(request_id,
-                message.payload['content'].encode('utf-8'))
+                message.payload['content'].encode('utf-8'),
+                message['session_event'])
         return self.publish_ack(user_message_id=request_id,
                 sent_message_id=request_id)
 
