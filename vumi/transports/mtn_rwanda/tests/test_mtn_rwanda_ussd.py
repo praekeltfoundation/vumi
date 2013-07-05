@@ -59,7 +59,6 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
         return d
 
     def assert_inbound_message(self, expected_payload, msg, **field_values):
-        expected_payload = self.EXPECTED_INBOUND_PAYLOAD.copy()
         field_values['message_id'] = msg['message_id']
         expected_payload.update(field_values)
         for field, expected_value in expected_payload.iteritems():
@@ -105,6 +104,15 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
                         len(expected_reply[key]))
             else:
                 self.assertEqual(expected_reply[key], received_text[key])
+
+    @inlineCallbacks
+    def test_nack(self):
+        msg = self.mkmsg_out()
+        self.dispatch(msg)
+        [nack] = yield self.wait_for_dispatched_events(1)
+        self.assertEqual(nack['user_message_id'], msg['message_id'])
+        self.assertEqual(nack['sent_message_id'], msg['message_id'])
+        self.assertEqual(nack['nack_reason'], 'Request not found')
 
     @inlineCallbacks
     def test_inbound_faulty_request(self):

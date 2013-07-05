@@ -141,13 +141,14 @@ class MTNRwandaUSSDTransport(Transport):
         """
         Read outbound message and do what needs to be done with them.
         """
-        self.timeout_request.cancel()
         request_id = message['in_reply_to']
 
         if self.get_request(request_id) is None:
-            return self.publish_nack(user_message_id=request_id,
-                    sent_message_id=request_id, reason='Request not found')
+            return self.publish_nack(user_message_id=message['message_id'],
+                    sent_message_id=message['message_id'],
+                    reason='Request not found')
 
+        self.timeout_request.cancel()
         self.finish_request(request_id,
                 message.payload['content'].encode('utf-8'),
                 message['session_event'])
