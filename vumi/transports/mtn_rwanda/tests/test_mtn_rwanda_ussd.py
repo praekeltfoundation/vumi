@@ -87,13 +87,14 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
         address = self.transport.xmlrpc_server.getHost()
         url = 'http://' + address.host + ':' + str(address.port) + '/'
         proxy = Proxy(url)
-        x = proxy.callRemote('handleUSSD',
-                         'TransactionId', '0001',
-                         'USSDServiceCode', '543',
-                         'USSDRequestString', '14321*1000#',
-                         'MSISDN', '275551234',
-                         'USSDEncoding', 'GSM0338',      # Optional
-                         'TransactionTime', '20060723T14:08:55')
+        x = proxy.callRemote('handleUSSD', {
+            'TransactionId': '0001',
+            'USSDServiceCode': '543',
+            'USSDRequestString': '14321*1000#',
+            'MSISDN': '275551234',
+            'USSDEncoding': 'GSM0338',      # Optional
+            'TransactionTime': '20060723T14:08:55'
+            })
         [msg] = yield self.wait_for_dispatched_messages(1)
         yield self.assert_inbound_message(self.EXPECTED_INBOUND_PAYLOAD.copy(),
                                           msg,
@@ -118,13 +119,13 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
         address = self.transport.xmlrpc_server.getHost()
         url = 'http://' + address.host + ':' + str(address.port) + '/'
         proxy = Proxy(url)
-        proxy.callRemote('handleUSSD',
-                         'TransactionId', '0001',
-                         'USSDServiceCode', '543',
-                         'USSDRequestString', '14321*1000#',
-                         'MSISDN', '275551234',
-                         'USSDEncoding', 'GSM0338',
-                         )
+        proxy.callRemote('handleUSSD', {
+            'TransactionId': '0001',
+            'USSDServiceCode': '543',
+            'USSDRequestString': '14321*1000#',
+            'MSISDN': '275551234',
+            'USSDEncoding': 'GSM0338',
+            })
 
         [msg] = yield self.wait_for_dispatched_messages(1)
         metadata = {
@@ -145,12 +146,13 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
         address = self.transport.xmlrpc_server.getHost()
         url = 'http://' + address.host + ':' + str(address.port) + '/'
         proxy = Proxy(url)
-        x = proxy.callRemote('handleUSSD',
-                     'TransactionId', '0001',
-                     'USSDServiceCode', '543',
-                     'USSDRequestString', '14321*1000#',
-                     'MSISDN', '275551234',
-                     'TransactionTime', '20060723T14:08:55')
+        x = proxy.callRemote('handleUSSD', {
+            'TransactionId': '0001',
+            'USSDServiceCode': '543',
+            'USSDRequestString': '14321*1000#',
+            'MSISDN': '275551234',
+            'TransactionTime': '20060723T14:08:55'
+            })
         [msg] = yield self.wait_for_dispatched_messages(1)
         self.clock.advance(30)
         try:
