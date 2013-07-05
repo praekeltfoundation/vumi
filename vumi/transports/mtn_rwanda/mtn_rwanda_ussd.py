@@ -24,6 +24,10 @@ class RequestTimedOutError(Exception):
     pass
 
 
+class InvalidRequest(Exception):
+    pass
+
+
 class MTNRwandaUSSDTransport(Transport):
 
     transport_type = 'ussd'
@@ -96,22 +100,10 @@ class MTNRwandaUSSDTransport(Transport):
         self._requests[message_id] = values
         self._requests_deferreds[message_id] = d
         if not self.validate_inbound_data(values.keys()):
-            metadata = {
-                'fault_code': '4001',
-                'fault_string': 'Missing parameters'
-                }
             self.timeout_request.cancel()
-            self._requests_deferreds[message_id].callback(
-                    self.get_request(message_id))
             self.remove_request(message_id)
-            return self.publish_message(
-                message_id=message_id,
-                content=values['USSDRequestString'],
-                from_addr=values['MSISDN'],
-                to_addr=values['USSDServiceCode'],
-                transport_type=self.transport_type,
-                transport_metadata={'mtn_rwanda_ussd': metadata}
-                )
+            d.errback(InvalidRequest("4001: Missing Parameters"))
+            return
 
         metadata = {
                 'transaction_id': values['TransactionId'],

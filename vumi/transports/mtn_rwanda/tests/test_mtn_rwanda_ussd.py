@@ -6,7 +6,8 @@ from twisted.web.xmlrpc import Proxy
 
 from vumi.message import TransportUserMessage
 from vumi.transports.mtn_rwanda.mtn_rwanda_ussd import (
-        MTNRwandaUSSDTransport, MTNRwandaXMLRPCResource, RequestTimedOutError)
+        MTNRwandaUSSDTransport, MTNRwandaXMLRPCResource, RequestTimedOutError,
+        InvalidRequest)
 from vumi.transports.tests.utils import TransportTestCase
 
 
@@ -119,7 +120,8 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
         address = self.transport.xmlrpc_server.getHost()
         url = 'http://' + address.host + ':' + str(address.port) + '/'
         proxy = Proxy(url)
-        proxy.callRemote('handleUSSD', {
+        try:
+            yield proxy.callRemote('handleUSSD', {
             'TransactionId': '0001',
             'USSDServiceCode': '543',
             'USSDRequestString': '14321*1000#',
@@ -127,19 +129,15 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
             'USSDEncoding': 'GSM0338',
             })
 
-        [msg] = yield self.wait_for_dispatched_messages(1)
-        metadata = {
-                'fault_code': '4001',
-                'fault_string': 'Missing parameters'
-                }
-        yield self.assert_inbound_message(
-                self.EXPECTED_INBOUND_FAULT_PAYLOAD.copy(),
-                msg,
-                from_addr='275551234',
-                to_addr='543',
-                content='14321*1000#',
-                transport_metadata={'mtn_rwanda_ussd': metadata}
-                )
+            [msg] = yield self.wait_for_dispatched_messages(1)
+        except xmlrpclib.Fault, e:
+            self.assertEqual(e.faultCode, 8002)
+            self.assertEqual(e.faultString, 'error')
+        else:
+            self.fail('We expected an invalid request error.')
+        [failure] = self.flushLoggedErrors(InvalidRequest)
+        err = failure.value
+        self.assertEqual(str(err), '4001: Missing Parameters')
 
     @inlineCallbacks
     def test_timeout(self):
@@ -161,7 +159,7 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
             self.assertEqual(e.faultCode, 8002)
             self.assertEqual(e.faultString, 'error')
         else:
-            self.fail("We expected a timeout error.")
+            self.fail('We expected a timeout error.')
         [failure] = self.flushLoggedErrors(RequestTimedOutError)
         err = failure.value
         self.assertTrue(str(err).endswith('timed out.'))
