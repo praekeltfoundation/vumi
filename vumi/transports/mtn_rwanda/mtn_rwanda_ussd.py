@@ -2,7 +2,7 @@
 from datetime import datetime
 from twisted.internet import reactor
 from twisted.web import xmlrpc, server
-from twisted.internet.defer import inlineCallbacks, Deferred
+from twisted.internet.defer import inlineCallbacks, Deferred, returnValue
 
 from vumi.message import TransportUserMessage
 from vumi.transports.base import Transport
@@ -106,18 +106,6 @@ class MTNRwandaUSSDTransport(Transport):
             return True
 
     @inlineCallbacks
-    def determine_session_event(self, session_id, value):
-        session = yield self.session_manager.load_session(session_id)
-        if session:
-            self._event[session_id] = TransportUserMessage.SESSION_RESUME
-            yield self.session_manager.save_session(session_id, session)
-        else:
-            self._event[session_id] = TransportUserMessage.SESSION_NEW
-            yield self.session_manager.create_session(
-                    session_id, from_addr=value['MSISDN'],
-                    to_addr=value['USSDServiceCode'])
-
-    @inlineCallbacks
     def handle_raw_inbound_request(self, message_id, values, d):
         """
         Called by the XML-RPC server when it receives a payload that
@@ -134,12 +122,15 @@ class MTNRwandaUSSDTransport(Transport):
 
         else:
             session_id = values['TransactionId']
-            self._event = {}
-            yield self.determine_session_event(session_id, values)
-            session_event = self._event[session_id]
-            if session_event == TransportUserMessage.SESSION_RESUME:
+            session = yield self.session_manager.load_session(session_id)
+            if session:
+                session_event = TransportUserMessage.SESSION_RESUME
                 content = values['USSDRequestString']
             else:
+                yield self.session_manager.create_session(
+                    session_id, from_addr=values['MSISDN'],
+                    to_addr=values['USSDServiceCode'])
+                session_event = TransportUserMessage.SESSION_NEW
                 content = None
 
             metadata = {
@@ -147,7 +138,7 @@ class MTNRwandaUSSDTransport(Transport):
                     'transaction_time': values['TransactionTime'],
                     }
 
-            yield self.publish_message(
+            res = yield self.publish_message(
                 message_id=message_id,
                 content=content,
                 from_addr=values['MSISDN'],
@@ -156,6 +147,8 @@ class MTNRwandaUSSDTransport(Transport):
                 transport_type=self.transport_type,
                 transport_metadata={'mtn_rwanda_ussd': metadata}
                 )
+
+            returnValue(res)
 
     @inlineCallbacks
     def finish_request(self, request_id, data, session_event):
