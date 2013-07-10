@@ -117,6 +117,7 @@ class MTNRwandaUSSDTransport(Transport):
                     session_id, from_addr=value['MSISDN'],
                     to_addr=value['USSDServiceCode'])
 
+    @inlineCallbacks
     def handle_raw_inbound_request(self, message_id, values, d):
         """
         Called by the XML-RPC server when it receives a payload that
@@ -130,23 +131,23 @@ class MTNRwandaUSSDTransport(Transport):
             self.timeout_request.cancel()
             self.remove_request(message_id)
             d.errback(InvalidRequest("4001: Missing Parameters"))
-            return
 
-        session_id = values['TransactionId']
-        self._event = {}
-        self.determine_session_event(session_id, values)
-        session_event = self._event[session_id]
-        if session_event == TransportUserMessage.SESSION_RESUME:
-            content = values['USSDRequestString']
         else:
-            content = None
+            session_id = values['TransactionId']
+            self._event = {}
+            yield self.determine_session_event(session_id, values)
+            session_event = self._event[session_id]
+            if session_event == TransportUserMessage.SESSION_RESUME:
+                content = values['USSDRequestString']
+            else:
+                content = None
 
-        metadata = {
-                'transaction_id': values['TransactionId'],
-                'transaction_time': values['TransactionTime'],
-                }
+            metadata = {
+                    'transaction_id': values['TransactionId'],
+                    'transaction_time': values['TransactionTime'],
+                    }
 
-        return self.publish_message(
+            yield self.publish_message(
                 message_id=message_id,
                 content=content,
                 from_addr=values['MSISDN'],
