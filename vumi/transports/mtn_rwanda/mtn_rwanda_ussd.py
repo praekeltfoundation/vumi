@@ -6,7 +6,8 @@ from twisted.internet.defer import inlineCallbacks, Deferred
 
 from vumi.message import TransportUserMessage
 from vumi.transports.base import Transport
-from vumi.config import ConfigServerEndpoint, ConfigInt
+from vumi.config import ConfigServerEndpoint, ConfigInt, ConfigDict
+from vumi.components.session import SessionManager
 
 
 class MTNRwandaUSSDTransportConfig(Transport.CONFIG_CLASS):
@@ -20,6 +21,12 @@ class MTNRwandaUSSDTransportConfig(Transport.CONFIG_CLASS):
         "No. of seconds to wait before removing a request that hasn't "
         "received a response yet.",
         default=30, static=True)
+    redis_manager = ConfigDict(
+        "Parameters to connect to redis with",
+        default={}, static=True)
+    session_timeout_period = ConfigInt(
+        "Maximum length of a USSD session",
+        default=600, static=True)
 
 
 class RequestTimedOutError(Exception):
@@ -50,6 +57,11 @@ class MTNRwandaUSSDTransport(Transport):
         config = self.get_static_config()
         self.endpoint = config.twisted_endpoint
         self.timeout = config.timeout
+
+        r_prefix = "vumi.transports.mtn_rwanda:%s" % self.transport_name
+        self.session_manager = yield SessionManager.from_redis_config(
+            config.redis_manager, r_prefix,
+            config.session_timeout_period)
         self.r = MTNRwandaXMLRPCResource(self)
         self.factory = server.Site(self.r)
         self.xmlrpc_server = yield self.endpoint.listen(self.factory)
@@ -59,6 +71,7 @@ class MTNRwandaUSSDTransport(Transport):
         """
         Clean-up of setup done in setup_transport.
         """
+        self.session_manager.stop()
         if self.xmlrpc_server is not None:
             yield self.xmlrpc_server.stopListening()
 
@@ -92,6 +105,18 @@ class MTNRwandaUSSDTransport(Transport):
         else:
             return True
 
+    @inlineCallbacks
+    def determine_session_event(self, session_id, values, event):
+        session = yield self.session_manager.load_session(session_id)
+        if session:
+            yield self.session_manager.save_session(session_id, session)
+            event[session_id] = TransportUserMessage.SESSION_RESUME
+        else:
+            yield self.session_manager.create_session(
+                    session_id, from_addr=values['MSISDN'],
+                    to_addr=values['USSDServiceCode'])
+            event[session_id] = TransportUserMessage.SESSION_NEW
+
     def handle_raw_inbound_request(self, message_id, values, d):
         """
         Called by the XML-RPC server when it receives a payload that
@@ -107,6 +132,15 @@ class MTNRwandaUSSDTransport(Transport):
             d.errback(InvalidRequest("4001: Missing Parameters"))
             return
 
+        session_id = values['TransactionId']
+        event = {}
+        self.determine_session_event(session_id, values, event)
+        session_event = event[session_id]
+        if session_event == TransportUserMessage.SESSION_RESUME:
+            content = values['USSDRequestString']
+        else:
+            content = None
+
         metadata = {
                 'transaction_id': values['TransactionId'],
                 'transaction_time': values['TransactionTime'],
@@ -114,13 +148,15 @@ class MTNRwandaUSSDTransport(Transport):
 
         return self.publish_message(
                 message_id=message_id,
-                content=values['USSDRequestString'],
+                content=content,
                 from_addr=values['MSISDN'],
                 to_addr=values['USSDServiceCode'],
+                session_event=session_event,
                 transport_type=self.transport_type,
                 transport_metadata={'mtn_rwanda_ussd': metadata}
                 )
 
+    @inlineCallbacks
     def finish_request(self, request_id, data, session_event):
         request = self.get_request(request_id)
         del request['USSDRequestString']
@@ -130,6 +166,7 @@ class MTNRwandaUSSDTransport(Transport):
             request['action'] = 'request'
         elif session_event == TransportUserMessage.SESSION_CLOSE:
             request['action'] = 'end'
+            yield self.session_manager.clear_session(request['TransactionId'])
         elif session_event == TransportUserMessage.SESSION_RESUME:
             request['action'] = 'notify'
         self.set_request(request_id, request)

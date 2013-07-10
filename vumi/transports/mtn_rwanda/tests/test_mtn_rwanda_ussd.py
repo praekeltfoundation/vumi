@@ -16,12 +16,14 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
 
     transport_class = MTNRwandaUSSDTransport
     transport_name = 'test_mtn_rwanda_ussd_transport'
+    session_id = 'session_id'
 
     EXPECTED_INBOUND_PAYLOAD = {
             'message_id': '',
-            'content': '',
+            'content': None,
             'from_addr': '',    # msisdn
             'to_addr': '',      # service code
+            'session_event': TransportUserMessage.SESSION_RESUME,
             'transport_name': transport_name,
             'transport_type': 'ussd',
             'transport_metadata': {
@@ -45,6 +47,7 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
         })
         self.transport = yield self.get_transport(config)
         self.transport.callLater = self.clock.callLater
+        self.session_manager = self.transport.session_manager
 
     def test_transport_creation(self):
         self.assertIsInstance(self.transport, MTNRwandaUSSDTransport)
@@ -82,19 +85,23 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
             'TransactionTime': '2013-07-05T22:58:47.565596'
             })
         [msg] = yield self.wait_for_dispatched_messages(1)
-        yield self.assert_inbound_message(self.EXPECTED_INBOUND_PAYLOAD.copy(),
-                                          msg,
-                                          from_addr='275551234',
-                                          to_addr='543',
-                                          content='14321*1000#')
+        yield self.assert_inbound_message(
+                self.EXPECTED_INBOUND_PAYLOAD.copy(),
+                msg,
+                from_addr='275551234',
+                to_addr='543',
+                session_event=TransportUserMessage.SESSION_NEW)
+
         expected_reply = {'MSISDN': '275551234',
                           'TransactionId': '0001',
                           'TransactionTime': datetime.now().isoformat(),
                           'USSDEncoding': 'GSM0338',
                           'USSDResponseString': 'Test message',
-                          'USSDServiceCode': '543'}
+                          'USSDServiceCode': '543',
+                          'action': 'end'}
 
-        reply = self.mk_reply(msg, expected_reply['USSDResponseString'])
+        reply = self.mk_reply(msg, expected_reply['USSDResponseString'],
+                continue_session=False)
 
         self.dispatch(reply)
         received_text = yield x
