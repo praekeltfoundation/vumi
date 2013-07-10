@@ -106,16 +106,16 @@ class MTNRwandaUSSDTransport(Transport):
             return True
 
     @inlineCallbacks
-    def determine_session_event(self, session_id, values, event):
+    def determine_session_event(self, session_id, value):
         session = yield self.session_manager.load_session(session_id)
         if session:
+            self._event[session_id] = TransportUserMessage.SESSION_RESUME
             yield self.session_manager.save_session(session_id, session)
-            event[session_id] = TransportUserMessage.SESSION_RESUME
         else:
+            self._event[session_id] = TransportUserMessage.SESSION_NEW
             yield self.session_manager.create_session(
-                    session_id, from_addr=values['MSISDN'],
-                    to_addr=values['USSDServiceCode'])
-            event[session_id] = TransportUserMessage.SESSION_NEW
+                    session_id, from_addr=value['MSISDN'],
+                    to_addr=value['USSDServiceCode'])
 
     def handle_raw_inbound_request(self, message_id, values, d):
         """
@@ -133,9 +133,9 @@ class MTNRwandaUSSDTransport(Transport):
             return
 
         session_id = values['TransactionId']
-        event = {}
-        self.determine_session_event(session_id, values, event)
-        session_event = event[session_id]
+        self._event = {}
+        self.determine_session_event(session_id, values)
+        session_event = self._event[session_id]
         if session_event == TransportUserMessage.SESSION_RESUME:
             content = values['USSDRequestString']
         else:
