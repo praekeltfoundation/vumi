@@ -13,6 +13,6 @@ txredis
 python-smpp
 pytz
 riakasaurus>=1.1.0
-riak
+riak==1.5.2
 https://github.com/dustin/twitty-twister/tarball/master#egg=twittytwister-0.1.1
 txJSON-RPC==0.3.1
