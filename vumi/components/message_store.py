@@ -224,7 +224,7 @@ class MessageStore(object):
 
         msg_record = yield self.outbound_messages.load(msg_id)
         if msg_record is not None:
-            for batch_id in msg_record.batches:
+            for batch_id in msg_record.batches.keys():
                 yield self.cache.add_event(batch_id, event)
 
     @Manager.calls_manager
