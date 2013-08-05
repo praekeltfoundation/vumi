@@ -201,7 +201,7 @@ class MessageStore(object):
                 batch_id = tag_record.current_batch.key
 
         if batch_id is not None:
-            msg_record.batch.key = batch_id
+            msg_record.batches.add_key(batch_id)
             yield self.cache.add_outbound_message(batch_id, msg)
 
         yield msg_record.save()
@@ -224,8 +224,7 @@ class MessageStore(object):
 
         msg_record = yield self.outbound_messages.load(msg_id)
         if msg_record is not None:
-            batch_id = msg_record.batch.key
-            if batch_id is not None:
+            for batch_id in msg_record.batches:
                 yield self.cache.add_event(batch_id, event)
 
     @Manager.calls_manager
@@ -248,7 +247,7 @@ class MessageStore(object):
                 batch_id = tag_record.current_batch.key
 
         if batch_id is not None:
-            msg_record.batch.key = batch_id
+            msg_record.batches.add_key(batch_id)
             self.cache.add_inbound_message(batch_id, msg)
 
         yield msg_record.save()
@@ -272,17 +271,17 @@ class MessageStore(object):
         return self.cache.get_event_status(batch_id)
 
     def batch_outbound_keys(self, batch_id):
-        return self.outbound_messages.index_keys('batch', batch_id)
+        return self.outbound_messages.index_keys('batches', batch_id)
 
     def batch_outbound_keys_matching(self, batch_id, query):
-        mr = self.outbound_messages.index_match(query, 'batch', batch_id)
+        mr = self.outbound_messages.index_match(query, 'batches', batch_id)
         return mr.get_keys()
 
     def batch_inbound_keys(self, batch_id):
-        return self.inbound_messages.index_keys('batch', batch_id)
+        return self.inbound_messages.index_keys('batches', batch_id)
 
     def batch_inbound_keys_matching(self, batch_id, query):
-        mr = self.inbound_messages.index_match(query, 'batch', batch_id)
+        mr = self.inbound_messages.index_match(query, 'batches', batch_id)
         return mr.get_keys()
 
     def message_event_keys(self, msg_id):
