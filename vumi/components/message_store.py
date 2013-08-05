@@ -14,6 +14,8 @@ from vumi.persist.fields import (
 from vumi.persist.txriak_manager import TxRiakManager
 from vumi import log
 from vumi.components.message_store_cache import MessageStoreCache
+from vumi.components.message_store_migrators import (
+    InboundMessageMigrator, OutboundMessageMigrator)
 
 
 class Batch(Model):
@@ -59,6 +61,10 @@ class CurrentTag(Model):
 
 
 class OutboundMessage(Model):
+
+    VERSION = 1
+    MIGRATOR = OutboundMessageMigrator
+
     # key is message_id
     msg = VumiMessage(TransportUserMessage)
     batches = ManyToMany(Batch)
@@ -71,6 +77,10 @@ class Event(Model):
 
 
 class InboundMessage(Model):
+
+    VERSION = 1
+    MIGRATOR = InboundMessageMigrator
+
     # key is message_id
     msg = VumiMessage(TransportUserMessage)
     batches = ManyToMany(Batch)
