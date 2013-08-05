@@ -181,6 +181,17 @@ class TestMessageStore(TestMessageStoreBase):
         self.assertEqual(batch_status, self._batch_status(sent=1))
 
     @inlineCallbacks
+    def test_add_outbound_message_to_multiple_batches(self):
+        msg_id, msg, batch_id_1 = yield self._create_outbound()
+        batch_id_2 = yield self.store.batch_start()
+        yield self.store.add_outbound_message(msg, batch_id=batch_id_2)
+
+        self.assertEqual((yield self.store.batch_outbound_keys(batch_id_1)),
+                         [msg_id])
+        self.assertEqual((yield self.store.batch_outbound_keys(batch_id_2)),
+                         [msg_id])
+
+    @inlineCallbacks
     def test_add_ack_event(self):
         msg_id, msg, batch_id = yield self._create_outbound()
         ack = self.mkmsg_ack(user_message_id=msg_id)
@@ -316,6 +327,17 @@ class TestMessageStore(TestMessageStoreBase):
 
         self.assertEqual(stored_msg, msg)
         self.assertEqual(inbound_keys, [msg_id])
+
+    @inlineCallbacks
+    def test_add_inbound_message_to_multiple_batches(self):
+        msg_id, msg, batch_id_1 = yield self._create_inbound()
+        batch_id_2 = yield self.store.batch_start()
+        yield self.store.add_inbound_message(msg, batch_id=batch_id_2)
+
+        self.assertEqual((yield self.store.batch_inbound_keys(batch_id_1)),
+                         [msg_id])
+        self.assertEqual((yield self.store.batch_inbound_keys(batch_id_2)),
+                         [msg_id])
 
     @inlineCallbacks
     def test_inbound_counts(self):
