@@ -159,7 +159,7 @@ class MessageStore(object):
             yield self.cache.add_event(batch_id, event)
 
     @Manager.calls_manager
-    def batch_start(self, tags, **metadata):
+    def batch_start(self, tags=(), **metadata):
         batch_id = uuid4().get_hex()
         batch = self.batches(batch_id)
         batch.tags.extend(tags)
