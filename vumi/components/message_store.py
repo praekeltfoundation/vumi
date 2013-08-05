@@ -9,8 +9,8 @@ from twisted.internet.defer import returnValue, inlineCallbacks
 
 from vumi.message import TransportEvent, TransportUserMessage
 from vumi.persist.model import Model, Manager
-from vumi.persist.fields import (VumiMessage, ForeignKey, ListOf, Tag, Dynamic,
-                                 Unicode)
+from vumi.persist.fields import (
+    VumiMessage, ForeignKey, ManyToMany, ListOf, Tag, Dynamic, Unicode)
 from vumi.persist.txriak_manager import TxRiakManager
 from vumi import log
 from vumi.components.message_store_cache import MessageStoreCache
@@ -61,7 +61,7 @@ class CurrentTag(Model):
 class OutboundMessage(Model):
     # key is message_id
     msg = VumiMessage(TransportUserMessage)
-    batch = ForeignKey(Batch, null=True)
+    batches = ManyToMany(Batch)
 
 
 class Event(Model):
@@ -73,7 +73,7 @@ class Event(Model):
 class InboundMessage(Model):
     # key is message_id
     msg = VumiMessage(TransportUserMessage)
-    batch = ForeignKey(Batch, null=True)
+    batches = ManyToMany(Batch)
 
 
 class MessageStore(object):
