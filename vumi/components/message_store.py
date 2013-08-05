@@ -132,7 +132,6 @@ class MessageStore(object):
 
     @Manager.calls_manager
     def reconcile_inbound_cache(self, batch_id):
-        # FIXME: We're loading messages one at a time here, which is stupid.
         inbound_keys = yield self.batch_inbound_keys(batch_id)
         for key in inbound_keys:
             try:
@@ -143,7 +142,6 @@ class MessageStore(object):
 
     @Manager.calls_manager
     def reconcile_outbound_cache(self, batch_id):
-        # FIXME: We're loading messages one at a time here, which is stupid.
         outbound_keys = yield self.batch_outbound_keys(batch_id)
         for key in outbound_keys:
             try:
