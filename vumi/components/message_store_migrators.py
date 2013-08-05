@@ -10,13 +10,17 @@ class OutboundMessageMigrator(ModelMigrator):
         mdata.set_value('$VERSION', 1)
 
         # Copy stuff that hasn't changed between versions
-        mdata.copy_values('msg')
+        msg_fields = [k for k, v in mdata.old_data.iteritems()
+                      if k.startswith('msg.')]
+        mdata.copy_values(*msg_fields)
 
         # Migrate batch -> batches
         batches = mdata.old_index.get('batch_bin', [])
         mdata.set_value('batches', batches)
         for batch_id in batches:
             mdata.add_index('batches_bin', batch_id)
+
+        return mdata
 
 
 class InboundMessageMigrator(ModelMigrator):
@@ -25,10 +29,14 @@ class InboundMessageMigrator(ModelMigrator):
         mdata.set_value('$VERSION', 1)
 
         # Copy stuff that hasn't changed between versions
-        mdata.copy_values('msg')
+        msg_fields = [k for k, v in mdata.old_data.iteritems()
+                      if k.startswith('msg.')]
+        mdata.copy_values(*msg_fields)
 
         # Migrate batch -> batches
         batches = mdata.old_index.get('batch_bin', [])
         mdata.set_value('batches', batches)
         for batch_id in batches:
             mdata.add_index('batches_bin', batch_id)
+
+        return mdata

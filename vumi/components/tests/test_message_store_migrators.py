@@ -46,6 +46,16 @@ class OutboundMessageMigratorTestCase(TestMigratorBase):
         self.assertEqual(new_record.msg, msg)
         self.assertEqual(new_record.batches.keys(), [old_batch.key])
 
+    @inlineCallbacks
+    def test_migrate_vnone_to_v1_without_batch(self):
+        msg = self.mkmsg_out()
+        old_record = self.outbound_vnone(msg["message_id"],
+                                         msg=msg, batch=None)
+        yield old_record.save()
+        new_record = yield self.outbound_v1.load(old_record.key)
+        self.assertEqual(new_record.msg, msg)
+        self.assertEqual(new_record.batches.keys(), [])
+
 
 class InboundMessageMigratorTestCase(TestMigratorBase):
 
@@ -66,3 +76,13 @@ class InboundMessageMigratorTestCase(TestMigratorBase):
         new_record = yield self.inbound_v1.load(old_record.key)
         self.assertEqual(new_record.msg, msg)
         self.assertEqual(new_record.batches.keys(), [old_batch.key])
+
+    @inlineCallbacks
+    def test_migrate_vnone_to_v1_without_batch(self):
+        msg = self.mkmsg_in()
+        old_record = self.inbound_vnone(msg["message_id"],
+                                        msg=msg, batch=None)
+        yield old_record.save()
+        new_record = yield self.inbound_v1.load(old_record.key)
+        self.assertEqual(new_record.msg, msg)
+        self.assertEqual(new_record.batches.keys(), [])
