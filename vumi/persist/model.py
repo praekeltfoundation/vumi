@@ -265,6 +265,19 @@ class Model(object):
         return manager.load_all_bunches(cls, keys)
 
     @classmethod
+    def all_keys(cls, manager):
+        """Return all keys that are part of this model's bucket.
+
+        Use's Riak's special `$bucket` index. Beware of tombstones (i.e.
+        the keys returned might have been deleted from Riak in the near past).
+
+        :returns:
+            List of keys from this model's bucket.
+        """
+        return manager.index_keys(cls, '$bucket', manager.bucket_name(cls),
+                                  None)
+
+    @classmethod
     def index_keys(cls, manager, field_name, value):
         """Find objects by index.
 
@@ -671,6 +684,9 @@ class ModelProxy(object):
 
     def load_all_bunches(self, *args, **kw):
         return self._modelcls.load_all_bunches(self._manager, *args, **kw)
+
+    def all_keys(self):
+        return self._modelcls.all_keys(self._manager)
 
     def index_keys(self, field_name, value):
         return self._modelcls.index_keys(
