@@ -266,9 +266,9 @@ class Model(object):
 
     @classmethod
     def all_keys(cls, manager):
-        """Return all keys that are part of this model's bucket.
+        """Return all keys in this model's bucket.
 
-        Use's Riak's special `$bucket` index. Beware of tombstones (i.e.
+        Uses Riak's special `$bucket` index. Beware of tombstones (i.e.
         the keys returned might have been deleted from Riak in the near past).
 
         :returns:
