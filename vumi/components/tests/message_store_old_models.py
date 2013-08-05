@@ -8,18 +8,24 @@ from vumi.persist.fields import (
 
 
 class BatchVNone(Model):
+    bucket = 'batch'
+
     # key is batch_id
     tags = ListOf(Tag())
     metadata = Dynamic(Unicode())
 
 
 class OutboundMessageVNone(Model):
+    bucket = 'outboundmessage'
+
     # key is message_id
     msg = VumiMessage(TransportUserMessage)
     batch = ForeignKey(BatchVNone, null=True)
 
 
 class InboundMessageVNone(Model):
+    bucket = 'inboundmessage'
+
     # key is message_id
     msg = VumiMessage(TransportUserMessage)
     batch = ForeignKey(BatchVNone, null=True)
