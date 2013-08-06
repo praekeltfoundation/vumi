@@ -28,6 +28,26 @@ class Options(usage.Options):
             raise usage.UsageError("Please specify a bucket prefix.")
 
 
+class ProgressEmitter(object):
+    """Report progress as a percentage to an emitter."""
+
+    def __init__(self, total, emit):
+        self.emit = emit
+        self.total = total
+        self.percentage = 0
+
+    def _calculate_percentage(self, value):
+        if value == 0:
+            return 0
+        return int(value * 100.0 / self.total)
+
+    def update(self, value):
+        old_percentage = self.percentage
+        self.percentage = self._calculate_percentage(value)
+        if self.percentage != old_percentage:
+            self.emit(self.percentage)
+
+
 class ConfigHolder(object):
     def __init__(self, options):
         self.options = options
@@ -42,10 +62,20 @@ class ConfigHolder(object):
         print s
 
     def run(self):
-        for key in self.model.all_keys():
-            obj = self.model.load(key)
-            if obj is not None:
-                obj.save()
+        keys = self.model.all_keys()
+        progress = ProgressEmitter(
+            len(keys),
+            lambda p: self.emit("%s complete." % (p,))
+        )
+        for i, key in enumerate(keys):
+            try:
+                obj = self.model.load(key)
+                if obj is not None:
+                    obj.save()
+            except Exception, e:
+                self.emit("Failed to migrate key: %r" % (key,))
+                self.emit(str(e))
+            progress.update(i)
 
 
 if __name__ == '__main__':
