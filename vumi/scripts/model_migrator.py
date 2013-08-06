@@ -76,9 +76,11 @@ class ConfigHolder(object):
                 obj = self.model.load(key)
                 if obj is not None:
                     obj.save()
+                else:
+                    self.emit("Skipping tombstone key %r." % (key,))
             except Exception, e:
-                self.emit("Failed to migrate key: %r" % (key,))
-                self.emit(str(e))
+                self.emit("Failed to migrate key %r:" % (key,))
+                self.emit("  %s: %s" % (type(e).__name__, e))
             progress.update(i)
         self.emit("Done.")
 

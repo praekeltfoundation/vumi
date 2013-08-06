@@ -41,7 +41,12 @@ class ModelMigratorTestCase(TestCase, PersistenceMixin):
     def tearDown(self):
         return self._persist_tearDown()
 
-    def make_cfg(self, args):
+    def make_cfg(self, args=None):
+        if args is None:
+            args = [
+                "-m", self.model_cls_path,
+                "-b", self.expected_bucket_prefix,
+            ]
         options = Options()
         options.parseOptions(args)
         return TestConfigHolder(self, options)
@@ -50,6 +55,11 @@ class ModelMigratorTestCase(TestCase, PersistenceMixin):
         self.assertEqual(config.get('bucket_prefix'),
                          self.expected_bucket_prefix)
         return self.riak_manager
+
+    def mk_simple_models(self, n):
+        for i in range(n):
+            obj = self.model(u"key-%d" % i, a=u"value-%d" % i)
+            obj.save()
 
     def test_model_class_required(self):
         self.assertRaises(usage.UsageError, self.make_cfg, [
@@ -62,19 +72,71 @@ class ModelMigratorTestCase(TestCase, PersistenceMixin):
         ])
 
     def test_successful_migration(self):
-        for i in range(3):
-            obj = self.model(u"key-%d" % i, a=u"value-%d" % i)
-            obj.save()
-        cfg = self.make_cfg([
-            "-m", self.model_cls_path,
-            "-b", self.expected_bucket_prefix,
-        ])
+        self.mk_simple_models(3)
+
+        loads, stores = [], []
+        orig_load = self.riak_manager.load
+
+        def record_load(modelcls, key, result=None):
+            loads.append(key)
+            return orig_load(modelcls, key, result=result)
+
+        self.patch(self.riak_manager, 'load', record_load)
+
+        def record_store(obj):
+            stores.append(obj.key)
+
+        self.patch(self.riak_manager, 'store', record_store)
+
+        cfg = self.make_cfg()
         cfg.run()
         self.assertEqual(cfg.output, [
             "3 keys found. Migrating ...",
             "33% complete.", "66% complete.",
             "Done.",
         ])
+        self.assertEqual(sorted(loads), [u"key-%d" % i for i in range(3)])
+        self.assertEqual(sorted(stores), [u"key-%d" % i for i in range(3)])
+
+    def test_migration_with_tombstones(self):
+        self.mk_simple_models(3)
+
+        def tombstone_load(modelcls, key, result=None):
+            return None
+
+        self.patch(self.riak_manager, 'load', tombstone_load)
+
+        cfg = self.make_cfg()
+        cfg.run()
+        self.assertEqual(cfg.output, [
+            "3 keys found. Migrating ...",
+            "Skipping tombstone key 'key-0'.",
+            "Skipping tombstone key 'key-1'.",
+            "33% complete.",
+            "Skipping tombstone key 'key-2'.",
+            "66% complete.",
+            "Done.",
+        ])
 
     def test_migration_with_failures(self):
-        pass
+        self.mk_simple_models(3)
+
+        def error_load(modelcls, key, result=None):
+            raise ValueError("Failed to load.")
+
+        self.patch(self.riak_manager, 'load', error_load)
+
+        cfg = self.make_cfg()
+        cfg.run()
+        self.assertEqual(cfg.output, [
+            "3 keys found. Migrating ...",
+            "Failed to migrate key 'key-0':",
+            "  ValueError: Failed to load.",
+            "Failed to migrate key 'key-1':",
+            "  ValueError: Failed to load.",
+            "33% complete.",
+            "Failed to migrate key 'key-2':",
+            "  ValueError: Failed to load.",
+            "66% complete.",
+            "Done.",
+        ])
