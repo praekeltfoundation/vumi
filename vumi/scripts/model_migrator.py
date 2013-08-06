@@ -52,7 +52,7 @@ class ProgressEmitter(object):
             self.emit(self.percentage)
 
 
-class ConfigHolder(object):
+class ModelMigrator(object):
     def __init__(self, options):
         self.options = options
         model_cls = load_class_by_string(options['model'])

@@ -5,7 +5,7 @@ from twisted.trial.unittest import TestCase
 
 from vumi.persist.model import Model
 from vumi.persist.fields import Unicode
-from vumi.scripts.model_migrator import ConfigHolder, Options
+from vumi.scripts.model_migrator import ModelMigrator, Options
 from vumi.tests.utils import PersistenceMixin
 
 
@@ -13,11 +13,11 @@ class SimpleModel(Model):
     a = Unicode()
 
 
-class TestConfigHolder(ConfigHolder):
+class TestModelMigrator(ModelMigrator):
     def __init__(self, testcase, *args, **kwargs):
         self.testcase = testcase
         self.output = []
-        super(TestConfigHolder, self).__init__(*args, **kwargs)
+        super(TestModelMigrator, self).__init__(*args, **kwargs)
 
     def emit(self, s):
         self.output.append(s)
@@ -45,12 +45,12 @@ class ModelMigratorTestCase(TestCase, PersistenceMixin):
     def tearDown(self):
         return self._persist_tearDown()
 
-    def make_cfg(self, args=None):
+    def make_migrator(self, args=None):
         if args is None:
             args = self.default_args
         options = Options()
         options.parseOptions(args)
-        return TestConfigHolder(self, options)
+        return TestModelMigrator(self, options)
 
     def get_sub_riak(self, config):
         self.assertEqual(config.get('bucket_prefix'),
@@ -63,12 +63,12 @@ class ModelMigratorTestCase(TestCase, PersistenceMixin):
             obj.save()
 
     def test_model_class_required(self):
-        self.assertRaises(usage.UsageError, self.make_cfg, [
+        self.assertRaises(usage.UsageError, self.make_migrator, [
             "-b", self.expected_bucket_prefix,
         ])
 
     def test_bucket_required(self):
-        self.assertRaises(usage.UsageError, self.make_cfg, [
+        self.assertRaises(usage.UsageError, self.make_migrator, [
             "-m", self.model_cls_path,
         ])
 
@@ -89,7 +89,7 @@ class ModelMigratorTestCase(TestCase, PersistenceMixin):
 
         self.patch(self.riak_manager, 'store', record_store)
 
-        cfg = self.make_cfg()
+        cfg = self.make_migrator()
         cfg.run()
         self.assertEqual(cfg.output, [
             "3 keys found. Migrating ...",
@@ -107,7 +107,7 @@ class ModelMigratorTestCase(TestCase, PersistenceMixin):
 
         self.patch(self.riak_manager, 'load', tombstone_load)
 
-        cfg = self.make_cfg()
+        cfg = self.make_migrator()
         cfg.run()
         for i in range(3):
             self.assertTrue(("Skipping tombstone key 'key-%d'." % i)
@@ -128,7 +128,7 @@ class ModelMigratorTestCase(TestCase, PersistenceMixin):
 
         self.patch(self.riak_manager, 'load', error_load)
 
-        cfg = self.make_cfg()
+        cfg = self.make_migrator()
         cfg.run()
         line_pairs = zip(cfg.output, cfg.output[1:])
         for i in range(3):
@@ -154,7 +154,7 @@ class ModelMigratorTestCase(TestCase, PersistenceMixin):
 
         self.patch(self.riak_manager, 'store', record_store)
 
-        cfg = self.make_cfg(self.default_args + ["--dry-run"])
+        cfg = self.make_migrator(self.default_args + ["--dry-run"])
         cfg.run()
         self.assertEqual(cfg.output, [
             "3 keys found. Migrating ...",
