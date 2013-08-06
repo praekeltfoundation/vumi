@@ -37,16 +37,17 @@ class ModelMigratorTestCase(TestCase, PersistenceMixin):
         self.model_cls_path = ".".join([
             SimpleModel.__module__, SimpleModel.__name__])
         self.expected_bucket_prefix = "bucket"
+        self.default_args = [
+            "-m", self.model_cls_path,
+            "-b", self.expected_bucket_prefix,
+        ]
 
     def tearDown(self):
         return self._persist_tearDown()
 
     def make_cfg(self, args=None):
         if args is None:
-            args = [
-                "-m", self.model_cls_path,
-                "-b", self.expected_bucket_prefix,
-            ]
+            args = self.default_args
         options = Options()
         options.parseOptions(args)
         return TestConfigHolder(self, options)
@@ -142,3 +143,22 @@ class ModelMigratorTestCase(TestCase, PersistenceMixin):
             "66% complete.",
             "Done.",
         ])
+
+    def test_dry_run(self):
+        self.mk_simple_models(3)
+
+        stores = []
+
+        def record_store(obj):
+            stores.append(obj.key)
+
+        self.patch(self.riak_manager, 'store', record_store)
+
+        cfg = self.make_cfg(self.default_args + ["--dry-run"])
+        cfg.run()
+        self.assertEqual(cfg.output, [
+            "3 keys found. Migrating ...",
+            "33% complete.", "66% complete.",
+            "Done.",
+        ])
+        self.assertEqual(sorted(stores), [])

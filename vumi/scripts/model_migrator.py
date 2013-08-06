@@ -16,6 +16,10 @@ class Options(usage.Options):
          "The bucket prefix for the Riak manager."],
     ]
 
+    optFlags = [
+        ["dry-run", None, "Don't save anything back to Riak."],
+    ]
+
     longdesc = """Offline model migrator. Necessary for updating
                   models when index names change so that old model
                   instances remain findable by index searches.
@@ -65,6 +69,7 @@ class ConfigHolder(object):
         print s
 
     def run(self):
+        dry_run = self.options["dry-run"]
         keys = self.model.all_keys()
         self.emit("%d keys found. Migrating ..." % len(keys))
         progress = ProgressEmitter(
@@ -75,7 +80,8 @@ class ConfigHolder(object):
             try:
                 obj = self.model.load(key)
                 if obj is not None:
-                    obj.save()
+                    if not dry_run:
+                        obj.save()
                 else:
                     self.emit("Skipping tombstone key %r." % (key,))
             except Exception, e:
