@@ -22,9 +22,9 @@ class Options(usage.Options):
                   """
 
     def postOptions(self):
-        if self.options['model'] is None:
+        if self['model'] is None:
             raise usage.UsageError("Please specify a model class.")
-        if self.options['bucket_prefix'] is None:
+        if self['bucket-prefix'] is None:
             raise usage.UsageError("Please specify a bucket prefix.")
 
 
@@ -55,17 +55,21 @@ class ConfigHolder(object):
         riak_config = {
             'bucket_prefix': options['bucket-prefix'],
         }
-        manager = RiakManager.from_config(riak_config)
+        manager = self.get_riak_manager(riak_config)
         self.model = manager.proxy(model_cls)
+
+    def get_riak_manager(self, riak_config):
+        return RiakManager.from_config(riak_config)
 
     def emit(self, s):
         print s
 
     def run(self):
         keys = self.model.all_keys()
+        self.emit("%d keys found. Migrating ..." % len(keys))
         progress = ProgressEmitter(
             len(keys),
-            lambda p: self.emit("%s complete." % (p,))
+            lambda p: self.emit("%s%% complete." % (p,))
         )
         for i, key in enumerate(keys):
             try:
@@ -76,6 +80,7 @@ class ConfigHolder(object):
                 self.emit("Failed to migrate key: %r" % (key,))
                 self.emit(str(e))
             progress.update(i)
+        self.emit("Done.")
 
 
 if __name__ == '__main__':
