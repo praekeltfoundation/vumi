@@ -108,12 +108,13 @@ class ModelMigratorTestCase(TestCase, PersistenceMixin):
 
         cfg = self.make_cfg()
         cfg.run()
-        self.assertEqual(cfg.output, [
+        for i in range(3):
+            self.assertTrue(("Skipping tombstone key 'key-%d'." % i)
+                            in cfg.output)
+        self.assertEqual(cfg.output[:1], [
             "3 keys found. Migrating ...",
-            "Skipping tombstone key 'key-0'.",
-            "Skipping tombstone key 'key-1'.",
-            "33% complete.",
-            "Skipping tombstone key 'key-2'.",
+        ])
+        self.assertEqual(cfg.output[-2:], [
             "66% complete.",
             "Done.",
         ])
@@ -128,15 +129,16 @@ class ModelMigratorTestCase(TestCase, PersistenceMixin):
 
         cfg = self.make_cfg()
         cfg.run()
-        self.assertEqual(cfg.output, [
+        line_pairs = zip(cfg.output, cfg.output[1:])
+        for i in range(3):
+            self.assertTrue((
+                "Failed to migrate key 'key-0':",
+                "  ValueError: Failed to load.",
+            ) in line_pairs)
+        self.assertEqual(cfg.output[:1], [
             "3 keys found. Migrating ...",
-            "Failed to migrate key 'key-0':",
-            "  ValueError: Failed to load.",
-            "Failed to migrate key 'key-1':",
-            "  ValueError: Failed to load.",
-            "33% complete.",
-            "Failed to migrate key 'key-2':",
-            "  ValueError: Failed to load.",
+        ])
+        self.assertEqual(cfg.output[-2:], [
             "66% complete.",
             "Done.",
         ])
