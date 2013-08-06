@@ -4,37 +4,35 @@
 from vumi.persist.model import ModelMigrator
 
 
-class OutboundMessageMigrator(ModelMigrator):
-    def migrate_from_unversioned(self, mdata):
-        # set version
-        mdata.set_value('$VERSION', 1)
-
-        # Copy stuff that hasn't changed between versions
-        msg_fields = [k for k in mdata.old_data if k.startswith('msg.')]
+class MessageMigratorBase(ModelMigrator):
+    def _copy_msg_field(self, msg_field, mdata):
+        key_prefix = "%s." % (msg_field,)
+        msg_fields = [k for k in mdata.old_data if k.startswith(key_prefix)]
         mdata.copy_values(*msg_fields)
 
-        # Migrate batch -> batches
-        batches = mdata.old_index.get('batch_bin', [])
-        mdata.set_value('batches', batches)
-        for batch_id in batches:
-            mdata.add_index('batches_bin', batch_id)
+    def _foreign_key_to_many_to_many(self, foreign_key, many_to_many, mdata):
+        old_keys = mdata.old_index.get('%s_bin' % (foreign_key,), [])
+        mdata.set_value(many_to_many, old_keys)
+        many_to_many_index = '%s_bin' % (many_to_many,)
+        for old_key in old_keys:
+            mdata.add_index(many_to_many_index, old_key)
+
+
+class OutboundMessageMigrator(MessageMigratorBase):
+    def migrate_from_unversioned(self, mdata):
+        mdata.set_value('$VERSION', 1)
+
+        self._copy_msg_field('msg', mdata)
+        self._foreign_key_to_many_to_many('batch', 'batches', mdata)
 
         return mdata
 
 
-class InboundMessageMigrator(ModelMigrator):
+class InboundMessageMigrator(MessageMigratorBase):
     def migrate_from_unversioned(self, mdata):
-        # set version
         mdata.set_value('$VERSION', 1)
 
-        # Copy stuff that hasn't changed between versions
-        msg_fields = [k for k in mdata.old_data if k.startswith('msg.')]
-        mdata.copy_values(*msg_fields)
-
-        # Migrate batch -> batches
-        batches = mdata.old_index.get('batch_bin', [])
-        mdata.set_value('batches', batches)
-        for batch_id in batches:
-            mdata.add_index('batches_bin', batch_id)
+        self._copy_msg_field('msg', mdata)
+        self._foreign_key_to_many_to_many('batch', 'batches', mdata)
 
         return mdata
