@@ -579,7 +579,7 @@ class Manager(object):
         raise NotImplementedError("Sub-classes of Manager should implement"
                                   " .delete(...)")
 
-    def load(self, cls, key):
+    def load(self, cls, key, result=None):
         """Load a model instance for the key from Riak.
 
         If the key doesn't exist, this method should return None
