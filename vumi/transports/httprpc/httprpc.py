@@ -122,6 +122,7 @@ class HttpRpcTransport(Transport):
         self.request_timeout_body = config.request_timeout_body
         self.gc_requests_interval = config.request_cleanup_interval
         self._validation_mode = config.validation_mode
+        self._to_addr_cache = {}
         if self._validation_mode not in self.KNOWN_VALIDATION_MODES:
             raise ConfigError('Invalid validation mode: %s' % (
                 self._validation_mode,))
@@ -194,8 +195,7 @@ class HttpRpcTransport(Transport):
                 self.close_request(request_id)
 
     def close_request(self, request_id):
-        request = self.get_request(request_id)
-        log.warning('Timing out %s' % (request.path,))
+        log.warning('Timing out %s' % (self.get_cached_to_addr(request_id),))
         self.finish_request(request_id, self.request_timeout_body,
                             self.request_timeout_status_code)
 
@@ -247,6 +247,7 @@ class HttpRpcTransport(Transport):
         self.emit("HttpRpcTransport.finish_request with data: %s" % (
             repr(data),))
         request = self.get_request(request_id)
+        self.clear_cached_to_addr(request_id)
         if request:
             for h_name, h_values in headers.iteritems():
                 request.responseHeaders.setRawHeaders(h_name, h_values)
@@ -258,3 +259,24 @@ class HttpRpcTransport(Transport):
                                         request.client.port,
                                         Transport.generate_message_id())
             return response_id
+
+    # NOTE: This hackery is required so that we know what to_addr a message
+    #       was received on. This is useful so we can log more useful debug
+    #       information when something goes wrong, like a timeout for example.
+    #
+    #       Since all the different transports that subclass this
+    #       base class have different implementations for retreiving the
+    #       to_addr it's impossible to grab this information higher up
+    #       in a consistent manner.
+    def publish_message(self, **kwargs):
+        self.cache_to_addr(kwargs['message_id'], kwargs['to_addr'])
+        return super(HttpRpcTransport, self).publish_message(**kwargs)
+
+    def cache_to_addr(self, request_id, to_addr):
+        self._to_addr_cache[request_id] = to_addr
+
+    def get_cached_to_addr(self, request_id):
+        return self._to_addr_cache.get(request_id)
+
+    def clear_cached_to_addr(self, request_id):
+        return self._to_addr_cache.pop(request_id, None)
