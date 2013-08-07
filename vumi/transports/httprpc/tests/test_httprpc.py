@@ -4,6 +4,7 @@ from twisted.internet.defer import inlineCallbacks
 from twisted.internet.task import Clock
 
 from vumi.utils import http_request, http_request_full
+from vumi.tests.utils import LogCatcher
 from vumi.transports.tests.test_base import TransportTestCase
 from vumi.transports.httprpc import HttpRpcTransport
 from vumi.message import TransportUserMessage
@@ -15,7 +16,7 @@ class OkTransport(HttpRpcTransport):
         self.publish_message(
                 message_id=msgid,
                 content='',
-                to_addr='',
+                to_addr='to_addr',
                 from_addr='',
                 provider='',
                 session_event=TransportUserMessage.SESSION_NEW,
@@ -81,8 +82,11 @@ class TestTransport(TransportTestCase):
     def test_timeout(self):
         d = http_request_full(self.transport_url + "foo", '', method='GET')
         [msg] = yield self.wait_for_dispatched_messages(1)
-        self.clock.advance(10.1)  # .1 second after timeout
-        response = yield d
+        with LogCatcher(message='Timing') as lc:
+            self.clock.advance(10.1)  # .1 second after timeout
+            response = yield d
+            [warning] = lc.messages()
+            self.assertEqual(warning, 'Timing out to_addr')
         self.assertEqual(response.delivered_body, 'I am a teapot')
         self.assertEqual(response.code, 418)
 

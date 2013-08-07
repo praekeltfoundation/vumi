@@ -274,7 +274,7 @@ class HttpRpcTransport(Transport):
         return super(HttpRpcTransport, self).publish_message(**kwargs)
 
     def get_request_to_addr(self, request_id):
-        self._requests[request_id].get('to_addr', 'Unknown')
+        return self._requests[request_id].get('to_addr', 'Unknown')
 
     def set_request_to_addr(self, request_id, to_addr):
         if request_id in self._requests:
