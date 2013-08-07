@@ -122,7 +122,6 @@ class HttpRpcTransport(Transport):
         self.request_timeout_body = config.request_timeout_body
         self.gc_requests_interval = config.request_cleanup_interval
         self._validation_mode = config.validation_mode
-        self._to_addr_cache = {}
         if self._validation_mode not in self.KNOWN_VALIDATION_MODES:
             raise ConfigError('Invalid validation mode: %s' % (
                 self._validation_mode,))
