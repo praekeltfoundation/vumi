@@ -100,5 +100,5 @@ if __name__ == '__main__':
         print '%s: Try --help for usage details.' % (sys.argv[0])
         sys.exit(1)
 
-    cfg = ConfigHolder(options)
+    cfg = ModelMigrator(options)
     cfg.run()
