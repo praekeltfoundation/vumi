@@ -190,12 +190,13 @@ class HttpRpcTransport(Transport):
         return missing_fields
 
     def manually_close_requests(self):
-        for request_id, (timestamp, request) in self._requests.items():
+        for request_id, request_data in self._requests.items():
+            timestamp = request_data['timestamp']
             if timestamp < self.clock.seconds() - self.request_timeout:
                 self.close_request(request_id)
 
     def close_request(self, request_id):
-        log.warning('Timing out %s' % (self.get_cached_to_addr(request_id),))
+        log.warning('Timing out %s' % (self.get_request_to_addr(request_id),))
         self.finish_request(request_id, self.request_timeout_body,
                             self.request_timeout_status_code)
 
@@ -207,12 +208,14 @@ class HttpRpcTransport(Transport):
     def set_request(self, request_id, request_object, timestamp=None):
         if timestamp is None:
             timestamp = self.clock.seconds()
-        self._requests[request_id] = (timestamp, request_object)
+        self._requests[request_id] = {
+            'timestamp': timestamp,
+            'request': request_object,
+        }
 
     def get_request(self, request_id):
         if request_id in self._requests:
-            _, request = self._requests[request_id]
-            return request
+            return self._requests[request_id]['request']
 
     def remove_request(self, request_id):
         del self._requests[request_id]
@@ -247,7 +250,6 @@ class HttpRpcTransport(Transport):
         self.emit("HttpRpcTransport.finish_request with data: %s" % (
             repr(data),))
         request = self.get_request(request_id)
-        self.clear_cached_to_addr(request_id)
         if request:
             for h_name, h_values in headers.iteritems():
                 request.responseHeaders.setRawHeaders(h_name, h_values)
@@ -269,14 +271,12 @@ class HttpRpcTransport(Transport):
     #       to_addr it's impossible to grab this information higher up
     #       in a consistent manner.
     def publish_message(self, **kwargs):
-        self.cache_to_addr(kwargs['message_id'], kwargs['to_addr'])
+        self.set_request_to_addr(kwargs['message_id'], kwargs['to_addr'])
         return super(HttpRpcTransport, self).publish_message(**kwargs)
 
-    def cache_to_addr(self, request_id, to_addr):
-        self._to_addr_cache[request_id] = to_addr
+    def get_request_to_addr(self, request_id):
+        self._requests[request_id].get('to_addr', 'Unknown')
 
-    def get_cached_to_addr(self, request_id):
-        return self._to_addr_cache.get(request_id)
-
-    def clear_cached_to_addr(self, request_id):
-        return self._to_addr_cache.pop(request_id, None)
+    def set_request_to_addr(self, request_id, to_addr):
+        if request_id in self._requests:
+            self._requests[request_id]['to_addr'] = to_addr
