@@ -62,19 +62,7 @@ class ModelMigratorTestCase(TestCase, PersistenceMixin):
             obj = self.model(u"key-%d" % i, a=u"value-%d" % i)
             obj.save()
 
-    def test_model_class_required(self):
-        self.assertRaises(usage.UsageError, self.make_migrator, [
-            "-b", self.expected_bucket_prefix,
-        ])
-
-    def test_bucket_required(self):
-        self.assertRaises(usage.UsageError, self.make_migrator, [
-            "-m", self.model_cls_path,
-        ])
-
-    def test_successful_migration(self):
-        self.mk_simple_models(3)
-
+    def record_load_and_store(self):
         loads, stores = [], []
         orig_load = self.riak_manager.load
 
@@ -88,7 +76,21 @@ class ModelMigratorTestCase(TestCase, PersistenceMixin):
             stores.append(obj.key)
 
         self.patch(self.riak_manager, 'store', record_store)
+        return loads, stores
 
+    def test_model_class_required(self):
+        self.assertRaises(usage.UsageError, self.make_migrator, [
+            "-b", self.expected_bucket_prefix,
+        ])
+
+    def test_bucket_required(self):
+        self.assertRaises(usage.UsageError, self.make_migrator, [
+            "-m", self.model_cls_path,
+        ])
+
+    def test_successful_migration(self):
+        self.mk_simple_models(3)
+        loads, stores = self.record_load_and_store()
         cfg = self.make_migrator()
         cfg.run()
         self.assertEqual(cfg.output, [
@@ -144,16 +146,22 @@ class ModelMigratorTestCase(TestCase, PersistenceMixin):
             "Done.",
         ])
 
+    def test_migrating_specific_keys(self):
+        self.mk_simple_models(3)
+        loads, stores = self.record_load_and_store()
+        cfg = self.make_migrator(self.default_args + ["--keys", "key-1,key-2"])
+        cfg.run()
+        self.assertEqual(cfg.output, [
+            "Migrating 2 specified keys ...",
+            "50% complete.",
+            "Done.",
+        ])
+        self.assertEqual(sorted(loads), [u"key-1", u"key-2"])
+        self.assertEqual(sorted(stores), [u"key-1", u"key-2"])
+
     def test_dry_run(self):
         self.mk_simple_models(3)
-
-        stores = []
-
-        def record_store(obj):
-            stores.append(obj.key)
-
-        self.patch(self.riak_manager, 'store', record_store)
-
+        loads, stores = self.record_load_and_store()
         cfg = self.make_migrator(self.default_args + ["--dry-run"])
         cfg.run()
         self.assertEqual(cfg.output, [
@@ -161,4 +169,5 @@ class ModelMigratorTestCase(TestCase, PersistenceMixin):
             "33% complete.", "66% complete.",
             "Done.",
         ])
+        self.assertEqual(sorted(loads), [u"key-%d" % i for i in range(3)])
         self.assertEqual(sorted(stores), [])

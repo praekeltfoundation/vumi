@@ -14,6 +14,9 @@ class Options(usage.Options):
          " E.g. 'vumi.components.message_store.InboundMessage'."],
         ["bucket-prefix", "b", None,
          "The bucket prefix for the Riak manager."],
+        ["keys", None, None,
+         "Migrate these specific keys rather than the whole bucket."
+         " E.g. --keys 'foo,bar,baz'"],
     ]
 
     optFlags = [
@@ -70,8 +73,12 @@ class ModelMigrator(object):
 
     def run(self):
         dry_run = self.options["dry-run"]
-        keys = self.model.all_keys()
-        self.emit("%d keys found. Migrating ..." % len(keys))
+        if self.options["keys"] is not None:
+            keys = self.options["keys"].split(",")
+            self.emit("Migrating %d specified keys ..." % len(keys))
+        else:
+            keys = self.model.all_keys()
+            self.emit("%d keys found. Migrating ..." % len(keys))
         progress = ProgressEmitter(
             len(keys),
             lambda p: self.emit("%s%% complete." % (p,))
