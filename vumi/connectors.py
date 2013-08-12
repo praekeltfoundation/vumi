@@ -5,6 +5,10 @@ from vumi.message import TransportMessage, TransportEvent, TransportUserMessage
 from vumi.middleware import MiddlewareStack
 
 
+class IgnoreMessage(Exception):
+    pass
+
+
 class BaseConnector(object):
     """Base class for 'connector' objects.
 
@@ -89,13 +93,19 @@ class BaseConnector(object):
         if handler is None:
             handler = self._default_handlers.get(mtype)
         d = self._middlewares.apply_consume(mtype, msg, self.name)
-        return d.addCallback(handler)
+        d.addCallback(handler)
+        return d.addErrback(self._ignore_message, msg)
 
     def _publish_message(self, mtype, msg, endpoint_name):
         if endpoint_name is not None:
             msg.set_routing_endpoint(endpoint_name)
         d = self._middlewares.apply_publish(mtype, msg, self.name)
         return d.addCallback(self._publishers[mtype].publish_message)
+
+    def _ignore_message(self, failure, msg):
+        failure.trap(IgnoreMessage)
+        log.debug("Ignoring msg due to %r: %r" % (failure.value, msg))
+        return None
 
 
 class ReceiveInboundConnector(BaseConnector):
@@ -151,3 +161,9 @@ class ReceiveOutboundConnector(BaseConnector):
 
     def publish_event(self, msg, endpoint_name=None):
         return self._publish_message('event', msg, endpoint_name)
+
+    def _ignore_message(self, failure, msg):
+        failure.trap(IgnoreMessage)
+        log.debug("Ignoring msg due to %r: %r" % (failure.value, msg))
+        # TODO: NACK the message.
+        return None
