@@ -105,7 +105,6 @@ class BaseConnector(object):
     def _ignore_message(self, failure, msg):
         failure.trap(IgnoreMessage)
         log.debug("Ignoring msg due to %r: %r" % (failure.value, msg))
-        return None
 
 
 class ReceiveInboundConnector(BaseConnector):
