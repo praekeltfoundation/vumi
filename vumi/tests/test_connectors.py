@@ -287,7 +287,8 @@ class TestReceiveInboundConnector(BaseConnectorTestCase):
         with LogCatcher() as lc:
             yield self.dispatch_inbound(msg, connector_name='foo')
             [log] = lc.messages()
-            self.assertTrue(log.startswith("Ignoring msg due to"))
+            self.assertTrue(log.startswith(
+                "Ignoring msg due to IgnoreMessage(): <Message"))
 
 
 class TestReceiveOutboundConnector(BaseConnectorTestCase):
@@ -372,6 +373,7 @@ class TestReceiveOutboundConnector(BaseConnectorTestCase):
         with LogCatcher() as lc:
             yield self.dispatch_outbound(msg, connector_name='foo')
             [log] = lc.messages()
-            self.assertTrue(log.startswith("Ignoring msg (with NACK) due to"))
+            self.assertTrue(log.startswith(
+                "Ignoring msg (with NACK) due to IgnoreMessage(): <Message"))
         [event] = yield self.get_dispatched_events(connector_name='foo')
         self.assertEqual(event['event_type'], 'nack')
