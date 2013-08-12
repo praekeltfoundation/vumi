@@ -164,6 +164,8 @@ class ReceiveOutboundConnector(BaseConnector):
 
     def _ignore_message(self, failure, msg):
         failure.trap(IgnoreMessage)
-        log.debug("Ignoring msg due to %r: %r" % (failure.value, msg))
-        # TODO: NACK the message.
-        return None
+        log.debug("Ignoring msg (with NACK) due to %r: %r" % (
+            failure.value, msg))
+        return self.publish_event(TransportEvent(
+            user_message_id=msg['message_id'], nack_reason=str(failure.value),
+            event_type='nack'))
