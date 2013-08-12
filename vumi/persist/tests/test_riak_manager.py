@@ -89,8 +89,7 @@ class TestRiakManager(CommonRiakManagerTests, TestCase):
             'transport_type': 'protocol_buffer',
             'bucket_prefix': 'test.',
             })
-        from riak import RiakPbcTransport
-        self.assertEqual(type(manager.client._transport), RiakPbcTransport)
+        self.assertEqual(manager.client.protocol, 'pbc')
 
     def test_transport_class_http(self):
         manager_class = type(self.manager)
@@ -98,16 +97,14 @@ class TestRiakManager(CommonRiakManagerTests, TestCase):
             'transport_type': 'http',
             'bucket_prefix': 'test.',
             })
-        from riak import RiakHttpTransport
-        self.assertEqual(type(manager.client._transport), RiakHttpTransport)
+        self.assertEqual(manager.client.protocol, 'http')
 
     def test_transport_class_default(self):
         manager_class = type(self.manager)
         manager = manager_class.from_config({
             'bucket_prefix': 'test.',
             })
-        from riak import RiakHttpTransport
-        self.assertEqual(type(manager.client._transport), RiakHttpTransport)
+        self.assertEqual(manager.client.protocol, 'http')
 
     @Manager.calls_manager
     def test_json_decoding(self):
@@ -124,3 +121,18 @@ class TestRiakManager(CommonRiakManagerTests, TestCase):
         dummy2 = yield self.manager.load(DummyModel, "foo")
         self.assertEqual(dummy2.get_data(), {"a": "b"})
         self.assertTrue(isinstance(dummy2.get_data()["a"], unicode))
+
+    def test_bucket_for_modelcls(self):
+        dummy_cls = type(self.mkdummy("foo"))
+        bucket1 = self.manager.bucket_for_modelcls(dummy_cls)
+        bucket2 = self.manager.bucket_for_modelcls(dummy_cls)
+        self.assertEqual(id(bucket1), id(bucket2))
+        self.assertEqual(bucket1.name, "test.dummy_model")
+
+    def test_riak_object(self):
+        dummy = DummyModel(self.manager, "foo")
+        riak_object = self.manager.riak_object(dummy, "foo")
+        self.assertEqual(riak_object.get_data(), {'$VERSION': None})
+        self.assertEqual(riak_object.get_content_type(), "application/json")
+        self.assertEqual(riak_object.get_bucket().name, "test.dummy_model")
+        self.assertEqual(riak_object.key, "foo")

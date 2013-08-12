@@ -4,11 +4,76 @@
 
 import json
 
-from riak import (RiakClient, RiakObject, RiakMapReduce, RiakHttpTransport,
-                    RiakPbcTransport)
+from riak import RiakClient, RiakObject, RiakMapReduce
 
 from vumi.persist.model import Manager
 from vumi.utils import flatten_generator
+
+
+def mk_proxy_property(attr):
+    def getter(self):
+        return getattr(self._riak_object, attr)
+
+    def setter(self, value):
+        setattr(self._riak_object, attr, value)
+
+    return property(getter, setter)
+
+
+class RiakIndexWrapper(object):
+    def __init__(self, entry):
+        self.entry = entry
+
+    def get_field(self):
+        return self.entry[0]
+
+    def get_value(self):
+        return self.entry[1]
+
+
+class RiakObjectWrapper(object):
+    _riak_object = None
+
+    def __init__(self, riak_object):
+        self._riak_object = riak_object
+
+    key = mk_proxy_property('key')
+    data = mk_proxy_property('data')
+    _data = mk_proxy_property('data')
+    content_type = mk_proxy_property('content_type')
+    indexes = mk_proxy_property('indexes')
+    store = mk_proxy_property('store')
+    reload = mk_proxy_property('reload')
+    delete = mk_proxy_property('delete')
+    add_index = mk_proxy_property('add_index')
+    remove_index = mk_proxy_property('remove_index')
+
+    def set_data(self, value):
+        self._riak_object.data = value
+
+    def get_data(self):
+        return self._riak_object.data
+
+    def get_bucket(self):
+        return self._riak_object.bucket
+
+    def set_indexes(self, value):
+        self._riak_object.indexes = value
+
+    def get_indexes(self):
+        return [RiakIndexWrapper(entry) for entry in self._riak_object.indexes]
+
+    def set_encoded_data(self, value):
+        self._riak_object.encoded_data = value
+
+    def get_content_type(self):
+        return self._riak_object.content_type
+
+    def __setattr__(self, name, value):
+        # Make sure we catch attempts to set attributes we aren't proxying.
+        if not hasattr(self, name):
+            raise AttributeError(name)
+        super(RiakObjectWrapper, self).__setattr__(name, value)
 
 
 class RiakManager(Manager):
@@ -25,25 +90,26 @@ class RiakManager(Manager):
         mapreduce_timeout = config.pop('mapreduce_timeout',
                                        cls.DEFAULT_MAPREDUCE_TIMEOUT)
         transport_type = config.pop('transport_type', 'http')
-        transport_class = {
-            'http': RiakHttpTransport,
-            'protocol_buffer': RiakPbcTransport,
-        }.get(transport_type, RiakHttpTransport)
+        protocol, port_arg = {
+            'http': ('http', 'http_port'),
+            'https': ('https', 'http_port'),
+            'protocol_buffer': ('pbc', 'pb_port'),
+        }.get(transport_type, ('http', 'http_port'))
 
         host = config.get('host', '127.0.0.1')
         port = config.get('port', 8098)
-        prefix = config.get('prefix', 'riak')
-        mapred_prefix = config.get('mapred_prefix', 'mapred')
         client_id = config.get('client_id')
-        # NOTE: the current riak.RiakClient expects this parameter but
-        #       internally doesn't do anything with it.
-        solr_transport_class = config.get('solr_transport_class', None)
         transport_options = config.get('transport_options', None)
 
-        client = RiakClient(host=host, port=port, prefix=prefix,
-            mapred_prefix=mapred_prefix, transport_class=transport_class,
-            client_id=client_id, solr_transport_class=solr_transport_class,
-            transport_options=transport_options)
+        client_args = {
+            'protocol': protocol,
+            'host': host,
+            port_arg: port,
+            'client_id': client_id,
+        }
+        if 'transport_options' in config:
+            client_args['transport_options'] = config['transport_options']
+        client = RiakClient(**client_args)
         # Some versions of the riak client library use simplejson by
         # preference, which breaks some of our unicode assumptions. This makes
         # sure we're using stdlib json which doesn't sometimes return
@@ -57,7 +123,7 @@ class RiakManager(Manager):
 
     def riak_object(self, modelcls, key, result=None):
         bucket = self.bucket_for_modelcls(modelcls)
-        riak_object = RiakObject(self.client, bucket, key)
+        riak_object = RiakObjectWrapper(RiakObject(self.client, bucket, key))
         if result:
             metadata = result['metadata']
             indexes = metadata['index']
@@ -68,12 +134,12 @@ class RiakManager(Manager):
                 #       there are indexes?) it comes back as a dict.
                 indexes = indexes.items()
             data = result['data']
-            riak_object.set_content_type(metadata['content-type'])
-            riak_object.set_indexes(indexes)
+            riak_object.content_type = metadata['content-type']
+            riak_object.indexes = indexes
             riak_object.set_encoded_data(data)
         else:
-            riak_object.set_data({'$VERSION': modelcls.VERSION})
-            riak_object.set_content_type("application/json")
+            riak_object.data = {'$VERSION': modelcls.VERSION}
+            riak_object.content_type = "application/json"
         return riak_object
 
     def store(self, modelobj):
@@ -115,9 +181,8 @@ class RiakManager(Manager):
 
     def purge_all(self):
         buckets = self.client.get_buckets()
-        for bucket_name in buckets:
-            if bucket_name.startswith(self.bucket_prefix):
-                bucket = self.client.bucket(bucket_name)
+        for bucket in buckets:
+            if bucket.name.startswith(self.bucket_prefix):
                 for key in bucket.get_keys():
                     obj = bucket.get(key)
                     obj.delete()

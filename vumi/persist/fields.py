@@ -604,7 +604,9 @@ class ForeignKeyDescriptor(FieldDescriptor):
     def clean(self, modelobj):
         if self.key not in modelobj._riak_object._data:
             # We might have an old-style index-only version of the data.
-            indexes = modelobj._riak_object.get_indexes(self.index_name)
+            all_indexes = modelobj._riak_object.get_indexes()
+            indexes = [entry.get_value() for entry in all_indexes
+                       if entry.get_field() == self.index_name]
             modelobj._riak_object._data[self.key] = (indexes or [None])[0]
 
     def get_value(self, modelobj):
@@ -705,7 +707,9 @@ class ManyToManyDescriptor(ForeignKeyDescriptor):
     def clean(self, modelobj):
         if self.key not in modelobj._riak_object._data:
             # We might have an old-style index-only version of the data.
-            indexes = modelobj._riak_object.get_indexes(self.index_name)
+            all_indexes = modelobj._riak_object.get_indexes()
+            indexes = [entry.get_value() for entry in all_indexes
+                       if entry.get_field() == self.index_name]
             modelobj._riak_object._data[self.key] = indexes[:]
 
     def get_foreign_keys(self, modelobj):

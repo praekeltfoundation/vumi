@@ -120,16 +120,14 @@ class MigrationData(object):
         self.new_data = {}
         self.old_index = {}
         self.new_index = {}
-        for riak_index in riak_object.get_metadata()['index']:
+        for riak_index in riak_object.get_indexes():
             field = riak_index.get_field()
             self.old_index.setdefault(field, [])
             self.old_index[field].append(riak_index.get_value())
 
     def get_riak_object(self):
         self.riak_object.set_data(self.new_data)
-        metadata = self.riak_object.get_metadata()
-        metadata['index'] = []
-        self.riak_object.set_metadata(metadata)
+        self.riak_object.set_indexes([])
         for field, values in self.new_index.iteritems():
             for value in values:
                 self.riak_object.add_index(field, value)
@@ -490,6 +488,9 @@ class VumiMapReduce(object):
         if isinstance(obj, basestring):
             # Assume strings are keys.
             return obj
+        elif isinstance(obj, tuple):
+            # New-style RiakLink, which is just a namedtuple.
+            return obj[1]
         else:
             # If we haven't been given a string, we probably have a RiakLink.
             return obj.get_key()

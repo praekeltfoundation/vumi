@@ -161,16 +161,20 @@ class CommonRiakManagerTests(object):
 
         def mapper(manager, link):
             self.assertEqual(manager, self.manager)
-            mr_results.append(link)
-            dummy = self.mkdummy(link.get_key())
+            if isinstance(link, tuple):
+                key = link[1]
+            else:
+                key = link.get_key()
+            mr_results.append(key)
+            dummy = self.mkdummy(key)
             return manager.load(DummyModel, dummy.key)
 
         results = yield self.manager.run_map_reduce(mr, mapper)
         results.sort(key=lambda d: d.key)
         expected_keys = [str(i) for i in range(4)]
         self.assertEqual([d.key for d in results], expected_keys)
-        mr_results.sort(key=lambda l: l.get_key())
-        self.assertEqual([l.get_key() for l in mr_results], expected_keys)
+        mr_results.sort()
+        self.assertEqual(mr_results, expected_keys)
 
     @Manager.calls_manager
     def test_run_riak_map_reduce_with_timeout(self):
@@ -189,6 +193,8 @@ class CommonRiakManagerTests(object):
             yield self.manager.run_map_reduce(mr, lambda m, l: None)
         except Exception, err:
             msg = str(err)
+            if msg.startswith("'"):
+                msg = msg[1:-1].replace("\\'", "'")
             self.assertTrue(msg.startswith("Error running MapReduce"
                                            " operation."))
             self.assertTrue(msg.endswith("Body: '{\"error\":\"timeout\"}'"))
