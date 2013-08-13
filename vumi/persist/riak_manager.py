@@ -58,7 +58,7 @@ class RiakObjectWrapper(object):
         return self._riak_object.bucket
 
     def set_indexes(self, value):
-        self._riak_object.indexes = value
+        self._riak_object.indexes = set(value)
 
     def get_indexes(self):
         return [RiakIndexWrapper(entry) for entry in self._riak_object.indexes]
