@@ -141,6 +141,10 @@ class TxRiakManager(Manager):
             mapreduce_done.addCallback(lambda r: reducer_func(self, r))
         return mapreduce_done
 
+    def index_keys(self, model, index_name, start_value, end_value=None):
+        bucket = self.bucket_for_modelcls(model)
+        return bucket.get_index(index_name, start_value, end_value)
+
     @inlineCallbacks
     def purge_all(self):
         buckets = yield self.client.list_buckets()

@@ -99,7 +99,6 @@ class RiakManager(Manager):
         host = config.get('host', '127.0.0.1')
         port = config.get('port', 8098)
         client_id = config.get('client_id')
-        transport_options = config.get('transport_options', None)
 
         client_args = {
             'protocol': protocol,
@@ -173,6 +172,12 @@ class RiakManager(Manager):
         if reducer_func is not None:
             results = reducer_func(self, results)
         return results
+
+    def index_keys(self, model, index_name, start_value, end_value=None):
+        bucket = self.bucket_for_modelcls(model)
+        # The IndexPage we get back from the new riak client doesn't fake
+        # listiness quite well enough.
+        return list(bucket.get_index(index_name, start_value, end_value))
 
     def riak_enable_search(self, modelcls):
         bucket_name = self.bucket_name(modelcls)

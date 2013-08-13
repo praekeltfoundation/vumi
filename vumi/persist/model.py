@@ -629,8 +629,8 @@ class Manager(object):
                                   " .run_map_reduce(...)")
 
     def index_keys(self, model, index_name, start_value, end_value=None):
-        bucket = self.bucket_for_modelcls(model)
-        return bucket.get_index(index_name, start_value, end_value)
+        raise NotImplementedError("Sub-classes of Manager should implement"
+                                  " .index_keys(...)")
 
     def mr_from_field(self, model, field_name, start_value, end_value=None):
         return VumiMapReduce.from_field(
