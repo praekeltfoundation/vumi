@@ -148,5 +148,7 @@ class TxRiakManager(Manager):
         for bucket_name in buckets:
             if bucket_name.startswith(self.bucket_prefix):
                 bucket = self.client.bucket(bucket_name)
-                deferreds.append(bucket.purge_keys())
+                d = bucket.purge_keys()
+                d.addCallback(lambda r: bucket.reset_properties())
+                deferreds.append(d)
         yield gatherResults(deferreds)

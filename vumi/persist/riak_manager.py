@@ -186,3 +186,4 @@ class RiakManager(Manager):
                 for key in bucket.get_keys():
                     obj = bucket.get(key)
                     obj.delete()
+                bucket.clear_properties()
