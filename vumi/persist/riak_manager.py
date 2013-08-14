@@ -191,4 +191,9 @@ class RiakManager(Manager):
                 for key in bucket.get_keys():
                     obj = bucket.get(key)
                     obj.delete()
-                bucket.clear_properties()
+                try:
+                    bucket.clear_properties()
+                except Exception, e:
+                    err_msg = "Resetting of bucket properties is not supported"
+                    if err_msg not in e.message:
+                        raise

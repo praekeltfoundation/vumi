@@ -147,6 +147,11 @@ class TxRiakManager(Manager):
 
     @inlineCallbacks
     def purge_all(self):
+        def catch_unsupported_operation(f):
+            err_msg = "Resetting of bucket properties is not supported"
+            if err_msg not in f.getErrorMessage():
+                return f
+
         buckets = yield self.client.list_buckets()
         deferreds = []
         for bucket_name in buckets:
@@ -154,5 +159,6 @@ class TxRiakManager(Manager):
                 bucket = self.client.bucket(bucket_name)
                 d = bucket.purge_keys()
                 d.addCallback(lambda r: bucket.reset_properties())
+                d.addErrback(catch_unsupported_operation)
                 deferreds.append(d)
         yield gatherResults(deferreds)
