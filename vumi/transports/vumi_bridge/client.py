@@ -34,8 +34,8 @@ class VumiMessageReceiver(basic.LineReceiver):
         self.errback = errback
         self._response = None
         self._wait_for_response = Deferred()
-        self._on_connect = on_connect or (lambda *a: None)
-        self._on_disconnect = on_disconnect or (lambda *a: None)
+        self._on_connect = on_connect or (lambda _: None)
+        self._on_disconnect = on_disconnect or (lambda _: None)
         self.disconnecting = False
 
     def get_response(self):
@@ -91,9 +91,11 @@ class StreamingClient(object):
         self.agent = Agent(reactor)
 
     def stream(self, message_class, callback, errback, url,
-               headers=None, on_disconnect=None):
+               headers=None, on_connect=None, on_disconnect=None):
         receiver = VumiMessageReceiver(
-            message_class, callback, errback, on_disconnect=on_disconnect)
+            message_class, callback, errback,
+            on_connect=on_connect,
+            on_disconnect=on_disconnect)
         d = self.agent.request('GET', url, headers)
         d.addCallback(lambda response: receiver.handle_response(response))
         d.addErrback(log.err)

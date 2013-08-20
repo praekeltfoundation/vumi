@@ -2,6 +2,7 @@
 
 import base64
 import json
+import random
 
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet import reactor
@@ -42,7 +43,7 @@ class VumiBridgeTransportConfig(Transport.CONFIG_CLASS):
         'not explicitly set, no maximum is applied',
         static=True)
     initial_delay = ConfigFloat(
-        'Initial delay for first reconnection attempt', default=1.0,
+        'Initial delay for first reconnection attempt', default=0.1,
         static=True)
     factor = ConfigFloat(
         'A multiplicitive factor by which the delay grows',
@@ -115,10 +116,11 @@ class GoConversationTransport(Transport):
                 self.retries))
             return
 
-        self.delay = min(self.delay * self.factor, config.max_reconnect_delay)
+        self.delay = min(self.delay * config.factor,
+                         config.max_reconnect_delay)
         if config.jitter:
             self.delay = random.normalvariate(self.delay,
-                                              self.delay * self.jitter)
+                                              self.delay * config.jitter)
         log.msg('Will retry in %s seconds' % (self.delay,))
         self.reconnect_call = self.clock.callLater(self.delay,
                                                    self.connect_api_clients)
