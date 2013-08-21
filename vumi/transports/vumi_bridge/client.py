@@ -34,8 +34,8 @@ class VumiMessageReceiver(basic.LineReceiver):
         self.errback = errback
         self._response = None
         self._wait_for_response = Deferred()
-        self._on_connect = on_connect or (lambda _: None)
-        self._on_disconnect = on_disconnect or (lambda _: None)
+        self._on_connect = on_connect or (lambda *a: None)
+        self._on_disconnect = on_disconnect or (lambda *a: None)
         self.disconnecting = False
 
     def get_response(self):
