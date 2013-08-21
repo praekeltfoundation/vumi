@@ -56,6 +56,18 @@ class SessionManagerTestCase(TestCase, PersistenceMixin):
         self.assertEqual(loaded, session)
 
     @inlineCallbacks
+    def test_create_clears_existing_session(self):
+        session = yield self.sm.create_session("u1", foo="bar")
+        self.assertEqual(sorted(session.keys()), ['created_at', 'foo'])
+        loaded = yield self.sm.load_session("u1")
+        self.assertEqual(loaded, session)
+
+        session = yield self.sm.create_session("u1", bar="baz")
+        self.assertEqual(sorted(session.keys()), ['bar', 'created_at'])
+        loaded = yield self.sm.load_session("u1")
+        self.assertEqual(loaded, session)
+
+    @inlineCallbacks
     def test_save_session(self):
         test_session = {"foo": 5, "bar": "baz"}
         yield self.sm.create_session("u1")
