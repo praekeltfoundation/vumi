@@ -407,7 +407,10 @@ class LoggingResource(SandboxResource):
         if msg is None:
             returnValue(self.reply(command, success=False,
                                    reason="Value expected for msg"))
-        msg = str(msg)
+        if not isinstance(msg, basestring):
+            msg = str(msg)
+        elif isinstance(msg, unicode):
+            msg = msg.encode('utf-8')
         yield self.log(api, msg, level)
         returnValue(self.reply(command, success=True))
 
