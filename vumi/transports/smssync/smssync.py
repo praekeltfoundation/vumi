@@ -56,6 +56,7 @@ class BaseSmsSyncTransport(HttpRpcTransport):
     # SMSSync True and False constants
     SMSSYNC_TRUE, SMSSYNC_FALSE = ("true", "false")
     SMSSYNC_DATE_FORMAT = "%m-%d-%y %H:%M"
+    MILLISECONDS = 1000
 
     callLater = reactor.callLater
 
@@ -115,6 +116,31 @@ class BaseSmsSyncTransport(HttpRpcTransport):
         present_keys = set(request.args.keys())
         return expected_keys.issubset(present_keys)
 
+    def _parse_timestamp(self, request):
+        smssync_timestamp = request.args['sent_timestamp'][0]
+        timestamp = None
+        if timestamp is None:
+            try:
+                timestamp = datetime.datetime.strptime(
+                    smssync_timestamp, self.SMSSYNC_DATE_FORMAT)
+            except ValueError:
+                pass
+
+        if timestamp is None:
+            try:
+                utc_ms = int(request.args['sent_timestamp'][0])
+                timestamp = datetime.datetime.utcfromtimestamp(
+                    utc_ms / self.MILLISECONDS)
+            except ValueError:
+                pass
+
+        if timestamp is None:
+            log.warning("Bad timestamp format: %r (args: %r)"
+                        % (request, request.args))
+            timestamp = datetime.datetime.utcnow()
+
+        return timestamp
+
     @inlineCallbacks
     def _handle_receive(self, message_id, request):
         if not self._check_request_args(request, ['secret', 'sent_timestamp',
@@ -131,14 +157,9 @@ class BaseSmsSyncTransport(HttpRpcTransport):
                         % (request, request.args))
             yield self._send_response(message_id, success=self.SMSSYNC_FALSE)
             return
-        try:
-            timestamp = datetime.datetime.strptime(
-                request.args['sent_timestamp'][0], self.SMSSYNC_DATE_FORMAT)
-        except ValueError:
-            log.warning("Bad timestmap format: %r (args: %r)"
-                        % (request, request.args))
-            yield self._send_response(message_id, success=self.SMSSYNC_FALSE)
-            return
+
+        timestamp = self._parse_timestamp(request)
+
         normalize = lambda raw: normalize_msisdn(raw, msginfo.country_code)
         message = {
             'message_id': message_id,
