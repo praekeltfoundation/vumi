@@ -179,6 +179,8 @@ class GoConversationTransport(Transport):
             'in_reply_to': message['in_reply_to'],
             'session_event': message['session_event']
         }
+        if 'helper_metadata' in message:
+            params['helper_metadata'] = message['helper_metadata']
 
         resp = yield http_request_full(
             self.get_url('messages.json'),

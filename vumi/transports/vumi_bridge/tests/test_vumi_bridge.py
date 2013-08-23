@@ -122,7 +122,8 @@ class GoConversationTransportTestCase(TransportTestCase):
             'in_reply_to': None,
             'to_addr': msg['to_addr'],
             'message_id': msg['message_id'],
-            'session_event': TransportUserMessage.SESSION_CLOSE
+            'session_event': TransportUserMessage.SESSION_CLOSE,
+            'helper_metadata': {},
         })
 
         remote_id = TransportUserMessage.generate_id()
