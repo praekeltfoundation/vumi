@@ -56,4 +56,4 @@ class InboundMessageInjectorTestCase(TransportTestCase):
 
 
 class OutboundMessageInjectorTestCase(InboundMessageInjectorTestCase):
-    pass
+    direction = 'outbound'
