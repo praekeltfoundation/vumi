@@ -59,14 +59,14 @@ class ParseSMPPLogMessagesTestCase(TestCase):
 
         parsed = json.loads(parser.emit_log[0])
         expected = {
-            "content": "hell0 world",
+            "content": "hello world",
             "transport_type": "ussd",
             "to_addr": "*120*12345*489665#",
             "message_id": "b1893fa98ff4485299e3781f73ebfbb6",
             "from_addr": "+27123456780"
         }
         for key in expected.keys():
-            self.assertEqual(parsed.get('key'), expected.get('key'))
+            self.assertEqual(parsed.get(key), expected.get(key))
 
     def test_parsing_of_smpp_inbound_line(self):
         parser = DummyLogParser({
@@ -97,14 +97,14 @@ class ParseSMPPLogMessagesTestCase(TestCase):
         parser.readline(SAMPLE_SMPP_OUTBOUND_LINE)
         parsed = json.loads(parser.emit_log[0])
         expected = {
-            "content": "hell0 world",
+            "content": "hello world",
             "transport_type": "sms",
             "to_addr": "+27123456780",
-            "message_id": "b1893fa98ff4485299e3781f73ebfbb6",
+            "message_id": "baz",
             "from_addr": "default10141"
         }
         for key in expected.keys():
-            self.assertEqual(parsed.get('key'), expected.get('key'))
+            self.assertEqual(parsed.get(key), expected.get(key))
 
     def test_parse_of_smpp_lines_with_limits(self):
         sample = resource_string(__name__, 'sample-smpp-output.log')
