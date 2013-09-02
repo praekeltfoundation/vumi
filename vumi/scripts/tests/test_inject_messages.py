@@ -5,9 +5,10 @@ import json
 import StringIO
 
 
-class MessageInjectorTestCase(TransportTestCase):
+class InboundMessageInjectorTestCase(TransportTestCase):
 
     transport_class = MessageInjector
+    direction = 'inbound'
 
     DEFAULT_DATA = {
             'content': 'CODE2',
@@ -19,9 +20,10 @@ class MessageInjectorTestCase(TransportTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        super(MessageInjectorTestCase, self).setUp()
+        super(InboundMessageInjectorTestCase, self).setUp()
         self.transport = yield self.get_transport({
             'transport-name': 'test_transport',
+            'direction': self.direction,
         })
 
     def make_data(self, **kw):
@@ -35,7 +37,8 @@ class MessageInjectorTestCase(TransportTestCase):
     def test_process_line(self):
         data = self.make_data()
         self.transport.process_line(json.dumps(data))
-        [msg] = self._amqp.get_messages('vumi', 'test_transport.inbound')
+        [msg] = self._amqp.get_messages(
+            'vumi', 'test_transport.%s' % (self.direction,))
         self.check_msg(msg, data)
 
     @inlineCallbacks
@@ -45,7 +48,12 @@ class MessageInjectorTestCase(TransportTestCase):
         in_file = StringIO.StringIO(data_string)
         out_file = StringIO.StringIO()
         yield self.transport.process_file(in_file, out_file)
-        msgs = self._amqp.get_messages('vumi', 'test_transport.inbound')
+        msgs = self._amqp.get_messages(
+            'vumi', 'test_transport.%s' % (self.direction,))
         for msg, datum in zip(msgs, data):
             self.check_msg(msg, datum)
         self.assertEqual(out_file.getvalue(), data_string + "\n")
+
+
+class OutboundMessageInjectorTestCase(InboundMessageInjectorTestCase):
+    pass
