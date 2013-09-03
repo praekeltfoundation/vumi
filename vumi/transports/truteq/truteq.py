@@ -177,7 +177,6 @@ class TruteqTransport(Transport):
         text = text.replace('\r', '\n')
 
         ssmi_session_type = self.VUMI_TO_SSMI_EVENT[message['session_event']]
-        # Everything we send to ssmi_client needs to be bytestrings.
-        data = text.encode(self.SSMI_ENCODING)
+        # We need to send unicode data to ssmi_client, but bytes for msisdn.
         msisdn = message['to_addr'].strip('+').encode(self.SSMI_ENCODING)
-        self.ssmi_client.send_ussd(msisdn, data, ssmi_session_type)
+        self.ssmi_client.send_ussd(msisdn, text, ssmi_session_type)
