@@ -271,7 +271,7 @@ class RedisResource(SandboxResource):
     :param int keys_per_user_soft:
         Maximum number of keys each user may make use of in redis
         before usage warnings are logged.
-        (default: 100).
+        (default: 80).
     :param int keys_per_user_hard:
         Maximum number of keys each user may make use of in redis
         (default: 100).
