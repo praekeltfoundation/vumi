@@ -271,17 +271,21 @@ class RedisResource(SandboxResource):
     :param int keys_per_user_soft:
         Maximum number of keys each user may make use of in redis
         before usage warnings are logged.
-        (default: 80).
+        (default: 80% of hard limit).
     :param int keys_per_user_hard:
         Maximum number of keys each user may make use of in redis
-        (default: 100).
+        (default: 100). Falls back to keys_per_user.
+    :param int keys_per_user:
+        Synonym for `keys_per_user_hard`. Deprecated.
     """
 
     @inlineCallbacks
     def setup(self):
         self.r_config = self.config.get('redis_manager', {})
-        self.keys_per_user_soft = self.config.get('keys_per_user_soft', 80)
-        self.keys_per_user_hard = self.config.get('keys_per_user_hard', 100)
+        self.keys_per_user_hard = self.config.get(
+            'keys_per_user_hard', self.config.get('keys_per_user', 100))
+        self.keys_per_user_soft = self.config.get(
+            'keys_per_user_soft', int(0.8 * self.keys_per_user_hard))
         self.redis = yield TxRedisManager.from_config(self.r_config)
 
     def teardown(self):
