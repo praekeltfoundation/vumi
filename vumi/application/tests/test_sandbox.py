@@ -16,7 +16,7 @@ from twisted.trial.unittest import TestCase, SkipTest
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.application.tests.utils import ApplicationTestCase
 from vumi.application.sandbox import (
-    Sandbox, SandboxApi, SandboxCommand, SandboxError, SandboxResources,
+    Sandbox, SandboxApi, SandboxCommand, SandboxResources,
     SandboxResource, RedisResource, OutboundResource, JsSandboxResource,
     LoggingResource, HttpClientResource, JsSandbox, JsFileSandbox)
 from vumi.tests.utils import LogCatcher, PersistenceMixin
@@ -467,11 +467,14 @@ class DummyAppWorker(object):
 
     class DummyApi(object):
         def __init__(self):
-            pass
+            self.logs = []
 
         def set_sandbox(self, sandbox):
             self.sandbox = sandbox
             self.sandbox_id = sandbox.sandbox_id
+
+        def log(self, message, level):
+            self.logs.append((level, message))
 
     class DummyProtocol(object):
         def __init__(self, sandbox_id, api):
@@ -577,11 +580,14 @@ class TestRedisResource(ResourceTestCaseBase, PersistenceMixin):
         super(TestRedisResource, self).setUp()
         yield self._persist_setUp()
         self.r_server = yield self.get_redis_manager()
-        yield self.create_resource({
-            'redis_manager': {
-                'FAKE_REDIS': self.r_server,
-                'key_prefix': self.r_server._key_prefix,
-            }})
+        yield self.create_resource({})
+
+    def create_resource(self, config):
+        config.setdefault('redis_manager', {
+            'FAKE_REDIS': self.r_server,
+            'key_prefix': self.r_server._key_prefix,
+        })
+        return super(TestRedisResource, self).create_resource(config)
 
     @inlineCallbacks
     def tearDown(self):
@@ -608,6 +614,12 @@ class TestRedisResource(ResourceTestCaseBase, PersistenceMixin):
         self.assertEqual((yield self.r_server.get(count_key)),
                          str(total_count))
 
+    def assert_api_log(self, expected_level, expected_message):
+        [log_entry] = self.api.logs
+        level, message = log_entry
+        self.assertEqual(level, expected_level)
+        self.assertEqual(message, expected_message)
+
     @inlineCallbacks
     def test_handle_set(self):
         reply = yield self.dispatch_command('set', key='foo', value='bar')
@@ -615,11 +627,57 @@ class TestRedisResource(ResourceTestCaseBase, PersistenceMixin):
         yield self.check_metric('foo', json.dumps('bar'), 1)
 
     @inlineCallbacks
-    def test_handle_set_too_many(self):
+    def test_handle_set_soft_limit_reached(self):
+        yield self.create_metric('foo', 'a', total_count=80)
+        reply = yield self.dispatch_command('set', key='bar', value='bar')
+        self.check_reply(reply, success=True)
+        self.assert_api_log(
+            logging.WARNING,
+            'Redis soft limit of 80 keys reached for sandbox test_id. '
+            'Once the hard limit of 100 is reached no more keys can '
+            'be written.'
+        )
+
+    @inlineCallbacks
+    def test_handle_set_hard_limit_reached(self):
         yield self.create_metric('foo', 'a', total_count=100)
         reply = yield self.dispatch_command('set', key='bar', value='bar')
         self.check_reply(reply, success=False, reason='Too many keys')
         yield self.check_metric('bar', None, 100)
+        self.assert_api_log(
+            logging.ERROR,
+            'Redis hard limit of test_id keys reached for sandbox 100. '
+            'No more keys can be written.'
+        )
+
+    @inlineCallbacks
+    def test_keys_per_user_fallback_hard_limit(self):
+        yield self.create_resource({
+            'keys_per_user': 10,
+        })
+        yield self.create_metric('foo', 'a', total_count=10)
+        reply = yield self.dispatch_command('set', key='bar', value='bar')
+        self.check_reply(reply, success=False, reason='Too many keys')
+        self.assert_api_log(
+            logging.ERROR,
+            'Redis hard limit of test_id keys reached for sandbox 10. '
+            'No more keys can be written.'
+        )
+
+    @inlineCallbacks
+    def test_keys_per_user_fallback_soft_limit(self):
+        yield self.create_resource({
+            'keys_per_user': 10,
+        })
+        yield self.create_metric('foo', 'a', total_count=8)
+        reply = yield self.dispatch_command('set', key='bar', value='bar')
+        self.check_reply(reply, success=True)
+        self.assert_api_log(
+            logging.WARNING,
+            'Redis soft limit of 8 keys reached for sandbox test_id. '
+            'Once the hard limit of 10 is reached no more keys can '
+            'be written.'
+        )
 
     @inlineCallbacks
     def test_handle_get(self):
@@ -668,11 +726,32 @@ class TestRedisResource(ResourceTestCaseBase, PersistenceMixin):
         yield self.check_metric('foo', 'a', 1)
 
     @inlineCallbacks
-    def test_handle_incr_too_many_keys(self):
+    def test_handle_incr_soft_limit_reached(self):
+        yield self.create_metric('foo', 'a', total_count=80)
+        reply = yield self.dispatch_command('incr', key='bar', amount=2)
+        self.check_reply(reply, success=True)
+        [limit_warning] = self.api.logs
+        level, message = limit_warning
+        self.assertEqual(level, logging.WARNING)
+        self.assertEqual(
+            message,
+            'Redis soft limit of 80 keys reached for sandbox test_id. '
+            'Once the hard limit of 100 is reached no more keys can '
+            'be written.')
+
+    @inlineCallbacks
+    def test_handle_incr_hard_limit_reached(self):
         yield self.create_metric('foo', 'a', total_count=100)
         reply = yield self.dispatch_command('incr', key='bar', amount=2)
         self.check_reply(reply, success=False, reason='Too many keys')
         yield self.check_metric('bar', None, 100)
+        [limit_error] = self.api.logs
+        level, message = limit_error
+        self.assertEqual(level, logging.ERROR)
+        self.assertEqual(
+            message,
+            'Redis hard limit of test_id keys reached for sandbox 100. '
+            'No more keys can be written.')
 
 
 class TestOutboundResource(ResourceTestCaseBase):

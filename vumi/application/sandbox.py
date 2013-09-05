@@ -268,15 +268,24 @@ class RedisResource(SandboxResource):
 
     :param dict redis_manager:
         Redis manager configuration options.
-    :param int keys_per_user:
+    :param int keys_per_user_soft:
         Maximum number of keys each user may make use of in redis
-        (default: 100).
+        before usage warnings are logged.
+        (default: 80% of hard limit).
+    :param int keys_per_user_hard:
+        Maximum number of keys each user may make use of in redis
+        (default: 100). Falls back to keys_per_user.
+    :param int keys_per_user:
+        Synonym for `keys_per_user_hard`. Deprecated.
     """
 
     @inlineCallbacks
     def setup(self):
         self.r_config = self.config.get('redis_manager', {})
-        self.keys_per_user = self.config.get('keys_per_user', 100)
+        self.keys_per_user_hard = self.config.get(
+            'keys_per_user_hard', self.config.get('keys_per_user', 100))
+        self.keys_per_user_soft = self.config.get(
+            'keys_per_user_soft', int(0.8 * self.keys_per_user_hard))
         self.redis = yield TxRedisManager.from_config(self.r_config)
 
     def teardown(self):
@@ -293,19 +302,34 @@ class RedisResource(SandboxResource):
                           reason="Too many keys")
 
     @inlineCallbacks
-    def check_keys(self, sandbox_id, key):
+    def check_keys(self, api, key):
         if (yield self.redis.exists(key)):
             returnValue(True)
-        count_key = self._count_key(sandbox_id)
-        if (yield self.redis.incr(count_key, 1)) > self.keys_per_user:
-            yield self.redis.incr(count_key, -1)
-            returnValue(False)
+        count_key = self._count_key(api.sandbox_id)
+        key_count = yield self.redis.incr(count_key, 1)
+        if key_count > self.keys_per_user_soft:
+            if key_count < self.keys_per_user_hard:
+                api.log('Redis soft limit of %s keys reached for sandbox %s. '
+                        'Once the hard limit of %s is reached no more keys '
+                        'can be written.' % (
+                            self.keys_per_user_soft,
+                            api.sandbox_id,
+                            self.keys_per_user_hard),
+                        logging.WARNING)
+            else:
+                api.log('Redis hard limit of %s keys reached for sandbox %s. '
+                        'No more keys can be written.' % (
+                            api.sandbox_id,
+                            self.keys_per_user_hard),
+                        logging.ERROR)
+                yield self.redis.incr(count_key, -1)
+                returnValue(False)
         returnValue(True)
 
     @inlineCallbacks
     def handle_set(self, api, command):
         key = self._sandboxed_key(api.sandbox_id, command.get('key'))
-        if not (yield self.check_keys(api.sandbox_id, key)):
+        if not (yield self.check_keys(api, key)):
             returnValue(self._too_many_keys(command))
         value = command.get('value')
         yield self.redis.set(key, json.dumps(value))
@@ -332,7 +356,7 @@ class RedisResource(SandboxResource):
     @inlineCallbacks
     def handle_incr(self, api, command):
         key = self._sandboxed_key(api.sandbox_id, command.get('key'))
-        if not (yield self.check_keys(api.sandbox_id, key)):
+        if not (yield self.check_keys(api, key)):
             returnValue(self._too_many_keys(command))
         amount = command.get('amount', 1)
         try:
