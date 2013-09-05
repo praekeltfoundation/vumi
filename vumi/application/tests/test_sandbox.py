@@ -553,6 +553,10 @@ class ResourceTestCaseBase(TestCase):
 
     @inlineCallbacks
     def create_resource(self, config):
+        if self.resource is not None:
+            # clean-up any existing resource so
+            # .create_resource can be called multiple times.
+            yield self.resource.teardown()
         resource = self.resource_cls(self.resource_name,
                                      self.app_worker,
                                      config)
