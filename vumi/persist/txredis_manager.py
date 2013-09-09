@@ -14,6 +14,7 @@ except ImportError:
 from twisted.internet import reactor
 from twisted.internet.defer import (
     inlineCallbacks, DeferredList, succeed, Deferred)
+from twisted.internet.error import ConnectionDone
 
 from vumi.persist.redis_base import Manager
 from vumi.persist.fake_redis import FakeRedis
@@ -133,6 +134,7 @@ class TxRedisManager(Manager):
         :param str key_prefix:
             Key prefix for namespacing.
         """
+        cfg = config.copy()
 
         host = config.pop('host', 'localhost')
         port = config.pop('port', 6379)
@@ -141,9 +143,15 @@ class TxRedisManager(Manager):
         reactor.connectTCP(host, port, factory)
 
         d = factory.deferred.addCallback(lambda client: client.connected_d)
-        d.addCallback(lambda client: cls(client, key_prefix, key_separator))
-        d.addCallback(cls._attach_reconnector)
+        d.addCallback(cls._manager_from_bits, cfg, key_prefix, key_separator)
         return d
+
+    @classmethod
+    def _manager_from_bits(cls, client, cfg, key_prefix, key_separator):
+        manager = cls(client, key_prefix, key_separator)
+        manager._config = cfg
+        cls._attach_reconnector(manager)
+        return manager
 
     @staticmethod
     def _attach_reconnector(manager):
@@ -162,10 +170,15 @@ class TxRedisManager(Manager):
     def _close(self):
         """Close redis connection."""
         yield self._client.factory.stopTrying()
-        # We dig around in txredis's privates here, but there's no realistic
-        # alternative to that.
-        if not self._client._disconnected:
+        try:
             yield self._client.quit()
+        except RuntimeError as e:
+            # Reraise errors that aren't caused by not being connected.
+            if e.args != ('Not connected',):
+                raise
+        except ConnectionDone:
+            # Swallow ConnectionDone here because we're closing anyway.
+            pass
 
     @inlineCallbacks
     def _purge_all(self):
@@ -173,10 +186,18 @@ class TxRedisManager(Manager):
 
         Use only in tests.
         """
-        deferreds = []
+        if self._client._disconnected:
+            new_manager = yield self._manager_from_config(
+                self._config, self._key_prefix, self._key_separator)
+            yield new_manager._purge_all()
+            yield new_manager._close()
+        else:
+            yield self._do_purge()
+
+    @inlineCallbacks
+    def _do_purge(self):
         for key in (yield self.keys()):
-            deferreds.append(self.delete(key))
-        yield DeferredList(deferreds)
+            yield self.delete(key)
 
     def _make_redis_call(self, call, *args, **kw):
         """Make a redis API call using the underlying client library.
