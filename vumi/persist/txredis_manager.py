@@ -186,7 +186,9 @@ class TxRedisManager(Manager):
 
         Use only in tests.
         """
-        if self._client._disconnected:
+        # We look at a private attr on the client that fakeredis doesn't have.
+        # This about the least hacky way I could come up with to do this. :-/
+        if getattr(self._client, '_disconnected', False):
             new_manager = yield self._manager_from_config(
                 self._config, self._key_prefix, self._key_separator)
             yield new_manager._purge_all()
