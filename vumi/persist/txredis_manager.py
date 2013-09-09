@@ -162,8 +162,10 @@ class TxRedisManager(Manager):
     def _close(self):
         """Close redis connection."""
         yield self._client.factory.stopTrying()
-        if self._client.transport is not None:
-            yield self._client.transport.loseConnection()
+        # We dig around in txredis's privates here, but there's no realistic
+        # alternative to that.
+        if not self._client._disconnected:
+            yield self._client.quit()
 
     @inlineCallbacks
     def _purge_all(self):

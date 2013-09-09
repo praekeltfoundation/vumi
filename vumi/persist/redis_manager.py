@@ -34,7 +34,8 @@ class RedisManager(Manager):
 
     def _close(self):
         """Close redis connection."""
-        pass
+        # Close all the connections this client may have open.
+        self._client.connection_pool.disconnect()
 
     def _purge_all(self):
         """Delete *ALL* keys whose names start with this manager's key prefix.
