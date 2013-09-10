@@ -14,6 +14,7 @@ except ImportError:
 from twisted.internet import reactor
 from twisted.internet.defer import (
     inlineCallbacks, DeferredList, succeed, Deferred)
+from twisted.internet.error import ConnectionDone
 
 from vumi.persist.redis_base import Manager
 from vumi.persist.fake_redis import FakeRedis
@@ -116,16 +117,17 @@ class TxRedisManager(Manager):
     call_decorator = staticmethod(inlineCallbacks)
 
     @classmethod
-    def _fake_manager(cls, fake_redis, key_prefix, key_separator):
+    def _fake_manager(cls, fake_redis, manager_config):
         if fake_redis is None:
             fake_redis = FakeRedis(async=True)
-        manager = cls(fake_redis, key_prefix)
+        manager_config['config']['FAKE_REDIS'] = fake_redis
+        manager = cls(fake_redis, **manager_config)
         # Because ._close() assumes a real connection.
         manager._close = fake_redis.teardown
         return succeed(manager)
 
     @classmethod
-    def _manager_from_config(cls, config, key_prefix, key_separator):
+    def _manager_from_config(cls, client_config, manager_config):
         """Construct a manager from a dictionary of options.
 
         :param dict config:
@@ -134,16 +136,21 @@ class TxRedisManager(Manager):
             Key prefix for namespacing.
         """
 
-        host = config.pop('host', 'localhost')
-        port = config.pop('port', 6379)
+        host = client_config.pop('host', 'localhost')
+        port = client_config.pop('port', 6379)
 
-        factory = VumiRedisClientFactory(**config)
+        factory = VumiRedisClientFactory(**client_config)
         reactor.connectTCP(host, port, factory)
 
         d = factory.deferred.addCallback(lambda client: client.connected_d)
-        d.addCallback(lambda client: cls(client, key_prefix, key_separator))
-        d.addCallback(cls._attach_reconnector)
+        d.addCallback(cls._make_manager, manager_config)
         return d
+
+    @classmethod
+    def _make_manager(cls, client, manager_config):
+        manager = cls(client, **manager_config)
+        cls._attach_reconnector(manager)
+        return manager
 
     @staticmethod
     def _attach_reconnector(manager):
@@ -162,8 +169,15 @@ class TxRedisManager(Manager):
     def _close(self):
         """Close redis connection."""
         yield self._client.factory.stopTrying()
-        if self._client.transport is not None:
-            yield self._client.transport.loseConnection()
+        try:
+            yield self._client.quit()
+        except RuntimeError as e:
+            # Reraise errors that aren't caused by not being connected.
+            if e.args != ('Not connected',):
+                raise
+        except ConnectionDone:
+            # Swallow ConnectionDone here because we're closing anyway.
+            pass
 
     @inlineCallbacks
     def _purge_all(self):
@@ -171,10 +185,19 @@ class TxRedisManager(Manager):
 
         Use only in tests.
         """
-        deferreds = []
+        # Given the races around connection closing, the easiest thing to do
+        # here is to create a new manager with the same config for cleanup
+        # operations.
+        new_manager = yield self.from_config(self._config)
+        # If we're a submanager we might have a different key prefix.
+        new_manager._key_prefix = self._key_prefix
+        yield new_manager._do_purge()
+        yield new_manager._close()
+
+    @inlineCallbacks
+    def _do_purge(self):
         for key in (yield self.keys()):
-            deferreds.append(self.delete(key))
-        yield DeferredList(deferreds)
+            yield self.delete(key)
 
     def _make_redis_call(self, call, *args, **kw):
         """Make a redis API call using the underlying client library.

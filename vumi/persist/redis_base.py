@@ -59,10 +59,11 @@ class Manager(object):
 
     __metaclass__ = CallMakerMetaclass
 
-    def __init__(self, client, key_prefix, key_separator=None):
+    def __init__(self, client, config, key_prefix, key_separator=None):
         if key_separator is None:
             key_separator = ':'
         self._client = client
+        self._config = config
         self._key_prefix = key_prefix
         self._key_separator = key_separator
 
@@ -76,8 +77,7 @@ class Manager(object):
 
     def sub_manager(self, sub_prefix):
         key_prefix = self._key(sub_prefix)
-        sub_man = self.__class__(self._client, key_prefix,
-                                 key_separator=self._key_separator)
+        sub_man = self.__class__(self._client, self._config, key_prefix)
         if isinstance(self._client, FakeRedis):
             sub_man._close = self._client.teardown
         return sub_man
@@ -112,13 +112,16 @@ class Manager(object):
         """
 
         # So we can mangle it
-        config = config.copy()
-        key_prefix = config.pop('key_prefix', None)
-        key_separator = config.pop('key_separator', ':')
-        fake_redis = config.pop('FAKE_REDIS', None)
+        client_config = config.copy()
+        manager_config = {
+            'config': config.copy(),
+            'key_prefix': client_config.pop('key_prefix', None),
+            'key_separator': client_config.pop('key_separator', ':'),
+        }
+        fake_redis = client_config.pop('FAKE_REDIS', None)
         if 'VUMITEST_REDIS_DB' in os.environ:
             fake_redis = None
-            config['db'] = int(os.environ['VUMITEST_REDIS_DB'])
+            client_config['db'] = int(os.environ['VUMITEST_REDIS_DB'])
 
         if fake_redis is not None:
             if isinstance(fake_redis, cls):
@@ -130,17 +133,17 @@ class Manager(object):
             else:
                 # We want a new fake redis.
                 fake_redis = None
-            return cls._fake_manager(fake_redis, key_prefix, key_separator)
+            return cls._fake_manager(fake_redis, manager_config)
 
-        return cls._manager_from_config(config, key_prefix, key_separator)
+        return cls._manager_from_config(client_config, manager_config)
 
     @classmethod
-    def _fake_manager(cls, fake_redis, key_prefix, key_separator):
+    def _fake_manager(cls, fake_redis, manager_config):
         raise NotImplementedError("Sub-classes of Manager should implement"
                                   " ._fake_manager(...)")
 
     @classmethod
-    def _manager_from_config(cls, config, key_prefix, key_separator):
+    def _manager_from_config(cls, client_config, manager_config):
         """Construct a client from a dictionary of options.
 
         :param dict config:
@@ -198,6 +201,10 @@ class Manager(object):
 
     def _unkeys(self, keys):
         return [self._unkey(k) for k in keys]
+
+    # Connection operations
+
+    quit = RedisCall([])
 
     # Global operations
 
