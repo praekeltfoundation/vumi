@@ -117,16 +117,17 @@ class TxRedisManager(Manager):
     call_decorator = staticmethod(inlineCallbacks)
 
     @classmethod
-    def _fake_manager(cls, fake_redis, key_prefix, key_separator):
+    def _fake_manager(cls, fake_redis, manager_config):
         if fake_redis is None:
             fake_redis = FakeRedis(async=True)
-        manager = cls(fake_redis, key_prefix)
+        manager_config['config']['FAKE_REDIS'] = fake_redis
+        manager = cls(fake_redis, **manager_config)
         # Because ._close() assumes a real connection.
         manager._close = fake_redis.teardown
         return succeed(manager)
 
     @classmethod
-    def _manager_from_config(cls, config, key_prefix, key_separator):
+    def _manager_from_config(cls, client_config, manager_config):
         """Construct a manager from a dictionary of options.
 
         :param dict config:
@@ -134,22 +135,20 @@ class TxRedisManager(Manager):
         :param str key_prefix:
             Key prefix for namespacing.
         """
-        cfg = config.copy()
 
-        host = config.pop('host', 'localhost')
-        port = config.pop('port', 6379)
+        host = client_config.pop('host', 'localhost')
+        port = client_config.pop('port', 6379)
 
-        factory = VumiRedisClientFactory(**config)
+        factory = VumiRedisClientFactory(**client_config)
         reactor.connectTCP(host, port, factory)
 
         d = factory.deferred.addCallback(lambda client: client.connected_d)
-        d.addCallback(cls._manager_from_bits, cfg, key_prefix, key_separator)
+        d.addCallback(cls._make_manager, manager_config)
         return d
 
     @classmethod
-    def _manager_from_bits(cls, client, cfg, key_prefix, key_separator):
-        manager = cls(client, key_prefix, key_separator)
-        manager._config = cfg
+    def _make_manager(cls, client, manager_config):
+        manager = cls(client, **manager_config)
         cls._attach_reconnector(manager)
         return manager
 
@@ -186,15 +185,14 @@ class TxRedisManager(Manager):
 
         Use only in tests.
         """
-        # We look at a private attr on the client that fakeredis doesn't have.
-        # This about the least hacky way I could come up with to do this. :-/
-        if getattr(self._client, '_disconnected', False):
-            new_manager = yield self._manager_from_config(
-                self._config, self._key_prefix, self._key_separator)
-            yield new_manager._purge_all()
-            yield new_manager._close()
-        else:
-            yield self._do_purge()
+        # Given the races around connection closing, the easiest thing to do
+        # here is to create a new manager with the same config for cleanup
+        # operations.
+        new_manager = yield self.from_config(self._config)
+        # If we're a submanager we might have a different key prefix.
+        new_manager._key_prefix = self._key_prefix
+        yield new_manager._do_purge()
+        yield new_manager._close()
 
     @inlineCallbacks
     def _do_purge(self):
