@@ -127,11 +127,12 @@ class TruteqTransport(Transport):
         yield self.session_manager.stop()
 
     @inlineCallbacks
-    def ussd_callback(self, msisdn, ussd_type, phase, message):
+    def ussd_callback(self, msisdn, ussd_type, phase, message, genfields=None):
         log.msg("Received USSD, from: %s, message: %s" % (msisdn, message))
         session_event = self.SSMI_TO_VUMI_EVENT[ussd_type]
         msisdn = normalize_msisdn(msisdn)
         message = message.decode(self.SSMI_ENCODING)
+        genfields = genfields or {}
 
         if session_event == TransportUserMessage.SESSION_NEW:
             # If it's a new session then store the message as the USSD code
@@ -156,7 +157,11 @@ class TruteqTransport(Transport):
             transport_name=self.transport_name,
             transport_type=self.transport_type,
             transport_metadata={},
-            )
+            helper_metadata={
+                'truteq': {
+                    'genfields': genfields,
+                }
+            })
 
     def sms_callback(self, *args, **kwargs):
         log.err("Got SMS from SSMI but SMSes not supported: %r, %r"

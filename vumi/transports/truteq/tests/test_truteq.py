@@ -85,7 +85,7 @@ class TestTruteqTransport(TransportTestCase):
 
     def _incoming_ussd(self, msisdn="+12345", ussd_type=SSMI_EXISTING,
                        phase="ignored", message="Hello"):
-        self.transport.ussd_callback(msisdn, ussd_type, phase, message)
+        return self.transport.ussd_callback(msisdn, ussd_type, phase, message)
 
     def _start_ussd(self, message="*678#", **kw):
         self._incoming_ussd(ussd_type=SSMI_NEW, message=message, **kw)
@@ -93,11 +93,14 @@ class TestTruteqTransport(TransportTestCase):
 
     @inlineCallbacks
     def _check_msg(self, from_addr="+12345", to_addr="*678#", content=None,
-                   session_event=None):
+                   session_event=None, helper_metadata=None):
+        default_hmd = {'truteq': {'genfields': {}}}
         [msg] = yield self.wait_for_dispatched_messages(1)
         self.assertEqual(msg['transport_name'], self.transport_name)
         self.assertEqual(msg['transport_type'], 'ussd')
         self.assertEqual(msg['transport_metadata'], {})
+        self.assertEqual(msg['helper_metadata'],
+                         helper_metadata or default_hmd)
         self.assertEqual(msg['from_addr'], from_addr)
         self.assertEqual(msg['to_addr'], to_addr)
         self.assertEqual(msg['content'], content)
@@ -108,6 +111,20 @@ class TestTruteqTransport(TransportTestCase):
     def test_handle_inbound_ussd_new(self):
         yield self._incoming_ussd(ussd_type=SSMI_NEW, message="*678#")
         yield self._check_msg(to_addr="*678#", session_event=SESSION_NEW)
+
+    @inlineCallbacks
+    def test_handle_inbound_extended_ussd_new(self):
+        yield self.transport.ussd_callback(
+            '+12345', SSMI_NEW, 'ignored', '*678#', {'OperatorID': '3'})
+        yield self._check_msg(
+            to_addr="*678#", session_event=SESSION_NEW,
+            helper_metadata={
+                'truteq': {
+                    'genfields': {
+                        'OperatorID': '3'
+                    }
+                }
+            })
 
     @inlineCallbacks
     def test_handle_inbound_ussd_resume(self):
