@@ -340,6 +340,7 @@ class PersistenceMixin(object):
                 pass
         for manager in self._persist_redis_managers:
             yield self._persist_purge_redis(manager)
+            yield manager.close_manager()
 
     def _persist_purge_riak(self, manager):
         "This is a separate method to allow easy overriding."
