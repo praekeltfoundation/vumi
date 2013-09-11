@@ -202,10 +202,6 @@ class Manager(object):
     def _unkeys(self, keys):
         return [self._unkey(k) for k in keys]
 
-    # Connection operations
-
-    quit = RedisCall([])
-
     # Global operations
 
     type = RedisCall(['key'])

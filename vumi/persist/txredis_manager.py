@@ -170,6 +170,9 @@ class TxRedisManager(Manager):
         """Close redis connection."""
         yield self._client.factory.stopTrying()
         try:
+            # This sends a Redis "QUIT" command, but it isn't implemented on
+            # our wrapper because it's about connection management rather than
+            # data.
             yield self._client.quit()
         except RuntimeError as e:
             # Reraise errors that aren't caused by not being connected.
