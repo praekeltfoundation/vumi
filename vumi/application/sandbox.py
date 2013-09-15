@@ -93,6 +93,7 @@ class SandboxProtocol(ProcessProtocol):
         self.recv_bytes = 0
         self.chunk = ''
         self.error_chunk = ''
+        self.error_lines = []
         api.set_sandbox(self)
 
     def spawn(self):
@@ -160,12 +161,12 @@ class SandboxProtocol(ProcessProtocol):
     def errReceived(self, data):
         lines = self._process_data(self.error_chunk, data)
         for i in range(len(lines) - 1):
-            self.api.log(lines[i], logging.ERROR)
+            self.error_lines.append(lines[i])
         self.error_chunk = lines[-1]
 
     def errConnectionLost(self):
         if self.error_chunk:
-            self.api.log(self.error_chunk, logging.ERROR)
+            self.error_lines.append(self.error_chunk)
             self.error_chunk = ""
 
     def _process_request_results(self, results):
@@ -188,6 +189,9 @@ class SandboxProtocol(ProcessProtocol):
         if not self._started.fired():
             self._started.callback(Failure(
                 SandboxError("Process failed to start.")))
+        if self.error_lines:
+            self.api.log("\n".join(self.error_lines), logging.ERROR)
+            self.error_lines = []
         requests_done = DeferredList(self._pending_requests)
         requests_done.addCallback(self._process_request_results)
         requests_done.addCallback(lambda _r: self._done.callback(result))
