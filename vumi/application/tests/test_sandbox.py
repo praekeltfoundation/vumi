@@ -132,6 +132,19 @@ class SandboxTestCase(SandboxTestCaseBase):
         self.assertEqual(msgs, ["err"])
 
     @inlineCallbacks
+    def test_stderr_from_sandbox_with_multiple_lines(self):
+        app = yield self.setup_app(
+            "import sys\n"
+            "sys.stderr.write('err1\\nerr2\\nerr3')\n"
+        )
+        with LogCatcher(log_level=logging.ERROR) as lc:
+            status = yield app.process_event_in_sandbox(self.mk_ack())
+            msgs = lc.messages()
+        self.assertEqual(status, 0)
+        self.assertEqual(msgs, ["err1\nerr2\nerr3"])
+        print msgs
+
+    @inlineCallbacks
     def test_bad_rlimit(self):
         soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
         # This irreversibly sets limits for the current process.
