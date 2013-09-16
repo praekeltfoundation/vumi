@@ -336,8 +336,15 @@ class PersistenceMixin(object):
                     yield self._persist_purge_riak(manager)
                 except ConnectionRefusedError:
                     pass
-            # Hackily close the client.
-            manager.client = None
+
+        # Hackily close all connections left open by the non-tx riak client.
+        # There's no other way to explicitly close these connections and not
+        # doing it means we can hit server-side connection limits in the middle
+        # of large test runs.
+        for manager in self._persist_riak_managers:
+            if hasattr(manager.client, '_cm'):
+                while manager.client._cm.conns:
+                    manager.client._cm.conns.pop().close()
 
         for purge, manager in self._persist_get_teardown_redis_managers():
             if purge:
