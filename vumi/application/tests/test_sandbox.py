@@ -18,9 +18,12 @@ from vumi.application.tests.utils import ApplicationTestCase
 from vumi.application.sandbox import (
     Sandbox, SandboxApi, SandboxCommand, SandboxResources,
     SandboxResource, RedisResource, OutboundResource, JsSandboxResource,
-    LoggingResource, HttpClientResource, JsSandbox, JsFileSandbox)
+    LoggingResource, HttpClientResource, JsSandbox, JsFileSandbox,
+    HttpClientContextFactory)
 from vumi.tests.utils import LogCatcher, PersistenceMixin
 
+from OpenSSL.SSL import (
+    VERIFY_PEER, VERIFY_FAIL_IF_NO_PEER_CERT, VERIFY_CLIENT_ONCE, VERIFY_NONE)
 
 class MockResource(SandboxResource):
     def __init__(self, name, app_worker, **handlers):
@@ -919,6 +922,9 @@ class TestHttpClientResource(ResourceTestCaseBase):
     def assert_not_unicode(self, arg):
         self.assertFalse(isinstance(arg, unicode))
 
+    def get_context_factory(self):
+        return self._context_factory
+
     def assert_http_request(self, url, method='GET', headers={}, data=None,
                             timeout=None, data_limit=None):
         timeout = (timeout if timeout is not None
@@ -929,6 +935,9 @@ class TestHttpClientResource(ResourceTestCaseBase):
         kw = dict(method=method, headers=headers, data=data,
                   timeout=timeout, data_limit=data_limit)
         [(actual_args, actual_kw)] = self._http_requests
+        self._context_factory = actual_kw.pop('context_factory')
+        self.assertTrue(isinstance(self._context_factory,
+                                   HttpClientContextFactory))
         self.assertEqual((actual_args, actual_kw), (args, kw))
 
         self.assert_not_unicode(actual_args[0])
@@ -997,3 +1006,43 @@ class TestHttpClientResource(ResourceTestCaseBase):
         reply = yield self.dispatch_command('get')
         self.assertFalse(reply['success'])
         self.assertEqual(reply['reason'], "No URL given")
+
+    @inlineCallbacks
+    def test_https_request(self):
+        self.http_request_succeed("foo")
+        reply = yield self.dispatch_command('get',
+                                            url='https://www.example.com')
+        self.assertTrue(reply['success'])
+        self.assertEqual(reply['body'], "foo")
+        self.assert_http_request('https://www.example.com', method='GET')
+
+        ctxt = self.get_context_factory()
+        self.assertEqual(ctxt.verify_options, None)
+
+    @inlineCallbacks
+    def test_https_request_verify_none(self):
+        self.http_request_succeed("foo")
+        reply = yield self.dispatch_command(
+            'get', url='https://www.example.com',
+            verify_options=['VERIFY_NONE'])
+        self.assertTrue(reply['success'])
+        self.assertEqual(reply['body'], "foo")
+        self.assert_http_request('https://www.example.com', method='GET')
+
+        ctxt = self.get_context_factory()
+        self.assertEqual(ctxt.verify_options, VERIFY_NONE)
+
+    @inlineCallbacks
+    def test_https_request_verify_peer_or_fail(self):
+        self.http_request_succeed("foo")
+        reply = yield self.dispatch_command(
+            'get', url='https://www.example.com',
+            verify_options=['VERIFY_PEER', 'VERIFY_FAIL_IF_NO_PEER_CERT'])
+        self.assertTrue(reply['success'])
+        self.assertEqual(reply['body'], "foo")
+        self.assert_http_request('https://www.example.com', method='GET')
+
+        ctxt = self.get_context_factory()
+        self.assertEqual(
+            ctxt.verify_options,
+            VERIFY_PEER | VERIFY_FAIL_IF_NO_PEER_CERT)

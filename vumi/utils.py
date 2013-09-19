@@ -13,7 +13,7 @@ from twisted.internet import defer
 from twisted.internet import reactor, protocol
 from twisted.internet.defer import succeed
 from twisted.python.failure import Failure
-from twisted.web.client import Agent, ResponseDone
+from twisted.web.client import Agent, ResponseDone, WebClientContextFactory
 from twisted.web.server import Site
 from twisted.web.http_headers import Headers
 from twisted.web.iweb import IBodyProducer
@@ -114,8 +114,9 @@ class SimplishReceiver(protocol.Protocol):
 
 
 def http_request_full(url, data=None, headers={}, method='POST',
-                      timeout=None, data_limit=None):
-    agent = Agent(reactor)
+                      timeout=None, data_limit=None, context_factory=None):
+    context_factory = context_factory or WebClientContextFactory()
+    agent = Agent(reactor, contextFactory=context_factory)
     d = agent.request(method,
                       url,
                       mkheaders(headers),
