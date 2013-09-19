@@ -472,7 +472,7 @@ class HttpClientContextFactory(WebClientContextFactory):
         return ok
 
     def getContext(self, hostname, port):
-        context = WebClientContextFactory.getContext(self)
+        context = WebClientContextFactory.getContext(self, hostname, port)
         if self.verify_options is not None:
             context.set_verify(self.verify_options, self.verify_callback)
         return context
