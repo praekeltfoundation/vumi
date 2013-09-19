@@ -114,9 +114,10 @@ class SimplishReceiver(protocol.Protocol):
 
 
 def http_request_full(url, data=None, headers={}, method='POST',
-                      timeout=None, data_limit=None, context_factory=None):
+                      timeout=None, data_limit=None, context_factory=None,
+                      agent_class=Agent):
     context_factory = context_factory or WebClientContextFactory()
-    agent = Agent(reactor, contextFactory=context_factory)
+    agent = agent_class(reactor, contextFactory=context_factory)
     d = agent.request(method,
                       url,
                       mkheaders(headers),
