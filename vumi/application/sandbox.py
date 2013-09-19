@@ -479,7 +479,39 @@ class HttpClientContextFactory(WebClientContextFactory):
 
 
 class HttpClientResource(SandboxResource):
-    """Resource that allows making HTTP calls to outside services."""
+    """Resource that allows making HTTP calls to outside services.
+
+    Command fields:
+        - ``url``: The URL to request
+        - ``verify_options``: A list of options to verify when doing
+            an HTTPS request. Possible string values are ``VERIFY_NONE``,
+            ``VERIFY_PEER``, ``VERIFY_CLIENT_ONCE`` and
+            ``VERIFY_FAIL_IF_NO_PEER_CERT``. Specifying multiple values
+            results in passing along a reduced ``OR`` value
+            (e.g. VERIFY_PEER | VERIFY_FAIL_IF_NO_PEER_CERT)
+        - ``headers``: A dictionary of keys for the header name and a list
+            of values to provide as header values.
+        - ``data``: The payload to submit as part of the request.
+
+    Success reply fields:
+        - ``success``: Set to ``true``
+        - ``body``: The response body
+        - ``code``: The HTTP response code
+
+    Failure reply fields:
+        - ``success``: set to ``false``
+        - ``reason``: Reason for the failure
+
+    Example:
+
+    .. code-block:: javascript
+
+        api.request(
+            'http.get',
+            {url: 'http://foo/'},
+            function(reply) { api.log_info(reply.body); });
+
+    """
 
     DEFAULT_TIMEOUT = 30  # seconds
     DEFAULT_DATA_LIMIT = 128 * 1024  # 128 KB
