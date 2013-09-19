@@ -6,6 +6,7 @@ from twisted.internet.defer import Deferred, inlineCallbacks
 from twisted.web.server import Site, NOT_DONE_YET
 from twisted.web.resource import Resource
 from twisted.web import http
+from twisted.web.client import WebClientContextFactory, Agent
 from twisted.internet.protocol import Protocol, Factory
 
 from vumi.utils import (normalize_msisdn, vumi_resource_path, cleanup_msisdn,
@@ -168,6 +169,24 @@ class HttpUtilsTestCase(TestCase):
         self.set_render(err)
         data = yield http_request(self.url, '')
         self.assertEqual(data, "Bad")
+
+    @inlineCallbacks
+    def test_http_request_with_custom_context_factory(self):
+        self.set_render(lambda r: "Yay")
+
+        ctxt = WebClientContextFactory()
+
+        class FakeAgent(Agent):
+            def __init__(slf, reactor, contextFactory=None):
+                self.assertEqual(contextFactory, ctxt)
+                super(FakeAgent, slf).__init__(reactor, contextFactory)
+
+        request = yield http_request_full(self.url, '',
+                                          context_factory=ctxt,
+                                          agent_class=FakeAgent)
+        self.assertEqual(request.delivered_body, "Yay")
+        self.assertEqual(request.code, http.OK)
+
 
     @inlineCallbacks
     def test_http_request_full_drop(self):

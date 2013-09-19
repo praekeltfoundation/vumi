@@ -7,6 +7,7 @@ import os
 import json
 import pkg_resources
 import logging
+import operator
 from uuid import uuid4
 
 from twisted.internet import reactor
@@ -16,6 +17,10 @@ from twisted.internet.defer import (
     succeed)
 from twisted.internet.error import ProcessDone
 from twisted.python.failure import Failure
+from twisted.web.client import WebClientContextFactory
+
+from OpenSSL.SSL import (
+    VERIFY_PEER, VERIFY_FAIL_IF_NO_PEER_CERT, VERIFY_CLIENT_ONCE, VERIFY_NONE)
 
 from vumi.config import ConfigText, ConfigInt, ConfigList, ConfigDict
 from vumi.application.base import ApplicationWorker
@@ -458,8 +463,55 @@ class LoggingResource(SandboxResource):
         return self.handle_log(api, command, level=logging.CRITICAL)
 
 
+class HttpClientContextFactory(WebClientContextFactory):
+
+    def __init__(self, verify_options=None):
+        self.verify_options = verify_options
+
+    def verify_callback(self, conn, cert, errno, errdepth, ok):
+        return ok
+
+    def getContext(self, hostname, port):
+        context = WebClientContextFactory.getContext(self)
+        if self.verify_options is not None:
+            context.set_verify(self.verify_options, self.verify_callback)
+        return context
+
+
 class HttpClientResource(SandboxResource):
-    """Resource that allows making HTTP calls to outside services."""
+    """Resource that allows making HTTP calls to outside services.
+
+    Command fields:
+        - ``url``: The URL to request
+        - ``verify_options``: A list of options to verify when doing
+            an HTTPS request. Possible string values are ``VERIFY_NONE``,
+            ``VERIFY_PEER``, ``VERIFY_CLIENT_ONCE`` and
+            ``VERIFY_FAIL_IF_NO_PEER_CERT``. Specifying multiple values
+            results in passing along a reduced ``OR`` value
+            (e.g. VERIFY_PEER | VERIFY_FAIL_IF_NO_PEER_CERT)
+        - ``headers``: A dictionary of keys for the header name and a list
+            of values to provide as header values.
+        - ``data``: The payload to submit as part of the request.
+
+    Success reply fields:
+        - ``success``: Set to ``true``
+        - ``body``: The response body
+        - ``code``: The HTTP response code
+
+    Failure reply fields:
+        - ``success``: set to ``false``
+        - ``reason``: Reason for the failure
+
+    Example:
+
+    .. code-block:: javascript
+
+        api.request(
+            'http.get',
+            {url: 'http://foo/'},
+            function(reply) { api.log_info(reply.body); });
+
+    """
 
     DEFAULT_TIMEOUT = 30  # seconds
     DEFAULT_DATA_LIMIT = 128 * 1024  # 128 KB
@@ -475,6 +527,24 @@ class HttpClientResource(SandboxResource):
             return succeed(self.reply(command, success=False,
                                       reason="No URL given"))
         url = url.encode("utf-8")
+
+        verify_map = {
+            'VERIFY_NONE': VERIFY_NONE,
+            'VERIFY_PEER': VERIFY_PEER,
+            'VERIFY_CLIENT_ONCE': VERIFY_CLIENT_ONCE,
+            'VERIFY_FAIL_IF_NO_PEER_CERT': VERIFY_FAIL_IF_NO_PEER_CERT
+        }
+
+        if 'verify_options' in command:
+            verify_options = [verify_map[key] for key in
+                                command.get('verify_options', [])]
+            verify_options = reduce(operator.or_, verify_options)
+        else:
+            verify_options = None
+
+        context_factory = HttpClientContextFactory(
+            verify_options=verify_options)
+
         headers = command.get('headers', {})
         headers = dict((k.encode("utf-8"), [x.encode("utf-8") for x in v])
                        for k, v in headers.items())
@@ -483,7 +553,8 @@ class HttpClientResource(SandboxResource):
             data = data.encode("utf-8")
         d = http_request_full(url, data=data, headers=headers,
                               method=method, timeout=self.timeout,
-                              data_limit=self.data_limit)
+                              data_limit=self.data_limit,
+                              context_factory=context_factory)
         d.addCallback(self._make_success_reply, command)
         d.addErrback(self._make_failure_reply, command)
         return d
