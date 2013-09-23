@@ -155,43 +155,43 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
         self.assertEqual(params, {'requestId': u'123456789abcdefg'})
 
     def test_packet_body_deserializing(self):
-        body = (
-            u"<USSDRequest>"
-            u"\n\t<requestId>"
-            u"\n\t\t554537967"
-            u"\n\t</requestId>"
-            u"\n\t<msisdn>"
-            u"\n\t\t2347067596383"
-            u"\n\t</msisdn>"
-            u"\n\t<starCode>"
-            u"\n\t\t759"
-            u"\n\t</starCode>"
-            u"\n\t<clientId>"
-            u"\n\t\t441"
-            u"\n\t</clientId>"
-            u"\n\t<phase>"
-            u"\n\t\t2"
-            u"\n\t</phase>"
-            u"\n\t<dcs>"
-            u"\n\t\t15"
-            u"\n\t</dcs>"
-            u"\n\t<userdata>"
-            u"\n\t\t\xa4"
-            u"\n\t</userdata>"
-            u"\n\t<msgtype>"
-            u"\n\t\t4"
-            u"\n\t</msgtype>"
-            u"\n\t<EndofSession>"
-            u"\n\t\t0"
-            u"\n\t</EndofSession>"
-            u"\n</USSDRequest>\n"
-        )
+        body = '\n'.join([
+            u"<USSDRequest>",
+            u"\t<requestId>",
+            u"\t\t554537967",
+            u"\t</requestId>",
+            u"\t<msisdn>",
+            u"\t\t2347067123456",
+            u"\t</msisdn>",
+            u"\t<starCode>",
+            u"\t\t759",
+            u"\t</starCode>",
+            u"\t<clientId>",
+            u"\t\t441",
+            u"\t</clientId>"
+            u"\t<phase>",
+            u"\t\t2",
+            u"\t</phase>",
+            u"\t<dcs>",
+            u"\t\t15",
+            u"\t</dcs>",
+            u"\t<userdata>",
+            u"\t\t\xa4",
+            u"\t</userdata>",
+            u"\t<msgtype>",
+            u"\t\t4",
+            u"\t</msgtype>",
+            u"\t<EndofSession>",
+            u"\t\t0",
+            u"\t</EndofSession>",
+            u"</USSDRequest>\n"
+        ])
         packet_type, params = XmlOverTcpClient.deserialize_body(body)
 
         self.assertEqual(packet_type, 'USSDRequest')
         self.assertEqual(params, {
             u'requestId': u'554537967',
-            u'msisdn': u'2347067596383',
+            u'msisdn': u'2347067123456',
             u'userdata': u'\xa4',
             u'clientId': u'441',
             u'dcs': u'15',
