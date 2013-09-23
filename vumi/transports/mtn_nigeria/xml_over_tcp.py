@@ -95,6 +95,10 @@ class XmlOverTcpClient(Protocol):
     # field. '15' is used for ASCII, and is the default. The documentation
     # does not offer any other codes.
     DATA_CODING_SCHEME = '15'
+
+    # ElementTree needs 'us-ascii' instead of 'ascii' for some reason.
+    # 'us-ascii' == 'ascii', according to
+    # http://www.iana.org/assignments/character-sets/character-sets.xhtml.
     ENCODING = 'us-ascii'
 
     # Data requests and responses need to include a 'phase' field. The
