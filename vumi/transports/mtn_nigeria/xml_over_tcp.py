@@ -96,10 +96,8 @@ class XmlOverTcpClient(Protocol):
     # does not offer any other codes.
     DATA_CODING_SCHEME = '15'
 
-    # ElementTree needs 'us-ascii' instead of 'ascii' for some reason.
-    # 'us-ascii' == 'ascii', according to
-    # http://www.iana.org/assignments/character-sets/character-sets.xhtml.
-    ENCODING = 'us-ascii'
+    # By observation, it appears that latin1 is the protocol's encoding
+    ENCODING = 'latin1'
 
     # Data requests and responses need to include a 'phase' field. The
     # documentation does not provide any information about 'phase', but we are
@@ -133,7 +131,7 @@ class XmlOverTcpClient(Protocol):
         self.reset_buffer()
 
     def reset_buffer(self):
-        self._buffer = u''
+        self._buffer = ''
         self._current_header = None
 
     def timeout(self):
@@ -216,13 +214,6 @@ class XmlOverTcpClient(Protocol):
         return self._buffer[:n]
 
     @classmethod
-    def decode(cls, s):
-        if isinstance(s, unicode):
-            return s
-
-        return str(s).decode(cls.ENCODING)
-
-    @classmethod
     def remove_nullbytes(cls, s):
         return s.replace('\0', '')
 
@@ -241,21 +232,15 @@ class XmlOverTcpClient(Protocol):
         # happens when the requestId length is shorter than 16 bytes, so they
         # just pad it with trailing nullbytes. We need to remove the nullbytes
         # before parsing the xml to prevent parse errors
-        body = cls.remove_nullbytes(body)
+        body = cls.remove_nullbytes(body.decode(cls.ENCODING))
 
-        # Sometimes certain fields (mostly the 'userdata' field where the user
-        # content goes) have non-ascii characters (eg. '\xa4'). We need to
-        # encode the body from the raw unicode buffer to ascii (or the
-        # configured encoding), but escaping non-ascii characters the way xml
-        # expects so that we don't break the encoding and xml parsing. By the
-        # time ElementTree has parsed the body, the non-ascii parts are in
-        # unicode form.
-        root = ET.fromstring(body.encode(cls.ENCODING, 'xmlcharrefreplace'))
+        # We transcode from the configured encoding to UTF-8, since ElementTree
+        # needs bytes, and all XML parsers need to accept UTF-8.
+        # http://www.w3.org/TR/xml/#charsets
+        root = ET.fromstring(body.encode('utf-8'))
 
         packet_type = root.tag
-        params = dict(
-            (cls.decode(el.tag).strip(), cls.decode(el.text).strip())
-            for el in root)
+        params = dict((el.tag.strip(), el.text.strip()) for el in root)
 
         return packet_type, params
 
@@ -372,7 +357,7 @@ class XmlOverTcpClient(Protocol):
         root = ET.Element(packet_type)
         for param_name, param_value in params:
             ET.SubElement(root, param_name).text = param_value
-        return ET.tostring(root, encoding=cls.ENCODING)
+        return ET.tostring(root).encode(cls.ENCODING)
 
     @classmethod
     def serialize_packet(cls, session_id, packet_type, params):

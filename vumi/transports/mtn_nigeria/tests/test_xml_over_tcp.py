@@ -123,31 +123,31 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
 
     def test_packet_body_serializing(self):
         body = XmlOverTcpClient.serialize_body(
-            u'DummyPacket',
+            'DummyPacket',
             [('requestId', '123456789abcdefg')])
         expected_body = (
-            u"<DummyPacket>"
-            u"<requestId>123456789abcdefg</requestId>"
-            u"</DummyPacket>")
+            "<DummyPacket>"
+            "<requestId>123456789abcdefg</requestId>"
+            "</DummyPacket>")
         self.assertEqual(body, expected_body)
 
     def test_packet_body_serializing_for_non_ascii_chars(self):
         body = XmlOverTcpClient.serialize_body(
-            u'DummyPacket',
+            'DummyPacket',
             [('requestId', '123456789abcdefg'),
              ('userdata', u'Zoë')])
         expected_body = (
-            u"<DummyPacket>"
-            u"<requestId>123456789abcdefg</requestId>"
-            u"<userdata>Zo&#235;</userdata>"
-            u"</DummyPacket>")
+            "<DummyPacket>"
+            "<requestId>123456789abcdefg</requestId>"
+            "<userdata>Zo&#235;</userdata>"
+            "</DummyPacket>")
         self.assertEqual(body, expected_body)
 
     def test_packet_body_deserializing_for_nullbytes(self):
         body = (
-            u"<DummyPacket>"
-            u"<requestId>123456789abcdefg\0\0\0</requestId>"
-            u"</DummyPacket>"
+            "<DummyPacket>"
+            "<requestId>123456789abcdefg\0\0\0</requestId>"
+            "</DummyPacket>"
         )
         packet_type, params = XmlOverTcpClient.deserialize_body(body)
 
@@ -156,49 +156,49 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
 
     def test_packet_body_deserializing(self):
         body = '\n'.join([
-            u"<USSDRequest>",
-            u"\t<requestId>",
-            u"\t\t554537967",
-            u"\t</requestId>",
-            u"\t<msisdn>",
-            u"\t\t2347067123456",
-            u"\t</msisdn>",
-            u"\t<starCode>",
-            u"\t\t759",
-            u"\t</starCode>",
-            u"\t<clientId>",
-            u"\t\t441",
-            u"\t</clientId>"
-            u"\t<phase>",
-            u"\t\t2",
-            u"\t</phase>",
-            u"\t<dcs>",
-            u"\t\t15",
-            u"\t</dcs>",
-            u"\t<userdata>",
-            u"\t\t\xa4",
-            u"\t</userdata>",
-            u"\t<msgtype>",
-            u"\t\t4",
-            u"\t</msgtype>",
-            u"\t<EndofSession>",
-            u"\t\t0",
-            u"\t</EndofSession>",
-            u"</USSDRequest>\n"
+            "<USSDRequest>",
+            "\t<requestId>",
+            "\t\t554537967",
+            "\t</requestId>",
+            "\t<msisdn>",
+            "\t\t2347067123456",
+            "\t</msisdn>",
+            "\t<starCode>",
+            "\t\t759",
+            "\t</starCode>",
+            "\t<clientId>",
+            "\t\t441",
+            "\t</clientId>"
+            "\t<phase>",
+            "\t\t2",
+            "\t</phase>",
+            "\t<dcs>",
+            "\t\t15",
+            "\t</dcs>",
+            "\t<userdata>",
+            "\t\t\xa4",
+            "\t</userdata>",
+            "\t<msgtype>",
+            "\t\t4",
+            "\t</msgtype>",
+            "\t<EndofSession>",
+            "\t\t0",
+            "\t</EndofSession>",
+            "</USSDRequest>\n"
         ])
         packet_type, params = XmlOverTcpClient.deserialize_body(body)
 
         self.assertEqual(packet_type, 'USSDRequest')
         self.assertEqual(params, {
-            u'requestId': u'554537967',
-            u'msisdn': u'2347067123456',
-            u'userdata': u'\xa4',
-            u'clientId': u'441',
-            u'dcs': u'15',
-            u'msgtype': u'4',
-            u'phase': u'2',
-            u'starCode': u'759',
-            u'EndofSession': u'0',
+            'requestId': '554537967',
+            'msisdn': '2347067123456',
+            'userdata': u'\xa4',
+            'clientId': '441',
+            'dcs': '15',
+            'msgtype': '4',
+            'phase': '2',
+            'starCode': '759',
+            'EndofSession': '0',
         })
 
     @inlineCallbacks
