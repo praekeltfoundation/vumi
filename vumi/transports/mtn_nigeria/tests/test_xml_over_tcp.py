@@ -168,7 +168,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
             "\t</starCode>",
             "\t<clientId>",
             "\t\t441",
-            "\t</clientId>"
+            "\t</clientId>",
             "\t<phase>",
             "\t\t2",
             "\t</phase>",
