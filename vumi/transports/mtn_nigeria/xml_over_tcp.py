@@ -352,10 +352,16 @@ class XmlOverTcpClient(Protocol):
             cls.serialize_header_field(session_id, cls.SESSION_ID_HEADER_SIZE),
             cls.serialize_header_field(length, cls.LENGTH_HEADER_SIZE))
 
+    @staticmethod
+    def ensure_str(s):
+        return s if isinstance(s, basestring) else str(s)
+
     @classmethod
     def serialize_body(cls, packet_type, params):
         root = ET.Element(packet_type)
         for param_name, param_value in params:
+            param_name = cls.ensure_str(param_name)
+            param_value = cls.ensure_str(param_value)
             ET.SubElement(root, param_name).text = param_value
         return ET.tostring(root).encode(cls.ENCODING)
 
