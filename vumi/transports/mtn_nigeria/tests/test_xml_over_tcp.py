@@ -124,12 +124,10 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
     def test_packet_body_serializing(self):
         body = XmlOverTcpClient.serialize_body(
             'DummyPacket',
-            [('requestId', '123456789abcdefg'),
-             ('foo', 1234)])
+            [('requestId', '123456789abcdefg')])
         expected_body = (
             "<DummyPacket>"
             "<requestId>123456789abcdefg</requestId>"
-            "<foo>1234</foo>"
             "</DummyPacket>")
         self.assertEqual(body, expected_body)
 

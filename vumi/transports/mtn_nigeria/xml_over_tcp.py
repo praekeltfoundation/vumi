@@ -352,16 +352,10 @@ class XmlOverTcpClient(Protocol):
             cls.serialize_header_field(session_id, cls.SESSION_ID_HEADER_SIZE),
             cls.serialize_header_field(length, cls.LENGTH_HEADER_SIZE))
 
-    @staticmethod
-    def ensure_str(s):
-        return s if isinstance(s, basestring) else str(s)
-
     @classmethod
     def serialize_body(cls, packet_type, params):
         root = ET.Element(packet_type)
         for param_name, param_value in params:
-            param_name = cls.ensure_str(param_name)
-            param_value = cls.ensure_str(param_value)
             ET.SubElement(root, param_name).text = param_value
         return ET.tostring(root).encode(cls.ENCODING)
 
@@ -396,7 +390,7 @@ class XmlOverTcpClient(Protocol):
         # NOTE: The protocol requires request ids to be number only ids. With a
         # request id length of 10 digits, generating ids using randint could
         # well cause collisions to occur, although this should be unlikely.
-        return randint(0, (10 ** cls.REQUEST_ID_LENGTH) - 1)
+        return str(randint(0, (10 ** cls.REQUEST_ID_LENGTH) - 1))
 
     def login(self):
         params = [
