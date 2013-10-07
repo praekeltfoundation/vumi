@@ -10,7 +10,7 @@ Documentation available online at http://vumi.readthedocs.org/ and in the `docs`
 
 |vumi-cover|_
 
-.. |vumi-cover| image:: https://coveralls.io/repos/praekelt/vumi/badge.png
+.. |vumi-cover| image:: https://coveralls.io/repos/praekelt/vumi/badge.png?branch=develop
 .. _vumi-cover: https://coveralls.io/r/praekelt/vumi
 
 To build the docs locally::
