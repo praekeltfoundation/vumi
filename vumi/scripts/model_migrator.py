@@ -79,6 +79,9 @@ class ModelMigrator(object):
         else:
             keys = self.model.all_keys()
             self.emit("%d keys found. Migrating ..." % len(keys))
+        # Depending on our Riak client, Python version, and JSON library we may
+        # get bytes or unicode here.
+        keys = [k.decode('utf-8') if isinstance(k, str) else k for k in keys]
         progress = ProgressEmitter(
             len(keys),
             lambda p: self.emit("%s%% complete." % (p,))

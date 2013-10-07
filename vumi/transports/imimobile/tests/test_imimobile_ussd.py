@@ -214,12 +214,12 @@ class TestImiMobileUssdTransportTestCase(TransportTestCase):
         response = yield self.mk_request(
             'some-suffix', unexpected_p1='', unexpected_p2='')
 
-        self.assertEqual(
-            response.delivered_body,
-            json.dumps({
-                'unexpected_parameter': ['unexpected_p1', 'unexpected_p2']
-            }))
         self.assertEqual(response.code, 400)
+        body = json.loads(response.delivered_body)
+        self.assertEqual(set(['unexpected_parameter']), set(body.keys()))
+        self.assertEqual(
+            sorted(body['unexpected_parameter']),
+            ['unexpected_p1', 'unexpected_p2'])
 
     @inlineCallbacks
     def test_nack_insufficient_message_fields(self):
