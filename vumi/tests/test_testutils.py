@@ -19,7 +19,7 @@ class MockingHistoryItemTestCase(TestCase):
 
     def test_repr(self):
         item = Mocking.HistoryItem(("a", "b"), {"c": 1})
-        self.assertEqual(repr(item), "<'HistoryItem' object at %s"
+        self.assertEqual(repr(item), "<'HistoryItem' object at %r"
                          " [args: ('a', 'b'), kw: {'c': 1}]>" % id(item))
 
 
