@@ -144,8 +144,12 @@ class TestHeartBeatMonitor(TestCase):
         }
         self.worker = get_stubbed_worker(monitor.HeartBeatMonitor, config)
 
+    @inlineCallbacks
     def tearDown(self):
-        self.worker.stopWorker()
+        redis = self.worker._redis
+        yield redis._purge_all()
+        yield redis.close_manager()
+        yield self.worker.stopWorker()
 
     def gen_fake_attrs(self, timestamp):
         sys_id = 'system-1'
@@ -200,12 +204,12 @@ class TestHeartBeatMonitor(TestCase):
         attrs = self.gen_fake_attrs(time.time())
         wkr_id = attrs['worker_id']
         # process the fake message ()
-        self.worker.update(attrs)
+        yield self.worker.update(attrs)
 
         wkr = self.worker._workers[attrs['worker_id']]
         wkr.snapshot()
 
-        wkr.audit(self.worker._storage)
+        yield wkr.audit(self.worker._storage)
 
         # test that an issue was opened
         self.assertEqual(wkr.procs_count, 1)
@@ -224,14 +228,14 @@ class TestHeartBeatMonitor(TestCase):
         attrs = self.gen_fake_attrs(time.time())
         wkr_id = attrs['worker_id']
         # process the fake message ()
-        self.worker.update(attrs)
+        yield self.worker.update(attrs)
         attrs['pid'] = 2342
-        self.worker.update(attrs)
+        yield self.worker.update(attrs)
 
         wkr = self.worker._workers[attrs['worker_id']]
         wkr.snapshot()
 
-        wkr.audit(self.worker._storage)
+        yield wkr.audit(self.worker._storage)
 
         # verify that no issue has been opened
         self.assertEqual(wkr.procs_count, 2)
@@ -252,7 +256,7 @@ class TestHeartBeatMonitor(TestCase):
         # process the fake message
         self.worker.update(attrs)
 
-        self.worker._periodic_task()
+        yield self.worker._periodic_task()
 
         # this blob is what should be persisted into redis (as JSON)
         expected = {

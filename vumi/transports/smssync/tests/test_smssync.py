@@ -56,6 +56,8 @@ class TestSingleSmsSync(TransportTestCase):
         msginfo = self.default_msginfo()
         if timestamp is None:
             timestamp = datetime.datetime.utcnow()
+        if hasattr(timestamp, 'strftime'):
+            timestamp = timestamp.strftime("%m-%d-%y %H:%M")
         if secret is None:
             secret = msginfo.smssync_secret
         # Timestamp format: mm-dd-yy-hh:mm, e.g. 11-27-11-07:11
@@ -63,7 +65,7 @@ class TestSingleSmsSync(TransportTestCase):
             'sent_to': to_addr,
             'from': from_addr,
             'message': content,
-            'sent_timestamp': timestamp.strftime("%m-%d-%y %H:%M"),
+            'sent_timestamp': timestamp,
             'message_id': message_id,
             'secret': secret,
         }
@@ -106,6 +108,17 @@ class TestSingleSmsSync(TransportTestCase):
         self.assertEqual(msg['to_addr'], "555")
         self.assertEqual(msg['from_addr'], "123")
         self.assertEqual(msg['content'], u"hællo")
+        self.assertEqual(msg['timestamp'], now)
+
+    @inlineCallbacks
+    def test_inbound_millisecond_timestamp(self):
+        smssync_ms = '1377125641000'
+        now = datetime.datetime.utcfromtimestamp(int(smssync_ms) / 1000)
+        response = yield self.smssync_inbound(content=u'hello',
+                                              timestamp=smssync_ms)
+        self.assertEqual(response, {"payload": {"success": "true",
+                                                "messages": []}})
+        [msg] = self.get_dispatched_messages()
         self.assertEqual(msg['timestamp'], now)
 
     @inlineCallbacks

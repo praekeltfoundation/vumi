@@ -137,6 +137,15 @@ class TestModelOnTxRiak(TestCase):
     def tearDown(self):
         yield self.manager.purge_all()
 
+    @Manager.calls_manager
+    def filter_tombstones(self, model_cls, keys):
+        live_keys = []
+        for key in keys:
+            model = yield model_cls.load(key)
+            if model is not None:
+                live_keys.append(key)
+        returnValue(live_keys)
+
     def test_simple_class(self):
         field_names = SimpleModel.field_descriptors.keys()
         self.assertEqual(sorted(field_names), ['a', 'b'])
@@ -313,6 +322,21 @@ class TestModelOnTxRiak(TestCase):
         simple_model = self.manager.proxy(SimpleModel)
         s = yield simple_model.load("foo")
         self.assertEqual(s, None)
+
+    @Manager.calls_manager
+    def test_all_keys(self):
+        simple_model = self.manager.proxy(SimpleModel)
+
+        keys = yield self.filter_tombstones(
+            simple_model, (yield simple_model.all_keys()))
+        self.assertEqual(keys, [])
+
+        yield simple_model("foo-1", a=5, b=u'1').save()
+        yield simple_model("foo-2", a=5, b=u'2').save()
+
+        keys = yield self.filter_tombstones(
+            simple_model, (yield simple_model.all_keys()))
+        self.assertEqual(sorted(keys), [u"foo-1", u"foo-2"])
 
     @Manager.calls_manager
     def test_index_keys(self):

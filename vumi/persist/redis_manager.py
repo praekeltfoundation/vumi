@@ -12,16 +12,17 @@ class RedisManager(Manager):
     call_decorator = staticmethod(flatten_generator)
 
     @classmethod
-    def _fake_manager(cls, fake_redis, key_prefix, key_separator):
+    def _fake_manager(cls, fake_redis, manager_config):
         if fake_redis is None:
             fake_redis = FakeRedis(async=False)
-        manager = cls(fake_redis, key_prefix)
+        manager_config['config']['FAKE_REDIS'] = fake_redis
+        manager = cls(fake_redis, **manager_config)
         # Because ._close() assumes a real connection.
         manager._close = fake_redis.teardown
         return manager
 
     @classmethod
-    def _manager_from_config(cls, config, key_prefix, key_separator):
+    def _manager_from_config(cls, config, manager_config):
         """Construct a manager from a dictionary of options.
 
         :param dict config:
@@ -30,11 +31,12 @@ class RedisManager(Manager):
             Key prefix for namespacing.
         """
 
-        return cls(redis.Redis(**config), key_prefix, key_separator)
+        return cls(redis.Redis(**config), **manager_config)
 
     def _close(self):
         """Close redis connection."""
-        pass
+        # Close all the connections this client may have open.
+        self._client.connection_pool.disconnect()
 
     def _purge_all(self):
         """Delete *ALL* keys whose names start with this manager's key prefix.

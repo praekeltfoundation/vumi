@@ -38,3 +38,7 @@ class RedisManagerTestCase(TestCase):
         self.manager.set('foo', 'baz')
         self.assertEqual(['foo'], self.manager.keys())
         self.assertEqual('baz', self.manager.get('foo'))
+
+    def test_disconnect_twice(self):
+        self.manager._close()
+        self.manager._close()

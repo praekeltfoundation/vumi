@@ -2,14 +2,16 @@
 
 import base64
 import json
+import random
 
 from twisted.internet.defer import inlineCallbacks
+from twisted.internet import reactor
 from twisted.web.http_headers import Headers
 from twisted.web import http
 
 from vumi.transports import Transport
 from vumi.transports.vumi_bridge.client import StreamingClient
-from vumi.config import ConfigText, ConfigDict, ConfigInt
+from vumi.config import ConfigText, ConfigDict, ConfigInt, ConfigFloat
 from vumi.persist.txredis_manager import TxRedisManager
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.utils import http_request_full
@@ -32,6 +34,28 @@ class VumiBridgeTransportConfig(Transport.CONFIG_CLASS):
         default=48 * 60 * 60)  # default is 48 hours.
     redis_manager = ConfigDict(
         "Redis client configuration.", default={}, static=True)
+    max_reconnect_delay = ConfigInt(
+        'Maximum number of seconds between connection attempts', default=3600,
+        static=True)
+    max_retries = ConfigInt(
+        'Maximum number of consecutive unsuccessful connection attempts '
+        'after which no further connection attempts will be made. If this is '
+        'not explicitly set, no maximum is applied',
+        static=True)
+    initial_delay = ConfigFloat(
+        'Initial delay for first reconnection attempt', default=0.1,
+        static=True)
+    factor = ConfigFloat(
+        'A multiplicitive factor by which the delay grows',
+        # (math.e)
+        default=2.7182818284590451,
+        static=True)
+    jitter = ConfigFloat(
+        'Percentage of randomness to introduce into the delay length'
+        'to prevent stampeding.',
+        # molar Planck constant times c, joule meter/mole
+        default=0.11962656472,
+        static=True)
 
 
 class GoConversationTransport(Transport):
@@ -50,12 +74,17 @@ class GoConversationTransport(Transport):
     """
 
     CONFIG_CLASS = VumiBridgeTransportConfig
+    continue_trying = True
+    clock = reactor
 
     @inlineCallbacks
     def setup_transport(self):
         config = self.get_static_config()
         self.redis = yield TxRedisManager.from_config(
             config.redis_manager)
+        self.retries = 0
+        self.delay = config.initial_delay
+        self.reconnect_call = None
         self.client = StreamingClient()
         self.connect_api_clients()
 
@@ -64,16 +93,44 @@ class GoConversationTransport(Transport):
             TransportUserMessage, self.handle_inbound_message,
             log.error, self.get_url('messages.json'),
             headers=Headers(self.get_auth_headers()),
+            on_connect=self.reset_reconnect_delay,
             on_disconnect=self.reconnect_api_clients)
         self.event_client = self.client.stream(
             TransportEvent, self.handle_inbound_event,
             log.error, self.get_url('events.json'),
             headers=Headers(self.get_auth_headers()),
+            on_connect=self.reset_reconnect_delay,
             on_disconnect=self.reconnect_api_clients)
 
     def reconnect_api_clients(self, reason):
         self.disconnect_api_clients()
-        self.connect_api_clients()
+        if not self.continue_trying:
+            log.msg('Not retrying because of explicit request')
+            return
+
+        config = self.get_static_config()
+        self.retries += 1
+        if (config.max_retries is not None
+            and (self.retries > config.max_retries)):
+            log.warning('Abandoning reconnecting after %s attempts.' % (
+                self.retries))
+            return
+
+        self.delay = min(self.delay * config.factor,
+                         config.max_reconnect_delay)
+        if config.jitter:
+            self.delay = random.normalvariate(self.delay,
+                                              self.delay * config.jitter)
+        log.msg('Will retry in %s seconds' % (self.delay,))
+        self.reconnect_call = self.clock.callLater(self.delay,
+                                                   self.connect_api_clients)
+
+    def reset_reconnect_delay(self):
+        config = self.get_static_config()
+        self.delay = config.initial_delay
+        self.retries = 0
+        self.reconnect_call = None
+        self.continue_trying = True
 
     def disconnect_api_clients(self):
         self.message_client.disconnect()
@@ -93,6 +150,10 @@ class GoConversationTransport(Transport):
         return url
 
     def teardown_transport(self):
+        if self.reconnect_call:
+            self.reconnect_call.cancel()
+            self.reconnect_call = None
+        self.continue_trying = False
         self.disconnect_api_clients()
 
     @inlineCallbacks
@@ -118,6 +179,8 @@ class GoConversationTransport(Transport):
             'in_reply_to': message['in_reply_to'],
             'session_event': message['session_event']
         }
+        if 'helper_metadata' in message:
+            params['helper_metadata'] = message['helper_metadata']
 
         resp = yield http_request_full(
             self.get_url('messages.json'),

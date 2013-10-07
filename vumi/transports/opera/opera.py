@@ -13,7 +13,7 @@ from vumi.utils import normalize_msisdn
 from vumi.transports import Transport
 from vumi.transports.failures import TemporaryFailure, PermanentFailure
 from vumi.transports.opera import utils
-from vumi.components import SessionManager
+from vumi.components.session import SessionManager
 
 
 def get_receipts_xml(content):

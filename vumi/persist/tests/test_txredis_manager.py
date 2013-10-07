@@ -37,3 +37,8 @@ class RedisManagerTestCase(TestCase):
         yield self.manager.set('foo', 'baz')
         self.assertEqual(['foo'], (yield self.manager.keys()))
         self.assertEqual('baz', (yield self.manager.get('foo')))
+
+    @inlineCallbacks
+    def test_disconnect_twice(self):
+        yield self.manager._close()
+        yield self.manager._close()

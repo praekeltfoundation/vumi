@@ -33,6 +33,11 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
             self.config['web_path'])
         yield self.session_manager.redis._purge_all()  # just in case
 
+    @inlineCallbacks
+    def tearDown(self):
+        yield super(TestAirtelUSSDTransportTestCase, self).tearDown()
+        yield self.session_manager.stop()
+
     def mk_full_request(self, **params):
         return http_request_full('%s?%s' % (self.transport_url,
             urlencode(params)), data='', method='GET')
