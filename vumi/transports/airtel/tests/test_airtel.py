@@ -347,3 +347,35 @@ class TestAirtelUSSDTransportTestCaseWithAuth(TestAirtelUSSDTransportTestCase):
                 'error': '523',
             }
         })
+
+class LoadBalancedAirtelUSSDTransportTestCase(TransportTestCase):
+
+    transport_class = AirtelUSSDTransport
+
+    @inlineCallbacks
+    def setUp(self):
+        yield super(LoadBalancedAirtelUSSDTransportTestCase, self).setUp()
+        self.default_config = {
+            'web_port': 0,
+            'web_path': '/api/v1/airtel/ussd/',
+            'validation_mode': 'permissive',
+            'session_key_prefix': 'foo',
+        }
+
+        config1 = self.default_config.copy()
+        config1['transport_name'] = 'transport_1'
+
+        config2 = self.default_config.copy()
+        config2['transport_name'] = 'transport_2'
+
+        self.transport1 = yield self.get_transport(config1)
+        self.transport2 = yield self.get_transport(config2)
+
+    @inlineCallbacks
+    def test_sessions_in_sync(self):
+        session1 = yield self.transport1.session_manager.load_session('user1')
+        session1['foo'] = 'bar'
+        yield self.transport1.session_manager.save_session('user1', session1)
+
+        session2 = yield self.transport2.session_manager.load_session('user1')
+        self.assertEqual(session2['foo'], 'bar')

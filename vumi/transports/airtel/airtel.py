@@ -24,6 +24,10 @@ class AirtelUSSDTransportConfig(HttpRpcTransport.CONFIG_CLASS):
                                      required=False, static=True)
     redis_manager = ConfigDict('Parameters to connect to Redis with.',
                                default={}, required=False, static=True)
+    session_key_prefix = ConfigText(
+        'The prefix to use for session key management. Specify this'
+        'if you are using more than 1 worker in a load-balanced'
+        'fashion.', default=None, static=True)
     ussd_session_timeout = ConfigInt('Max length of a USSD session',
                                      default=60 * 10, required=False,
                                      static=True)
@@ -47,9 +51,13 @@ class AirtelUSSDTransport(HttpRpcTransport):
     def setup_transport(self):
         super(AirtelUSSDTransport, self).setup_transport()
         config = self.get_static_config()
-        r_prefix = "vumi.transports.airtel:%s" % self.transport_name
+        default_session_key_prefix = "vumi.transports.airtel:%s" % (
+                                        self.transport_name,)
+        session_key_prefix = (config.session_key_prefix or
+                            default_session_key_prefix)
+        print 'session_key_prefix', session_key_prefix
         self.session_manager = yield SessionManager.from_redis_config(
-            config.redis_manager, r_prefix,
+            config.redis_manager, session_key_prefix,
             config.ussd_session_timeout)
 
     def is_cleanup(self, request):
