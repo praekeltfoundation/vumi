@@ -347,3 +347,35 @@ class TestAirtelUSSDTransportTestCaseWithAuth(TestAirtelUSSDTransportTestCase):
                 'error': '523',
             }
         })
+
+class LoadBalancedAirtelUSSDTransportTestCase(TransportTestCase):
+
+    transport_class = AirtelUSSDTransport
+
+    @inlineCallbacks
+    def setUp(self):
+        yield super(LoadBalancedAirtelUSSDTransportTestCase, self).setUp()
+        self.default_config = {
+            'web_port': 0,
+            'web_path': '/api/v1/airtel/ussd/',
+            'validation_mode': 'permissive',
+        }
+
+    @inlineCallbacks
+    def test_session_prefixes(self):
+        config1 = self.default_config.copy()
+        config1['transport_name'] = 'transport_1'
+        config1['session_key_prefix'] = 'foo'
+
+        config2 = self.default_config.copy()
+        config2['transport_name'] = 'transport_2'
+        config2['session_key_prefix'] = 'foo'
+
+        self.transport1 = yield self.get_transport(config1)
+        self.transport2 = yield self.get_transport(config2)
+        self.transport3 = yield self.get_transport(self.default_config)
+
+        self.assertEqual(self.transport1.get_session_key_prefix(), 'foo')
+        self.assertEqual(self.transport2.get_session_key_prefix(), 'foo')
+        self.assertEqual(self.transport3.get_session_key_prefix(),
+            'vumi.transports.airtel:sphex')
