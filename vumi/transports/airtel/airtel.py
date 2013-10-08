@@ -51,14 +51,15 @@ class AirtelUSSDTransport(HttpRpcTransport):
     def setup_transport(self):
         super(AirtelUSSDTransport, self).setup_transport()
         config = self.get_static_config()
+        self.session_manager = yield SessionManager.from_redis_config(
+            config.redis_manager, self.get_session_key_prefix(),
+            config.ussd_session_timeout)
+
+    def get_session_key_prefix(self):
+        config = self.get_static_config()
         default_session_key_prefix = "vumi.transports.airtel:%s" % (
                                         self.transport_name,)
-        session_key_prefix = (config.session_key_prefix or
-                            default_session_key_prefix)
-        print 'session_key_prefix', session_key_prefix
-        self.session_manager = yield SessionManager.from_redis_config(
-            config.redis_manager, session_key_prefix,
-            config.ussd_session_timeout)
+        return (config.session_key_prefix or default_session_key_prefix)
 
     def is_cleanup(self, request):
         return 'clean' in request.args
