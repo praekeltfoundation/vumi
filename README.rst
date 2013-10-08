@@ -8,6 +8,11 @@ Documentation available online at http://vumi.readthedocs.org/ and in the `docs`
 .. |vumi-ci| image:: https://travis-ci.org/praekelt/vumi.png?branch=develop
 .. _vumi-ci: https://travis-ci.org/praekelt/vumi
 
+|vumi-cover|_
+
+.. |vumi-cover| image:: https://coveralls.io/repos/praekelt/vumi/badge.png?branch=develop
+.. _vumi-cover: https://coveralls.io/r/praekelt/vumi
+
 To build the docs locally::
 
     $ virtualenv --no-site-packages ve/

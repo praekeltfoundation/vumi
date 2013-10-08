@@ -116,6 +116,28 @@ class ListPoolsCmd(usage.Options):
                            or ['-- None --']))
 
 
+class ReleaseTagCmd(usage.Options):
+
+    synopsis = "<pool> <tag>"
+
+    def parseArgs(self, pool, tag):
+        self.pool = pool
+        self.tag = tag
+
+    def run(self, cfg):
+        free_tags = cfg.tagpool.free_tags(self.pool)
+        inuse_tags = cfg.tagpool.inuse_tags(self.pool)
+        tag_tuple = (self.pool, self.tag)
+        if tag_tuple not in inuse_tags:
+            if tag_tuple not in free_tags:
+                cfg.emit('Unknown tag %s.' % (tag_tuple,))
+            else:
+                cfg.emit('Tag %s not in use.' % (tag_tuple,))
+        else:
+            cfg.tagpool.release_tag(tag_tuple)
+            cfg.emit('Released %s.' % (tag_tuple,))
+
+
 class Options(usage.Options):
     subCommands = [
         ["create-pool", None, CreatePoolCmd,
@@ -128,7 +150,10 @@ class Options(usage.Options):
          "List the free and inuse keys associated with a tag pool."],
         ["list-pools", None, ListPoolsCmd,
          "List all pools defined in config and in the tag store."],
-        ]
+        ["release-tag", None, ReleaseTagCmd,
+         "Release a single tag, moves it from the in-use to the free set. "
+         "Use only if you know what you are doing."]
+    ]
 
     optParameters = [
         ["config", "c", "tagpools.yaml",
