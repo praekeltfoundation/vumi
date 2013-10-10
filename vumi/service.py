@@ -307,9 +307,8 @@ class Consumer(object):
 
     def _check_notify(self):
         if self.paused and not self._in_progress:
-            for d in self._notify_paused_and_quiet:
-                d.callback(None)
-            self._notify_paused_and_quiet = []
+            while self._notify_paused_and_quiet:
+                self._notify_paused_and_quiet.pop(0).callback(None)
 
     @inlineCallbacks
     def consume(self, message):
