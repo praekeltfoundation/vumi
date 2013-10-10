@@ -79,6 +79,9 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
     delivery_report_regex = ConfigRegex(
         'What regex to use for matching delivery reports',
         default=DELIVERY_REPORT_REGEX, static=True)
+    submit_sm_encoding = ConfigText(
+        'How to encode the SMS before putting on the wire', static=True,
+        default='utf-8')
     data_coding_overrides = ConfigDict(
         "Overrides for data_coding character set mapping. This is useful for "
         "setting the default encoding (0), adding additional undefined "
@@ -153,6 +156,7 @@ class SmppTransport(Transport):
         log.msg("Starting the SmppTransport for %s" % (
             config.twisted_endpoint))
 
+        self.submit_sm_encoding = config.submit_sm_encoding
         default_prefix = "%s@%s" % (config.system_id, config.transport_name)
 
         r_config = config.redis_manager
@@ -431,7 +435,7 @@ class SmppTransport(Transport):
                                     config.OPERATOR_PREFIX,
                                     config.OPERATOR_NUMBER)
         return self.esme_client.submit_sm(
-            short_message=text.encode('utf-8'),
+            short_message=text.encode(self.submit_sm_encoding),
             destination_addr=str(to_addr),
             source_addr=route or from_addr,
             message_type=message['transport_type'],
