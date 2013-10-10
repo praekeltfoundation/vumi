@@ -114,8 +114,9 @@ class ApplicationWorker(BaseWorker):
         return d
 
     def teardown_worker(self):
-        self.pause_connectors()
-        return self.teardown_application()
+        d = self.pause_connectors()
+        d.addCallback(lambda r: self.teardown_application())
+        return d
 
     def setup_application(self):
         """

@@ -6,7 +6,7 @@ from copy import deepcopy
 from twisted.python import log
 from twisted.application.service import MultiService
 from twisted.application.internet import TCPClient
-from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
 from twisted.internet import protocol, reactor
 import txamqp
 from txamqp.client import TwistedDelegate
@@ -265,6 +265,8 @@ class Consumer(object):
 
     @inlineCallbacks
     def start(self, channel, queue):
+        self._notify_paused_and_quiet = []
+        self._in_progress = 0
         self.channel = channel
         self.queue = queue
         self.keep_consuming = True
@@ -290,16 +292,32 @@ class Consumer(object):
 
     def pause(self):
         self.paused = True
-        return self.channel.channel_flow(active=False)
+        self.channel.channel_flow(active=False)
+        return self.notify_paused_and_quiet()
 
     def unpause(self):
         self.paused = False
-        return self.channel.channel_flow(active=True)
+        self.channel.channel_flow(active=True)
+
+    def notify_paused_and_quiet(self):
+        d = Deferred()
+        self._notify_paused_and_quiet.append(d)
+        self._check_notify()
+        return d
+
+    def _check_notify(self):
+        if self.paused and not self._in_progress:
+            for d in self._notify_paused_and_quiet:
+                d.callback(None)
+            self._notify_paused_and_quiet = []
 
     @inlineCallbacks
     def consume(self, message):
+        self._in_progress += 1
         result = yield self.consume_message(self.message_class.from_json(
                                             message.content.body))
+        self._in_progress -= 1
+        self._check_notify()
         if self._testing:
             self.channel.message_processed()
         if result is not False:
