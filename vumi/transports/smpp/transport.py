@@ -84,7 +84,7 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
         default='utf-8')
     submit_sm_data_coding = ConfigInt(
         'What data_coding value to tell the SMSC we\'re using when putting'
-        'an SMS on the wire', static=True, default=8)
+        'an SMS on the wire', static=True, default=0)
     data_coding_overrides = ConfigDict(
         "Overrides for data_coding character set mapping. This is useful for "
         "setting the default encoding (0), adding additional undefined "

@@ -539,7 +539,7 @@ class EsmeToSmscTestCase(TransportTestCase):
     def test_submit_sm_data_coding(self):
         # Startup
         yield self.startTransport()
-        self.transport.submit_sm_data_coding = 0
+        self.transport.submit_sm_data_coding = 8
         yield self.transport._block_till_bind
         yield self.clear_link_pdus()
 
@@ -559,7 +559,7 @@ class EsmeToSmscTestCase(TransportTestCase):
 
         submit_sm_pdu = yield pdu_queue.get()
         sms = submit_sm_pdu['pdu']['body']['mandatory_parameters']
-        self.assertEqual(sms['data_coding'], 0)
+        self.assertEqual(sms['data_coding'], 8)
 
     @inlineCallbacks
     def test_submit_and_deliver_ussd_continue(self):
