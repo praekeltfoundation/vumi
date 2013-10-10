@@ -12,11 +12,18 @@ import binascii
 from smpp.pdu import unpack_pdu
 from smpp.pdu_builder import (
     BindTransceiver, BindTransmitter, BindReceiver, DeliverSMResp, SubmitSM,
-    EnquireLink, EnquireLinkResp, QuerySM)
+    EnquireLink, EnquireLinkResp, QuerySM, PDU)
 from smpp.pdu_inspector import (
     MultipartMessage, detect_multipart, multipart_key)
 
 from vumi import log
+
+
+class UnbindResp(PDU):
+    # pdu_builder doesn't have one of these yet.
+    def __init__(self, sequence_number, **kwargs):
+        super(UnbindResp, self).__init__(
+            'unbind_resp', 'ESME_ROK', sequence_number, **kwargs)
 
 
 def unpacked_pdu_opts(unpacked_pdu):
@@ -217,6 +224,12 @@ class EsmeTransceiver(Protocol):
         if self._lose_conn is not None:
             self._lose_conn.cancel()
             self._lose_conn = None
+
+    @inlineCallbacks
+    def handle_unbind(self, pdu):
+        yield self.send_pdu(UnbindResp(
+            sequence_number=pdu['header']['sequence_number']))
+        self.transport.loseConnection()
 
     @inlineCallbacks
     def handle_bind_transceiver_resp(self, pdu):

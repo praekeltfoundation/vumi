@@ -1,7 +1,7 @@
 from twisted.trial import unittest
 from twisted.internet.task import Clock
 from twisted.internet.defer import inlineCallbacks, returnValue
-from smpp.pdu_builder import DeliverSM, BindTransceiverResp
+from smpp.pdu_builder import DeliverSM, BindTransceiverResp, Unbind
 from smpp.pdu import unpack_pdu
 
 from vumi.tests.utils import LogCatcher, PersistenceMixin
@@ -168,6 +168,14 @@ class EsmeGenericMixin(object):
         yield esme.redis.set('smpp_last_sequence_number', 0xFFFF0000)
         self.assertEqual(0xFFFF0001, (yield esme.get_next_seq()))
         self.assertEqual(1, (yield esme.get_next_seq()))
+
+    @inlineCallbacks
+    def test_unbind(self):
+        esme = yield self.get_esme()
+
+        yield esme.handle_data(Unbind(1).get_bin())
+
+        self.assertEqual(False, esme.transport.connected)
 
 
 class EsmeTransmitterMixin(EsmeGenericMixin):
