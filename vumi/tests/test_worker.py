@@ -1,5 +1,5 @@
 from twisted.trial.unittest import TestCase
-from twisted.internet.defer import inlineCallbacks, succeed
+from twisted.internet.defer import inlineCallbacks, succeed, Deferred
 
 from vumi.worker import BaseConfig, BaseWorker
 from vumi.connectors import ReceiveInboundConnector, ReceiveOutboundConnector
@@ -207,3 +207,26 @@ class TestBaseWorker(VumiWorkerTestCase):
         connector.pause()
         self.worker.unpause_connectors()
         self.assertFalse(connector.paused)
+
+    @inlineCallbacks
+    def test_pause_connectors_unprocessed_messages(self):
+        handler_wait = Deferred()
+        handler_continue = Deferred()
+
+        def handler(msg):
+            handler_wait.callback(None)
+            return handler_continue
+
+        connector = yield self.worker.setup_ri_connector('foo')
+        connector.set_default_inbound_handler(handler)
+        connector.unpause()
+        self.dispatch_inbound(self.mkmsg_in(), 'foo')
+
+        yield handler_wait
+        d = self.worker.pause_connectors()
+        self.assertTrue(connector.paused)
+        self.assertFalse(d.called)
+
+        handler_continue.callback(None)
+        yield d
+        self.assertTrue(connector.paused)
