@@ -82,6 +82,9 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
     submit_sm_encoding = ConfigText(
         'How to encode the SMS before putting on the wire', static=True,
         default='utf-8')
+    submit_sm_data_coding = ConfigInt(
+        'What data_coding value to tell the SMSC we\'re using when putting'
+        'an SMS on the wire', static=True, default=0)
     data_coding_overrides = ConfigDict(
         "Overrides for data_coding character set mapping. This is useful for "
         "setting the default encoding (0), adding additional undefined "
@@ -157,6 +160,7 @@ class SmppTransport(Transport):
             config.twisted_endpoint))
 
         self.submit_sm_encoding = config.submit_sm_encoding
+        self.submit_sm_data_coding = config.submit_sm_data_coding
         default_prefix = "%s@%s" % (config.system_id, config.transport_name)
 
         r_config = config.redis_manager
@@ -436,6 +440,7 @@ class SmppTransport(Transport):
                                     config.OPERATOR_NUMBER)
         return self.esme_client.submit_sm(
             short_message=text.encode(self.submit_sm_encoding),
+            data_coding=self.submit_sm_data_coding,
             destination_addr=str(to_addr),
             source_addr=route or from_addr,
             message_type=message['transport_type'],
