@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import binascii
 
 from twisted.internet.defer import Deferred, inlineCallbacks, succeed
@@ -505,6 +506,60 @@ class EsmeToSmscTestCase(TransportTestCase):
 
         dispatched_failures = self.get_dispatched_failures()
         self.assertEqual(dispatched_failures, [])
+
+    @inlineCallbacks
+    def test_submit_sm_encoding(self):
+        # Startup
+        yield self.startTransport()
+        self.transport.submit_sm_encoding = 'latin-1'
+        yield self.transport._block_till_bind
+        yield self.clear_link_pdus()
+
+        msg = TransportUserMessage(
+                to_addr="2772222222",
+                from_addr="2772000000",
+                content=u'Zoë destroyer of Ascii!',
+                transport_name=self.transport_name,
+                transport_type='ussd',
+                transport_metadata={},
+                rkey='%s.outbound' % self.transport_name,
+                timestamp='0',
+                )
+        yield self.dispatch(msg)
+
+        pdu_queue = self.service.factory.smsc.pdu_queue
+
+        submit_sm_pdu = yield pdu_queue.get()
+        sms = submit_sm_pdu['pdu']['body']['mandatory_parameters']
+        self.assertEqual(
+            sms['short_message'],
+            u'Zoë destroyer of Ascii!'.encode('latin-1'))
+
+    @inlineCallbacks
+    def test_submit_sm_data_coding(self):
+        # Startup
+        yield self.startTransport()
+        self.transport.submit_sm_data_coding = 8
+        yield self.transport._block_till_bind
+        yield self.clear_link_pdus()
+
+        msg = TransportUserMessage(
+                to_addr="2772222222",
+                from_addr="2772000000",
+                content=u'hello world',
+                transport_name=self.transport_name,
+                transport_type='ussd',
+                transport_metadata={},
+                rkey='%s.outbound' % self.transport_name,
+                timestamp='0',
+                )
+        yield self.dispatch(msg)
+
+        pdu_queue = self.service.factory.smsc.pdu_queue
+
+        submit_sm_pdu = yield pdu_queue.get()
+        sms = submit_sm_pdu['pdu']['body']['mandatory_parameters']
+        self.assertEqual(sms['data_coding'], 8)
 
     @inlineCallbacks
     def test_submit_and_deliver_ussd_continue(self):

@@ -70,8 +70,9 @@ class Transport(BaseWorker):
         return d
 
     def teardown_worker(self):
-        self.pause_connectors()
-        return self.teardown_transport()
+        d = self.pause_connectors()
+        d.addCallback(lambda r: self.teardown_transport())
+        return d
 
     def setup_transport(self):
         """
