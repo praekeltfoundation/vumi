@@ -1,34 +1,28 @@
-# -*- test-case-name: vumi.blinkenlights.tests.test_heartbeat -*-
+# -*- test-case-name: vumi.blinkenlights.heartbeat.tests.test_storage -*-
 
 """
 Storage Schema:
 
- Systems (set):            key = systems
- Workers in system (set):  key = system:$SYSTEM_ID:workers
- Worker attributes (hash): key = worker:$WORKER_ID:attrs
- Worker hostinfo (hash):   key = worker:$WORKER_ID:hosts
- Worker Issue (hash):      key = worker:$WORKER_ID:issue
+ Timestamp (UNIX timestamp):  key = timestamp
+ List of systems (JSON list): key = systems
+ System state (JSON dict):    key = system:$SYSTEM_ID
+ Worker issue (JSON dict):    key = worker:$WORKER_ID:issue
 """
+
+import json
 
 from vumi.persist.redis_base import Manager
 
-
-# some redis key-making functions.
-#
-# These functions are reused by the monitoring dash,
-# which uses another redis client interface
-# Its a lot simpler for now to make these toplevel functions.
-
-def attr_key(worker_id):
-    return "worker:%s:attrs" % worker_id
-
-
-def hostinfo_key(worker_id):
-    return "worker:%s:hosts" % worker_id
+TIMESTAMP_KEY = "timestamp"
+SYSTEMS_KEY = "systems"
 
 
 def issue_key(worker_id):
     return "worker:%s:issue" % worker_id
+
+
+def system_key(system_id):
+    return "system:%s" % system_id
 
 
 class Storage(object):
@@ -43,41 +37,20 @@ class Storage(object):
         self.manager = redis
 
     @Manager.calls_manager
-    def set_systems(self, system_ids):
-        """ delete existing system ids and replace with new ones """
-        key = "systems"
-        yield self._redis.delete(key)
-        for sys_id in system_ids:
-            yield self._redis.sadd(key, sys_id)
+    def add_system_ids(self, system_ids):
+        yield self._redis.sadd(SYSTEMS_KEY, *system_ids)
 
     @Manager.calls_manager
-    def set_system_workers(self, system_id, worker_ids):
-        """ delete existing worker ids and replace with new ones """
-        key = "system:%s:workers" % system_id
-        yield self._redis.delete(key)
-        # not sure how to make sadd() accept varags :-(
-        for wkr_id in worker_ids:
-            yield self._redis.sadd(key, wkr_id)
+    def write_system(self, sys):
+        key = system_key(sys.system_id)
+        yield self._redis.set(key, sys.dumps())
 
-    @Manager.calls_manager
-    def set_worker_attrs(self, worker_id, attrs):
-        key = attr_key(worker_id)
-        yield self._redis.hmset(key, attrs)
-
-    @Manager.calls_manager
-    def set_worker_hostinfo(self, worker_id, hostinfo):
-        key = hostinfo_key(worker_id)
-        yield self._redis.hmset(key, hostinfo)
-
-    @Manager.calls_manager
-    def delete_worker_hostinfo(self, worker_id):
-        key = hostinfo_key(worker_id)
-        yield self._redis.delete(key)
-
-    @Manager.calls_manager
-    def set_worker_issue(self, worker_id, issue):
-        key = issue_key(worker_id)
-        yield self._redis.hmset(key, issue)
+    def _issue_to_dict(self, issue):
+        return {
+            'issue_type': issue.issue_type,
+            'start_time': issue.start_time,
+            'procs_count': issue.procs_count,
+        }
 
     @Manager.calls_manager
     def delete_worker_issue(self, worker_id):
@@ -87,8 +60,10 @@ class Storage(object):
     @Manager.calls_manager
     def open_or_update_issue(self, worker_id, issue):
         key = issue_key(worker_id)
-        # add these fields if they do not already exist
-        yield self._redis.hsetnx(key, 'issue_type', issue['issue_type'])
-        yield self._redis.hsetnx(key, 'start_time', issue['start_time'])
-        # update current proc count
-        yield self._redis.hset(key, 'procs_count', issue['procs_count'])
+        issue_raw = yield self._redis.get(key)
+        if issue_raw is None:
+            issue_data = self._issue_to_dict(issue)
+        else:
+            issue_data = json.loads(issue_raw)
+            issue_data['procs_count'] = issue.procs_count
+        yield self._redis.set(key, json.dumps(issue_data))

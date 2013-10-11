@@ -1,7 +1,8 @@
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.connectors import (
-    BaseConnector, ReceiveInboundConnector, ReceiveOutboundConnector)
+    BaseConnector, ReceiveInboundConnector, ReceiveOutboundConnector,
+    IgnoreMessage)
 from vumi.tests.utils import VumiWorkerTestCase, LogCatcher
 from vumi.worker import BaseWorker
 from vumi.message import TransportUserMessage
@@ -274,6 +275,21 @@ class TestReceiveInboundConnector(BaseConnectorTestCase):
         msgs = yield self.get_dispatched_outbound(connector_name='foo')
         self.assertEqual(msgs, [msg])
 
+    @inlineCallbacks
+    def test_inbound_handler_ignore_message(self):
+        def im_handler(msg):
+            raise IgnoreMessage()
+
+        conn = yield self.mk_connector(connector_name='foo', setup=True)
+        conn.unpause()
+        conn.set_default_inbound_handler(im_handler)
+        msg = self.mkmsg_in()
+        with LogCatcher() as lc:
+            yield self.dispatch_inbound(msg, connector_name='foo')
+            [log] = lc.messages()
+            self.assertTrue(log.startswith(
+                "Ignoring msg due to IgnoreMessage(): <Message"))
+
 
 class TestReceiveOutboundConnector(BaseConnectorTestCase):
 
@@ -344,3 +360,20 @@ class TestReceiveOutboundConnector(BaseConnectorTestCase):
         yield conn.publish_event(msg)
         msgs = yield self.get_dispatched_events(connector_name='foo')
         self.assertEqual(msgs, [msg])
+
+    @inlineCallbacks
+    def test_outbound_handler_nack_message(self):
+        def im_handler(msg):
+            raise IgnoreMessage()
+
+        conn = yield self.mk_connector(connector_name='foo', setup=True)
+        conn.unpause()
+        conn.set_default_outbound_handler(im_handler)
+        msg = self.mkmsg_in()
+        with LogCatcher() as lc:
+            yield self.dispatch_outbound(msg, connector_name='foo')
+            [log] = lc.messages()
+            self.assertTrue(log.startswith(
+                "Ignoring msg (with NACK) due to IgnoreMessage(): <Message"))
+        [event] = yield self.get_dispatched_events(connector_name='foo')
+        self.assertEqual(event['event_type'], 'nack')

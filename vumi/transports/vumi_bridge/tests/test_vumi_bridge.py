@@ -3,7 +3,10 @@ import json
 from datetime import datetime
 
 from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.error import ConnectionLost
+from twisted.internet.task import Clock
 from twisted.web.server import NOT_DONE_YET
+from twisted.python.failure import Failure
 
 from vumi.tests.utils import MockHttpServer
 from vumi.transports.tests.utils import TransportTestCase
@@ -28,9 +31,11 @@ class GoConversationTransportTestCase(TransportTestCase):
             'conversation_key': 'conversation-key',
             'access_token': 'access-token',
         })
+        self.clock = Clock()
         self.transport = yield self.get_transport(config)
+        self.transport.clock = self.clock
         self._pending_reqs = []
-        # when the transport fires up it stars two new connections,
+        # when the transport fires up it starts two new connections,
         # wait for them & name them accordingly
         reqs = []
         reqs.append((yield self.get_next_request()))
@@ -41,13 +46,18 @@ class GoConversationTransportTestCase(TransportTestCase):
         else:
             self.message_req = reqs[1]
             self.event_req = reqs[0]
+        # put some data on the wire to have connectionMade called
+        self.message_req.write('')
+        self.event_req.write('')
 
     @inlineCallbacks
     def tearDown(self):
-        yield super(GoConversationTransportTestCase, self).tearDown()
         for req in self._pending_reqs:
             if not req.finished:
                 yield req.finish()
+        yield super(GoConversationTransportTestCase, self).tearDown()
+        yield self.transport.redis._purge_all()
+        yield self.transport.redis.close_manager()
         yield self.mock_server.stop()
 
     def handle_inbound_request(self, request):
@@ -89,7 +99,7 @@ class GoConversationTransportTestCase(TransportTestCase):
     @inlineCallbacks
     def test_receiving_events(self):
         # prime the mapping
-        self.transport.map_message_id('remote', 'local')
+        yield self.transport.map_message_id('remote', 'local')
         ack = self.mkmsg_ack()
         ack['event_id'] = 'event-id'
         ack['user_message_id'] = 'remote'
@@ -112,7 +122,8 @@ class GoConversationTransportTestCase(TransportTestCase):
             'in_reply_to': None,
             'to_addr': msg['to_addr'],
             'message_id': msg['message_id'],
-            'session_event': TransportUserMessage.SESSION_CLOSE
+            'session_event': TransportUserMessage.SESSION_CLOSE,
+            'helper_metadata': {},
         })
 
         remote_id = TransportUserMessage.generate_id()
@@ -125,3 +136,28 @@ class GoConversationTransportTestCase(TransportTestCase):
         [ack] = yield self.wait_for_dispatched_events(1)
         self.assertEqual(ack['user_message_id'], msg['message_id'])
         self.assertEqual(ack['sent_message_id'], remote_id)
+
+    @inlineCallbacks
+    def test_reconnecting(self):
+        message_client = self.transport.message_client
+        message_client.connectionLost(Failure(ConnectionLost('foo')))
+
+        config = self.transport.get_static_config()
+
+        self.assertTrue(self.transport.delay > config.initial_delay)
+        self.assertEqual(self.transport.retries, 1)
+        self.assertTrue(self.transport.reconnect_call)
+        self.clock.advance(self.transport.delay + 0.1)
+
+        # write something to ensure connectionMade() is called on
+        # the protocol
+        message_req = yield self.get_next_request()
+        message_req.write('')
+
+        event_req = yield self.get_next_request()
+        event_req.write('')
+
+        self.assertEqual(self.transport.delay, config.initial_delay)
+        self.assertEqual(self.transport.retries, 0)
+        self.assertFalse(self.transport.reconnect_call)
+

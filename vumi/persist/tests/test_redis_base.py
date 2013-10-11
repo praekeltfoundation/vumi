@@ -6,10 +6,10 @@ from vumi.persist.redis_base import Manager
 
 
 class ManagerTestCase(TestCase):
-    def mk_manager(self, key_prefix='test', client=None):
+    def mk_manager(self, key_prefix='test', client=None, config=None):
         if client is None:
             client = object()
-        return Manager(client, key_prefix)
+        return Manager(client, config=config, key_prefix=key_prefix)
 
     def test_key_prefix(self):
         manager = self.mk_manager()

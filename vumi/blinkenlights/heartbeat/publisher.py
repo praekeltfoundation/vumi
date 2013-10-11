@@ -24,7 +24,9 @@ class HeartBeatMessage(Message):
             'version',
             'system_id',
             'worker_id',
-            'timestamp',
+            'worker_name',
+            'hostname',
+            'pid',
             )
 
 

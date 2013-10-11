@@ -4,15 +4,17 @@
 
 from txjsonrpc.web.jsonrpc import JSONRPC
 from txjsonrpc.jsonrpc import addIntrospection
+
+from twisted.application.internet import StreamServerEndpointService
 from twisted.internet.defer import inlineCallbacks
-from twisted.web.server import Site
-from twisted.application import strports
 
 from vumi.worker import BaseWorker
-from vumi.config import ConfigDict, ConfigText
+from vumi.config import ConfigDict, ConfigText, ConfigServerEndpoint
 from vumi.persist.txredis_manager import TxRedisManager
 from vumi.components.tagpool import TagpoolManager
 from vumi.rpc import signature, Unicode, Tag, List, Dict
+from vumi.transports.httprpc import httprpc
+from vumi.utils import build_web_site
 
 
 class TagpoolApiServer(JSONRPC):
@@ -114,20 +116,32 @@ class TagpoolApiWorker(BaseWorker):
     class CONFIG_CLASS(BaseWorker.CONFIG_CLASS):
         worker_name = ConfigText(
             "Name of this tagpool API worker.", required=True, static=True)
-        twisted_endpoint = ConfigText(
+        twisted_endpoint = ConfigServerEndpoint(
             "Twisted endpoint to listen on.", required=True, static=True)
+        web_path = ConfigText(
+            "The path to serve this resource on.", required=True, static=True)
+        health_path = ConfigText(
+            "The path to server the health resource on.", default='/health/',
+            static=True)
         redis_manager = ConfigDict(
             "Redis client configuration.", default={}, static=True)
+
+    def get_health_response(self):
+        return "OK"
 
     @inlineCallbacks
     def setup_worker(self):
         config = self.get_static_config()
-        redis_manager = yield TxRedisManager.from_config(config.redis_manager)
-        tagpool = TagpoolManager(redis_manager)
+        self.redis_manager = yield TxRedisManager.from_config(config.redis_manager)
+        tagpool = TagpoolManager(self.redis_manager)
         rpc = TagpoolApiServer(tagpool)
         addIntrospection(rpc)
-        site = Site(rpc)
-        self.addService(strports.service(config.twisted_endpoint, site))
+        site = build_web_site({
+            config.web_path: rpc,
+            config.health_path: httprpc.HttpRpcHealthResource(self),
+        })
+        self.addService(
+            StreamServerEndpointService(config.twisted_endpoint, site))
 
     def teardown_worker(self):
         pass

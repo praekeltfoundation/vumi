@@ -5,7 +5,7 @@ import time
 from twisted.internet.defer import inlineCallbacks
 from twisted.trial.unittest import TestCase
 
-from vumi.components import SessionManager
+from vumi.components.session import SessionManager
 from vumi.tests.utils import PersistenceMixin
 
 
@@ -52,6 +52,18 @@ class SessionManagerTestCase(TestCase, PersistenceMixin):
         session = yield self.sm.create_session("u1")
         self.assertEqual(sorted(session.keys()), ['created_at'])
         self.assertTrue(time.time() - float(session['created_at']) < 10.0)
+        loaded = yield self.sm.load_session("u1")
+        self.assertEqual(loaded, session)
+
+    @inlineCallbacks
+    def test_create_clears_existing_session(self):
+        session = yield self.sm.create_session("u1", foo="bar")
+        self.assertEqual(sorted(session.keys()), ['created_at', 'foo'])
+        loaded = yield self.sm.load_session("u1")
+        self.assertEqual(loaded, session)
+
+        session = yield self.sm.create_session("u1", bar="baz")
+        self.assertEqual(sorted(session.keys()), ['bar', 'created_at'])
         loaded = yield self.sm.load_session("u1")
         self.assertEqual(loaded, session)
 

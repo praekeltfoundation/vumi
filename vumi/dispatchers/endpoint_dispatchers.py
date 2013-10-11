@@ -29,8 +29,9 @@ class Dispatcher(BaseWorker):
         return d
 
     def teardown_worker(self):
-        self.pause_connectors()
-        return self.teardown_dispatcher()
+        d = self.pause_connectors()
+        d.addCallback(lambda r: self.teardown_dispatcher())
+        return d
 
     def setup_dispatcher(self):
         """
@@ -63,7 +64,8 @@ class Dispatcher(BaseWorker):
 
     def _mkhandler(self, handler_func, connector_name):
         def errback(f):
-            log.error("Error routing message for %s" % (connector_name,), f)
+            log.error("Error routing message for %s" % (connector_name,))
+            log.error(f)
 
         def handler(msg):
             d = self.get_config(msg)

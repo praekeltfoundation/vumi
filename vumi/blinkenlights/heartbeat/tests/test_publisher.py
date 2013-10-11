@@ -33,6 +33,7 @@ class TestHeartBeatPublisher(TestCase):
             'version': publisher.HeartBeatMessage.VERSION_20130319,
             'system_id': "system-1",
             'worker_id': "worker-1",
+            'worker_name': "worker-1",
             'hostname': "test-host-1",
             'timestamp': 100,
             'pid': 43,

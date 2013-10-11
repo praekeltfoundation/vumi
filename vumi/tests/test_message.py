@@ -27,6 +27,11 @@ class TransportMessageTestMixin(object):
         self.assertEqual('20110921', msg['message_version'])
         self.assertEqual(UTCNearNow(), msg['timestamp'])
 
+    def test_helper_metadata(self):
+        self.assertEqual({}, self.make_message()['helper_metadata'])
+        msg = self.make_message(helper_metadata={'foo': 'bar'})
+        self.assertEqual({'foo': 'bar'}, msg['helper_metadata'])
+
     def test_routing_metadata(self):
         self.assertEqual({}, self.make_message().routing_metadata)
         msg = self.make_message(routing_metadata={'foo': 'bar'})
@@ -288,6 +293,7 @@ class TransportEventTest(TransportMessageTestMixin, TestCase):
         self.assertEqual('abc', msg['user_message_id'])
         self.assertEqual('20110921', msg['message_version'])
         self.assertEqual('ghi', msg['sent_message_id'])
+        self.assertEqual({}, msg['helper_metadata'])
 
     def test_transport_event_nack(self):
         msg = TransportEvent(
@@ -302,6 +308,7 @@ class TransportEventTest(TransportMessageTestMixin, TestCase):
         self.assertEqual('def', msg['event_id'])
         self.assertEqual('abc', msg['user_message_id'])
         self.assertEqual('20110921', msg['message_version'])
+        self.assertEqual({}, msg['helper_metadata'])
 
     def test_transport_event_delivery_report(self):
         msg = TransportEvent(
@@ -320,3 +327,4 @@ class TransportEventTest(TransportMessageTestMixin, TestCase):
         self.assertEqual('20110921', msg['message_version'])
         # self.assertEqual('sphex', msg['transport_name'])
         self.assertEqual('delivered', msg['delivery_status'])
+        self.assertEqual({}, msg['helper_metadata'])

@@ -8,7 +8,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.message import TransportEvent
 from vumi.application.tests.test_base import ApplicationTestCase
-from vumi.components import MessageStore
+from vumi.tests.utils import import_skip
 
 
 class TestMessageStoreBase(ApplicationTestCase):
@@ -19,6 +19,10 @@ class TestMessageStoreBase(ApplicationTestCase):
     @inlineCallbacks
     def setUp(self):
         yield super(TestMessageStoreBase, self).setUp()
+        try:
+            from vumi.components.message_store import MessageStore
+        except ImportError, e:
+            import_skip(e, 'riakasaurus', 'riakasaurus.riak')
         self.redis = yield self.get_redis_manager()
         self.manager = self.get_riak_manager()
         self.store = MessageStore(self.manager, self.redis)
@@ -136,6 +140,19 @@ class TestMessageStore(TestMessageStoreBase):
         self.assertEqual(event_keys, [])
 
     @inlineCallbacks
+    def test_add_outbound_message_again(self):
+        msg_id, msg, _batch_id = yield self._create_outbound(tag=None)
+
+        old_stored_msg = yield self.store.get_outbound_message(msg_id)
+        self.assertEqual(old_stored_msg, msg)
+
+        msg['helper_metadata']['foo'] = {'bar': 'baz'}
+        yield self.store.add_outbound_message(msg)
+        new_stored_msg = yield self.store.get_outbound_message(msg_id)
+        self.assertEqual(new_stored_msg, msg)
+        self.assertNotEqual(old_stored_msg, new_stored_msg)
+
+    @inlineCallbacks
     def test_add_outbound_message_with_batch_id(self):
         msg_id, msg, batch_id = yield self._create_outbound(by_batch=True)
 
@@ -164,6 +181,17 @@ class TestMessageStore(TestMessageStoreBase):
         self.assertEqual(batch_status, self._batch_status(sent=1))
 
     @inlineCallbacks
+    def test_add_outbound_message_to_multiple_batches(self):
+        msg_id, msg, batch_id_1 = yield self._create_outbound()
+        batch_id_2 = yield self.store.batch_start()
+        yield self.store.add_outbound_message(msg, batch_id=batch_id_2)
+
+        self.assertEqual((yield self.store.batch_outbound_keys(batch_id_1)),
+                         [msg_id])
+        self.assertEqual((yield self.store.batch_outbound_keys(batch_id_2)),
+                         [msg_id])
+
+    @inlineCallbacks
     def test_add_ack_event(self):
         msg_id, msg, batch_id = yield self._create_outbound()
         ack = self.mkmsg_ack(user_message_id=msg_id)
@@ -175,6 +203,27 @@ class TestMessageStore(TestMessageStoreBase):
         batch_status = yield self.store.batch_status(batch_id)
 
         self.assertEqual(stored_ack, ack)
+        self.assertEqual(event_keys, [ack_id])
+        self.assertEqual(batch_status, self._batch_status(sent=1, ack=1))
+
+    @inlineCallbacks
+    def test_add_ack_event_again(self):
+        msg_id, msg, batch_id = yield self._create_outbound()
+        ack = self.mkmsg_ack(user_message_id=msg_id)
+        ack_id = ack['event_id']
+        yield self.store.add_event(ack)
+        old_stored_ack = yield self.store.get_event(ack_id)
+        self.assertEqual(old_stored_ack, ack)
+
+        ack['helper_metadata']['foo'] = {'bar': 'baz'}
+        yield self.store.add_event(ack)
+        new_stored_ack = yield self.store.get_event(ack_id)
+        self.assertEqual(new_stored_ack, ack)
+        self.assertNotEqual(old_stored_ack, new_stored_ack)
+
+        event_keys = yield self.store.message_event_keys(msg_id)
+        batch_status = yield self.store.batch_status(batch_id)
+
         self.assertEqual(event_keys, [ack_id])
         self.assertEqual(batch_status, self._batch_status(sent=1, ack=1))
 
@@ -247,6 +296,19 @@ class TestMessageStore(TestMessageStoreBase):
         self.assertEqual(stored_msg, msg)
 
     @inlineCallbacks
+    def test_add_inbound_message_again(self):
+        msg_id, msg, _batch_id = yield self._create_inbound(tag=None)
+
+        old_stored_msg = yield self.store.get_inbound_message(msg_id)
+        self.assertEqual(old_stored_msg, msg)
+
+        msg['helper_metadata']['foo'] = {'bar': 'baz'}
+        yield self.store.add_inbound_message(msg)
+        new_stored_msg = yield self.store.get_inbound_message(msg_id)
+        self.assertEqual(new_stored_msg, msg)
+        self.assertNotEqual(old_stored_msg, new_stored_msg)
+
+    @inlineCallbacks
     def test_add_inbound_message_with_batch_id(self):
         msg_id, msg, batch_id = yield self._create_inbound(by_batch=True)
 
@@ -265,6 +327,17 @@ class TestMessageStore(TestMessageStoreBase):
 
         self.assertEqual(stored_msg, msg)
         self.assertEqual(inbound_keys, [msg_id])
+
+    @inlineCallbacks
+    def test_add_inbound_message_to_multiple_batches(self):
+        msg_id, msg, batch_id_1 = yield self._create_inbound()
+        batch_id_2 = yield self.store.batch_start()
+        yield self.store.add_inbound_message(msg, batch_id=batch_id_2)
+
+        self.assertEqual((yield self.store.batch_inbound_keys(batch_id_1)),
+                         [msg_id])
+        self.assertEqual((yield self.store.batch_inbound_keys(batch_id_2)),
+                         [msg_id])
 
     @inlineCallbacks
     def test_inbound_counts(self):
@@ -350,7 +423,7 @@ class TestMessageStoreCache(TestMessageStoreBase):
         # FakeRedis provides a flushdb() function but TxRedisManager doesn't
         # and I'm not sure what the intended behaviour of flushdb on a
         # submanager is
-        message_store.cache.redis._client._data = {}
+        return message_store.cache.redis._purge_all()
 
     @inlineCallbacks
     def test_cache_batch_start(self):
@@ -425,7 +498,7 @@ class TestMessageStoreCache(TestMessageStoreBase):
                 sent_message_id=msg['message_id'])
             yield self.store.add_event(ack)
 
-        self.clear_cache(self.store)
+        yield self.clear_cache(self.store)
         batch_status = yield self.store.batch_status(batch_id)
         self.assertEqual(batch_status, {})
         # Default reconciliation delta should return True

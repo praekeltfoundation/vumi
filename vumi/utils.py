@@ -13,11 +13,12 @@ from twisted.internet import defer
 from twisted.internet import reactor, protocol
 from twisted.internet.defer import succeed
 from twisted.python.failure import Failure
-from twisted.web.client import Agent, ResponseDone
+from twisted.web.client import Agent, ResponseDone, WebClientContextFactory
 from twisted.web.server import Site
 from twisted.web.http_headers import Headers
 from twisted.web.iweb import IBodyProducer
 from twisted.web.http import PotentialDataLoss
+from twisted.web.resource import Resource
 
 from vumi.errors import VumiError
 
@@ -113,8 +114,10 @@ class SimplishReceiver(protocol.Protocol):
 
 
 def http_request_full(url, data=None, headers={}, method='POST',
-                      timeout=None, data_limit=None):
-    agent = Agent(reactor)
+                      timeout=None, data_limit=None, context_factory=None,
+                      agent_class=Agent):
+    context_factory = context_factory or WebClientContextFactory()
+    agent = agent_class(reactor, contextFactory=context_factory)
     d = agent.request(method,
                       url,
                       mkheaders(headers),
@@ -210,6 +213,43 @@ class StringProducer(object):
 
     def stopProducing(self):
         pass
+
+
+def build_web_site(resources, site_class=None):
+    """Build a Twisted web Site instance for a specified dictionary of
+    resources.
+
+    :param dict resources:
+        Dictionary of path -> resource class mappings to create the site from.
+    :type site_class: Sub-class of Twisted's Site
+    :param site_class:
+        Site class to create. Defaults to :class:`LogFilterSite`.
+    """
+    if site_class is None:
+        site_class = LogFilterSite
+
+    root = Resource()
+    # sort by ascending path length to make sure we create
+    # resources lower down in the path earlier
+    resources = resources.items()
+    resources = sorted(resources, key=lambda r: len(r[0]))
+
+    def create_node(node, path):
+        if path in node.children:
+            return node.children.get(path)
+        else:
+            new_node = Resource()
+            node.putChild(path, new_node)
+            return new_node
+
+    for path, resource in resources:
+        request_path = filter(None, path.split('/'))
+        nodes, leaf = request_path[0:-1], request_path[-1]
+        parent = reduce(create_node, nodes, root)
+        parent.putChild(leaf, resource)
+
+    site_factory = site_class(root)
+    return site_factory
 
 
 class LogFilterSite(Site):
@@ -381,57 +421,3 @@ def safe_routing_key(routing_key):
 
 def generate_worker_id(system_id, worker_id):
     return "%s:%s" % (system_id, worker_id,)
-
-### SAMPLE CONFIG PARAMETERS - REPLACE 'x's IN OPERATOR_NUMBER
-
-"""
-COUNTRY_CODE: "27"
-
-OPERATOR_NUMBER:
-    VODACOM: "2782xxxxxxxxxxx"
-    MTN: "2783xxxxxxxxxxx"
-    CELLC: "2784xxxxxxxxxxx"
-    VIRGIN: ""
-    8TA: ""
-    UNKNOWN: ""
-
-OPERATOR_PREFIX:
-    2771:
-        27710: MTN
-        27711: VODACOM
-        27712: VODACOM
-        27713: VODACOM
-        27714: VODACOM
-        27715: VODACOM
-        27716: VODACOM
-        27717: MTN
-        27719: MTN
-
-    2772: VODACOM
-    2773: MTN
-    2774:
-        27740: CELLC
-        27741: VIRGIN
-        27742: CELLC
-        27743: CELLC
-        27744: CELLC
-        27745: CELLC
-        27746: CELLC
-        27747: CELLC
-        27748: CELLC
-        27749: CELLC
-
-    2776: VODACOM
-    2778: MTN
-    2779: VODACOM
-    2781:
-        27811: 8TA
-        27812: 8TA
-        27813: 8TA
-        27814: 8TA
-
-    2782: VODACOM
-    2783: MTN
-    2784: CELLC
-
-"""

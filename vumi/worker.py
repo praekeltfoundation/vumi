@@ -6,7 +6,8 @@ import time
 import os
 import socket
 
-from twisted.internet.defer import inlineCallbacks, succeed, maybeDeferred
+from twisted.internet.defer import (
+    inlineCallbacks, succeed, maybeDeferred, gatherResults)
 from twisted.python import log
 
 from vumi.service import Worker
@@ -113,7 +114,7 @@ class BaseWorker(Worker):
         return attrs
 
     def custom_heartbeat_attrs(self):
-        """ Worker subclasses can override this to add custom attributes """
+        """Worker subclasses can override this to add custom attributes"""
         return {}
 
     def teardown_connectors(self):
@@ -203,8 +204,8 @@ class BaseWorker(Worker):
                                     middleware=middleware)
 
     def pause_connectors(self):
-        for connector in self.connectors.itervalues():
-            connector.pause()
+        return gatherResults([
+            connector.pause() for connector in self.connectors.itervalues()])
 
     def unpause_connectors(self):
         for connector in self.connectors.itervalues():

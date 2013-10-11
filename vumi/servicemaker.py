@@ -197,12 +197,12 @@ class VumiWorkerServiceMaker(object):
                                              worker_id)
         worker.addService(sentry_service)
 
+
     def makeService(self, options):
         worker_creator = WorkerCreator(options.vumi_options)
         worker = worker_creator.create_worker(options.worker_class,
                                               options.worker_config)
         self.configure_sentry(worker, options)
-        #log.startLoggingWithObserver(Foo().emit, setStdout=True)
         return worker
 
 

@@ -15,6 +15,8 @@ class InjectorOptions(VumiOptions):
     optParameters = [
         ["transport-name", None, None,
             "Name of the transport to inject messages from"],
+        ["direction", None, "inbound",
+            "Direction messages are to be sent to."],
         ["verbose", "v", False, "Output the JSON being injected"],
     ]
 
@@ -32,8 +34,9 @@ class MessageInjector(Worker):
     @inlineCallbacks
     def startWorker(self):
         self.transport_name = self.config['transport-name']
-        self.publisher = yield self.publish_to('%s.inbound' %
-                                                self.transport_name)
+        self.direction = self.config['direction']
+        self.publisher = yield self.publish_to(
+            '%s.%s' % (self.transport_name, self.direction))
         self.publisher.require_bind = False
         self.WORKER_QUEUE.put(self)
 

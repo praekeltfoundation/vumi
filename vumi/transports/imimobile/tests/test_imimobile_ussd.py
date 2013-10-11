@@ -172,7 +172,7 @@ class TestImiMobileUssdTransportTestCase(TransportTestCase):
     @inlineCallbacks
     def test_inbound_close_and_reply(self):
         from_addr = '9221234567'
-        self.mk_session(from_addr=from_addr)
+        yield self.mk_session(from_addr=from_addr)
 
         user_content = "Farewell, sweet Concorde!"
         d = self.mk_request('some-suffix', msg=user_content)
@@ -214,12 +214,12 @@ class TestImiMobileUssdTransportTestCase(TransportTestCase):
         response = yield self.mk_request(
             'some-suffix', unexpected_p1='', unexpected_p2='')
 
-        self.assertEqual(
-            response.delivered_body,
-            json.dumps({
-                'unexpected_parameter': ['unexpected_p1', 'unexpected_p2']
-            }))
         self.assertEqual(response.code, 400)
+        body = json.loads(response.delivered_body)
+        self.assertEqual(set(['unexpected_parameter']), set(body.keys()))
+        self.assertEqual(
+            sorted(body['unexpected_parameter']),
+            ['unexpected_p1', 'unexpected_p2'])
 
     @inlineCallbacks
     def test_nack_insufficient_message_fields(self):

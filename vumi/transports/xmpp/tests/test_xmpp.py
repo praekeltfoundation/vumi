@@ -34,6 +34,11 @@ class XMPPTransportTestCase(TransportTestCase):
         self.jid = transport.jid
         returnValue(transport)
 
+    def assert_ack(self, ack, reply):
+        self.assertEqual(ack.payload['event_type'], 'ack')
+        self.assertEqual(ack.payload['user_message_id'], reply['message_id'])
+        self.assertEqual(ack.payload['sent_message_id'], reply['message_id'])
+
     @inlineCallbacks
     def test_outbound_message(self):
         transport = yield self.mk_transport()
@@ -49,6 +54,9 @@ class XMPPTransportTestCase(TransportTestCase):
         self.assertEqual(message['to'], 'user@xmpp.domain.com')
         self.assertTrue(message['id'])
         self.assertEqual(str(message.children[0]), 'hello world')
+
+        [ack] = yield self.wait_for_dispatched_events(1)
+        self.assert_ack(ack, msg)
 
     @inlineCallbacks
     def test_inbound_message(self):

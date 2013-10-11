@@ -6,6 +6,8 @@ import resource
 import os
 import json
 import pkg_resources
+import logging
+import operator
 from uuid import uuid4
 
 from twisted.internet import reactor
@@ -15,6 +17,10 @@ from twisted.internet.defer import (
     succeed)
 from twisted.internet.error import ProcessDone
 from twisted.python.failure import Failure
+from twisted.web.client import WebClientContextFactory
+
+from OpenSSL.SSL import (
+    VERIFY_PEER, VERIFY_FAIL_IF_NO_PEER_CERT, VERIFY_CLIENT_ONCE, VERIFY_NONE)
 
 from vumi.config import ConfigText, ConfigInt, ConfigList, ConfigDict
 from vumi.application.base import ApplicationWorker
@@ -92,6 +98,7 @@ class SandboxProtocol(ProcessProtocol):
         self.recv_bytes = 0
         self.chunk = ''
         self.error_chunk = ''
+        self.error_lines = []
         api.set_sandbox(self)
 
     def spawn(self):
@@ -122,6 +129,9 @@ class SandboxProtocol(ProcessProtocol):
             return True
         else:
             self.kill()
+            self.api.log("Sandbox %r killed for producing too much data on"
+                         " stderr and stdout." % (self.sandbox_id),
+                         level=logging.ERROR)
             return False
 
     def connectionMade(self):
@@ -129,7 +139,7 @@ class SandboxProtocol(ProcessProtocol):
 
     def _process_data(self, chunk, data):
         if not self.check_recv(len(data)):
-            return [chunk]  # skip the data if it's too big
+            return ['']  # skip the data if it's too big
         line_parts = data.split("\n")
         line_parts[0] = chunk + line_parts[0]
         return line_parts
@@ -156,18 +166,23 @@ class SandboxProtocol(ProcessProtocol):
     def errReceived(self, data):
         lines = self._process_data(self.error_chunk, data)
         for i in range(len(lines) - 1):
-            log.error(Failure(SandboxError(lines[i])))
+            self.error_lines.append(lines[i])
         self.error_chunk = lines[-1]
 
     def errConnectionLost(self):
         if self.error_chunk:
-            log.error(Failure(SandboxError(self.error_chunk)))
+            self.error_lines.append(self.error_chunk)
             self.error_chunk = ""
 
     def _process_request_results(self, results):
         for success, result in results:
             if not success:
+                # errors here are bugs in Vumi and thus should always
+                # be logged via Twisted too.
                 log.error(result)
+                # we log them again in a simplified form via the sandbox
+                # api so that the sandbox owner gets to see them too
+                self.api.log(result.getErrorMessage(), logging.ERROR)
 
     def processEnded(self, reason):
         if self.timeout_task.active():
@@ -179,6 +194,9 @@ class SandboxProtocol(ProcessProtocol):
         if not self._started.fired():
             self._started.callback(Failure(
                 SandboxError("Process failed to start.")))
+        if self.error_lines:
+            self.api.log("\n".join(self.error_lines), logging.ERROR)
+            self.error_lines = []
         requests_done = DeferredList(self._pending_requests)
         requests_done.addCallback(self._process_request_results)
         requests_done.addCallback(lambda _r: self._done.callback(result))
@@ -239,18 +257,16 @@ class SandboxResource(object):
         return SandboxCommand(cmd=command['cmd'], reply=True,
                               cmd_id=command['cmd_id'], **kwargs)
 
-    def log_error(self, error_msg):
-        log.error(Failure(SandboxError(error_msg)))
-
     def dispatch_request(self, api, command):
         handler_name = 'handle_%s' % (command['cmd'],)
         handler = getattr(self, handler_name, self.unknown_request)
         return maybeDeferred(handler, api, command)
 
     def unknown_request(self, api, command):
-        self.log_error("Resource %s: unknown command %r received from"
-                       " sandbox %r [%r]" % (self.name, command['cmd'],
-                                             api.sandbox_id, command))
+        api.log("Resource %s received unknown command %r from"
+                " sandbox %r. Killing sandbox. [Full command: %r]"
+                % (self.name, command['cmd'], api.sandbox_id, command),
+                logging.ERROR)
         api.sandbox_kill()  # it's a harsh world
 
 
@@ -261,15 +277,24 @@ class RedisResource(SandboxResource):
 
     :param dict redis_manager:
         Redis manager configuration options.
-    :param int keys_per_user:
+    :param int keys_per_user_soft:
         Maximum number of keys each user may make use of in redis
-        (default: 100).
+        before usage warnings are logged.
+        (default: 80% of hard limit).
+    :param int keys_per_user_hard:
+        Maximum number of keys each user may make use of in redis
+        (default: 100). Falls back to keys_per_user.
+    :param int keys_per_user:
+        Synonym for `keys_per_user_hard`. Deprecated.
     """
 
     @inlineCallbacks
     def setup(self):
         self.r_config = self.config.get('redis_manager', {})
-        self.keys_per_user = self.config.get('keys_per_user', 100)
+        self.keys_per_user_hard = self.config.get(
+            'keys_per_user_hard', self.config.get('keys_per_user', 100))
+        self.keys_per_user_soft = self.config.get(
+            'keys_per_user_soft', int(0.8 * self.keys_per_user_hard))
         self.redis = yield TxRedisManager.from_config(self.r_config)
 
     def teardown(self):
@@ -286,19 +311,34 @@ class RedisResource(SandboxResource):
                           reason="Too many keys")
 
     @inlineCallbacks
-    def check_keys(self, sandbox_id, key):
+    def check_keys(self, api, key):
         if (yield self.redis.exists(key)):
             returnValue(True)
-        count_key = self._count_key(sandbox_id)
-        if (yield self.redis.incr(count_key, 1)) > self.keys_per_user:
-            yield self.redis.incr(count_key, -1)
-            returnValue(False)
+        count_key = self._count_key(api.sandbox_id)
+        key_count = yield self.redis.incr(count_key, 1)
+        if key_count > self.keys_per_user_soft:
+            if key_count < self.keys_per_user_hard:
+                api.log('Redis soft limit of %s keys reached for sandbox %s. '
+                        'Once the hard limit of %s is reached no more keys '
+                        'can be written.' % (
+                            self.keys_per_user_soft,
+                            api.sandbox_id,
+                            self.keys_per_user_hard),
+                        logging.WARNING)
+            else:
+                api.log('Redis hard limit of %s keys reached for sandbox %s. '
+                        'No more keys can be written.' % (
+                            api.sandbox_id,
+                            self.keys_per_user_hard),
+                        logging.ERROR)
+                yield self.redis.incr(count_key, -1)
+                returnValue(False)
         returnValue(True)
 
     @inlineCallbacks
     def handle_set(self, api, command):
         key = self._sandboxed_key(api.sandbox_id, command.get('key'))
-        if not (yield self.check_keys(api.sandbox_id, key)):
+        if not (yield self.check_keys(api, key)):
             returnValue(self._too_many_keys(command))
         value = command.get('value')
         yield self.redis.set(key, json.dumps(value))
@@ -325,7 +365,7 @@ class RedisResource(SandboxResource):
     @inlineCallbacks
     def handle_incr(self, api, command):
         key = self._sandboxed_key(api.sandbox_id, command.get('key'))
-        if not (yield self.check_keys(api.sandbox_id, key)):
+        if not (yield self.check_keys(api, key)):
             returnValue(self._too_many_keys(command))
         amount = command.get('amount', 1)
         try:
@@ -356,8 +396,8 @@ class OutboundResource(SandboxResource):
     def handle_send_to(self, api, command):
         content = command['content']
         to_addr = command['to_addr']
-        tag = command.get('tag', 'default')
-        self.app_worker.send_to(to_addr, content, tag=tag)
+        endpoint = command.get('endpoint', 'default')
+        self.app_worker.send_to(to_addr, content, endpoint=endpoint)
 
 
 class JsSandboxResource(SandboxResource):
@@ -380,13 +420,98 @@ class LoggingResource(SandboxResource):
     """Resource that allows a sandbox to log messages via Twisted's
     logging framework.
     """
+    def log(self, api, msg, level):
+        """Logs a message via vumi.log (i.e. Twisted logging).
+
+        Sub-class should override this if they wish to log messages
+        elsewhere. The `api` parameter is provided for use by such
+        sub-classes.
+
+        The `log` method should always return a deferred.
+        """
+        return succeed(log.msg(msg, logLevel=level))
+
+    @inlineCallbacks
+    def handle_log(self, api, command, level=None):
+        level = command.get('level', level)
+        if level is None:
+            level = logging.INFO
+        msg = command.get('msg')
+        if msg is None:
+            returnValue(self.reply(command, success=False,
+                                   reason="Value expected for msg"))
+        if not isinstance(msg, basestring):
+            msg = str(msg)
+        elif isinstance(msg, unicode):
+            msg = msg.encode('utf-8')
+        yield self.log(api, msg, level)
+        returnValue(self.reply(command, success=True))
+
+    def handle_debug(self, api, command):
+        return self.handle_log(api, command, level=logging.DEBUG)
+
     def handle_info(self, api, command):
-        log.info(str(command['msg']))
-        return self.reply(command, success=True)
+        return self.handle_log(api, command, level=logging.INFO)
+
+    def handle_warning(self, api, command):
+        return self.handle_log(api, command, level=logging.WARNING)
+
+    def handle_error(self, api, command):
+        return self.handle_log(api, command, level=logging.ERROR)
+
+    def handle_critical(self, api, command):
+        return self.handle_log(api, command, level=logging.CRITICAL)
+
+
+class HttpClientContextFactory(WebClientContextFactory):
+
+    def __init__(self, verify_options=None):
+        self.verify_options = verify_options
+
+    def verify_callback(self, conn, cert, errno, errdepth, ok):
+        return ok
+
+    def getContext(self, hostname, port):
+        context = WebClientContextFactory.getContext(self, hostname, port)
+        if self.verify_options is not None:
+            context.set_verify(self.verify_options, self.verify_callback)
+        return context
 
 
 class HttpClientResource(SandboxResource):
-    """Resource that allows making HTTP calls to outside services."""
+    """Resource that allows making HTTP calls to outside services.
+
+    Command fields:
+        - ``url``: The URL to request
+        - ``verify_options``: A list of options to verify when doing
+            an HTTPS request. Possible string values are ``VERIFY_NONE``,
+            ``VERIFY_PEER``, ``VERIFY_CLIENT_ONCE`` and
+            ``VERIFY_FAIL_IF_NO_PEER_CERT``. Specifying multiple values
+            results in passing along a reduced ``OR`` value
+            (e.g. VERIFY_PEER | VERIFY_FAIL_IF_NO_PEER_CERT)
+        - ``headers``: A dictionary of keys for the header name and a list
+            of values to provide as header values.
+        - ``data``: The payload to submit as part of the request.
+
+    Success reply fields:
+        - ``success``: Set to ``true``
+        - ``body``: The response body
+        - ``code``: The HTTP response code
+
+    Failure reply fields:
+        - ``success``: set to ``false``
+        - ``reason``: Reason for the failure
+
+    Example:
+
+    .. code-block:: javascript
+
+        api.request(
+            'http.get',
+            {url: 'http://foo/'},
+            function(reply) { api.log_info(reply.body); });
+
+    """
 
     DEFAULT_TIMEOUT = 30  # seconds
     DEFAULT_DATA_LIMIT = 128 * 1024  # 128 KB
@@ -402,6 +527,24 @@ class HttpClientResource(SandboxResource):
             return succeed(self.reply(command, success=False,
                                       reason="No URL given"))
         url = url.encode("utf-8")
+
+        verify_map = {
+            'VERIFY_NONE': VERIFY_NONE,
+            'VERIFY_PEER': VERIFY_PEER,
+            'VERIFY_CLIENT_ONCE': VERIFY_CLIENT_ONCE,
+            'VERIFY_FAIL_IF_NO_PEER_CERT': VERIFY_FAIL_IF_NO_PEER_CERT
+        }
+
+        if 'verify_options' in command:
+            verify_options = [verify_map[key] for key in
+                                command.get('verify_options', [])]
+            verify_options = reduce(operator.or_, verify_options)
+        else:
+            verify_options = None
+
+        context_factory = HttpClientContextFactory(
+            verify_options=verify_options)
+
         headers = command.get('headers', {})
         headers = dict((k.encode("utf-8"), [x.encode("utf-8") for x in v])
                        for k, v in headers.items())
@@ -410,7 +553,8 @@ class HttpClientResource(SandboxResource):
             data = data.encode("utf-8")
         d = http_request_full(url, data=data, headers=headers,
                               method=method, timeout=self.timeout,
-                              data_limit=self.data_limit)
+                              data_limit=self.data_limit,
+                              context_factory=context_factory)
         d.addCallback(self._make_success_reply, command)
         d.addErrback(self._make_failure_reply, command)
         return d
@@ -448,6 +592,20 @@ class SandboxApi(object):
         self._inbound_messages = {}
         self.resources = resources
         self.fallback_resource = SandboxResource("fallback", None, {})
+        potential_logger = None
+        if config.logging_resource:
+            potential_logger = self.resources.resources.get(
+                config.logging_resource)
+            if potential_logger is None:
+                log.warning("Failed to find logging resource %r."
+                            " Falling back to Twisted logging."
+                            % (config.logging_resource,))
+            elif not hasattr(potential_logger, 'log'):
+                log.warning("Logging resource %r has no attribute 'log'."
+                            " Falling abck to Twisted logging."
+                            % (config.logging_resource,))
+                potential_logger = None
+        self.logging_resource = potential_logger
         self.config = config
 
     @property
@@ -483,6 +641,14 @@ class SandboxApi(object):
     def get_inbound_message(self, message_id):
         return self._inbound_messages.get(message_id)
 
+    def log(self, msg, level):
+        if self.logging_resource is None:
+            # fallback to vumi.log logging if we don't
+            # have a logging resource.
+            return succeed(log.msg(msg, logLevel=level))
+        else:
+            return self.logging_resource.log(self, msg, level=level)
+
     @inlineCallbacks
     def dispatch_request(self, command):
         resource_name, sep, rest = command['cmd'].partition('.')
@@ -494,7 +660,12 @@ class SandboxApi(object):
         try:
             reply = yield resource.dispatch_request(self, command)
         except Exception, e:
-            log.err()
+            # errors here are bugs in Vumi so we always log them
+            # via Twisted. However, we reply to the sandbox with
+            # a failure and log via the sandbox api so that the
+            # sandbox owner can be notified.
+            log.error()
+            self.log(str(e), level=logging.ERROR)
             reply = SandboxCommand(
                 reply=True,
                 cmd_id=command['cmd_id'],
@@ -557,6 +728,12 @@ class SandboxConfig(ApplicationWorker.CONFIG_CLASS):
         " names or values of the RLIMIT constants in"
         " Python `resource` module. Values should be appropriate integers.",
         default={})
+    logging_resource = ConfigText(
+        "Name of the logging resource to use to report errors detected"
+        " in sandboxed code (e.g. lines written to stderr, unexpected"
+        " process termination). Set to null to disable and report"
+        " these directly using Twisted logging instead.",
+        default=None)
     sandbox_id = ConfigText("This is set based on individual messages.")
 
 
@@ -573,7 +750,7 @@ class Sandbox(ApplicationWorker):
         resource.RLIMIT_DATA: (32 * MB, 32 * MB),
         resource.RLIMIT_STACK: (1 * MB, 1 * MB),
         resource.RLIMIT_RSS: (10 * MB, 10 * MB),
-        resource.RLIMIT_NOFILE: (10, 10),
+        resource.RLIMIT_NOFILE: (15, 15),
         resource.RLIMIT_MEMLOCK: (64 * KB, 64 * KB),
         resource.RLIMIT_AS: (196 * MB, 196 * MB),
     }
@@ -601,6 +778,17 @@ class Sandbox(ApplicationWorker):
 
     def teardown_application(self):
         return self.resources.teardown_resources()
+
+    def setup_connectors(self):
+        # Set the default event handler so we can handle events from any
+        # endpoint.
+        d = super(Sandbox, self).setup_connectors()
+
+        def cb(connector):
+            connector.set_default_event_handler(self.dispatch_event)
+            return connector
+
+        return d.addCallback(cb)
 
     def create_sandbox_resources(self, config):
         return SandboxResources(self, config)
@@ -699,6 +887,12 @@ class JsSandboxConfig(SandboxConfig):
 
     javascript = ConfigText("JavaScript code to run.", required=True)
     app_context = ConfigText("Custom context to execute JS with.")
+    logging_resource = ConfigText(
+        "Name of the logging resource to use to report errors detected"
+        " in sandboxed code (e.g. lines written to stderr, unexpected"
+        " process termination). Set to null to disable and report"
+        " these directly using Twisted logging instead.",
+        default='log')
 
 
 class JsSandbox(Sandbox):
@@ -714,6 +908,7 @@ class JsSandbox(Sandbox):
       resources under the name `js` if no `js` resource exists.
     * An instance of :class:`LoggingResource` is added to the sandbox
       resources under the name `log` if no `log` resource exists.
+    * `logging_resource` is set to `log` if it is not set.
     * An extra 'javascript' parameter specifies the javascript to execute.
     * An extra optional 'app_context' parameter specifying a custom
       context for the 'javascript' application to execute with.

@@ -60,7 +60,7 @@ class DummySentryClient(object):
 class TestSentryLogObserver(TestCase):
     def setUp(self):
         self.client = DummySentryClient()
-        self.obs = SentryLogObserver(self.client, 'test')
+        self.obs = SentryLogObserver(self.client, 'test', "worker-1")
 
     def test_level_for_event(self):
         for expected_level, event in [
@@ -81,7 +81,8 @@ class TestSentryLogObserver(TestCase):
         self.obs({'failure': f, 'system': 'foo', 'isError': 1})
         self.assertEqual(self.client.exceptions, [
             (((type(e), e, None),),
-             {'data': {'level': 40, 'logger': 'test.foo'}}),
+             {'data': {'level': 40, 'logger': 'test.foo'},
+              'tags': {'worker-id': 'worker-1'}}),
         ])
 
     def test_log_traceback(self):
@@ -100,7 +101,8 @@ class TestSentryLogObserver(TestCase):
                   'logLevel': logging.WARN})
         self.assertEqual(self.client.messages, [
             (('a',),
-             {'data': {'level': 30, 'logger': 'test.foo'}})
+             {'data': {'level': 30, 'logger': 'test.foo'},
+              'tags': {'worker-id': 'worker-1'}})
         ])
 
     def test_log_info(self):
@@ -116,14 +118,18 @@ class TestSentryLoggerSerivce(TestCase):
         self.patch(vumi.sentry, 'vumi_raven_client', lambda dsn: self.client)
         self.logger = LogPublisher()
         self.service = SentryLoggerService("http://example.com/",
-                                           "test.logger", logger=self.logger)
+                                           "test.logger",
+                                           "worker-1",
+                                           logger=self.logger)
 
     @inlineCallbacks
     def test_logging(self):
         yield self.service.startService()
         self.logger.msg("Hello", logLevel=logging.WARN)
         self.assertEqual(self.client.messages, [
-            (("Hello",), {'data': {'level': 30, 'logger': 'test.logger'}}),
+            (("Hello",),
+             {'data': {'level': 30, 'logger': 'test.logger'},
+              'tags': {'worker-id': 'worker-1'}})
         ])
         del self.client.messages[:]
         yield self.service.stopService()

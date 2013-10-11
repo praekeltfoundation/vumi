@@ -6,9 +6,8 @@ from copy import deepcopy
 from twisted.python import log
 from twisted.application.service import MultiService
 from twisted.application.internet import TCPClient
-from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
 from twisted.internet import protocol, reactor
-from twisted.web.resource import Resource
 import txamqp
 from txamqp.client import TwistedDelegate
 from txamqp.content import Content
@@ -17,7 +16,7 @@ from txamqp.protocol import AMQClient
 from vumi.errors import VumiError
 from vumi.message import Message
 from vumi.utils import (load_class_by_string, vumi_resource_path, http_request,
-                        basic_auth_string, LogFilterSite)
+                        basic_auth_string, build_web_site)
 
 
 SPECS = {}
@@ -243,29 +242,8 @@ class Worker(MultiService, object):
         return self._amqp_client.start_publisher(publisher_class, *args, **kw)
 
     def start_web_resources(self, resources, port, site_class=None):
-        # start the HTTP server for receiving the receipts
-        root = Resource()
-        # sort by ascending path length to make sure we create
-        # resources lower down in the path earlier
-        resources = sorted(resources, key=lambda r: len(r[1]))
-        for resource, path in resources:
-            request_path = filter(None, path.split('/'))
-            nodes, leaf = request_path[0:-1], request_path[-1]
-
-            def create_node(node, path):
-                if path in node.children:
-                    return node.children.get(path)
-                else:
-                    new_node = Resource()
-                    node.putChild(path, new_node)
-                    return new_node
-
-            parent = reduce(create_node, nodes, root)
-            parent.putChild(leaf, resource)
-
-        if site_class is None:
-            site_class = LogFilterSite
-        site_factory = site_class(root)
+        resources = dict((path, resource) for resource, path in resources)
+        site_factory = build_web_site(resources, site_class=site_class)
         return reactor.listenTCP(port, site_factory)
 
 
@@ -287,6 +265,8 @@ class Consumer(object):
 
     @inlineCallbacks
     def start(self, channel, queue):
+        self._notify_paused_and_quiet = []
+        self._in_progress = 0
         self.channel = channel
         self.queue = queue
         self.keep_consuming = True
@@ -312,16 +292,31 @@ class Consumer(object):
 
     def pause(self):
         self.paused = True
-        return self.channel.channel_flow(active=False)
+        self.channel.channel_flow(active=False)
+        return self.notify_paused_and_quiet()
 
     def unpause(self):
         self.paused = False
-        return self.channel.channel_flow(active=True)
+        self.channel.channel_flow(active=True)
+
+    def notify_paused_and_quiet(self):
+        d = Deferred()
+        self._notify_paused_and_quiet.append(d)
+        self._check_notify()
+        return d
+
+    def _check_notify(self):
+        if self.paused and not self._in_progress:
+            while self._notify_paused_and_quiet:
+                self._notify_paused_and_quiet.pop(0).callback(None)
 
     @inlineCallbacks
     def consume(self, message):
+        self._in_progress += 1
         result = yield self.consume_message(self.message_class.from_json(
                                             message.content.body))
+        self._in_progress -= 1
+        self._check_notify()
         if self._testing:
             self.channel.message_processed()
         if result is not False:

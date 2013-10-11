@@ -263,11 +263,29 @@ class FakeRedisTestCase(TestCase):
 
     @inlineCallbacks
     def test_ltrim(self):
+        for i in range(1, 5):
+            yield self.assert_redis_op(i - 1, 'rpush', 'list', str(i))
+        yield self.assert_redis_op(
+            ['1', '2', '3', '4'], 'lrange', 'list', 0, -1)
+        yield self.assert_redis_op(None, 'ltrim', 'list', 1, 2)
+        yield self.assert_redis_op(['2', '3'], 'lrange', 'list', 0, -1)
+
+    @inlineCallbacks
+    def test_ltrim_mid_range(self):
+        for i in range(1, 6):
+            yield self.assert_redis_op(i - 1, 'rpush', 'list', str(i))
+        yield self.assert_redis_op(
+            ['1', '2', '3', '4', '5'], 'lrange', 'list', 0, -1)
+        yield self.assert_redis_op(None, 'ltrim', 'list', 2, 3)
+        yield self.assert_redis_op(['3', '4'], 'lrange', 'list', 0, -1)
+
+    @inlineCallbacks
+    def test_ltrim_keep_all(self):
         for i in range(1, 4):
             yield self.assert_redis_op(i - 1, 'rpush', 'list', str(i))
         yield self.assert_redis_op(['1', '2', '3'], 'lrange', 'list', 0, -1)
-        yield self.assert_redis_op(None, 'ltrim', 'list', 1, 2)
-        yield self.assert_redis_op(['2', '3'], 'lrange', 'list', 0, -1)
+        yield self.assert_redis_op(None, 'ltrim', 'list', 0, -1)
+        yield self.assert_redis_op(['1', '2', '3'], 'lrange', 'list', 0, -1)
 
     @inlineCallbacks
     def test_lrem_negative_num(self):
