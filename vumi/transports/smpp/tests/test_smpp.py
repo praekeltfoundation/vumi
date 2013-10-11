@@ -535,6 +535,9 @@ class EsmeToSmscTestCase(TransportTestCase):
             sms['short_message'],
             u'Zoë destroyer of Ascii!'.encode('latin-1'))
 
+        # clear ack and nack
+        yield self.wait_for_dispatched_events(2)
+
     @inlineCallbacks
     def test_submit_sm_data_coding(self):
         # Startup
@@ -560,6 +563,9 @@ class EsmeToSmscTestCase(TransportTestCase):
         submit_sm_pdu = yield pdu_queue.get()
         sms = submit_sm_pdu['pdu']['body']['mandatory_parameters']
         self.assertEqual(sms['data_coding'], 8)
+
+        # clear ack and nack
+        yield self.wait_for_dispatched_events(2)
 
     @inlineCallbacks
     def test_submit_and_deliver_ussd_continue(self):
