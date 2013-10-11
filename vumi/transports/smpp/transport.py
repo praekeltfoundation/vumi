@@ -97,6 +97,11 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
         "`message_payload` optional field instead of the `short_message` "
         "field. Default is `False`, simply because that maintains previous "
         "behaviour.", default=False, static=True)
+    force_long_messages = ConfigBool(
+        "If `True`, all messages will be sent in the `message_payload` "
+        "optional field instead of the `short_message` field. "
+        "Default is `False`, simply because that maintains previous "
+        "behaviour.", default=False, static=True)
     split_bind_prefix = ConfigText(
         "This is the Redis prefix to use for storing things like sequence "
         "numbers and message ids for delivery report handling. It defaults "

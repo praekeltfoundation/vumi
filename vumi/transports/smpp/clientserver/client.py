@@ -467,7 +467,8 @@ class EsmeTransceiver(Protocol):
                             kwargs.get('session_info', None))
 
         message = pdu_params['short_message']
-        if self.config.send_long_messages and len(message) > 254:
+        if self.config.send_long_messages and (
+            len(message) > 254 or self.config.force_long_messages):
             pdu.add_message_payload(''.join('%02x' % ord(c) for c in message))
 
         self.send_pdu(pdu)

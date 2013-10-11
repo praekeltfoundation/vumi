@@ -265,6 +265,13 @@ class EsmeToSmscTestCase(TransportTestCase):
     transport_name = "esme_testing_transport"
     transport_class = MockSmppTransport
 
+    server_config = {
+        "system_id": "VumiTestSMSC",
+        "password": "password",
+        "twisted_endpoint": "tcp:0",
+        "transport_type": "smpp",
+    }
+
     def assert_pdu_header(self, expected, actual, field):
         self.assertEqual(expected['pdu']['header'][field],
                          actual['pdu']['header'][field])
@@ -288,19 +295,13 @@ class EsmeToSmscTestCase(TransportTestCase):
     @inlineCallbacks
     def setUp(self):
         yield super(EsmeToSmscTestCase, self).setUp()
-        server_config = {
-            "system_id": "VumiTestSMSC",
-            "password": "password",
-            "twisted_endpoint": "tcp:0",
-            "transport_name": self.transport_name,
-            "transport_type": "smpp",
-        }
-        self.service = SmppService(None, config=server_config)
+        self.server_config['transport_name'] = self.transport_name
+        self.service = SmppService(None, config=self.server_config)
         yield self.service.startWorker()
         self.service.factory.protocol = SmscTestServer
 
         host = self.service.listening.getHost()
-        client_config = server_config.copy()
+        client_config = self.server_config.copy()
         client_config['twisted_endpoint'] = 'tcp:host=%s:port=%s' % (
             host.host, host.port)
         self.transport = yield self.get_transport(client_config, start=False)
@@ -748,6 +749,46 @@ class EsmeToSmscTestCase(TransportTestCase):
                          ("Failed to retrieve message id for delivery "
                           "report. Delivery report from "
                           "esme_testing_transport discarded.",))
+
+class EsmeForceLongMessageTestCase(EsmeToSmscTestCase):
+
+    server_config = {
+        "system_id": "VumiTestSMSC",
+        "password": "password",
+        "twisted_endpoint": "tcp:0",
+        "transport_type": "smpp",
+        "force_long_messages": True,
+        "send_long_messages": True,
+    }
+
+    @inlineCallbacks
+    def test_force_long_messages(self):
+        # Startup
+        yield self.startTransport()
+        yield self.transport._block_till_bind
+        yield self.clear_link_pdus()
+
+        msg = TransportUserMessage(
+                to_addr="2772222222",
+                from_addr="2772000000",
+                content=u'ë' * 60,
+                transport_name=self.transport_name,
+                transport_type='ussd',
+                transport_metadata={},
+                rkey='%s.outbound' % self.transport_name,
+                timestamp='0',
+                )
+        yield self.dispatch(msg)
+
+        pdu_queue = self.service.factory.smsc.pdu_queue
+
+        submit_sm_pdu = yield pdu_queue.get()
+        mandatory = submit_sm_pdu['pdu']['body']['mandatory_parameters']
+        self.assertEqual(mandatory['short_message'], None)
+
+        optional = submit_sm_pdu['pdu']['body']['optional_parameters']
+        _, _, multipart_payload = optional
+        print multipart_payload
 
 
 class EsmeToSmscTestCaseDeliveryYo(EsmeToSmscTestCase):
