@@ -101,6 +101,10 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
         "If `True`, messages longer than 140 bytes will be sent as a series "
         "of smaller messages with the sar_* parameters set. Default is "
         "`False`.", default=False, static=True)
+    send_multipart_udh = ConfigBool(
+        "If `True`, messages longer than 140 bytes will be sent as a series "
+        "of smaller messages with the user data headers. Default is `False`.",
+        default=False, static=True)
     split_bind_prefix = ConfigText(
         "This is the Redis prefix to use for storing things like sequence "
         "numbers and message ids for delivery report handling. It defaults "

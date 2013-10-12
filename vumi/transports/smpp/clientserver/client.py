@@ -459,6 +459,7 @@ class EsmeTransceiver(Protocol):
             returnValue(0)
 
         sar_params = kwargs.pop('sar_params', None)
+        has_udh = kwargs.pop('has_udh', False)
 
         pdu_params = self.bind_params.copy()
         pdu_params.update(kwargs)
@@ -467,6 +468,12 @@ class EsmeTransceiver(Protocol):
         if self.config.send_multipart_sar and sar_params is None:
             if len(message) > 130:
                 sequence_number = yield self._submit_multipart_sar(
+                    **pdu_params)
+                returnValue(sequence_number)
+
+        if self.config.send_multipart_udh and not has_udh:
+            if len(message) > 130:
+                sequence_number = yield self._submit_multipart_udh(
                     **pdu_params)
                 returnValue(sequence_number)
 
@@ -505,6 +512,24 @@ class EsmeTransceiver(Protocol):
                 'total_segments': len(split_msg),
                 'segment_seqnum': i + 1,
             }
+            sequence_number = yield self.submit_sm(**params)
+        returnValue(sequence_number)
+
+    @inlineCallbacks
+    def _submit_multipart_udh(self, **pdu_params):
+        message = pdu_params['short_message']
+        split_msg = []
+        while message:
+            split_msg.append(message[:130])
+            message = message[130:]
+        ref_num = randint(1, 255)
+        for i, msg in enumerate(split_msg):
+            params = pdu_params.copy()
+            params['has_udh'] = True
+            params['esm_class'] = 0x40
+            udh = '\05\00\03%s%s%s' % (
+                chr(ref_num), chr(len(split_msg)), chr(i + 1))
+            params['short_message'] = udh + msg
             sequence_number = yield self.submit_sm(**params)
         returnValue(sequence_number)
 
