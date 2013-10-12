@@ -212,6 +212,32 @@ class EsmeTransmitterMixin(EsmeGenericMixin):
                          pdu_opts['message_payload'])
 
     @inlineCallbacks
+    def test_submit_sm_sms_multipart_sar(self):
+        """Submit a long SMS message using multipart sar fields."""
+        esme = yield self.get_esme(config={
+            'send_multipart_sar': True,
+        })
+        long_message = 'This is a long message.' * 20
+        yield esme.submit_sm(short_message=long_message)
+        self.assertEqual(4, len(esme.fake_sent_pdus))
+        msg_parts = []
+        msg_refs = []
+
+        for i, sm_pdu in enumerate(esme.fake_sent_pdus):
+            sm = unpack_pdu(sm_pdu.get_bin())
+            pdu_opts = unpacked_pdu_opts(sm)
+            mandatory_parameters = sm['body']['mandatory_parameters']
+
+            self.assertEqual('submit_sm', sm['header']['command_id'])
+            msg_parts.append(mandatory_parameters['short_message'])
+            msg_refs.append(pdu_opts['sar_msg_ref_num'])
+            self.assertEqual(i + 1, pdu_opts['sar_segment_seqnum'])
+            self.assertEqual(4, pdu_opts['sar_total_segments'])
+
+        self.assertEqual(long_message, ''.join(msg_parts))
+        self.assertEqual(1, len(set(msg_refs)))
+
+    @inlineCallbacks
     def test_submit_sm_ussd_continue(self):
         """Submit a USSD message with a session continue flag."""
         esme = yield self.get_esme()

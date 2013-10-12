@@ -2,6 +2,7 @@
 
 import json
 import uuid
+from random import randint
 
 from twisted.internet import reactor
 from twisted.internet.protocol import Protocol, ClientFactory
@@ -457,21 +458,54 @@ class EsmeTransceiver(Protocol):
                      'dropping message: %s' % (self.state, kwargs)))
             returnValue(0)
 
-        sequence_number = yield self.get_next_seq()
+        sar_params = kwargs.pop('sar_params', None)
+
         pdu_params = self.bind_params.copy()
         pdu_params.update(kwargs)
+        message = pdu_params['short_message']
+
+        if self.config.send_multipart_sar and sar_params is None:
+            if len(message) > 130:
+                sequence_number = yield self._submit_multipart_sar(
+                    **pdu_params)
+                returnValue(sequence_number)
+
+        sequence_number = yield self.get_next_seq()
 
         pdu = SubmitSM(sequence_number, **pdu_params)
         if kwargs.get('message_type', 'sms') == 'ussd':
             update_ussd_pdu(pdu, kwargs.get('continue_session', True),
                             kwargs.get('session_info', None))
 
-        message = pdu_params['short_message']
         if self.config.send_long_messages and len(message) > 254:
             pdu.add_message_payload(''.join('%02x' % ord(c) for c in message))
 
+        if sar_params:
+            pdu.set_sar_msg_ref_num(sar_params['msg_ref_num'])
+            pdu.set_sar_total_segments(sar_params['total_segments'])
+            pdu.set_sar_segment_seqnum(sar_params['segment_seqnum'])
+
         self.send_pdu(pdu)
         yield self.push_unacked(sequence_number)
+        returnValue(sequence_number)
+
+    @inlineCallbacks
+    def _submit_multipart_sar(self, **pdu_params):
+        message = pdu_params['short_message']
+        split_msg = []
+        while message:
+            split_msg.append(message[:130])
+            message = message[130:]
+        ref_num = randint(1, 255)
+        for i, msg in enumerate(split_msg):
+            params = pdu_params.copy()
+            params['short_message'] = msg
+            params['sar_params'] = {
+                'msg_ref_num': ref_num,
+                'total_segments': len(split_msg),
+                'segment_seqnum': i + 1,
+            }
+            sequence_number = yield self.submit_sm(**params)
         returnValue(sequence_number)
 
     @inlineCallbacks
