@@ -3,7 +3,6 @@
 from pkg_resources import resource_filename
 
 from twisted.trial.unittest import TestCase
-from twisted.python import usage
 
 from vumi.tests.utils import PersistenceMixin
 
@@ -71,7 +70,7 @@ class CreatePoolCmdTestCase(TagPoolBaseTestCase):
 
 
 class UpdatePoolMetadataCmdTestCase(TagPoolBaseTestCase):
-    def test_create_pool_range_tags(self):
+    def test_update_tagpool_metadata(self):
         cfg = make_cfg(["update-pool-metadata", "shortcode"])
         cfg.run()
         self.assertEqual(cfg.output, [
@@ -80,6 +79,36 @@ class UpdatePoolMetadataCmdTestCase(TagPoolBaseTestCase):
             ])
         self.assertEqual(cfg.tagpool.get_metadata("shortcode"),
                          {'transport_type': 'sms'})
+
+
+class UpdateAllPoolMetadataCmdTestCase(TagPoolBaseTestCase):
+    def test_update_all_metadata(self):
+        cfg = make_cfg(["update-all-metadata"])
+        cfg.tagpool.declare_tags([("xmpp", "tag"), ("longcode", "tag")])
+        cfg.run()
+        self.assertEqual(cfg.output, [
+            'Updating pool metadata.',
+            'Note: Pools not present in both the config and tagpool'
+            ' store will not be updated.',
+            '  Updating metadata for pool longcode ...',
+            '  Updating metadata for pool xmpp ...',
+            'Done.'
+            ])
+        self.assertEqual(cfg.tagpool.get_metadata("longcode"),
+                         {u'transport_type': u'sms'})
+        self.assertEqual(cfg.tagpool.get_metadata("xmpp"),
+                         {u'transport_type': u'xmpp'})
+        self.assertEqual(cfg.tagpool.get_metadata("shortcode"), {})
+
+    def test_no_pools(self):
+        cfg = make_cfg(["update-all-metadata"])
+        cfg.run()
+        self.assertEqual(cfg.output, [
+            'Updating pool metadata.',
+            'Note: Pools not present in both the config and tagpool'
+            ' store will not be updated.',
+            'No pools found.',
+            ])
 
 
 class PurgePoolCmdTestCase(TagPoolBaseTestCase):
