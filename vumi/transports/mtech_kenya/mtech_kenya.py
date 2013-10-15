@@ -37,15 +37,6 @@ class MTechKenyaTransport(HttpRpcTransport):
         403: 'Invalid mobile number',
     }
 
-    def validate_config(self):
-        config = self.get_static_config()
-        self._credentials = {
-            'user': config.mt_username,
-            'pass': config.mt_password,
-        }
-        self._outbound_url = config.outbound_url
-        return super(MTechKenyaTransport, self).validate_config()
-
     @inlineCallbacks
     def handle_outbound_message(self, message):
         config = self.get_static_config()
@@ -57,8 +48,7 @@ class MTechKenyaTransport(HttpRpcTransport):
             'MSISDN': message['to_addr'],
             'MESSAGE': message['content'],
         }
-        log.msg("Sending outbound message: %s" % (message,))
-        url = '%s?%s' % (self._outbound_url, urlencode(params))
+        url = '%s?%s' % (config.outbound_url, urlencode(params))
         log.msg("Making HTTP request: %s" % (url,))
         response = yield http_request_full(url, '', method='POST')
         log.msg("Response: (%s) %r" % (response.code, response.delivered_body))
@@ -85,7 +75,6 @@ class MTechKenyaTransport(HttpRpcTransport):
             content=values['MESSAGE'],
             to_addr=values['shortCode'],
             from_addr=values['MSISDN'],
-            provider='vumi',
             transport_type=self.transport_type,
             transport_metadata={'transport_message_id': values['messageID']},
         )
