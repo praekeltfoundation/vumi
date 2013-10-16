@@ -131,7 +131,7 @@ class TelnetServerTransport(Transport):
 
     def register_client(self, client):
         client_addr = client.getAddress()
-        log.msg("Registering client connected from %r" % client_addr)
+        log.msg("Registering client connected from %r", client_addr)
         self._clients[client_addr] = client
         self.send_inbound_message(client, None,
                                   TransportUserMessage.SESSION_NEW)

@@ -58,7 +58,7 @@ class EsmeTransceiver(Protocol):
         self.bind_params = bind_params
         self.esme_callbacks = esme_callbacks
         self.state = 'CLOSED'
-        log.msg('STATE: %s' % (self.state,))
+        log.msg('STATE: %s', self.state)
         self.smpp_bind_timeout = self.config.smpp_bind_timeout
         self.smpp_enquire_link_interval = \
                 self.config.smpp_enquire_link_interval
@@ -143,8 +143,8 @@ class EsmeTransceiver(Protocol):
         pdu = unpack_pdu(data)
         command_id = pdu['header']['command_id']
         if command_id not in ('enquire_link', 'enquire_link_resp'):
-            log.debug('INCOMING <<<< %s' % binascii.b2a_hex(data))
-            log.debug('INCOMING <<<< %s' % pdu)
+            log.debug('INCOMING <<<< %s', binascii.b2a_hex(data))
+            log.debug('INCOMING <<<< %s', pdu)
         handler = getattr(self, 'handle_%s' % (command_id,),
                           self._command_handler_not_found)
         yield handler(pdu)
@@ -157,12 +157,12 @@ class EsmeTransceiver(Protocol):
             data = yield self._pdu_queue.get()
 
     def _command_handler_not_found(self, pdu):
-        log.err('No command handler available for %s' % (pdu,))
+        log.err('No command handler available for %s', pdu)
 
     @inlineCallbacks
     def connectionMade(self):
         self.state = 'OPEN'
-        log.msg('STATE: %s' % (self.state))
+        log.msg('STATE: %s', self.state)
         seq = yield self.get_next_seq()
         pdu = self.BIND_PDU(seq, **self.bind_params)
         log.msg(pdu.get_obj())
@@ -176,19 +176,19 @@ class EsmeTransceiver(Protocol):
 
     def lose_unbound_connection(self, required_state):
         if self.state != required_state:
-            log.msg('Breaking connection due to binding delay, %s != %s\n' % (
-                self.state, required_state))
+            log.msg('Breaking connection due to binding delay, %s != %s\n',
+                self.state, required_state)
             self._lose_conn = None
             self.transport.loseConnection()
         else:
-            log.msg('Successful bind: %s, cancelling bind timeout' % (
-                self.state))
+            log.msg('Successful bind: %s, cancelling bind timeout',
+                self.state)
 
     def connectionLost(self, *args, **kwargs):
         self.state = 'CLOSED'
         self.stop_enquire_link()
         self.cancel_drop_connection_call()
-        log.msg('STATE: %s' % (self.state))
+        log.msg('STATE: %s', self.state)
 
     def dataReceived(self, data):
         self.datastream += data
@@ -202,7 +202,7 @@ class EsmeTransceiver(Protocol):
         unpacked = unpack_pdu(data)
         command_id = unpacked['header']['command_id']
         if command_id not in ('enquire_link', 'enquire_link_resp'):
-            log.debug('OUTGOING >>>> %s' % unpacked)
+            log.debug('OUTGOING >>>> %s', unpacked)
         self.transport.write(data)
 
     @inlineCallbacks
@@ -236,7 +236,7 @@ class EsmeTransceiver(Protocol):
         if pdu['header']['command_status'] == 'ESME_ROK':
             self.state = 'BOUND_TRX'
             yield self.start_enquire_link()
-        log.msg('STATE: %s' % (self.state))
+        log.msg('STATE: %s', self.state)
 
     @inlineCallbacks
     def handle_submit_sm_resp(self, pdu):
@@ -283,22 +283,22 @@ class EsmeTransceiver(Protocol):
         codecs.update(self.config.data_coding_overrides)
         codec = codecs.get(data_coding, None)
         if codec is None or message is None:
-            log.msg("WARNING: Not decoding message with data_coding=%s" % (
-                    data_coding,))
+            log.msg("WARNING: Not decoding message with data_coding=%s",
+                    data_coding)
         else:
             try:
                 return message.decode(codec)
             except Exception, e:
-                log.msg("Error decoding message with data_coding=%s" % (
-                        data_coding,))
+                log.msg("Error decoding message with data_coding=%s",
+                        data_coding)
                 log.err(e)
         return message
 
     @inlineCallbacks
     def handle_deliver_sm(self, pdu):
         if self.state not in ['BOUND_RX', 'BOUND_TRX']:
-            log.err('WARNING: Received deliver_sm in wrong state: %s' % (
-                self.state))
+            log.err('WARNING: Received deliver_sm in wrong state: %s',
+                self.state)
             return
 
         if pdu['header']['command_status'] != 'ESME_ROK':
@@ -397,16 +397,16 @@ class EsmeTransceiver(Protocol):
     def _handle_deliver_sm_multipart(self, pdu, pdu_params):
         message_id = str(uuid.uuid4())
         redis_key = "multi_%s" % (multipart_key(detect_multipart(pdu)),)
-        log.debug("Redis multipart key: %s" % (redis_key))
+        log.debug("Redis multipart key: %s", redis_key)
         value = yield self.redis.get(redis_key)
         value = json.loads(value or 'null')
-        log.debug("Retrieved value: %s" % (repr(value)))
+        log.debug("Retrieved value: %s", repr(value))
         multi = MultipartMessage(value)
         multi.add_pdu(pdu)
         completed = multi.get_completed()
         if completed:
             yield self.redis.delete(redis_key)
-            log.msg("Reassembled Message: %s" % (completed['message']))
+            log.msg("Reassembled Message: %s", completed['message'])
             # We assume that all parts have the same data_coding here, because
             # otherwise there's nothing sensible we can do.
             decoded_msg = self._decode_message(completed['message'],
@@ -429,13 +429,13 @@ class EsmeTransceiver(Protocol):
             pdu_resp = EnquireLinkResp(sequence_number)
             self.send_pdu(pdu_resp)
         else:
-            log.msg("enquire_link NOT OK: %r" % (pdu,))
+            log.msg("enquire_link NOT OK: %r", pdu)
 
     def handle_enquire_link_resp(self, pdu):
         if pdu['header']['command_status'] == 'ESME_ROK':
             log.msg("enquire_link_resp OK")
         else:
-            log.msg("enquire_link_resp NOT OK: %r" % (pdu,))
+            log.msg("enquire_link_resp NOT OK: %r", pdu)
 
     def get_unacked_count(self):
         return self.redis.llen("unacked").addCallback(int)
@@ -443,12 +443,12 @@ class EsmeTransceiver(Protocol):
     @inlineCallbacks
     def push_unacked(self, sequence_number=-1):
         yield self.redis.lpush("unacked", sequence_number)
-        log.msg("unacked pushed to: %s" % ((yield self.get_unacked_count())))
+        log.msg("unacked pushed to: %s", (yield self.get_unacked_count()))
 
     @inlineCallbacks
     def pop_unacked(self):
         yield self.redis.lpop("unacked")
-        log.msg("unacked popped to: %s" % ((yield self.get_unacked_count())))
+        log.msg("unacked popped to: %s", (yield self.get_unacked_count()))
 
     @inlineCallbacks
     def submit_sm(self, **kwargs):
@@ -505,7 +505,7 @@ class EsmeTransmitter(EsmeTransceiver):
         if pdu['header']['command_status'] == 'ESME_ROK':
             self.state = 'BOUND_TX'
             yield self.start_enquire_link()
-        log.msg('STATE: %s' % (self.state))
+        log.msg('STATE: %s', self.state)
 
 
 class EsmeReceiver(EsmeTransceiver):
@@ -517,7 +517,7 @@ class EsmeReceiver(EsmeTransceiver):
         if pdu['header']['command_status'] == 'ESME_ROK':
             self.state = 'BOUND_RX'
             yield self.start_enquire_link()
-        log.msg('STATE: %s' % (self.state))
+        log.msg('STATE: %s', self.state)
 
 
 class EsmeTransceiverFactory(ClientFactory):

@@ -105,7 +105,7 @@ class BaseSmsSyncTransport(HttpRpcTransport):
     def _handle_send(self, message_id, request):
         msginfo = yield self.msginfo_for_request(request)
         if msginfo is None:
-            log.warning("Bad account: %r (args: %r)" % (request, request.args))
+            log.warning("Bad account: %r (args: %r)", request, request.args)
             yield self._send_response(message_id, success=self.SMSSYNC_FALSE)
             return
         yield self._respond_with_pending_messages(
@@ -135,8 +135,7 @@ class BaseSmsSyncTransport(HttpRpcTransport):
                 pass
 
         if timestamp is None:
-            log.warning("Bad timestamp format: %r (args: %r)"
-                        % (request, request.args))
+            log.warning("Bad timestamp format: %r (args: %r)", request, request.args)
             timestamp = datetime.datetime.utcnow()
 
         return timestamp
@@ -146,15 +145,14 @@ class BaseSmsSyncTransport(HttpRpcTransport):
         if not self._check_request_args(request, ['secret', 'sent_timestamp',
                                                   'sent_to', 'from',
                                                   'message']):
-            log.warning("Bad request: %r (args: %r)" % (request, request.args))
+            log.warning("Bad request: %r (args: %r)", request, request.args)
             yield self._send_response(message_id, success=self.SMSSYNC_FALSE)
             return
         msginfo = yield self.msginfo_for_request(request)
         supplied_secret = request.args['secret'][0]
         if msginfo is None or (msginfo.smssync_secret and
                                not msginfo.smssync_secret == supplied_secret):
-            log.warning("Bad secret or account: %r (args: %r)"
-                        % (request, request.args))
+            log.warning("Bad secret or account: %r (args: %r)", request, request.args)
             yield self._send_response(message_id, success=self.SMSSYNC_FALSE)
             return
 

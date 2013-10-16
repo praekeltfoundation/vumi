@@ -52,17 +52,17 @@ class MtechUssdTransport(HttpRpcTransport):
     def handle_status_message(self, msgid, session_id):
         mur = MtechUssdResponse(session_id)
         response_body = unicode(mur).encode(self.ENCODING)
-        log.msg("Outbound message: %r" % (response_body,))
+        log.msg("Outbound message: %r", response_body)
         return self.finish_request(msgid, response_body)
 
     @inlineCallbacks
     def handle_raw_inbound_message(self, msgid, request):
         request_body = request.content.read()
-        log.msg("Inbound message: %r" % (request_body,))
+        log.msg("Inbound message: %r", request_body)
         try:
             body = ET.fromstring(request_body)
         except:
-            log.warning("Error parsing request XML: %s" % (request_body,))
+            log.warning("Error parsing request XML: %s", request_body)
             yield self.finish_request(msgid, "", code=400)
             return
 
@@ -122,7 +122,7 @@ class MtechUssdTransport(HttpRpcTransport):
         if message['session_event'] != TransportUserMessage.SESSION_CLOSE:
             mur.add_freetext_option()
         response_body = unicode(mur).encode(self.ENCODING)
-        log.msg("Outbound message: %r" % (response_body,))
+        log.msg("Outbound message: %r", response_body)
         self.finish_request(message['in_reply_to'], response_body)
         return self.publish_ack(user_message_id=message['message_id'],
             sent_message_id=message['message_id'])

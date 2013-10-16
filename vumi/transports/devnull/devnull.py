@@ -60,7 +60,7 @@ class DevNullTransport(Transport):
 
         dr = ('failed' if random.random() < self.failure_rate
                 else 'delivered')
-        log.info('MT %(dr)s: %(from_addr)s -> %(to_addr)s: %(content)s' % {
+        log.info('MT %(dr)s: %(from_addr)s -> %(to_addr)s: %(content)s', {
             'dr': dr,
             'from_addr': message['from_addr'],
             'to_addr': message['to_addr'],
@@ -71,7 +71,7 @@ class DevNullTransport(Transport):
         yield self.publish_delivery_report(message['message_id'], dr)
         if random.random() < self.reply_rate:
             reply_copy = self.reply_copy or message['content']
-            log.info('MO %(from_addr)s -> %(to_addr)s: %(content)s' % {
+            log.info('MO %(from_addr)s -> %(to_addr)s: %(content)s', {
                 'from_addr': message['to_addr'],
                 'to_addr': message['from_addr'],
                 'content': reply_copy,

@@ -77,7 +77,7 @@ class FakeVas2NetsHandler(Resource):
             'messageid', 'provider', 'tariff', 'owner', 'service',
             'subservice'
             ]
-        log.msg('Received sms: %s' % (request.args,))
+        log.msg('Received sms: %s', request.args)
         for key in required_fields:
             if key not in request.args:
                 request.setResponseCode(http.BAD_REQUEST)
@@ -113,7 +113,7 @@ class FakeVas2NetsHandler(Resource):
             'sender': sender,
             }
 
-        log.msg("Sending receipt: %s" % (params,))
+        log.msg("Sending receipt: %s", params)
         d = HttpResponseHandler.req_POST(self.receipt_url, params)
         if self.deliver_hook:
             d.addCallback(self.deliver_hook)

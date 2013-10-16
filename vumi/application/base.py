@@ -143,7 +143,7 @@ class ApplicationWorker(BaseWorker):
         return self._dispatch_event_raw(event)
 
     def consume_unknown_event(self, event):
-        log.msg("Unknown event type in message %r" % (event,))
+        log.msg("Unknown event type in message %r", event)
 
     def consume_ack(self, event):
         """Handle an ack message."""

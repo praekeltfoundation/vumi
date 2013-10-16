@@ -156,8 +156,8 @@ class SmppTransport(Transport):
     @inlineCallbacks
     def setup_transport(self):
         config = self.get_static_config()
-        log.msg("Starting the SmppTransport for %s" % (
-            config.twisted_endpoint))
+        log.msg("Starting the SmppTransport for %s",
+            config.twisted_endpoint)
 
         self.submit_sm_encoding = config.submit_sm_encoding
         self.submit_sm_data_coding = config.submit_sm_data_coding
@@ -214,9 +214,9 @@ class SmppTransport(Transport):
 
     @inlineCallbacks
     def handle_outbound_message(self, message):
-        log.debug("Consumed outgoing message %r" % (message,))
-        log.debug("Unacknowledged message count: %s" % (
-                (yield self.esme_client.get_unacked_count()),))
+        log.debug("Consumed outgoing message %r", message)
+        log.debug("Unacknowledged message count: %s",
+                (yield self.esme_client.get_unacked_count()))
         yield self.r_set_message(message)
         yield self._submit_outbound_message(message)
 
@@ -304,8 +304,8 @@ class SmppTransport(Transport):
         sent_sms_id = (
             yield self.r_get_id_for_sequence(kwargs['sequence_number']))
         if sent_sms_id is None:
-            log.err("Sequence number lookup failed for:%s" % (
-                kwargs['sequence_number'],))
+            log.err("Sequence number lookup failed for:%s",
+                kwargs['sequence_number'])
         else:
             yield self.r_set_id_for_third_party_id(
                 transport_msg_id, sent_sms_id)
@@ -327,10 +327,10 @@ class SmppTransport(Transport):
     @inlineCallbacks
     def submit_sm_success(self, sent_sms_id, transport_msg_id):
         yield self.r_delete_message(sent_sms_id)
-        log.debug("Mapping transport_msg_id=%s to sent_sms_id=%s" % (
-            transport_msg_id, sent_sms_id))
-        log.debug("PUBLISHING ACK: (%s -> %s)" % (
-            sent_sms_id, transport_msg_id))
+        log.debug("Mapping transport_msg_id=%s to sent_sms_id=%s",
+            transport_msg_id, sent_sms_id)
+        log.debug("PUBLISHING ACK: (%s -> %s)",
+            sent_sms_id, transport_msg_id)
         self.publish_ack(
             user_message_id=sent_sms_id,
             sent_message_id=transport_msg_id)
@@ -339,8 +339,8 @@ class SmppTransport(Transport):
     def submit_sm_failure(self, sent_sms_id, reason, failure_code=None):
         error_message = yield self.r_get_message(sent_sms_id)
         if error_message is None:
-            log.err("Could not retrieve failed message:%s" % (
-                sent_sms_id))
+            log.err("Could not retrieve failed message:%s",
+                sent_sms_id)
         else:
             yield self.r_delete_message(sent_sms_id)
             yield self.publish_nack(sent_sms_id, reason)
@@ -353,8 +353,8 @@ class SmppTransport(Transport):
     def submit_sm_throttled(self, sent_sms_id):
         message = yield self.r_get_message(sent_sms_id)
         if message is None:
-            log.err("Could not retrieve throttled message:%s" % (
-                sent_sms_id))
+            log.err("Could not retrieve throttled message:%s",
+                sent_sms_id)
         else:
             config = self.get_static_config()
             self.callLater(config.throttle_delay,
@@ -385,11 +385,10 @@ class SmppTransport(Transport):
             kwargs['delivery_report']['id'])
         if message_id is None:
             log.warning("Failed to retrieve message id for delivery report."
-                        " Delivery report from %s discarded."
-                        % self.transport_name)
+                        " Delivery report from %s discarded.", self.transport_name)
             return
-        log.msg("PUBLISHING DELIV REPORT: %s %s" % (message_id,
-                                                    delivery_status))
+        log.msg("PUBLISHING DELIV REPORT: %s %s", message_id,
+                                                    delivery_status)
         returnValue((yield self.publish_delivery_report(
                     user_message_id=message_id,
                     delivery_status=delivery_status,
@@ -416,7 +415,7 @@ class SmppTransport(Transport):
             session_info = kwargs.get('session_info')
             message['transport_metadata']['session_info'] = session_info
 
-        log.msg("PUBLISHING INBOUND: %s" % (message,))
+        log.msg("PUBLISHING INBOUND: %s", message)
         # TODO: This logs messages that fail to serialize to JSON
         #       Usually this happens when an SMPP message has content
         #       we can't decode (e.g. data_coding == 4). We should
@@ -425,7 +424,7 @@ class SmppTransport(Transport):
         return self.publish_message(**message).addErrback(log.err)
 
     def send_smpp(self, message):
-        log.debug("Sending SMPP message: %s" % (message))
+        log.debug("Sending SMPP message: %s", message)
         # first do a lookup in our YAML to see if we've got a source_addr
         # defined for the given MT number, if not, trust the from_addr
         # in the message
@@ -454,7 +453,7 @@ class SmppTransport(Transport):
 
     def send_failure(self, message, exception, reason):
         """Send a failure report."""
-        log.msg("Failed to send: %s reason: %s" % (message, reason))
+        log.msg("Failed to send: %s reason: %s", message, reason)
         return super(SmppTransport, self).send_failure(message,
                                                        exception, reason)
 

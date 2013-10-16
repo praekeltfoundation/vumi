@@ -76,12 +76,12 @@ class AirtelUSSDTransport(HttpRpcTransport):
             auth = (username == config.airtel_username and
                     password == config.airtel_password)
             if not auth:
-                log.msg('Invalid authentication credentials: %s:%s' % (
-                        username, password))
+                log.msg('Invalid authentication credentials: %s:%s',
+                        username, password)
             return auth
 
     def handle_bad_request(self, message_id, request, errors):
-        log.msg('Unhappy incoming message: %s' % (errors,))
+        log.msg('Unhappy incoming message: %s', errors)
         return self.finish_request(message_id, json.dumps(errors),
                                    code=http.BAD_REQUEST)
 
@@ -110,8 +110,8 @@ class AirtelUSSDTransport(HttpRpcTransport):
         session_id = values['SessionID']
         session = yield self.session_manager.load_session(session_id)
         if not session:
-            log.warning('Received cleanup for unknown session: %s' % (
-                        session_id,))
+            log.warning('Received cleanup for unknown session: %s',
+                        session_id)
             self.finish_request(message_id, 'Unknown Session', code=http.OK)
             return
 
@@ -201,9 +201,9 @@ class AirtelUSSDTransport(HttpRpcTransport):
         }
 
         if self.noisy:
-            log.debug('in_reply_to: %s' % (message['in_reply_to'],))
-            log.debug('content: %s' % (message['content'],))
-            log.debug('Response headers: %r' % (headers,))
+            log.debug('in_reply_to: %s', message['in_reply_to'])
+            log.debug('content: %s', message['content'])
+            log.debug('Response headers: %r', headers)
 
         self.finish_request(
             message['in_reply_to'],

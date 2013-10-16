@@ -187,8 +187,7 @@ class OperaTransport(Transport):
 
     @inlineCallbacks
     def setup_transport(self):
-        log.msg('Starting the OperaInboundTransport config: %s' %
-            self.transport_name)
+        log.msg('Starting the OperaInboundTransport config: %s', self.transport_name)
         r_prefix = "%(transport_name)s@%(url)s" % self.config
         self.session_manager = yield SessionManager.from_redis_config(
             self.r_config, r_prefix, self.message_id_lifetime)
@@ -235,7 +234,7 @@ class OperaTransport(Transport):
         xmlrpc_payload['Receipt'] = receipt
         xmlrpc_payload['MaxSegments'] = self.max_segments
 
-        log.msg("Sending SMS via Opera: %s" % xmlrpc_payload)
+        log.msg("Sending SMS via Opera: %s", xmlrpc_payload)
 
         d = self.proxy.callRemote('EAPIGateway.SendSMS',
             xmlrpc_payload)
@@ -243,7 +242,7 @@ class OperaTransport(Transport):
 
         proxy_response = yield d
 
-        log.msg("Proxy response: %s" % proxy_response)
+        log.msg("Proxy response: %s", proxy_response)
         transport_message_id = proxy_response['Identifier']
 
         yield self.set_message_id_for_identifier(
@@ -272,7 +271,6 @@ class OperaTransport(Transport):
 
     @inlineCallbacks
     def teardown_transport(self):
-        log.msg("Stopping the OperaOutboundTransport: %s" %
-            self.transport_name)
+        log.msg("Stopping the OperaOutboundTransport: %s", self.transport_name)
         yield self.web_resource.loseConnection()
         yield self.session_manager.stop()

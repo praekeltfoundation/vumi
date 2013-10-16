@@ -49,11 +49,11 @@ class MediafoneTransport(HttpRpcTransport):
             'phone': message['to_addr'],
             'msg': message['content'],
             }
-        log.msg("Sending outbound message: %s" % (message,))
+        log.msg("Sending outbound message: %s", message)
         url = '%s?%s' % (self._outbound_url, urlencode(params))
-        log.msg("Making HTTP request: %s" % (url,))
+        log.msg("Making HTTP request: %s", url)
         response = yield http_request_full(url, '', method='GET')
-        log.msg("Response: (%s) %r" % (response.code, response.delivered_body))
+        log.msg("Response: (%s) %r", response.code, response.delivered_body)
         if response.code == http.OK:
             yield self.publish_ack(user_message_id=message['message_id'],
                 sent_message_id=message['message_id'])
@@ -66,7 +66,7 @@ class MediafoneTransport(HttpRpcTransport):
     def handle_raw_inbound_message(self, message_id, request):
         values, errors = self.get_field_values(request, self.EXPECTED_FIELDS)
         if errors:
-            log.msg('Unhappy incoming message: %s' % (errors,))
+            log.msg('Unhappy incoming message: %s', errors)
             yield self.finish_request(message_id, json.dumps(errors), code=400)
             return
         log.msg(('MediafoneTransport sending from %(from)s to %(to)s '

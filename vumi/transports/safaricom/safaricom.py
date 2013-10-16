@@ -55,7 +55,7 @@ class SafaricomTransport(HttpRpcTransport):
     def handle_raw_inbound_message(self, message_id, request):
         values, errors = self.get_field_values(request, self.EXPECTED_FIELDS)
         if errors:
-            log.err('Unhappy incoming message: %s' % (errors,))
+            log.err('Unhappy incoming message: %s', errors)
             yield self.finish_request(message_id, json.dumps(errors), code=400)
             return
         self.emit(('SafaricomTransport sending from %s to %s '

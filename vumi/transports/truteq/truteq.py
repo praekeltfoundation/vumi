@@ -128,7 +128,7 @@ class TruteqTransport(Transport):
 
     @inlineCallbacks
     def ussd_callback(self, msisdn, ussd_type, phase, message, genfields=None):
-        log.msg("Received USSD, from: %s, message: %s" % (msisdn, message))
+        log.msg("Received USSD, from: %s, message: %s", msisdn, message)
         session_event = self.SSMI_TO_VUMI_EVENT[ussd_type]
         msisdn = normalize_msisdn(msisdn)
         message = message.decode(self.SSMI_ENCODING)
@@ -164,14 +164,13 @@ class TruteqTransport(Transport):
             })
 
     def sms_callback(self, *args, **kwargs):
-        log.err("Got SMS from SSMI but SMSes not supported: %r, %r"
-                % (args, kwargs))
+        log.err("Got SMS from SSMI but SMSes not supported: %r, %r", args, kwargs)
 
     def ssmi_errback(self, *args, **kwargs):
-        log.err("Got error from SSMI: %r, %r" % (args, kwargs))
+        log.err("Got error from SSMI: %r, %r", args, kwargs)
 
     def handle_outbound_message(self, message):
-        log.msg("Outbound USSD message: %s" % (message,))
+        log.msg("Outbound USSD message: %s", message)
         text = message['content']
         if text is None:
             text = ''

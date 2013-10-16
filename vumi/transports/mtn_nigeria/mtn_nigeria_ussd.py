@@ -135,7 +135,7 @@ class MtnNigeriaUssdTransport(Transport):
         message_id, from_addr = self.pop_fields(params, 'requestId', 'msisdn')
 
         log.msg('MtnNigeriaUssdTransport receiving inbound message from %s '
-                'to %s: %s' % (from_addr, to_addr, content))
+                'to %s: %s', from_addr, to_addr, content)
 
         if session_event == TransportUserMessage.SESSION_CLOSE:
             self.factory.client.send_data_response(

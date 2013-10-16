@@ -92,7 +92,7 @@ class CellulantTransport(HttpRpcTransport):
         if to_addr is None:
             # we can't continue so finish request and log error
             self.finish_request(message_id, '')
-            log.error("Failed redis USSD to_addr lookup for %s" % request.args)
+            log.error("Failed redis USSD to_addr lookup for %s", request.args)
         else:
             transport_metadata = {
                 'session_id': request.args.get('sessionID')[0],

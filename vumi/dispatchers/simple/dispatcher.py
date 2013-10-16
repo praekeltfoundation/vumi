@@ -11,13 +11,13 @@ class MessageHandler(object):
         self.queue_name = queue_name
         self.publisher = publisher
         self.publish_keys = publish_keys or []  # if None assume empty set
-        log.msg("SimpleDispatcher forwarding from %s to %s" % (
-            self.queue_name, self.publish_keys))
+        log.msg("SimpleDispatcher forwarding from %s to %s",
+            self.queue_name, self.publish_keys)
 
     def consume_message(self, message):
-        log.msg("SimpleDispatcher consuming on %s: %s" % (
+        log.msg("SimpleDispatcher consuming on %s: %s",
             self.queue_name,
-            repr(message)))
+            repr(message))
         for k in self.publish_keys:
             self.publisher.publish_message(message, routing_key=k)
 
@@ -26,7 +26,7 @@ class SimpleDispatcher(Worker):
 
     @inlineCallbacks
     def startWorker(self):
-        log.msg("Starting SimpleDispatcher with config: %s" % (self.config))
+        log.msg("Starting SimpleDispatcher with config: %s", self.config)
 
         self.publisher = yield self.publish_to("simpledispatcher.fallback")
         for queue_name, publish_keys in self.config['route_mappings'].items():

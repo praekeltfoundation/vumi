@@ -64,7 +64,7 @@ class Dispatcher(BaseWorker):
 
     def _mkhandler(self, handler_func, connector_name):
         def errback(f):
-            log.error("Error routing message for %s" % (connector_name,))
+            log.error("Error routing message for %s", connector_name)
             log.error(f)
 
         def handler(msg):
@@ -123,13 +123,13 @@ class RoutingTableDispatcher(Dispatcher):
         endpoint_name = msg.get_routing_endpoint()
         endpoint_routing = config.routing_table.get(connector_name)
         if endpoint_routing is None:
-            log.warning("No routing information for connector '%s'" % (
-                    connector_name,))
+            log.warning("No routing information for connector '%s'",
+                    connector_name)
             return None
         target = endpoint_routing.get(endpoint_name)
         if target is None:
-            log.warning("No routing information for endpoint '%s' on '%s'" % (
-                    endpoint_name, connector_name,))
+            log.warning("No routing information for endpoint '%s' on '%s'",
+                    endpoint_name, connector_name)
             return None
         return target
 

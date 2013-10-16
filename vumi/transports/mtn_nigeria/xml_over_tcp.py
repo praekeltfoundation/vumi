@@ -136,7 +136,7 @@ class XmlOverTcpClient(Protocol):
 
     def timeout(self):
         log.msg("No enquire link response received after %s seconds, "
-                "disconnecting" % self.timeout_period)
+                "disconnecting", self.timeout_period)
         self.disconnect()
 
     def disconnect(self):
@@ -193,7 +193,7 @@ class XmlOverTcpClient(Protocol):
             try:
                 packet_type, params = self.deserialize_body(body)
             except ParseError as e:
-                log.err("Error parsing packet (%s): %s" % (e, packet))
+                log.err("Error parsing packet (%s): %s", e, packet)
                 self.disconnect()
                 return
 
@@ -245,20 +245,19 @@ class XmlOverTcpClient(Protocol):
         return packet_type, params
 
     def packet_received(self, session_id, packet_type, params):
-        log.debug("Packet of type '%s' with session id '%s' received: %s"
-                  % (packet_type, session_id, params))
+        log.debug("Packet of type '%s' with session id '%s' received: %s", packet_type, session_id, params)
 
         # dispatch the packet to the appropriate handler
         handler_name = self.PACKET_RECEIVED_HANDLERS.get(packet_type, None)
         if handler_name is None:
-            log.err("Packet of an unknown type received: %s" % packet_type)
+            log.err("Packet of an unknown type received: %s", packet_type)
             return self.send_error_response(
                 session_id, params.get('requestId'), '208')
 
         if (not self.authenticated and
                 packet_type not in self.IGNORE_AUTH_PACKETS):
             log.err("'%s' packet received before client authentication "
-                    "was completed" % packet_type)
+                    "was completed", packet_type)
             return self.send_error_response(
                 session_id, params.get('requestId'), '207')
 
@@ -372,7 +371,7 @@ class XmlOverTcpClient(Protocol):
                 % packet_type)
 
         packet = self.serialize_packet(session_id, packet_type, params)
-        log.debug("Sending packet: %s" % packet)
+        log.debug("Sending packet: %s", packet)
         self.transport.write(packet)
 
     @classmethod
@@ -466,7 +465,7 @@ class XmlOverTcpClient(Protocol):
             return
 
         log.debug("Enquire link response received, sending next request in %s "
-                  "seconds" % self.enquire_link_interval)
+                  "seconds", self.enquire_link_interval)
         self.cancel_scheduled_timeout()
 
     def send_enquire_link_response(self, session_id, request_id):

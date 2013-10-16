@@ -78,8 +78,8 @@ class HTTPRelayApplication(ApplicationWorker):
                 if (raw_headers[0].lower() == 'true') and content:
                     self.reply_to(message, content)
         else:
-            log.err('%s responded with %s' % (config.url.geturl(),
-                                                response.code))
+            log.err('%s responded with %s', config.url.geturl(),
+                                                response.code)
 
     @inlineCallbacks
     def relay_event(self, event):

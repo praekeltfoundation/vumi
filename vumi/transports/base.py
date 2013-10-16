@@ -110,8 +110,7 @@ class Transport(BaseWorker):
             d.addCallback(self.failure_publisher.publish_message)
             d.addCallback(lambda _f: self.failure_published())
         except:
-            log.err("Error publishing failure: %s, %s, %s"
-                    % (message, exception, traceback))
+            log.err("Error publishing failure: %s, %s, %s", message, exception, traceback)
             raise
         return d
 

@@ -56,7 +56,7 @@ class AmqpFactory(protocol.ReconnectingClientFactory):
         return self.amqp_client
 
     def clientConnectionFailed(self, connector, reason):
-        log.err("Connection failed: %r" % (reason,))
+        log.err("Connection failed: %r", reason)
         self.worker._amqp_connection_failed()
         self.amqp_client = None
         protocol.ReconnectingClientFactory.clientConnectionFailed(
@@ -66,7 +66,7 @@ class AmqpFactory(protocol.ReconnectingClientFactory):
         if not self.worker.running:
             # We've specifically asked for this disconnect.
             return
-        log.err("Client connection lost: %r" % (reason,))
+        log.err("Client connection lost: %r", reason)
         self.worker._amqp_connection_failed()
         self.amqp_client = None
         protocol.ReconnectingClientFactory.clientConnectionLost(
@@ -215,7 +215,7 @@ class Worker(MultiService, object):
             'durable': durable,
             'start_paused': paused,
         }
-        log.msg('Starting %s with %s' % (class_name, kwargs))
+        log.msg('Starting %s with %s', class_name, kwargs)
         klass = type(class_name, (DynamicConsumer,), kwargs)
         if message_class is not None:
             klass.message_class = message_class
@@ -323,11 +323,11 @@ class Consumer(object):
             returnValue(self.ack(message))
         else:
             log.msg('Received %s as a return value consume_message. '
-                    'Not acknowledging AMQ message' % result)
+                    'Not acknowledging AMQ message', result)
 
     def consume_message(self, message):
         """helper method, override in implementation"""
-        log.msg("Received message: %s" % message)
+        log.msg("Received message: %s", message)
 
     def ack(self, message):
         self.channel.basic_ack(message.delivery_tag, True)

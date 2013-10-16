@@ -112,8 +112,8 @@ class GoConversationTransport(Transport):
         self.retries += 1
         if (config.max_retries is not None
             and (self.retries > config.max_retries)):
-            log.warning('Abandoning reconnecting after %s attempts.' % (
-                self.retries))
+            log.warning('Abandoning reconnecting after %s attempts.',
+                self.retries)
             return
 
         self.delay = min(self.delay * config.factor,
@@ -121,7 +121,7 @@ class GoConversationTransport(Transport):
         if config.jitter:
             self.delay = random.normalvariate(self.delay,
                                               self.delay * config.jitter)
-        log.msg('Will retry in %s seconds' % (self.delay,))
+        log.msg('Will retry in %s seconds', self.delay)
         self.reconnect_call = self.clock.callLater(self.delay,
                                                    self.connect_api_clients)
 
@@ -189,8 +189,8 @@ class GoConversationTransport(Transport):
             method='PUT')
 
         if resp.code != http.OK:
-            log.warning('Unexpected status code: %s, body: %s' % (
-                resp.code, resp.delivered_body))
+            log.warning('Unexpected status code: %s, body: %s',
+                resp.code, resp.delivered_body)
             yield self.publish_nack(message['message_id'],
                                     reason='Unexpected status code: %s' % (
                                         resp.code,))

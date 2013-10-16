@@ -68,8 +68,8 @@ class MediaEdgeGSMTransport(HttpRpcTransport):
 
             url = '%s?%s' % (self._outbound_url, urlencode(params))
             response = yield http_request_full(url, '', method='GET')
-            log.msg("Response: (%s) %r" % (response.code,
-                response.delivered_body))
+            log.msg("Response: (%s) %r", response.code,
+                response.delivered_body)
             if response.code == http.OK:
                 yield self.publish_ack(user_message_id=message['message_id'],
                     sent_message_id=message['message_id'])
@@ -88,7 +88,7 @@ class MediaEdgeGSMTransport(HttpRpcTransport):
             errors['credentials'] = 'invalid'
 
         if errors:
-            log.msg('Unhappy incoming message: %s' % (errors,))
+            log.msg('Unhappy incoming message: %s', errors)
             yield self.finish_request(message_id, json.dumps(errors), code=400)
             return
         log.msg(('MediaEdgeGSMTransport sending from %(PhoneNumber)s to '

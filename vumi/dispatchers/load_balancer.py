@@ -75,8 +75,7 @@ class LoadBalancingRouter(BaseDispatchRouter):
             if transport_name not in self.transport_name_set:
                 log.warning("LoadBalancer is configured for reply affinity but"
                             " reply for unknown load balancer endpoint %r was"
-                            " was received. Using round-robin routing instead."
-                            % (transport_name,))
+                            " was received. Using round-robin routing instead.", transport_name)
                 transport_name = self.transport_name_cycle.next()
         else:
             transport_name = self.transport_name_cycle.next()

@@ -57,7 +57,7 @@ class HttpApiTransport(HttpRpcTransport):
         if self.reply_expected:
             return super(HttpApiTransport, self).handle_outbound_message(
                 message)
-        log.msg("HttpApiTransport dropping outbound message: %s" % (message))
+        log.msg("HttpApiTransport dropping outbound message: %s", message)
 
     def get_api_field_values(self, request, required_fields):
         values = self.field_defaults.copy()

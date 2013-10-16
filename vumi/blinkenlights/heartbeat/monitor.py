@@ -233,10 +233,10 @@ class HeartBeatMonitor(BaseWorker):
         # 2. Message which are too old.
         wkr = self._workers.get(worker_id, None)
         if wkr is None:
-            log.msg("Discarding message. worker '%s' is unknown" % worker_id)
+            log.msg("Discarding message. worker '%s' is unknown", worker_id)
             return
         if timestamp < (time.time() - self.deadline):
-            log.msg("Discarding heartbeat from '%s'. Too old" % worker_id)
+            log.msg("Discarding heartbeat from '%s'. Too old", worker_id)
             return
 
         wkr.record(hostname, pid)
@@ -280,5 +280,5 @@ class HeartBeatMonitor(BaseWorker):
         self._task_done.addErrback(errfn)
 
     def _consume_message(self, msg):
-        log.msg("Received message: %s" % msg)
+        log.msg("Received message: %s", msg)
         self.update(msg.payload)

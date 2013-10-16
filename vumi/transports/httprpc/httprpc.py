@@ -195,7 +195,7 @@ class HttpRpcTransport(Transport):
                 self.close_request(request_id)
 
     def close_request(self, request_id):
-        log.warning('Timing out %s' % (self.get_request_to_addr(request_id),))
+        log.warning('Timing out %s', self.get_request_to_addr(request_id))
         self.finish_request(request_id, self.request_timeout_body,
                             self.request_timeout_status_code)
 

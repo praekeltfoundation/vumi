@@ -148,11 +148,11 @@ class MetricTimeBucket(Worker):
     """
     @inlineCallbacks
     def startWorker(self):
-        log.msg("Starting a MetricTimeBucket with config: %s" % self.config)
+        log.msg("Starting a MetricTimeBucket with config: %s", self.config)
         buckets = int(self.config.get("buckets"))
-        log.msg("Total number of buckets %d" % buckets)
+        log.msg("Total number of buckets %d", buckets)
         bucket_size = int(self.config.get("bucket_size"))
-        log.msg("Bucket size is %d seconds" % bucket_size)
+        log.msg("Bucket size is %d seconds", bucket_size)
         self.publisher = yield self.start_publisher(TimeBucketPublisher,
                                                     buckets, bucket_size)
         self.consumer = yield self.start_consumer(MetricsConsumer,
@@ -187,11 +187,11 @@ class MetricAggregator(Worker):
 
     @inlineCallbacks
     def startWorker(self):
-        log.msg("Starting a MetricAggregator with config: %s" % self.config)
+        log.msg("Starting a MetricAggregator with config: %s", self.config)
         bucket = int(self.config.get("bucket"))
-        log.msg("MetricAggregator bucket %d" % bucket)
+        log.msg("MetricAggregator bucket %d", bucket)
         self.bucket_size = int(self.config.get("bucket_size"))
-        log.msg("Bucket size is %d seconds" % self.bucket_size)
+        log.msg("Bucket size is %d seconds", self.bucket_size)
         self.lag = float(self.config.get("lag", 5.0))
 
         # ts_key -> { metric_name -> (aggregate_set, values) }
@@ -258,14 +258,14 @@ class MetricAggregator(Worker):
 class MetricsCollectorWorker(Worker):
     @inlineCallbacks
     def startWorker(self):
-        log.msg("Starting %s with config: %s" % (
-                type(self).__name__, self.config))
+        log.msg("Starting %s with config: %s",
+                type(self).__name__, self.config)
         yield self.setup_worker()
         self.consumer = yield self.start_consumer(
             AggregatedMetricConsumer, self.consume_metrics)
 
     def stopWorker(self):
-        log.msg("Stopping %s" % (type(self).__name__,))
+        log.msg("Stopping %s", type(self).__name__)
         return self.teardown_worker()
 
     def setup_worker(self):
@@ -370,13 +370,11 @@ class RandomMetricsGenerator(Worker):
 
     @inlineCallbacks
     def startWorker(self):
-        log.msg("Starting the MetricsGenerator with config: %s" % self.config)
+        log.msg("Starting the MetricsGenerator with config: %s", self.config)
         manager_period = float(self.config.get("manager_period", 5.0))
-        log.msg("MetricManager will sent metrics every %s seconds" %
-                manager_period)
+        log.msg("MetricManager will sent metrics every %s seconds", manager_period)
         generator_period = float(self.config.get("generator_period", 1.0))
-        log.msg("Random metrics values will be generated every %s seconds" %
-                generator_period)
+        log.msg("Random metrics values will be generated every %s seconds", generator_period)
 
         self.mm = yield self.start_publisher(MetricManager, "vumi.random.",
                                              manager_period)

@@ -104,16 +104,16 @@ class ReceiveSMSResource(Resource):
             request.setResponseCode(http.BAD_REQUEST)
             msg = "Need more request keys to complete this request. \n\n" \
                     "Missing request key: %s" % e
-            log.msg('Returning %s: %s' % (http.BAD_REQUEST, msg))
+            log.msg('Returning %s: %s', http.BAD_REQUEST, msg)
             request.write(msg)
         except ValueError, e:
             request.setResponseCode(http.BAD_REQUEST)
             msg = "ValueError: %s" % e
-            log.msg('Returning %s: %s' % (http.BAD_REQUEST, msg))
+            log.msg('Returning %s: %s', http.BAD_REQUEST, msg)
             request.write(msg)
         except Exception, e:
             request.setResponseCode(http.INTERNAL_SERVER_ERROR)
-            log.err("Error processing request: %s" % (request,))
+            log.err("Error processing request: %s", request)
         request.finish()
 
     def render(self, request):
@@ -131,7 +131,7 @@ class DeliveryReceiptResource(Resource):
 
     @inlineCallbacks
     def do_render(self, request):
-        log.msg('got hit with %s' % request.args)
+        log.msg('got hit with %s', request.args)
         request.setResponseCode(http.OK)
         request.setHeader('Content-Type', 'text/plain')
         try:
@@ -158,16 +158,16 @@ class DeliveryReceiptResource(Resource):
             request.setResponseCode(http.BAD_REQUEST)
             msg = "Need more request keys to complete this request. \n\n" \
                     "Missing request key: %s" % e
-            log.msg('Returning %s: %s' % (http.BAD_REQUEST, msg))
+            log.msg('Returning %s: %s', http.BAD_REQUEST, msg)
             request.write(msg)
         except ValueError, e:
             request.setResponseCode(http.BAD_REQUEST)
             msg = "ValueError: %s" % e
-            log.msg('Returning %s: %s' % (http.BAD_REQUEST, msg))
+            log.msg('Returning %s: %s', http.BAD_REQUEST, msg)
             request.write(msg)
         except Exception, e:
             request.setResponseCode(http.INTERNAL_SERVER_ERROR)
-            log.err("Error processing request: %s" % (request,))
+            log.err("Error processing request: %s", request)
         request.finish()
 
     def render(self, request):
@@ -252,7 +252,7 @@ class Vas2NetsTransport(Transport):
 
         params.update(message_params)
 
-        log.msg('Hitting %s with %s' % (self.config['url'], params))
+        log.msg('Hitting %s with %s', self.config['url'], params)
         log.msg(urlencode(params))
 
         try:

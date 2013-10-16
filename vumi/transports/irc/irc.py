@@ -94,23 +94,23 @@ class VumiBotProtocol(irc.IRCClient):
 
     def connectionMade(self):
         irc.IRCClient.connectionMade(self)
-        log.msg("Connected (nickname is: %s)" % (self.nickname,))
+        log.msg("Connected (nickname is: %s)", self.nickname)
 
     def connectionLost(self, reason):
         irc.IRCClient.connectionLost(self, reason)
-        log.msg("Disconnected (nickname was: %s)." % (self.nickname,))
+        log.msg("Disconnected (nickname was: %s).", self.nickname)
 
     # callbacks for events
 
     def signedOn(self):
         """Called when bot has succesfully signed on to server."""
-        log.msg("Attempting to join channels: %r" % (self.channels,))
+        log.msg("Attempting to join channels: %r", self.channels)
         for channel in self.channels:
             self.join(channel)
 
     def joined(self, channel):
         """This will get called when the bot joins the channel."""
-        log.msg("Joined %r" % (channel,))
+        log.msg("Joined %r", channel)
 
     def privmsg(self, sender, recipient, message):
         """This will get called when the bot receives a message."""
@@ -136,7 +136,7 @@ class VumiBotProtocol(irc.IRCClient):
         """Called when an IRC user changes their nickname."""
         old_nick = prefix.partition('!')[0]
         new_nick = params[0]
-        log.msg("Nick changed from %r to %r" % (old_nick, new_nick))
+        log.msg("Nick changed from %r to %r", old_nick, new_nick)
 
     # For fun, override the method that determines how a nickname is changed on
     # collisions. The default method appends an underscore.

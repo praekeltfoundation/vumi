@@ -103,7 +103,7 @@ class BaseConnector(object):
 
     def _ignore_message(self, failure, msg):
         failure.trap(IgnoreMessage)
-        log.debug("Ignoring msg due to %r: %r" % (failure.value, msg))
+        log.debug("Ignoring msg due to %r: %r", failure.value, msg)
 
 
 class ReceiveInboundConnector(BaseConnector):
@@ -116,10 +116,10 @@ class ReceiveInboundConnector(BaseConnector):
         return gatherResults([outbound_d, inbound_d, event_d])
 
     def default_inbound_handler(self, msg):
-        log.warning("No inbound handler for %r: %r" % (self.name, msg))
+        log.warning("No inbound handler for %r: %r", self.name, msg)
 
     def default_event_handler(self, msg):
-        log.warning("No event handler for %r: %r" % (self.name, msg))
+        log.warning("No event handler for %r: %r", self.name, msg)
 
     def set_inbound_handler(self, handler, endpoint_name=None):
         self._set_endpoint_handler('inbound', handler, endpoint_name)
@@ -146,7 +146,7 @@ class ReceiveOutboundConnector(BaseConnector):
         return gatherResults([outbound_d, inbound_d, event_d])
 
     def default_outbound_handler(self, msg):
-        log.warning("No outbound handler for %r: %r" % (self.name, msg))
+        log.warning("No outbound handler for %r: %r", self.name, msg)
 
     def set_outbound_handler(self, handler, endpoint_name=None):
         self._set_endpoint_handler('outbound', handler, endpoint_name)
@@ -162,8 +162,8 @@ class ReceiveOutboundConnector(BaseConnector):
 
     def _ignore_message(self, failure, msg):
         failure.trap(IgnoreMessage)
-        log.debug("Ignoring msg (with NACK) due to %r: %r" % (
-            failure.value, msg))
+        log.debug("Ignoring msg (with NACK) due to %r: %r",
+            failure.value, msg)
         return self.publish_event(TransportEvent(
             user_message_id=msg['message_id'], nack_reason=str(failure.value),
             event_type='nack'))

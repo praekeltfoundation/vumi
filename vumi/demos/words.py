@@ -21,7 +21,7 @@ class SimpleAppWorker(ApplicationWorker):
 
         Then process the user's message.
         """
-        log.msg("User message: %s" % msg['content'])
+        log.msg("User message: %s", msg['content'])
         text = msg['content']
         if text is None:
             reply = self.get_help()

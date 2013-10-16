@@ -66,7 +66,7 @@ class TwitterTransport(Transport):
                 need access to the Twitter docs to do so at the
                 moment.
         """
-        log.msg("Twitter transport sending %r" % (message,))
+        log.msg("Twitter transport sending %r", message)
         try:
             post_id = yield self.twitter.update(message['content'])
             yield self.publish_ack(user_message_id=message['message_id'],

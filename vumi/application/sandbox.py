@@ -598,12 +598,10 @@ class SandboxApi(object):
                 config.logging_resource)
             if potential_logger is None:
                 log.warning("Failed to find logging resource %r."
-                            " Falling back to Twisted logging."
-                            % (config.logging_resource,))
+                            " Falling back to Twisted logging.", config.logging_resource)
             elif not hasattr(potential_logger, 'log'):
                 log.warning("Logging resource %r has no attribute 'log'."
-                            " Falling abck to Twisted logging."
-                            % (config.logging_resource,))
+                            " Falling abck to Twisted logging.", config.logging_resource)
                 potential_logger = None
         self.logging_resource = potential_logger
         self.config = config

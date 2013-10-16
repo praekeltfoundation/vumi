@@ -124,14 +124,13 @@ class ImiMobileUssdTransport(HttpRpcTransport):
         errors.update(field_value_errors)
 
         if errors:
-            log.msg('Unhappy incoming message: %s' % (errors,))
+            log.msg('Unhappy incoming message: %s', errors)
             yield self.finish_request(
                 message_id, json.dumps(errors), code=http.BAD_REQUEST)
             return
 
         from_addr = values['msisdn']
-        log.msg('ImiMobileTransport receiving inbound message from %s to %s.' %
-                (from_addr, to_addr))
+        log.msg('ImiMobileTransport receiving inbound message from %s to %s.', from_addr, to_addr)
 
         content = values['msg']
         if self.user_has_terminated_session(content):

@@ -152,7 +152,7 @@ class XMPPTransport(Transport):
         self.presence_interval = self.config.get('presence_interval', 60)
 
     def setup_transport(self):
-        log.msg("Starting XMPPTransport: %s" % self.transport_name)
+        log.msg("Starting XMPPTransport: %s", self.transport_name)
 
         self.jid = JID(self.username)
         self.xmpp_client = self._xmpp_client(self.jid, self.password,
@@ -174,7 +174,7 @@ class XMPPTransport(Transport):
             self.jid, self.publish_message, self.unpause_connectors)
         self.xmpp_protocol.setHandlerParent(self.xmpp_client)
 
-        log.msg("XMPPTransport %s started." % self.transport_name)
+        log.msg("XMPPTransport %s started.", self.transport_name)
 
     def announce_presence(self):
         if not self.presence_call.running:
@@ -191,7 +191,7 @@ class XMPPTransport(Transport):
                 None: self.status})
 
     def teardown_transport(self):
-        log.msg("XMPPTransport %s stopped." % self.transport_name)
+        log.msg("XMPPTransport %s stopped.", self.transport_name)
         ping_call = getattr(self, 'ping_call', None)
         if ping_call and ping_call.running:
             ping_call.stop()

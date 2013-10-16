@@ -77,7 +77,7 @@ class HangmanGame(object):
         else:
             assert len(message) == 1
             self.guesses.add(message)
-            log.msg("Message: %r, word: %r" % (message, self.word))
+            log.msg("Message: %r, word: %r", message, self.word)
             if message in self.word:
                 self.msg = u"Word contains at least one '%s'! :D" % (message,)
             else:
@@ -151,7 +151,7 @@ class HangmanWorker(ApplicationWorker):
         yield self.session_manager.stop()
 
     def random_word(self, random_word_url):
-        log.msg('Fetching random word from %s' % (random_word_url,))
+        log.msg('Fetching random word from %s', random_word_url)
         d = http_request(random_word_url, None, method='GET')
 
         def _decode(word):
@@ -207,7 +207,7 @@ class HangmanWorker(ApplicationWorker):
 
         Then process the user's message.
         """
-        log.msg("User message: %s" % msg['content'])
+        log.msg("User message: %s", msg['content'])
 
         user_id = msg.user()
         config = yield self.get_config(msg)

@@ -49,7 +49,7 @@ class OldSimpleHttpTransport(HttpRpcTransport):
         return self.identities.get(username) == password
 
     def handle_outbound_message(self, message):
-        log.msg("OldSimpleHttpTransport consuming %s" % (message))
+        log.msg("OldSimpleHttpTransport consuming %s", message)
         return self.publish_ack(user_message_id=message['message_id'],
             sent_message_id=message['message_id'])
 
@@ -100,7 +100,7 @@ class OldSimpleHttpTransport(HttpRpcTransport):
 class OldTemplateHttpTransport(OldSimpleHttpTransport):
 
     def handle_outbound_message(self, message):
-        log.msg("OldTemplateHttpTransport consuming %s" % (message))
+        log.msg("OldTemplateHttpTransport consuming %s", message)
 
     def extract_template_args(self, args, length):
         template_args = []

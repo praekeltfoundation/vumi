@@ -74,7 +74,7 @@ class MultiPlayerGameWorker(ApplicationWorker):
     def reply(self, player, content, continue_session=True):
         orig = self.messages.pop(player, None)
         if orig is None:
-            log.msg("Can't reply to %r, no stored message." % player)
+            log.msg("Can't reply to %r, no stored message.", player)
             return
         return self.reply_to(orig, content, continue_session=continue_session)
 

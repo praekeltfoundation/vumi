@@ -53,7 +53,7 @@ class SendResource(Resource):
         request.finish()
 
     def render_(self, request):
-        log.msg("Send request: %s" % (request,))
+        log.msg("Send request: %s", request)
         request.setHeader("content-type", "application/json; charset=utf-8")
         d = self.application.handle_raw_outbound_message(request)
         d.addCallback(lambda msgs: self.finish_request(request, msgs))
@@ -292,9 +292,7 @@ class RapidSMSRelay(ApplicationWorker):
         return self._call_rapidsms(message)
 
     def consume_ack(self, event):
-        log.info("Acknowledgement received for message %r"
-                 % (event['user_message_id']))
+        log.info("Acknowledgement received for message %r", event['user_message_id'])
 
     def consume_delivery_report(self, event):
-        log.info("Delivery report received for message %r, status %r"
-                 % (event['user_message_id'], event['delivery_status']))
+        log.info("Delivery report received for message %r, status %r", event['user_message_id'], event['delivery_status'])

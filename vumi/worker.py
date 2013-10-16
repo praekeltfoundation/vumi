@@ -55,8 +55,7 @@ class BaseWorker(Worker):
         self._worker_id = None
 
     def startWorker(self):
-        log.msg('Starting a %s worker with config: %s'
-                % (self.__class__.__name__, self.config))
+        log.msg('Starting a %s worker with config: %s', self.__class__.__name__, self.config)
         d = maybeDeferred(self._validate_config)
         then_call(d, self.setup_heartbeat)
         then_call(d, self.setup_middleware)
@@ -65,7 +64,7 @@ class BaseWorker(Worker):
         return d
 
     def stopWorker(self):
-        log.msg('Stopping a %s worker.' % (self.__class__.__name__,))
+        log.msg('Stopping a %s worker.', self.__class__.__name__)
         d = succeed(None)
         then_call(d, self.teardown_worker)
         then_call(d, self.teardown_connectors)
@@ -85,8 +84,7 @@ class BaseWorker(Worker):
             self._system_id = self.options.get("system-id", "global")
             self._worker_id = generate_worker_id(self._system_id,
                                                  self._worker_name)
-            log.msg("Starting HeartBeat publisher with worker_name=%s"
-                    % self._worker_name)
+            log.msg("Starting HeartBeat publisher with worker_name=%s", self._worker_name)
             self._hb_pub = yield self.start_publisher(HeartBeatPublisher,
                                                 self._gen_heartbeat_attrs)
         else:

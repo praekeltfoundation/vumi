@@ -88,7 +88,7 @@ class AppositTransport(HttpRpcTransport):
             errors['unsupported_channel'] = channel
 
         if errors:
-            log.msg('Unhappy incoming message: %s' % (errors,))
+            log.msg('Unhappy incoming message: %s', errors)
             yield self.finish_request(message_id, json.dumps(errors),
                                       code=http.BAD_REQUEST)
             return

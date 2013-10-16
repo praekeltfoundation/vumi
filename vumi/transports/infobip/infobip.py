@@ -206,7 +206,7 @@ class InfobipTransport(HttpRpcTransport):
                                        "handle_infobip_error", False)))
         session_handler = getattr(self, session_handler_name)
         req_content = request.content.read()
-        log.msg("Incoming message: %r" % (req_content,))
+        log.msg("Incoming message: %r", req_content)
         if sends_json:
             try:
                 req_data = json.loads(req_content)
