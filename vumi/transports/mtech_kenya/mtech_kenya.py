@@ -30,7 +30,7 @@ class MTechKenyaTransport(HttpRpcTransport):
     CONFIG_CLASS = MTechKenyaTransportConfig
 
     EXPECTED_FIELDS = set(["shortCode", "MSISDN", "MESSAGE", "messageID"])
-    IGNORED_FIELDS = set()
+    OPTIONAL_FIELDS = set(["linkID", "gateway", "message_type"])
 
     KNOWN_ERROR_RESPONSE_CODES = {
         401: 'Invalid username or password',
@@ -48,6 +48,9 @@ class MTechKenyaTransport(HttpRpcTransport):
             'MSISDN': message['to_addr'],
             'MESSAGE': message['content'],
         }
+        link_id = message['transport_metadata'].get('linkID')
+        if link_id is not None:
+            params['linkID'] = link_id
         url = '%s?%s' % (config.outbound_url, urlencode(params))
         log.msg("Making HTTP request: %s" % (url,))
         response = yield http_request_full(url, '', method='POST')
@@ -63,20 +66,23 @@ class MTechKenyaTransport(HttpRpcTransport):
     @inlineCallbacks
     def handle_raw_inbound_message(self, message_id, request):
         values, errors = self.get_field_values(
-            request, self.EXPECTED_FIELDS, self.IGNORED_FIELDS)
+            request, self.EXPECTED_FIELDS, self.OPTIONAL_FIELDS)
         if errors:
             log.msg('Unhappy incoming message: %s' % (errors,))
             yield self.finish_request(message_id, json.dumps(errors), code=400)
             return
         log.msg(('MTechKenyaTransport sending from %(MSISDN)s to '
                  '%(shortCode)s message "%(MESSAGE)s"') % values)
+        transport_metadata = {'transport_message_id': values['messageID']}
+        if values.get('linkID') is not None:
+            transport_metadata['linkID'] = values['linkID']
         yield self.publish_message(
             message_id=message_id,
             content=values['MESSAGE'],
             to_addr=values['shortCode'],
             from_addr=values['MSISDN'],
             transport_type=self.transport_type,
-            transport_metadata={'transport_message_id': values['messageID']},
+            transport_metadata=transport_metadata,
         )
         yield self.finish_request(
             message_id, json.dumps({'message_id': message_id}))

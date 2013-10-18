@@ -162,3 +162,40 @@ class TestMTechKenyaTransport(TransportTestCase):
         [nack] = yield self.wait_for_dispatched_events(1)
         self.assertEqual('nack', nack['event_type'])
         self.assertEqual('Invalid mobile number', nack['nack_reason'])
+
+    @inlineCallbacks
+    def test_inbound_linkid(self):
+        url = self.mkurl('hello', linkID='link123')
+        response = yield http_request(url, '', method='POST')
+        [msg] = self.get_dispatched_messages()
+        self.assertEqual(msg['transport_name'], self.transport_name)
+        self.assertEqual(msg['to_addr'], "12345")
+        self.assertEqual(msg['from_addr'], "2371234567")
+        self.assertEqual(msg['content'], "hello")
+        self.assertEqual(msg['transport_metadata'], {
+            'transport_message_id': '1234567',
+            'linkID': 'link123',
+        })
+        self.assertEqual(json.loads(response),
+                         {'message_id': msg['message_id']})
+
+    @inlineCallbacks
+    def test_outbound_linkid(self):
+        msg = self.mkmsg_out(to_addr="2371234567", transport_metadata={
+            'linkID': 'link123',
+        })
+        yield self.dispatch(msg)
+        req = yield self.cellulant_sms_calls.get()
+        self.assertEqual(req.path, '/')
+        self.assertEqual(req.method, 'POST')
+        self.assertEqual({
+            'user': ['testuser'],
+            'pass': ['testpass'],
+            'messageID': [msg['message_id']],
+            'shortCode': ['9292'],
+            'MSISDN': ['2371234567'],
+            'MESSAGE': ['hello world'],
+            'linkID': ['link123'],
+        }, req.args)
+        [ack] = yield self.wait_for_dispatched_events(1)
+        self.assertEqual('ack', ack['event_type'])
