@@ -3,6 +3,7 @@
 """ USSD Transport for TrueAfrican (Uganda) """
 
 from twisted.internet.defer import Deferred, returnValue, inlineCallbacks
+from twisted.internet import reactor
 from twisted.web import xmlrpc, server
 from twisted.application import internet
 
@@ -11,6 +12,9 @@ from vumi.message import TransportUserMessage
 from vumi.transports.base import Transport
 from vumi.components.session import SessionManager
 from vumi.config import ConfigText, ConfigInt, ConfigDict
+
+
+Request = collections.namedtuple('Request', ['deferred', 'start_time'])
 
 
 class XmlRpcResource(xmlrpc.XMLRPC):
@@ -38,26 +42,32 @@ class XmlRpcResource(xmlrpc.XMLRPC):
                 'ussd_session_cont',
                 'ussd_session_end']
 
+    @inlineCallbacks
     def ussd_session_init(self, session_data):
         """ handler for USSD.INIT """
         msisdn = session_data['msisdn']
         to_addr = session_data['shortcode']
         session_id = session_data['session']
-        return self.transport.handle_session_new(session_id,
-                                                 msisdn,
-                                                 to_addr)
+        response = yield self.transport.handle_session_new(session_id,
+                                                           msisdn,
+                                                           to_addr)
+        returnValue(response)
 
+    @inlineCallbacks
     def ussd_session_cont(self, session_data):
         """ handler for USSD.CONT """
         session_id = session_data['session']
         content = session_data['response']
-        return self.transport.handle_session_resume(session_id,
-                                                    content)
+        response = self.transport.handle_session_resume(session_id,
+                                                        content)
+        returnValue(response)
 
+    @inlineCallbacks
     def ussd_session_end(self, session_data):
         """ handler for USSD.END """
         session_id = session_data['session']
-        return self.transport.handle_session_end(session_id)
+        response = yield self.transport.handle_session_end(session_id)
+        returnValue(response)
 
 
 class TrueAfricanUssdTransportConfig(Transport.CONFIG_CLASS):
@@ -82,7 +92,6 @@ class TrueAfricanUssdTransport(Transport):
     CONFIG_CLASS = TrueAfricanUssdTransportConfig
 
     TRANSPORT_TYPE = 'ussd'
-    ENCODING = 'UTF-8'
     SESSION_KEY_PREFIX = "vumi:transport:trueafrican:ussd"
 
     SESSION_STATE_MAP = {
@@ -94,17 +103,36 @@ class TrueAfricanUssdTransport(Transport):
     def setup_transport(self):
         super(TrueAfricanUssdTransport, self).setup_transport()
         config = self.get_static_config()
+
+        # Session handling
         key_prefix = "%s:%s" % (self.SESSION_KEY_PREFIX, self.transport_name)
         self.session_manager = yield SessionManager.from_redis_config(
             config.redis_manager, key_prefix,
             config.session_timeout_period
         )
 
+        # XMLRPC Resource
         site = server.Site(XmlRpcResource(self))
         service = internet.TCPServer(config.server_port, site,
                                      interface=config.server_hostname)
         service.setServiceParent(self)
+
+        # request tracking
         self._requests = {}
+        self.request_timeout = config.request_timeout
+        self.request_timeout_task = LoopingCall(self.request_timeout_cb)
+        self.request_timeout_task.clock = self.clock
+        self.request_timeout_task.start(config.request_timeout)
+
+    @property
+    def clock(self):
+        return reactor
+
+    def self.request_timeout_cb(self):
+        for request_id, request in self._requests.items():
+            start_time = request.start_time
+            if start_time < self.clock.seconds() - self.request_timeout:
+                self.finish_expired_request(request_id)
 
     def get_transport_url(self, suffix=''):
         """
@@ -119,11 +147,8 @@ class TrueAfricanUssdTransport(Transport):
 
     def track_request(self, request_id):
         d = Deferred()
-        self._requests[request_id] = d
+        self._requests[request_id] = Request(d, self.clock.seconds())
         return d
-
-    def untrack_request(self, request_id):
-        del self._requests[request_id]
 
     @inlineCallbacks
     def handle_session_new(self, session_id, msisdn, to_addr):
@@ -152,15 +177,33 @@ class TrueAfricanUssdTransport(Transport):
         # This is an existing session.
         session = yield self.session_manager.load_session(session_id)
         if not session:
-            # We have a missing or broken session.
-            self.send_error_response(session_id)
-            return
+            returnValue(self.response_for_error())
         session_event = TransportUserMessage.SESSION_RESUME
         transport_metadata = {'session_id': session_id}
         request_id = self.generate_message_id()
         self.publish_message(
             message_id=request_id,
             content=content,
+            to_addr=session['to_addr'],
+            from_addr=session['msisdn'],
+            session_event=session_event,
+            transport_name=self.transport_name,
+            transport_type=self.TRANSPORT_TYPE,
+            transport_metadata=transport_metadata,
+        )
+        returnValue(self.track_request(request_id))
+
+    @inlineCallbacks
+    def handle_session_end(self, session_id):
+        session = yield self.session_manager.load_session(session_id)
+        if not session:
+            returnValue(self.response_for_error())
+        session_event = TransportUserMessage.SESSION_CLOSE
+        transport_metadata = {'session_id': session_id}
+        request_id = self.generate_message_id()
+        self.publish_message(
+            message_id=request_id,
+            content=None,
             to_addr=session['to_addr'],
             from_addr=session['msisdn'],
             session_event=session_event,
@@ -181,6 +224,7 @@ class TrueAfricanUssdTransport(Transport):
                 reason="Missing 'in_reply_to', 'content' or 'session_id' field"
             )
         response = {
+            'status': 'OK',
             'session': session_id,
             'type': self.SESSION_STATE_MAP[message['session_event']],
             'message': content
@@ -188,34 +232,51 @@ class TrueAfricanUssdTransport(Transport):
         log.msg("Sending outbound message %s: %s" % (
             message['message_id'], response)
         )
-        self.complete_request(in_reply_to,
-                              message['message_id'],
-                              response)
+        self.finish_request(in_reply_to,
+                            message['message_id'],
+                            response)
 
-    def send_error_response(self, request_id, publish_nack=False):
-        deferred = self._requests[request_id]
-        del self._requests[request_id]
+    def response_for_error(self):
+        """
+        Generic response for abnormal server side errors.
+        """
         response = {
-            'session': request_id,
-            'type': 'end',
+            'status': 'ERROR',
+            'message': ('We encountered an error processing '
+                        'this request')
+            'type': 'end'
         }
-        deferred.callback(response)
+        return response
 
-    def send_response(self, request_id, message_id, response):
-        deferred = self._requests[request_id]
+    def finish_request(self, request_id, message_id, response):
+        request = self._requests.get(request_id)
+        if request is None:
+            # send a nack back, indicating that the original request had
+            # timed out before the outbound message reached us.
+            self.publish_nack(message_id, message_id,
+                              "Failed to send outbound message %s: "
+                              "Exceeded request timeout")
+        else:
+            del self._requests[request_id]
+            deferred.addCallbacks(
+                lambda _: self.on_finish_success_cb(message_id),
+                lambda f: self.on_finish_failure_cb(f, message_id)
+            )
+            request.deferred.callback(response)
+
+    def finish_expired_request(self, request_id, request):
+        """
+        Called on requests that timed out.
+        """
         del self._requests[request_id]
-        deferred.addCallbacks(
-            lambda _: self.on_send_success(message_id),
-            lambda failure: self.on_send_failure(failure, message_id)
-        )
-        deferred.callback(response)
+        request.deferred.callback(self.response_for_error())
 
-    def on_send_success(self, message_id):
+    def _finish_success_cb(self, message_id):
         return self.publish_ack(message_id, message_id)
 
-    def on_send_failure(self, failure, message_id):
+    def _finish_failure_cb(self, failure, message_id):
         failure_message = "Failed to send outbound message %s: %s" % (
-            failure,
-            message_id
+            message_id,
+            repr(failure)
         )
         return self.publish_nack(message_id, message_id, failure_message)
