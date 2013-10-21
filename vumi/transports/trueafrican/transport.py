@@ -123,7 +123,7 @@ class TrueAfricanUssdTransport(Transport):
         site = server.Site(XmlRpcResource(self))
         self.web_service = internet.TCPServer(config.server_port, site,
                                               interface=config.server_hostname)
-        self.web_service.setServiceParent(self)
+        self.addService(self.web_service)
 
         # request tracking
         self._requests = {}
@@ -272,9 +272,10 @@ class TrueAfricanUssdTransport(Transport):
         else:
             del self._requests[request_id]
             request.deferred.addCallbacks(
-                lambda _: self._finish_success_cb(message_id),
+                lambda r: self._finish_success_cb(r, message_id),
                 lambda f: self._finish_failure_cb(f, message_id)
             )
+            print "sdfs %s" % response
             request.deferred.callback(response)
 
     def finish_expired_request(self, request_id, request):
@@ -284,12 +285,16 @@ class TrueAfricanUssdTransport(Transport):
         del self._requests[request_id]
         request.deferred.callback(self.response_for_error())
 
-    def _finish_success_cb(self, message_id):
-        return self.publish_ack(message_id, message_id)
+    def _finish_success_cb(self, r, message_id):
+        print "_finish_success_cb %s" % r
+        self.publish_ack(message_id, message_id)
+        return r
 
     def _finish_failure_cb(self, failure, message_id):
+        print "_finish_failure_cb %s" % failure
         failure_message = "Failed to send outbound message %s: %s" % (
             message_id,
             repr(failure)
         )
-        return self.publish_nack(message_id, message_id, failure_message)
+        self.publish_nack(message_id, message_id, failure_message)
+        return failure

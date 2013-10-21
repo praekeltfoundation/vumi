@@ -32,14 +32,13 @@ class TestTrueAfricanUssdTransport(TransportTestCase):
     def service_client(self):
         return Proxy(self.service_url)
 
-    @inlineCallbacks
     def reply(self, *args, **kw):
-        """
-        Fake a response from an application worker
-        """
-        [msg] = yield self.wait_for_dispatched_messages(1)
-        msg = TransportUserMessage(**msg.payload)
-        self.dispatch(msg.reply(*args, **kw))
+        def reply(r):
+            msg = TransportUserMessage(**r[0].payload)
+            self.dispatch(msg.reply(*args, **kw))
+            return msg
+        d = self.wait_for_dispatched_messages(1)
+        return d.addCallback(reply)
 
     @inlineCallbacks
     def test_session_init(self):
@@ -49,7 +48,11 @@ class TestTrueAfricanUssdTransport(TransportTestCase):
                                     'msisdn': '+27724385170',
                                     'shortcode': '*23#'})
         msg = yield self.reply("Hello!")
-        print msg
+        self.assertEqual(msg['transport_name'], self.transport_name)
+        self.assertEqual(msg['transport_type'], "ussd")
+        self.assertEqual(msg['session_event'],
+                         TransportUserMessage.SESSION_NEW)
+
         resp = yield resp_d
         self.assertEquals(
             resp,
