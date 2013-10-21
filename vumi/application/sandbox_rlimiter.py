@@ -74,10 +74,17 @@ class SandboxRlimiter(object):
         # spawns a SandboxRlimiter, connectionMade then passes the rlimits
         # through to stdin and the SandboxRlimiter applies them
         args = kwargs.pop('args', [])
+        # we need to pass Python the actual filename of this script
+        # (rather than using -m __name__) so that is doesn't import
+        # Twisted's reactor (since that causes errors when we close
+        # all the file handles if using certain reactors).
+        script_name = __file__
+        if script_name.endswith('.pyc') or script_name.endswith('.pyo'):
+            script_name = script_name[:-len('.pyc')] + '.py'
         # the -u for unbuffered I/O is important (otherwise the process
         # execed will be very confused about where its stdin data has
         # gone)
-        args = [sys.executable, '-u', __file__, '--'] + args
+        args = [sys.executable, '-u', script_name, '--'] + args
         env = kwargs.pop('env', {})
         cls._override_child_env(env, rlimits)
         reactor.spawnProcess(protocol, sys.executable, args=args, env=env,
