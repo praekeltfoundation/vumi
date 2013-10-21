@@ -23,7 +23,8 @@ from vumi.application.sandbox import (
 from vumi.tests.utils import LogCatcher, PersistenceMixin
 
 from OpenSSL.SSL import (
-    VERIFY_PEER, VERIFY_FAIL_IF_NO_PEER_CERT, VERIFY_CLIENT_ONCE, VERIFY_NONE)
+    VERIFY_PEER, VERIFY_FAIL_IF_NO_PEER_CERT, VERIFY_NONE)
+
 
 class MockResource(SandboxResource):
     def __init__(self, name, app_worker, **handlers):
