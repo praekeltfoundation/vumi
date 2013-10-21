@@ -231,6 +231,7 @@ class EsmeTransmitterMixin(EsmeGenericMixin):
 
             self.assertEqual('submit_sm', sm['header']['command_id'])
             msg_parts.append(mandatory_parameters['short_message'])
+            self.assertTrue(len(mandatory_parameters['short_message']) <= 130)
             msg_refs.append(pdu_opts['sar_msg_ref_num'])
             self.assertEqual(i + 1, pdu_opts['sar_segment_seqnum'])
             self.assertEqual(4, pdu_opts['sar_total_segments'])
@@ -265,6 +266,7 @@ class EsmeTransmitterMixin(EsmeGenericMixin):
             msg_refs.append(udh_ref)
             self.assertEqual(4, udh_tot)
             self.assertEqual(i + 1, udh_seq)
+            self.assertTrue(len(msg) <= 136)
             msg_parts.append(msg[6:])
             self.assertEqual(0x40, mandatory_parameters['esm_class'])
 
