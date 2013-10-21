@@ -12,16 +12,18 @@ from vumi.transports.smpp.transport import SmppTransportConfig
 
 
 class FakeTransport(object):
-    def __init__(self):
+    def __init__(self, protocol):
         self.connected = True
+        self.protocol = protocol
 
     def loseConnection(self):
         self.connected = False
+        self.protocol.connectionLost()
 
 
 class FakeEsmeMixin(object):
     def setup_fake(self):
-        self.transport = FakeTransport()
+        self.transport = FakeTransport(self)
         self.clock = Clock()
         self.callLater = self.clock.callLater
         self.fake_sent_pdus = []
@@ -133,32 +135,65 @@ class EsmeGenericMixin(object):
 
     @inlineCallbacks
     def test_bind_timeout(self):
-        esme = yield self.get_unbound_esme()
+        callbacks_called = []
+        esme = yield self.get_unbound_esme(callbacks={
+            'connect': lambda client: callbacks_called.append('connect'),
+            'disconnect': lambda: callbacks_called.append('disconnect'),
+        })
         yield esme.connectionMade()
 
+        self.assertEqual([], callbacks_called)
         self.assertEqual(True, esme.transport.connected)
         self.assertNotEqual(None, esme._lose_conn)
 
         esme.clock.advance(esme.smpp_bind_timeout)
 
+        self.assertEqual(['disconnect'], callbacks_called)
         self.assertEqual(False, esme.transport.connected)
         self.assertEqual(None, esme._lose_conn)
 
     @inlineCallbacks
     def test_bind_no_timeout(self):
-        esme = yield self.get_unbound_esme()
+        callbacks_called = []
+        esme = yield self.get_unbound_esme(callbacks={
+            'connect': lambda client: callbacks_called.append('connect'),
+            'disconnect': lambda: callbacks_called.append('disconnect'),
+        })
         yield esme.connectionMade()
 
+        self.assertEqual([], callbacks_called)
         self.assertEqual(True, esme.transport.connected)
         self.assertNotEqual(None, esme._lose_conn)
 
         esme.handle_bind_transceiver_resp(unpack_pdu(
             BindTransceiverResp(1).get_bin()))
 
+        self.assertEqual(['connect'], callbacks_called)
         self.assertEqual(True, esme.transport.connected)
         self.assertEqual(None, esme._lose_conn)
         esme.lc_enquire.stop()
         yield esme.lc_enquire.deferred
+
+    @inlineCallbacks
+    def test_bind_and_disconnect(self):
+        callbacks_called = []
+        esme = yield self.get_unbound_esme(callbacks={
+            'connect': lambda client: callbacks_called.append('connect'),
+            'disconnect': lambda: callbacks_called.append('disconnect'),
+        })
+        yield esme.connectionMade()
+
+        esme.handle_bind_transceiver_resp(unpack_pdu(
+            BindTransceiverResp(1).get_bin()))
+
+        self.assertEqual(['connect'], callbacks_called)
+        esme.lc_enquire.stop()
+        yield esme.lc_enquire.deferred
+
+        yield esme.transport.loseConnection()
+
+        self.assertEqual(['connect', 'disconnect'], callbacks_called)
+        self.assertEqual(False, esme.transport.connected)
 
     @inlineCallbacks
     def test_sequence_rollover(self):

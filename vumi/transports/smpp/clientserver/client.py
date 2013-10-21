@@ -189,6 +189,7 @@ class EsmeTransceiver(Protocol):
         self.stop_enquire_link()
         self.cancel_drop_connection_call()
         log.msg('STATE: %s' % (self.state))
+        self.esme_callbacks.disconnect()
 
     def dataReceived(self, data):
         self.datastream += data
@@ -543,7 +544,6 @@ class EsmeTransceiverFactory(ClientFactory):
     @inlineCallbacks
     def clientConnectionLost(self, connector, reason):
         log.msg('Lost connection.  Reason:', reason)
-        yield self.esme_callbacks.disconnect()
         ClientFactory.clientConnectionLost(self, connector, reason)
 
     def clientConnectionFailed(self, connector, reason):

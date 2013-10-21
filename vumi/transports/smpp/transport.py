@@ -228,7 +228,7 @@ class SmppTransport(Transport):
 
     def esme_disconnected(self):
         log.msg("ESME Disconnected")
-        self.pause_connectors()
+        return self.pause_connectors()
 
     # Redis message storing methods
 
