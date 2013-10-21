@@ -4,7 +4,7 @@
 
 import collections
 
-from twisted.internet.defer import Deferred, returnValue, inlineCallbacks
+from twisted.internet.defer import Deferred, waitForDeferred, returnValue, inlineCallbacks
 from twisted.internet.task import LoopingCall
 from twisted.internet import reactor
 from twisted.web import xmlrpc, server
@@ -51,9 +51,9 @@ class XmlRpcResource(xmlrpc.XMLRPC):
         msisdn = session_data['msisdn']
         to_addr = session_data['shortcode']
         session_id = session_data['session']
-        response = yield self.transport.handle_session_new(session_id,
-                                                           msisdn,
-                                                           to_addr)
+        response = self.transport.handle_session_new(session_id,
+                                                     msisdn,
+                                                     to_addr)
         returnValue(response)
 
     @inlineCallbacks
@@ -88,7 +88,7 @@ class TrueAfricanUssdTransportConfig(Transport.CONFIG_CLASS):
     session_timeout = ConfigInt(
         "Number of seconds before USSD session information stored in"
         " Redis expires.",
-        default=600, static=True),
+        default=600, static=True)
     request_timeout = ConfigInt(
         "How long should we wait for the remote side generating the response"
         " for this synchronous operation to come back. Any connection that has"
@@ -117,7 +117,8 @@ class TrueAfricanUssdTransport(Transport):
         # Session handling
         key_prefix = "%s:%s" % (self.SESSION_KEY_PREFIX, self.transport_name)
         self.session_manager = yield SessionManager.from_redis_config(
-            config.redis_manager, key_prefix,
+            config.redis_manager,
+            key_prefix,
             config.session_timeout
         )
 
@@ -131,26 +132,38 @@ class TrueAfricanUssdTransport(Transport):
         self._requests = {}
         self.request_timeout = config.request_timeout
         self.request_timeout_task = LoopingCall(self.request_timeout_cb)
-        self.request_timeout_task.clock = self.clock
-        self.request_timeout_task.start(config.request_timeout)
+        self.request_timeout_task.clock = self.get_clock()
+        self._deferred_for_task = self.request_timeout_task.start(
+            config.request_timeout,
+            now=False
+        )
+        self._deferred_for_task.addErrback(
+            lambda f: log.err(f, "Request expiration handler failed")
+        )
 
+    @inlineCallbacks
     def teardown_transport(self):
         if self.request_timeout_task.running:
             self.request_timeout_task.stop()
+            yield self._deferred_for_task
+        yield self.session_manager.stop()
+        yield super(TrueAfricanUssdTransport, self).teardown_transport()
 
-    @property
-    def clock(self):
+    def get_clock(self):
+        """
+        For easier stubbing in tests
+        """
         return reactor
 
     def request_timeout_cb(self):
         for request_id, request in self._requests.items():
             start_time = request.start_time
-            if start_time < self.clock.seconds() - self.request_timeout:
+            if start_time < self.get_clock().seconds() - self.request_timeout:
                 self.finish_expired_request(request_id)
 
     def track_request(self, request_id):
         d = Deferred()
-        self._requests[request_id] = Request(d, self.clock.seconds())
+        self._requests[request_id] = Request(d, self.get_clock().seconds())
         return d
 
     @inlineCallbacks
@@ -261,7 +274,7 @@ class TrueAfricanUssdTransport(Transport):
                               "Exceeded request timeout")
         else:
             del self._requests[request_id]
-            deferred.addCallbacks(
+            request.deferred.addCallbacks(
                 lambda _: self.on_finish_success_cb(message_id),
                 lambda f: self.on_finish_failure_cb(f, message_id)
             )
