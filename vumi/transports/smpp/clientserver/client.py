@@ -458,31 +458,33 @@ class EsmeTransceiver(Protocol):
                      'dropping message: %s' % (self.state, kwargs)))
             returnValue(0)
 
-        sar_params = kwargs.pop('sar_params', None)
-        has_udh = kwargs.pop('has_udh', False)
-
         pdu_params = self.bind_params.copy()
         pdu_params.update(kwargs)
         message = pdu_params['short_message']
 
-        if self.config.send_multipart_sar and sar_params is None:
-            if len(message) > 130:
+        if len(message) > 130:
+            if self.config.send_multipart_sar:
                 sequence_numbers = yield self._submit_multipart_sar(
                     **pdu_params)
                 returnValue(sequence_numbers)
-
-        if self.config.send_multipart_udh and not has_udh:
-            if len(message) > 130:
+            elif self.config.send_multipart_udh:
                 sequence_numbers = yield self._submit_multipart_udh(
                     **pdu_params)
                 returnValue(sequence_numbers)
 
+        sequence_number = yield self._submit_sm(**pdu_params)
+        returnValue([sequence_number])
+
+    @inlineCallbacks
+    def _submit_sm(self, **pdu_params):
         sequence_number = yield self.get_next_seq()
+        message = pdu_params['short_message']
+        sar_params = pdu_params.pop('sar_params', None)
 
         pdu = SubmitSM(sequence_number, **pdu_params)
-        if kwargs.get('message_type', 'sms') == 'ussd':
-            update_ussd_pdu(pdu, kwargs.get('continue_session', True),
-                            kwargs.get('session_info', None))
+        if pdu_params.get('message_type', 'sms') == 'ussd':
+            update_ussd_pdu(pdu, pdu_params.get('continue_session', True),
+                            pdu_params.get('session_info', None))
 
         if self.config.send_long_messages and len(message) > 254:
             pdu.add_message_payload(''.join('%02x' % ord(c) for c in message))
@@ -494,7 +496,7 @@ class EsmeTransceiver(Protocol):
 
         self.send_pdu(pdu)
         yield self.push_unacked(sequence_number)
-        returnValue([sequence_number])
+        returnValue(sequence_number)
 
     @inlineCallbacks
     def _submit_multipart_sar(self, **pdu_params):
@@ -513,8 +515,8 @@ class EsmeTransceiver(Protocol):
                 'total_segments': len(split_msg),
                 'segment_seqnum': i + 1,
             }
-            sequence_number = yield self.submit_sm(**params)
-            sequence_numbers.extend(sequence_number)
+            sequence_number = yield self._submit_sm(**params)
+            sequence_numbers.append(sequence_number)
         returnValue(sequence_numbers)
 
     @inlineCallbacks
@@ -528,13 +530,12 @@ class EsmeTransceiver(Protocol):
         sequence_numbers = []
         for i, msg in enumerate(split_msg):
             params = pdu_params.copy()
-            params['has_udh'] = True
             params['esm_class'] = 0x40
             udh = '\05\00\03%s%s%s' % (
                 chr(ref_num), chr(len(split_msg)), chr(i + 1))
             params['short_message'] = udh + msg
-            sequence_number = yield self.submit_sm(**params)
-            sequence_numbers.extend(sequence_number)
+            sequence_number = yield self._submit_sm(**params)
+            sequence_numbers.append(sequence_number)
         returnValue(sequence_numbers)
 
     @inlineCallbacks
