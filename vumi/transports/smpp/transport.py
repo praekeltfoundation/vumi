@@ -230,9 +230,11 @@ class SmppTransport(Transport):
 
     @inlineCallbacks
     def _submit_outbound_message(self, message):
-        sequence_number = yield self.send_smpp(message)
-        yield self.r_set_id_for_sequence(
-            sequence_number, message.payload.get("message_id"))
+        sequence_numbers = yield self.send_smpp(message)
+        # TODO: Handle multiple acks for a single message that we split up.
+        for sequence_number in sequence_numbers:
+            yield self.r_set_id_for_sequence(
+                sequence_number, message.payload.get("message_id"))
 
     def esme_disconnected(self):
         log.msg("ESME Disconnected")

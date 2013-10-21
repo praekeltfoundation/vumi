@@ -218,7 +218,8 @@ class EsmeTransmitterMixin(EsmeGenericMixin):
             'send_multipart_sar': True,
         })
         long_message = 'This is a long message.' * 20
-        yield esme.submit_sm(short_message=long_message)
+        seq_nums = yield esme.submit_sm(short_message=long_message)
+        self.assertEqual([2, 3, 4, 5], seq_nums)
         self.assertEqual(4, len(esme.fake_sent_pdus))
         msg_parts = []
         msg_refs = []
@@ -244,7 +245,8 @@ class EsmeTransmitterMixin(EsmeGenericMixin):
             'send_multipart_udh': True,
         })
         long_message = 'This is a long message.' * 20
-        yield esme.submit_sm(short_message=long_message)
+        seq_nums = yield esme.submit_sm(short_message=long_message)
+        self.assertEqual([2, 3, 4, 5], seq_nums)
         self.assertEqual(4, len(esme.fake_sent_pdus))
         msg_parts = []
         msg_refs = []

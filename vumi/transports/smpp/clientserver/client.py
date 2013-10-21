@@ -467,15 +467,15 @@ class EsmeTransceiver(Protocol):
 
         if self.config.send_multipart_sar and sar_params is None:
             if len(message) > 130:
-                sequence_number = yield self._submit_multipart_sar(
+                sequence_numbers = yield self._submit_multipart_sar(
                     **pdu_params)
-                returnValue(sequence_number)
+                returnValue(sequence_numbers)
 
         if self.config.send_multipart_udh and not has_udh:
             if len(message) > 130:
-                sequence_number = yield self._submit_multipart_udh(
+                sequence_numbers = yield self._submit_multipart_udh(
                     **pdu_params)
-                returnValue(sequence_number)
+                returnValue(sequence_numbers)
 
         sequence_number = yield self.get_next_seq()
 
@@ -494,7 +494,7 @@ class EsmeTransceiver(Protocol):
 
         self.send_pdu(pdu)
         yield self.push_unacked(sequence_number)
-        returnValue(sequence_number)
+        returnValue([sequence_number])
 
     @inlineCallbacks
     def _submit_multipart_sar(self, **pdu_params):
@@ -504,6 +504,7 @@ class EsmeTransceiver(Protocol):
             split_msg.append(message[:130])
             message = message[130:]
         ref_num = randint(1, 255)
+        sequence_numbers = []
         for i, msg in enumerate(split_msg):
             params = pdu_params.copy()
             params['short_message'] = msg
@@ -513,7 +514,8 @@ class EsmeTransceiver(Protocol):
                 'segment_seqnum': i + 1,
             }
             sequence_number = yield self.submit_sm(**params)
-        returnValue(sequence_number)
+            sequence_numbers.extend(sequence_number)
+        returnValue(sequence_numbers)
 
     @inlineCallbacks
     def _submit_multipart_udh(self, **pdu_params):
@@ -523,6 +525,7 @@ class EsmeTransceiver(Protocol):
             split_msg.append(message[:130])
             message = message[130:]
         ref_num = randint(1, 255)
+        sequence_numbers = []
         for i, msg in enumerate(split_msg):
             params = pdu_params.copy()
             params['has_udh'] = True
@@ -531,7 +534,8 @@ class EsmeTransceiver(Protocol):
                 chr(ref_num), chr(len(split_msg)), chr(i + 1))
             params['short_message'] = udh + msg
             sequence_number = yield self.submit_sm(**params)
-        returnValue(sequence_number)
+            sequence_numbers.extend(sequence_number)
+        returnValue(sequence_numbers)
 
     @inlineCallbacks
     def enquire_link(self, **kwargs):
