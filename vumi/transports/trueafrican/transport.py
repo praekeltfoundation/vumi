@@ -23,7 +23,7 @@ Request = collections.namedtuple('Request', ['deferred', 'start_time'])
 class XmlRpcResource(xmlrpc.XMLRPC):
 
     def __init__(self, transport):
-        xmlrpc.XMLRPC.__init__(self, allowNone=False, useDateTime=False)
+        xmlrpc.XMLRPC.__init__(self, allowNone=True, useDateTime=False)
         self.transport = transport
         self._handlers = {
             "USSD.INIT": self.ussd_session_init,
@@ -45,32 +45,28 @@ class XmlRpcResource(xmlrpc.XMLRPC):
                 'ussd_session_cont',
                 'ussd_session_end']
 
-    @inlineCallbacks
     def ussd_session_init(self, session_data):
         """ handler for USSD.INIT """
         msisdn = session_data['msisdn']
         to_addr = session_data['shortcode']
         session_id = session_data['session']
-        response = self.transport.handle_session_new(session_id,
-                                                     msisdn,
-                                                     to_addr)
-        returnValue(response)
+        return self.transport.handle_session_new(session_id,
+                                                 msisdn,
+                                                 to_addr)
 
     @inlineCallbacks
     def ussd_session_cont(self, session_data):
         """ handler for USSD.CONT """
         session_id = session_data['session']
         content = session_data['response']
-        response = self.transport.handle_session_resume(session_id,
-                                                        content)
-        returnValue(response)
+        return self.transport.handle_session_resume(session_id,
+                                                    content)
 
     @inlineCallbacks
     def ussd_session_end(self, session_data):
         """ handler for USSD.END """
         session_id = session_data['session']
-        response = yield self.transport.handle_session_end(session_id)
-        returnValue(response)
+        return self.transport.handle_session_end(session_id)
 
 
 class TrueAfricanUssdTransportConfig(Transport.CONFIG_CLASS):
@@ -105,6 +101,7 @@ class TrueAfricanUssdTransport(Transport):
     SESSION_KEY_PREFIX = "vumi:transport:trueafrican:ussd"
 
     SESSION_STATE_MAP = {
+        TransportUserMessage.SESSION_NONE: 'cont',
         TransportUserMessage.SESSION_RESUME: 'cont',
         TransportUserMessage.SESSION_CLOSE: 'end',
     }
@@ -186,7 +183,7 @@ class TrueAfricanUssdTransport(Transport):
             transport_type=self.TRANSPORT_TYPE,
             transport_metadata=transport_metadata,
         )
-        returnValue(self.track_request(request_id))
+        yield self.track_request(request_id)
 
     @inlineCallbacks
     def handle_session_resume(self, session_id, content):
@@ -207,7 +204,7 @@ class TrueAfricanUssdTransport(Transport):
             transport_type=self.TRANSPORT_TYPE,
             transport_metadata=transport_metadata,
         )
-        returnValue(self.track_request(request_id))
+        yield self.track_request(request_id)
 
     @inlineCallbacks
     def handle_session_end(self, session_id):
@@ -227,7 +224,7 @@ class TrueAfricanUssdTransport(Transport):
             transport_type=self.TRANSPORT_TYPE,
             transport_metadata=transport_metadata,
         )
-        returnValue(self.track_request(request_id))
+        yield self.track_request(request_id)
 
     def handle_outbound_message(self, message):
         in_reply_to = message['in_reply_to']
@@ -237,7 +234,7 @@ class TrueAfricanUssdTransport(Transport):
             return self.publish_nack(
                 user_message_id=message['message_id'],
                 sent_message_id=message['message_id'],
-                reason="Missing 'in_reply_to', 'content' or 'session_id' field"
+                reason="Missing in_reply_to, content or session_id fields"
             )
         response = {
             'status': 'OK',
@@ -275,8 +272,8 @@ class TrueAfricanUssdTransport(Transport):
         else:
             del self._requests[request_id]
             request.deferred.addCallbacks(
-                lambda _: self.on_finish_success_cb(message_id),
-                lambda f: self.on_finish_failure_cb(f, message_id)
+                lambda _: self._finish_success_cb(message_id),
+                lambda f: self._finish_failure_cb(f, message_id)
             )
             request.deferred.callback(response)
 

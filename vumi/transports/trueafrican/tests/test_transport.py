@@ -1,8 +1,7 @@
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.web.xmlrpc import Proxy
 
 from vumi.transports.tests.utils import TransportTestCase
-from vumi.utils import http_request_full
 from vumi.message import TransportUserMessage
 from vumi.transports.trueafrican.transport import TrueAfricanUssdTransport
 
@@ -33,18 +32,14 @@ class TestTrueAfricanUssdTransport(TransportTestCase):
     def service_client(self):
         return Proxy(self.service_url)
 
-    def reply_to_message(self, *args, **kw):
+    @inlineCallbacks
+    def reply(self, *args, **kw):
         """
         Fake a response from an application worker
         """
-        d = self.wait_for_dispatched_messages(1)
-
-        def reply(r):
-            msg = TransportUserMessage(**r[0].payload)
-            self.dispatch(msg.reply(*args, **kw))
-            return msg
-
-        return d.addCallback(reply)
+        [msg] = yield self.wait_for_dispatched_messages(1)
+        msg = TransportUserMessage(**msg.payload)
+        self.dispatch(msg.reply(*args, **kw))
 
     @inlineCallbacks
     def test_session_init(self):
@@ -53,7 +48,8 @@ class TestTrueAfricanUssdTransport(TransportTestCase):
                                    {'session': '32423',
                                     'msisdn': '+27724385170',
                                     'shortcode': '*23#'})
-        yield self.reply_to_message("Hello!")
+        msg = yield self.reply("Hello!")
+        print msg
         resp = yield resp_d
         self.assertEquals(
             resp,
@@ -72,4 +68,4 @@ class TestTrueAfricanUssdTransport(TransportTestCase):
         self.assertEqual(nack['user_message_id'], msg['message_id'])
         self.assertEqual(nack['sent_message_id'], msg['message_id'])
         self.assertEqual(nack['nack_reason'],
-                         'Missing in_reply_to, content or session_id')
+                         'Missing in_reply_to, content or session_id fields')
