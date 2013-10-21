@@ -462,7 +462,9 @@ class EsmeTransceiver(Protocol):
         pdu_params.update(kwargs)
         message = pdu_params['short_message']
 
-        if len(message) > 130:
+        # The limit of 140 here is to deal with UCS-2 which uses 16 bits per
+        # character instead of 7.
+        if len(message) > 140:
             if self.config.send_multipart_sar:
                 sequence_numbers = yield self._submit_multipart_sar(
                     **pdu_params)
@@ -503,6 +505,10 @@ class EsmeTransceiver(Protocol):
         message = pdu_params['short_message']
         split_msg = []
         while message:
+            # We chop the message into 130 byte chunks to leave room for the
+            # user data header no matter what encoding is being used.
+            # FIXME: If we have utf-8 encoded data, we might break in the
+            # middle of a multibyte character.
             split_msg.append(message[:130])
             message = message[130:]
         ref_num = randint(1, 255)
@@ -524,13 +530,23 @@ class EsmeTransceiver(Protocol):
         message = pdu_params['short_message']
         split_msg = []
         while message:
+            # We chop the message into 130 byte chunks to leave room for the
+            # user data header no matter what encoding is being used.
+            # FIXME: If we have utf-8 encoded data, we might break in the
+            # middle of a multibyte character.
             split_msg.append(message[:130])
             message = message[130:]
         ref_num = randint(1, 255)
         sequence_numbers = []
         for i, msg in enumerate(split_msg):
             params = pdu_params.copy()
+            # 0x40 is the UDHI flag indicating that this payload contains a
+            # user data header.
             params['esm_class'] = 0x40
+            # See http://en.wikipedia.org/wiki/User_Data_Header for an
+            # explanation of the magic numbers below. We should probably
+            # abstract this out into a class that makes it less magic and
+            # opaque.
             udh = '\05\00\03%s%s%s' % (
                 chr(ref_num), chr(len(split_msg)), chr(i + 1))
             params['short_message'] = udh + msg
@@ -542,7 +558,8 @@ class EsmeTransceiver(Protocol):
     def enquire_link(self, **kwargs):
         if self.state in ['BOUND_TX', 'BOUND_RX', 'BOUND_TRX']:
             sequence_number = yield self.get_next_seq()
-            pdu = EnquireLink(sequence_number, **dict(self.bind_params, **kwargs))
+            pdu = EnquireLink(
+                sequence_number, **dict(self.bind_params, **kwargs))
             self.send_pdu(pdu)
             returnValue(sequence_number)
         returnValue(0)
