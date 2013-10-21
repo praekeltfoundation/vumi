@@ -41,6 +41,28 @@ class UpdatePoolMetadataCmd(PoolSubCmd):
         cfg.emit("  Done.")
 
 
+class UpdateAllPoolMetadataCmd(usage.Options):
+    def run(self, cfg):
+        pools_in_tagpool = cfg.tagpool.list_pools()
+        pools_in_cfg = set(cfg.pools.keys())
+        pools_in_both = sorted(pools_in_tagpool.intersection(pools_in_cfg))
+
+        cfg.emit("Updating pool metadata.")
+        cfg.emit("Note: Pools not present in both the config and tagpool"
+                 " store will not be updated.")
+
+        if not pools_in_both:
+            cfg.emit("No pools found.")
+            return
+
+        for pool in pools_in_both:
+            cfg.emit("  Updating metadata for pool %s ..." % pool)
+            metadata = cfg.metadata(pool)
+            cfg.tagpool.set_metadata(pool, metadata)
+
+        cfg.emit("Done.")
+
+
 class PurgePoolCmd(PoolSubCmd):
     def run(self, cfg):
         cfg.emit("Purging pool %s ..." % self.pool)
@@ -144,6 +166,8 @@ class Options(usage.Options):
          "Declare tags for a tag pool."],
         ["update-pool-metadata", None, UpdatePoolMetadataCmd,
          "Update a pool's metadata from config."],
+        ["update-all-metadata", None, UpdateAllPoolMetadataCmd,
+         "Update all pool meta data from config."],
         ["purge-pool", None, PurgePoolCmd,
          "Purge all tags from a tag pool."],
         ["list-keys", None, ListKeysCmd,
