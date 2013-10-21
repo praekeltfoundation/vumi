@@ -13,14 +13,21 @@ class TestTrueAfricanUssdTransport(TransportTestCase):
     transport_name = 'trueafrican_ussd'
     transport_class = TrueAfricanUssdTransport
 
+    def get_transport_url(self, transport):
+        """
+        Get the URL for the HTTP resource. Requires the worker to be started.
+        """
+        addr = transport.web_service._getPort().getHost()
+        return "http://%s:%s/" % (addr.host, addr.port)
+
     @inlineCallbacks
     def setUp(self):
-        yield super(TrueAfricanUssdTransport, self).setUp()
+        yield super(TestTrueAfricanUssdTransport, self).setUp()
         self.config = {
             'server_hostname': '127.0.0.1',
             'server_port': 0,
         }
         self.transport = yield self.get_transport(self.config)
-        self.client = Proxy('127.0.0.1:
 
-        def make_request(self):
+    def test_foo(self):
+        pass

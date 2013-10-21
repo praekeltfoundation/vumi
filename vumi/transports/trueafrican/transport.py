@@ -2,7 +2,10 @@
 
 """ USSD Transport for TrueAfrican (Uganda) """
 
+import collections
+
 from twisted.internet.defer import Deferred, returnValue, inlineCallbacks
+from twisted.internet.task import LoopingCall
 from twisted.internet import reactor
 from twisted.web import xmlrpc, server
 from twisted.application import internet
@@ -82,9 +85,16 @@ class TrueAfricanUssdTransportConfig(Transport.CONFIG_CLASS):
     redis_manager = ConfigDict(
         "Parameters to connect to Redis with",
         default={}, static=True)
-    session_timeout_period = ConfigInt(
-        "Max length (in seconds) of a USSD session",
-        default=600, static=True)
+    session_timeout = ConfigInt(
+        "Number of seconds before USSD session information stored in"
+        " Redis expires.",
+        default=600, static=True),
+    request_timeout = ConfigInt(
+        "How long should we wait for the remote side generating the response"
+        " for this synchronous operation to come back. Any connection that has"
+        " waited longer than `request_timeout` seconds will manually be"
+        " closed.",
+        default=(4 * 60), static=True)
 
 
 class TrueAfricanUssdTransport(Transport):
@@ -108,14 +118,14 @@ class TrueAfricanUssdTransport(Transport):
         key_prefix = "%s:%s" % (self.SESSION_KEY_PREFIX, self.transport_name)
         self.session_manager = yield SessionManager.from_redis_config(
             config.redis_manager, key_prefix,
-            config.session_timeout_period
+            config.session_timeout
         )
 
         # XMLRPC Resource
         site = server.Site(XmlRpcResource(self))
-        service = internet.TCPServer(config.server_port, site,
-                                     interface=config.server_hostname)
-        service.setServiceParent(self)
+        self.web_service = internet.TCPServer(config.server_port, site,
+                                              interface=config.server_hostname)
+        self.web_service.setServiceParent(self)
 
         # request tracking
         self._requests = {}
@@ -124,26 +134,19 @@ class TrueAfricanUssdTransport(Transport):
         self.request_timeout_task.clock = self.clock
         self.request_timeout_task.start(config.request_timeout)
 
+    def teardown_transport(self):
+        if self.request_timeout_task.running:
+            self.request_timeout_task.stop()
+
     @property
     def clock(self):
         return reactor
 
-    def self.request_timeout_cb(self):
+    def request_timeout_cb(self):
         for request_id, request in self._requests.items():
             start_time = request.start_time
             if start_time < self.clock.seconds() - self.request_timeout:
                 self.finish_expired_request(request_id)
-
-    def get_transport_url(self, suffix=''):
-        """
-        Get the URL for the HTTP resource. Requires the worker to be started.
-
-        This is mostly useful in tests, and probably shouldn't be used
-        in non-test code, because the API might live behind a load
-        balancer or proxy.
-        """
-        addr = self.web_resource.getHost()
-        return "http://%s:%s/%s" % (addr.host, addr.port, suffix.lstrip('/'))
 
     def track_request(self, request_id):
         d = Deferred()
@@ -243,7 +246,7 @@ class TrueAfricanUssdTransport(Transport):
         response = {
             'status': 'ERROR',
             'message': ('We encountered an error processing '
-                        'this request')
+                        'this request'),
             'type': 'end'
         }
         return response
