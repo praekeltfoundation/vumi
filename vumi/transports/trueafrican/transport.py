@@ -106,6 +106,8 @@ class TrueAfricanUssdTransport(Transport):
         TransportUserMessage.SESSION_CLOSE: 'end',
     }
 
+    CHECK_FOR_TIMEOUT_PERIOD = 5
+
     @inlineCallbacks
     def setup_transport(self):
         super(TrueAfricanUssdTransport, self).setup_transport()
@@ -120,10 +122,10 @@ class TrueAfricanUssdTransport(Transport):
         )
 
         # XMLRPC Resource
-        site = server.Site(XmlRpcResource(self))
+        self.site = site = server.Site(XmlRpcResource(self))
         self.web_service = internet.TCPServer(config.server_port, site,
                                               interface=config.server_hostname)
-        self.addService(self.web_service)
+        self.web_service.setServiceParent(self)
 
         # request tracking
         self._requests = {}
@@ -131,7 +133,7 @@ class TrueAfricanUssdTransport(Transport):
         self.request_timeout_task = LoopingCall(self.request_timeout_cb)
         self.request_timeout_task.clock = self.get_clock()
         self._deferred_for_task = self.request_timeout_task.start(
-            config.request_timeout,
+            self.CHECK_FOR_TIMEOUT_PERIOD,
             now=False
         )
         self._deferred_for_task.addErrback(
@@ -140,6 +142,9 @@ class TrueAfricanUssdTransport(Transport):
 
     @inlineCallbacks
     def teardown_transport(self):
+        #yield self.site.getHost().loseConnection()
+        #yield self.web_service.stopService()
+        #yield self.web_service._getPort().stopListening()
         if self.request_timeout_task.running:
             self.request_timeout_task.stop()
             yield self._deferred_for_task
@@ -183,7 +188,8 @@ class TrueAfricanUssdTransport(Transport):
             transport_type=self.TRANSPORT_TYPE,
             transport_metadata=transport_metadata,
         )
-        yield self.track_request(request_id)
+        r = yield self.track_request(request_id)
+        returnValue(r)
 
     @inlineCallbacks
     def handle_session_resume(self, session_id, content):
@@ -204,7 +210,8 @@ class TrueAfricanUssdTransport(Transport):
             transport_type=self.TRANSPORT_TYPE,
             transport_metadata=transport_metadata,
         )
-        yield self.track_request(request_id)
+        r = yield self.track_request(request_id)
+        returnValue(r)
 
     @inlineCallbacks
     def handle_session_end(self, session_id):
@@ -224,7 +231,8 @@ class TrueAfricanUssdTransport(Transport):
             transport_type=self.TRANSPORT_TYPE,
             transport_metadata=transport_metadata,
         )
-        yield self.track_request(request_id)
+        r = yield self.track_request(request_id)
+        returnValue(r)
 
     def handle_outbound_message(self, message):
         in_reply_to = message['in_reply_to']
@@ -275,7 +283,6 @@ class TrueAfricanUssdTransport(Transport):
                 lambda r: self._finish_success_cb(r, message_id),
                 lambda f: self._finish_failure_cb(f, message_id)
             )
-            print "sdfs %s" % response
             request.deferred.callback(response)
 
     def finish_expired_request(self, request_id, request):
@@ -286,15 +293,12 @@ class TrueAfricanUssdTransport(Transport):
         request.deferred.callback(self.response_for_error())
 
     def _finish_success_cb(self, r, message_id):
-        print "_finish_success_cb %s" % r
         self.publish_ack(message_id, message_id)
         return r
 
     def _finish_failure_cb(self, failure, message_id):
-        print "_finish_failure_cb %s" % failure
         failure_message = "Failed to send outbound message %s: %s" % (
             message_id,
             repr(failure)
         )
         self.publish_nack(message_id, message_id, failure_message)
-        return failure

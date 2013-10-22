@@ -1,4 +1,5 @@
-from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
+from twisted.internet import reactor
 from twisted.web.xmlrpc import Proxy
 
 from vumi.transports.tests.utils import TransportTestCase
@@ -32,7 +33,7 @@ class TestTrueAfricanUssdTransport(TransportTestCase):
     def service_client(self):
         return Proxy(self.service_url)
 
-    def reply(self, *args, **kw):
+    def reply_to_message(self, *args, **kw):
         def reply(r):
             msg = TransportUserMessage(**r[0].payload)
             self.dispatch(msg.reply(*args, **kw))
@@ -47,18 +48,19 @@ class TestTrueAfricanUssdTransport(TransportTestCase):
                                    {'session': '32423',
                                     'msisdn': '+27724385170',
                                     'shortcode': '*23#'})
-        msg = yield self.reply("Hello!")
+        msg = yield self.reply_to_message("Hello!")
         self.assertEqual(msg['transport_name'], self.transport_name)
         self.assertEqual(msg['transport_type'], "ussd")
         self.assertEqual(msg['session_event'],
                          TransportUserMessage.SESSION_NEW)
 
         resp = yield resp_d
-        self.assertEquals(
+        self.assertEqual(
             resp,
             {
                 'message': 'Hello!',
                 'session': '32423',
+                'status': 'OK',
                 'type': 'cont'
             }
         )
