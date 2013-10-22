@@ -20,6 +20,9 @@ from smpp.pdu_inspector import (
 from vumi import log
 
 
+GSM_MAX_SMS_BYTES = 140
+
+
 class UnbindResp(PDU):
     # pdu_builder doesn't have one of these yet.
     def __init__(self, sequence_number, **kwargs):
@@ -462,9 +465,17 @@ class EsmeTransceiver(Protocol):
         pdu_params.update(kwargs)
         message = pdu_params['short_message']
 
-        # The limit of 140 here is to deal with UCS-2 which uses 16 bits per
-        # character instead of 7.
-        if len(message) > 140:
+        # We use GSM_MAX_SMS_BYTES here because we may have already-encoded
+        # UCS-2 data to send and therefore can't use the 160 (7-bit) character
+        # limit everyone knows and loves. If we have some other encoding
+        # instead, this may result in unnecessarily short message parts. The
+        # SMSC is probably going to treat whatever we send it as whatever
+        # encoding it likes best and then encode (or mangle) it into a form it
+        # thinks should be in the GSM message payload. Basically, when we have
+        # to split messages up ourselves here we've already lost and the best
+        # we can hope for is not getting hurt too badly by the inevitable
+        # breakages.
+        if len(message) > GSM_MAX_SMS_BYTES:
             if self.config.send_multipart_sar:
                 sequence_numbers = yield self._submit_multipart_sar(
                     **pdu_params)
@@ -504,13 +515,16 @@ class EsmeTransceiver(Protocol):
     def _submit_multipart_sar(self, **pdu_params):
         message = pdu_params['short_message']
         split_msg = []
+        # We chop the message into 130 byte chunks to leave 10 bytes for the
+        # user data header the SMSC is presumably going to add for us. This is
+        # a guess based mostly on optimism and the hope that we'll never have
+        # to deal with this stuff in production.
+        # FIXME: If we have utf-8 encoded data, we might break in the
+        # middle of a multibyte character.
+        payload_length = GSM_MAX_SMS_BYTES - 10
         while message:
-            # We chop the message into 130 byte chunks to leave room for the
-            # user data header no matter what encoding is being used.
-            # FIXME: If we have utf-8 encoded data, we might break in the
-            # middle of a multibyte character.
-            split_msg.append(message[:130])
-            message = message[130:]
+            split_msg.append(message[:payload_length])
+            message = message[payload_length:]
         ref_num = randint(1, 255)
         sequence_numbers = []
         for i, msg in enumerate(split_msg):
@@ -529,13 +543,15 @@ class EsmeTransceiver(Protocol):
     def _submit_multipart_udh(self, **pdu_params):
         message = pdu_params['short_message']
         split_msg = []
+        # We chop the message into 130 byte chunks to leave 10 bytes for the
+        # 6-byte user data header we add and a little extra space in case the
+        # SMSC does unexpected things with our message.
+        # FIXME: If we have utf-8 encoded data, we might break in the
+        # middle of a multibyte character.
+        payload_length = GSM_MAX_SMS_BYTES - 10
         while message:
-            # We chop the message into 130 byte chunks to leave room for the
-            # user data header no matter what encoding is being used.
-            # FIXME: If we have utf-8 encoded data, we might break in the
-            # middle of a multibyte character.
-            split_msg.append(message[:130])
-            message = message[130:]
+            split_msg.append(message[:payload_length])
+            message = message[payload_length:]
         ref_num = randint(1, 255)
         sequence_numbers = []
         for i, msg in enumerate(split_msg):
