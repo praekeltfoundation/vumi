@@ -122,10 +122,10 @@ class TrueAfricanUssdTransport(Transport):
         )
 
         # XMLRPC Resource
-        self.site = site = server.Site(XmlRpcResource(self))
-        self.web_service = internet.TCPServer(config.server_port, site,
-                                              interface=config.server_hostname)
-        self.web_service.setServiceParent(self)
+        self.web_resource = reactor.listenTCP(
+            config.server_port,
+            server.Site(XmlRpcResource(self))
+        )
 
         # request tracking
         self._requests = {}
@@ -142,9 +142,7 @@ class TrueAfricanUssdTransport(Transport):
 
     @inlineCallbacks
     def teardown_transport(self):
-        #yield self.site.getHost().loseConnection()
-        #yield self.web_service.stopService()
-        #yield self.web_service._getPort().stopListening()
+        yield self.web_resource.loseConnection()
         if self.request_timeout_task.running:
             self.request_timeout_task.stop()
             yield self._deferred_for_task

@@ -27,7 +27,7 @@ class TestTrueAfricanUssdTransport(TransportTestCase):
         """
         Get the URL for the HTTP resource. Requires the worker to be started.
         """
-        addr = transport.web_service._getPort().getHost()
+        addr = transport.web_resource.getHost()
         return "http://%s:%s/" % (addr.host, addr.port)
 
     def service_client(self):
