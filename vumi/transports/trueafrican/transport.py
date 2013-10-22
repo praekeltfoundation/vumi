@@ -54,7 +54,6 @@ class XmlRpcResource(xmlrpc.XMLRPC):
                                                  msisdn,
                                                  to_addr)
 
-    @inlineCallbacks
     def ussd_session_cont(self, session_data):
         """ handler for USSD.CONT """
         session_id = session_data['session']
@@ -62,7 +61,6 @@ class XmlRpcResource(xmlrpc.XMLRPC):
         return self.transport.handle_session_resume(session_id,
                                                     content)
 
-    @inlineCallbacks
     def ussd_session_end(self, session_data):
         """ handler for USSD.END """
         session_id = session_data['session']
@@ -98,7 +96,7 @@ class TrueAfricanUssdTransport(Transport):
     CONFIG_CLASS = TrueAfricanUssdTransportConfig
 
     TRANSPORT_TYPE = 'ussd'
-    SESSION_KEY_PREFIX = "vumi:transport:trueafrican:ussd"
+    SESSION_KEY_PREFIX = 'vumi:transport:trueafrican:ussd'
 
     SESSION_STATE_MAP = {
         TransportUserMessage.SESSION_NONE: 'cont',
@@ -202,7 +200,7 @@ class TrueAfricanUssdTransport(Transport):
             message_id=request_id,
             content=content,
             to_addr=session['to_addr'],
-            from_addr=session['msisdn'],
+            from_addr=session['from_addr'],
             session_event=session_event,
             transport_name=self.transport_name,
             transport_type=self.TRANSPORT_TYPE,
@@ -218,19 +216,22 @@ class TrueAfricanUssdTransport(Transport):
             returnValue(self.response_for_error())
         session_event = TransportUserMessage.SESSION_CLOSE
         transport_metadata = {'session_id': session_id}
-        request_id = self.generate_message_id()
         self.publish_message(
-            message_id=request_id,
+            message_id=self.generate_message_id(),
             content=None,
             to_addr=session['to_addr'],
-            from_addr=session['msisdn'],
+            from_addr=session['from_addr'],
             session_event=session_event,
             transport_name=self.transport_name,
             transport_type=self.TRANSPORT_TYPE,
             transport_metadata=transport_metadata,
         )
-        r = yield self.track_request(request_id)
-        returnValue(r)
+        # send a response immediately, and don't (n)ack
+        # since this is not application-initiated
+        response = {
+            'status': 'OK',
+        }
+        returnValue(response)
 
     def handle_outbound_message(self, message):
         in_reply_to = message['in_reply_to']

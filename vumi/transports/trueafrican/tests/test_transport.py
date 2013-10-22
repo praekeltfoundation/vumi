@@ -44,24 +44,148 @@ class TestTrueAfricanUssdTransport(TransportTestCase):
     @inlineCallbacks
     def test_session_init(self):
         client = self.service_client()
-        resp_d = client.callRemote('USSD.INIT',
-                                   {'session': '32423',
-                                    'msisdn': '+27724385170',
-                                    'shortcode': '*23#'})
-        msg = yield self.reply_to_message("Hello!")
+        resp_d = client.callRemote(
+            'USSD.INIT',
+            {'session': '1',
+             'msisdn': '+27724385170',
+             'shortcode': '*23#'}
+        )
+        msg = yield self.reply_to_message("Oh Hai!")
+
+        # verify the transport -> application message
         self.assertEqual(msg['transport_name'], self.transport_name)
         self.assertEqual(msg['transport_type'], "ussd")
         self.assertEqual(msg['session_event'],
                          TransportUserMessage.SESSION_NEW)
+        self.assertEqual(msg['from_addr'], '+27724385170')
+        self.assertEqual(msg['to_addr'], '*23#')
+        self.assertEqual(msg['content'], None)
 
         resp = yield resp_d
         self.assertEqual(
             resp,
             {
-                'message': 'Hello!',
-                'session': '32423',
+                'message': 'Oh Hai!',
+                'session': '1',
                 'status': 'OK',
                 'type': 'cont'
+            }
+        )
+
+    @inlineCallbacks
+    def test_session_resume(self):
+        client = self.service_client()
+
+        # initiate session
+        resp_d = client.callRemote(
+            'USSD.INIT',
+            {'session': '1',
+             'msisdn': '+27724385170',
+             'shortcode': '*23#'}
+        )
+        yield self.reply_to_message("ping")
+        yield resp_d
+        yield self.clear_dispatched_messages()
+
+        # resume session
+        resp_d = client.callRemote(
+            'USSD.CONT',
+            {'session': '1',
+             'response': 'pong'}
+        )
+        msg = yield self.reply_to_message("ping")
+        # verify the transport -> application message
+        self.assertEqual(msg['transport_name'], self.transport_name)
+        self.assertEqual(msg['transport_type'], "ussd")
+        self.assertEqual(msg['session_event'],
+                         TransportUserMessage.SESSION_RESUME)
+        self.assertEqual(msg['from_addr'], '+27724385170')
+        self.assertEqual(msg['to_addr'], '*23#')
+        self.assertEqual(msg['content'], 'pong')
+
+        resp = yield resp_d
+        self.assertEqual(
+            resp,
+            {
+                'message': 'ping',
+                'session': '1',
+                'status': 'OK',
+                'type': 'cont'
+            }
+        )
+
+    @inlineCallbacks
+    def test_session_end_user_initiated(self):
+        client = self.service_client()
+
+        # initiate session
+        resp_d = client.callRemote(
+            'USSD.INIT',
+            {'session': '1',
+             'msisdn': '+27724385170',
+             'shortcode': '*23#'}
+        )
+        yield self.reply_to_message("ping")
+        yield resp_d
+        yield self.clear_dispatched_messages()
+
+        # user initiated session termination
+        resp_d = client.callRemote(
+            'USSD.END',
+            {'session': '1'}
+        )
+
+        [msg] = yield self.wait_for_dispatched_messages(1)
+        self.assertEqual(msg['transport_name'], self.transport_name)
+        self.assertEqual(msg['transport_type'], "ussd")
+        self.assertEqual(msg['session_event'],
+                         TransportUserMessage.SESSION_CLOSE)
+        self.assertEqual(msg['from_addr'], '+27724385170')
+        self.assertEqual(msg['to_addr'], '*23#')
+        self.assertEqual(msg['content'], None)
+
+        resp = yield resp_d
+        self.assertEqual(
+            resp,
+            {
+                'status': 'OK',
+            }
+        )
+
+    @inlineCallbacks
+    def test_session_end_application_initiated(self):
+        client = self.service_client()
+
+        # initiate session
+        resp_d = client.callRemote(
+            'USSD.INIT',
+            {'session': '1',
+             'msisdn': '+27724385170',
+             'shortcode': '*23#'}
+        )
+        yield self.reply_to_message("ping")
+        yield resp_d
+        yield self.clear_dispatched_messages()
+
+        # end session
+        resp_d = client.callRemote(
+            'USSD.CONT',
+            {'session': '1',
+             'response': 'o rly?'}
+        )
+        yield self.reply_to_message(
+            "kthxbye",
+            session_event=TransportUserMessage.SESSION_CLOSE
+        )
+
+        resp = yield resp_d
+        self.assertEqual(
+            resp,
+            {
+                'message': 'kthxbye',
+                'session': '1',
+                'status': 'OK',
+                'type': 'end'
             }
         )
 
