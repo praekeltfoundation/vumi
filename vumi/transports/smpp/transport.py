@@ -134,6 +134,15 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
     redis_manager = ConfigDict(
         'How to connect to Redis', default={}, static=True)
 
+    def post_validate(self):
+        long_message_params = (
+            'send_long_messages', 'send_multipart_sar', 'send_multipart_udh')
+        set_params = [p for p in long_message_params if getattr(self, p)]
+        if len(set_params) > 1:
+            params = ', '.join(set_params)
+            self.raise_config_error(
+                "The following parameters are mutually exclusive: %s" % params)
+
 
 class SmppTransport(Transport):
     """
