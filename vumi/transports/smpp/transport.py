@@ -97,6 +97,14 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
         "`message_payload` optional field instead of the `short_message` "
         "field. Default is `False`, simply because that maintains previous "
         "behaviour.", default=False, static=True)
+    send_multipart_sar = ConfigBool(
+        "If `True`, messages longer than 140 bytes will be sent as a series "
+        "of smaller messages with the sar_* parameters set. Default is "
+        "`False`.", default=False, static=True)
+    send_multipart_udh = ConfigBool(
+        "If `True`, messages longer than 140 bytes will be sent as a series "
+        "of smaller messages with the user data headers. Default is `False`.",
+        default=False, static=True)
     split_bind_prefix = ConfigText(
         "This is the Redis prefix to use for storing things like sequence "
         "numbers and message ids for delivery report handling. It defaults "
@@ -125,6 +133,15 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
         "E.g. { 'NETWORK1': '27761234567'}", default={}, static=True)
     redis_manager = ConfigDict(
         'How to connect to Redis', default={}, static=True)
+
+    def post_validate(self):
+        long_message_params = (
+            'send_long_messages', 'send_multipart_sar', 'send_multipart_udh')
+        set_params = [p for p in long_message_params if getattr(self, p)]
+        if len(set_params) > 1:
+            params = ', '.join(set_params)
+            self.raise_config_error(
+                "The following parameters are mutually exclusive: %s" % params)
 
 
 class SmppTransport(Transport):
@@ -222,9 +239,11 @@ class SmppTransport(Transport):
 
     @inlineCallbacks
     def _submit_outbound_message(self, message):
-        sequence_number = yield self.send_smpp(message)
-        yield self.r_set_id_for_sequence(
-            sequence_number, message.payload.get("message_id"))
+        sequence_numbers = yield self.send_smpp(message)
+        # TODO: Handle multiple acks for a single message that we split up.
+        for sequence_number in sequence_numbers:
+            yield self.r_set_id_for_sequence(
+                sequence_number, message.payload.get("message_id"))
 
     def esme_disconnected(self):
         log.msg("ESME Disconnected")

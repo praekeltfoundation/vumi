@@ -3,8 +3,10 @@ import binascii
 
 from twisted.internet.defer import Deferred, inlineCallbacks, succeed
 from twisted.internet.task import Clock
+from twisted.trial.unittest import TestCase
 from smpp.pdu_builder import SubmitSMResp, DeliverSM
 
+from vumi.config import ConfigError
 from vumi.message import TransportUserMessage
 from vumi.transports.smpp.clientserver.client import (
     EsmeTransceiver, EsmeCallbacks)
@@ -16,6 +18,49 @@ from vumi.transports.smpp.clientserver.client import unpacked_pdu_opts
 from vumi.transports.smpp.clientserver.tests.utils import SmscTestServer
 from vumi.transports.tests.utils import TransportTestCase
 from vumi.tests.utils import LogCatcher
+
+
+class TestSmppTransportConfig(TestCase):
+    def required_config(self, config_params):
+        config = {
+            "transport_name": "sphex",
+            "twisted_endpoint": "tcp:host=localhost:port=0",
+            "system_id": "vumitest-vumitest-vumitest",
+            "password": "password",
+        }
+        config.update(config_params)
+        return config
+
+    def get_config(self, config_dict):
+        return SmppTransport.CONFIG_CLASS(config_dict)
+
+    def assert_config_error(self, config_dict):
+        try:
+            self.get_config(config_dict)
+            self.fail("ConfigError not raised.")
+        except ConfigError as err:
+            return err.message
+
+    def test_long_message_params(self):
+        self.get_config(self.required_config({}))
+        self.get_config(self.required_config({'send_long_messages': True}))
+        self.get_config(self.required_config({'send_multipart_sar': True}))
+        self.get_config(self.required_config({'send_multipart_udh': True}))
+        errmsg = self.assert_config_error(self.required_config({
+            'send_long_messages': True,
+            'send_multipart_sar': True,
+        }))
+        self.assertEqual(errmsg, (
+            "The following parameters are mutually exclusive: "
+            "send_long_messages, send_multipart_sar"))
+        errmsg = self.assert_config_error(self.required_config({
+            'send_long_messages': True,
+            'send_multipart_sar': True,
+            'send_multipart_udh': True,
+        }))
+        self.assertEqual(errmsg, (
+            "The following parameters are mutually exclusive: "
+            "send_long_messages, send_multipart_sar, send_multipart_udh"))
 
 
 class SmppTransportTestCase(TransportTestCase):
