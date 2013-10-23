@@ -4,6 +4,7 @@ from twisted.internet.defer import inlineCallbacks
 from vumi.application.tests.utils import ApplicationTestCase
 from vumi.message import TransportUserMessage
 from vumi.demos.rps import RockPaperScissorsGame, RockPaperScissorsWorker
+from vumi.tests.helpers import MessageHelper
 
 
 class TestRockPaperScissorsGame(unittest.TestCase):
@@ -66,6 +67,12 @@ class TestRockPaperScissorsWorker(ApplicationTestCase):
     def setUp(self):
         super(TestRockPaperScissorsWorker, self).setUp()
         self.worker = yield self.get_application({})
+        self.msg_helper = MessageHelper()
+
+    def make_start_message(self, from_addr):
+        return self.msg_helper.make_inbound(
+            None, from_addr=from_addr,
+            session_event=TransportUserMessage.SESSION_NEW)
 
     @inlineCallbacks
     def test_new_sessions(self):
@@ -75,14 +82,12 @@ class TestRockPaperScissorsWorker(ApplicationTestCase):
         user1 = '+27831234567'
         user2 = '+27831234568'
 
-        yield self.dispatch(self.mkmsg_in(from_addr=user1,
-                            session_event=TransportUserMessage.SESSION_NEW))
+        yield self.dispatch(self.make_start_message(user1))
         self.assertNotEquals(None, self.worker.open_game)
         game = self.worker.open_game
         self.assertEquals({user1: game}, self.worker.games)
 
-        yield self.dispatch(self.mkmsg_in(from_addr=user2,
-                            session_event=TransportUserMessage.SESSION_NEW))
+        yield self.dispatch(self.make_start_message(user2))
         self.assertEquals(None, self.worker.open_game)
         self.assertEquals({user1: game, user2: game}, self.worker.games)
 
@@ -90,18 +95,17 @@ class TestRockPaperScissorsWorker(ApplicationTestCase):
 
     @inlineCallbacks
     def test_moves(self):
-        yield self.dispatch(self.mkmsg_in(from_addr='+27831234567',
-                            session_event=TransportUserMessage.SESSION_NEW))
+        user1 = '+27831234567'
+        user2 = '+27831234568'
+
+        yield self.dispatch(self.make_start_message(user1))
         game = self.worker.open_game
-        yield self.dispatch(self.mkmsg_in(from_addr='+27831234568',
-                            session_event=TransportUserMessage.SESSION_NEW))
+        yield self.dispatch(self.make_start_message(user2))
 
         self.assertEquals(2, len(self.get_dispatched_messages()))
-        yield self.dispatch(self.mkmsg_in(from_addr='+27831234568',
-                                          content='1'))
+        yield self.dispatch(self.msg_helper.make_inbound('1', from_addr=user2))
         self.assertEquals(2, len(self.get_dispatched_messages()))
-        yield self.dispatch(self.mkmsg_in(from_addr='+27831234567',
-                                          content='2'))
+        yield self.dispatch(self.msg_helper.make_inbound('2', from_addr=user1))
         self.assertEquals(4, len(self.get_dispatched_messages()))
         self.assertEquals((0, 1), game.scores)
 
@@ -109,14 +113,14 @@ class TestRockPaperScissorsWorker(ApplicationTestCase):
     def test_full_game(self):
         user1 = '+27831234567'
         user2 = '+27831234568'
-        yield self.dispatch(self.mkmsg_in(from_addr=user1,
-                            session_event=TransportUserMessage.SESSION_NEW))
+
+        yield self.dispatch(self.make_start_message(user1))
         game = self.worker.open_game
-        yield self.dispatch(self.mkmsg_in(from_addr=user2,
-                            session_event=TransportUserMessage.SESSION_NEW))
+        yield self.dispatch(self.make_start_message(user2))
 
         for user, content in [(user1, '1'), (user2, '2')] * 5:  # best-of 5
-            yield self.dispatch(self.mkmsg_in(from_addr=user, content=content))
+            yield self.dispatch(self.msg_helper.make_inbound(
+                content, from_addr=user))
 
         self.assertEqual((5, 0), game.scores)
         [end1, end2] = self.get_dispatched_messages()[-2:]

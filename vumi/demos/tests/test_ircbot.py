@@ -6,6 +6,7 @@ from vumi.application.tests.utils import ApplicationTestCase
 
 from vumi.demos.ircbot import MemoWorker
 from vumi.message import TransportUserMessage
+from vumi.tests.helpers import MessageHelper
 
 
 class TestMemoWorker(ApplicationTestCase):
@@ -17,6 +18,7 @@ class TestMemoWorker(ApplicationTestCase):
         super(TestMemoWorker, self).setUp()
         self.worker = yield self.get_application({'worker_name': 'testmemo'})
         yield self.worker.redis._purge_all()  # just in case
+        self.msg_helper = MessageHelper()
 
     @inlineCallbacks
     def send(self, content, from_addr='testnick', channel=None):
@@ -26,9 +28,9 @@ class TestMemoWorker(ApplicationTestCase):
             transport_metadata['irc_channel'] = channel
             helper_metadata['irc'] = {'irc_channel': channel}
 
-        msg = self.mkmsg_in(content=content, from_addr=from_addr,
-                            helper_metadata=helper_metadata,
-                            transport_metadata=transport_metadata)
+        msg = self.msg_helper.make_inbound(
+            content, from_addr=from_addr, helper_metadata=helper_metadata,
+            transport_metadata=transport_metadata)
         yield self.dispatch(msg)
 
     @inlineCallbacks

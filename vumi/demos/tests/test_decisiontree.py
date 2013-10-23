@@ -11,6 +11,7 @@ from vumi.demos.decisiontree import (DecisionTreeWorker, TemplatedDecisionTree,
                                      TraversedDecisionTree)
 from vumi.message import TransportUserMessage
 from vumi.application.tests.utils import ApplicationTestCase
+from vumi.tests.helpers import MessageHelper
 
 
 class TemplatedDecisionTreeTestCase(TestCase):
@@ -122,6 +123,7 @@ class TestDecisionTreeWorker(ApplicationTestCase):
                 'worker_name': 'test_decision_tree_worker',
                 })
         yield self.worker.session_manager.redis._purge_all()  # just in case
+        self.msg_helper = MessageHelper()
 
     def replace_timestamp(self, string):
         newstring = re.sub(r'imestamp": "\d*"',
@@ -131,8 +133,8 @@ class TestDecisionTreeWorker(ApplicationTestCase):
 
     @inlineCallbacks
     def send(self, content, session_event=None, from_addr="456789"):
-        msg = self.mkmsg_in(content, session_event=session_event,
-                            from_addr=from_addr)
+        msg = self.msg_helper.make_inbound(
+            content, session_event=session_event, from_addr=from_addr)
         yield self.dispatch(msg)
 
     @inlineCallbacks

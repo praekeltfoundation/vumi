@@ -12,6 +12,7 @@ from twisted.web.static import Data
 from vumi.application.tests.utils import ApplicationTestCase
 from vumi.demos.hangman import HangmanGame, HangmanWorker
 from vumi.message import TransportUserMessage
+from vumi.tests.helpers import MessageHelper
 
 import string
 
@@ -159,10 +160,12 @@ class TestHangmanWorker(ApplicationTestCase):
                 'random_word_url': random_word_url,
                 })
         yield self.worker.session_manager.redis._purge_all()  # just in case
+        self.msg_helper = MessageHelper()
 
     @inlineCallbacks
     def send(self, content, session_event=None):
-        msg = self.mkmsg_in(content=content, session_event=session_event)
+        msg = self.msg_helper.make_inbound(
+            content, session_event=session_event)
         yield self.dispatch(msg)
 
     @inlineCallbacks
