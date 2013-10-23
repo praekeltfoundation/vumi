@@ -17,6 +17,7 @@ from vumi.transports.base import Transport
 from vumi.components.session import SessionManager
 from vumi.config import ConfigText, ConfigInt, ConfigDict
 
+
 class TrueAfricanUssdTransportConfig(Transport.CONFIG_CLASS):
     """TrueAfrican USSD transport configuration."""
 
