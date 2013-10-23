@@ -5,9 +5,9 @@ from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
 
 from vumi.utils import http_request_full
-from vumi.tests.utils import PersistenceMixin, VumiWorkerTestCase
 from vumi.message import TransportUserMessage
-from vumi.tests.utils import import_skip
+from vumi.tests.utils import PersistenceMixin, VumiWorkerTestCase, import_skip
+from vumi.tests.helpers import MessageHelper
 
 
 class MessageStoreAPITestCase(VumiWorkerTestCase, PersistenceMixin):
@@ -41,15 +41,18 @@ class MessageStoreAPITestCase(VumiWorkerTestCase, PersistenceMixin):
 
         self.tag = ("pool", "tag")
         self.batch_id = yield self.store.batch_start([self.tag])
+        self.msg_helper = MessageHelper(
+            transport_name=self.transport_name,
+            transport_type=self.transport_type)
 
     @inlineCallbacks
     def create_inbound(self, batch_id, count, content_template):
         messages = []
         now = datetime.now()
         for i in range(count):
-            msg = self.mkmsg_in(content=content_template.format(i),
-                message_id=TransportUserMessage.generate_id())
-            msg['timestamp'] = now - timedelta(i * 10)
+            msg = self.msg_helper.make_inbound(
+                content_template.format(i),
+                timestamp=(now - timedelta(i * 10)))
             yield self.store.add_inbound_message(msg, batch_id=batch_id)
             messages.append(msg)
         returnValue(messages)
@@ -59,9 +62,9 @@ class MessageStoreAPITestCase(VumiWorkerTestCase, PersistenceMixin):
         messages = []
         now = datetime.now()
         for i in range(count):
-            msg = self.mkmsg_out(content=content_template.format(i),
-                message_id=TransportUserMessage.generate_id())
-            msg['timestamp'] = now - timedelta(i * 10)
+            msg = self.msg_helper.make_outbound(
+                content_template.format(i),
+                timestamp=(now - timedelta(i * 10)))
             yield self.store.add_outbound_message(msg, batch_id=batch_id)
             messages.append(msg)
         returnValue(messages)

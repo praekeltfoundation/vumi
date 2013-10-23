@@ -1,9 +1,10 @@
 """Tests for go.components.message_store_migrators."""
 
 from twisted.internet.defer import inlineCallbacks
+from twisted.trial.unittest import TestCase
 
-from vumi.application.tests.test_base import ApplicationTestCase
-from vumi.tests.utils import import_skip
+from vumi.tests.utils import PersistenceMixin, import_skip
+from vumi.tests.helpers import MessageHelper
 
 try:
     from vumi.components.tests.message_store_old_models import (
@@ -16,15 +17,20 @@ except ImportError, e:
     riak_import_error = e
 
 
-class TestMigratorBase(ApplicationTestCase):
+class TestMigratorBase(TestCase, PersistenceMixin):
+    timeout = 5
     use_riak = True
 
     @inlineCallbacks
     def setUp(self):
-        yield super(TestMigratorBase, self).setUp()
+        yield self._persist_setUp()
         if riak_import_error is not None:
             import_skip(riak_import_error, 'riakasaurus', 'riakasaurus.riak')
         self.manager = self.get_riak_manager()
+        self.msg_helper = MessageHelper()
+
+    def tearDown(self):
+        return self._persist_tearDown()
 
 
 class OutboundMessageMigratorTestCase(TestMigratorBase):
@@ -37,7 +43,7 @@ class OutboundMessageMigratorTestCase(TestMigratorBase):
 
     @inlineCallbacks
     def test_migrate_vnone_to_v1(self):
-        msg = self.mkmsg_out()
+        msg = self.msg_helper.make_outbound("outbound")
         old_batch = self.batch_vnone(key=u"batch-1")
         old_record = self.outbound_vnone(msg["message_id"],
                                          msg=msg, batch=old_batch)
@@ -48,7 +54,7 @@ class OutboundMessageMigratorTestCase(TestMigratorBase):
 
     @inlineCallbacks
     def test_migrate_vnone_to_v1_without_batch(self):
-        msg = self.mkmsg_out()
+        msg = self.msg_helper.make_outbound("outbound")
         old_record = self.outbound_vnone(msg["message_id"],
                                          msg=msg, batch=None)
         yield old_record.save()
@@ -68,7 +74,7 @@ class InboundMessageMigratorTestCase(TestMigratorBase):
 
     @inlineCallbacks
     def test_migrate_vnone_to_v1(self):
-        msg = self.mkmsg_in()
+        msg = self.msg_helper.make_inbound("inbound")
         old_batch = self.batch_vnone(key=u"batch-1")
         old_record = self.inbound_vnone(msg["message_id"],
                                         msg=msg, batch=old_batch)
@@ -79,7 +85,7 @@ class InboundMessageMigratorTestCase(TestMigratorBase):
 
     @inlineCallbacks
     def test_migrate_vnone_to_v1_without_batch(self):
-        msg = self.mkmsg_in()
+        msg = self.msg_helper.make_inbound("inbound")
         old_record = self.inbound_vnone(msg["message_id"],
                                         msg=msg, batch=None)
         yield old_record.save()

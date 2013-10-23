@@ -5,20 +5,21 @@ import time
 from datetime import datetime, timedelta
 
 from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.trial.unittest import TestCase
 
 from vumi.message import TransportEvent
-from vumi.application.tests.test_base import ApplicationTestCase
-from vumi.tests.utils import import_skip
+from vumi.tests.utils import import_skip, PersistenceMixin
+from vumi.tests.helpers import MessageHelper
 
 
-class TestMessageStoreBase(ApplicationTestCase):
-    # inherits from ApplicationTestCase for .mkmsg_in and .mkmsg_out
-
+class TestMessageStoreBase(TestCase, PersistenceMixin):
+    timeout = 5
     use_riak = True
 
     @inlineCallbacks
     def setUp(self):
-        yield super(TestMessageStoreBase, self).setUp()
+        self._persist_setUp()
+        super(TestMessageStoreBase, self).setUp()
         try:
             from vumi.components.message_store import MessageStore
         except ImportError, e:
@@ -26,6 +27,12 @@ class TestMessageStoreBase(ApplicationTestCase):
         self.redis = yield self.get_redis_manager()
         self.manager = self.get_riak_manager()
         self.store = MessageStore(self.manager, self.redis)
+        self.msg_helper = MessageHelper()
+
+    @inlineCallbacks
+    def tearDown(self):
+        yield super(TestMessageStoreBase, self).tearDown()
+        yield self._persist_tearDown()
 
     @inlineCallbacks
     def _maybe_batch(self, tag, by_batch):
@@ -40,11 +47,10 @@ class TestMessageStoreBase(ApplicationTestCase):
 
     @inlineCallbacks
     def _create_outbound(self, tag=("pool", "tag"), by_batch=False,
-                            content='outbound foo'):
+                         content='outbound foo'):
         """Create and store an outbound message."""
         add_kw, batch_id = yield self._maybe_batch(tag, by_batch)
-        msg = self.mkmsg_out(content=content,
-                             message_id=TransportEvent.generate_id())
+        msg = self.msg_helper.make_outbound(content)
         msg_id = msg['message_id']
         yield self.store.add_outbound_message(msg, **add_kw)
         returnValue((msg_id, msg, batch_id))
@@ -54,9 +60,8 @@ class TestMessageStoreBase(ApplicationTestCase):
                             content='inbound foo'):
         """Create and store an inbound message."""
         add_kw, batch_id = yield self._maybe_batch(tag, by_batch)
-        msg = self.mkmsg_in(content=content, to_addr="+1234567810001",
-                            transport_type="sms",
-                            message_id=TransportEvent.generate_id())
+        msg = self.msg_helper.make_inbound(
+            content, to_addr="+1234567810001", transport_type="sms")
         msg_id = msg['message_id']
         yield self.store.add_inbound_message(msg, **add_kw)
         returnValue((msg_id, msg, batch_id))
@@ -68,8 +73,8 @@ class TestMessageStoreBase(ApplicationTestCase):
         now = start_timestamp or datetime.now()
         messages = []
         for i in range(count):
-            msg = self.mkmsg_out(message_id=TransportEvent.generate_id())
-            msg['timestamp'] = now - timedelta(i * time_multiplier)
+            msg = self.msg_helper.make_outbound(
+                "foo", timestamp=(now - timedelta(i * time_multiplier)))
             yield self.store.add_outbound_message(msg, batch_id=batch_id)
             messages.append(msg)
         returnValue(messages)
@@ -81,8 +86,8 @@ class TestMessageStoreBase(ApplicationTestCase):
         now = start_timestamp or datetime.now()
         messages = []
         for i in range(count):
-            msg = self.mkmsg_in(message_id=TransportEvent.generate_id())
-            msg['timestamp'] = now - timedelta(i * time_multiplier)
+            msg = self.msg_helper.make_inbound(
+                "foo", timestamp=(now - timedelta(i * time_multiplier)))
             yield self.store.add_inbound_message(msg, batch_id=batch_id)
             messages.append(msg)
         returnValue(messages)
@@ -194,7 +199,7 @@ class TestMessageStore(TestMessageStoreBase):
     @inlineCallbacks
     def test_add_ack_event(self):
         msg_id, msg, batch_id = yield self._create_outbound()
-        ack = self.mkmsg_ack(user_message_id=msg_id)
+        ack = self.msg_helper.make_ack(msg)
         ack_id = ack['event_id']
         yield self.store.add_event(ack)
 
@@ -209,7 +214,7 @@ class TestMessageStore(TestMessageStoreBase):
     @inlineCallbacks
     def test_add_ack_event_again(self):
         msg_id, msg, batch_id = yield self._create_outbound()
-        ack = self.mkmsg_ack(user_message_id=msg_id)
+        ack = self.msg_helper.make_ack(msg)
         ack_id = ack['event_id']
         yield self.store.add_event(ack)
         old_stored_ack = yield self.store.get_event(ack_id)
@@ -230,7 +235,7 @@ class TestMessageStore(TestMessageStoreBase):
     @inlineCallbacks
     def test_add_nack_event(self):
         msg_id, msg, batch_id = yield self._create_outbound()
-        nack = self.mkmsg_nack(user_message_id=msg_id)
+        nack = self.msg_helper.make_nack(msg)
         nack_id = nack['event_id']
         yield self.store.add_event(nack)
 
@@ -245,7 +250,7 @@ class TestMessageStore(TestMessageStoreBase):
     @inlineCallbacks
     def test_add_ack_event_without_batch(self):
         msg_id, msg, _batch_id = yield self._create_outbound(tag=None)
-        ack = self.mkmsg_ack(user_message_id=msg_id)
+        ack = self.msg_helper.make_ack(msg)
         ack_id = ack['event_id']
         yield self.store.add_event(ack)
 
@@ -258,7 +263,7 @@ class TestMessageStore(TestMessageStoreBase):
     @inlineCallbacks
     def test_add_nack_event_without_batch(self):
         msg_id, msg, _batch_id = yield self._create_outbound(tag=None)
-        nack = self.mkmsg_nack(user_message_id=msg_id)
+        nack = self.msg_helper.make_nack(msg)
         nack_id = nack['event_id']
         yield self.store.add_event(nack)
 
@@ -274,8 +279,8 @@ class TestMessageStore(TestMessageStoreBase):
 
         dr_ids = []
         for status in TransportEvent.DELIVERY_STATUSES:
-            dr = self.mkmsg_delivery(user_message_id=msg_id,
-                                        status=status)
+            dr = self.msg_helper.make_delivery_report(
+                msg, delivery_status=status)
             dr_id = dr['event_id']
             dr_ids.append(dr_id)
             yield self.store.add_event(dr)
@@ -343,16 +348,16 @@ class TestMessageStore(TestMessageStoreBase):
     def test_inbound_counts(self):
         _msg_id, _msg, batch_id = yield self._create_inbound(by_batch=True)
         self.assertEqual(1, (yield self.store.batch_inbound_count(batch_id)))
-        yield self.store.add_inbound_message(self.mkmsg_in(
-                message_id=TransportEvent.generate_id()), batch_id=batch_id)
+        yield self.store.add_inbound_message(
+            self.msg_helper.make_inbound("foo"), batch_id=batch_id)
         self.assertEqual(2, (yield self.store.batch_inbound_count(batch_id)))
 
     @inlineCallbacks
     def test_outbound_counts(self):
         _msg_id, _msg, batch_id = yield self._create_outbound(by_batch=True)
         self.assertEqual(1, (yield self.store.batch_outbound_count(batch_id)))
-        yield self.store.add_outbound_message(self.mkmsg_out(
-                message_id=TransportEvent.generate_id()), batch_id=batch_id)
+        yield self.store.add_outbound_message(
+            self.msg_helper.make_outbound("foo"), batch_id=batch_id)
         self.assertEqual(2, (yield self.store.batch_outbound_count(batch_id)))
 
     @inlineCallbacks
@@ -478,7 +483,7 @@ class TestMessageStoreCache(TestMessageStoreBase):
         yield self.create_outbound_messages(batch_id, 10)
 
         # Store one extra in the cache to throw off the allow threshold delta
-        recon_msg = self.mkmsg_out(message_id=TransportEvent.generate_id())
+        recon_msg = self.msg_helper.make_outbound("foo")
         yield self.store.cache.add_outbound_message(batch_id, recon_msg)
 
         # Default reconciliation delta should return True
@@ -494,8 +499,7 @@ class TestMessageStoreCache(TestMessageStoreBase):
         # Store via message_store
         messages = yield self.create_outbound_messages(batch_id, 10)
         for msg in messages:
-            ack = self.mkmsg_ack(user_message_id=msg['message_id'],
-                sent_message_id=msg['message_id'])
+            ack = self.msg_helper.make_ack(msg)
             yield self.store.add_event(ack)
 
         yield self.clear_cache(self.store)

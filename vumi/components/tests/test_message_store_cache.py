@@ -5,18 +5,19 @@
 from datetime import datetime, timedelta
 
 from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.trial.unittest import TestCase
 
-from vumi.message import TransportMessage
-from vumi.application.tests.test_base import ApplicationTestCase
-from vumi.tests.utils import import_skip
+from vumi.tests.utils import PersistenceMixin, import_skip
+from vumi.tests.helpers import MessageHelper
 
 
-class TestMessageStoreCache(ApplicationTestCase):
+class TestMessageStoreCache(TestCase, PersistenceMixin):
+    timeout = 5
     use_riak = True
 
     @inlineCallbacks
     def setUp(self):
-        yield super(TestMessageStoreCache, self).setUp()
+        yield self._persist_setUp()
         try:
             from vumi.components.message_store import MessageStore
         except ImportError, e:
@@ -27,27 +28,19 @@ class TestMessageStoreCache(ApplicationTestCase):
         self.cache = self.store.cache
         self.batch_id = 'a-batch-id'
         self.cache.batch_start(self.batch_id)
+        self.msg_helper = MessageHelper()
 
-    def mkmsg_out(self, **kwargs):
-        defaults = {
-            'message_id': TransportMessage.generate_id(),
-        }
-        defaults.update(kwargs)
-        return super(TestMessageStoreCache, self).mkmsg_out(**defaults)
-
-    def mkmsg_in(self, **kwargs):
-        defaults = {
-            'message_id': TransportMessage.generate_id(),
-        }
-        defaults.update(kwargs)
-        return super(TestMessageStoreCache, self).mkmsg_in(**defaults)
+    def tearDown(self):
+        return self._persist_tearDown()
 
     @inlineCallbacks
     def add_messages(self, batch_id, callback, count=10):
         messages = []
         now = datetime.now()
         for i in range(count):
-            msg = self.mkmsg_in(from_addr='from-%s' % (i,),
+            msg = self.msg_helper.make_inbound(
+                "inbound",
+                from_addr='from-%s' % (i,),
                 to_addr='to-%s' % (i,))
             msg['timestamp'] = now - timedelta(seconds=i)
             yield callback(batch_id, msg)
@@ -56,7 +49,7 @@ class TestMessageStoreCache(ApplicationTestCase):
 
     @inlineCallbacks
     def test_add_outbound_message(self):
-        msg = self.mkmsg_out()
+        msg = self.msg_helper.make_outbound("outbound")
         yield self.cache.add_outbound_message(self.batch_id, msg)
         [msg_key] = yield self.cache.get_outbound_message_keys(self.batch_id)
         self.assertEqual(msg_key, msg['message_id'])
@@ -91,15 +84,17 @@ class TestMessageStoreCache(ApplicationTestCase):
     @inlineCallbacks
     def test_get_batch_ids(self):
         yield self.cache.batch_start('batch-1')
-        yield self.cache.add_outbound_message('batch-1', self.mkmsg_out())
+        yield self.cache.add_outbound_message(
+            'batch-1', self.msg_helper.make_outbound("outbound"))
         yield self.cache.batch_start('batch-2')
-        yield self.cache.add_outbound_message('batch-2', self.mkmsg_out())
+        yield self.cache.add_outbound_message(
+            'batch-2', self.msg_helper.make_outbound("outbound"))
         self.assertEqual((yield self.cache.get_batch_ids()), set([
             self.batch_id, 'batch-1', 'batch-2']))
 
     @inlineCallbacks
     def test_add_inbound_message(self):
-        msg = self.mkmsg_in()
+        msg = self.msg_helper.make_inbound("inbound")
         yield self.cache.add_inbound_message(self.batch_id, msg)
         [msg_key] = yield self.cache.get_inbound_message_keys(self.batch_id)
         self.assertEqual(msg_key, msg['message_id'])
@@ -157,11 +152,10 @@ class TestMessageStoreCache(ApplicationTestCase):
 
     @inlineCallbacks
     def test_add_event(self):
-        msg = self.mkmsg_out()
+        msg = self.msg_helper.make_outbound("outbound")
         self.cache.add_outbound_message(self.batch_id, msg)
-        ack = self.mkmsg_ack(user_message_id=msg['message_id'],
-            sent_message_id=TransportMessage.generate_id())
-        delivery = self.mkmsg_delivery(user_message_id=msg['message_id'])
+        ack = self.msg_helper.make_ack(msg)
+        delivery = self.msg_helper.make_delivery_report(msg)
         yield self.cache.add_event(self.batch_id, ack)
         yield self.cache.add_event(self.batch_id, delivery)
         status = yield self.cache.get_event_status(self.batch_id)
@@ -177,11 +171,9 @@ class TestMessageStoreCache(ApplicationTestCase):
 
     @inlineCallbacks
     def test_add_event_idempotence(self):
-        msg = self.mkmsg_out()
+        msg = self.msg_helper.make_outbound("outbound")
         self.cache.add_outbound_message(self.batch_id, msg)
-        acks = [self.mkmsg_ack(user_message_id=msg['message_id'],
-                                sent_message_id=msg['message_id'])
-                                for i in range(10)]
+        acks = [self.msg_helper.make_ack(msg) for i in range(10)]
         for ack in acks:
             # send exact same event multiple times
             ack['event_id'] = 'identical'
@@ -200,7 +192,7 @@ class TestMessageStoreCache(ApplicationTestCase):
     @inlineCallbacks
     def test_add_outbound_message_idempotence(self):
         for i in range(10):
-            msg = self.mkmsg_out()
+            msg = self.msg_helper.make_outbound("outbound")
             msg['message_id'] = 'the-same-thing'
             yield self.cache.add_outbound_message(self.batch_id, msg)
         status = yield self.cache.get_event_status(self.batch_id)
@@ -212,7 +204,7 @@ class TestMessageStoreCache(ApplicationTestCase):
     @inlineCallbacks
     def test_add_inbound_message_idempotence(self):
         for i in range(10):
-            msg = self.mkmsg_in()
+            msg = self.msg_helper.make_inbound("inbound")
             msg['message_id'] = 'the-same-thing'
             self.cache.add_inbound_message(self.batch_id, msg)
         self.assertEqual(
@@ -221,12 +213,11 @@ class TestMessageStoreCache(ApplicationTestCase):
 
     @inlineCallbacks
     def test_clear_batch(self):
-        msg_in = self.mkmsg_in()
-        msg_out = self.mkmsg_out()
-        ack = self.mkmsg_ack(user_message_id=msg_out['message_id'],
-            sent_message_id=msg_out['message_id'])
-        dr = self.mkmsg_delivery(user_message_id=msg_out['message_id'],
-            status='delivered')
+        msg_in = self.msg_helper.make_inbound("inbound")
+        msg_out = self.msg_helper.make_outbound("outbound")
+        ack = self.msg_helper.make_ack(msg_out)
+        dr = self.msg_helper.make_delivery_report(
+            msg_out, delivery_status='delivered')
         yield self.cache.add_inbound_message(self.batch_id, msg_in)
         yield self.cache.add_outbound_message(self.batch_id, msg_out)
         yield self.cache.add_event(self.batch_id, ack)
@@ -273,7 +264,7 @@ class TestMessageStoreCache(ApplicationTestCase):
 
         now = datetime.now()
         for i in range(10):
-            msg_in = self.mkmsg_in()
+            msg_in = self.msg_helper.make_inbound("inbound")
             msg_in['timestamp'] = now - timedelta(seconds=i * 10)
             yield self.cache.add_inbound_message(self.batch_id, msg_in)
 
@@ -294,7 +285,7 @@ class TestMessageStoreCache(ApplicationTestCase):
 
         now = datetime.now()
         for i in range(10):
-            msg_out = self.mkmsg_out()
+            msg_out = self.msg_helper.make_outbound("outbound")
             msg_out['timestamp'] = now - timedelta(seconds=i * 10)
             yield self.cache.add_outbound_message(self.batch_id, msg_out)
 
@@ -329,7 +320,7 @@ class TestMessageStoreCache(ApplicationTestCase):
         #       that the cache is returning them in the correct order
         #       when we pull out the search results.
         for i in range(10):
-            msg_in = self.mkmsg_in(content='hello-%s' % (i,))
+            msg_in = self.msg_helper.make_inbound('hello-%s' % (i,))
             msg_in['timestamp'] = now + timedelta(seconds=i * 10)
             yield self.cache.add_inbound_message(self.batch_id, msg_in)
             message_ids.append(msg_in['message_id'])
