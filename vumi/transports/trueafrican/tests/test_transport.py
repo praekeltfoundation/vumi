@@ -1,5 +1,4 @@
-from twisted.internet.defer import inlineCallbacks, returnValue, Deferred, CancelledError
-from twisted.internet import reactor
+from twisted.internet.defer import inlineCallbacks
 from twisted.internet.task import Clock
 from twisted.internet.error import ConnectionLost
 from twisted.web.xmlrpc import Proxy
