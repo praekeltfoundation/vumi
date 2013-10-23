@@ -121,36 +121,7 @@ class TrueAfricanUssdTransport(Transport):
                                              self.clock.seconds())
         return d
 
-    @inlineCallbacks
-    def handle_session_new(self, request, session_id, msisdn, to_addr):
-        session = yield self.session_manager.create_session(
-            session_id,
-            from_addr=msisdn,
-            to_addr=to_addr
-        )
-        session_event = TransportUserMessage.SESSION_NEW
-        transport_metadata = {'session_id': session_id}
-        request_id = self.generate_message_id()
-        self.publish_message(
-            message_id=request_id,
-            content=None,
-            to_addr=to_addr,
-            from_addr=msisdn,
-            session_event=session_event,
-            transport_name=self.transport_name,
-            transport_type=self.TRANSPORT_TYPE,
-            transport_metadata=transport_metadata,
-        )
-        r = yield self.track_request(request_id, request, session)
-        returnValue(r)
-
-    @inlineCallbacks
-    def handle_session_resume(self, request, session_id, content):
-        # This is an existing session.
-        session = yield self.session_manager.load_session(session_id)
-        if not session:
-            returnValue(self.response_for_error())
-        session_event = TransportUserMessage.SESSION_RESUME
+    def _send_inbound(self, session_id, session, session_event, content):
         transport_metadata = {'session_id': session_id}
         request_id = self.generate_message_id()
         self.publish_message(
@@ -163,6 +134,30 @@ class TrueAfricanUssdTransport(Transport):
             transport_type=self.TRANSPORT_TYPE,
             transport_metadata=transport_metadata,
         )
+        return request_id
+
+    @inlineCallbacks
+    def handle_session_new(self, request, session_id, msisdn, to_addr):
+        session = yield self.session_manager.create_session(
+            session_id,
+            from_addr=msisdn,
+            to_addr=to_addr
+        )
+        session_event = TransportUserMessage.SESSION_NEW
+        request_id = self._send_inbound(
+            session_id, session, session_event, None)
+        r = yield self.track_request(request_id, request, session)
+        returnValue(r)
+
+    @inlineCallbacks
+    def handle_session_resume(self, request, session_id, content):
+        # This is an existing session.
+        session = yield self.session_manager.load_session(session_id)
+        if not session:
+            returnValue(self.response_for_error())
+        session_event = TransportUserMessage.SESSION_RESUME
+        request_id = self._send_inbound(
+            session_id, session, session_event, content)
         r = yield self.track_request(request_id, request, session)
         returnValue(r)
 
@@ -172,19 +167,9 @@ class TrueAfricanUssdTransport(Transport):
         if not session:
             returnValue(self.response_for_error())
         session_event = TransportUserMessage.SESSION_CLOSE
-        transport_metadata = {'session_id': session_id}
-        self.publish_message(
-            message_id=self.generate_message_id(),
-            content=None,
-            to_addr=session['to_addr'],
-            from_addr=session['from_addr'],
-            session_event=session_event,
-            transport_name=self.transport_name,
-            transport_type=self.TRANSPORT_TYPE,
-            transport_metadata=transport_metadata,
-        )
         # send a response immediately, and don't (n)ack
         # since this is not application-initiated
+        self._send_inbound(session_id, session, session_event, None)
         response = {}
         returnValue(response)
 
@@ -281,32 +266,18 @@ Request = collections.namedtuple('Request', ['deferred',
 
 
 class XmlRpcResource(xmlrpc.XMLRPC):
+    def __init__(self, transport):
+        xmlrpc.XMLRPC.__init__(self, allowNone=True, useDateTime=False)
+        self.putSubHandler("USSD", USSDXmlRpcResource(transport))
 
+
+class USSDXmlRpcResource(xmlrpc.XMLRPC):
     def __init__(self, transport):
         xmlrpc.XMLRPC.__init__(self, allowNone=True, useDateTime=False)
         self.transport = transport
-        self._handlers = {
-            "USSD.INIT": self.ussd_session_init,
-            "USSD.CONT": self.ussd_session_cont,
-            "USSD.END": self.ussd_session_end,
-        }
-
-    def lookupProcedure(self, procedurePath):
-        try:
-            return self._handlers[procedurePath]
-        except KeyError:
-            raise xmlrpc.NoSuchFunction(
-                self.NOT_FOUND,
-                "Procedure '%s' not found" % procedurePath
-            )
-
-    def listProcedures(self):
-        return ['ussd_session_init',
-                'ussd_session_cont',
-                'ussd_session_end']
 
     @xmlrpc.withRequest
-    def ussd_session_init(self, request, session_data):
+    def xmlrpc_INIT(self, request, session_data):
         """ handler for USSD.INIT """
         msisdn = session_data['msisdn']
         to_addr = session_data['shortcode']
@@ -317,7 +288,7 @@ class XmlRpcResource(xmlrpc.XMLRPC):
                                                  to_addr)
 
     @xmlrpc.withRequest
-    def ussd_session_cont(self, request, session_data):
+    def xmlrpc_CONT(self, request, session_data):
         """ handler for USSD.CONT """
         session_id = session_data['session']
         content = session_data['response']
@@ -326,7 +297,7 @@ class XmlRpcResource(xmlrpc.XMLRPC):
                                                     content)
 
     @xmlrpc.withRequest
-    def ussd_session_end(self, request, session_data):
+    def xmlrpc_END(self, request, session_data):
         """ handler for USSD.END """
         session_id = session_data['session']
         return self.transport.handle_session_end(request,
