@@ -47,7 +47,6 @@ class TrueAfricanUssdTransport(Transport):
     CONFIG_CLASS = TrueAfricanUssdTransportConfig
 
     TRANSPORT_TYPE = 'ussd'
-    SESSION_KEY_PREFIX = 'vumi:transport:trueafrican:ussd'
 
     SESSION_STATE_MAP = {
         TransportUserMessage.SESSION_NONE: 'cont',
@@ -63,7 +62,7 @@ class TrueAfricanUssdTransport(Transport):
         config = self.get_static_config()
 
         # Session handling
-        key_prefix = "%s:%s" % (self.SESSION_KEY_PREFIX, self.transport_name)
+        key_prefix = "trueafrican:%s" % self.transport_name
         self.session_manager = yield SessionManager.from_redis_config(
             config.redis_manager,
             key_prefix,
