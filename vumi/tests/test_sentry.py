@@ -12,7 +12,7 @@ from twisted.web import http
 from twisted.python.failure import Failure
 from twisted.python.log import LogPublisher
 
-from vumi.tests.utils import MockHttpServer, LogCatcher, import_skip, mocking
+from vumi.tests.utils import MockHttpServer, LogCatcher, import_skip
 from vumi.sentry import (quiet_get_page, SentryLogObserver, vumi_raven_client,
                          SentryLoggerService)
 
@@ -171,16 +171,22 @@ class TestRavenUtilityFunctions(TestCase):
         return dsn
 
     def parse_call(self, sentry_call):
-        postdata = sentry_call.kwargs['postdata']
+        args, kwargs = sentry_call
+        postdata = kwargs['postdata']
         return json.loads(base64.b64decode(postdata).decode('zlib'))
 
     def test_vumi_raven_client_capture_message(self):
+        import vumi.sentry
         dsn = self.mk_sentry_dsn()
-        mock_page = mocking(quiet_get_page)
-        mock_page.return_value = Deferred()
-        with mock_page:
-            client = vumi_raven_client(dsn)
-            client.captureMessage("my message")
-        [sentry_call] = mock_page.history
+        call_history = []
+
+        def fake_get_page(*args, **kw):
+            call_history.append((args, kw))
+            return Deferred()
+
+        self.patch(vumi.sentry, 'quiet_get_page', fake_get_page)
+        client = vumi_raven_client(dsn)
+        client.captureMessage("my message")
+        [sentry_call] = call_history
         sentry_data = self.parse_call(sentry_call)
         self.assertEqual(sentry_data['message'], "my message")

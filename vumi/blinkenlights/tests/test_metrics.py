@@ -2,7 +2,7 @@ from twisted.trial.unittest import TestCase
 from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, Deferred
 from vumi.blinkenlights import metrics
-from vumi.tests.utils import get_stubbed_worker, get_stubbed_channel, mocking
+from vumi.tests.utils import get_stubbed_worker, get_stubbed_channel
 from vumi.message import Message
 from vumi.service import Worker
 
@@ -236,18 +236,26 @@ class TestCount(TestCase, CheckValuesMixin):
 
 
 class TestTimer(TestCase, CheckValuesMixin):
+
+    def patch_time(self, starting_value):
+        def fake_time():
+            return self._fake_time
+        self.patch(time, 'time', fake_time)
+        self._fake_time = starting_value
+
+    def incr_fake_time(self, value):
+        self._fake_time += value
+
     def test_start_and_stop(self):
         timer = metrics.Timer("foo")
         timer.manage("prefix.")
-        with mocking(time.time) as mockt:
-            mockt.return_value = 12345.0
-            timer.start()
-            try:
-                mockt.return_value += 0.1  # feign sleep
-            finally:
-                timer.stop()
-            self.check_poll_func(timer, 1, lambda x: 0.09 < x < 0.11)
-            self.check_poll(timer, [])
+
+        self.patch_time(12345.0)
+        timer.start()
+        self.incr_fake_time(0.1)
+        timer.stop()
+        self.check_poll_func(timer, 1, lambda x: 0.09 < x < 0.11)
+        self.check_poll(timer, [])
 
     def test_already_started(self):
         timer = metrics.Timer("foo")
@@ -258,24 +266,22 @@ class TestTimer(TestCase, CheckValuesMixin):
     def test_context_manager(self):
         timer = metrics.Timer("foo")
         timer.manage("prefix.")
-        with mocking(time.time) as mockt:
-            mockt.return_value = 12345.0
-            with timer:
-                mockt.return_value += 0.1  # feign sleep
-            self.check_poll_func(timer, 1, lambda x: 0.09 < x < 0.11)
-            self.check_poll(timer, [])
+        self.patch_time(12345.0)
+        with timer:
+            self.incr_fake_time(0.1)  # feign sleep
+        self.check_poll_func(timer, 1, lambda x: 0.09 < x < 0.11)
+        self.check_poll(timer, [])
 
     def test_accumulate_times(self):
         timer = metrics.Timer("foo")
         timer.manage("prefix.")
-        with mocking(time.time) as mockt:
-            mockt.return_value = 12345.0
-            with timer:
-                mockt.return_value += 0.1  # feign sleep
-            with timer:
-                mockt.return_value += 0.1  # feign sleep
-            self.check_poll_func(timer, 2, lambda x: 0.09 < x < 0.11)
-            self.check_poll(timer, [])
+        self.patch_time(12345.0)
+        with timer:
+            self.incr_fake_time(0.1)  # feign sleep
+        with timer:
+            self.incr_fake_time(0.1)  # feign sleep
+        self.check_poll_func(timer, 2, lambda x: 0.09 < x < 0.11)
+        self.check_poll(timer, [])
 
 
 class TestMetricsConsumer(TestCase):
