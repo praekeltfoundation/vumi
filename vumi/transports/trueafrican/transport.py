@@ -1,6 +1,8 @@
 # -*- test-case-name: vumi.transports.trueafrican.tests.test_transport -*-
 
-""" USSD Transport for TrueAfrican (Uganda) """
+"""
+USSD Transport for TrueAfrican (Uganda)
+"""
 
 import collections
 
@@ -14,77 +16,6 @@ from vumi.message import TransportUserMessage
 from vumi.transports.base import Transport
 from vumi.components.session import SessionManager
 from vumi.config import ConfigText, ConfigInt, ConfigDict
-
-# The transport keeps tracks of requests which are still waiting on a response
-# from an application worker. These requests are stored in a dict and are keyed
-# by the message_id of the transport message dispatched by the
-# transport in response to the request.
-#
-# For each logical request, we keep track of the following:
-#
-# deferred:     When the response is available, we fire this deferred
-# http_request: The Twisted HTTP request associated with the XML RPC request
-# session:      Reference to session data
-# timestamp:    The time the request was received. Used for timeouts.
-#
-Request = collections.namedtuple('Request', ['deferred',
-                                             'http_request',
-                                             'session',
-                                             'timestamp'])
-
-
-class XmlRpcResource(xmlrpc.XMLRPC):
-
-    def __init__(self, transport):
-        xmlrpc.XMLRPC.__init__(self, allowNone=True, useDateTime=False)
-        self.transport = transport
-        self._handlers = {
-            "USSD.INIT": self.ussd_session_init,
-            "USSD.CONT": self.ussd_session_cont,
-            "USSD.END": self.ussd_session_end,
-        }
-
-    def lookupProcedure(self, procedurePath):
-        try:
-            return self._handlers[procedurePath]
-        except KeyError:
-            raise xmlrpc.NoSuchFunction(
-                self.NOT_FOUND,
-                "Procedure '%s' not found" % procedurePath
-            )
-
-    def listProcedures(self):
-        return ['ussd_session_init',
-                'ussd_session_cont',
-                'ussd_session_end']
-
-    @xmlrpc.withRequest
-    def ussd_session_init(self, request, session_data):
-        """ handler for USSD.INIT """
-        msisdn = session_data['msisdn']
-        to_addr = session_data['shortcode']
-        session_id = session_data['session']
-        return self.transport.handle_session_new(request,
-                                                 session_id,
-                                                 msisdn,
-                                                 to_addr)
-
-    @xmlrpc.withRequest
-    def ussd_session_cont(self, request, session_data):
-        """ handler for USSD.CONT """
-        session_id = session_data['session']
-        content = session_data['response']
-        return self.transport.handle_session_resume(request,
-                                                    session_id,
-                                                    content)
-
-    @xmlrpc.withRequest
-    def ussd_session_end(self, request, session_data):
-        """ handler for USSD.END """
-        session_id = session_data['session']
-        return self.transport.handle_session_end(request,
-                                                 session_id)
-
 
 class TrueAfricanUssdTransportConfig(Transport.CONFIG_CLASS):
     """TrueAfrican USSD transport configuration."""
@@ -328,3 +259,74 @@ class TrueAfricanUssdTransport(Transport):
             sent_message_id=message_id,
             reason=str(failure)
         )
+
+
+# The transport keeps tracks of requests which are still waiting on a response
+# from an application worker. These requests are stored in a dict and are keyed
+# by the message_id of the transport message dispatched by the
+# transport in response to the request.
+#
+# For each logical request, we keep track of the following:
+#
+# deferred:     When the response is available, we fire this deferred
+# http_request: The Twisted HTTP request associated with the XML RPC request
+# session:      Reference to session data
+# timestamp:    The time the request was received. Used for timeouts.
+
+Request = collections.namedtuple('Request', ['deferred',
+                                             'http_request',
+                                             'session',
+                                             'timestamp'])
+
+
+class XmlRpcResource(xmlrpc.XMLRPC):
+
+    def __init__(self, transport):
+        xmlrpc.XMLRPC.__init__(self, allowNone=True, useDateTime=False)
+        self.transport = transport
+        self._handlers = {
+            "USSD.INIT": self.ussd_session_init,
+            "USSD.CONT": self.ussd_session_cont,
+            "USSD.END": self.ussd_session_end,
+        }
+
+    def lookupProcedure(self, procedurePath):
+        try:
+            return self._handlers[procedurePath]
+        except KeyError:
+            raise xmlrpc.NoSuchFunction(
+                self.NOT_FOUND,
+                "Procedure '%s' not found" % procedurePath
+            )
+
+    def listProcedures(self):
+        return ['ussd_session_init',
+                'ussd_session_cont',
+                'ussd_session_end']
+
+    @xmlrpc.withRequest
+    def ussd_session_init(self, request, session_data):
+        """ handler for USSD.INIT """
+        msisdn = session_data['msisdn']
+        to_addr = session_data['shortcode']
+        session_id = session_data['session']
+        return self.transport.handle_session_new(request,
+                                                 session_id,
+                                                 msisdn,
+                                                 to_addr)
+
+    @xmlrpc.withRequest
+    def ussd_session_cont(self, request, session_data):
+        """ handler for USSD.CONT """
+        session_id = session_data['session']
+        content = session_data['response']
+        return self.transport.handle_session_resume(request,
+                                                    session_id,
+                                                    content)
+
+    @xmlrpc.withRequest
+    def ussd_session_end(self, request, session_data):
+        """ handler for USSD.END """
+        session_id = session_data['session']
+        return self.transport.handle_session_end(request,
+                                                 session_id)
