@@ -7,6 +7,7 @@ from vumi.tests.utils import VumiWorkerTestCase, LogCatcher
 from vumi.worker import BaseWorker
 from vumi.message import TransportUserMessage
 from vumi.middleware.tests.utils import RecordingMiddleware
+from vumi.tests.helpers import MessageHelper
 
 
 class DummyWorker(BaseWorker):
@@ -23,6 +24,10 @@ class DummyWorker(BaseWorker):
 class BaseConnectorTestCase(VumiWorkerTestCase):
 
     connector_class = None
+
+    def setUp(self):
+        self.msg_helper = MessageHelper()
+        return super(BaseConnectorTestCase, self).setUp()
 
     @inlineCallbacks
     def mk_connector(self, worker=None, connector_name=None,
@@ -66,7 +71,7 @@ class TestBaseConnector(BaseConnectorTestCase):
         consumer.unpause()
         msgs = []
         conn._set_default_endpoint_handler('inbound', msgs.append)
-        msg = self.mkmsg_in()
+        msg = self.msg_helper.make_inbound("inbound")
         yield self.dispatch_inbound(msg, connector_name='foo')
         record = msgs[0].payload.pop('record')
         self.assertEqual(record,
@@ -81,7 +86,7 @@ class TestBaseConnector(BaseConnectorTestCase):
         conn = yield self.mk_connector(
             worker=worker, connector_name='foo', middlewares=middlewares)
         yield conn._setup_publisher('outbound')
-        msg = self.mkmsg_out()
+        msg = self.msg_helper.make_outbound("outbound")
         yield conn._publish_message('outbound', msg, 'dummy_endpoint')
         msgs = yield self.get_dispatched_outbound(connector_name='foo')
         record = msgs[0].payload.pop('record')
@@ -149,7 +154,7 @@ class TestBaseConnector(BaseConnectorTestCase):
         consumer.unpause()
         msgs = []
         conn._set_endpoint_handler('inbound', msgs.append, 'dummy_endpoint')
-        msg = self.mkmsg_in()
+        msg = self.msg_helper.make_inbound("inbound")
         msg.set_routing_endpoint('dummy_endpoint')
         yield self.dispatch_inbound(msg, connector_name='foo')
         self.assertEqual(msgs, [msg])
@@ -160,7 +165,7 @@ class TestBaseConnector(BaseConnectorTestCase):
         consumer.unpause()
         msgs = []
         conn._set_endpoint_handler('inbound', msgs.append, None)
-        msg = self.mkmsg_in()
+        msg = self.msg_helper.make_inbound("inbound")
         yield self.dispatch_inbound(msg, connector_name='foo')
         self.assertEqual(msgs, [msg])
 
@@ -170,7 +175,7 @@ class TestBaseConnector(BaseConnectorTestCase):
         consumer.unpause()
         msgs = []
         conn._set_default_endpoint_handler('inbound', msgs.append)
-        msg = self.mkmsg_in()
+        msg = self.msg_helper.make_inbound("inbound")
         yield self.dispatch_inbound(msg, connector_name='foo')
         self.assertEqual(msgs, [msg])
 
@@ -178,7 +183,7 @@ class TestBaseConnector(BaseConnectorTestCase):
     def test_publish_message_with_endpoint(self):
         conn = yield self.mk_connector(connector_name='foo')
         yield conn._setup_publisher('outbound')
-        msg = self.mkmsg_out()
+        msg = self.msg_helper.make_outbound("outbound")
         yield conn._publish_message('outbound', msg, 'dummy_endpoint')
         msgs = yield self.get_dispatched_outbound(connector_name='foo')
         self.assertEqual(msgs, [msg])
@@ -195,18 +200,18 @@ class TestReceiveInboundConnector(BaseConnectorTestCase):
         conn.unpause()
 
         with LogCatcher() as lc:
-            msg = self.mkmsg_in()
+            msg = self.msg_helper.make_inbound("inbound")
             yield self.dispatch_inbound(msg, connector_name='foo')
             [msg_log] = lc.messages()
             self.assertTrue(msg_log.startswith("No inbound handler for 'foo'"))
 
         with LogCatcher() as lc:
-            event = self.mkmsg_ack()
+            event = self.msg_helper.make_ack()
             yield self.dispatch_event(event, connector_name='foo')
             [event_log] = lc.messages()
             self.assertTrue(event_log.startswith("No event handler for 'foo'"))
 
-        msg = self.mkmsg_out()
+        msg = self.msg_helper.make_outbound("outbound")
         yield conn.publish_outbound(msg)
         msgs = yield self.get_dispatched_outbound(connector_name='foo')
         self.assertEqual(msgs, [msg])
@@ -215,7 +220,8 @@ class TestReceiveInboundConnector(BaseConnectorTestCase):
     def test_default_inbound_handler(self):
         conn = yield self.mk_connector(connector_name='foo', setup=True)
         with LogCatcher() as lc:
-            conn.default_inbound_handler(self.mkmsg_in())
+            conn.default_inbound_handler(
+                self.msg_helper.make_inbound("inbound"))
             [log] = lc.messages()
             self.assertTrue(log.startswith("No inbound handler for 'foo'"))
 
@@ -223,7 +229,7 @@ class TestReceiveInboundConnector(BaseConnectorTestCase):
     def test_default_event_handler(self):
         conn = yield self.mk_connector(connector_name='foo', setup=True)
         with LogCatcher() as lc:
-            conn.default_event_handler(self.mkmsg_ack())
+            conn.default_event_handler(self.msg_helper.make_ack())
             [log] = lc.messages()
             self.assertTrue(log.startswith("No event handler for 'foo'"))
 
@@ -233,7 +239,7 @@ class TestReceiveInboundConnector(BaseConnectorTestCase):
         conn = yield self.mk_connector(connector_name='foo', setup=True)
         conn.unpause()
         conn.set_inbound_handler(msgs.append)
-        msg = self.mkmsg_in()
+        msg = self.msg_helper.make_inbound("inbound")
         yield self.dispatch_inbound(msg, connector_name='foo')
         self.assertEqual(msgs, [msg])
 
@@ -243,7 +249,7 @@ class TestReceiveInboundConnector(BaseConnectorTestCase):
         conn = yield self.mk_connector(connector_name='foo', setup=True)
         conn.unpause()
         conn.set_default_inbound_handler(msgs.append)
-        msg = self.mkmsg_in()
+        msg = self.msg_helper.make_inbound("inbound")
         yield self.dispatch_inbound(msg, connector_name='foo')
         self.assertEqual(msgs, [msg])
 
@@ -253,7 +259,7 @@ class TestReceiveInboundConnector(BaseConnectorTestCase):
         conn = yield self.mk_connector(connector_name='foo', setup=True)
         conn.unpause()
         conn.set_event_handler(msgs.append)
-        msg = self.mkmsg_ack()
+        msg = self.msg_helper.make_ack()
         yield self.dispatch_event(msg, connector_name='foo')
         self.assertEqual(msgs, [msg])
 
@@ -263,14 +269,14 @@ class TestReceiveInboundConnector(BaseConnectorTestCase):
         conn = yield self.mk_connector(connector_name='foo', setup=True)
         conn.unpause()
         conn.set_default_event_handler(msgs.append)
-        msg = self.mkmsg_ack()
+        msg = self.msg_helper.make_ack()
         yield self.dispatch_event(msg, connector_name='foo')
         self.assertEqual(msgs, [msg])
 
     @inlineCallbacks
     def test_publish_outbound(self):
         conn = yield self.mk_connector(connector_name='foo', setup=True)
-        msg = self.mkmsg_out()
+        msg = self.msg_helper.make_outbound("outbound")
         yield conn.publish_outbound(msg)
         msgs = yield self.get_dispatched_outbound(connector_name='foo')
         self.assertEqual(msgs, [msg])
@@ -283,7 +289,7 @@ class TestReceiveInboundConnector(BaseConnectorTestCase):
         conn = yield self.mk_connector(connector_name='foo', setup=True)
         conn.unpause()
         conn.set_default_inbound_handler(im_handler)
-        msg = self.mkmsg_in()
+        msg = self.msg_helper.make_inbound("inbound")
         with LogCatcher() as lc:
             yield self.dispatch_inbound(msg, connector_name='foo')
             [log] = lc.messages()
@@ -302,17 +308,17 @@ class TestReceiveOutboundConnector(BaseConnectorTestCase):
         conn.unpause()
 
         with LogCatcher() as lc:
-            msg = self.mkmsg_out()
+            msg = self.msg_helper.make_outbound("outbound")
             yield self.dispatch_outbound(msg, connector_name='foo')
             [log] = lc.messages()
             self.assertTrue(log.startswith("No outbound handler for 'foo'"))
 
-        msg = self.mkmsg_in()
+        msg = self.msg_helper.make_inbound("inbound")
         yield conn.publish_inbound(msg)
         msgs = yield self.get_dispatched_inbound(connector_name='foo')
         self.assertEqual(msgs, [msg])
 
-        msg = self.mkmsg_ack()
+        msg = self.msg_helper.make_ack()
         yield conn.publish_event(msg)
         msgs = yield self.get_dispatched_events(connector_name='foo')
         self.assertEqual(msgs, [msg])
@@ -321,7 +327,8 @@ class TestReceiveOutboundConnector(BaseConnectorTestCase):
     def test_default_outbound_handler(self):
         conn = yield self.mk_connector(connector_name='foo', setup=True)
         with LogCatcher() as lc:
-            conn.default_outbound_handler(self.mkmsg_out())
+            conn.default_outbound_handler(
+                self.msg_helper.make_outbound("outbound"))
             [log] = lc.messages()
             self.assertTrue(log.startswith("No outbound handler for 'foo'"))
 
@@ -331,7 +338,7 @@ class TestReceiveOutboundConnector(BaseConnectorTestCase):
         conn = yield self.mk_connector(connector_name='foo', setup=True)
         conn.unpause()
         conn.set_outbound_handler(msgs.append)
-        msg = self.mkmsg_out()
+        msg = self.msg_helper.make_outbound("outbound")
         yield self.dispatch_outbound(msg, connector_name='foo')
         self.assertEqual(msgs, [msg])
 
@@ -341,14 +348,14 @@ class TestReceiveOutboundConnector(BaseConnectorTestCase):
         conn = yield self.mk_connector(connector_name='foo', setup=True)
         conn.unpause()
         conn.set_default_outbound_handler(msgs.append)
-        msg = self.mkmsg_out()
+        msg = self.msg_helper.make_outbound("outbound")
         yield self.dispatch_outbound(msg, connector_name='foo')
         self.assertEqual(msgs, [msg])
 
     @inlineCallbacks
     def test_publish_inbound(self):
         conn = yield self.mk_connector(connector_name='foo', setup=True)
-        msg = self.mkmsg_in()
+        msg = self.msg_helper.make_inbound("inbound")
         yield conn.publish_inbound(msg)
         msgs = yield self.get_dispatched_inbound(connector_name='foo')
         self.assertEqual(msgs, [msg])
@@ -356,7 +363,7 @@ class TestReceiveOutboundConnector(BaseConnectorTestCase):
     @inlineCallbacks
     def test_publish_event(self):
         conn = yield self.mk_connector(connector_name='foo', setup=True)
-        msg = self.mkmsg_ack()
+        msg = self.msg_helper.make_ack()
         yield conn.publish_event(msg)
         msgs = yield self.get_dispatched_events(connector_name='foo')
         self.assertEqual(msgs, [msg])
@@ -369,7 +376,7 @@ class TestReceiveOutboundConnector(BaseConnectorTestCase):
         conn = yield self.mk_connector(connector_name='foo', setup=True)
         conn.unpause()
         conn.set_default_outbound_handler(im_handler)
-        msg = self.mkmsg_in()
+        msg = self.msg_helper.make_inbound("inbound")
         with LogCatcher() as lc:
             yield self.dispatch_outbound(msg, connector_name='foo')
             [log] = lc.messages()

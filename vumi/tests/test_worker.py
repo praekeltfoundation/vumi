@@ -5,6 +5,7 @@ from vumi.worker import BaseConfig, BaseWorker
 from vumi.connectors import ReceiveInboundConnector, ReceiveOutboundConnector
 from vumi.tests.utils import VumiWorkerTestCase, LogCatcher, get_stubbed_worker
 from vumi.middleware.base import BaseMiddleware
+from vumi.tests.helpers import MessageHelper
 
 
 class DummyWorker(BaseWorker):
@@ -57,6 +58,7 @@ class TestBaseWorker(VumiWorkerTestCase):
     def setUp(self):
         yield super(TestBaseWorker, self).setUp()
         self.worker = yield self.get_worker({}, DummyWorker, False)
+        self.msg_helper = MessageHelper()
 
     @inlineCallbacks
     def test_start_worker(self):
@@ -147,7 +149,7 @@ class TestBaseWorker(VumiWorkerTestCase):
 
     @inlineCallbacks
     def test_get_config(self):
-        msg = self.mkmsg_in()
+        msg = self.msg_helper.make_inbound("inbound")
         cfg = yield self.worker.get_config(msg)
         self.assertEqual([f.name for f in cfg.fields], ['amqp_prefetch_count'])
         self.assertEqual(cfg.amqp_prefetch_count, 20)
@@ -220,7 +222,7 @@ class TestBaseWorker(VumiWorkerTestCase):
         connector = yield self.worker.setup_ri_connector('foo')
         connector.set_default_inbound_handler(handler)
         connector.unpause()
-        self.dispatch_inbound(self.mkmsg_in(), 'foo')
+        self.dispatch_inbound(self.msg_helper.make_inbound("inbound"), 'foo')
 
         yield handler_wait
         d = self.worker.pause_connectors()
