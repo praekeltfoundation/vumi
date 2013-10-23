@@ -112,7 +112,7 @@ class TrueAfricanUssdTransport(Transport):
         TransportUserMessage.SESSION_CLOSE: 'end',
     }
 
-    CHECK_FOR_TIMEOUT_PERIOD = 5
+    TIMEOUT_TASK_INTERVAL = 10
 
     @inlineCallbacks
     def setup_transport(self):
@@ -134,25 +134,26 @@ class TrueAfricanUssdTransport(Transport):
         )
 
         # request tracking
+        self.clock = self.get_clock()
         self._requests = {}
         self.request_timeout = config.request_timeout
-        self.request_timeout_task = LoopingCall(self.request_timeout_cb)
-        self.clock = self.get_clock()
-        self.request_timeout_task.clock = self.clock
-        self._deferred_for_task = self.request_timeout_task.start(
-            self.CHECK_FOR_TIMEOUT_PERIOD,
+        self.timeout_task = LoopingCall(self.request_timeout_cb)
+        self.timeout_task.clock = self.clock
+        self.timeout_task_d = self.timeout_task.start(
+            self.TIMEOUT_TASK_INTERVAL,
             now=False
         )
-        self._deferred_for_task.addErrback(
-            lambda f: log.err(f, "Request expiration handler failed")
+        self.timeout_task_d.addErrback(
+            log.err,
+            "Request timeout handler failed"
         )
 
     @inlineCallbacks
     def teardown_transport(self):
         yield self.web_resource.loseConnection()
-        if self.request_timeout_task.running:
-            self.request_timeout_task.stop()
-            yield self._deferred_for_task
+        if self.timeout_task.running:
+            self.timeout_task.stop()
+            yield self.timeout_task_d
         yield self.session_manager.stop()
         yield super(TrueAfricanUssdTransport, self).teardown_transport()
 
