@@ -16,8 +16,7 @@ from twisted.internet.defer import DeferredQueue, inlineCallbacks, returnValue
 from twisted.python import log
 from twisted.python.monkey import MonkeyPatcher
 
-from vumi.utils import (vumi_resource_path, import_module, flatten_generator,
-                        LogFilterSite)
+from vumi.utils import vumi_resource_path, flatten_generator, LogFilterSite
 from vumi.service import get_spec, Worker, WorkerCreator
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.tests.fake_amqp import FakeAMQPBroker, FakeAMQClient
