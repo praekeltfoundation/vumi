@@ -16,8 +16,7 @@ from twisted.internet.defer import DeferredQueue, inlineCallbacks, returnValue
 from twisted.python import log
 from twisted.python.monkey import MonkeyPatcher
 
-from vumi.utils import (vumi_resource_path, import_module, flatten_generator,
-                        LogFilterSite)
+from vumi.utils import vumi_resource_path, flatten_generator, LogFilterSite
 from vumi.service import get_spec, Worker, WorkerCreator
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.tests.fake_amqp import FakeAMQPBroker, FakeAMQClient
@@ -55,54 +54,6 @@ class RegexMatcher(object):
 
     def __eq__(self, other):
         return self.regex.match(other)
-
-
-class Mocking(object):
-
-    class HistoryItem(object):
-        def __init__(self, args, kwargs):
-            self.args = args
-            self.kwargs = kwargs
-
-        def __repr__(self):
-            return '<%r object at %r [args: %r, kw: %r]>' % (
-                self.__class__.__name__, id(self), self.args, self.kwargs)
-
-    def __init__(self, function):
-        """Mock a function"""
-        self.function = function
-        self.called = 0
-        self.history = []
-        self.return_value = None
-
-    def __enter__(self):
-        """Overwrite whatever module the function is part of"""
-        self.mod = import_module(self.function.__module__)
-        setattr(self.mod, self.function.__name__, self)
-        return self
-
-    def __exit__(self, *exc_info):
-        """Reset to whatever the function was originally when done"""
-        setattr(self.mod, self.function.__name__, self.function)
-
-    def __call__(self, *args, **kwargs):
-        """Return the return value when called, store the args & kwargs
-        for testing later, called is a counter and evaluates to True
-        if ever called."""
-        self.args = args
-        self.kwargs = kwargs
-        self.called += 1
-        self.history.append(self.HistoryItem(args, kwargs))
-        return self.return_value
-
-    def to_return(self, *args):
-        """Specify the return value"""
-        self.return_value = args if len(args) > 1 else list(args).pop()
-        return self
-
-
-def mocking(fn):
-    return Mocking(fn)
 
 
 def fake_amq_message(dictionary, delivery_tag='delivery_tag'):

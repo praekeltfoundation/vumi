@@ -1,7 +1,7 @@
 from twisted.trial.unittest import TestCase
 
 from vumi.service import Worker
-from vumi.tests.utils import get_stubbed_worker, Mocking, LogCatcher
+from vumi.tests.utils import get_stubbed_worker, LogCatcher
 from vumi.tests.fake_amqp import FakeAMQClient
 from vumi import log
 
@@ -9,18 +9,6 @@ from vumi import log
 class ToyWorker(Worker):
     def poke(self):
         return "poke"
-
-
-class MockingHistoryItemTestCase(TestCase):
-    def test_basic_item(self):
-        item = Mocking.HistoryItem(("a", "b"), {"c": 1})
-        self.assertEqual(item.args, ("a", "b"))
-        self.assertEqual(item.kwargs, {"c": 1})
-
-    def test_repr(self):
-        item = Mocking.HistoryItem(("a", "b"), {"c": 1})
-        self.assertEqual(repr(item), "<'HistoryItem' object at %r"
-                         " [args: ('a', 'b'), kw: {'c': 1}]>" % id(item))
 
 
 class UtilsTestCase(TestCase):
