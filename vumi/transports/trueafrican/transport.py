@@ -120,36 +120,7 @@ class TrueAfricanUssdTransport(Transport):
                                              self.clock.seconds())
         return d
 
-    @inlineCallbacks
-    def handle_session_new(self, request, session_id, msisdn, to_addr):
-        session = yield self.session_manager.create_session(
-            session_id,
-            from_addr=msisdn,
-            to_addr=to_addr
-        )
-        session_event = TransportUserMessage.SESSION_NEW
-        transport_metadata = {'session_id': session_id}
-        request_id = self.generate_message_id()
-        self.publish_message(
-            message_id=request_id,
-            content=None,
-            to_addr=to_addr,
-            from_addr=msisdn,
-            session_event=session_event,
-            transport_name=self.transport_name,
-            transport_type=self.TRANSPORT_TYPE,
-            transport_metadata=transport_metadata,
-        )
-        r = yield self.track_request(request_id, request, session)
-        returnValue(r)
-
-    @inlineCallbacks
-    def handle_session_resume(self, request, session_id, content):
-        # This is an existing session.
-        session = yield self.session_manager.load_session(session_id)
-        if not session:
-            returnValue(self.response_for_error())
-        session_event = TransportUserMessage.SESSION_RESUME
+    def _send_inbound(self, session_id, session, session_event, content):
         transport_metadata = {'session_id': session_id}
         request_id = self.generate_message_id()
         self.publish_message(
@@ -162,6 +133,30 @@ class TrueAfricanUssdTransport(Transport):
             transport_type=self.TRANSPORT_TYPE,
             transport_metadata=transport_metadata,
         )
+        return request_id
+
+    @inlineCallbacks
+    def handle_session_new(self, request, session_id, msisdn, to_addr):
+        session = yield self.session_manager.create_session(
+            session_id,
+            from_addr=msisdn,
+            to_addr=to_addr
+        )
+        session_event = TransportUserMessage.SESSION_NEW
+        request_id = self._send_inbound(
+            session_id, session, session_event, None)
+        r = yield self.track_request(request_id, request, session)
+        returnValue(r)
+
+    @inlineCallbacks
+    def handle_session_resume(self, request, session_id, content):
+        # This is an existing session.
+        session = yield self.session_manager.load_session(session_id)
+        if not session:
+            returnValue(self.response_for_error())
+        session_event = TransportUserMessage.SESSION_RESUME
+        request_id = self._send_inbound(
+            session_id, session, session_event, content)
         r = yield self.track_request(request_id, request, session)
         returnValue(r)
 
@@ -171,19 +166,9 @@ class TrueAfricanUssdTransport(Transport):
         if not session:
             returnValue(self.response_for_error())
         session_event = TransportUserMessage.SESSION_CLOSE
-        transport_metadata = {'session_id': session_id}
-        self.publish_message(
-            message_id=self.generate_message_id(),
-            content=None,
-            to_addr=session['to_addr'],
-            from_addr=session['from_addr'],
-            session_event=session_event,
-            transport_name=self.transport_name,
-            transport_type=self.TRANSPORT_TYPE,
-            transport_metadata=transport_metadata,
-        )
         # send a response immediately, and don't (n)ack
         # since this is not application-initiated
+        self._send_inbound(session_id, session, session_event, None)
         response = {}
         returnValue(response)
 
