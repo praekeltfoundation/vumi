@@ -25,8 +25,8 @@ class TestTrueAfricanUssdTransport(TransportTestCase):
     def setUp(self):
         yield super(TestTrueAfricanUssdTransport, self).setUp()
         self.config = {
-            'server_hostname': '127.0.0.1',
-            'server_port': 0,
+            'interface': '127.0.0.1',
+            'port': 0,
             'request_timeout': 10,
         }
         self.clock = Clock()
@@ -248,12 +248,8 @@ class TestTrueAfricanUssdTransport(TransportTestCase):
         client = self.web_client()
 
         # initiate session
-        resp_d = client.callRemote(
-            'USSD.INIT',
-            {'session': '1',
-             'msisdn': '+27724385170',
-             'shortcode': '*23#'}
-        )
+        resp_d = client.callRemote('USSD.INIT', self.SESSION_INIT_BODY)
+
         [msg] = yield self.wait_for_dispatched_inbound(1)
         with LogCatcher(message='Timing out') as lc:
             self.assertTrue(msg['message_id'] in self.transport._requests)

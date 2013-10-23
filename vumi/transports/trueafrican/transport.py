@@ -15,7 +15,18 @@ from vumi.transports.base import Transport
 from vumi.components.session import SessionManager
 from vumi.config import ConfigText, ConfigInt, ConfigDict
 
-# A bag of info associated with an individual request
+# The transport keeps tracks of requests which are still waiting on a response
+# from an application worker. These requests are stored in a dict and are keyed
+# by the message_id of the transport message dispatched by the
+# transport in response to the request.
+#
+# For each logical request, we keep track of the following:
+#
+# deferred:     When the response is available, we fire this deferred
+# http_request: The Twisted HTTP request associated with the XML RPC request
+# session:      Reference to session data
+# timestamp:    The time the request was received. Used for timeouts.
+#
 Request = collections.namedtuple('Request', ['deferred',
                                              'http_request',
                                              'session',
@@ -78,12 +89,12 @@ class XmlRpcResource(xmlrpc.XMLRPC):
 class TrueAfricanUssdTransportConfig(Transport.CONFIG_CLASS):
     """TrueAfrican USSD transport configuration."""
 
-    server_hostname = ConfigText(
-        "Bind to this hostname",
-        required=True, static=True)
-    server_port = ConfigInt(
+    port = ConfigInt(
         "Bind to this port",
         required=True, static=True)
+    interface = ConfigText(
+        "Bind to this interface",
+        default='', static=True)
     redis_manager = ConfigDict(
         "Parameters to connect to Redis with",
         default={}, static=True)
@@ -129,8 +140,9 @@ class TrueAfricanUssdTransport(Transport):
 
         # XMLRPC Resource
         self.web_resource = reactor.listenTCP(
-            config.server_port,
-            server.Site(XmlRpcResource(self))
+            config.port,
+            server.Site(XmlRpcResource(self)),
+            interface=config.interface
         )
 
         # request tracking
