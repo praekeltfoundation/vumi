@@ -254,13 +254,15 @@ class TestTrueAfricanUssdTransport(TransportTestCase):
              'msisdn': '+27724385170',
              'shortcode': '*23#'}
         )
-        yield self.wait_for_dispatched_messages(1)
+        [msg] = yield self.wait_for_dispatched_inbound(1)
         with LogCatcher(message='Timing out') as lc:
+            self.assertTrue(msg['message_id'] in self.transport._requests)
             self.clock.advance(10.1)  # .1 second after timeout
-            resp = yield resp_d
+            self.assertFalse(msg['message_id'] in self.transport._requests)
             [warning] = lc.messages()
             self.assertEqual(warning,
                              'Timing out on response for +27724385170')
+            resp = yield resp_d
             self.assertEqual(
                 resp,
                 {
@@ -269,3 +271,17 @@ class TestTrueAfricanUssdTransport(TransportTestCase):
                     'type': 'end'
                 }
             )
+
+    @inlineCallbacks
+    def test_request_tracking(self):
+        """
+        Verify that the transport cleans up after finishing a request
+        """
+        client = self.web_client()
+        resp_d = client.callRemote('USSD.INIT', self.SESSION_INIT_BODY)
+
+        [msg] = yield self.wait_for_dispatched_inbound(1)
+        yield self.reply(msg, "pong")
+        self.assertTrue(msg['message_id'] in self.transport._requests)
+        yield resp_d
+        self.assertFalse(msg['message_id'] in self.transport._requests)
