@@ -4,11 +4,10 @@
 
 import collections
 
-from twisted.internet.defer import Deferred, waitForDeferred, returnValue, inlineCallbacks
+from twisted.internet.defer import Deferred, returnValue, inlineCallbacks
 from twisted.internet.task import LoopingCall
 from twisted.internet import reactor
 from twisted.web import xmlrpc, server
-from twisted.application import internet
 
 from vumi import log
 from vumi.message import TransportUserMessage
@@ -16,8 +15,11 @@ from vumi.transports.base import Transport
 from vumi.components.session import SessionManager
 from vumi.config import ConfigText, ConfigInt, ConfigDict
 
-
-Request = collections.namedtuple('Request', ['deferred', 'start_time'])
+# A bag of info associated with an individual request
+Request = collections.namedtuple('Request', ['deferred',
+                                             'http_request',
+                                             'session',
+                                             'timestamp'])
 
 
 class XmlRpcResource(xmlrpc.XMLRPC):
@@ -45,26 +47,32 @@ class XmlRpcResource(xmlrpc.XMLRPC):
                 'ussd_session_cont',
                 'ussd_session_end']
 
-    def ussd_session_init(self, session_data):
+    @xmlrpc.withRequest
+    def ussd_session_init(self, request, session_data):
         """ handler for USSD.INIT """
         msisdn = session_data['msisdn']
         to_addr = session_data['shortcode']
         session_id = session_data['session']
-        return self.transport.handle_session_new(session_id,
+        return self.transport.handle_session_new(request,
+                                                 session_id,
                                                  msisdn,
                                                  to_addr)
 
-    def ussd_session_cont(self, session_data):
+    @xmlrpc.withRequest
+    def ussd_session_cont(self, request, session_data):
         """ handler for USSD.CONT """
         session_id = session_data['session']
         content = session_data['response']
-        return self.transport.handle_session_resume(session_id,
+        return self.transport.handle_session_resume(request,
+                                                    session_id,
                                                     content)
 
-    def ussd_session_end(self, session_data):
+    @xmlrpc.withRequest
+    def ussd_session_end(self, request, session_data):
         """ handler for USSD.END """
         session_id = session_data['session']
-        return self.transport.handle_session_end(session_id)
+        return self.transport.handle_session_end(request,
+                                                 session_id)
 
 
 class TrueAfricanUssdTransportConfig(Transport.CONFIG_CLASS):
@@ -129,7 +137,8 @@ class TrueAfricanUssdTransport(Transport):
         self._requests = {}
         self.request_timeout = config.request_timeout
         self.request_timeout_task = LoopingCall(self.request_timeout_cb)
-        self.request_timeout_task.clock = self.get_clock()
+        self.clock = self.get_clock()
+        self.request_timeout_task.clock = self.clock
         self._deferred_for_task = self.request_timeout_task.start(
             self.CHECK_FOR_TIMEOUT_PERIOD,
             now=False
@@ -155,18 +164,21 @@ class TrueAfricanUssdTransport(Transport):
 
     def request_timeout_cb(self):
         for request_id, request in self._requests.items():
-            start_time = request.start_time
-            if start_time < self.get_clock().seconds() - self.request_timeout:
-                self.finish_expired_request(request_id)
+            timestamp = request.timestamp
+            if timestamp < self.clock.seconds() - self.request_timeout:
+                self.finish_expired_request(request_id, request)
 
-    def track_request(self, request_id):
+    def track_request(self, request_id, http_request, session):
         d = Deferred()
-        self._requests[request_id] = Request(d, self.get_clock().seconds())
+        self._requests[request_id] = Request(d,
+                                             http_request,
+                                             session,
+                                             self.clock.seconds())
         return d
 
     @inlineCallbacks
-    def handle_session_new(self, session_id, msisdn, to_addr):
-        yield self.session_manager.create_session(
+    def handle_session_new(self, request, session_id, msisdn, to_addr):
+        session = yield self.session_manager.create_session(
             session_id,
             from_addr=msisdn,
             to_addr=to_addr
@@ -184,11 +196,11 @@ class TrueAfricanUssdTransport(Transport):
             transport_type=self.TRANSPORT_TYPE,
             transport_metadata=transport_metadata,
         )
-        r = yield self.track_request(request_id)
+        r = yield self.track_request(request_id, request, session)
         returnValue(r)
 
     @inlineCallbacks
-    def handle_session_resume(self, session_id, content):
+    def handle_session_resume(self, request, session_id, content):
         # This is an existing session.
         session = yield self.session_manager.load_session(session_id)
         if not session:
@@ -206,11 +218,11 @@ class TrueAfricanUssdTransport(Transport):
             transport_type=self.TRANSPORT_TYPE,
             transport_metadata=transport_metadata,
         )
-        r = yield self.track_request(request_id)
+        r = yield self.track_request(request_id, request, session)
         returnValue(r)
 
     @inlineCallbacks
-    def handle_session_end(self, session_id):
+    def handle_session_end(self, request, session_id):
         session = yield self.session_manager.load_session(session_id)
         if not session:
             returnValue(self.response_for_error())
@@ -228,9 +240,7 @@ class TrueAfricanUssdTransport(Transport):
         )
         # send a response immediately, and don't (n)ack
         # since this is not application-initiated
-        response = {
-            'status': 'OK',
-        }
+        response = {}
         returnValue(response)
 
     def handle_outbound_message(self, message):
@@ -244,7 +254,6 @@ class TrueAfricanUssdTransport(Transport):
                 reason="Missing in_reply_to, content or session_id fields"
             )
         response = {
-            'status': 'OK',
             'session': session_id,
             'type': self.SESSION_STATE_MAP[message['session_event']],
             'message': content
@@ -261,9 +270,7 @@ class TrueAfricanUssdTransport(Transport):
         Generic response for abnormal server side errors.
         """
         response = {
-            'status': 'ERROR',
-            'message': ('We encountered an error processing '
-                        'this request'),
+            'message': 'We encountered an error while processing your message',
             'type': 'end'
         }
         return response
@@ -273,13 +280,20 @@ class TrueAfricanUssdTransport(Transport):
         if request is None:
             # send a nack back, indicating that the original request had
             # timed out before the outbound message reached us.
-            self.publish_nack(message_id, message_id,
-                              "Failed to send outbound message %s: "
-                              "Exceeded request timeout")
+            self.publish_nack(
+                user_message_id=message_id,
+                sent_message_id=message_id,
+                reason='Exceeded request timeout'
+            )
         else:
             del self._requests[request_id]
-            request.deferred.addCallbacks(
-                lambda r: self._finish_success_cb(r, message_id),
+            # (n)ack publishing.
+            #
+            # Add a callback and errback, either of which will be invoked
+            # depending on whether the response was written to the client
+            # successfully or not
+            request.http_request.notifyFinish().addCallbacks(
+                lambda _: self._finish_success_cb(message_id),
                 lambda f: self._finish_failure_cb(f, message_id)
             )
             request.deferred.callback(response)
@@ -289,15 +303,15 @@ class TrueAfricanUssdTransport(Transport):
         Called on requests that timed out.
         """
         del self._requests[request_id]
+        log.msg('Timing out on response for %s' % request.session['from_addr'])
         request.deferred.callback(self.response_for_error())
 
-    def _finish_success_cb(self, r, message_id):
+    def _finish_success_cb(self, message_id):
         self.publish_ack(message_id, message_id)
-        return r
 
     def _finish_failure_cb(self, failure, message_id):
-        failure_message = "Failed to send outbound message %s: %s" % (
-            message_id,
-            repr(failure)
+        self.publish_nack(
+            user_message_id=message_id,
+            sent_message_id=message_id,
+            reason=str(failure)
         )
-        self.publish_nack(message_id, message_id, failure_message)

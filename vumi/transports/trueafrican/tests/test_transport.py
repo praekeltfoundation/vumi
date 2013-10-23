@@ -1,10 +1,13 @@
-from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
+from twisted.internet.defer import inlineCallbacks, returnValue, Deferred, CancelledError
 from twisted.internet import reactor
+from twisted.internet.task import Clock
+from twisted.internet.error import ConnectionLost
 from twisted.web.xmlrpc import Proxy
 
 from vumi.transports.tests.utils import TransportTestCase
 from vumi.message import TransportUserMessage
 from vumi.transports.trueafrican.transport import TrueAfricanUssdTransport
+from vumi.tests.utils import LogCatcher
 
 
 class TestTrueAfricanUssdTransport(TransportTestCase):
@@ -13,13 +16,22 @@ class TestTrueAfricanUssdTransport(TransportTestCase):
     transport_name = 'trueafrican_ussd'
     transport_class = TrueAfricanUssdTransport
 
+    SESSION_INIT_BODY = {
+        'session': '1',
+        'msisdn': '+27724385170',
+        'shortcode': '*23#'
+    }
+
     @inlineCallbacks
     def setUp(self):
         yield super(TestTrueAfricanUssdTransport, self).setUp()
         self.config = {
             'server_hostname': '127.0.0.1',
             'server_port': 0,
+            'request_timeout': 10,
         }
+        self.clock = Clock()
+        self.patch(TrueAfricanUssdTransport, 'get_clock', lambda _: self.clock)
         self.transport = yield self.get_transport(self.config)
         self.service_url = self.get_service_url(self.transport)
 
@@ -30,7 +42,7 @@ class TestTrueAfricanUssdTransport(TransportTestCase):
         addr = transport.web_resource.getHost()
         return "http://%s:%s/" % (addr.host, addr.port)
 
-    def service_client(self):
+    def web_client(self):
         return Proxy(self.service_url)
 
     def reply_to_message(self, *args, **kw):
@@ -41,16 +53,18 @@ class TestTrueAfricanUssdTransport(TransportTestCase):
         d = self.wait_for_dispatched_messages(1)
         return d.addCallback(reply)
 
+    def reply(self, msg, *args, **kw):
+        msg_out = TransportUserMessage(**msg.payload).reply(*args, **kw)
+        self.dispatch(msg_out)
+        return msg_out
+
     @inlineCallbacks
-    def test_session_init(self):
-        client = self.service_client()
-        resp_d = client.callRemote(
-            'USSD.INIT',
-            {'session': '1',
-             'msisdn': '+27724385170',
-             'shortcode': '*23#'}
-        )
-        msg = yield self.reply_to_message("Oh Hai!")
+    def test_session_new(self):
+        client = self.web_client()
+        resp_d = client.callRemote('USSD.INIT', self.SESSION_INIT_BODY)
+
+        [msg] = yield self.wait_for_dispatched_inbound(1)
+        yield self.reply(msg, "Oh Hai!")
 
         # verify the transport -> application message
         self.assertEqual(msg['transport_name'], self.transport_name)
@@ -67,23 +81,20 @@ class TestTrueAfricanUssdTransport(TransportTestCase):
             {
                 'message': 'Oh Hai!',
                 'session': '1',
-                'status': 'OK',
                 'type': 'cont'
             }
         )
 
     @inlineCallbacks
     def test_session_resume(self):
-        client = self.service_client()
+        client = self.web_client()
 
         # initiate session
-        resp_d = client.callRemote(
-            'USSD.INIT',
-            {'session': '1',
-             'msisdn': '+27724385170',
-             'shortcode': '*23#'}
-        )
-        yield self.reply_to_message("ping")
+        resp_d = client.callRemote('USSD.INIT', self.SESSION_INIT_BODY)
+
+        [msg] = yield self.wait_for_dispatched_inbound(1)
+        yield self.reply(msg, "pong")
+
         yield resp_d
         yield self.clear_dispatched_messages()
 
@@ -93,8 +104,11 @@ class TestTrueAfricanUssdTransport(TransportTestCase):
             {'session': '1',
              'response': 'pong'}
         )
-        msg = yield self.reply_to_message("ping")
-        # verify the transport -> application message
+
+        [msg] = yield self.wait_for_dispatched_inbound(1)
+        yield self.reply(msg, "ping")
+
+        # verify the dispatched inbound message
         self.assertEqual(msg['transport_name'], self.transport_name)
         self.assertEqual(msg['transport_type'], "ussd")
         self.assertEqual(msg['session_event'],
@@ -109,23 +123,20 @@ class TestTrueAfricanUssdTransport(TransportTestCase):
             {
                 'message': 'ping',
                 'session': '1',
-                'status': 'OK',
                 'type': 'cont'
             }
         )
 
     @inlineCallbacks
     def test_session_end_user_initiated(self):
-        client = self.service_client()
+        client = self.web_client()
 
         # initiate session
-        resp_d = client.callRemote(
-            'USSD.INIT',
-            {'session': '1',
-             'msisdn': '+27724385170',
-             'shortcode': '*23#'}
-        )
-        yield self.reply_to_message("ping")
+        resp_d = client.callRemote('USSD.INIT', self.SESSION_INIT_BODY)
+
+        [msg] = yield self.wait_for_dispatched_inbound(1)
+        yield self.reply(msg, "ping")
+
         yield resp_d
         yield self.clear_dispatched_messages()
 
@@ -135,7 +146,7 @@ class TestTrueAfricanUssdTransport(TransportTestCase):
             {'session': '1'}
         )
 
-        [msg] = yield self.wait_for_dispatched_messages(1)
+        [msg] = yield self.wait_for_dispatched_inbound(1)
         self.assertEqual(msg['transport_name'], self.transport_name)
         self.assertEqual(msg['transport_type'], "ussd")
         self.assertEqual(msg['session_event'],
@@ -145,25 +156,17 @@ class TestTrueAfricanUssdTransport(TransportTestCase):
         self.assertEqual(msg['content'], None)
 
         resp = yield resp_d
-        self.assertEqual(
-            resp,
-            {
-                'status': 'OK',
-            }
-        )
+        self.assertEqual(resp, {})
 
     @inlineCallbacks
     def test_session_end_application_initiated(self):
-        client = self.service_client()
+        client = self.web_client()
 
         # initiate session
-        resp_d = client.callRemote(
-            'USSD.INIT',
-            {'session': '1',
-             'msisdn': '+27724385170',
-             'shortcode': '*23#'}
-        )
-        yield self.reply_to_message("ping")
+        resp_d = client.callRemote('USSD.INIT', self.SESSION_INIT_BODY)
+        [msg] = yield self.wait_for_dispatched_inbound(1)
+
+        yield self.reply(msg, "ping")
         yield resp_d
         yield self.clear_dispatched_messages()
 
@@ -173,10 +176,10 @@ class TestTrueAfricanUssdTransport(TransportTestCase):
             {'session': '1',
              'response': 'o rly?'}
         )
-        yield self.reply_to_message(
-            "kthxbye",
-            session_event=TransportUserMessage.SESSION_CLOSE
-        )
+
+        [msg] = yield self.wait_for_dispatched_inbound(1)
+        yield self.reply(msg, "kthxbye",
+                         session_event=TransportUserMessage.SESSION_CLOSE)
 
         resp = yield resp_d
         self.assertEqual(
@@ -184,13 +187,55 @@ class TestTrueAfricanUssdTransport(TransportTestCase):
             {
                 'message': 'kthxbye',
                 'session': '1',
-                'status': 'OK',
                 'type': 'end'
             }
         )
 
     @inlineCallbacks
-    def test_nack(self):
+    def test_ack_for_outbound_message(self):
+        client = self.web_client()
+
+        # initiate session
+        resp_d = client.callRemote('USSD.INIT', self.SESSION_INIT_BODY)
+
+        # send response
+        [msg] = yield self.wait_for_dispatched_inbound(1)
+        rep = yield self.reply(msg, "ping")
+        yield resp_d
+
+        [ack] = yield self.wait_for_dispatched_events(1)
+        self.assertEqual(ack['event_type'], 'ack')
+        self.assertEqual(ack['user_message_id'], rep['message_id'])
+        self.assertEqual(ack['sent_message_id'], rep['message_id'])
+
+    @inlineCallbacks
+    def test_nack_for_outbound_message(self):
+        client = self.web_client()
+
+        # initiate session
+        resp_d = client.callRemote('USSD.INIT', self.SESSION_INIT_BODY)
+
+        [msg] = yield self.wait_for_dispatched_messages(1)
+
+        # cancel the request and mute the resulting error.
+        request = self.transport._requests[msg['message_id']]
+        request.http_request.connectionLost(ConnectionLost())
+        resp_d.cancel()
+        resp_d.addErrback(lambda f: None)
+
+        # send response
+        tum = TransportUserMessage(**msg.payload)
+        rep = tum.reply("ping")
+
+        yield self.dispatch(rep)
+        [nack] = yield self.wait_for_dispatched_events(1)
+
+        self.assertEqual(nack['event_type'], 'nack')
+        self.assertEqual(nack['user_message_id'], rep['message_id'])
+        self.assertEqual(nack['sent_message_id'], rep['message_id'])
+
+    @inlineCallbacks
+    def test_nack_for_invalid_outbound_message(self):
         msg = self.mkmsg_out()
         yield self.dispatch(msg)
         [nack] = yield self.wait_for_dispatched_events(1)
@@ -198,3 +243,30 @@ class TestTrueAfricanUssdTransport(TransportTestCase):
         self.assertEqual(nack['sent_message_id'], msg['message_id'])
         self.assertEqual(nack['nack_reason'],
                          'Missing in_reply_to, content or session_id fields')
+
+    @inlineCallbacks
+    def test_timeout(self):
+        client = self.web_client()
+
+        # initiate session
+        resp_d = client.callRemote(
+            'USSD.INIT',
+            {'session': '1',
+             'msisdn': '+27724385170',
+             'shortcode': '*23#'}
+        )
+        yield self.wait_for_dispatched_messages(1)
+        with LogCatcher(message='Timing out') as lc:
+            self.clock.advance(10.1)  # .1 second after timeout
+            resp = yield resp_d
+            [warning] = lc.messages()
+            self.assertEqual(warning,
+                             'Timing out on response for +27724385170')
+            self.assertEqual(
+                resp,
+                {
+                    'message': ('We encountered an error while processing'
+                                ' your message'),
+                    'type': 'end'
+                }
+            )
