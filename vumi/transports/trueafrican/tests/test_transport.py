@@ -281,3 +281,37 @@ class TestTrueAfricanUssdTransport(TransportTestCase):
         self.assertTrue(msg['message_id'] in self.transport._requests)
         yield resp_d
         self.assertFalse(msg['message_id'] in self.transport._requests)
+
+    @inlineCallbacks
+    def test_missing_session(self):
+        """
+        Verify that the transport handles missing session data in a
+        graceful manner
+        """
+        client = self.web_client()
+        resp_d = client.callRemote('USSD.INIT', self.SESSION_INIT_BODY)
+
+        [msg] = yield self.wait_for_dispatched_inbound(1)
+        yield self.reply(msg, "pong")
+        yield resp_d
+        yield self.clear_dispatched_messages()
+
+        # simulate Redis falling over
+        yield self.transport.session_manager.redis._purge_all()
+
+        # resume
+        resp_d = client.callRemote(
+            'USSD.CONT',
+            {'session': '1',
+             'response': 'o rly?'}
+        )
+
+        resp = yield resp_d
+        self.assertEqual(
+            resp,
+            {
+                'message': ('We encountered an error while processing'
+                            ' your message'),
+                'type': 'end'
+            }
+        )
