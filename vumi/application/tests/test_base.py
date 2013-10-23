@@ -1,11 +1,10 @@
-import warnings
-
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.application.base import ApplicationWorker, SESSION_NEW, SESSION_CLOSE
 from vumi.message import TransportUserMessage, TransportEvent
-from vumi.tests.utils import get_stubbed_worker, LogCatcher
+from vumi.tests.utils import get_stubbed_worker
 from vumi.application.tests.utils import ApplicationTestCase
+from vumi.tests.helpers import MessageHelper
 
 
 class DummyApplicationWorker(ApplicationWorker):
@@ -63,6 +62,7 @@ class TestApplicationWorker(ApplicationTestCase):
         self.transport_name = 'test'
         self.config = {'transport_name': self.transport_name}
         self.worker = yield self.get_application(self.config)
+        self.msg_helper = MessageHelper(transport_name=self.transport_name)
 
     def assert_msgs_match(self, msgs, expected_msgs):
         for key in ['timestamp', 'message_id']:
@@ -79,11 +79,9 @@ class TestApplicationWorker(ApplicationTestCase):
     @inlineCallbacks
     def test_event_dispatch(self):
         events = [
-            ('ack', self.mkmsg_ack(sent_message_id='remote-id',
-                                   user_message_id='ack-uuid')),
-            ('nack', self.mkmsg_nack(user_message_id='nack-uuid')),
-            ('delivery_report', self.mkmsg_delivery(
-                                        user_message_id='dr-uuid')),
+            ('ack', self.msg_helper.make_ack()),
+            ('nack', self.msg_helper.make_nack()),
+            ('delivery_report', self.msg_helper.make_delivery_report()),
             ]
         for name, event in events:
             yield self.dispatch_event(event)
@@ -174,9 +172,9 @@ class TestApplicationWorker(ApplicationTestCase):
     def test_subclassing_api(self):
         worker = get_stubbed_worker(ApplicationWorker,
                                     {'transport_name': 'test'})
-        worker.consume_ack(self.mkmsg_ack())
-        worker.consume_nack(self.mkmsg_nack())
-        worker.consume_delivery_report(self.mkmsg_delivery())
+        worker.consume_ack(self.msg_helper.make_ack())
+        worker.consume_nack(self.msg_helper.make_nack())
+        worker.consume_delivery_report(self.msg_helper.make_delivery_report())
         worker.consume_unknown_event(FakeUserMessage())
         worker.consume_user_message(FakeUserMessage())
         worker.new_session(FakeUserMessage())
@@ -303,11 +301,16 @@ class TestApplicationMiddlewareHooks(ApplicationTestCase):
     }
 
     @inlineCallbacks
+    def setUp(self):
+        yield super(TestApplicationMiddlewareHooks, self).setUp()
+        self.msg_helper = MessageHelper(transport_name=self.transport_name)
+
+    @inlineCallbacks
     def test_middleware_for_inbound_messages(self):
         app = yield self.get_application(self.TEST_MIDDLEWARE_CONFIG)
         msgs = []
         app.consume_user_message = msgs.append
-        orig_msg = self.mkmsg_in()
+        orig_msg = self.msg_helper.make_inbound("hi")
         orig_msg['timestamp'] = 0
         yield self.dispatch(orig_msg)
         [msg] = msgs
@@ -321,7 +324,7 @@ class TestApplicationMiddlewareHooks(ApplicationTestCase):
         app = yield self.get_application(self.TEST_MIDDLEWARE_CONFIG)
         msgs = []
         app._event_handlers['ack'] = msgs.append
-        orig_msg = self.mkmsg_ack()
+        orig_msg = self.msg_helper.make_ack()
         orig_msg['event_id'] = 1234
         orig_msg['timestamp'] = 0
         yield self.dispatch_event(orig_msg)
@@ -334,7 +337,7 @@ class TestApplicationMiddlewareHooks(ApplicationTestCase):
     @inlineCallbacks
     def test_middleware_for_outbound_messages(self):
         app = yield self.get_application(self.TEST_MIDDLEWARE_CONFIG)
-        orig_msg = self.mkmsg_out()
+        orig_msg = self.msg_helper.make_inbound("hi")
         yield app.reply_to(orig_msg, 'Hello!')
         msgs = self.get_dispatched_messages()
         [msg] = msgs

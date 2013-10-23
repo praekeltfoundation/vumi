@@ -11,6 +11,7 @@ from vumi.tests.utils import TestResourceWorker, LogCatcher, get_stubbed_worker
 from vumi.application.rapidsms_relay import RapidSMSRelay, BadRequestError
 from vumi.utils import http_request_full, basic_auth_string, to_kwargs
 from vumi.message import TransportUserMessage, from_json
+from vumi.tests.helpers import MessageHelper
 
 
 class DummyRapidResource(Resource):
@@ -27,6 +28,11 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
 
     application_class = RapidSMSRelay
     path = '/test/resource/path'
+
+    @inlineCallbacks
+    def setUp(self):
+        yield super(RapidSMSRelayTestCase, self).setUp()
+        self.msg_helper = MessageHelper()
 
     @inlineCallbacks
     def setup_resource(self, callback=None, auth=None):
@@ -72,7 +78,7 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
             return 'OK'
 
         yield self.setup_resource(cb)
-        yield self.dispatch(self.mkmsg_in())
+        yield self.dispatch(self.msg_helper.make_inbound("hello world"))
         self.assertEqual([], self.get_dispatched_messages())
 
     @inlineCallbacks
@@ -83,7 +89,7 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
             return 'OK'
 
         yield self.setup_resource(cb)
-        yield self.dispatch(self.mkmsg_in(content=u'h\xc6llo'))
+        yield self.dispatch(self.msg_helper.make_inbound(u'h\xc6llo'))
         self.assertEqual([], self.get_dispatched_messages())
 
     @inlineCallbacks
@@ -98,7 +104,8 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
             return 'OK'
 
         yield self.setup_resource(cb)
-        yield self.dispatch(self.mkmsg_in())
+        yield self.dispatch(self.msg_helper.make_inbound(
+            "hello world", message_id="abc"))
         self.assertEqual([], self.get_dispatched_messages())
 
     @inlineCallbacks
@@ -108,15 +115,19 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
             return 'Not Authorized'
 
         yield self.setup_resource(cb)
-        yield self.dispatch(self.mkmsg_in())
+        yield self.dispatch(self.msg_helper.make_inbound("hi"))
         self.assertEqual([], self.get_dispatched_messages())
 
     @inlineCallbacks
     def test_rapidsms_relay_logs_events(self):
         yield self.setup_resource()
         with LogCatcher() as lc:
-            yield self.dispatch(self.mkmsg_delivery(), rkey=self.rkey('event'))
-            yield self.dispatch(self.mkmsg_ack(), rkey=self.rkey('event'))
+            msg = self.msg_helper.make_outbound("foo", message_id="abc")
+            yield self.dispatch(self.msg_helper.make_delivery_report(msg),
+                                rkey=self.rkey('event'))
+            msg = self.msg_helper.make_outbound("foo", message_id="1")
+            yield self.dispatch(self.msg_helper.make_ack(msg),
+                                rkey=self.rkey('event'))
             self.assertEqual(lc.messages(), [
                 "Delivery report received for message u'abc',"
                 " status u'delivered'",
@@ -181,8 +192,8 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
     def test_rapidsms_relay_reply(self):
         msg_id, to_addr = 'abc', '+1234'
         yield self.setup_resource(lambda r: 'OK')
-        yield self.dispatch(self.mkmsg_in(message_id=msg_id,
-                                          from_addr=to_addr))
+        yield self.dispatch(self.msg_helper.make_inbound(
+            "foo", message_id=msg_id, from_addr=to_addr))
         response = yield self._call_relay({
             'to_addr': [to_addr],
             'content': 'foo',

@@ -1,11 +1,14 @@
+from base64 import b64decode
+
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.web import http
+
 from vumi.application.tests.utils import ApplicationTestCase
 from vumi.tests.utils import TestResourceWorker, get_stubbed_worker
 from vumi.application.tests.test_http_relay_stubs import TestResource
 from vumi.application.http_relay import HTTPRelayApplication
 from vumi.message import TransportEvent
-from base64 import b64decode
+from vumi.tests.helpers import MessageHelper
 
 
 class HTTPRelayTestCase(ApplicationTestCase):
@@ -17,6 +20,7 @@ class HTTPRelayTestCase(ApplicationTestCase):
     def setUp(self):
         yield super(HTTPRelayTestCase, self).setUp()
         self.path = '/path'
+        self.msg_helper = MessageHelper()
 
     @inlineCallbacks
     def setup_resource_with_callback(self, callback):
@@ -53,7 +57,7 @@ class HTTPRelayTestCase(ApplicationTestCase):
     @inlineCallbacks
     def test_http_relay_success_with_no_reply(self):
         yield self.setup_resource(http.OK, '', {})
-        msg = self.mkmsg_in()
+        msg = self.msg_helper.make_inbound("hi")
         yield self.dispatch(msg)
         self.assertEqual([], self.get_dispatched_messages())
 
@@ -62,7 +66,7 @@ class HTTPRelayTestCase(ApplicationTestCase):
         yield self.setup_resource(http.OK, 'thanks!', {
             HTTPRelayApplication.reply_header: 'true',
         })
-        msg = self.mkmsg_in()
+        msg = self.msg_helper.make_inbound("hi")
         yield self.dispatch(msg)
         [response] = self.get_dispatched_messages()
         self.assertEqual(response['content'], 'thanks!')
@@ -73,13 +77,13 @@ class HTTPRelayTestCase(ApplicationTestCase):
         yield self.setup_resource(http.OK, 'thanks!', {
             HTTPRelayApplication.reply_header: 'untrue!',
         })
-        yield self.dispatch(self.mkmsg_in())
+        yield self.dispatch(self.msg_helper.make_inbound("hi"))
         self.assertEqual([], self.get_dispatched_messages())
 
     @inlineCallbacks
     def test_http_relay_success_with_bad_reply(self):
         yield self.setup_resource(http.NOT_FOUND, '', {})
-        yield self.dispatch(self.mkmsg_in())
+        yield self.dispatch(self.msg_helper.make_inbound("hi"))
         self.assertEqual([], self.get_dispatched_messages())
 
     @inlineCallbacks
@@ -102,7 +106,7 @@ class HTTPRelayTestCase(ApplicationTestCase):
             return 'thanks!'
 
         yield self.setup_resource_with_callback(cb)
-        yield self.dispatch(self.mkmsg_in())
+        yield self.dispatch(self.msg_helper.make_inbound("hi"))
         [msg] = self.get_dispatched_messages()
         self.assertEqual(msg['content'], 'thanks!')
 
@@ -113,7 +117,7 @@ class HTTPRelayTestCase(ApplicationTestCase):
             return 'Not Authorized'
 
         yield self.setup_resource_with_callback(cb)
-        yield self.dispatch(self.mkmsg_in())
+        yield self.dispatch(self.msg_helper.make_inbound("hi"))
         self.assertEqual([], self.get_dispatched_messages())
 
     @inlineCallbacks
@@ -125,7 +129,7 @@ class HTTPRelayTestCase(ApplicationTestCase):
             return ''
 
         yield self.setup_resource_with_callback(cb)
-        delivery_report = self.mkmsg_delivery()
+        delivery_report = self.msg_helper.make_delivery_report()
         yield self.dispatch(delivery_report, rkey=self.rkey('event'))
         self.assertEqual([], self.get_dispatched_messages())
         self.assertEqual([delivery_report], events)
