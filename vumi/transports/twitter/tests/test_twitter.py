@@ -5,6 +5,7 @@ from twisted.web import error
 from vumi.transports.twitter import TwitterTransport
 from vumi.transports.tests.utils import TransportTestCase
 from vumi.message import TransportUserMessage
+from vumi.tests.helpers import MessageHelper
 
 
 class Thing(object):
@@ -64,6 +65,7 @@ class TwitterTransportTestCase(TransportTestCase):
         self.transport = yield self.get_transport(self.config, start=False)
         self.transport._twitter_class = FakeTwitter
         yield self.transport.startWorker()
+        self.msg_helper = MessageHelper()
 
     @inlineCallbacks
     def test_handle_replies(self):
@@ -114,7 +116,7 @@ class TwitterTransportTestCase(TransportTestCase):
     @inlineCallbacks
     def test_nack(self):
         self.transport.twitter.raise_update_error = True
-        msg = self.mkmsg_out()
+        msg = self.msg_helper.make_outbound("outbound")
         yield self.dispatch(msg)
         [nack] = yield self.wait_for_dispatched_events(1)
         self.assertEqual(nack['user_message_id'], msg['message_id'])

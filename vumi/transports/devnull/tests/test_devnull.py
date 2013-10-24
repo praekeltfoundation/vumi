@@ -3,11 +3,13 @@ from twisted.internet.defer import inlineCallbacks
 from vumi.transports.tests.utils import TransportTestCase
 from vumi.transports.devnull import DevNullTransport
 from vumi.tests.utils import LogCatcher
+from vumi.tests.helpers import MessageHelper
 
 
 class DevNullTransportTestCase(TransportTestCase):
 
     transport_class = DevNullTransport
+    msg_helper = MessageHelper()
 
     @inlineCallbacks
     def test_outbound_logging(self):
@@ -16,7 +18,7 @@ class DevNullTransportTestCase(TransportTestCase):
             'failure_rate': 0,
             'reply_rate': 1,
         })
-        msg = self.mkmsg_out()
+        msg = self.msg_helper.make_outbound("outbound")
         with LogCatcher() as logger:
             yield self.dispatch(msg)
         log_msg = logger.messages()[0]
@@ -31,7 +33,7 @@ class DevNullTransportTestCase(TransportTestCase):
             'failure_rate': 0.2,
             'reply_rate': 0.8,
         })
-        msg = self.mkmsg_out()
+        msg = self.msg_helper.make_outbound("outbound")
         yield self.dispatch(msg)
         [ack, dr] = self.get_dispatched_events()
         self.assertEqual(ack['event_type'], 'ack')
@@ -44,7 +46,7 @@ class DevNullTransportTestCase(TransportTestCase):
             'failure_rate': 0.2,
             'reply_rate': 0.8,
         })
-        msg = self.mkmsg_out()
+        msg = self.msg_helper.make_outbound("outbound")
         yield self.dispatch(msg)
         [nack] = self.get_dispatched_events()
         self.assertEqual(nack['event_type'], 'nack')
@@ -57,7 +59,7 @@ class DevNullTransportTestCase(TransportTestCase):
             'reply_rate': 1,
         })
 
-        msg = self.mkmsg_out()
+        msg = self.msg_helper.make_outbound("outbound")
         yield self.dispatch(msg)
         [reply_msg] = self.get_dispatched_messages()
         self.assertEqual(msg['content'], reply_msg['content'])

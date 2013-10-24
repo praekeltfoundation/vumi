@@ -11,6 +11,7 @@ from vumi.message import TransportUserMessage
 from vumi.transports.telnet import (TelnetServerTransport,
                                     AddressedTelnetServerTransport)
 from vumi.transports.tests.utils import TransportTestCase
+from vumi.tests.helpers import MessageHelper
 
 
 NON_ASCII = u"öæł"
@@ -40,6 +41,7 @@ class BaseTelnetServerTransortTestCase(TransportTestCase):
         self.worker = yield self.get_transport({'telnet_port': 0})
         self.client = yield self.make_client()
         yield self.wait_for_client_start()
+        self.msg_helper = MessageHelper()
 
     @inlineCallbacks
     def tearDown(self):
@@ -146,7 +148,8 @@ class TelnetServerTransportTestCase(BaseTelnetServerTransortTestCase):
     @inlineCallbacks
     def test_outbound_send(self):
         [reg] = yield self.get_dispatched_messages()
-        msg = self.mkmsg_out(content="send_foo", to_addr=reg['from_addr'])
+        msg = self.msg_helper.make_outbound(
+            "send_foo", to_addr=reg['from_addr'])
         yield self.dispatch(msg)
         line = yield self.client.transport.protocol.queue.get()
         self.assertEqual(line, "send_foo")

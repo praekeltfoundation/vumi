@@ -9,11 +9,11 @@ from vumi.utils import http_request
 from vumi.transports.vodacom_messaging import (VodacomMessagingResponse,
     VodacomMessagingTransport)
 from vumi.message import TransportUserMessage
+from vumi.tests.helpers import MessageHelper
 
 
 class TestVodacomMessagingTransport(TransportTestCase):
 
-    timeout = 3
     transport_name = 'vodacom_messaging'
     transport_class = VodacomMessagingTransport
 
@@ -31,6 +31,7 @@ class TestVodacomMessagingTransport(TransportTestCase):
         }
         self.transport = yield self.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url().rstrip('/')
+        self.msg_helper = MessageHelper(transport_name=self.transport_name)
 
     @inlineCallbacks
     def test_inbound_new_continue(self):
@@ -133,7 +134,7 @@ class TestVodacomMessagingTransport(TransportTestCase):
 
     @inlineCallbacks
     def test_nack(self):
-        msg = self.mkmsg_out()
+        msg = self.msg_helper.make_outbound("outbound")
         yield self.dispatch(msg)
         [nack] = yield self.wait_for_dispatched_events(1)
         self.assertEqual(nack['user_message_id'], msg['message_id'])

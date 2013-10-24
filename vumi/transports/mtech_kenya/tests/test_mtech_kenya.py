@@ -9,6 +9,7 @@ from vumi.utils import http_request, http_request_full
 from vumi.tests.utils import MockHttpServer
 from vumi.transports.tests.utils import TransportTestCase
 from vumi.transports.mtech_kenya import MTechKenyaTransport
+from vumi.tests.helpers import MessageHelper
 
 
 class TestMTechKenyaTransport(TransportTestCase):
@@ -37,6 +38,7 @@ class TestMTechKenyaTransport(TransportTestCase):
         self.config.update(self.valid_creds)
         self.transport = yield self.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url()
+        self.msg_helper = MessageHelper(mobile_addr="2371234567")
 
     @inlineCallbacks
     def tearDown(self):
@@ -108,7 +110,7 @@ class TestMTechKenyaTransport(TransportTestCase):
 
     @inlineCallbacks
     def test_outbound(self):
-        msg = self.mkmsg_out(to_addr="2371234567")
+        msg = self.msg_helper.make_outbound("hi")
         yield self.dispatch(msg)
         req = yield self.cellulant_sms_calls.get()
         self.assertEqual(req.path, '/')
@@ -119,7 +121,7 @@ class TestMTechKenyaTransport(TransportTestCase):
             'messageID': [msg['message_id']],
             'shortCode': ['9292'],
             'MSISDN': ['2371234567'],
-            'MESSAGE': ['hello world'],
+            'MESSAGE': ['hi'],
         }, req.args)
         [ack] = yield self.wait_for_dispatched_events(1)
         self.assertEqual('ack', ack['event_type'])
@@ -127,7 +129,7 @@ class TestMTechKenyaTransport(TransportTestCase):
     @inlineCallbacks
     def test_outbound_bad_creds(self):
         self.valid_creds['mt_username'] = 'other_user'
-        msg = self.mkmsg_out(to_addr="2371234567")
+        msg = self.msg_helper.make_outbound("hi")
         yield self.dispatch(msg)
         req = yield self.cellulant_sms_calls.get()
         self.assertEqual(req.path, '/')
@@ -138,7 +140,7 @@ class TestMTechKenyaTransport(TransportTestCase):
             'messageID': [msg['message_id']],
             'shortCode': ['9292'],
             'MSISDN': ['2371234567'],
-            'MESSAGE': ['hello world'],
+            'MESSAGE': ['hi'],
         }, req.args)
         [nack] = yield self.wait_for_dispatched_events(1)
         self.assertEqual('nack', nack['event_type'])
@@ -146,7 +148,7 @@ class TestMTechKenyaTransport(TransportTestCase):
 
     @inlineCallbacks
     def test_outbound_bad_msisdn(self):
-        msg = self.mkmsg_out(to_addr="4471234567")
+        msg = self.msg_helper.make_outbound("hi", to_addr="4471234567")
         yield self.dispatch(msg)
         req = yield self.cellulant_sms_calls.get()
         self.assertEqual(req.path, '/')
@@ -157,7 +159,7 @@ class TestMTechKenyaTransport(TransportTestCase):
             'messageID': [msg['message_id']],
             'shortCode': ['9292'],
             'MSISDN': ['4471234567'],
-            'MESSAGE': ['hello world'],
+            'MESSAGE': ['hi'],
         }, req.args)
         [nack] = yield self.wait_for_dispatched_events(1)
         self.assertEqual('nack', nack['event_type'])
@@ -181,7 +183,7 @@ class TestMTechKenyaTransport(TransportTestCase):
 
     @inlineCallbacks
     def test_outbound_linkid(self):
-        msg = self.mkmsg_out(to_addr="2371234567", transport_metadata={
+        msg = self.msg_helper.make_outbound("hi", transport_metadata={
             'linkID': 'link123',
         })
         yield self.dispatch(msg)
@@ -194,7 +196,7 @@ class TestMTechKenyaTransport(TransportTestCase):
             'messageID': [msg['message_id']],
             'shortCode': ['9292'],
             'MSISDN': ['2371234567'],
-            'MESSAGE': ['hello world'],
+            'MESSAGE': ['hi'],
             'linkID': ['link123'],
         }, req.args)
         [ack] = yield self.wait_for_dispatched_events(1)

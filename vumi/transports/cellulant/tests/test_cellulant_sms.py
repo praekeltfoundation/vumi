@@ -9,6 +9,7 @@ from vumi.utils import http_request, http_request_full
 from vumi.tests.utils import MockHttpServer
 from vumi.transports.tests.utils import TransportTestCase
 from vumi.transports.cellulant import CellulantSmsTransport
+from vumi.tests.helpers import MessageHelper
 
 
 class TestCellulantSmsTransport(TransportTestCase):
@@ -42,6 +43,7 @@ class TestCellulantSmsTransport(TransportTestCase):
         }
         self.transport = yield self.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url()
+        self.msg_helper = MessageHelper(transport_name=self.transport_name)
 
     @inlineCallbacks
     def tearDown(self):
@@ -89,7 +91,8 @@ class TestCellulantSmsTransport(TransportTestCase):
 
     @inlineCallbacks
     def test_outbound(self):
-        yield self.dispatch(self.mkmsg_out(to_addr="2371234567"))
+        yield self.dispatch(self.msg_helper.make_outbound(
+            "hello world", to_addr="2371234567"))
         req = yield self.cellulant_sms_calls.get()
         self.assertEqual(req.path, '/')
         self.assertEqual(req.method, 'GET')
@@ -103,8 +106,8 @@ class TestCellulantSmsTransport(TransportTestCase):
 
     @inlineCallbacks
     def test_outbound_creds_selection(self):
-        yield self.dispatch(self.mkmsg_out(to_addr="2371234567",
-            from_addr='2371234567'))
+        yield self.dispatch(self.msg_helper.make_outbound(
+            "hello world", to_addr="2371234567", from_addr='2371234567'))
         req = yield self.cellulant_sms_calls.get()
         self.assertEqual(req.path, '/')
         self.assertEqual(req.method, 'GET')
@@ -116,8 +119,8 @@ class TestCellulantSmsTransport(TransportTestCase):
                 'message': ['hello world'],
                 }, req.args)
 
-        yield self.dispatch(self.mkmsg_out(to_addr="2371234567",
-            from_addr='9292'))
+        yield self.dispatch(self.msg_helper.make_outbound(
+            "hello world", to_addr="2371234567", from_addr='9292'))
         req = yield self.cellulant_sms_calls.get()
         self.assertEqual(req.path, '/')
         self.assertEqual(req.method, 'GET')
@@ -200,6 +203,7 @@ class TestAcksCellulantSmsTransport(TransportTestCase):
         }
         self.transport = yield self.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url()
+        self.msg_helper = MessageHelper(transport_name=self.transport_name)
 
     @inlineCallbacks
     def tearDown(self):
@@ -216,8 +220,8 @@ class TestAcksCellulantSmsTransport(TransportTestCase):
     @inlineCallbacks
     def mock_event(self, msg, nr_events):
         self.mock_response(msg)
-        yield self.dispatch(self.mkmsg_out(to_addr='2371234567',
-            message_id='id_%s' % (msg,)))
+        yield self.dispatch(self.msg_helper.make_outbound(
+            "foo", to_addr='2371234567', message_id='id_%s' % (msg,)))
         yield self.cellulant_sms_calls.get()
         events = yield self.wait_for_dispatched_events(nr_events)
         returnValue(events)

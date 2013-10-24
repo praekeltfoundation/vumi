@@ -8,6 +8,7 @@ from vumi.tests.utils import LogCatcher
 from vumi.transports.tests.test_base import TransportTestCase
 from vumi.transports.httprpc import HttpRpcTransport
 from vumi.message import TransportUserMessage
+from vumi.tests.helpers import MessageHelper
 
 
 class OkTransport(HttpRpcTransport):
@@ -46,6 +47,7 @@ class TestTransport(TransportTestCase):
             }
         self.transport = yield self.get_transport(config)
         self.transport_url = self.transport.get_transport_url()
+        self.msg_helper = MessageHelper()
 
     @inlineCallbacks
     def test_health(self):
@@ -71,7 +73,7 @@ class TestTransport(TransportTestCase):
 
     @inlineCallbacks
     def test_nack(self):
-        msg = self.mkmsg_out()
+        msg = self.msg_helper.make_outbound("outbound")
         self.dispatch(msg)
         [nack] = yield self.wait_for_dispatched_events(1)
         self.assertEqual(nack['user_message_id'], msg['message_id'])

@@ -10,11 +10,10 @@ from vumi.utils import http_request, http_request_full
 from vumi.tests.utils import MockHttpServer
 from vumi.transports.tests.utils import TransportTestCase
 from vumi.transports.mediafonemc import MediafoneTransport
+from vumi.tests.helpers import MessageHelper
 
 
 class TestMediafoneTransport(TransportTestCase):
-
-    timeout = 5
 
     transport_name = 'test_mediafone_transport'
     transport_class = MediafoneTransport
@@ -39,6 +38,7 @@ class TestMediafoneTransport(TransportTestCase):
         self.transport_url = self.transport.get_transport_url()
         self.mediafonemc_response = ''
         self.mediafonemc_response_code = http.OK
+        self.msg_helper = MessageHelper(transport_name=self.transport_name)
 
     @inlineCallbacks
     def tearDown(self):
@@ -86,7 +86,8 @@ class TestMediafoneTransport(TransportTestCase):
 
     @inlineCallbacks
     def test_outbound(self):
-        yield self.dispatch(self.mkmsg_out(to_addr="2371234567"))
+        yield self.dispatch(self.msg_helper.make_outbound(
+            "hello world", to_addr="2371234567"))
         req = yield self.mediafone_calls.get()
         self.assertEqual(req.path, '/')
         self.assertEqual(req.method, 'GET')
@@ -102,7 +103,7 @@ class TestMediafoneTransport(TransportTestCase):
         self.mediafonemc_response_code = http.NOT_FOUND
         self.mediafonemc_response = 'Not Found'
 
-        msg = self.mkmsg_out(to_addr='2371234567')
+        msg = self.msg_helper.make_outbound("outbound", to_addr="2371234567")
         yield self.dispatch(msg)
 
         yield self.mediafone_calls.get()

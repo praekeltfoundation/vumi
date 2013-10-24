@@ -18,6 +18,7 @@ from vumi.transports.smpp.clientserver.client import unpacked_pdu_opts
 from vumi.transports.smpp.clientserver.tests.utils import SmscTestServer
 from vumi.transports.tests.utils import TransportTestCase
 from vumi.tests.utils import LogCatcher
+from vumi.tests.helpers import MessageHelper
 
 
 class TestSmppTransportConfig(TestCase):
@@ -86,6 +87,7 @@ class SmppTransportTestCase(TransportTestCase):
         self._make_esme()
         self.transport.esme_client = self.esme
         self.transport.esme_connected(self.esme)
+        self.msg_helper = MessageHelper()
 
     def _make_esme(self):
         self.esme_callbacks = EsmeCallbacks(
@@ -109,10 +111,8 @@ class SmppTransportTestCase(TransportTestCase):
     @inlineCallbacks
     def test_message_persistence(self):
         # A simple test of set -> get -> delete for redis message persistence
-        message1 = self.mkmsg_out(
-            message_id='1234567890abcdefg',
-            content="hello world",
-            to_addr="far-far-away")
+        message1 = self.msg_helper.make_outbound(
+            "hello world", message_id='12345abcde', to_addr="far-far-away")
         original_json = message1.to_json()
         yield self.transport.r_set_message(message1)
         retrieved_json = yield self.transport.r_get_message_json(
@@ -147,11 +147,11 @@ class SmppTransportTestCase(TransportTestCase):
     @inlineCallbacks
     def test_out_of_order_responses(self):
         # Sequence numbers are hardcoded, assuming we start fresh from 0.
-        message1 = self.mkmsg_out("message 1", message_id='444')
+        message1 = self.msg_helper.make_outbound("message 1", message_id='444')
         response1 = SubmitSMResp(1, "3rd_party_id_1")
         yield self.dispatch(message1)
 
-        message2 = self.mkmsg_out("message 2", message_id='445')
+        message2 = self.msg_helper.make_outbound("message 2", message_id='445')
         response2 = SubmitSMResp(2, "3rd_party_id_2")
         yield self.dispatch(message2)
 
@@ -160,14 +160,15 @@ class SmppTransportTestCase(TransportTestCase):
         yield self.esme.handle_data(response2.get_bin())
         yield self.esme.handle_data(response1.get_bin())
 
-        self.assertEqual([
-                self.mkmsg_ack('445', '3rd_party_id_2'),
-                self.mkmsg_ack('444', '3rd_party_id_1'),
-                ], self.get_dispatched_events())
+        [ack1, ack2] = self.get_dispatched_events()
+        self.assertEqual(ack1['user_message_id'], '445')
+        self.assertEqual(ack1['sent_message_id'], '3rd_party_id_2')
+        self.assertEqual(ack2['user_message_id'], '444')
+        self.assertEqual(ack2['sent_message_id'], '3rd_party_id_1')
 
     @inlineCallbacks
     def test_failed_submit(self):
-        message = self.mkmsg_out("message", message_id='446')
+        message = self.msg_helper.make_outbound("message", message_id='446')
         response = SubmitSMResp(1, "3rd_party_id_3",
                                 command_status="ESME_RSUBMITFAIL")
         yield self.dispatch(message)
@@ -185,7 +186,7 @@ class SmppTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_failed_submit_with_no_reason(self):
-        message = self.mkmsg_out("message", message_id='446')
+        message = self.msg_helper.make_outbound("message", message_id='446')
         # Equivalent of SubmitSMResp(1, "3rd_party_id_3", command_status='XXX')
         # but with a bad command_status (pdu_builder can't produce binary with
         # command_statuses' it doesn't understand). Use
@@ -228,12 +229,14 @@ class SmppTransportTestCase(TransportTestCase):
         def assert_throttled_status(throttled, messages, acks):
             self.assertEqual(self.transport.throttled, throttled)
             self.assert_sent_contents(messages)
-            self.assertEqual(acks, self.get_dispatched_events())
+            self.assertEqual(acks, [
+                (m['user_message_id'], m['sent_message_id'])
+                for m in self.get_dispatched_events()])
             self.assertEqual([], self.get_dispatched_failures())
 
         assert_throttled_status(False, [], [])
 
-        message = self.mkmsg_out("Heimlich", message_id="447")
+        message = self.msg_helper.make_outbound("Heimlich", message_id="447")
         response = SubmitSMResp(1, "3rd_party_id_4",
                                 command_status="ESME_RTHROTTLED")
         yield self.dispatch(message)
@@ -244,7 +247,7 @@ class SmppTransportTestCase(TransportTestCase):
         clock.advance(0.05)
         yield self.transport.redis.exists('wait for redis')
         assert_throttled_status(True, ["Heimlich"], [])
-        message2 = self.mkmsg_out("Other", message_id="448")
+        message2 = self.msg_helper.make_outbound("Other", message_id="448")
         yield self.dispatch(message2)
         assert_throttled_status(True, ["Heimlich"], [])
         # Resent
@@ -255,9 +258,9 @@ class SmppTransportTestCase(TransportTestCase):
         yield self.esme.handle_data(SubmitSMResp(2, "3rd_party_5").get_bin())
         yield self._amqp.kick_delivery()
         yield self.esme.handle_data(SubmitSMResp(3, "3rd_party_6").get_bin())
-        assert_throttled_status(False, ["Heimlich", "Heimlich", "Other"],
-                                [self.mkmsg_ack('447', '3rd_party_5'),
-                                 self.mkmsg_ack('448', '3rd_party_6')])
+        assert_throttled_status(
+            False, ["Heimlich", "Heimlich", "Other"],
+            [('447', '3rd_party_5'), ('448', '3rd_party_6')])
 
     @inlineCallbacks
     def test_reconnect(self):

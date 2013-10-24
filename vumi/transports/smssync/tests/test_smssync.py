@@ -15,6 +15,7 @@ from vumi.transports.tests.utils import TransportTestCase
 from vumi.transports.smssync import SingleSmsSync, MultiSmsSync
 from vumi.transports.smssync.smssync import SmsSyncMsgInfo
 from vumi.transports.failures import PermanentFailure
+from vumi.tests.helpers import MessageHelper
 
 
 class TestSingleSmsSync(TransportTestCase):
@@ -39,6 +40,7 @@ class TestSingleSmsSync(TransportTestCase):
         self.transport = yield self.get_transport(self.config)
         self.transport.callLater = self._dummy_call_later
         self.transport_url = self.transport.get_transport_url()
+        self.msg_helper = MessageHelper()
 
     def _dummy_call_later(self, *args, **kw):
         self.clock.callLater(*args, **kw)
@@ -166,7 +168,7 @@ class TestSingleSmsSync(TransportTestCase):
 
     @inlineCallbacks
     def test_poll_outbound(self):
-        outbound_msg = self.mkmsg_out(content=u'hællo')
+        outbound_msg = self.msg_helper.make_outbound(u'hællo')
         msginfo = self.default_msginfo()
         self.transport.add_msginfo_metadata(outbound_msg.payload, msginfo)
         yield self.dispatch(outbound_msg)
@@ -218,7 +220,7 @@ class TestMultiSmsSync(TestSingleSmsSync):
 
     @inlineCallbacks
     def test_nack(self):
-        msg = self.mkmsg_out()
+        msg = self.msg_helper.make_outbound("hello world")
         # we intentionally skip adding the msg info to force the transport
         # to reply with a nack
         yield self.dispatch(msg)

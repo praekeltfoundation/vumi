@@ -8,6 +8,7 @@ from vumi.utils import http_request_full
 from vumi.message import TransportUserMessage
 from vumi.transports.tests.utils import TransportTestCase
 from vumi.transports.imimobile import ImiMobileUssdTransport
+from vumi.tests.helpers import MessageHelper
 
 
 class TestImiMobileUssdTransportTestCase(TransportTestCase):
@@ -36,13 +37,14 @@ class TestImiMobileUssdTransportTestCase(TransportTestCase):
             'suffix_to_addrs': {
                 'some-suffix': self._to_addr,
                 'some-other-suffix': '56264',
-             }
+            }
         }
         self.transport = yield self.get_transport(self.config)
         self.session_manager = self.transport.session_manager
         self.transport_url = self.transport.get_transport_url(
             self.config['web_path'])
         yield self.session_manager.redis._purge_all()  # just in case
+        self.msg_helper = MessageHelper()
 
     def mk_full_request(self, suffix, **params):
         return http_request_full('%s?%s' % (self.transport_url + suffix,
@@ -223,7 +225,8 @@ class TestImiMobileUssdTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_nack_insufficient_message_fields(self):
-        reply = self.mkmsg_out(message_id='23', in_reply_to=None, content=None)
+        reply = self.msg_helper.make_outbound(
+            None, message_id='23', in_reply_to=None)
         self.dispatch(reply)
         [nack] = yield self.wait_for_dispatched_events(1)
         self.assert_nack(
@@ -232,10 +235,9 @@ class TestImiMobileUssdTransportTestCase(TransportTestCase):
     @inlineCallbacks
     def test_nack_http_http_response_failure(self):
         self.patch(self.transport, 'finish_request', lambda *a, **kw: None)
-        reply = self.mkmsg_out(
-            message_id='23',
-            in_reply_to='some-number',
-            content='There are some who call me ... Tim!')
+        reply = self.msg_helper.make_outbound(
+            'There are some who call me ... Tim!', message_id='23',
+            in_reply_to='some-number')
         self.dispatch(reply)
         [nack] = yield self.wait_for_dispatched_events(1)
         self.assert_nack(

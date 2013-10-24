@@ -10,6 +10,7 @@ from vumi.transports.mtn_rwanda.mtn_rwanda_ussd import (
         MTNRwandaUSSDTransport, MTNRwandaXMLRPCResource, RequestTimedOutError,
         InvalidRequest)
 from vumi.transports.tests.utils import TransportTestCase
+from vumi.tests.helpers import MessageHelper
 
 
 class MTNRwandaUSSDTransportTestCase(TransportTestCase):
@@ -48,6 +49,7 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
         self.transport = yield self.get_transport(config)
         self.transport.callLater = self.clock.callLater
         self.session_manager = self.transport.session_manager
+        self.msg_helper = MessageHelper()
 
     def test_transport_creation(self):
         self.assertIsInstance(self.transport, MTNRwandaUSSDTransport)
@@ -114,7 +116,7 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_nack(self):
-        msg = self.mkmsg_out()
+        msg = self.msg_helper.make_outbound("outbound")
         self.dispatch(msg)
         [nack] = yield self.wait_for_dispatched_events(1)
         self.assertEqual(nack['user_message_id'], msg['message_id'])
@@ -128,11 +130,11 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
         proxy = Proxy(url)
         try:
             yield proxy.callRemote('handleUSSD', {
-            'TransactionId': '0001',
-            'USSDServiceCode': '543',
-            'USSDRequestString': '14321*1000#',
-            'MSISDN': '275551234',
-            'USSDEncoding': 'GSM0338',
+                'TransactionId': '0001',
+                'USSDServiceCode': '543',
+                'USSDRequestString': '14321*1000#',
+                'MSISDN': '275551234',
+                'USSDEncoding': 'GSM0338',
             })
             [msg] = yield self.wait_for_dispatched_messages(1)
         except xmlrpclib.Fault, e:

@@ -13,6 +13,7 @@ from vumi.transports.tests.utils import TransportTestCase
 from vumi.message import TransportUserMessage
 
 from vumi.transports.vumi_bridge import GoConversationTransport
+from vumi.tests.helpers import MessageHelper
 
 
 class GoConversationTransportTestCase(TransportTestCase):
@@ -49,6 +50,7 @@ class GoConversationTransportTestCase(TransportTestCase):
         # put some data on the wire to have connectionMade called
         self.message_req.write('')
         self.event_req.write('')
+        self.msg_helper = MessageHelper()
 
     @inlineCallbacks
     def tearDown(self):
@@ -90,8 +92,7 @@ class GoConversationTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_receiving_messages(self):
-        msg = self.mkmsg_in()
-        msg['timestamp'] = datetime.utcnow()
+        msg = self.msg_helper.make_inbound("inbound")
         self.message_req.write(msg.to_json().encode('utf-8') + '\n')
         [received_msg] = yield self.wait_for_dispatched_messages(1)
         self.assertEqual(received_msg['message_id'], msg['message_id'])
@@ -100,10 +101,8 @@ class GoConversationTransportTestCase(TransportTestCase):
     def test_receiving_events(self):
         # prime the mapping
         yield self.transport.map_message_id('remote', 'local')
-        ack = self.mkmsg_ack()
-        ack['event_id'] = 'event-id'
+        ack = self.msg_helper.make_ack(event_id='event-id')
         ack['user_message_id'] = 'remote'
-        ack['timestamp'] = datetime.utcnow()
         self.event_req.write(ack.to_json().encode('utf-8') + '\n')
         [received_ack] = yield self.wait_for_dispatched_events(1)
         self.assertEqual(received_ack['event_id'], ack['event_id'])
@@ -112,8 +111,8 @@ class GoConversationTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_sending_messages(self):
-        msg = self.mkmsg_out()
-        msg['session_event'] = TransportUserMessage.SESSION_CLOSE
+        msg = self.msg_helper.make_outbound(
+            "outbound", session_event=TransportUserMessage.SESSION_CLOSE)
         d = self.dispatch(msg)
         req = yield self.get_next_request()
         received_msg = json.loads(req.content.read())

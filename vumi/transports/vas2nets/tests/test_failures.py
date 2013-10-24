@@ -14,6 +14,7 @@ from vumi.transports.failures import (FailureMessage, FailureWorker,
                                       TemporaryFailure)
 from vumi.transports.vas2nets.vas2nets import (Vas2NetsTransport,
                                                Vas2NetsTransportError)
+from vumi.tests.helpers import MessageHelper
 
 
 class BadVas2NetsResource(Resource):
@@ -77,6 +78,7 @@ class Vas2NetsFailureWorkerTestCase(unittest.TestCase, PersistenceMixin):
         self.worker = yield self.mk_transport_worker(self.config, self.broker)
         self.fail_worker = yield self.mk_failure_worker(
             self.fail_config, self.broker)
+        self.msg_helper = MessageHelper()
 
     @inlineCallbacks
     def tearDown(self):
@@ -121,19 +123,9 @@ class Vas2NetsFailureWorkerTestCase(unittest.TestCase, PersistenceMixin):
             retry_keys.update((yield self.redis.smembers(bucket_key)))
         returnValue(retry_keys)
 
-    def mkmsg_out(self, in_reply_to=None):
-        return TransportUserMessage(
-            to_addr='+41791234567',
-            from_addr='9292',
-            message_id='1',
-            transport_name='vas2nets',
-            transport_type='sms',
-            transport_metadata={
-                'network_id': 'network-id',
-            },
-            content='hello world',
-            in_reply_to=in_reply_to,
-            )
+    def make_outbound(self, content, **kw):
+        kw.setdefault('transport_metadata', {'network_id': 'network-id'})
+        return self.msg_helper.make_outbound(content, **kw)
 
     def assert_dispatched_count(self, count, routing_key):
         self.assertEqual(count, len(self.get_dispatched(routing_key)))
@@ -141,7 +133,7 @@ class Vas2NetsFailureWorkerTestCase(unittest.TestCase, PersistenceMixin):
     @inlineCallbacks
     def test_send_sms_success(self):
         yield self.mk_resource_worker("Result_code: 00, Message OK")
-        yield self.worker._process_message(self.mkmsg_out())
+        yield self.worker._process_message(self.make_outbound("outbound"))
         self.assert_dispatched_count(1, 'vas2nets.event')
         self.assert_dispatched_count(0, 'vas2nets.failures')
 
@@ -154,7 +146,7 @@ class Vas2NetsFailureWorkerTestCase(unittest.TestCase, PersistenceMixin):
         yield self.mk_resource_worker("Result_code: 04, Internal system error "
                                       "occurred while processing message",
                                       {})
-        yield self.worker._process_message(self.mkmsg_out())
+        yield self.worker._process_message(self.make_outbound("outbound"))
         yield self.worker.failure_published.deferred
         yield self.broker.kick_delivery()
         self.assert_dispatched_count(1, 'vas2nets.event')
@@ -184,7 +176,7 @@ class Vas2NetsFailureWorkerTestCase(unittest.TestCase, PersistenceMixin):
         A 'connection refused' error should be retried.
         """
         self.worker.failure_published = FailureCounter(1)
-        msg = self.mkmsg_out()
+        msg = self.make_outbound("outbound")
         yield self.worker._process_message(msg)
         yield self.worker.failure_published.deferred
         self.assert_dispatched_count(0, 'vas2nets.event')

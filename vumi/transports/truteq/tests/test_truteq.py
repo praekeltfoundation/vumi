@@ -13,6 +13,7 @@ from vumi.message import TransportUserMessage
 from vumi.transports.tests.utils import TransportTestCase
 from vumi.transports.truteq.truteq import TruteqTransport
 from vumi.tests.utils import LogCatcher
+from vumi.tests.helpers import MessageHelper
 
 
 # To reduce verbosity.
@@ -77,6 +78,7 @@ class TestTruteqTransport(TransportTestCase):
             'port': addr.port,
             }
         self.transport = yield self.get_transport(self.config, start=True)
+        self.msg_helper = MessageHelper()
 
     @inlineCallbacks
     def tearDown(self):
@@ -154,8 +156,8 @@ class TestTruteqTransport(TransportTestCase):
     @inlineCallbacks
     def _test_outbound_ussd(self, vumi_session_type, ssmi_session_type,
                             content="Test", encoding="utf-8"):
-        msg = self.mkmsg_out(content=content, to_addr=u"+1234",
-                             session_event=vumi_session_type)
+        msg = self.msg_helper.make_outbound(
+            content, to_addr=u"+1234", session_event=vumi_session_type)
         yield self.dispatch(msg)
         ussd_call = yield self.server_factory.ussd_calls.get()
         data = content.encode(encoding) if content else ""
@@ -187,8 +189,8 @@ class TestTruteqTransport(TransportTestCase):
 
     @inlineCallbacks
     def _test_content_wrangling(self, submitted, expected):
-        msg = self.mkmsg_out(content=submitted,
-            to_addr=u"+1234", session_event=SESSION_NONE)
+        msg = self.msg_helper.make_outbound(
+            submitted, to_addr=u"+1234", session_event=SESSION_NONE)
         yield self.dispatch(msg)
         # Grab what was sent to Truteq
         ussd_call = yield self.server_factory.ussd_calls.get()

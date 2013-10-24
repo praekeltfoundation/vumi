@@ -11,6 +11,7 @@ from vumi.tests.utils import MockHttpServer
 from vumi.transports.tests.utils import TransportTestCase
 from vumi.transports.mediaedgegsm import MediaEdgeGSMTransport
 from vumi.message import TransportUserMessage
+from vumi.tests.helpers import MessageHelper
 
 
 class TestMediaEdgeGSMTransport(TransportTestCase):
@@ -47,6 +48,7 @@ class TestMediaEdgeGSMTransport(TransportTestCase):
         self.transport_url = self.transport.get_transport_url()
         self.mediaedgegsm_response = ''
         self.mediaedgegsm_response_code = http.OK
+        self.msg_helper = MessageHelper(transport_name=self.transport_name)
 
     @inlineCallbacks
     def tearDown(self):
@@ -109,7 +111,7 @@ class TestMediaEdgeGSMTransport(TransportTestCase):
 
         sent_messages = []
         for msisdn in msisdns:
-            msg = self.mkmsg_out(to_addr=msisdn)
+            msg = self.msg_helper.make_outbound("outbound", to_addr=msisdn)
             yield self.dispatch(msg)
             sent_messages.append(msg)
 
@@ -138,7 +140,7 @@ class TestMediaEdgeGSMTransport(TransportTestCase):
         self.mediaedgegsm_response_code = http.NOT_FOUND
         self.mediaedgegsm_response = 'Not Found'
 
-        msg = self.mkmsg_out(to_addr='+41791200000')
+        msg = self.msg_helper.make_outbound("outbound", to_addr='+41791200000')
         yield self.dispatch(msg)
 
         yield self.mediaedgegsm_calls.get()

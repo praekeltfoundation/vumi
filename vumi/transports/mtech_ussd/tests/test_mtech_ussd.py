@@ -6,11 +6,11 @@ from vumi.utils import http_request_full
 from vumi.message import TransportUserMessage
 from vumi.transports.mtech_ussd import MtechUssdTransport
 from vumi.transports.mtech_ussd.mtech_ussd import MtechUssdResponse
+from vumi.tests.helpers import MessageHelper
 
 
 class TestMtechUssdTransport(TransportTestCase):
 
-    timeout = 1
     transport_name = 'mtech_ussd'
     transport_class = MtechUssdTransport
 
@@ -30,6 +30,7 @@ class TestMtechUssdTransport(TransportTestCase):
         self.transport_url = self.transport.get_transport_url().rstrip('/')
         self.url = "%s%s" % (self.transport_url, self.config['web_path'])
         yield self.transport.session_manager.redis._purge_all()  # just in case
+        self.msg_helper = MessageHelper()
 
     def make_ussd_request_full(self, session_id, **kwargs):
         lines = [
@@ -131,7 +132,7 @@ class TestMtechUssdTransport(TransportTestCase):
 
     @inlineCallbacks
     def test_nack(self):
-        msg = self.mkmsg_out()
+        msg = self.msg_helper.make_outbound("outbound")
         yield self.dispatch(msg)
         [nack] = yield self.wait_for_dispatched_events(1)
         self.assertEqual(nack['user_message_id'], msg['message_id'])

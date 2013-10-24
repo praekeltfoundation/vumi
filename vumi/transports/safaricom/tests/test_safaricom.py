@@ -7,12 +7,12 @@ from vumi.transports.tests.utils import TransportTestCase
 from vumi.transports.safaricom import SafaricomTransport
 from vumi.message import TransportUserMessage
 from vumi.utils import http_request
+from vumi.tests.helpers import MessageHelper
 
 
 class TestSafaricomTransportTestCase(TransportTestCase):
 
     transport_class = SafaricomTransport
-    timeout = 1
 
     @inlineCallbacks
     def setUp(self):
@@ -26,6 +26,7 @@ class TestSafaricomTransportTestCase(TransportTestCase):
         self.transport_url = self.transport.get_transport_url(
             self.config['web_path'])
         yield self.session_manager.redis._purge_all()  # just in case
+        self.msg_helper = MessageHelper()
 
     def mk_full_request(self, **params):
         return http_request('%s?%s' % (self.transport_url,
@@ -232,7 +233,7 @@ class TestSafaricomTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_nack(self):
-        msg = self.mkmsg_out()
+        msg = self.msg_helper.make_outbound("outbound")
         yield self.dispatch(msg)
         [nack] = yield self.wait_for_dispatched_events(1)
         self.assertEqual(nack['user_message_id'], msg['message_id'])

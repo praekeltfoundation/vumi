@@ -7,6 +7,7 @@ from vumi.transports.tests.utils import TransportTestCase
 from vumi.message import TransportUserMessage
 from vumi.transports.trueafrican.transport import TrueAfricanUssdTransport
 from vumi.tests.utils import LogCatcher
+from vumi.tests.helpers import MessageHelper
 
 
 class TestTrueAfricanUssdTransport(TransportTestCase):
@@ -32,6 +33,7 @@ class TestTrueAfricanUssdTransport(TransportTestCase):
         self.patch(TrueAfricanUssdTransport, 'get_clock', lambda _: self.clock)
         self.transport = yield self.get_transport(self.config)
         self.service_url = self.get_service_url(self.transport)
+        self.msg_helper = MessageHelper()
 
     def get_service_url(self, transport):
         """
@@ -246,7 +248,7 @@ class TestTrueAfricanUssdTransport(TransportTestCase):
 
     @inlineCallbacks
     def test_nack_for_invalid_outbound_message(self):
-        msg = self.mkmsg_out()
+        msg = self.msg_helper.make_outbound("outbound")
         yield self.dispatch(msg)
         [nack] = yield self.wait_for_dispatched_events(1)
         self.assertEqual(nack['user_message_id'], msg['message_id'])

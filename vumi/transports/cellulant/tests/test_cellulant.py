@@ -6,6 +6,7 @@ from vumi.transports.tests.utils import TransportTestCase
 from vumi.transports.cellulant import CellulantTransport
 from vumi.message import TransportUserMessage
 from vumi.utils import http_request
+from vumi.tests.helpers import MessageHelper
 
 
 class TestCellulantTransportTestCase(TransportTestCase):
@@ -25,6 +26,7 @@ class TestCellulantTransportTestCase(TransportTestCase):
         self.transport_url = self.transport.get_transport_url(
             self.config['web_path'])
         yield self.transport.session_manager.redis._purge_all()  # just in case
+        self.msg_helper = MessageHelper(transport_name=self.transport_name)
 
     def mk_request(self, **params):
         defaults = {
@@ -129,7 +131,7 @@ class TestCellulantTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_nack(self):
-        msg = self.mkmsg_out()
+        msg = self.msg_helper.make_outbound("foo")
         self.dispatch(msg)
         [nack] = yield self.wait_for_dispatched_events(1)
         self.assertEqual(nack['user_message_id'], msg['message_id'])
