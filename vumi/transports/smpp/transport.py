@@ -117,7 +117,7 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
         "work.", default='', static=True)
     throttle_delay = ConfigFloat(
         "Delay (in seconds) before retrying a message after receiving "
-        "`ESME_RTHROTTLED`.", default=0.1, static=True)
+        "`ESME_RTHROTTLED` or `ESME_RMSGQFUL`.", default=0.1, static=True)
     COUNTRY_CODE = ConfigText(
         "Used to translate a leading zero in a destination MSISDN into a "
         "country code. Default ''", default="", static=True)
@@ -334,7 +334,7 @@ class SmppTransport(Transport):
                 # The sms was submitted ok
                 yield self.submit_sm_success(sent_sms_id, transport_msg_id)
                 yield self._stop_throttling()
-            elif status == 'ESME_RTHROTTLED':
+            elif status in ('ESME_RTHROTTLED', 'ESME_RMSGQFUL'):
                 yield self._start_throttling()
                 yield self.submit_sm_throttled(sent_sms_id)
             else:

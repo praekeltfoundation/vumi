@@ -222,7 +222,7 @@ class SmppTransportTestCase(TransportTestCase):
                               "discarded.",))
 
     @inlineCallbacks
-    def test_throttled_submit(self):
+    def test_throttled_submit_ESME_RTHROTTLED(self):
         clock = Clock()
         self.transport.callLater = clock.callLater
 
@@ -239,6 +239,47 @@ class SmppTransportTestCase(TransportTestCase):
         message = self.msg_helper.make_outbound("Heimlich", message_id="447")
         response = SubmitSMResp(1, "3rd_party_id_4",
                                 command_status="ESME_RTHROTTLED")
+        yield self.dispatch(message)
+        yield self.esme.handle_data(response.get_bin())
+
+        assert_throttled_status(True, ["Heimlich"], [])
+        # Still waiting to resend
+        clock.advance(0.05)
+        yield self.transport.redis.exists('wait for redis')
+        assert_throttled_status(True, ["Heimlich"], [])
+        message2 = self.msg_helper.make_outbound("Other", message_id="448")
+        yield self.dispatch(message2)
+        assert_throttled_status(True, ["Heimlich"], [])
+        # Resent
+        clock.advance(0.05)
+        yield self.transport.redis.exists('wait for redis')
+        assert_throttled_status(True, ["Heimlich", "Heimlich"], [])
+        # And acknowledged by the other side
+        yield self.esme.handle_data(SubmitSMResp(2, "3rd_party_5").get_bin())
+        yield self._amqp.kick_delivery()
+        yield self.esme.handle_data(SubmitSMResp(3, "3rd_party_6").get_bin())
+        assert_throttled_status(
+            False, ["Heimlich", "Heimlich", "Other"],
+            [('447', '3rd_party_5'), ('448', '3rd_party_6')])
+
+    @inlineCallbacks
+    def test_throttled_submit_ESME_RMSGQFUL(self):
+        clock = Clock()
+        self.transport.callLater = clock.callLater
+
+        def assert_throttled_status(throttled, messages, acks):
+            self.assertEqual(self.transport.throttled, throttled)
+            self.assert_sent_contents(messages)
+            self.assertEqual(acks, [
+                (m['user_message_id'], m['sent_message_id'])
+                for m in self.get_dispatched_events()])
+            self.assertEqual([], self.get_dispatched_failures())
+
+        assert_throttled_status(False, [], [])
+
+        message = self.msg_helper.make_outbound("Heimlich", message_id="447")
+        response = SubmitSMResp(1, "3rd_party_id_4",
+                                command_status="ESME_RMSGQFUL")
         yield self.dispatch(message)
         yield self.esme.handle_data(response.get_bin())
 
