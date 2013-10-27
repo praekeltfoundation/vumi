@@ -422,6 +422,19 @@ class EsmeReceiverMixin(EsmeGenericMixin):
         yield esme.handle_deliver_sm(self.get_sm(dr_text, 8))
 
     @inlineCallbacks
+    def test_deliver_sm_delivery_report_ucs2_long(self):
+        esme = yield self.get_esme(delivery_report=self.assertion_cb(
+                u'DELIVRD', 'delivery_report', 'stat'))
+
+        dr_text = (
+            'id:1b1720be-5f48-41c4-b3f8-6e59dbf45366 sub:001 dlvrd:001 '
+            'submit date:120726132548 done date:120726132548 stat:DELIVRD '
+            'err:000 text:').decode('ascii').encode('utf-16be')
+        sm = DeliverSM(1, short_message='', data_coding=8)
+        sm.add_message_payload(dr_text.encode('hex'))
+        yield esme.handle_deliver_sm(unpack_pdu(sm.get_bin()))
+
+    @inlineCallbacks
     def test_deliver_sm_multipart(self):
         esme = yield self.get_esme(
             deliver_sm=self.assertion_cb(u'hello world', 'short_message'))
