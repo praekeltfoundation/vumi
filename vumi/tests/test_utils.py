@@ -187,7 +187,6 @@ class HttpUtilsTestCase(TestCase):
         self.assertEqual(request.delivered_body, "Yay")
         self.assertEqual(request.code, http.OK)
 
-
     @inlineCallbacks
     def test_http_request_full_drop(self):
         def interrupt(r):
@@ -276,6 +275,15 @@ class HttpUtilsTestCase(TestCase):
 
         d.addBoth(check_response)
         yield d
+
+    @inlineCallbacks
+    def test_http_request_full_ok_with_timeout_set(self):
+        # If we don't cancel the pending timeout check this test will fail with
+        # a dirty reactor.
+        self.set_render(lambda r: "Yay")
+        request = yield http_request_full(self.url, '', timeout=100)
+        self.assertEqual(request.delivered_body, "Yay")
+        self.assertEqual(request.code, http.OK)
 
     @inlineCallbacks
     def test_http_request_full_timeout_before_connect(self):

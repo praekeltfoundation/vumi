@@ -140,8 +140,14 @@ def http_request_full(url, data=None, headers={}, method='POST',
             cancelling_on_timeout[0] = True
             d.cancel()
 
+        def cancel_timeout(r, delayed_call):
+            if delayed_call.active():
+                delayed_call.cancel()
+            return r
+
         d.addErrback(raise_timeout)
-        reactor.callLater(timeout, cancel_on_timeout)
+        delayed_call = reactor.callLater(timeout, cancel_on_timeout)
+        d.addCallback(cancel_timeout, delayed_call)
 
     return d
 
