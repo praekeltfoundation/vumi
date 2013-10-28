@@ -416,9 +416,9 @@ class EsmeReceiverMixin(EsmeGenericMixin):
                 u'DELIVRD', 'delivery_report', 'stat'))
 
         dr_text = (
-            'id:1b1720be-5f48 sub:001 dlvrd:001 '
-            'submit date:120726132548 done date:120726132548 stat:DELIVRD '
-            'err:000 text:').decode('ascii').encode('utf-16be')
+            u'id:1b1720be-5f48 sub:001 dlvrd:001 '
+            u'submit date:120726132548 done date:120726132548 stat:DELIVRD '
+            u'err:000 text:').encode('utf-16be')
         yield esme.handle_deliver_sm(self.get_sm(dr_text, 8))
 
     @inlineCallbacks
@@ -427,9 +427,9 @@ class EsmeReceiverMixin(EsmeGenericMixin):
                 u'DELIVRD', 'delivery_report', 'stat'))
 
         dr_text = (
-            'id:1b1720be-5f48-41c4-b3f8-6e59dbf45366 sub:001 dlvrd:001 '
-            'submit date:120726132548 done date:120726132548 stat:DELIVRD '
-            'err:000 text:').decode('ascii').encode('utf-16be')
+            u'id:1b1720be-5f48-41c4-b3f8-6e59dbf45366 sub:001 dlvrd:001 '
+            u'submit date:120726132548 done date:120726132548 stat:DELIVRD '
+            u'err:000 text:').encode('utf-16be')
         sm = DeliverSM(1, short_message='', data_coding=8)
         sm.add_message_payload(dr_text.encode('hex'))
         yield esme.handle_deliver_sm(unpack_pdu(sm.get_bin()))
