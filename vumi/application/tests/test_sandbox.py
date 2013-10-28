@@ -146,7 +146,6 @@ class SandboxTestCase(SandboxTestCaseBase):
             msgs = lc.messages()
         self.assertEqual(status, 0)
         self.assertEqual(msgs, ["err1\nerr2\nerr3"])
-        print msgs
 
     @inlineCallbacks
     def test_bad_rlimit(self):
