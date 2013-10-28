@@ -1,7 +1,5 @@
 # -*- test-case-name: vumi.transports.smpp.tests.test_smpp -*-
 
-from datetime import datetime
-
 from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, returnValue
 
@@ -32,6 +30,27 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
         ' +[Tt]ext:(?P<text>.{,20})'
         '.*'
     )
+
+    DELIVERY_REPORT_STATUS_MAPPING = {
+        # Output values should map to themselves:
+        'delivered': 'delivered',
+        'failed': 'failed',
+        'pending': 'pending',
+        # SMPP `message_state` values:
+        'ENROUTE': 'pending',
+        'DELIVERED': 'delivered',
+        'EXPIRED': 'failed',
+        'DELETED': 'failed',
+        'UNDELIVERABLE': 'failed',
+        'ACCEPTED': 'delivered',
+        'UNKNOWN': 'pending',
+        'REJECTED': 'failed',
+        # From the most common regex-extracted format:
+        'DELIVRD': 'delivered',
+        'REJECTD': 'failed',
+        # Currently we will accept this for Yo! TODO: investigate
+        '0': 'delivered',
+    }
 
     twisted_endpoint = ConfigClientEndpoint(
         'The SMPP endpoint to connect to.',
@@ -79,6 +98,10 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
     delivery_report_regex = ConfigRegex(
         'What regex to use for matching delivery reports',
         default=DELIVERY_REPORT_REGEX, static=True)
+    delivery_report_status_mapping = ConfigDict(
+        "Mapping from delivery report message state to "
+        "(`delivered`, `failed`, `pending`)",
+        static=True, default=DELIVERY_REPORT_STATUS_MAPPING)
     submit_sm_encoding = ConfigText(
         'How to encode the SMS before putting on the wire', static=True,
         default='utf-8')
@@ -380,18 +403,8 @@ class SmppTransport(Transport):
                            self._submit_outbound_message, message)
 
     def delivery_status(self, state):
-        if state in ('delivered', 'failed', 'pending'):
-            return state
-        if state in [
-                "DELIVRD",
-                "0"  # Currently we will accept this for Yo! TODO: investigate
-                ]:
-            return "delivered"
-        if state in [
-                "REJECTD"
-                ]:
-            return "failed"
-        return "pending"
+        config = self.get_static_config()
+        return config.delivery_report_status_mapping.get(state, 'pending')
 
     @inlineCallbacks
     def delivery_report(self, message_id, message_state):

@@ -324,15 +324,15 @@ class EsmeTransceiver(Protocol):
             yield self.esme_callbacks.delivery_report(
                 message_id=receipted_message_id.decode('hex'),
                 message_state={
-                    1: 'pending',  # ENROUTE
-                    2: 'delivered',  # DELIVERED
-                    3: 'failed',  # EXPIRED
-                    4: 'failed',  # DELETED
-                    5: 'failed',  # UNDELIVERABLE
-                    6: 'delivered',  # ACCEPTED
-                    7: 'pending',  # UNKNOWN
-                    8: 'failed',  # REJECTED
-                }.get(message_state, 'pending'),
+                    1: 'ENROUTE',
+                    2: 'DELIVERED',
+                    3: 'EXPIRED',
+                    4: 'DELETED',
+                    5: 'UNDELIVERABLE',
+                    6: 'ACCEPTED',
+                    7: 'UNKNOWN',
+                    8: 'REJECTED',
+                }.get(message_state, 'UNKNOWN'),
             )
             receipted_message_id = receipted_message_id.decode('hex')
 

@@ -404,7 +404,7 @@ class EsmeReceiverMixin(EsmeGenericMixin):
     def test_deliver_sm_delivery_report_delivered(self):
         esme = yield self.get_esme(delivery_report=self.assertion_cb({
             'message_id': '1b1720be-5f48-41c4-b3f8-6e59dbf45366',
-            'message_state': 'delivered',
+            'message_state': 'DELIVERED',
         }))
 
         sm = DeliverSM(1, short_message='delivery report')
@@ -419,7 +419,7 @@ class EsmeReceiverMixin(EsmeGenericMixin):
     def test_deliver_sm_delivery_report_rejected(self):
         esme = yield self.get_esme(delivery_report=self.assertion_cb({
             'message_id': '1b1720be-5f48-41c4-b3f8-6e59dbf45366',
-            'message_state': 'failed',
+            'message_state': 'REJECTED',
         }))
 
         sm = DeliverSM(1, short_message='delivery report')
