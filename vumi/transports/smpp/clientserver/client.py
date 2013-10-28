@@ -322,17 +322,7 @@ class EsmeTransceiver(Protocol):
         if message_payload is not None:
             pdu_params['short_message'] = message_payload.decode('hex')
 
-        delivery_report = self.config.delivery_report_regex.search(
-            pdu_params['short_message'] or '')
-
-        if delivery_report:
-            # We have a delivery report.
-            yield self.esme_callbacks.delivery_report(
-                destination_addr=pdu_params['destination_addr'],
-                source_addr=pdu_params['source_addr'],
-                delivery_report=delivery_report.groupdict(),
-                )
-        elif detect_ussd(pdu_opts):
+        if detect_ussd(pdu_opts):
             # We have a USSD message.
             yield self._handle_deliver_sm_ussd(pdu, pdu_params, pdu_opts)
         elif detect_multipart(pdu):
@@ -341,6 +331,24 @@ class EsmeTransceiver(Protocol):
         else:
             # We have a standard SMS.
             yield self._handle_deliver_sm_sms(pdu_params)
+
+    def _deliver_sm(self, source_addr, destination_addr, short_message, **kw):
+        delivery_report = self.config.delivery_report_regex.search(
+            short_message or '')
+        if delivery_report:
+            # We have a delivery report.
+            return self.esme_callbacks.delivery_report(
+                source_addr=source_addr,
+                destination_addr=destination_addr,
+                delivery_report=delivery_report.groupdict())
+
+        message_id = str(uuid.uuid4())
+        return self.esme_callbacks.deliver_sm(
+            source_addr=source_addr,
+            destination_addr=destination_addr,
+            short_message=short_message,
+            message_id=message_id,
+            **kw)
 
     def _handle_deliver_sm_ussd(self, pdu, pdu_params, pdu_opts):
         # Some of this stuff might be specific to Tata's setup.
@@ -374,33 +382,26 @@ class EsmeTransceiver(Protocol):
             # We have an explicit "end session" flag.
             session_event = 'close'
 
-        message_id = str(uuid.uuid4())
         decoded_msg = self._decode_message(pdu_params['short_message'],
                                            pdu_params['data_coding'])
-        return self.esme_callbacks.deliver_sm(
-            destination_addr=pdu_params['destination_addr'],
+        return self._deliver_sm(
             source_addr=pdu_params['source_addr'],
+            destination_addr=pdu_params['destination_addr'],
             short_message=decoded_msg,
-            message_id=message_id,
             message_type='ussd',
             session_event=session_event,
-            session_info=session_info,
-            )
+            session_info=session_info)
 
     def _handle_deliver_sm_sms(self, pdu_params):
-        message_id = str(uuid.uuid4())
         decoded_msg = self._decode_message(pdu_params['short_message'],
                                            pdu_params['data_coding'])
-        return self.esme_callbacks.deliver_sm(
-            destination_addr=pdu_params['destination_addr'],
+        return self._deliver_sm(
             source_addr=pdu_params['source_addr'],
-            short_message=decoded_msg,
-            message_id=message_id,
-            )
+            destination_addr=pdu_params['destination_addr'],
+            short_message=decoded_msg)
 
     @inlineCallbacks
     def _handle_deliver_sm_multipart(self, pdu, pdu_params):
-        message_id = str(uuid.uuid4())
         redis_key = "multi_%s" % (multipart_key(detect_multipart(pdu)),)
         log.debug("Redis multipart key: %s" % (redis_key))
         value = yield self.redis.get(redis_key)
@@ -417,12 +418,10 @@ class EsmeTransceiver(Protocol):
             decoded_msg = self._decode_message(completed['message'],
                                                pdu_params['data_coding'])
             # and we can finally pass the whole message on
-            yield self.esme_callbacks.deliver_sm(
-                destination_addr=completed['to_msisdn'],
+            yield self._deliver_sm(
                 source_addr=completed['from_msisdn'],
-                short_message=decoded_msg,
-                message_id=message_id,
-                )
+                destination_addr=completed['to_msisdn'],
+                short_message=decoded_msg)
         else:
             yield self.redis.set(
                 redis_key, json.dumps(multi.get_array()))
