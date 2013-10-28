@@ -380,6 +380,8 @@ class SmppTransport(Transport):
                            self._submit_outbound_message, message)
 
     def delivery_status(self, state):
+        if state in ('delivered', 'failed', 'pending'):
+            return state
         if state in [
                 "DELIVRD",
                 "0"  # Currently we will accept this for Yo! TODO: investigate
@@ -392,16 +394,9 @@ class SmppTransport(Transport):
         return "pending"
 
     @inlineCallbacks
-    def delivery_report(self, *args, **kwargs):
-        transport_metadata = {
-                "message": kwargs['delivery_report'],
-                "date": datetime.strptime(
-                    kwargs['delivery_report']['done_date'], "%y%m%d%H%M%S")
-                }
-        delivery_status = self.delivery_status(
-            kwargs['delivery_report']['stat'])
-        message_id = yield self.r_get_id_for_third_party_id(
-            kwargs['delivery_report']['id'])
+    def delivery_report(self, message_id, message_state):
+        delivery_status = self.delivery_status(message_state)
+        message_id = yield self.r_get_id_for_third_party_id(message_id)
         if message_id is None:
             log.warning("Failed to retrieve message id for delivery report."
                         " Delivery report from %s discarded."
@@ -411,8 +406,7 @@ class SmppTransport(Transport):
                                                     delivery_status))
         returnValue((yield self.publish_delivery_report(
                     user_message_id=message_id,
-                    delivery_status=delivery_status,
-                    transport_metadata=transport_metadata)))
+                    delivery_status=delivery_status)))
 
     def deliver_sm(self, *args, **kwargs):
         message_type = kwargs.get('message_type', 'sms')
