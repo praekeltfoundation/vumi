@@ -1,6 +1,4 @@
 
-from datetime import datetime
-
 from vumi.message import TransportUserMessage, TransportEvent
 
 
