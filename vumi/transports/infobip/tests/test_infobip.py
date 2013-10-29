@@ -71,6 +71,10 @@ class TestInfobipUssdTransport(TransportTestCase):
 
         if defer_response:
             response = deferred_req
+            # We need to make sure we wait for the response so we don't leave
+            # the reactor dirty if the test runner wins the race with the HTTP
+            # client.
+            self.addCleanup(lambda: deferred_req)
         else:
             response = yield deferred_req
         returnValue((msg, response))
