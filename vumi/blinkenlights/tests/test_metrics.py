@@ -29,17 +29,16 @@ class TestMetricManager(TestCase):
         reactor.callLater(delay, lambda: d.callback(None))
         return d
 
-    def _check_msg(self, broker, metric, values):
+    def _check_msg(self, broker, manager, metric, values):
         msgs = broker.get_dispatched("vumi.metrics", "vumi.metrics")
         if values is None:
             self.assertEqual(msgs, [])
             return
         content = msgs[-1]
-        name = metric.name
         self.assertEqual(content.properties, {"delivery mode": 2})
         msg = Message.from_json(content.body)
         [datapoint] = msg.payload["datapoints"]
-        self.assertEqual(datapoint[0], name)
+        self.assertEqual(datapoint[0], manager.prefix + metric.name)
         self.assertEqual(datapoint[1], list(metric.aggs))
         # check datapoints within 2s of now -- the truncating of
         # time.time() to an int for timestamps can cause a 1s
@@ -54,7 +53,7 @@ class TestMetricManager(TestCase):
     def test_register(self):
         mm = metrics.MetricManager("vumi.test.")
         cnt = mm.register(metrics.Count("my.count"))
-        self.assertEqual(cnt.name, "vumi.test.my.count")
+        self.assertEqual(cnt.name, "my.count")
         self.assertEqual(mm._metrics, [cnt])
 
     def test_double_register(self):
@@ -68,7 +67,7 @@ class TestMetricManager(TestCase):
         cnt = mm.register(metrics.Count("my.count"))
         self.assertTrue("my.count" in mm)
         self.assertTrue(mm["my.count"] is cnt)
-        self.assertEqual(mm["my.count"].name, "vumi.test.my.count")
+        self.assertEqual(mm["my.count"].name, "my.count")
 
     @inlineCallbacks
     def test_start(self):
@@ -80,16 +79,16 @@ class TestMetricManager(TestCase):
         mm.start(channel)
         try:
             self.assertTrue(mm._task is not None)
-            self._check_msg(broker, cnt, None)
+            self._check_msg(broker, mm, cnt, None)
 
             cnt.inc()
             yield self.wait_publish()
-            self._check_msg(broker, cnt, [1])
+            self._check_msg(broker, mm, cnt, [1])
 
             cnt.inc()
             cnt.inc()
             yield self.wait_publish()
-            self._check_msg(broker, cnt, [1, 1])
+            self._check_msg(broker, mm, cnt, [1, 1])
         finally:
             mm.stop()
 
@@ -108,12 +107,12 @@ class TestMetricManager(TestCase):
         acc = mm.register(metrics.Metric("my.acc"))
         try:
             self.assertTrue(mm._task is not None)
-            self._check_msg(broker, acc, None)
+            self._check_msg(broker, mm, acc, None)
 
             acc.set(1.5)
             acc.set(1.0)
             yield self.wait_publish()
-            self._check_msg(broker, acc, [1.5, 1.0])
+            self._check_msg(broker, mm, acc, [1.5, 1.0])
         finally:
             mm.stop()
 
@@ -209,9 +208,8 @@ class CheckValuesMixin(object):
 class TestMetric(TestCase, CheckValuesMixin):
     def test_manage(self):
         metric = metrics.Metric("foo")
-        self.assertEqual(metric.name, None)
         metric.manage("vumi.test.")
-        self.assertEqual(metric.name, "vumi.test.foo")
+        self.assertEqual(metric.name, "foo")
         self.assertRaises(metrics.MetricRegistrationError, metric.manage,
                           "vumi.othertest.")
 

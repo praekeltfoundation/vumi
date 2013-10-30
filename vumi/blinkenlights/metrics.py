@@ -36,7 +36,8 @@ class MetricManager(Publisher):
 
     def __init__(self, prefix, publish_interval=5, on_publish=None):
         self.prefix = prefix
-        self._metrics = []  # list of metric objects
+        self._metrics = []  # list of metrics to poll
+        self._oneshot_msgs = []  # list of oneshot messages since last publish
         self._metrics_lookup = {}  # metric suffix -> metric
         self._publish_interval = publish_interval
         self._task = None  # created in .start()
@@ -58,11 +59,20 @@ class MetricManager(Publisher):
 
     def _publish_metrics(self):
         msg = MetricMessage()
+        # oneshot metrics
+        msg.extend(self._oneshot_msgs)
+        self._oneshot_msgs = []
+        # polled metrics
         for metric in self._metrics:
-            msg.append((metric.name, metric.aggs, metric.poll()))
+            msg.append(
+                (self.prefix + metric.name, metric.aggs, metric.poll()))
         self.publish_message(msg)
         if self._on_publish is not None:
             self._on_publish(self)
+
+    def oneshot(self, metric, value):
+        self._oneshot_msgs.append(
+            (self.prefix + metric.name, metric.aggs, value))
 
     def register(self, metric):
         """Register a new metric object to be managed by this metric set.
@@ -78,10 +88,10 @@ class MetricManager(Publisher):
         """
         metric.manage(self.prefix)
         self._metrics.append(metric)
-        if metric.suffix in self._metrics_lookup:
+        if metric.name in self._metrics_lookup:
             raise MetricRegistrationError("Duplicate metric name %s"
                                           % metric.name)
-        self._metrics_lookup[metric.suffix] = metric
+        self._metrics_lookup[metric.name] = metric
         return metric
 
     def __getitem__(self, suffix):
@@ -164,21 +174,21 @@ class Metric(object):
     #: Default aggregators are [:data:`AVG`]
     DEFAULT_AGGREGATORS = [AVG]
 
-    def __init__(self, suffix, aggregators=None):
+    def __init__(self, name, aggregators=None):
         if aggregators is None:
             aggregators = self.DEFAULT_AGGREGATORS
-        self.name = None  # set when prefix is set
+        self.name = name
         self.aggs = tuple(sorted(agg.name for agg in aggregators))
-        self.suffix = suffix
+        self.managed = False
         self._values = []  # list of unpolled values
 
     def manage(self, prefix):
         """Called by :class:`MetricManager` when this metric is registered."""
-        if self.name is not None:
-            raise MetricRegistrationError("Metric %s%s already registered"
+        if self.managed:
+            raise MetricRegistrationError("Metric %s already registered"
                                           " with a MetricManager." %
-                                          (prefix, self.suffix))
-        self.name = prefix + self.suffix
+                                          (self.name,))
+        self.managed = True
 
     def set(self, value):
         """Append a value for later polling."""
