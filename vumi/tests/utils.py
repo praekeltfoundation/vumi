@@ -489,6 +489,10 @@ class VumiWorkerTestCase(TestCase):
 
     @inlineCallbacks
     def tearDown(self):
+        # Wait for any pending message deliveries to avoid a race with a dirty
+        # reactor.
+        yield self._amqp.wait_delivery()
+        # Now stop all the workers.
         for worker in self._workers:
             yield worker.stopWorker()
 

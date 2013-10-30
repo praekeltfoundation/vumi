@@ -42,16 +42,6 @@ class EchoApplicationWorker(ApplicationWorker):
         self.reply_to(message, message['content'])
 
 
-class FakeUserMessage(TransportUserMessage):
-    def __init__(self, **kw):
-        kw['to_addr'] = 'to'
-        kw['from_addr'] = 'from'
-        kw['transport_name'] = 'test'
-        kw['transport_type'] = 'fake'
-        kw['transport_metadata'] = {}
-        super(FakeUserMessage, self).__init__(**kw)
-
-
 class TestApplicationWorker(ApplicationTestCase):
 
     application_class = DummyApplicationWorker
@@ -101,9 +91,11 @@ class TestApplicationWorker(ApplicationTestCase):
     @inlineCallbacks
     def test_user_message_dispatch(self):
         messages = [
-            ('user_message', FakeUserMessage()),
-            ('new_session', FakeUserMessage(session_event=SESSION_NEW)),
-            ('close_session', FakeUserMessage(session_event=SESSION_CLOSE)),
+            ('user_message', self.msg_helper.make_inbound("foo")),
+            ('new_session', self.msg_helper.make_inbound(
+                "foo", session_event=SESSION_NEW)),
+            ('close_session', self.msg_helper.make_inbound(
+                "foo", session_event=SESSION_CLOSE)),
             ]
         for name, message in messages:
             yield self.dispatch(message)
@@ -112,7 +104,7 @@ class TestApplicationWorker(ApplicationTestCase):
 
     @inlineCallbacks
     def test_reply_to(self):
-        msg = FakeUserMessage()
+        msg = self.msg_helper.make_inbound("foo")
         yield self.worker.reply_to(msg, "More!")
         yield self.worker.reply_to(msg, "End!", False)
         replies = self.get_dispatched_messages()
@@ -127,7 +119,7 @@ class TestApplicationWorker(ApplicationTestCase):
 
         # Stick a message on the queue before starting the worker so it will be
         # received as soon as the message consumer starts consuming.
-        msg = FakeUserMessage(content="Hello!")
+        msg = self.msg_helper.make_inbound("Hello!")
         yield self.dispatch(msg)
 
         # Start the app and process stuff.
@@ -141,7 +133,7 @@ class TestApplicationWorker(ApplicationTestCase):
 
     @inlineCallbacks
     def test_reply_to_group(self):
-        msg = FakeUserMessage()
+        msg = self.msg_helper.make_inbound("foo")
         yield self.worker.reply_to_group(msg, "Group!")
         replies = self.get_dispatched_messages()
         expecteds = [msg.reply_group("Group!")]
@@ -175,10 +167,10 @@ class TestApplicationWorker(ApplicationTestCase):
         worker.consume_ack(self.msg_helper.make_ack())
         worker.consume_nack(self.msg_helper.make_nack())
         worker.consume_delivery_report(self.msg_helper.make_delivery_report())
-        worker.consume_unknown_event(FakeUserMessage())
-        worker.consume_user_message(FakeUserMessage())
-        worker.new_session(FakeUserMessage())
-        worker.close_session(FakeUserMessage())
+        worker.consume_unknown_event(self.msg_helper.make_inbound("foo"))
+        worker.consume_user_message(self.msg_helper.make_inbound("foo"))
+        worker.new_session(self.msg_helper.make_inbound("foo"))
+        worker.close_session(self.msg_helper.make_inbound("foo"))
 
     def get_app_consumers(self, app):
         for connector in app.connectors.values():

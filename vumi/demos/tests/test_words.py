@@ -50,6 +50,7 @@ class TestSimpleAppWorker(unittest.TestCase):
 
     @inlineCallbacks
     def tearDown(self):
+        yield self.broker.wait_delivery()
         yield self.worker.stopWorker()
 
     @inlineCallbacks

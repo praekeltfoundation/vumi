@@ -225,6 +225,10 @@ class FakeAMQPBroker(object):
         delivering any messages from the current run. This should not
         leave any messages undelivered, because basic_publish() kicks
         off a delivery run.
+
+        NOTE: This method should be called during test teardown to make
+        sure there are no pending delivery cleanups that will cause a
+        dirty reactor race.
         """
         if self._delivering is not None:
             return self._delivering['deferred']

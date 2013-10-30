@@ -30,6 +30,9 @@ class FakeAMQPTestCase(TestCase):
     def setUp(self):
         self.broker = fake_amqp.FakeAMQPBroker()
 
+    def tearDown(self):
+        return self.broker.wait_delivery()
+
     def make_exchange(self, exchange, exchange_type):
         self.broker.exchange_declare(exchange, exchange_type)
         return self.broker.exchanges[exchange]

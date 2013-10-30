@@ -6,7 +6,7 @@ from twisted.web.resource import Resource
 from twisted.trial import unittest
 from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
 
-from vumi.message import TransportUserMessage, from_json
+from vumi.message import from_json
 from vumi.tests.utils import (
     get_stubbed_worker, TestResourceWorker, PersistenceMixin)
 from vumi.tests.fake_amqp import FakeAMQPBroker
@@ -84,6 +84,7 @@ class Vas2NetsFailureWorkerTestCase(unittest.TestCase, PersistenceMixin):
     def tearDown(self):
         for worker in self.workers:
             yield worker.stopWorker()
+        yield self.broker.wait_delivery()
         yield self._persist_tearDown()
 
     @inlineCallbacks

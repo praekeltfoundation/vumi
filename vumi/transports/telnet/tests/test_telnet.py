@@ -2,8 +2,8 @@
 
 """Tests for vumi.transports.telnet.transport."""
 
-from twisted.internet.defer import (inlineCallbacks, DeferredQueue,
-                                    returnValue)
+from twisted.internet.defer import (
+    inlineCallbacks, DeferredQueue, returnValue, Deferred)
 from twisted.protocols.basic import LineReceiver
 from twisted.internet import reactor, protocol
 
@@ -21,12 +21,18 @@ class ClientProtocol(LineReceiver):
 
     def __init__(self):
         self.queue = DeferredQueue()
+        self.connect_d = Deferred()
+        self.disconnect_d = Deferred()
+
+    def connectionMade(self):
+        self.connect_d.callback(None)
 
     def lineReceived(self, line):
         self.queue.put(line)
 
     def connectionLost(self, reason):
         self.queue.put("DONE")
+        self.disconnect_d.callback(None)
 
 
 class BaseTelnetServerTransortTestCase(TransportTestCase):
@@ -47,14 +53,13 @@ class BaseTelnetServerTransortTestCase(TransportTestCase):
     def tearDown(self):
         if self.client.transport.connected:
             self.client.transport.loseConnection()
-            self.clear_dispatched_messages()
-            # Wait for all registered clients to get their disconnects.
-            yield self.wait_for_dispatched_messages(len(self.worker._clients))
+            yield self.client.disconnect_d
+            # Kick off the delivery of the deregistration message.
+            yield self._amqp.kick_delivery()
         yield super(BaseTelnetServerTransortTestCase, self).tearDown()
 
     def wait_for_client_start(self):
-        """Wait for first message from client to be ready."""
-        return self.wait_for_dispatched_messages(1)
+        return self.client.connect_d
 
     def get_dispatched_messages(self):
         return [TransportUserMessage.from_json(m.to_json())
@@ -73,7 +78,7 @@ class TelnetServerTransportTestCase(BaseTelnetServerTransortTestCase):
 
     @inlineCallbacks
     def test_client_register(self):
-        [msg] = yield self.get_dispatched_messages()
+        [msg] = yield self.wait_for_dispatched_messages(1)
         self.assertEqual(msg['content'], None)
         self.assertEqual(msg['session_event'],
                          TransportUserMessage.SESSION_NEW)
@@ -81,8 +86,7 @@ class TelnetServerTransportTestCase(BaseTelnetServerTransortTestCase):
     @inlineCallbacks
     def test_client_deregister(self):
         self.client.transport.loseConnection()
-        yield self.wait_for_dispatched_messages(2)
-        [reg, msg] = yield self.get_dispatched_messages()
+        [reg, msg] = yield self.wait_for_dispatched_messages(2)
         self.assertEqual(msg['content'], None)
         self.assertEqual(msg['session_event'],
                          TransportUserMessage.SESSION_CLOSE)
@@ -90,8 +94,7 @@ class TelnetServerTransportTestCase(BaseTelnetServerTransortTestCase):
     @inlineCallbacks
     def test_handle_input(self):
         self.client.transport.write("foo\n")
-        yield self.wait_for_dispatched_messages(2)
-        [reg, msg] = yield self.get_dispatched_messages()
+        [reg, msg] = yield self.wait_for_dispatched_messages(2)
         self.assertEqual(msg['content'], "foo")
         self.assertEqual(msg['session_event'],
                          TransportUserMessage.SESSION_RESUME)
@@ -99,59 +102,59 @@ class TelnetServerTransportTestCase(BaseTelnetServerTransortTestCase):
     @inlineCallbacks
     def test_handle_non_ascii_input(self):
         self.client.transport.write(NON_ASCII.encode("utf-8"))
-        yield self.wait_for_dispatched_messages(2)
-        [reg, msg] = yield self.get_dispatched_messages()
+        [reg, msg] = yield self.wait_for_dispatched_messages(2)
         self.assertEqual(msg['content'], NON_ASCII)
         self.assertEqual(msg['session_event'],
                          TransportUserMessage.SESSION_RESUME)
 
     @inlineCallbacks
     def test_outbound_reply(self):
-        [reg] = yield self.get_dispatched_messages()
-        reply = reg.reply(content="reply_foo", continue_session=False)
+        [reg] = yield self.wait_for_dispatched_messages(1)
+        reply = TransportUserMessage(**reg.payload).reply("reply_foo")
         yield self.dispatch(reply)
-        line = yield self.client.transport.protocol.queue.get()
+        line = yield self.client.queue.get()
         self.assertEqual(line, "reply_foo")
         self.assertTrue(self.client.transport.connected)
 
     @inlineCallbacks
     def test_non_ascii_outbound_reply(self):
-        [reg] = yield self.get_dispatched_messages()
-        reply = reg.reply(content=NON_ASCII, continue_session=False)
+        [reg] = yield self.wait_for_dispatched_messages(1)
+        reply = TransportUserMessage(**reg.payload).reply(content=NON_ASCII)
         yield self.dispatch(reply)
-        line = yield self.client.transport.protocol.queue.get()
+        line = yield self.client.queue.get()
         self.assertEqual(line, NON_ASCII.encode('utf-8'))
         self.assertTrue(self.client.transport.connected)
 
     @inlineCallbacks
     def test_non_ascii_outbound_unknown_address(self):
-        [reg] = yield self.get_dispatched_messages()
-        reply = reg.reply(content=NON_ASCII, continue_session=False)
+        [reg] = yield self.wait_for_dispatched_messages(1)
+        reply = TransportUserMessage(**reg.payload).reply(content=NON_ASCII)
         reply['to_addr'] = 'nowhere'
         yield self.dispatch(reply)
-        line = yield self.client.transport.protocol.queue.get()
+        line = yield self.client.queue.get()
         self.assertEqual(line,
             (u"UNKNOWN ADDR [nowhere]: %s" % (NON_ASCII,)).encode('utf-8'))
         self.assertTrue(self.client.transport.connected)
 
     @inlineCallbacks
     def test_outbound_close_event(self):
-        [reg] = yield self.get_dispatched_messages()
-        reply = reg.reply(content="reply_done", continue_session=False)
+        [reg] = yield self.wait_for_dispatched_messages(1)
+        reply = TransportUserMessage(**reg.payload).reply(
+            content="reply_done", continue_session=False)
         yield self.dispatch(reply)
-        line = yield self.client.transport.protocol.queue.get()
+        line = yield self.client.queue.get()
         self.assertEqual(line, "reply_done")
-        line = yield self.client.transport.protocol.queue.get()
+        line = yield self.client.queue.get()
         self.assertEqual(line, "DONE")
         self.assertFalse(self.client.transport.connected)
 
     @inlineCallbacks
     def test_outbound_send(self):
-        [reg] = yield self.get_dispatched_messages()
+        [reg] = yield self.wait_for_dispatched_messages(1)
         msg = self.msg_helper.make_outbound(
             "send_foo", to_addr=reg['from_addr'])
         yield self.dispatch(msg)
-        line = yield self.client.transport.protocol.queue.get()
+        line = yield self.client.queue.get()
         self.assertEqual(line, "send_foo")
         self.assertTrue(self.client.transport.connected)
 

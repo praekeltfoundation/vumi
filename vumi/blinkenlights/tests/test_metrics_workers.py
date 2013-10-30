@@ -37,6 +37,7 @@ class TestMetricTimeBucket(TestCase):
         worker = get_stubbed_worker(metrics_workers.MetricTimeBucket,
                                     config=config)
         broker = BrokerWrapper(worker._amqp_client.broker)
+        self.addCleanup(broker.wait_delivery)
         yield worker.startWorker()
 
         datapoints = [
@@ -90,6 +91,7 @@ class TestMetricAggregator(TestCase):
                                  config=config)
         worker._time = self.fake_time
         broker = BrokerWrapper(worker._amqp_client.broker)
+        self.addCleanup(broker.wait_delivery)
         yield worker.startWorker()
 
         datapoints = [
@@ -128,6 +130,7 @@ class TestMetricAggregator(TestCase):
                                  config=config)
         worker._time = self.fake_time
         broker = BrokerWrapper(worker._amqp_client.broker)
+        self.addCleanup(broker.wait_delivery)
         yield worker.startWorker()
 
         datapoints = [
@@ -166,6 +169,7 @@ class TestMetricAggregator(TestCase):
                                  config=config)
         worker._time = self.fake_time
         broker = BrokerWrapper(worker._amqp_client.broker)
+        self.addCleanup(broker.wait_delivery)
         yield worker.startWorker()
 
         datapoints = [
@@ -226,6 +230,7 @@ class TestAggregationSystem(TestCase):
     @inlineCallbacks
     def _setup_workers(self, bucketters, aggregators, bucket_size):
         broker = FakeAMQPBroker()
+        self.addCleanup(broker.wait_delivery)
         self.broker = BrokerWrapper(broker)
 
         bucket_config = {
@@ -282,6 +287,7 @@ class TestGraphitePublisher(TestCase):
     @inlineCallbacks
     def test_publish_metric(self):
         self.broker = FakeAMQPBroker()
+        self.addCleanup(self.broker.wait_delivery)
         datapoint = ("vumi.test.v1", 1.0, 1234)
         channel = yield get_stubbed_channel(self.broker)
         pub = metrics_workers.GraphitePublisher()
@@ -295,6 +301,7 @@ class TestGraphiteMetricsCollector(TestCase):
     def test_single_message(self):
         worker = get_stubbed_worker(metrics_workers.GraphiteMetricsCollector)
         broker = BrokerWrapper(worker._amqp_client.broker)
+        self.addCleanup(broker.wait_delivery)
         yield worker.startWorker()
 
         datapoints = [("vumi.test.foo", "", [(1234, 1.5)])]
@@ -327,6 +334,7 @@ class TestUDPMetricsCollector(TestCase):
                 'metrics_port': self.udp_server.getHost().port,
                 })
         self.broker = BrokerWrapper(self.worker._amqp_client.broker)
+        self.addCleanup(self.broker.wait_delivery)
         yield self.worker.startWorker()
 
     @inlineCallbacks
@@ -384,6 +392,7 @@ class TestRandomMetricsGenerator(TestCase):
         self._workers.append(worker)
         worker.on_run = self.on_run
         broker = BrokerWrapper(worker._amqp_client.broker)
+        self.addCleanup(broker.wait_delivery)
         yield worker.startWorker()
 
         yield self.wake_after_run()
