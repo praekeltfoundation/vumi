@@ -60,8 +60,10 @@ class MetricManager(Publisher):
     def _publish_metrics(self):
         msg = MetricMessage()
         # oneshot metrics
-        msg.extend(self._oneshot_msgs)
-        self._oneshot_msgs = []
+        oneshots, self._oneshot_msgs = self._oneshot_msgs, []
+        for metric, values in oneshots:
+            msg.append(
+                (self.prefix + metric.name, metric.aggs, values))
         # polled metrics
         for metric in self._metrics:
             msg.append(
@@ -72,7 +74,7 @@ class MetricManager(Publisher):
 
     def oneshot(self, metric, value):
         self._oneshot_msgs.append(
-            (self.prefix + metric.name, metric.aggs, value))
+            (metric, [(int(time.time()), value)]))
 
     def register(self, metric):
         """Register a new metric object to be managed by this metric set.
@@ -185,9 +187,9 @@ class Metric(object):
     def manage(self, prefix):
         """Called by :class:`MetricManager` when this metric is registered."""
         if self.managed:
-            raise MetricRegistrationError("Metric %s already registered"
+            raise MetricRegistrationError("Metric %s%s already registered"
                                           " with a MetricManager." %
-                                          (self.name,))
+                                          (prefix, self.name))
         self.managed = True
 
     def set(self, value):

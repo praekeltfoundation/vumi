@@ -1,6 +1,6 @@
 from twisted.trial.unittest import TestCase
 from twisted.internet import reactor
-from twisted.internet.defer import inlineCallbacks, Deferred
+from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
 from vumi.blinkenlights import metrics
 from vumi.tests.utils import get_stubbed_worker, get_stubbed_channel
 from vumi.message import Message
@@ -23,6 +23,15 @@ class TestMetricManager(TestCase):
 
     def wait_publish(self):
         return self._next_publish
+
+    @inlineCallbacks
+    def start_manager(self, manager):
+        channel = yield get_stubbed_channel()
+        broker = channel.broker
+        self.addCleanup(broker.wait_delivery)
+        manager.start(channel)
+        self.addCleanup(manager.stop)
+        returnValue(broker)
 
     def _sleep(self, delay):
         d = Deferred()
@@ -50,6 +59,16 @@ class TestMetricManager(TestCase):
                         % (now, datapoint))
         self.assertEqual([dp[1] for dp in datapoint[2]], values)
 
+    def test_oneshot(self):
+        self.patch(time, "time", lambda: 12345)
+        mm = metrics.MetricManager("vumi.test.")
+        cnt = metrics.Count("my.count")
+        mm.oneshot(cnt, 3)
+        self.assertEqual(cnt.name, "my.count")
+        self.assertEqual(mm._oneshot_msgs, [
+            (cnt, [(12345, 3)]),
+        ])
+
     def test_register(self):
         mm = metrics.MetricManager("vumi.test.")
         cnt = mm.register(metrics.Count("my.count"))
@@ -70,27 +89,42 @@ class TestMetricManager(TestCase):
         self.assertEqual(mm["my.count"].name, "my.count")
 
     @inlineCallbacks
-    def test_start(self):
-        channel = yield get_stubbed_channel()
-        broker = channel.broker
-        self.addCleanup(broker.wait_delivery)
+    def test_publish_metrics_poll(self):
         mm = metrics.MetricManager("vumi.test.", 0.1, self.on_publish)
         cnt = mm.register(metrics.Count("my.count"))
-        mm.start(channel)
-        try:
-            self.assertTrue(mm._task is not None)
-            self._check_msg(broker, mm, cnt, None)
+        broker = yield self.start_manager(mm)
 
-            cnt.inc()
-            yield self.wait_publish()
-            self._check_msg(broker, mm, cnt, [1])
+        cnt.inc()
+        mm._publish_metrics()
+        self._check_msg(broker, mm, cnt, [1])
 
-            cnt.inc()
-            cnt.inc()
-            yield self.wait_publish()
-            self._check_msg(broker, mm, cnt, [1, 1])
-        finally:
-            mm.stop()
+    @inlineCallbacks
+    def test_publish_metrics_oneshot(self):
+        mm = metrics.MetricManager("vumi.test.", 0.1, self.on_publish)
+        cnt = metrics.Count("my.count")
+        broker = yield self.start_manager(mm)
+
+        mm.oneshot(cnt, 1)
+        mm._publish_metrics()
+        self._check_msg(broker, mm, cnt, [1])
+
+    @inlineCallbacks
+    def test_start(self):
+        mm = metrics.MetricManager("vumi.test.", 0.1, self.on_publish)
+        cnt = mm.register(metrics.Count("my.count"))
+        broker = yield self.start_manager(mm)
+
+        self.assertTrue(mm._task is not None)
+        self._check_msg(broker, mm, cnt, None)
+
+        cnt.inc()
+        yield self.wait_publish()
+        self._check_msg(broker, mm, cnt, [1])
+
+        cnt.inc()
+        cnt.inc()
+        yield self.wait_publish()
+        self._check_msg(broker, mm, cnt, [1, 1])
 
     def test_stop_unstarted(self):
         mm = metrics.MetricManager("vumi.test.", 0.1, self.on_publish)
