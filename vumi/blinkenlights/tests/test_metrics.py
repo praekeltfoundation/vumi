@@ -74,6 +74,7 @@ class TestMetricManager(TestCase):
     def test_start(self):
         channel = yield get_stubbed_channel()
         broker = channel.broker
+        self.addCleanup(broker.wait_delivery)
         mm = metrics.MetricManager("vumi.test.", 0.1, self.on_publish)
         cnt = mm.register(metrics.Count("my.count"))
         mm.start(channel)
@@ -101,6 +102,7 @@ class TestMetricManager(TestCase):
     def test_in_worker(self):
         worker = get_stubbed_worker(Worker)
         broker = worker._amqp_client.broker
+        self.addCleanup(broker.wait_delivery)
         mm = yield worker.start_publisher(metrics.MetricManager,
                                           "vumi.test.", 0.1, self.on_publish)
         acc = mm.register(metrics.Metric("my.acc"))

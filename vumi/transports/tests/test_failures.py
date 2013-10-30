@@ -40,6 +40,7 @@ class FailureWorkerTestCase(unittest.TestCase, PersistenceMixin):
         self.redis = self.worker.redis
         yield self.redis._purge_all()  # Just in case
         self.broker = self.worker._amqp_client.broker
+        self.addCleanup(self.broker.wait_delivery)
 
     def assert_write_timestamp(self, expected, delta, now):
         self.assertEqual(expected,
