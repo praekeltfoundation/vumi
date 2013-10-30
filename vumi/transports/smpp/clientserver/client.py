@@ -317,7 +317,9 @@ class EsmeTransceiver(Protocol):
         pdu_params = pdu['body']['mandatory_parameters']
         pdu_opts = unpacked_pdu_opts(pdu)
 
-        # This might be a delivery report with PDU parameters.
+        # This might be a delivery receipt with PDU parameters. If we get a
+        # delivery receipt without these parameters we'll try a regex match
+        # later once we've decoded the message properly.
         receipted_message_id = pdu_opts.get('receipted_message_id', None)
         message_state = pdu_opts.get('message_state', None)
         if receipted_message_id is not None and message_state is not None:
