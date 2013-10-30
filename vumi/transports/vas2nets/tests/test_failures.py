@@ -2,36 +2,18 @@
 from datetime import datetime
 
 from twisted.web import http
-from twisted.web.resource import Resource
 from twisted.trial import unittest
 from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
 
 from vumi.message import from_json
 from vumi.tests.utils import (
-    get_stubbed_worker, TestResourceWorker, PersistenceMixin)
+    PersistenceMixin, get_stubbed_worker, MockHttpServer)
 from vumi.tests.fake_amqp import FakeAMQPBroker
-from vumi.transports.failures import (FailureMessage, FailureWorker,
-                                      TemporaryFailure)
-from vumi.transports.vas2nets.vas2nets import (Vas2NetsTransport,
-                                               Vas2NetsTransportError)
+from vumi.transports.failures import (
+    FailureMessage, FailureWorker, TemporaryFailure)
+from vumi.transports.vas2nets.vas2nets import (
+    Vas2NetsTransport, Vas2NetsTransportError)
 from vumi.tests.helpers import MessageHelper
-
-
-class BadVas2NetsResource(Resource):
-    isLeaf = True
-
-    def __init__(self, body, headers=None, code=http.OK):
-        self.body = body
-        self.code = code
-        if headers is None:
-            headers = {'X-Nth-Smsid': 'message_id'}
-        self.headers = headers
-
-    def render_POST(self, request):
-        request.setResponseCode(self.code)
-        for k, v in self.headers.items():
-            request.setHeader(k, v)
-        return self.body
 
 
 class FailureCounter(object):
@@ -54,11 +36,9 @@ class Vas2NetsFailureWorkerTestCase(unittest.TestCase, PersistenceMixin):
     def setUp(self):
         self._persist_setUp()
         self.today = datetime.utcnow().date()
-        self.port = 9999
-        self.path = '/api/v1/sms/vas2nets/receive/'
         self.config = self.mk_config({
             'transport_name': 'vas2nets',
-            'url': 'http://localhost:%s%s' % (self.port, self.path),
+            'url': None,
             'username': 'username',
             'password': 'password',
             'owner': 'owner',
@@ -66,7 +46,7 @@ class Vas2NetsFailureWorkerTestCase(unittest.TestCase, PersistenceMixin):
             'subservice': 'subservice',
             'web_receive_path': '/receive',
             'web_receipt_path': '/receipt',
-            'web_port': 9998,
+            'web_port': 0,
         })
         self.fail_config = self.mk_config({
             'transport_name': 'vas2nets',
@@ -104,13 +84,20 @@ class Vas2NetsFailureWorkerTestCase(unittest.TestCase, PersistenceMixin):
         returnValue(w)
 
     @inlineCallbacks
-    def mk_resource_worker(self, body, headers=None, code=http.OK):
-        w = get_stubbed_worker(TestResourceWorker, {}, self.broker)
-        self.workers.append(w)
-        w.set_resources([(self.path, BadVas2NetsResource,
-                          (body, headers, code))])
-        yield w.startWorker()
-        returnValue(w)
+    def mk_mock_server(self, body, headers=None, code=http.OK):
+        if headers is None:
+            headers = {'X-Nth-Smsid': 'message_id'}
+
+        def handler(request):
+            request.setResponseCode(code)
+            for k, v in headers.items():
+                request.setHeader(k, v)
+            return body
+
+        self.mock_server = MockHttpServer(handler)
+        self.addCleanup(self.mock_server.stop)
+        yield self.mock_server.start()
+        self.worker.config['url'] = self.mock_server.url
 
     def get_dispatched(self, rkey):
         return self.broker.get_dispatched('vumi', rkey)
@@ -133,7 +120,7 @@ class Vas2NetsFailureWorkerTestCase(unittest.TestCase, PersistenceMixin):
 
     @inlineCallbacks
     def test_send_sms_success(self):
-        yield self.mk_resource_worker("Result_code: 00, Message OK")
+        yield self.mk_mock_server("Result_code: 00, Message OK")
         yield self.worker._process_message(self.make_outbound("outbound"))
         self.assert_dispatched_count(1, 'vas2nets.event')
         self.assert_dispatched_count(0, 'vas2nets.failures')
@@ -144,7 +131,7 @@ class Vas2NetsFailureWorkerTestCase(unittest.TestCase, PersistenceMixin):
         A 'No SmsId Header' error should not be retried.
         """
         self.worker.failure_published = FailureCounter(1)
-        yield self.mk_resource_worker("Result_code: 04, Internal system error "
+        yield self.mk_mock_server("Result_code: 04, Internal system error "
                                       "occurred while processing message",
                                       {})
         yield self.worker._process_message(self.make_outbound("outbound"))
@@ -176,6 +163,9 @@ class Vas2NetsFailureWorkerTestCase(unittest.TestCase, PersistenceMixin):
         """
         A 'connection refused' error should be retried.
         """
+        # Hope nothing's listening on this port.
+        self.worker.config['url'] = 'http://localhost:9999/'
+
         self.worker.failure_published = FailureCounter(1)
         msg = self.make_outbound("outbound")
         yield self.worker._process_message(msg)

@@ -4,13 +4,11 @@ from datetime import datetime
 from urllib import urlencode
 
 from twisted.web import http
-from twisted.web.resource import Resource
 from twisted.python import log
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.utils import http_request_full
 from vumi.transports.tests.utils import TransportTestCase
-from vumi.tests.utils import get_stubbed_worker, TestResourceWorker
 from vumi.message import TransportMessage
 from vumi.transports.failures import TemporaryFailure, PermanentFailure
 from vumi.transports.base import FailureMessage
@@ -18,36 +16,7 @@ from vumi.transports.vas2nets.vas2nets import (
     Vas2NetsTransport, validate_characters, Vas2NetsTransportError,
     Vas2NetsEncodingError, normalize_outbound_msisdn)
 from vumi.tests.helpers import MessageHelper
-
-
-class TestResource(Resource):
-    isLeaf = True
-
-    def __init__(self, message_id, message, code=http.OK, send_id=None):
-        self.message_id = message_id
-        self.message = message
-        self.code = code
-        self.send_id = send_id
-
-    def render_POST(self, request):
-        log.msg(request.content.read())
-        request.setResponseCode(self.code)
-        required_fields = [
-            'username', 'password', 'call-number', 'origin', 'text',
-            'messageid', 'provider', 'tariff', 'owner', 'service',
-            'subservice'
-        ]
-        log.msg('request.args', request.args)
-        for key in required_fields:
-            log.msg('checking for %s' % key)
-            assert key in request.args
-
-        if self.send_id is not None:
-            assert request.args['messageid'] == [self.send_id]
-
-        if self.message_id:
-            request.setHeader('X-Nth-Smsid', self.message_id)
-        return self.message
+from vumi.tests.utils import MockHttpServer
 
 
 class Vas2NetsTransportTestCase(TransportTestCase):
@@ -59,11 +28,9 @@ class Vas2NetsTransportTestCase(TransportTestCase):
     @inlineCallbacks
     def setUp(self):
         yield super(Vas2NetsTransportTestCase, self).setUp()
-        self.path = '/api/v1/sms/vas2nets/receive/'
-        self.port = 9999
         self.config = {
             'transport_name': 'vas2nets',
-            'url': 'http://localhost:%s%s' % (self.port, self.path),
+            'url': None,
             'username': 'username',
             'password': 'password',
             'owner': 'owner',
@@ -71,23 +38,42 @@ class Vas2NetsTransportTestCase(TransportTestCase):
             'subservice': 'subservice',
             'web_receive_path': '/receive',
             'web_receipt_path': '/receipt',
-            'web_port': 9998,
+            'web_port': 0,
         }
-        self.worker = yield self.get_transport(self.config)
+        self.transport = yield self.get_transport(self.config)
+        self.transport_url = self.transport.get_transport_url()
         self.today = datetime.utcnow().date()
         self.msg_helper = MessageHelper(transport_name=self.transport_name)
 
-    @inlineCallbacks
-    def tearDown(self):
-        yield self.worker.stopWorker()
-        yield super(Vas2NetsTransportTestCase, self).tearDown()
+    def _make_handler(self, message_id, message, code, send_id):
+        def handler(request):
+            log.msg(request.content.read())
+            request.setResponseCode(code)
+            required_fields = [
+                'username', 'password', 'call-number', 'origin', 'text',
+                'messageid', 'provider', 'tariff', 'owner', 'service',
+                'subservice'
+            ]
+            log.msg('request.args', request.args)
+            for key in required_fields:
+                log.msg('checking for %s' % key)
+                self.assertTrue(key in request.args)
 
-    def make_resource_worker(self, msg_id, msg, code=http.OK, send_id=None):
-        w = get_stubbed_worker(TestResourceWorker, {})
-        w.set_resources([
-                (self.path, TestResource, (msg_id, msg, code, send_id))])
-        self._workers.append(w)
-        return w.startWorker()
+            if send_id is not None:
+                self.assertEqual(request.args['messageid'], [send_id])
+
+            if message_id:
+                request.setHeader('X-Nth-Smsid', message_id)
+            return message
+        return handler
+
+    @inlineCallbacks
+    def start_mock_server(self, msg_id, msg, code=http.OK, send_id=None):
+        self.mock_server = MockHttpServer(
+            self._make_handler(msg_id, msg, code, send_id))
+        self.addCleanup(self.mock_server.stop)
+        yield self.mock_server.start()
+        self.transport.config['url'] = self.mock_server.url
 
     def make_request(self, path, qparams):
         """
@@ -105,8 +91,7 @@ class Vas2NetsTransportTestCase(TransportTestCase):
             'keyword': '',
         }
         args.update(qparams)
-        url = "http://localhost:%s/%s" % (
-            self.config['web_port'], path.lstrip('/'))
+        url = self.transport_url + path
         return http_request_full(url, urlencode(args), {
                 'Content-Type': ['application/x-www-form-urlencoded'],
                 })
@@ -158,8 +143,7 @@ class Vas2NetsTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_health_check(self):
-        url = "http://localhost:%s/health" % (self.config['web_port'],)
-        response = yield http_request_full(url)
+        response = yield http_request_full(self.transport_url + "/health")
 
         self.assertEqual('OK', response.delivered_body)
         self.assertEqual(response.code, http.OK)
@@ -251,7 +235,7 @@ class Vas2NetsTransportTestCase(TransportTestCase):
 
         # open an HTTP resource that mocks the Vas2Nets response for the
         # duration of this test
-        yield self.make_resource_worker(mocked_message_id, mocked_message)
+        yield self.start_mock_server(mocked_message_id, mocked_message)
 
         sent_msg = self.make_outbound("hello")
         yield self.dispatch(sent_msg)
@@ -269,7 +253,7 @@ class Vas2NetsTransportTestCase(TransportTestCase):
 
         # open an HTTP resource that mocks the Vas2Nets response for the
         # duration of this test
-        yield self.make_resource_worker(mocked_message_id, mocked_message,
+        yield self.start_mock_server(mocked_message_id, mocked_message,
                                         send_id=reply_to_msgid)
 
         sent_msg = self.make_outbound("hello", in_reply_to=reply_to_msgid)
@@ -285,7 +269,7 @@ class Vas2NetsTransportTestCase(TransportTestCase):
         mocked_message_id = False
         mocked_message = ("Result_code: 04, Internal system error occurred "
                           "while processing message")
-        yield self.make_resource_worker(mocked_message_id, mocked_message)
+        yield self.start_mock_server(mocked_message_id, mocked_message)
 
         msg = self.make_outbound("hello")
         d = self.dispatch(msg)
@@ -307,6 +291,8 @@ class Vas2NetsTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_send_sms_noconn(self):
+        # Hope nothing's listening on this port.
+        self.transport.config['url'] = 'http://localhost:9999/'
         msg = self.make_outbound("hello")
         d = self.dispatch(msg)
         yield d
@@ -324,7 +310,7 @@ class Vas2NetsTransportTestCase(TransportTestCase):
     @inlineCallbacks
     def test_send_sms_not_OK(self):
         mocked_message = "Page not found."
-        yield self.make_resource_worker(None, mocked_message, http.NOT_FOUND)
+        yield self.start_mock_server(None, mocked_message, http.NOT_FOUND)
 
         msg = self.make_outbound("hello")
         deferred = self.dispatch(msg)
