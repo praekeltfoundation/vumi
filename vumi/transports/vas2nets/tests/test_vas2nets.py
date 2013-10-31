@@ -291,7 +291,8 @@ class Vas2NetsTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_send_sms_noconn(self):
-        # Hope nothing's listening on this port.
+        # TODO: Figure out a solution that doesn't require hoping that
+        #       nothing's listening on this port.
         self.transport.config['url'] = 'http://localhost:9999/'
         msg = self.make_outbound("hello")
         d = self.dispatch(msg)

@@ -163,7 +163,8 @@ class Vas2NetsFailureWorkerTestCase(unittest.TestCase, PersistenceMixin):
         """
         A 'connection refused' error should be retried.
         """
-        # Hope nothing's listening on this port.
+        # TODO: Figure out a solution that doesn't require hoping that
+        #       nothing's listening on this port.
         self.worker.config['url'] = 'http://localhost:9999/'
 
         self.worker.failure_published = FailureCounter(1)
