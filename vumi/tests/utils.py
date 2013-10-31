@@ -89,23 +89,6 @@ def get_stubbed_channel(broker=None, id=0):
     return amq_client.channel(id)
 
 
-class TestResourceWorker(Worker):
-    port = 9999
-    _resources = ()
-
-    def set_resources(self, resources):
-        self._resources = resources
-
-    def startWorker(self):
-        resources = [(cls(*args), path) for path, cls, args in self._resources]
-        self.resources = self.start_web_resources(resources, self.port)
-        return defer.succeed(None)
-
-    def stopWorker(self):
-        if self.resources:
-            self.resources.stopListening()
-
-
 def FakeRedis():
     warnings.warn("Use of FakeRedis is deprecated. "
                   "Use persist.tests.fake_redis instead.",
