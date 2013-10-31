@@ -1,11 +1,10 @@
 from base64 import b64decode
 
-from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.defer import inlineCallbacks
 from twisted.web import http
 
 from vumi.application.tests.utils import ApplicationTestCase
-from vumi.tests.utils import TestResourceWorker, get_stubbed_worker
-from vumi.application.tests.test_http_relay_stubs import TestResource
+from vumi.tests.utils import MockHttpServer
 from vumi.application.http_relay import HTTPRelayApplication
 from vumi.message import TransportEvent
 from vumi.tests.helpers import MessageHelper
@@ -14,7 +13,6 @@ from vumi.tests.helpers import MessageHelper
 class HTTPRelayTestCase(ApplicationTestCase):
 
     application_class = HTTPRelayApplication
-    timeout = 1
 
     @inlineCallbacks
     def setUp(self):
@@ -24,35 +22,23 @@ class HTTPRelayTestCase(ApplicationTestCase):
 
     @inlineCallbacks
     def setup_resource_with_callback(self, callback):
-        self.resource = yield self.make_resource_worker(callback=callback)
-        self.app = yield self.setup_app(self.path, self.resource)
-
-    @inlineCallbacks
-    def setup_resource(self, code, content, headers):
-        self.resource = yield self.make_resource_worker(code, content,
-                                                        headers)
-        self.app = yield self.setup_app(self.path, self.resource)
-
-    @inlineCallbacks
-    def setup_app(self, path, resource):
-        app = yield self.get_application({
-            'url': 'http://localhost:%s%s' % (
-                resource.port,
-                path),
+        self.mock_server = MockHttpServer(callback)
+        self.addCleanup(self.mock_server.stop)
+        yield self.mock_server.start()
+        self.app = yield self.get_application({
+            'url': '%s%s' % (self.mock_server.url, self.path),
             'username': 'username',
             'password': 'password',
         })
-        returnValue(app)
 
-    @inlineCallbacks
-    def make_resource_worker(self, code=http.OK, content='',
-                                headers={}, callback=None):
-        w = get_stubbed_worker(TestResourceWorker, {})
-        w.set_resources([
-                (self.path, TestResource, (code, content, headers, callback))])
-        self._workers.append(w)
-        yield w.startWorker()
-        returnValue(w)
+    def setup_resource(self, code, content, headers):
+        def handler(request):
+            request.setResponseCode(code)
+            for key, value in headers.items():
+                request.setHeader(key, value)
+            return content
+
+        return self.setup_resource_with_callback(handler)
 
     @inlineCallbacks
     def test_http_relay_success_with_no_reply(self):
