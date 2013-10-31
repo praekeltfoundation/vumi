@@ -401,9 +401,41 @@ class EsmeReceiverMixin(EsmeGenericMixin):
         self.flushLoggedErrors()
 
     @inlineCallbacks
-    def test_deliver_sm_delivery_report(self):
-        esme = yield self.get_esme(delivery_report=self.assertion_cb(
-                u'DELIVRD', 'delivery_report', 'stat'))
+    def test_deliver_sm_delivery_report_delivered(self):
+        esme = yield self.get_esme(delivery_report=self.assertion_cb({
+            'message_id': '1b1720be-5f48-41c4-b3f8-6e59dbf45366',
+            'message_state': 'DELIVERED',
+        }))
+
+        sm = DeliverSM(1, short_message='delivery report')
+        sm._PDU__add_optional_parameter(
+            'receipted_message_id',
+            '1b1720be-5f48-41c4-b3f8-6e59dbf45366'.encode('hex'))
+        sm._PDU__add_optional_parameter('message_state', 2)
+
+        yield esme.handle_deliver_sm(unpack_pdu(sm.get_bin()))
+
+    @inlineCallbacks
+    def test_deliver_sm_delivery_report_rejected(self):
+        esme = yield self.get_esme(delivery_report=self.assertion_cb({
+            'message_id': '1b1720be-5f48-41c4-b3f8-6e59dbf45366',
+            'message_state': 'REJECTED',
+        }))
+
+        sm = DeliverSM(1, short_message='delivery report')
+        sm._PDU__add_optional_parameter(
+            'receipted_message_id',
+            '1b1720be-5f48-41c4-b3f8-6e59dbf45366'.encode('hex'))
+        sm._PDU__add_optional_parameter('message_state', 8)
+
+        yield esme.handle_deliver_sm(unpack_pdu(sm.get_bin()))
+
+    @inlineCallbacks
+    def test_deliver_sm_delivery_report_regex_fallback(self):
+        esme = yield self.get_esme(delivery_report=self.assertion_cb({
+            'message_id': '1b1720be-5f48-41c4-b3f8-6e59dbf45366',
+            'message_state': 'DELIVRD',
+        }))
 
         yield esme.handle_deliver_sm(self.get_sm(
                 'id:1b1720be-5f48-41c4-b3f8-6e59dbf45366 sub:001 dlvrd:001 '
@@ -411,9 +443,11 @@ class EsmeReceiverMixin(EsmeGenericMixin):
                 'err:000 text:'))
 
     @inlineCallbacks
-    def test_deliver_sm_delivery_report_ucs2(self):
-        esme = yield self.get_esme(delivery_report=self.assertion_cb(
-                u'DELIVRD', 'delivery_report', 'stat'))
+    def test_deliver_sm_delivery_report_regex_fallback_ucs2(self):
+        esme = yield self.get_esme(delivery_report=self.assertion_cb({
+            'message_id': '1b1720be-5f48',
+            'message_state': 'DELIVRD',
+        }))
 
         dr_text = (
             u'id:1b1720be-5f48 sub:001 dlvrd:001 '
@@ -422,9 +456,11 @@ class EsmeReceiverMixin(EsmeGenericMixin):
         yield esme.handle_deliver_sm(self.get_sm(dr_text, 8))
 
     @inlineCallbacks
-    def test_deliver_sm_delivery_report_ucs2_long(self):
-        esme = yield self.get_esme(delivery_report=self.assertion_cb(
-                u'DELIVRD', 'delivery_report', 'stat'))
+    def test_deliver_sm_delivery_report_regex_fallback_ucs2_long(self):
+        esme = yield self.get_esme(delivery_report=self.assertion_cb({
+            'message_id': '1b1720be-5f48-41c4-b3f8-6e59dbf45366',
+            'message_state': 'DELIVRD',
+        }))
 
         dr_text = (
             u'id:1b1720be-5f48-41c4-b3f8-6e59dbf45366 sub:001 dlvrd:001 '

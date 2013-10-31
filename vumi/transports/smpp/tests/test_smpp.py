@@ -885,6 +885,33 @@ class EsmeToSmscTestCaseDeliveryYo(EsmeToSmscTestCase):
         self.expected_delivery_status = 'delivered'  # stat:0 means delivered
 
 
+class EsmeToSmscTestCaseDeliveryOverrideMapping(EsmeToSmscTestCase):
+    # This tests a non-standard delivery report status mapping.
+
+    @inlineCallbacks
+    def setUp(self):
+        yield super(EsmeToSmscTestCase, self).setUp()
+
+        self.config = {
+            "system_id": "VumiTestSMSC",
+            "password": "password",
+            "host": "localhost",
+            "port": 0,
+            "transport_name": self.transport_name,
+            "transport_type": "smpp",
+            "delivery_report_regex": "id:(?P<id>\S+) stat:(?P<stat>\S+) .*",
+            "delivery_report_status_mapping": {"foo": "delivered"},
+            "smsc_delivery_report_string": (
+                'id:%s stat:foo submit date:%s done date:%s'),
+        }
+        self.service = SmppService(None, config=self.config)
+        yield self.service.startWorker()
+        self.service.factory.protocol = SmscTestServer
+        self.config['port'] = self.service.listening.getHost().port
+        self.transport = yield self.get_transport(self.config, start=False)
+        self.expected_delivery_status = 'delivered'  # stat:0 means delivered
+
+
 class TxEsmeToSmscTestCase(TransportTestCase):
 
     transport_name = "esme_testing_transport"
