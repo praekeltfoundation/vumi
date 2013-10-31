@@ -324,7 +324,7 @@ class EsmeTransceiver(Protocol):
         message_state = pdu_opts.get('message_state', None)
         if receipted_message_id is not None and message_state is not None:
             yield self.esme_callbacks.delivery_report(
-                message_id=receipted_message_id.decode('hex'),
+                message_id=receipted_message_id,
                 message_state={
                     1: 'ENROUTE',
                     2: 'DELIVERED',
@@ -336,7 +336,6 @@ class EsmeTransceiver(Protocol):
                     8: 'REJECTED',
                 }.get(message_state, 'UNKNOWN'),
             )
-            receipted_message_id = receipted_message_id.decode('hex')
 
         # We might have a `message_payload` optional field to worry about.
         message_payload = pdu_opts.get('message_payload', None)

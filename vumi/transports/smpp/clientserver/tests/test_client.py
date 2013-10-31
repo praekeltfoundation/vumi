@@ -410,7 +410,7 @@ class EsmeReceiverMixin(EsmeGenericMixin):
         sm = DeliverSM(1, short_message='delivery report')
         sm._PDU__add_optional_parameter(
             'receipted_message_id',
-            '1b1720be-5f48-41c4-b3f8-6e59dbf45366'.encode('hex'))
+            '1b1720be-5f48-41c4-b3f8-6e59dbf45366')
         sm._PDU__add_optional_parameter('message_state', 2)
 
         yield esme.handle_deliver_sm(unpack_pdu(sm.get_bin()))
@@ -425,7 +425,7 @@ class EsmeReceiverMixin(EsmeGenericMixin):
         sm = DeliverSM(1, short_message='delivery report')
         sm._PDU__add_optional_parameter(
             'receipted_message_id',
-            '1b1720be-5f48-41c4-b3f8-6e59dbf45366'.encode('hex'))
+            '1b1720be-5f48-41c4-b3f8-6e59dbf45366')
         sm._PDU__add_optional_parameter('message_state', 8)
 
         yield esme.handle_deliver_sm(unpack_pdu(sm.get_bin()))
