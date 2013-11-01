@@ -251,7 +251,7 @@ class SmppTransportTestCase(TransportTestCase):
         assert_throttled_status(True, ["Heimlich", "Heimlich"], [])
         # And acknowledged by the other side
         yield self.esme.handle_data(SubmitSMResp(2, "3rd_party_5").get_bin())
-        yield self._amqp.kick_delivery()
+        yield self.tx_helper.kick_delivery()
         yield self.esme.handle_data(SubmitSMResp(3, "3rd_party_6").get_bin())
         assert_throttled_status(
             False, ["Heimlich", "Heimlich", "Other"],
@@ -291,7 +291,7 @@ class SmppTransportTestCase(TransportTestCase):
         assert_throttled_status(True, ["Heimlich", "Heimlich"], [])
         # And acknowledged by the other side
         yield self.esme.handle_data(SubmitSMResp(2, "3rd_party_5").get_bin())
-        yield self._amqp.kick_delivery()
+        yield self.tx_helper.kick_delivery()
         yield self.esme.handle_data(SubmitSMResp(3, "3rd_party_6").get_bin())
         assert_throttled_status(
             False, ["Heimlich", "Heimlich", "Other"],

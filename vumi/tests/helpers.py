@@ -276,7 +276,7 @@ class AMQPHelper(object):
     @proxyable
     def dispatch_raw(self, routing_key, message, exchange='vumi'):
         self.broker.publish_message(exchange, routing_key, message)
-        return self.broker.kick_delivery()
+        return self.kick_delivery()
 
     @proxyable
     def dispatch_inbound(self, message, connector_name=None):
@@ -292,6 +292,10 @@ class AMQPHelper(object):
     def dispatch_event(self, message, connector_name=None):
         return self.dispatch_raw(
             self._rkey(connector_name, 'event'), message)
+
+    @proxyable
+    def kick_delivery(self):
+        return self.broker.kick_delivery()
 
 
 class MessageDispatchHelper(object):
