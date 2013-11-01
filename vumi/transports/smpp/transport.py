@@ -1,7 +1,5 @@
 # -*- test-case-name: vumi.transports.smpp.tests.test_smpp -*-
 
-from datetime import datetime
-
 from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, returnValue
 
@@ -32,6 +30,27 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
         ' +[Tt]ext:(?P<text>.{,20})'
         '.*'
     )
+
+    DELIVERY_REPORT_STATUS_MAPPING = {
+        # Output values should map to themselves:
+        'delivered': 'delivered',
+        'failed': 'failed',
+        'pending': 'pending',
+        # SMPP `message_state` values:
+        'ENROUTE': 'pending',
+        'DELIVERED': 'delivered',
+        'EXPIRED': 'failed',
+        'DELETED': 'failed',
+        'UNDELIVERABLE': 'failed',
+        'ACCEPTED': 'delivered',
+        'UNKNOWN': 'pending',
+        'REJECTED': 'failed',
+        # From the most common regex-extracted format:
+        'DELIVRD': 'delivered',
+        'REJECTD': 'failed',
+        # Currently we will accept this for Yo! TODO: investigate
+        '0': 'delivered',
+    }
 
     twisted_endpoint = ConfigClientEndpoint(
         'The SMPP endpoint to connect to.',
@@ -79,6 +98,10 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
     delivery_report_regex = ConfigRegex(
         'What regex to use for matching delivery reports',
         default=DELIVERY_REPORT_REGEX, static=True)
+    delivery_report_status_mapping = ConfigDict(
+        "Mapping from delivery report message state to "
+        "(`delivered`, `failed`, `pending`)",
+        static=True, default=DELIVERY_REPORT_STATUS_MAPPING)
     submit_sm_encoding = ConfigText(
         'How to encode the SMS before putting on the wire', static=True,
         default='utf-8')
@@ -380,28 +403,13 @@ class SmppTransport(Transport):
                            self._submit_outbound_message, message)
 
     def delivery_status(self, state):
-        if state in [
-                "DELIVRD",
-                "0"  # Currently we will accept this for Yo! TODO: investigate
-                ]:
-            return "delivered"
-        if state in [
-                "REJECTD"
-                ]:
-            return "failed"
-        return "pending"
+        config = self.get_static_config()
+        return config.delivery_report_status_mapping.get(state, 'pending')
 
     @inlineCallbacks
-    def delivery_report(self, *args, **kwargs):
-        transport_metadata = {
-                "message": kwargs['delivery_report'],
-                "date": datetime.strptime(
-                    kwargs['delivery_report']['done_date'], "%y%m%d%H%M%S")
-                }
-        delivery_status = self.delivery_status(
-            kwargs['delivery_report']['stat'])
-        message_id = yield self.r_get_id_for_third_party_id(
-            kwargs['delivery_report']['id'])
+    def delivery_report(self, message_id, message_state):
+        delivery_status = self.delivery_status(message_state)
+        message_id = yield self.r_get_id_for_third_party_id(message_id)
         if message_id is None:
             log.warning("Failed to retrieve message id for delivery report."
                         " Delivery report from %s discarded."
@@ -411,8 +419,7 @@ class SmppTransport(Transport):
                                                     delivery_status))
         returnValue((yield self.publish_delivery_report(
                     user_message_id=message_id,
-                    delivery_status=delivery_status,
-                    transport_metadata=transport_metadata)))
+                    delivery_status=delivery_status)))
 
     def deliver_sm(self, *args, **kwargs):
         message_type = kwargs.get('message_type', 'sms')

@@ -2,26 +2,15 @@
 
 import json
 
-from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.defer import inlineCallbacks
 from twisted.web import http
-from twisted.web.resource import Resource
 
 from vumi.application.tests.test_base import ApplicationTestCase
-from vumi.tests.utils import TestResourceWorker, LogCatcher, get_stubbed_worker
+from vumi.tests.utils import LogCatcher, MockHttpServer
 from vumi.application.rapidsms_relay import RapidSMSRelay, BadRequestError
 from vumi.utils import http_request_full, basic_auth_string, to_kwargs
 from vumi.message import TransportUserMessage, from_json
 from vumi.tests.helpers import MessageHelper
-
-
-class DummyRapidResource(Resource):
-    isLeaf = True
-
-    def __init__(self, callback):
-        self.callback = callback
-
-    def render_POST(self, request):
-        return self.callback(request)
 
 
 class RapidSMSRelayTestCase(ApplicationTestCase):
@@ -38,14 +27,16 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
     def setup_resource(self, callback=None, auth=None):
         if callback is None:
             callback = lambda r: self.fail("No RapidSMS requests expected.")
-        self.resource = yield self.setup_dummy_rapidsms(callback=callback)
-        self.app = yield self.setup_app(self.path, self.resource, auth=auth)
+        self.mock_server = MockHttpServer(callback)
+        self.addCleanup(self.mock_server.stop)
+        yield self.mock_server.start()
+        url = '%s%s' % (self.mock_server.url, self.path)
+        self.app = yield self.setup_app(url, auth=auth)
 
-    @inlineCallbacks
-    def setup_app(self, path, resource, auth=None):
+    def setup_app(self, url, auth=None):
         vumi_username, vumi_password = auth if auth else (None, None)
-        app = yield self.get_application({
-            'rapidsms_url': 'http://localhost:%s%s' % (resource.port, path),
+        return self.get_application({
+            'rapidsms_url': url,
             'web_path': '/send/',
             'web_port': '0',
             'rapidsms_username': 'username',
@@ -53,15 +44,6 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
             'vumi_username': vumi_username,
             'vumi_password': vumi_password,
         })
-        returnValue(app)
-
-    @inlineCallbacks
-    def setup_dummy_rapidsms(self, callback):
-        w = get_stubbed_worker(TestResourceWorker, {})
-        w.set_resources([(self.path, DummyRapidResource, (callback,))])
-        self._workers.append(w)
-        yield w.startWorker()
-        returnValue(w)
 
     def get_response_msgs(self, response):
         payloads = from_json(response.delivered_body)

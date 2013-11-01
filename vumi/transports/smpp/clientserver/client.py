@@ -317,6 +317,26 @@ class EsmeTransceiver(Protocol):
         pdu_params = pdu['body']['mandatory_parameters']
         pdu_opts = unpacked_pdu_opts(pdu)
 
+        # This might be a delivery receipt with PDU parameters. If we get a
+        # delivery receipt without these parameters we'll try a regex match
+        # later once we've decoded the message properly.
+        receipted_message_id = pdu_opts.get('receipted_message_id', None)
+        message_state = pdu_opts.get('message_state', None)
+        if receipted_message_id is not None and message_state is not None:
+            yield self.esme_callbacks.delivery_report(
+                message_id=receipted_message_id,
+                message_state={
+                    1: 'ENROUTE',
+                    2: 'DELIVERED',
+                    3: 'EXPIRED',
+                    4: 'DELETED',
+                    5: 'UNDELIVERABLE',
+                    6: 'ACCEPTED',
+                    7: 'UNKNOWN',
+                    8: 'REJECTED',
+                }.get(message_state, 'UNKNOWN'),
+            )
+
         # We might have a `message_payload` optional field to worry about.
         message_payload = pdu_opts.get('message_payload', None)
         if message_payload is not None:
@@ -337,10 +357,10 @@ class EsmeTransceiver(Protocol):
             short_message or '')
         if delivery_report:
             # We have a delivery report.
+            fields = delivery_report.groupdict()
             return self.esme_callbacks.delivery_report(
-                source_addr=source_addr,
-                destination_addr=destination_addr,
-                delivery_report=delivery_report.groupdict())
+                message_id=fields['id'],
+                message_state=fields['stat'])
 
         message_id = str(uuid.uuid4())
         return self.esme_callbacks.deliver_sm(
