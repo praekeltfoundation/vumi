@@ -38,7 +38,7 @@ class MetricManager(Publisher):
         self.prefix = prefix
         self._metrics = []  # list of metrics to poll
         self._oneshot_msgs = []  # list of oneshot messages since last publish
-        self._metrics_lookup = {}  # metric suffix -> metric
+        self._metrics_lookup = {}  # metric name -> metric
         self._publish_interval = publish_interval
         self._task = None  # created in .start()
         self._on_publish = on_publish
@@ -73,6 +73,16 @@ class MetricManager(Publisher):
             self._on_publish(self)
 
     def oneshot(self, metric, value):
+        """Publish a single value for the given metric.
+
+        :type metric: :class:`Metric`
+        :param metric:
+            Metric object to register. Will have the manager's prefix
+            added to its name.
+        :type value: float
+        :param value:
+            The value to publish for the metric.
+        """
         self._oneshot_msgs.append(
             (metric, [(int(time.time()), value)]))
 
@@ -83,8 +93,8 @@ class MetricManager(Publisher):
 
         :type metric: :class:`Metric`
         :param metric:
-            Metric object to register. Will have the manager's prefix
-            added to its name.
+            Metric object to register. The metric will have its `.manage()`
+            method called with this manager as the manager.
         :rtype:
             For convenience, returns the metric passed in.
         """
@@ -154,10 +164,11 @@ class Metric(object):
     Values set are collected and polled periodically by the metric
     manager.
 
-    :type suffix: str
-    :param suffix:
-        Suffix to append to the :class:`MetricManager`
-        prefix to create the metric name.
+    :type name: str
+    :param name:
+        Name of this metric. Will be appened to the
+        :class:`MetricManager` prefix when this metric
+        is published.
     :type aggregators: list of aggregators, optional
     :param aggregators:
         List of aggregation functions to request
@@ -170,7 +181,7 @@ class Metric(object):
     >>> my_val = mm.register(Metric('my.value'))
     >>> my_val.set(1.5)
     >>> my_val.name
-    'vumi.worker0.my.value'
+    'my.value'
     """
 
     #: Default aggregators are [:data:`AVG`]
