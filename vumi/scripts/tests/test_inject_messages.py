@@ -1,29 +1,32 @@
-from twisted.internet.defer import inlineCallbacks
-from vumi.transports.tests.utils import TransportTestCase
-from vumi.scripts.inject_messages import MessageInjector
-import json
 import StringIO
+import json
+
+from twisted.internet.defer import inlineCallbacks
+
+from vumi.scripts.inject_messages import MessageInjector
+from vumi.tests.utils import VumiWorkerTestCase
+from vumi.tests.helpers import AMQPHelper
 
 
-class InboundMessageInjectorTestCase(TransportTestCase):
-
-    transport_class = MessageInjector
-    direction = 'inbound'
+class TestMessageInjector(VumiWorkerTestCase):
 
     DEFAULT_DATA = {
-            'content': 'CODE2',
-            'transport_type': 'sms',
-            'to_addr': '1458',
-            'message_id': '1',
-            'from_addr': '1234',
-        }
+        'content': 'CODE2',
+        'transport_type': 'sms',
+        'to_addr': '1458',
+        'message_id': '1',
+        'from_addr': '1234',
+    }
 
-    @inlineCallbacks
     def setUp(self):
-        super(InboundMessageInjectorTestCase, self).setUp()
-        self.transport = yield self.get_transport({
-            'transport-name': 'test_transport',
-            'direction': self.direction,
+        self.amqp_helper = AMQPHelper('sphex')
+        self.addCleanup(self.amqp_helper.cleanup)
+        super(TestMessageInjector, self).setUp()
+
+    def get_worker(self, direction):
+        return self.amqp_helper.get_worker(MessageInjector, {
+            'transport-name': 'sphex',
+            'direction': direction,
         })
 
     def make_data(self, **kw):
@@ -34,26 +37,44 @@ class InboundMessageInjectorTestCase(TransportTestCase):
         for key in data:
             self.assertEqual(msg[key], data[key])
 
-    def test_process_line(self):
+    @inlineCallbacks
+    def test_process_line_inbound(self):
+        worker = yield self.get_worker('inbound')
         data = self.make_data()
-        self.transport.process_line(json.dumps(data))
-        [msg] = self._amqp.get_messages(
-            'vumi', 'test_transport.%s' % (self.direction,))
+        worker.process_line(json.dumps(data))
+        [msg] = self.amqp_helper.get_dispatched_inbound()
         self.check_msg(msg, data)
 
     @inlineCallbacks
-    def test_process_file(self):
+    def test_process_line_outbound(self):
+        worker = yield self.get_worker('outbound')
+        data = self.make_data()
+        worker.process_line(json.dumps(data))
+        [msg] = self.amqp_helper.get_dispatched_outbound()
+        self.check_msg(msg, data)
+
+    @inlineCallbacks
+    def test_process_file_inbound(self):
+        worker = yield self.get_worker('inbound')
         data = [self.make_data(message_id=i) for i in range(10)]
         data_string = "\n".join(json.dumps(datum) for datum in data)
         in_file = StringIO.StringIO(data_string)
         out_file = StringIO.StringIO()
-        yield self.transport.process_file(in_file, out_file)
-        msgs = self._amqp.get_messages(
-            'vumi', 'test_transport.%s' % (self.direction,))
+        yield worker.process_file(in_file, out_file)
+        msgs = self.amqp_helper.get_dispatched_inbound()
         for msg, datum in zip(msgs, data):
             self.check_msg(msg, datum)
         self.assertEqual(out_file.getvalue(), data_string + "\n")
 
-
-class OutboundMessageInjectorTestCase(InboundMessageInjectorTestCase):
-    direction = 'outbound'
+    @inlineCallbacks
+    def test_process_file_outbound(self):
+        worker = yield self.get_worker('outbound')
+        data = [self.make_data(message_id=i) for i in range(10)]
+        data_string = "\n".join(json.dumps(datum) for datum in data)
+        in_file = StringIO.StringIO(data_string)
+        out_file = StringIO.StringIO()
+        yield worker.process_file(in_file, out_file)
+        msgs = self.amqp_helper.get_dispatched_outbound()
+        for msg, datum in zip(msgs, data):
+            self.check_msg(msg, datum)
+        self.assertEqual(out_file.getvalue(), data_string + "\n")

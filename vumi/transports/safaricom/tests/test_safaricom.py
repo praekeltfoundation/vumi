@@ -7,7 +7,7 @@ from vumi.transports.tests.utils import TransportTestCase
 from vumi.transports.safaricom import SafaricomTransport
 from vumi.message import TransportUserMessage
 from vumi.utils import http_request
-from vumi.tests.helpers import MessageHelper
+from vumi.transports.tests.helpers import TransportHelper
 
 
 class TestSafaricomTransportTestCase(TransportTestCase):
@@ -21,12 +21,13 @@ class TestSafaricomTransportTestCase(TransportTestCase):
             'web_port': 0,
             'web_path': '/api/v1/safaricom/ussd/',
         }
-        self.transport = yield self.get_transport(self.config)
+        self.tx_helper = TransportHelper(self)
+        self.addCleanup(self.tx_helper.cleanup)
+        self.transport = yield self.tx_helper.get_transport(self.config)
         self.session_manager = self.transport.session_manager
         self.transport_url = self.transport.get_transport_url(
             self.config['web_path'])
         yield self.session_manager.redis._purge_all()  # just in case
-        self.msg_helper = MessageHelper()
 
     def mk_full_request(self, **params):
         return http_request('%s?%s' % (self.transport_url,
@@ -46,7 +47,7 @@ class TestSafaricomTransportTestCase(TransportTestCase):
     def test_inbound_begin(self):
         # Second connect is the actual start of the session
         deferred = self.mk_request(USSD_PARAMS='7')
-        [msg] = yield self.wait_for_dispatched_messages(1)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assertEqual(msg['content'], '')
         self.assertEqual(msg['to_addr'], '*167*7#')
         self.assertEqual(msg['from_addr'], '27761234567'),
@@ -58,8 +59,7 @@ class TestSafaricomTransportTestCase(TransportTestCase):
             },
         })
 
-        reply = TransportUserMessage(**msg.payload).reply("ussd message")
-        yield self.dispatch(reply)
+        yield self.tx_helper.make_dispatch_reply(msg, "ussd message")
         response = yield deferred
         self.assertEqual(response, 'CON ussd message')
 
@@ -75,7 +75,7 @@ class TestSafaricomTransportTestCase(TransportTestCase):
         # The last submitted bit of content is the last value delimited by '*'
         deferred = self.mk_request(USSD_PARAMS='7*a*b*c')
 
-        [msg] = yield self.wait_for_dispatched_messages(1)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assertEqual(msg['content'], 'c')
         self.assertEqual(msg['to_addr'], '*167*7#')
         self.assertEqual(msg['from_addr'], '27761234567')
@@ -87,9 +87,8 @@ class TestSafaricomTransportTestCase(TransportTestCase):
             },
         })
 
-        reply = TransportUserMessage(**msg.payload).reply("hello world",
-            continue_session=False)
-        self.dispatch(reply)
+        yield self.tx_helper.make_dispatch_reply(
+            msg, "hello world", continue_session=False)
         response = yield deferred
         self.assertEqual(response, 'END hello world')
 
@@ -111,51 +110,44 @@ class TestSafaricomTransportTestCase(TransportTestCase):
         }
 
         d1 = self.mk_full_request(USSD_PARAMS='7*1', **defaults)
-        [msg1] = yield self.wait_for_dispatched_messages(1)
+        [msg1] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assertEqual(msg1['to_addr'], '*167*7*1#')
         self.assertEqual(msg1['content'], '')
         self.assertEqual(msg1['session_event'],
             TransportUserMessage.SESSION_NEW)
-        reply = TransportUserMessage(**msg1.payload).reply("hello world",
-            continue_session=True)
-        self.dispatch(reply)
+        yield self.tx_helper.make_dispatch_reply(msg1, "hello world")
         yield d1
 
         # follow up with the user submitting 'a'
         d2 = self.mk_full_request(USSD_PARAMS='7*1*a', **defaults)
-        [msg1, msg2] = yield self.wait_for_dispatched_messages(2)
+        [msg1, msg2] = yield self.tx_helper.wait_for_dispatched_inbound(2)
         self.assertEqual(msg2['to_addr'], '*167*7*1#')
         self.assertEqual(msg2['content'], 'a')
         self.assertEqual(msg2['session_event'],
             TransportUserMessage.SESSION_RESUME)
-        reply = TransportUserMessage(**msg2.payload).reply("hello world",
-            continue_session=False)
-        self.dispatch(reply)
+        yield self.tx_helper.make_dispatch_reply(
+            msg2, "hello world", continue_session=False)
         yield d2
 
     @inlineCallbacks
     def test_hitting_url_twice_without_content(self):
         d1 = self.mk_request(USSD_PARAMS='7*3')
-        [msg1] = yield self.wait_for_dispatched_messages(1)
+        [msg1] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assertEqual(msg1['to_addr'], '*167*7*3#')
         self.assertEqual(msg1['content'], '')
         self.assertEqual(msg1['session_event'],
             TransportUserMessage.SESSION_NEW)
-        reply = TransportUserMessage(**msg1.payload).reply('Hello',
-            continue_session=True)
-        self.dispatch(reply)
+        yield self.tx_helper.make_dispatch_reply(msg1, "Hello")
         yield d1
 
         # make the exact same request again
         d2 = self.mk_request(USSD_PARAMS='7*3')
-        [msg1, msg2] = yield self.wait_for_dispatched_messages(2)
+        [msg1, msg2] = yield self.tx_helper.wait_for_dispatched_inbound(2)
         self.assertEqual(msg2['to_addr'], '*167*7*3#')
         self.assertEqual(msg2['content'], '')
         self.assertEqual(msg2['session_event'],
             TransportUserMessage.SESSION_RESUME)
-        reply = TransportUserMessage(**msg2.payload).reply('Hello',
-            continue_session=True)
-        self.dispatch(reply)
+        yield self.tx_helper.make_dispatch_reply(msg2, "Hello")
         yield d2
 
     @inlineCallbacks
@@ -166,12 +158,10 @@ class TestSafaricomTransportTestCase(TransportTestCase):
         # we're submitting a bunch of *s
         deferred = self.mk_request(USSD_PARAMS='7*a*b*****')
 
-        [msg] = yield self.wait_for_dispatched_messages(1)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assertEqual(msg['content'], '****')
 
-        reply = TransportUserMessage(**msg.payload).reply('Hello',
-            continue_session=True)
-        self.dispatch(reply)
+        yield self.tx_helper.make_dispatch_reply(msg, "Hello")
         yield deferred
         session = yield self.session_manager.load_session('session-id')
         self.assertEqual(session['last_ussd_params'], '7*a*b*****')
@@ -184,12 +174,10 @@ class TestSafaricomTransportTestCase(TransportTestCase):
         # we're submitting a bunch of *s
         deferred = self.mk_request(USSD_PARAMS='7*a*b*****')
 
-        [msg] = yield self.wait_for_dispatched_messages(1)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assertEqual(msg['content'], '**')
 
-        reply = TransportUserMessage(**msg.payload).reply('Hello',
-            continue_session=True)
-        self.dispatch(reply)
+        yield self.tx_helper.make_dispatch_reply(msg, "Hello")
         yield deferred
         session = yield self.session_manager.load_session('session-id')
         self.assertEqual(session['last_ussd_params'], '7*a*b*****')
@@ -197,45 +185,38 @@ class TestSafaricomTransportTestCase(TransportTestCase):
     @inlineCallbacks
     def test_submitting_with_base_code_empty_ussd_params(self):
         d1 = self.mk_request()
-        [msg1] = yield self.wait_for_dispatched_messages(1)
+        [msg1] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assertEqual(msg1['to_addr'], '*167#')
         self.assertEqual(msg1['content'], '')
         self.assertEqual(msg1['session_event'],
             TransportUserMessage.SESSION_NEW)
-        reply = TransportUserMessage(**msg1.payload).reply('Hello',
-            continue_session=True)
-        self.dispatch(reply)
+        yield self.tx_helper.make_dispatch_reply(msg1, "Hello")
         yield d1
 
         # ask for first menu
         d2 = self.mk_request(USSD_PARAMS='1')
-        [msg1, msg2] = yield self.wait_for_dispatched_messages(2)
+        [msg1, msg2] = yield self.tx_helper.wait_for_dispatched_inbound(2)
         self.assertEqual(msg2['to_addr'], '*167#')
         self.assertEqual(msg2['content'], '1')
         self.assertEqual(msg2['session_event'],
             TransportUserMessage.SESSION_RESUME)
-        reply = TransportUserMessage(**msg2.payload).reply('Hello',
-            continue_session=True)
-        self.dispatch(reply)
+        yield self.tx_helper.make_dispatch_reply(msg2, "Hello")
         yield d2
 
         # ask for second menu
         d3 = self.mk_request(USSD_PARAMS='1*1')
-        [msg1, msg2, msg3] = yield self.wait_for_dispatched_messages(3)
+        [m1, m2, msg3] = yield self.tx_helper.wait_for_dispatched_inbound(3)
         self.assertEqual(msg3['to_addr'], '*167#')
         self.assertEqual(msg3['content'], '1')
         self.assertEqual(msg3['session_event'],
             TransportUserMessage.SESSION_RESUME)
-        reply = TransportUserMessage(**msg3.payload).reply('Hello',
-            continue_session=True)
-        self.dispatch(reply)
+        yield self.tx_helper.make_dispatch_reply(msg3, "Hello")
         yield d3
 
     @inlineCallbacks
     def test_nack(self):
-        msg = self.msg_helper.make_outbound("outbound")
-        yield self.dispatch(msg)
-        [nack] = yield self.wait_for_dispatched_events(1)
+        msg = yield self.tx_helper.make_dispatch_outbound("outbound")
+        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assertEqual(nack['user_message_id'], msg['message_id'])
         self.assertEqual(nack['sent_message_id'], msg['message_id'])
         self.assertEqual(nack['nack_reason'],

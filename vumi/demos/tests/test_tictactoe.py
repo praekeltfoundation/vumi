@@ -4,7 +4,7 @@ from twisted.internet.defer import inlineCallbacks
 from vumi.demos.tictactoe import TicTacToeGame, TicTacToeWorker
 from vumi.application.tests.utils import ApplicationTestCase
 from vumi.message import TransportUserMessage
-from vumi.tests.helpers import MessageHelper
+from vumi.application.tests.helpers import ApplicationHelper
 
 
 class TestTicTacToeGame(unittest.TestCase):
@@ -77,11 +77,12 @@ class TestTicTacToeWorker(ApplicationTestCase):
     @inlineCallbacks
     def setUp(self):
         yield super(TestTicTacToeWorker, self).setUp()
-        self.worker = yield self.get_application({})
-        self.msg_helper = MessageHelper()
+        self.app_helper = ApplicationHelper(self)
+        self.addCleanup(self.app_helper.cleanup)
+        self.worker = yield self.app_helper.get_application({})
 
-    def make_start_message(self, from_addr):
-        return self.msg_helper.make_inbound(
+    def dispatch_start_message(self, from_addr):
+        return self.app_helper.make_dispatch_inbound(
             None, from_addr=from_addr,
             session_event=TransportUserMessage.SESSION_NEW)
 
@@ -93,16 +94,16 @@ class TestTicTacToeWorker(ApplicationTestCase):
         user1 = '+27831234567'
         user2 = '+27831234568'
 
-        yield self.dispatch(self.make_start_message(user1))
+        yield self.dispatch_start_message(user1)
         self.assertNotEquals(None, self.worker.open_game)
         game = self.worker.open_game
         self.assertEquals({user1: game}, self.worker.games)
 
-        yield self.dispatch(self.make_start_message(user2))
+        yield self.dispatch_start_message(user2)
         self.assertEquals(None, self.worker.open_game)
         self.assertEquals({user1: game, user2: game}, self.worker.games)
 
-        [msg] = self.get_dispatched_messages()
+        [msg] = self.app_helper.get_dispatched_outbound()
         self.assertTrue(msg['content'].startswith('+---+---+---+'))
 
     @inlineCallbacks
@@ -110,16 +111,16 @@ class TestTicTacToeWorker(ApplicationTestCase):
         user1 = '+27831234567'
         user2 = '+27831234568'
 
-        yield self.dispatch(self.make_start_message(user1))
+        yield self.dispatch_start_message(user1)
         game = self.worker.open_game
-        yield self.dispatch(self.make_start_message(user2))
-        self.assertEquals(1, len(self.get_dispatched_messages()))
+        yield self.dispatch_start_message(user2)
+        self.assertEquals(1, len(self.app_helper.get_dispatched_outbound()))
 
-        yield self.dispatch(self.msg_helper.make_inbound('1', from_addr=user1))
-        self.assertEquals(2, len(self.get_dispatched_messages()))
+        yield self.app_helper.make_dispatch_inbound('1', from_addr=user1)
+        self.assertEquals(2, len(self.app_helper.get_dispatched_outbound()))
 
-        yield self.dispatch(self.msg_helper.make_inbound('2', from_addr=user2))
-        self.assertEquals(3, len(self.get_dispatched_messages()))
+        yield self.app_helper.make_dispatch_inbound('2', from_addr=user2)
+        self.assertEquals(3, len(self.app_helper.get_dispatched_outbound()))
 
         self.assertEqual('X', game.board[0][0])
         self.assertEqual('O', game.board[0][1])
@@ -128,19 +129,19 @@ class TestTicTacToeWorker(ApplicationTestCase):
     def test_full_game(self):
         user1 = '+27831234567'
         user2 = '+27831234568'
-        yield self.dispatch(self.make_start_message(user1))
+        yield self.dispatch_start_message(user1)
         game = self.worker.open_game
-        yield self.dispatch(self.make_start_message(user2))
+        yield self.dispatch_start_message(user2)
 
         for user, content in [
                 (user1, '1'), (user2, '4'),
                 (user1, '2'), (user2, '5'),
                 (user1, '3')]:
-            yield self.dispatch(self.msg_helper.make_inbound(
-                content, from_addr=user))
+            yield self.app_helper.make_dispatch_inbound(
+                content, from_addr=user)
 
         self.assertEqual('X', game.check_win())
-        [end1, end2] = self.get_dispatched_messages()[-2:]
+        [end1, end2] = self.app_helper.get_dispatched_outbound()[-2:]
         self.assertEqual(user1, end1["to_addr"])
         self.assertEqual("You won!", end1["content"])
         self.assertEqual(user2, end2["to_addr"])

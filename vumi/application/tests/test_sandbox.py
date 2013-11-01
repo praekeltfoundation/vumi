@@ -8,12 +8,14 @@ import pkg_resources
 import logging
 from collections import defaultdict
 
+from OpenSSL.SSL import (
+    VERIFY_PEER, VERIFY_FAIL_IF_NO_PEER_CERT, VERIFY_NONE)
+
 from twisted.internet.defer import (
     inlineCallbacks, fail, succeed, DeferredQueue)
 from twisted.internet.error import ProcessTerminated
 from twisted.trial.unittest import TestCase, SkipTest
 
-from vumi.message import TransportUserMessage, TransportEvent
 from vumi.application.tests.utils import ApplicationTestCase
 from vumi.application.sandbox import (
     Sandbox, SandboxApi, SandboxCommand, SandboxResources,
@@ -22,8 +24,7 @@ from vumi.application.sandbox import (
     HttpClientContextFactory)
 from vumi.tests.utils import LogCatcher, PersistenceMixin
 
-from OpenSSL.SSL import (
-    VERIFY_PEER, VERIFY_FAIL_IF_NO_PEER_CERT, VERIFY_NONE)
+from .helpers import ApplicationHelper
 
 
 class MockResource(SandboxResource):
@@ -46,6 +47,11 @@ class SandboxTestCaseBase(ApplicationTestCase):
 
     application_class = Sandbox
 
+    def setUp(self):
+        super(SandboxTestCaseBase, self).setUp()
+        self.app_helper = ApplicationHelper(self)
+        self.addCleanup(self.app_helper.cleanup)
+
     def setup_app(self, executable=None, args=None, extra_config=None):
         tmp_path = self.mktemp()
         os.mkdir(tmp_path)
@@ -59,41 +65,7 @@ class SandboxTestCaseBase(ApplicationTestCase):
             config['args'] = args
         if extra_config is not None:
             config.update(extra_config)
-        return self.get_application(config)
-
-    def mk_ack(self, **kw):
-        msg_kw = {
-            'event_type': 'ack', 'user_message_id': '1',
-            'sent_message_id': '1', 'sandbox_id': 'sandbox1',
-        }
-        msg_kw.update(kw)
-        return TransportEvent(**msg_kw)
-
-    def mk_nack(self, **kw):
-        msg_kw = {
-            'event_type': 'nack', 'user_message_id': '1',
-            'sandbox_id': 'sandbox1', 'nack_reason': 'unknown',
-        }
-        msg_kw.update(kw)
-        return TransportEvent(**msg_kw)
-
-    def mk_delivery_report(self, **kw):
-        msg_kw = {
-            'event_type': 'delivery_report', 'user_message_id': '1',
-            'sent_message_id': '1', 'sandbox_id': 'sandbox1',
-            'delivery_status': 'delivered',
-        }
-        msg_kw.update(kw)
-        return TransportEvent(**msg_kw)
-
-    def mk_msg(self, **kw):
-        msg_kw = {
-            'to_addr': "1", 'from_addr': "2",
-            'transport_name': "test", 'transport_type': "sphex",
-            'sandbox_id': 'sandbox1',
-        }
-        msg_kw.update(kw)
-        return TransportUserMessage(**msg_kw)
+        return self.app_helper.get_application(config)
 
 
 class SandboxTestCase(SandboxTestCaseBase):
@@ -112,7 +84,8 @@ class SandboxTestCase(SandboxTestCaseBase):
             "time.sleep(5)\n"
         )
         with LogCatcher(log_level=logging.ERROR) as lc:
-            status = yield app.process_event_in_sandbox(self.mk_ack())
+            status = yield app.process_event_in_sandbox(
+                self.app_helper.make_ack(sandbox_id='sandbox1'))
             [msg] = lc.messages()
         self.assertTrue(msg.startswith(
             "Resource fallback received unknown command 'unknown'"
@@ -130,7 +103,8 @@ class SandboxTestCase(SandboxTestCaseBase):
             "sys.stderr.write('err\\n')\n"
         )
         with LogCatcher(log_level=logging.ERROR) as lc:
-            status = yield app.process_event_in_sandbox(self.mk_ack())
+            status = yield app.process_event_in_sandbox(
+                self.app_helper.make_ack(sandbox_id='sandbox1'))
             msgs = lc.messages()
         self.assertEqual(status, 0)
         self.assertEqual(msgs, ["err"])
@@ -142,7 +116,8 @@ class SandboxTestCase(SandboxTestCaseBase):
             "sys.stderr.write('err1\\nerr2\\nerr3')\n"
         )
         with LogCatcher(log_level=logging.ERROR) as lc:
-            status = yield app.process_event_in_sandbox(self.mk_ack())
+            status = yield app.process_event_in_sandbox(
+                self.app_helper.make_ack(sandbox_id='sandbox1'))
             msgs = lc.messages()
         self.assertEqual(status, 0)
         self.assertEqual(msgs, ["err1\nerr2\nerr3"])
@@ -163,7 +138,8 @@ class SandboxTestCase(SandboxTestCaseBase):
             "sys.stderr.write('%s %s\\n' % rlimit_nofile)\n",
             {'rlimits': {'RLIMIT_NOFILE': [soft, hard * 2]}})
         with LogCatcher(log_level=logging.ERROR) as lc:
-            status = yield app.process_event_in_sandbox(self.mk_ack())
+            status = yield app.process_event_in_sandbox(
+                self.app_helper.make_ack(sandbox_id='sandbox1'))
             msgs = lc.messages()
         self.assertEqual(status, 0)
         self.assertEqual(msgs, ["%s %s" % (soft, hard)])
@@ -185,7 +161,8 @@ class SandboxTestCase(SandboxTestCaseBase):
                     },
                 },
             }})
-        status = yield app.process_event_in_sandbox(self.mk_ack())
+        status = yield app.process_event_in_sandbox(
+            self.app_helper.make_ack(sandbox_id='sandbox1'))
         self.assertEqual(status, 0)
         self.assertEqual(sorted((yield r_server.keys())),
                          ['count#sandbox1',
@@ -196,7 +173,7 @@ class SandboxTestCase(SandboxTestCaseBase):
 
     @inlineCallbacks
     def test_outbound_reply_from_sandbox(self):
-        msg = self.mk_msg()
+        msg = self.app_helper.make_inbound("foo", sandbox_id='sandbox1')
         json_data = SandboxCommand(cmd='outbound.reply_to',
                                    content='Hooray!',
                                    in_reply_to=msg['message_id']).to_json()
@@ -210,7 +187,7 @@ class SandboxTestCase(SandboxTestCaseBase):
             }})
         status = yield app.process_message_in_sandbox(msg)
         self.assertEqual(status, 0)
-        [reply] = self.get_dispatched_messages()
+        [reply] = self.app_helper.get_dispatched_outbound()
         self.assertEqual(reply['content'], "Hooray!")
         self.assertEqual(reply['session_event'], None)
 
@@ -229,7 +206,8 @@ class SandboxTestCase(SandboxTestCaseBase):
             % (send_out, send_err),
             {'recv_limit': str(recv_limit)})
         with LogCatcher(log_level=logging.ERROR) as lc:
-            status = yield app.process_message_in_sandbox(self.mk_msg())
+            status = yield app.process_message_in_sandbox(
+                self.app_helper.make_inbound("foo", sandbox_id='sandbox1'))
             msgs = lc.messages()
         self.assertEqual(status, None)
         self.assertEqual(msgs[0],
@@ -253,7 +231,8 @@ class SandboxTestCase(SandboxTestCaseBase):
              }},
         )
         with LogCatcher() as lc:
-            status = yield app.process_message_in_sandbox(self.mk_msg())
+            status = yield app.process_message_in_sandbox(
+                self.app_helper.make_inbound("foo", sandbox_id='sandbox1'))
             [value_str] = lc.messages()
         self.assertEqual(status, 0)
         self.assertEqual(value_str, "success")
@@ -272,7 +251,8 @@ class SandboxTestCase(SandboxTestCaseBase):
              }},
         )
         with LogCatcher() as lc:
-            status = yield app.process_message_in_sandbox(self.mk_msg())
+            status = yield app.process_message_in_sandbox(
+                self.app_helper.make_inbound("foo", sandbox_id='sandbox1'))
             [path_str] = lc.messages()
         self.assertEqual(status, 0)
         path = path_str.split(':')
@@ -293,7 +273,8 @@ class SandboxTestCase(SandboxTestCaseBase):
              }},
         )
         with LogCatcher() as lc:
-            status = yield app.process_message_in_sandbox(self.mk_msg())
+            status = yield app.process_message_in_sandbox(
+                self.app_helper.make_inbound("foo", sandbox_id='sandbox1'))
             [path_str] = lc.messages()
         self.assertEqual(status, 0)
         path = path_str.split(':')
@@ -314,7 +295,8 @@ class SandboxTestCase(SandboxTestCaseBase):
              }},
         )
         with LogCatcher() as lc:
-            status = yield app.process_message_in_sandbox(self.mk_msg())
+            status = yield app.process_message_in_sandbox(
+                self.app_helper.make_inbound("foo", sandbox_id='sandbox1'))
             msgs = lc.messages()
         self.assertEqual(status, 0)
         logging_resource = app.resources.resources['foo']
@@ -346,24 +328,24 @@ class SandboxTestCase(SandboxTestCaseBase):
         self.assertEqual(echoed_cmd['msg'], msg.payload)
 
     def test_consume_user_message(self):
-        return self.echo_check('consume_user_message', self.mk_msg(),
-                               'inbound-message')
+        msg = self.app_helper.make_inbound("foo", sandbox_id='sandbox1')
+        return self.echo_check('consume_user_message', msg, 'inbound-message')
 
     def test_close_session(self):
-        return self.echo_check('close_session', self.mk_msg(),
-                               'inbound-message')
+        msg = self.app_helper.make_inbound("foo", sandbox_id='sandbox1')
+        return self.echo_check('close_session', msg, 'inbound-message')
 
     def test_consume_ack(self):
-        return self.echo_check('consume_ack', self.mk_ack(),
-                               'inbound-event')
+        msg = self.app_helper.make_ack(sandbox_id='sandbox1')
+        return self.echo_check('consume_ack', msg, 'inbound-event')
 
     def test_consume_nack(self):
-        return self.echo_check('consume_nack', self.mk_nack(),
-                               'inbound-event')
+        msg = self.app_helper.make_nack(sandbox_id='sandbox1')
+        return self.echo_check('consume_nack', msg, 'inbound-event')
 
     def test_consume_delivery_report(self):
-        return self.echo_check('consume_delivery_report',
-            self.mk_delivery_report(), 'inbound-event')
+        msg = self.app_helper.make_delivery_report(sandbox_id='sandbox1')
+        return self.echo_check('consume_delivery_report', msg, 'inbound-event')
 
     @inlineCallbacks
     def event_dispatch_check(self, event):
@@ -378,7 +360,7 @@ class SandboxTestCase(SandboxTestCaseBase):
             }},
         )
         with LogCatcher() as lc:
-            yield self.dispatch_event(event)
+            yield self.app_helper.dispatch_event(event)
             [cmd_json] = lc.messages()
 
         if not cmd_json.startswith('{'):
@@ -389,10 +371,11 @@ class SandboxTestCase(SandboxTestCaseBase):
         self.assertEqual(echoed_cmd['msg'], event.payload)
 
     def test_event_dispatch_default(self):
-        return self.event_dispatch_check(self.mk_ack())
+        return self.event_dispatch_check(
+            self.app_helper.make_ack(sandbox_id='sandbox1'))
 
     def test_event_dispatch_non_default(self):
-        ack = self.mk_ack()
+        ack = self.app_helper.make_ack(sandbox_id='sandbox1')
         ack.set_routing_endpoint('foo')
         return self.event_dispatch_check(ack)
 
@@ -422,7 +405,8 @@ class JsSandboxTestCase(SandboxTestCaseBase):
         app = yield self.setup_app(javascript)
 
         with LogCatcher() as lc:
-            status = yield app.process_message_in_sandbox(self.mk_msg())
+            status = yield app.process_message_in_sandbox(
+                self.app_helper.make_inbound("foo", sandbox_id='sandbox1'))
             failures = [log['failure'].value for log in lc.errors]
             msgs = lc.messages()
         self.assertEqual(failures, [])
@@ -446,7 +430,8 @@ class JsSandboxTestCase(SandboxTestCaseBase):
         })
 
         with LogCatcher() as lc:
-            status = yield app.process_message_in_sandbox(self.mk_msg())
+            status = yield app.process_message_in_sandbox(
+                self.app_helper.make_inbound("foo", sandbox_id='sandbox1'))
             failures = [log['failure'].value for log in lc.errors]
             msgs = lc.messages()
         self.assertEqual(failures, [])

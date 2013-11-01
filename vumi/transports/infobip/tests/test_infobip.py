@@ -9,6 +9,7 @@ from vumi.utils import http_request
 from vumi.transports.infobip.infobip import InfobipTransport
 from vumi.message import TransportUserMessage
 from vumi.tests.utils import LogCatcher
+from vumi.transports.tests.helpers import TransportHelper
 
 
 class TestInfobipUssdTransport(TransportTestCase):
@@ -25,7 +26,9 @@ class TestInfobipUssdTransport(TransportTestCase):
             'web_path': "/session/",
             'web_port': 0,
             }
-        self.transport = yield self.get_transport(config)
+        self.tx_helper = TransportHelper(self)
+        self.addCleanup(self.tx_helper.cleanup)
+        self.transport = yield self.tx_helper.get_transport(config)
         self.transport_url = self.transport.get_transport_url()
         yield self.transport.session_manager.redis._purge_all()  # just in case
 
@@ -62,12 +65,11 @@ class TestInfobipUssdTransport(TransportTestCase):
         if not expect_msg:
             msg = None
         else:
-            [msg] = yield self.wait_for_dispatched_messages(1)
-            self.clear_dispatched_messages()
-            msg = TransportUserMessage(**msg.payload)
+            [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+            self.tx_helper.clear_all_dispatched()
             if reply is not None:
-                reply_msg = msg.reply(reply, continue_session=continue_session)
-                self.dispatch(reply_msg)
+                yield self.tx_helper.make_dispatch_reply(
+                    msg, reply, continue_session=continue_session)
 
         if defer_response:
             response = deferred_req
@@ -240,13 +242,8 @@ class TestInfobipUssdTransport(TransportTestCase):
 
     @inlineCallbacks
     def test_outbound_non_reply_logs_error(self):
-        msg = TransportUserMessage(to_addr="1234", from_addr="5678",
-                                   transport_name="test_infobip",
-                                   transport_type="ussd",
-                                   transport_metadata={})
-
         with LogCatcher() as logger:
-            yield self.dispatch(msg)
+            msg = yield self.tx_helper.make_dispatch_outbound("hi")
             [error] = logger.errors
 
         expected_error = ("Infobip transport cannot process outbound message"
@@ -254,7 +251,7 @@ class TestInfobipUssdTransport(TransportTestCase):
 
         [errmsg] = error['message']
         self.assertTrue(expected_error in errmsg)
-        [nack] = yield self.wait_for_dispatched_events(1)
+        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assertEqual(nack['user_message_id'], msg['message_id'])
         self.assertEqual(nack['nack_reason'], expected_error)
 
@@ -262,8 +259,8 @@ class TestInfobipUssdTransport(TransportTestCase):
     def test_ack(self):
         msg, response = yield self.make_request(
             "start", 1, text="Hi!", reply="Moo")
-        [event] = yield self.wait_for_dispatched_events(1)
-        [reply] = yield self.wait_for_dispatched_outbound(1)
+        [event] = yield self.tx_helper.wait_for_dispatched_events(1)
+        [reply] = yield self.tx_helper.wait_for_dispatched_outbound(1)
 
         self.assertEqual(event["event_type"], "ack")
         self.assertEqual(event["user_message_id"], reply["message_id"])
@@ -274,10 +271,9 @@ class TestInfobipUssdTransport(TransportTestCase):
                                                     defer_response=True)
         # finish message so reply will fail
         self.transport.finish_request(msg['message_id'], "Done")
-        reply = msg.reply("Ping")
 
         with LogCatcher() as logger:
-            yield self.dispatch(reply)
+            reply = yield self.tx_helper.make_dispatch_reply(msg, "Ping")
             [error] = logger.errors
 
         expected_error = ("Infobip transport could not find original request"
@@ -286,7 +282,6 @@ class TestInfobipUssdTransport(TransportTestCase):
         [errmsg] = error['message']
         self.assertTrue(expected_error in errmsg)
 
-        [nack] = yield self.wait_for_dispatched_events(1)
-        [nack] = yield self.wait_for_dispatched_events(1)
+        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assertEqual(nack['user_message_id'], reply['message_id'])
         self.assertEqual(nack['nack_reason'], expected_error)

@@ -12,7 +12,7 @@ from vumi.transports.failures import FailureMessage, TemporaryFailure
 from vumi.transports.irc.irc import IrcMessage, VumiBotProtocol
 from vumi.transports.irc import IrcTransport
 from vumi.transports.tests.utils import TransportTestCase
-from vumi.tests.helpers import MessageHelper
+from vumi.transports.tests.helpers import TransportHelper
 
 
 class TestIrcMessage(unittest.TestCase):
@@ -226,10 +226,11 @@ class TestIrcTransport(TransportTestCase):
             'channels': [],
             'nickname': self.nick,
             }
-        self.transport = yield self.get_transport(self.config, start=True)
+        self.tx_helper = TransportHelper(self)
+        self.addCleanup(self.tx_helper.cleanup)
+        self.transport = yield self.tx_helper.get_transport(self.config)
         # wait for transport to connect
         yield self.irc_server.filter_events("NICK")
-        self.msg_helper = MessageHelper(transport_name=self.transport_name)
 
     @inlineCallbacks
     def tearDown(self):
@@ -237,12 +238,12 @@ class TestIrcTransport(TransportTestCase):
         yield super(TestIrcTransport, self).tearDown()
         yield self.irc_server.finished_d
 
-    def make_outbound_irc(self, *args, **kw):
+    def dispatch_outbound_irc(self, *args, **kw):
         helper_metadata = kw.setdefault('helper_metadata', {'irc': {}})
         irc_command = kw.pop('irc_command', None)
         if irc_command is not None:
             helper_metadata['irc']['irc_command'] = irc_command
-        return self.msg_helper.make_outbound(*args, **kw)
+        return self.tx_helper.make_dispatch_outbound(*args, **kw)
 
     def assert_inbound_message(self, msg, to_addr, from_addr, channel, content,
                                addressed_to_transport, irc_command):
@@ -268,7 +269,7 @@ class TestIrcTransport(TransportTestCase):
         to_payload = lambda m: dict(
             (k, v) for k, v in m.payload.iteritems()
             if k not in ('event_id', 'timestamp', 'transport_type'))
-        self.assertEqual(to_payload(self.msg_helper.make_ack(msg)),
+        self.assertEqual(to_payload(self.tx_helper.make_ack(msg)),
                          to_payload(ack))
 
     def send_irc_message(self, content, recipient, sender="user!ident@host"):
@@ -278,7 +279,7 @@ class TestIrcTransport(TransportTestCase):
     def test_handle_inbound_to_channel(self):
         text = "Hello gooites"
         self.send_irc_message(text, "#zoo")
-        [msg] = yield self.wait_for_dispatched_messages(1)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assert_inbound_message(msg,
                                     to_addr=None,
                                     from_addr="user",
@@ -290,7 +291,7 @@ class TestIrcTransport(TransportTestCase):
     @inlineCallbacks
     def test_handle_inbound_to_channel_directed(self):
         self.send_irc_message("%s: Hi" % (self.nick,), "#zoo")
-        [msg] = yield self.wait_for_dispatched_messages(1)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assert_inbound_message(msg,
                                     to_addr=self.nick,
                                     from_addr="user",
@@ -302,7 +303,7 @@ class TestIrcTransport(TransportTestCase):
     @inlineCallbacks
     def test_handle_inbound_to_user(self):
         self.send_irc_message("Hi there", "%s!bot@host" % (self.nick,))
-        [msg] = yield self.wait_for_dispatched_messages(1)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assert_inbound_message(msg,
                                     to_addr=self.nick,
                                     from_addr="user",
@@ -315,7 +316,7 @@ class TestIrcTransport(TransportTestCase):
     def test_handle_inbound_channel_notice(self):
         sender, recipient, text = "user!ident@host", "#zoo", "Hello gooites"
         self.irc_server.server.notice(sender, recipient, text)
-        [msg] = yield self.wait_for_dispatched_messages(1)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assertEqual(msg['transport_name'], self.transport_name)
         self.assertEqual(msg['to_addr'], None)
         self.assertEqual(msg['from_addr'], "user")
@@ -338,7 +339,7 @@ class TestIrcTransport(TransportTestCase):
     def test_handle_inbound_user_notice(self):
         sender, recipient, text = "user!ident@host", "bot", "Hello gooites"
         self.irc_server.server.notice(sender, recipient, text)
-        [msg] = yield self.wait_for_dispatched_messages(1)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assertEqual(msg['transport_name'], self.transport_name)
         self.assertEqual(msg['to_addr'], "bot")
         self.assertEqual(msg['from_addr'], "user")
@@ -364,9 +365,8 @@ class TestIrcTransport(TransportTestCase):
 
         expected_error = "IrcTransport not connected (state: 'disconnected')."
 
-        msg = self.make_outbound_irc("outbound")
-        yield self.dispatch(msg)
-        [error] = self.get_dispatched_failures()
+        yield self.dispatch_outbound_irc("outbound")
+        [error] = self.tx_helper.get_dispatched_failures()
         self.assertTrue(error['reason'].strip().endswith(expected_error))
 
         [error] = self.flushLoggedErrors(TemporaryFailure)
@@ -376,90 +376,84 @@ class TestIrcTransport(TransportTestCase):
 
     @inlineCallbacks
     def test_handle_outbound_to_channel_old(self):
-        msg = self.make_outbound_irc("hello world", to_addr="#vumitest")
-        yield self.dispatch(msg)
+        msg = yield self.dispatch_outbound_irc(
+            "hello world", to_addr="#vumitest")
 
         event = yield self.irc_server.filter_events('PRIVMSG')
         self.assertEqual(event, ('', 'PRIVMSG',
                                  ['#vumitest', 'hello world']))
 
-        [smsg] = self.get_dispatched_events()
+        [smsg] = self.tx_helper.get_dispatched_events()
         self.assert_ack_for(msg, smsg)
 
     @inlineCallbacks
     def test_handle_outbound_to_channel(self):
-        msg = self.make_outbound_irc(
+        msg = yield self.dispatch_outbound_irc(
             "hello world", to_addr=None, group="#vumitest")
-        yield self.dispatch(msg)
 
         event = yield self.irc_server.filter_events('PRIVMSG')
         self.assertEqual(event, ('', 'PRIVMSG',
                                  ['#vumitest', 'hello world']))
 
-        [smsg] = self.get_dispatched_events()
+        [smsg] = self.tx_helper.get_dispatched_events()
         self.assert_ack_for(msg, smsg)
 
     @inlineCallbacks
     def test_handle_outbound_to_channel_directed(self):
-        msg = self.make_outbound_irc(
+        msg = yield self.dispatch_outbound_irc(
             "hello world", to_addr="user", group="#vumitest")
-        yield self.dispatch(msg)
 
         event = yield self.irc_server.filter_events('PRIVMSG')
         self.assertEqual(event, ('', 'PRIVMSG',
                                  ['#vumitest', 'user: hello world']))
 
-        [smsg] = self.get_dispatched_events()
+        [smsg] = self.tx_helper.get_dispatched_events()
         self.assert_ack_for(msg, smsg)
 
     @inlineCallbacks
     def test_handle_outbound_to_user(self):
-        msg = self.make_outbound_irc(
+        msg = yield self.dispatch_outbound_irc(
             "hello world", to_addr="user", group=None)
-        yield self.dispatch(msg)
 
         event = yield self.irc_server.filter_events('PRIVMSG')
         self.assertEqual(event, ('', 'PRIVMSG',
                                  ['user', 'hello world']))
 
-        [smsg] = self.get_dispatched_events()
+        [smsg] = self.tx_helper.get_dispatched_events()
         self.assert_ack_for(msg, smsg)
 
     @inlineCallbacks
     def test_handle_outbound_action_to_channel(self):
-        msg = self.make_outbound_irc(
+        msg = yield self.dispatch_outbound_irc(
             "waves", to_addr=None, group="#vumitest", irc_command="ACTION")
-        yield self.dispatch(msg)
 
         event = yield self.irc_server.filter_events('PRIVMSG')
         self.assertEqual(event, ('', 'PRIVMSG',
                                  ['#vumitest', '\x01ACTION waves\x01']))
 
-        [smsg] = self.get_dispatched_events()
+        [smsg] = self.tx_helper.get_dispatched_events()
         self.assert_ack_for(msg, smsg)
 
     @inlineCallbacks
     def test_handle_outbound_action_to_channel_directed(self):
-        msg = self.make_outbound_irc(
+        msg = yield self.dispatch_outbound_irc(
             "waves", to_addr="user", group="#vumitest", irc_command='ACTION')
-        yield self.dispatch(msg)
 
         event = yield self.irc_server.filter_events('PRIVMSG')
         self.assertEqual(event, ('', 'PRIVMSG',
                                  ['#vumitest', '\x01ACTION waves\x01']))
 
-        [smsg] = self.get_dispatched_events()
+        [smsg] = self.tx_helper.get_dispatched_events()
         self.assert_ack_for(msg, smsg)
 
     @inlineCallbacks
     def test_handle_outbound_action_to_user(self):
-        msg = self.make_outbound_irc(
+        msg = yield self.dispatch_outbound_irc(
             "waves", to_addr="user", group=None, irc_command='ACTION')
-        yield self.dispatch(msg)
 
         event = yield self.irc_server.filter_events('PRIVMSG')
         self.assertEqual(event, ('', 'PRIVMSG',
                                  ['user', '\x01ACTION waves\x01']))
 
-        [smsg] = self.get_dispatched_events()
+        [smsg] = self.tx_helper.get_dispatched_events()
         self.assert_ack_for(msg, smsg)

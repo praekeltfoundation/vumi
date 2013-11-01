@@ -10,7 +10,7 @@ from vumi.tests.utils import MockHttpServer
 from vumi.utils import http_request_full
 from vumi.transports.apposit import AppositTransport
 from vumi.transports.tests.utils import TransportTestCase
-from vumi.tests.helpers import MessageHelper
+from vumi.transports.tests.helpers import TransportHelper
 
 
 class TestAppositTransport(TransportTestCase):
@@ -45,12 +45,16 @@ class TestAppositTransport(TransportTestCase):
             },
             'outbound_url': self.mock_server.url,
         }
-        self.transport = yield self.get_transport(config)
+        self.tx_helper = TransportHelper(self, msg_helper_args={
+            'transport_name': self.transport_name,
+            'transport_type': 'sms',
+            'transport_addr': '8123',
+            'mobile_addr': '251911223344',
+        })
+        self.addCleanup(self.tx_helper.cleanup)
+        self.transport = yield self.tx_helper.get_transport(config)
         self.transport_url = self.transport.get_transport_url()
         self.web_path = config['web_path']
-        self.msg_helper = MessageHelper(
-            transport_name=self.transport_name, transport_type='sms',
-            transport_addr='8123', mobile_addr='251911223344')
 
     @inlineCallbacks
     def tearDown(self):
@@ -138,7 +142,7 @@ class TestAppositTransport(TransportTestCase):
             'isTest': 'true',
         })
 
-        [msg] = self.get_dispatched_messages()
+        [msg] = self.tx_helper.get_dispatched_inbound()
         self.assert_message_fields(msg,
             transport_name=self.transport_name,
             transport_type='sms',
@@ -154,8 +158,7 @@ class TestAppositTransport(TransportTestCase):
 
     @inlineCallbacks
     def test_outbound(self):
-        msg = self.msg_helper.make_outbound('racecar')
-        yield self.dispatch(msg)
+        msg = yield self.tx_helper.make_dispatch_outbound('racecar')
 
         request = yield self.outbound_requests.get()
         self.assert_outbound_request(request, **{
@@ -168,14 +171,14 @@ class TestAppositTransport(TransportTestCase):
             'channel': 'SMS'
         })
 
-        [ack] = yield self.wait_for_dispatched_events(1)
+        [ack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assert_ack(ack, msg)
 
     @inlineCallbacks
     def test_inbound_requests_for_non_ascii_content(self):
         response = yield self.send_inbound_request(
             content=u'Hliðskjálf'.encode('UTF-8'))
-        [msg] = self.get_dispatched_messages()
+        [msg] = self.tx_helper.get_dispatched_inbound()
         self.assert_message_fields(msg, content=u'Hliðskjálf')
 
         self.assertEqual(response.code, http.OK)
@@ -226,9 +229,8 @@ class TestAppositTransport(TransportTestCase):
 
     @inlineCallbacks
     def test_outbound_request_credential_selection(self):
-        msg1 = self.msg_helper.make_outbound(
+        msg1 = yield self.tx_helper.make_dispatch_outbound(
             'so many dynamos', from_addr='8123')
-        yield self.dispatch(msg1)
         request1 = yield self.outbound_requests.get()
         self.assert_outbound_request(request1,
             fromAddress='8123',
@@ -236,9 +238,8 @@ class TestAppositTransport(TransportTestCase):
             password='toor',
             serviceId='service-id-1')
 
-        msg2 = self.msg_helper.make_outbound(
+        msg2 = yield self.tx_helper.make_dispatch_outbound(
             'so many dynamos', from_addr='8124')
-        yield self.dispatch(msg2)
         request2 = yield self.outbound_requests.get()
         self.assert_outbound_request(request2,
             fromAddress='8124',
@@ -246,18 +247,17 @@ class TestAppositTransport(TransportTestCase):
             password='nimda',
             serviceId='service-id-2')
 
-        [ack1, ack2] = yield self.wait_for_dispatched_events(2)
+        [ack1, ack2] = yield self.tx_helper.wait_for_dispatched_events(2)
         self.assert_ack(ack1, msg1)
         self.assert_ack(ack2, msg2)
 
     @inlineCallbacks
     def test_outbound_requests_for_non_ascii_content(self):
-        msg = self.msg_helper.make_outbound(u'Hliðskjálf')
-        yield self.dispatch(msg)
+        msg = yield self.tx_helper.make_dispatch_outbound(u'Hliðskjálf')
         request = yield self.outbound_requests.get()
         self.assert_outbound_request(request, content='Hliðskjálf')
 
-        [ack] = yield self.wait_for_dispatched_events(1)
+        [ack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assert_ack(ack, msg)
 
     @inlineCallbacks
@@ -265,10 +265,9 @@ class TestAppositTransport(TransportTestCase):
         code = '102999'
         self.set_mock_server_response(http.BAD_REQUEST, code)
 
-        msg = self.msg_helper.make_outbound('racecar')
-        yield self.dispatch(msg)
+        msg = yield self.tx_helper.make_dispatch_outbound('racecar')
 
-        [nack] = yield self.wait_for_dispatched_events(1)
+        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assert_nack(nack, msg, "(%s) %s" % (
             code, self.transport.KNOWN_ERROR_RESPONSE_CODES[code]))
 
@@ -277,20 +276,18 @@ class TestAppositTransport(TransportTestCase):
         code = '103000'
         self.set_mock_server_response(http.BAD_REQUEST, code)
 
-        msg = self.msg_helper.make_outbound("so many dynamos")
-        yield self.dispatch(msg)
+        msg = yield self.tx_helper.make_dispatch_outbound("so many dynamos")
 
-        [nack] = yield self.wait_for_dispatched_events(1)
+        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assert_nack(
             nack, msg, self.transport.UNKNOWN_RESPONSE_CODE_ERROR % code)
 
     @inlineCallbacks
     def test_outbound_requests_for_unsupported_transport_types(self):
         transport_type = 'steven'
-        msg = self.msg_helper.make_outbound(
+        msg = yield self.tx_helper.make_dispatch_outbound(
             "so many dynamos", transport_type=transport_type)
-        yield self.dispatch(msg)
 
-        [nack] = yield self.wait_for_dispatched_events(1)
+        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assert_nack(nack, msg,
             self.transport.UNSUPPORTED_TRANSPORT_TYPE_ERROR % transport_type)

@@ -138,8 +138,11 @@ class TelnetServerTransport(Transport):
 
     def deregister_client(self, client):
         log.msg("Deregistering client.")
-        self.send_inbound_message(client, None,
-                                  TransportUserMessage.SESSION_CLOSE)
+        if self.connectors:
+            # If this happens during teardown there's a race between the server
+            # shutdown and the connector cleanup.
+            self.send_inbound_message(
+                client, None, TransportUserMessage.SESSION_CLOSE)
         del self._clients[client.getAddress()]
 
     def handle_input(self, client, text):

@@ -12,7 +12,7 @@ from twisted.web.static import Data
 from vumi.application.tests.utils import ApplicationTestCase
 from vumi.demos.hangman import HangmanGame, HangmanWorker
 from vumi.message import TransportUserMessage
-from vumi.tests.helpers import MessageHelper
+from vumi.application.tests.helpers import ApplicationHelper
 
 import string
 
@@ -155,22 +155,22 @@ class TestHangmanWorker(ApplicationTestCase):
         addr = self.webserver.getHost()
         random_word_url = "http://%s:%s/word" % (addr.host, addr.port)
 
-        self.worker = yield self.get_application({
-                'worker_name': 'test_hangman',
-                'random_word_url': random_word_url,
-                })
-        yield self.worker.session_manager.redis._purge_all()  # just in case
-        self.msg_helper = MessageHelper()
+        self.app_helper = ApplicationHelper(self)
+        self.addCleanup(self.app_helper.cleanup)
 
-    @inlineCallbacks
+        self.worker = yield self.app_helper.get_application({
+            'worker_name': 'test_hangman',
+            'random_word_url': random_word_url,
+        })
+        yield self.worker.session_manager.redis._purge_all()  # just in case
+
     def send(self, content, session_event=None):
-        msg = self.msg_helper.make_inbound(
+        return self.app_helper.make_dispatch_inbound(
             content, session_event=session_event)
-        yield self.dispatch(msg)
 
     @inlineCallbacks
     def recv(self, n=0):
-        msgs = yield self.wait_for_dispatched_messages(n)
+        msgs = yield self.app_helper.wait_for_dispatched_outbound(n)
 
         def reply_code(msg):
             if msg['session_event'] == TransportUserMessage.SESSION_CLOSE:

@@ -10,7 +10,7 @@ from vumi.transports.mtn_rwanda.mtn_rwanda_ussd import (
         MTNRwandaUSSDTransport, MTNRwandaXMLRPCResource, RequestTimedOutError,
         InvalidRequest)
 from vumi.transports.tests.utils import TransportTestCase
-from vumi.tests.helpers import MessageHelper
+from vumi.transports.tests.helpers import TransportHelper
 
 
 class MTNRwandaUSSDTransportTestCase(TransportTestCase):
@@ -46,10 +46,11 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
             'twisted_endpoint': 'tcp:port=0',
             'timeout': '30',
         })
-        self.transport = yield self.get_transport(config)
+        self.tx_helper = TransportHelper(self)
+        self.addCleanup(self.tx_helper.cleanup)
+        self.transport = yield self.tx_helper.get_transport(config)
         self.transport.callLater = self.clock.callLater
         self.session_manager = self.transport.session_manager
-        self.msg_helper = MessageHelper()
 
     def test_transport_creation(self):
         self.assertIsInstance(self.transport, MTNRwandaUSSDTransport)
@@ -69,10 +70,6 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
         for field, expected_value in expected_payload.iteritems():
             self.assertEqual(msg[field], expected_value)
 
-    def mk_reply(self, request_msg, reply_content, continue_session=True):
-        request_msg = TransportUserMessage(**request_msg.payload)
-        return request_msg.reply(reply_content, continue_session)
-
     @inlineCallbacks
     def test_inbound_request_and_reply(self):
         address = self.transport.xmlrpc_server.getHost()
@@ -86,7 +83,7 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
             'USSDEncoding': 'GSM0338',      # Optional
             'TransactionTime': '2013-07-05T22:58:47.565596'
             })
-        [msg] = yield self.wait_for_dispatched_messages(1)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         yield self.assert_inbound_message(
                 self.EXPECTED_INBOUND_PAYLOAD.copy(),
                 msg,
@@ -102,10 +99,9 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
                           'USSDServiceCode': '543',
                           'action': 'end'}
 
-        reply = self.mk_reply(msg, expected_reply['USSDResponseString'],
-                continue_session=False)
+        self.tx_helper.make_dispatch_reply(
+            msg, expected_reply['USSDResponseString'], continue_session=False)
 
-        self.dispatch(reply)
         received_text = yield x
         for key in received_text.keys():
             if key == 'TransactionTime':
@@ -116,9 +112,8 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_nack(self):
-        msg = self.msg_helper.make_outbound("outbound")
-        self.dispatch(msg)
-        [nack] = yield self.wait_for_dispatched_events(1)
+        msg = yield self.tx_helper.make_dispatch_outbound("outbound")
+        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assertEqual(nack['user_message_id'], msg['message_id'])
         self.assertEqual(nack['sent_message_id'], msg['message_id'])
         self.assertEqual(nack['nack_reason'], 'Request not found')
@@ -136,7 +131,7 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
                 'MSISDN': '275551234',
                 'USSDEncoding': 'GSM0338',
             })
-            [msg] = yield self.wait_for_dispatched_messages(1)
+            [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         except xmlrpclib.Fault, e:
             self.assertEqual(e.faultCode, 8002)
             self.assertEqual(e.faultString, 'error')
@@ -158,7 +153,7 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
             'MSISDN': '275551234',
             'TransactionTime': '2013-07-05T22:58:47.565596'
             })
-        [msg] = yield self.wait_for_dispatched_messages(1)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.clock.advance(30)
         try:
             yield x

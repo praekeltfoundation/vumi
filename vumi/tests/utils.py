@@ -9,7 +9,7 @@ from functools import wraps
 
 import pytz
 from twisted.trial.unittest import TestCase, SkipTest
-from twisted.internet import defer, reactor
+from twisted.internet import reactor
 from twisted.internet.error import ConnectionRefusedError
 from twisted.web.resource import Resource
 from twisted.internet.defer import DeferredQueue, inlineCallbacks, returnValue
@@ -17,7 +17,7 @@ from twisted.python import log
 from twisted.python.monkey import MonkeyPatcher
 
 from vumi.utils import vumi_resource_path, flatten_generator, LogFilterSite
-from vumi.service import get_spec, Worker, WorkerCreator
+from vumi.service import get_spec, WorkerCreator
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.tests.fake_amqp import FakeAMQPBroker, FakeAMQClient
 

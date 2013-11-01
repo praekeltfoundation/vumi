@@ -8,7 +8,7 @@ from vumi.tests.utils import LogCatcher
 from vumi.transports.tests.test_base import TransportTestCase
 from vumi.transports.httprpc import HttpRpcTransport
 from vumi.message import TransportUserMessage
-from vumi.tests.helpers import MessageHelper
+from vumi.transports.tests.helpers import TransportHelper
 
 
 class OkTransport(HttpRpcTransport):
@@ -45,9 +45,10 @@ class TestTransport(TransportTestCase):
             'request_timeout_status_code': 418,
             'request_timeout_body': 'I am a teapot',
             }
-        self.transport = yield self.get_transport(config)
+        self.tx_helper = TransportHelper(self)
+        self.addCleanup(self.tx_helper.cleanup)
+        self.transport = yield self.tx_helper.get_transport(config)
         self.transport_url = self.transport.get_transport_url()
-        self.msg_helper = MessageHelper()
 
     @inlineCallbacks
     def test_health(self):
@@ -60,22 +61,18 @@ class TestTransport(TransportTestCase):
     @inlineCallbacks
     def test_inbound(self):
         d = http_request(self.transport_url + "foo", '', method='GET')
-        [msg] = yield self.wait_for_dispatched_messages(1)
-        payload = msg.payload
-        tum = TransportUserMessage(**payload)
-        rep = tum.reply("OK")
-        yield self.dispatch(rep)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        rep = yield self.tx_helper.make_dispatch_reply(msg, "OK")
         response = yield d
         self.assertEqual(response, 'OK')
-        [ack] = yield self.wait_for_dispatched_events(1)
+        [ack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assertEqual(ack['user_message_id'], rep['message_id'])
         self.assertEqual(ack['sent_message_id'], rep['message_id'])
 
     @inlineCallbacks
     def test_nack(self):
-        msg = self.msg_helper.make_outbound("outbound")
-        self.dispatch(msg)
-        [nack] = yield self.wait_for_dispatched_events(1)
+        msg = yield self.tx_helper.make_dispatch_outbound("outbound")
+        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assertEqual(nack['user_message_id'], msg['message_id'])
         self.assertEqual(nack['sent_message_id'], msg['message_id'])
         self.assertEqual(nack['nack_reason'], 'Missing fields: in_reply_to')
@@ -83,7 +80,7 @@ class TestTransport(TransportTestCase):
     @inlineCallbacks
     def test_timeout(self):
         d = http_request_full(self.transport_url + "foo", '', method='GET')
-        [msg] = yield self.wait_for_dispatched_messages(1)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         with LogCatcher(message='Timing') as lc:
             self.clock.advance(10.1)  # .1 second after timeout
             response = yield d
@@ -123,7 +120,9 @@ class TestJSONTransport(TransportTestCase):
             'username': 'testuser',
             'password': 'testpass',
             }
-        self.transport = yield self.get_transport(config)
+        self.tx_helper = TransportHelper(self)
+        self.addCleanup(self.tx_helper.cleanup)
+        self.transport = yield self.tx_helper.get_transport(config)
         self.transport_url = self.transport.get_transport_url()
 
     @inlineCallbacks
@@ -134,14 +133,11 @@ class TestJSONTransport(TransportTestCase):
                 ' "from_addr": "some_msisdn"'
                 '}',
                 method='POST')
-        [msg] = yield self.wait_for_dispatched_messages(1)
-        payload = msg.payload
-        self.assertEqual(payload['content'], 'hello')
-        self.assertEqual(payload['to_addr'], 'the_app')
-        self.assertEqual(payload['from_addr'], 'some_msisdn')
-        tum = TransportUserMessage(**payload)
-        rep = tum.reply('{"content": "bye"}')
-        yield self.dispatch(rep)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        self.assertEqual(msg['content'], 'hello')
+        self.assertEqual(msg['to_addr'], 'the_app')
+        self.assertEqual(msg['from_addr'], 'some_msisdn')
+        yield self.tx_helper.make_dispatch_reply(msg, '{"content": "bye"}')
         response = yield d
         self.assertEqual(response, '{"content": "bye"}')
 
@@ -171,17 +167,17 @@ class TestCustomOutboundTransport(TransportTestCase):
             'username': 'testuser',
             'password': 'testpass',
             }
-        self.transport = yield self.get_transport(config)
+        self.tx_helper = TransportHelper(self)
+        self.addCleanup(self.tx_helper.cleanup)
+        self.transport = yield self.tx_helper.get_transport(config)
         self.transport_url = self.transport.get_transport_url()
 
     @inlineCallbacks
     def test_optional_headers(self):
         d = http_request_full(self.transport_url + "foo", '', method='GET')
-        [msg] = yield self.wait_for_dispatched_messages(1)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
 
-        tum = TransportUserMessage(**msg.payload)
-        rep = tum.reply("OK")
-        yield self.dispatch(rep)
+        yield self.tx_helper.make_dispatch_reply(msg, "OK")
 
         response = yield d
         self.assertEqual(

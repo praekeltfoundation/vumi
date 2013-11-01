@@ -8,7 +8,7 @@ from vumi.utils import http_request_full
 from vumi.message import TransportUserMessage
 from vumi.transports.tests.utils import TransportTestCase
 from vumi.transports.imimobile import ImiMobileUssdTransport
-from vumi.tests.helpers import MessageHelper
+from vumi.transports.tests.helpers import TransportHelper
 
 
 class TestImiMobileUssdTransportTestCase(TransportTestCase):
@@ -39,12 +39,13 @@ class TestImiMobileUssdTransportTestCase(TransportTestCase):
                 'some-other-suffix': '56264',
             }
         }
-        self.transport = yield self.get_transport(self.config)
+        self.tx_helper = TransportHelper(self)
+        self.addCleanup(self.tx_helper.cleanup)
+        self.transport = yield self.tx_helper.get_transport(self.config)
         self.session_manager = self.transport.session_manager
         self.transport_url = self.transport.get_transport_url(
             self.config['web_path'])
         yield self.session_manager.redis._purge_all()  # just in case
-        self.msg_helper = MessageHelper()
 
     def mk_full_request(self, suffix, **params):
         return http_request_full('%s?%s' % (self.transport_url + suffix,
@@ -106,20 +107,20 @@ class TestImiMobileUssdTransportTestCase(TransportTestCase):
         # Second connect is the actual start of the session
         user_content = "Who are you?"
         d = self.mk_request('some-suffix', msg=user_content)
-        [msg] = yield self.wait_for_dispatched_messages(1)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assert_inbound_message(msg,
             session_event=TransportUserMessage.SESSION_NEW,
             content=user_content)
 
         reply_content = "We are the Knights Who Say ... Ni!"
         reply = self.mk_reply(msg, reply_content)
-        self.dispatch(reply)
+        self.tx_helper.dispatch_outbound(reply)
         response = yield d
         self.assertEqual(response.delivered_body, reply_content)
         self.assertEqual(
             response.headers.getRawHeaders('X-USSD-SESSION'), ['1'])
 
-        [ack] = yield self.wait_for_dispatched_events(1)
+        [ack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assert_ack(ack, reply)
 
     @inlineCallbacks
@@ -129,14 +130,14 @@ class TestImiMobileUssdTransportTestCase(TransportTestCase):
 
         user_content = "Well, what is it you want?"
         d = self.mk_request('some-suffix', msg=user_content)
-        [msg] = yield self.wait_for_dispatched_messages(1)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assert_inbound_message(msg,
             session_event=TransportUserMessage.SESSION_RESUME,
             content=user_content)
 
         reply_content = "We want ... a shrubbery!"
         reply = self.mk_reply(msg, reply_content, continue_session=False)
-        self.dispatch(reply)
+        self.tx_helper.dispatch_outbound(reply)
         response = yield d
         self.assertEqual(response.delivered_body, reply_content)
         self.assertEqual(
@@ -146,7 +147,7 @@ class TestImiMobileUssdTransportTestCase(TransportTestCase):
         session = yield self.session_manager.load_session(from_addr)
         self.assertEqual(session, {})
 
-        [ack] = yield self.wait_for_dispatched_events(1)
+        [ack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assert_ack(ack, reply)
 
     @inlineCallbacks
@@ -155,20 +156,20 @@ class TestImiMobileUssdTransportTestCase(TransportTestCase):
 
         user_content = "Well, what is it you want?"
         d = self.mk_request('some-suffix', msg=user_content)
-        [msg] = yield self.wait_for_dispatched_messages(1)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assert_inbound_message(msg,
             session_event=TransportUserMessage.SESSION_RESUME,
             content=user_content)
 
         reply_content = "We want ... a shrubbery!"
         reply = self.mk_reply(msg, reply_content, continue_session=True)
-        self.dispatch(reply)
+        self.tx_helper.dispatch_outbound(reply)
         response = yield d
         self.assertEqual(response.delivered_body, reply_content)
         self.assertEqual(
             response.headers.getRawHeaders('X-USSD-SESSION'), ['1'])
 
-        [ack] = yield self.wait_for_dispatched_events(1)
+        [ack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assert_ack(ack, reply)
 
     @inlineCallbacks
@@ -178,7 +179,7 @@ class TestImiMobileUssdTransportTestCase(TransportTestCase):
 
         user_content = "Farewell, sweet Concorde!"
         d = self.mk_request('some-suffix', msg=user_content)
-        [msg] = yield self.wait_for_dispatched_messages(1)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assert_inbound_message(msg,
             session_event=TransportUserMessage.SESSION_CLOSE,
             content=user_content)
@@ -225,21 +226,21 @@ class TestImiMobileUssdTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_nack_insufficient_message_fields(self):
-        reply = self.msg_helper.make_outbound(
+        reply = self.tx_helper.make_outbound(
             None, message_id='23', in_reply_to=None)
-        self.dispatch(reply)
-        [nack] = yield self.wait_for_dispatched_events(1)
+        self.tx_helper.dispatch_outbound(reply)
+        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assert_nack(
             nack, reply, self.transport.INSUFFICIENT_MSG_FIELDS_ERROR)
 
     @inlineCallbacks
     def test_nack_http_http_response_failure(self):
         self.patch(self.transport, 'finish_request', lambda *a, **kw: None)
-        reply = self.msg_helper.make_outbound(
+        reply = self.tx_helper.make_outbound(
             'There are some who call me ... Tim!', message_id='23',
             in_reply_to='some-number')
-        self.dispatch(reply)
-        [nack] = yield self.wait_for_dispatched_events(1)
+        self.tx_helper.dispatch_outbound(reply)
+        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assert_nack(
             nack, reply, self.transport.RESPONSE_FAILURE_ERROR)
 
