@@ -241,15 +241,23 @@ class CheckValuesMixin(object):
 
 class TestMetric(TestCase, CheckValuesMixin):
     def test_manage(self):
+        mm = metrics.MetricManager("vumi.test.")
         metric = metrics.Metric("foo")
-        metric.manage("vumi.test.")
+        metric.manage(mm)
         self.assertEqual(metric.name, "foo")
+        mm2 = metrics.MetricManager("vumi.othertest.")
         self.assertRaises(metrics.MetricRegistrationError, metric.manage,
-                          "vumi.othertest.")
+                          mm2)
+
+    def test_managed(self):
+        metric = metrics.Metric("foo")
+        self.assertFalse(metric.managed)
+        mm = metrics.MetricManager("vumi.test.")
+        metric.manage(mm)
+        self.assertTrue(metric.managed)
 
     def test_poll(self):
         metric = metrics.Metric("foo")
-        metric.manage("prefix.")
         self.check_poll(metric, [])
         metric.set(1.0)
         metric.set(2.0)
@@ -259,7 +267,6 @@ class TestMetric(TestCase, CheckValuesMixin):
 class TestCount(TestCase, CheckValuesMixin):
     def test_inc_and_poll(self):
         metric = metrics.Count("foo")
-        metric.manage("prefix.")
         self.check_poll(metric, [])
         metric.inc()
         self.check_poll(metric, [1.0])
@@ -282,7 +289,6 @@ class TestTimer(TestCase, CheckValuesMixin):
 
     def test_start_and_stop(self):
         timer = metrics.Timer("foo")
-        timer.manage("prefix.")
 
         self.patch_time(12345.0)
         timer.start()
@@ -293,13 +299,11 @@ class TestTimer(TestCase, CheckValuesMixin):
 
     def test_already_started(self):
         timer = metrics.Timer("foo")
-        timer.manage("prefix.")
         timer.start()
         self.assertRaises(metrics.TimerAlreadyStartedError, timer.start)
 
     def test_context_manager(self):
         timer = metrics.Timer("foo")
-        timer.manage("prefix.")
         self.patch_time(12345.0)
         with timer:
             self.incr_fake_time(0.1)  # feign sleep
@@ -308,7 +312,6 @@ class TestTimer(TestCase, CheckValuesMixin):
 
     def test_accumulate_times(self):
         timer = metrics.Timer("foo")
-        timer.manage("prefix.")
         self.patch_time(12345.0)
         with timer:
             self.incr_fake_time(0.1)  # feign sleep

@@ -88,7 +88,7 @@ class MetricManager(Publisher):
         :rtype:
             For convenience, returns the metric passed in.
         """
-        metric.manage(self.prefix)
+        metric.manage(self)
         self._metrics.append(metric)
         if metric.name in self._metrics_lookup:
             raise MetricRegistrationError("Duplicate metric name %s"
@@ -181,16 +181,20 @@ class Metric(object):
             aggregators = self.DEFAULT_AGGREGATORS
         self.name = name
         self.aggs = tuple(sorted(agg.name for agg in aggregators))
-        self.managed = False
+        self._manager = None
         self._values = []  # list of unpolled values
 
-    def manage(self, prefix):
+    @property
+    def managed(self):
+        return self._manager is not None
+
+    def manage(self, manager):
         """Called by :class:`MetricManager` when this metric is registered."""
-        if self.managed:
-            raise MetricRegistrationError("Metric %s%s already registered"
-                                          " with a MetricManager." %
-                                          (prefix, self.name))
-        self.managed = True
+        if self._manager is not None:
+            raise MetricRegistrationError(
+                "Metric %s already registered with MetricManager with"
+                " prefix %s." % (self.name, self._manager.prefix))
+        self._manager = manager
 
     def set(self, value):
         """Append a value for later polling."""
