@@ -461,8 +461,6 @@ class VumiWorkerTestCase(VumiTestCase):
     cases that involve vumi workers.
     """
 
-    # We inherit our timeout from VumiTestCase now.
-
     transport_name = "sphex"
     transport_type = None
 
