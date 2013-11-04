@@ -1,7 +1,8 @@
-from twisted.trial.unittest import TestCase
-from vumi.scripts.parse_log_messages import LogParser
-from pkg_resources import resource_string
 import json
+from pkg_resources import resource_string
+
+from vumi.scripts.parse_log_messages import LogParser
+from vumi.tests.helpers import VumiTestCase
 
 
 class DummyLogParser(LogParser):
@@ -47,7 +48,8 @@ SAMPLE_SMPP_OUTBOUND_LINE = (
     "u'user_message'}\">"
 )
 
-class ParseSMPPLogMessagesTestCase(TestCase):
+
+class ParseSMPPLogMessagesTestCase(VumiTestCase):
 
     def test_parsing_of_line(self):
         parser = DummyLogParser({

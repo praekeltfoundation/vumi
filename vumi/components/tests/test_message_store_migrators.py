@@ -1,10 +1,9 @@
 """Tests for go.components.message_store_migrators."""
 
 from twisted.internet.defer import inlineCallbacks
-from twisted.trial.unittest import TestCase
 
 from vumi.tests.utils import PersistenceMixin, import_skip
-from vumi.tests.helpers import MessageHelper
+from vumi.tests.helpers import VumiTestCase, MessageHelper
 
 try:
     from vumi.components.tests.message_store_old_models import (
@@ -17,20 +16,17 @@ except ImportError, e:
     riak_import_error = e
 
 
-class TestMigratorBase(TestCase, PersistenceMixin):
-    timeout = 5
+class TestMigratorBase(VumiTestCase, PersistenceMixin):
     use_riak = True
 
     @inlineCallbacks
     def setUp(self):
         yield self._persist_setUp()
+        self.add_cleanup(self._persist_tearDown)
         if riak_import_error is not None:
             import_skip(riak_import_error, 'riakasaurus', 'riakasaurus.riak')
         self.manager = self.get_riak_manager()
         self.msg_helper = MessageHelper()
-
-    def tearDown(self):
-        return self._persist_tearDown()
 
 
 class OutboundMessageMigratorTestCase(TestMigratorBase):

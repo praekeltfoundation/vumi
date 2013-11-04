@@ -13,7 +13,6 @@ from vumi.tests.helpers import MessageHelper, AMQPHelper
 class MessageStoreAPITestCase(VumiWorkerTestCase, PersistenceMixin):
 
     use_riak = True
-    timeout = 5
 
     @inlineCallbacks
     def setUp(self):

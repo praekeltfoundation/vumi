@@ -14,7 +14,6 @@ from vumi.transports.tests.helpers import TransportHelper
 class TestImiMobileUssdTransportTestCase(TransportTestCase):
 
     transport_class = ImiMobileUssdTransport
-    timeout = 1
 
     _from_addr = '9221234567'
     _to_addr = '56263'

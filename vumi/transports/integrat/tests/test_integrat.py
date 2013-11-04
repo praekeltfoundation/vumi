@@ -1,6 +1,5 @@
 # -*- encoding: utf-8 -*-
 
-from twisted.trial.unittest import TestCase
 from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, DeferredQueue
 from twisted.web.server import Site
@@ -12,6 +11,7 @@ from vumi.message import TransportUserMessage
 from vumi.transports.integrat.integrat import (IntegratHttpResource,
                                                IntegratTransport)
 from vumi.transports.tests.helpers import TransportHelper
+from vumi.tests.helpers import VumiTestCase
 
 
 XML_TEMPLATE = '''
@@ -35,7 +35,7 @@ XML_TEMPLATE = '''
 '''
 
 
-class TestIntegratHttpResource(TestCase):
+class TestIntegratHttpResource(VumiTestCase):
 
     DEFAULT_MSG = {
         'from_addr': '+2799053421',
@@ -51,12 +51,9 @@ class TestIntegratHttpResource(TestCase):
         site_factory = Site(IntegratHttpResource("testgrat", "ussd",
             self._publish))
         self.server = yield reactor.listenTCP(0, site_factory)
+        self.add_cleanup(self.server.loseConnection)
         addr = self.server.getHost()
         self._server_url = "http://%s:%s/" % (addr.host, addr.port)
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield self.server.loseConnection()
 
     def _publish(self, **kws):
         self.msgs.append(kws)

@@ -1,4 +1,3 @@
-from twisted.trial import unittest
 from twisted.internet.task import Clock
 from twisted.internet.defer import inlineCallbacks, returnValue
 from smpp.pdu_builder import DeliverSM, BindTransceiverResp, Unbind
@@ -9,6 +8,7 @@ from vumi.transports.smpp.clientserver.client import (
     EsmeTransceiver, EsmeReceiver, EsmeTransmitter, EsmeCallbacks, ESME,
     unpacked_pdu_opts)
 from vumi.transports.smpp.transport import SmppTransportConfig
+from vumi.tests.helpers import VumiTestCase
 
 
 class FakeTransport(object):
@@ -59,17 +59,16 @@ class FakeEsmeTransmitter(EsmeTransmitter, FakeEsmeMixin):
         return self.fake_send_pdu(pdu)
 
 
-class EsmeTestCaseBase(unittest.TestCase, PersistenceMixin):
-    timeout = 5
+class EsmeTestCaseBase(VumiTestCase, PersistenceMixin):
     ESME_CLASS = None
 
     def setUp(self):
         self._persist_setUp()
+        self.add_cleanup(self._persist_tearDown)
         self._expected_callbacks = []
-
-    def tearDown(self):
-        self.assertEqual(self._expected_callbacks, [], "Uncalled callbacks.")
-        return self._persist_tearDown()
+        self.add_cleanup(
+            self.assertEqual, self._expected_callbacks, [],
+            "Uncalled callbacks.")
 
     def get_unbound_esme(self, host="127.0.0.1", port="0",
                          system_id="1234", password="password",
@@ -543,7 +542,7 @@ class EsmeReceiverTestCase(EsmeTestCaseBase, EsmeReceiverMixin):
                              error['message'][0]))
 
 
-class ESMETestCase(unittest.TestCase):
+class ESMETestCase(VumiTestCase):
 
     def setUp(self):
         config = SmppTransportConfig({

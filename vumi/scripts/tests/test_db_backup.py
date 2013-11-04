@@ -4,11 +4,10 @@ import json
 import datetime
 
 import yaml
-from twisted.trial.unittest import TestCase
-
-from vumi.tests.utils import PersistenceMixin
 
 from vumi.scripts.db_backup import ConfigHolder, Options, vumi_version
+from vumi.tests.utils import PersistenceMixin
+from vumi.tests.helpers import VumiTestCase
 
 
 class TestConfigHolder(ConfigHolder):
@@ -29,17 +28,15 @@ class TestConfigHolder(ConfigHolder):
         return self.testcase.get_sub_redis(config)
 
 
-class DbBackupBaseTestCase(TestCase, PersistenceMixin):
+class DbBackupBaseTestCase(VumiTestCase, PersistenceMixin):
     sync_persistence = True
 
     def setUp(self):
         self._persist_setUp()
+        self.add_cleanup(self._persist_tearDown)
         # Make sure we start fresh.
         self.get_redis_manager()._purge_all()
         self.redis = self.get_redis_manager()
-
-    def tearDown(self):
-        return self._persist_tearDown()
 
     def make_cfg(self, args):
         options = Options()

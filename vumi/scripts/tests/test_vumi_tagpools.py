@@ -2,9 +2,8 @@
 
 from pkg_resources import resource_filename
 
-from twisted.trial.unittest import TestCase
-
 from vumi.tests.utils import PersistenceMixin
+from vumi.tests.helpers import VumiTestCase
 
 
 def make_cfg(args):
@@ -25,16 +24,14 @@ def make_cfg(args):
     return TestConfigHolder(options)
 
 
-class TagPoolBaseTestCase(TestCase, PersistenceMixin):
+class TagPoolBaseTestCase(VumiTestCase, PersistenceMixin):
     sync_persistence = True
 
     def setUp(self):
         self._persist_setUp()
+        self.add_cleanup(self._persist_tearDown)
         # Make sure we start fresh.
         self.get_redis_manager()._purge_all()
-
-    def tearDown(self):
-        return self._persist_tearDown()
 
 
 class CreatePoolCmdTestCase(TagPoolBaseTestCase):

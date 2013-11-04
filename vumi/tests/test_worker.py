@@ -1,11 +1,10 @@
-from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks, succeed, Deferred
 
 from vumi.worker import BaseConfig, BaseWorker
 from vumi.connectors import ReceiveInboundConnector, ReceiveOutboundConnector
 from vumi.tests.utils import VumiWorkerTestCase, LogCatcher
 from vumi.middleware.base import BaseMiddleware
-from vumi.tests.helpers import MessageHelper, AMQPHelper
+from vumi.tests.helpers import VumiTestCase, MessageHelper, AMQPHelper
 
 
 class DummyWorker(BaseWorker):
@@ -42,7 +41,7 @@ class CallRecorder(object):
         return self.func(*args, **kwargs)
 
 
-class TestBaseConfig(TestCase):
+class TestBaseConfig(VumiTestCase):
     def test_no_amqp_prefetch(self):
         config = BaseConfig({})
         self.assertEqual(config.amqp_prefetch_count, 20)

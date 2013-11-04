@@ -25,7 +25,7 @@ class HTTPRelayTestCase(ApplicationTestCase):
     @inlineCallbacks
     def setup_resource_with_callback(self, callback):
         self.mock_server = MockHttpServer(callback)
-        self.addCleanup(self.mock_server.stop)
+        self.add_cleanup(self.mock_server.stop)
         yield self.mock_server.start()
         self.app = yield self.app_helper.get_application({
             'url': '%s%s' % (self.mock_server.url, self.path),

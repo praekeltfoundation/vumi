@@ -1,3 +1,7 @@
+import os
+
+from twisted.internet.defer import inlineCallbacks
+from twisted.trial.unittest import TestCase
 
 from twisted.internet.defer import succeed, inlineCallbacks
 
@@ -32,6 +36,33 @@ def generate_proxies(target, source, suffix=None):
             raise Exception(
                 'Attribute already exists: %s' % (target_name,))
         setattr(target, target_name, attribute)
+
+
+def get_timeout():
+    # Look up the timeout in an environment variable and use a default of 5
+    # seconds if there isn't one there.
+    timeout_str = os.environ.get('VUMI_TEST_TIMEOUT', '5')
+    return float(timeout_str)
+
+
+class VumiTestCase(TestCase):
+    timeout = get_timeout()
+
+    _cleanup_funcs = None
+
+    @inlineCallbacks
+    def tearDown(self):
+        # Run any cleanup code we've registered with .add_cleanup().
+        # We do this ourselves instead of using trial's .addCleanup() because
+        # that doesn't have timeouts applied to it.
+        if self._cleanup_funcs is not None:
+            for cleanup, args, kw in reversed(self._cleanup_funcs):
+                yield cleanup(*args, **kw)
+
+    def add_cleanup(self, func, *args, **kw):
+        if self._cleanup_funcs is None:
+            self._cleanup_funcs = []
+        self._cleanup_funcs.append((func, args, kw))
 
 
 class MessageHelper(object):

@@ -1,10 +1,10 @@
 """Tests for vumi.persist.txriak_manager."""
 
-from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.persist.model import Manager
 from vumi.tests.utils import import_skip
+from vumi.tests.helpers import VumiTestCase
 
 
 class DummyModel(object):
@@ -204,7 +204,7 @@ class CommonRiakManagerTests(object):
         self.assertEqual(result, None)
 
 
-class TestTxRiakManager(CommonRiakManagerTests, TestCase):
+class TestTxRiakManager(CommonRiakManagerTests, VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
@@ -216,10 +216,8 @@ class TestTxRiakManager(CommonRiakManagerTests, TestCase):
         self.pbc_transport = transport.PBCTransport
         self.http_transport = transport.HTTPTransport
         self.manager = TxRiakManager.from_config({'bucket_prefix': 'test.'})
+        self.add_cleanup(self.manager.purge_all)
         yield self.manager.purge_all()
-
-    def tearDown(self):
-        return self.manager.purge_all()
 
     def test_call_decorator(self):
         self.assertEqual(type(self.manager).call_decorator, inlineCallbacks)
