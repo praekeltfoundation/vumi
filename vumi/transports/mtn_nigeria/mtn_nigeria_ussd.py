@@ -5,7 +5,7 @@ from twisted.internet.protocol import ReconnectingClientFactory
 from vumi import log
 from vumi.transports.base import Transport
 from vumi.message import TransportUserMessage
-from vumi.config import ConfigInt, ConfigText,  ConfigDict
+from vumi.config import ConfigInt, ConfigText, ConfigDict
 from vumi.components.session import SessionManager
 from vumi.transports.mtn_nigeria.xml_over_tcp import (
     XmlOverTcpError, CodedXmlOverTcpError, XmlOverTcpClient)
