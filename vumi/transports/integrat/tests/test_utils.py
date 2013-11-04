@@ -16,10 +16,6 @@ class HigateXMLTestCases(VumiTestCase):
     def setUp(self):
         self.dolog = True
         self.hxp = HigateXMLParser()
-        self.add_cleanup(self.cleanup_hxp)
-
-    def cleanup_hxp(self):
-        del self.hxp
 
     def testParseOnResult(self):
         OnResult_xml = '''

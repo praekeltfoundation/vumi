@@ -7,7 +7,7 @@ def safetext(element):
     return element.text or ''
 
 
-class HigateXMLParser():
+class HigateXMLParser(object):
 
     def parse(self, xmlstring):
         element = ElementTree.fromstring(xmlstring)
