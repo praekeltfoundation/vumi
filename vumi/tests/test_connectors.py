@@ -7,7 +7,7 @@ from vumi.tests.utils import VumiWorkerTestCase, LogCatcher
 from vumi.worker import BaseWorker
 from vumi.message import TransportUserMessage
 from vumi.middleware.tests.utils import RecordingMiddleware
-from .helpers import MessageHelper, AMQPHelper
+from vumi.tests.helpers import MessageHelper, AMQPHelper
 
 
 class DummyWorker(BaseWorker):

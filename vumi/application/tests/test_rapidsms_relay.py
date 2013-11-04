@@ -10,7 +10,7 @@ from vumi.tests.utils import LogCatcher, MockHttpServer
 from vumi.application.rapidsms_relay import RapidSMSRelay, BadRequestError
 from vumi.utils import http_request_full, basic_auth_string, to_kwargs
 from vumi.message import TransportUserMessage, from_json
-from .helpers import ApplicationHelper
+from vumi.application.tests.helpers import ApplicationHelper
 
 
 class RapidSMSRelayTestCase(ApplicationTestCase):

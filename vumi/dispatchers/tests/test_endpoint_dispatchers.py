@@ -2,7 +2,7 @@ from twisted.internet.defer import inlineCallbacks
 
 from vumi.dispatchers.endpoint_dispatchers import RoutingTableDispatcher
 from vumi.tests.utils import VumiWorkerTestCase
-from .helpers import DispatcherHelper
+from vumi.dispatchers.tests.helpers import DispatcherHelper
 
 
 class TestRoutingTableDispatcher(VumiWorkerTestCase):

@@ -5,7 +5,7 @@ from vumi.message import TransportUserMessage
 from vumi.tests.utils import get_stubbed_worker
 from vumi.application.tests.utils import ApplicationTestCase
 
-from .helpers import ApplicationHelper
+from vumi.application.tests.helpers import ApplicationHelper
 
 
 class DummyApplicationWorker(ApplicationWorker):

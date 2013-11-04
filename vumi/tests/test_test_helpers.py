@@ -1,6 +1,6 @@
 from twisted.trial.unittest import TestCase
 
-from .helpers import proxyable, generate_proxies
+from vumi.tests.helpers import proxyable, generate_proxies
 
 
 class TestHelperHelpers(TestCase):

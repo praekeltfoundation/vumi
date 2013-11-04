@@ -5,7 +5,7 @@ from vumi.dispatchers.base import (
 from vumi.tests.utils import VumiWorkerTestCase, LogCatcher
 from vumi.dispatchers.tests.utils import DispatcherTestCase, DummyDispatcher
 from vumi.tests.helpers import MessageHelper
-from .helpers import DispatcherHelper
+from vumi.dispatchers.tests.helpers import DispatcherHelper
 
 
 class TestBaseDispatchWorker(VumiWorkerTestCase):

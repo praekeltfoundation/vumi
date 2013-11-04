@@ -25,7 +25,7 @@ from vumi.application.sandbox import (
 from vumi.tests.utils import LogCatcher, PersistenceMixin
 from vumi.tests.helpers import VumiTestCase
 
-from .helpers import ApplicationHelper
+from vumi.application.tests.helpers import ApplicationHelper
 
 
 class MockResource(SandboxResource):

@@ -5,7 +5,7 @@ from vumi.tests.utils import StubbedWorkerCreator, VumiWorkerTestCase
 from vumi.service import Worker
 from vumi.message import TransportUserMessage
 from vumi.multiworker import MultiWorker
-from .helpers import MessageHelper, AMQPHelper
+from vumi.tests.helpers import MessageHelper, AMQPHelper
 
 
 class ToyWorker(Worker):

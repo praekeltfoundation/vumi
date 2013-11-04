@@ -8,7 +8,7 @@ from vumi.tests.utils import MockHttpServer
 from vumi.application.http_relay import HTTPRelayApplication
 from vumi.message import TransportEvent
 
-from .helpers import ApplicationHelper
+from vumi.application.tests.helpers import ApplicationHelper
 
 
 class HTTPRelayTestCase(ApplicationTestCase):

@@ -1,9 +1,7 @@
 import os
 
-from twisted.internet.defer import inlineCallbacks
-from twisted.trial.unittest import TestCase
-
 from twisted.internet.defer import succeed, inlineCallbacks
+from twisted.trial.unittest import TestCase
 
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.service import get_spec
