@@ -1,7 +1,7 @@
 from datetime import datetime
 
-from twisted.trial.unittest import TestCase
 from vumi.blinkenlights import message20110707 as message
+from vumi.tests.helpers import VumiTestCase
 
 
 TIMEOBJ = datetime(2011, 07, 07, 12, 00, 00)
@@ -25,13 +25,7 @@ def mkmsgobj(message_type, source_name, source_id, payload, timestamp):
                            timestamp)
 
 
-class MessageTestCase(TestCase):
-
-    def setUp(self):
-        pass
-
-    def tearDown(self):
-        pass
+class MessageTestCase(VumiTestCase):
 
     def test_decode_valid_message(self):
         """A valid message dict should decode into an appropriate Message
@@ -115,7 +109,7 @@ def mkmetricsmsg(metrics):
                  TIMELIST)
 
 
-class MetricsMessageTestCase(TestCase):
+class MetricsMessageTestCase(VumiTestCase):
     def test_parse_empty_metrics(self):
         msg_data = mkmetricsmsg([])
         msg = message.MetricsMessage.from_dict(msg_data)

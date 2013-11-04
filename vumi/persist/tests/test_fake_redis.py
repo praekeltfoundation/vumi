@@ -1,17 +1,15 @@
 # -*- coding: utf-8 -*-
-from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.persist.fake_redis import FakeRedis
+from vumi.tests.helpers import VumiTestCase
 
 
-class FakeRedisTestCase(TestCase):
+class FakeRedisTestCase(VumiTestCase):
 
     def setUp(self):
         self.redis = FakeRedis()
-
-    def tearDown(self):
-        self.redis.teardown()
+        self.add_cleanup(self.redis.teardown)
 
     def assert_redis_op(self, expected, op, *args, **kw):
         self.assertEqual(expected, getattr(self.redis, op)(*args, **kw))
@@ -333,18 +331,11 @@ class FakeRedisTestCase(TestCase):
         yield self.assert_redis_op('hash', 'type', 'hash_key')
 
 
-class FakeRedisCharsetHandlingTestCase(TestCase):
-
-    def setUp(self):
-        self._redises = []
-
-    def tearDown(self):
-        for redis in self._redises:
-            redis.teardown()
+class FakeRedisCharsetHandlingTestCase(VumiTestCase):
 
     def get_redis(self, *args, **kwargs):
         redis = FakeRedis(*args, **kwargs)
-        self._redises.append(redis)
+        self.add_cleanup(redis.teardown)
         return redis
 
     def assert_redis_op(self, redis, expected, op, *args, **kw):

@@ -3,7 +3,6 @@
 """Tests for vumi.components.tagpool_api."""
 
 from txjsonrpc.web.jsonrpc import Proxy
-from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet import reactor
 from twisted.web.server import Site
@@ -13,25 +12,23 @@ from vumi.components.tagpool_api import TagpoolApiServer, TagpoolApiWorker
 from vumi.components.tagpool import TagpoolManager
 from vumi.tests.utils import VumiWorkerTestCase, PersistenceMixin
 from vumi.utils import http_request
+from vumi.tests.helpers import VumiTestCase
 
 
-class TestTagpoolApiServer(TestCase, PersistenceMixin):
+class TestTagpoolApiServer(VumiTestCase, PersistenceMixin):
 
     @inlineCallbacks
     def setUp(self):
         self._persist_setUp()
+        self.add_cleanup(self._persist_tearDown)
         self.redis = yield self.get_redis_manager()
         self.tagpool = TagpoolManager(self.redis)
         site = Site(TagpoolApiServer(self.tagpool))
         self.server = yield reactor.listenTCP(0, site)
+        self.add_cleanup(self.server.loseConnection)
         addr = self.server.getHost()
         self.proxy = Proxy("http://%s:%d/" % (addr.host, addr.port))
         yield self.setup_tags()
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield self.server.loseConnection()
-        yield self._persist_tearDown()
 
     @inlineCallbacks
     def setup_tags(self):

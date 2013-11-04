@@ -1,4 +1,3 @@
-from twisted.trial.unittest import TestCase
 from twisted.internet.endpoints import TCP4ServerEndpoint, TCP4ClientEndpoint
 
 from vumi.errors import ConfigError
@@ -6,9 +5,10 @@ from vumi.config import (
     Config, ConfigField, ConfigText, ConfigInt, ConfigFloat, ConfigBool,
     ConfigList, ConfigDict, ConfigUrl, ConfigRegex, ConfigServerEndpoint,
     ConfigClientEndpoint)
+from .helpers import VumiTestCase
 
 
-class ConfigTest(TestCase):
+class ConfigTest(VumiTestCase):
     def test_simple_config(self):
         class FooConfig(Config):
             "Test config."
@@ -174,7 +174,7 @@ class FakeModel(object):
         self._config_data = config
 
 
-class ConfigFieldTest(TestCase):
+class ConfigFieldTest(VumiTestCase):
     def fake_model(self, *value, **kw):
         config = kw.pop('config', {})
         if value:

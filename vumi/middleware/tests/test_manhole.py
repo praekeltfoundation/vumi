@@ -1,8 +1,10 @@
-from twisted.trial.unittest import TestCase, SkipTest
+from twisted.trial.unittest import SkipTest
 
 from twisted.internet import defer, protocol, reactor
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet.endpoints import TCP4ClientEndpoint
+
+from vumi.tests.helpers import VumiTestCase
 
 try:
 
@@ -25,7 +27,7 @@ class DummyWorker(object):
     pass
 
 
-class ManholeMiddlewareTestCase(TestCase):
+class ManholeMiddlewareTestCase(VumiTestCase):
 
     def setUp(self):
         if not ssh:

@@ -1,23 +1,21 @@
 """Tests for vumi.middleware.message_storing."""
 
-from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.middleware.tagger import TaggingMiddleware
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.tests.utils import PersistenceMixin
+from vumi.tests.helpers import VumiTestCase
 
 
-class StoringMiddlewareTestCase(TestCase, PersistenceMixin):
+class StoringMiddlewareTestCase(VumiTestCase, PersistenceMixin):
 
     use_riak = True
-
-    DEFAULT_CONFIG = {
-        }
 
     @inlineCallbacks
     def setUp(self):
         self._persist_setUp()
+        self.add_cleanup(self._persist_tearDown)
         dummy_worker = object()
         config = self.mk_config({})
 
@@ -30,16 +28,12 @@ class StoringMiddlewareTestCase(TestCase, PersistenceMixin):
         from vumi.middleware.message_storing import StoringMiddleware
 
         self.mw = StoringMiddleware("dummy_storer", config, dummy_worker)
+        self.add_cleanup(self.mw.teardown_middleware)
         yield self.mw.setup_middleware()
         self.store = self.mw.store
+        self.add_cleanup(self.store.manager.purge_all)
         yield self.store.manager.purge_all()
         yield self.store.cache.redis._purge_all()  # just in case
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield self.mw.teardown_middleware()
-        yield self.store.manager.purge_all()
-        yield self._persist_tearDown()
 
     def mk_msg(self):
         msg = TransportUserMessage(to_addr="45678", from_addr="12345",

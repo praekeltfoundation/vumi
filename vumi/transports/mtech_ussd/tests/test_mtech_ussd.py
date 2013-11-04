@@ -1,12 +1,11 @@
 from twisted.internet.defer import inlineCallbacks
-from twisted.trial.unittest import TestCase
 
 from vumi.transports.tests.utils import TransportTestCase
 from vumi.utils import http_request_full
 from vumi.message import TransportUserMessage
 from vumi.transports.mtech_ussd import MtechUssdTransport
 from vumi.transports.mtech_ussd.mtech_ussd import MtechUssdResponse
-from vumi.tests.helpers import MessageHelper
+from vumi.tests.helpers import VumiTestCase, MessageHelper
 
 
 class TestMtechUssdTransport(TransportTestCase):
@@ -249,7 +248,7 @@ class TestMtechUssdTransport(TransportTestCase):
         self.assertEqual(response, correct_response)
 
 
-class TestMtechUssdResponse(TestCase):
+class TestMtechUssdResponse(VumiTestCase):
     def setUp(self):
         self.mur = MtechUssdResponse("sid123")
 

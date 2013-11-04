@@ -2,11 +2,11 @@ import yaml
 import itertools
 
 from twisted.internet.defer import inlineCallbacks, returnValue
-from twisted.trial.unittest import TestCase
 
 from vumi.middleware.base import (BaseMiddleware, MiddlewareStack,
                                   create_middlewares_from_config,
                                   setup_middlewares_from_config)
+from vumi.tests.helpers import VumiTestCase
 
 
 class ToyMiddleware(BaseMiddleware):
@@ -40,7 +40,7 @@ class ToyMiddleware(BaseMiddleware):
         return self._handle('failure', message, connector_name)
 
 
-class MiddlewareStackTestCase(TestCase):
+class MiddlewareStackTestCase(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
@@ -99,7 +99,7 @@ class MiddlewareStackTestCase(TestCase):
             ['mw3', 'mw2', 'mw1'])
 
 
-class UtilityFunctionsTestCase(TestCase):
+class UtilityFunctionsTestCase(VumiTestCase):
 
     TEST_CONFIG_1 = {
         "middleware": [

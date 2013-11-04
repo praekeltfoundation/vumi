@@ -1,11 +1,10 @@
-from twisted.trial.unittest import TestCase
-
 from vumi.tests.utils import RegexMatcher, UTCNearNow
 from vumi.message import (Message, TransportMessage, TransportEvent,
                           TransportUserMessage)
+from .helpers import VumiTestCase
 
 
-class MessageTest(TestCase):
+class MessageTest(VumiTestCase):
 
     def test_message_equality(self):
         self.assertEqual(Message(a=5), Message(a=5))
@@ -60,7 +59,7 @@ class TransportMessageTestMixin(object):
         self.assertEqual('foo', msg.routing_metadata['endpoint_name'])
 
 
-class TransportMessageTest(TransportMessageTestMixin, TestCase):
+class TransportMessageTest(TransportMessageTestMixin, VumiTestCase):
     def make_message(self, **extra_fields):
         fields = dict(message_type='foo')
         fields.update(extra_fields)
@@ -73,7 +72,7 @@ class TransportMessageTest(TransportMessageTestMixin, TestCase):
         self.assertEqual('foo', msg['message_type'])
 
 
-class TransportUserMessageTest(TransportMessageTestMixin, TestCase):
+class TransportUserMessageTest(TransportMessageTestMixin, VumiTestCase):
     def make_message(self, **extra_fields):
         fields = dict(
             # message_id='abc',
@@ -269,7 +268,7 @@ class TransportUserMessageTest(TransportMessageTestMixin, TestCase):
         self.assertEqual(msg['helper_metadata'], {})
 
 
-class TransportEventTest(TransportMessageTestMixin, TestCase):
+class TransportEventTest(TransportMessageTestMixin, VumiTestCase):
     def make_message(self, **extra_fields):
         fields = dict(
             event_id='def',

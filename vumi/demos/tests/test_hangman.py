@@ -2,7 +2,8 @@
 
 """Tests for vumi.demos.hangman."""
 
-from twisted.trial import unittest
+import string
+
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet import reactor
 from twisted.web.server import Site
@@ -12,16 +13,14 @@ from twisted.web.static import Data
 from vumi.application.tests.utils import ApplicationTestCase
 from vumi.demos.hangman import HangmanGame, HangmanWorker
 from vumi.message import TransportUserMessage
-from vumi.tests.helpers import MessageHelper
-
-import string
+from vumi.tests.helpers import VumiTestCase, MessageHelper
 
 
 def mkstate(word, guesses, msg):
     return {'word': word, 'guesses': guesses, 'msg': msg}
 
 
-class TestHangmanGame(unittest.TestCase):
+class TestHangmanGame(VumiTestCase):
     def test_easy_game(self):
         game = HangmanGame(word='moo')
         game.event('m')

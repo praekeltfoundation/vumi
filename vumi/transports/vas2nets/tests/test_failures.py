@@ -2,7 +2,6 @@
 from datetime import datetime
 
 from twisted.web import http
-from twisted.trial import unittest
 from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
 
 from vumi.message import from_json
@@ -13,7 +12,7 @@ from vumi.transports.failures import (
     FailureMessage, FailureWorker, TemporaryFailure)
 from vumi.transports.vas2nets.vas2nets import (
     Vas2NetsTransport, Vas2NetsTransportError)
-from vumi.tests.helpers import MessageHelper
+from vumi.tests.helpers import VumiTestCase, MessageHelper
 
 
 class FailureCounter(object):
@@ -28,13 +27,12 @@ class FailureCounter(object):
             self.deferred.callback(None)
 
 
-class Vas2NetsFailureWorkerTestCase(unittest.TestCase, PersistenceMixin):
-
-    timeout = 5
+class Vas2NetsFailureWorkerTestCase(VumiTestCase, PersistenceMixin):
 
     @inlineCallbacks
     def setUp(self):
         self._persist_setUp()
+        self.add_cleanup(self._persist_tearDown)
         self.today = datetime.utcnow().date()
         self.config = self.mk_config({
             'transport_name': 'vas2nets',
@@ -53,31 +51,24 @@ class Vas2NetsFailureWorkerTestCase(unittest.TestCase, PersistenceMixin):
             'retry_routing_key': '%(transport_name)s.outbound',
             'failures_routing_key': '%(transport_name)s.failures',
             })
-        self.workers = []
         self.broker = FakeAMQPBroker()
+        self.add_cleanup(self.broker.wait_delivery)
         self.worker = yield self.mk_transport_worker(self.config, self.broker)
         self.fail_worker = yield self.mk_failure_worker(
             self.fail_config, self.broker)
         self.msg_helper = MessageHelper()
 
     @inlineCallbacks
-    def tearDown(self):
-        for worker in self.workers:
-            yield worker.stopWorker()
-        yield self.broker.wait_delivery()
-        yield self._persist_tearDown()
-
-    @inlineCallbacks
     def mk_transport_worker(self, config, broker):
         worker = get_stubbed_worker(Vas2NetsTransport, config, broker)
-        self.workers.append(worker)
+        self.add_cleanup(worker.stopWorker)
         yield worker.startWorker()
         returnValue(worker)
 
     @inlineCallbacks
     def mk_failure_worker(self, config, broker):
         w = get_stubbed_worker(FailureWorker, config, broker)
-        self.workers.append(w)
+        self.add_cleanup(w.stopWorker)
         w.retry_publisher = yield self.worker.publish_to("foo")
         yield w.startWorker()
         self.redis = w.redis
@@ -95,7 +86,7 @@ class Vas2NetsFailureWorkerTestCase(unittest.TestCase, PersistenceMixin):
             return body
 
         self.mock_server = MockHttpServer(handler)
-        self.addCleanup(self.mock_server.stop)
+        self.add_cleanup(self.mock_server.stop)
         yield self.mock_server.start()
         self.worker.config['url'] = self.mock_server.url
 

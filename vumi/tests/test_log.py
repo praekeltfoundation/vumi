@@ -1,19 +1,15 @@
 import logging
 
-from twisted.trial.unittest import TestCase
-
 from vumi.tests.utils import LogCatcher
 from vumi import log
+from .helpers import VumiTestCase
 
 
 class TestException(Exception):
     pass
 
 
-class VumiLogTestCase(TestCase):
-
-    def tearDown(self):
-        self.flushLoggedErrors(TestException)
+class VumiLogTestCase(VumiTestCase):
 
     def test_normal_log_levels(self):
         levels = [
@@ -36,6 +32,7 @@ class VumiLogTestCase(TestCase):
             ('ERROR', log.error),
             ('CRITICAL', log.critical),
         ]
+        self.add_cleanup(self.flushLoggedErrors, TestException)
         for label, logger in levels:
             entry = 'foo %s' % (label,)
             lc = LogCatcher()

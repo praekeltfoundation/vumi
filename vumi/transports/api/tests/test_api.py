@@ -18,9 +18,6 @@ def config_override(**config):
 
 
 class TestHttpApiTransport(TransportTestCase):
-
-    timeout = 5
-
     transport_name = 'test_http_api_transport'
     transport_class = HttpApiTransport
 

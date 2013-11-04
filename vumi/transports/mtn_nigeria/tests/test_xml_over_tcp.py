@@ -4,7 +4,6 @@
 import struct
 from itertools import count
 
-from twisted.trial import unittest
 from twisted.internet.task import Clock
 from twisted.internet.defer import inlineCallbacks
 
@@ -12,6 +11,7 @@ from vumi import log
 from vumi.transports.mtn_nigeria.xml_over_tcp import (
     XmlOverTcpError, CodedXmlOverTcpError, XmlOverTcpClient)
 from vumi.transports.mtn_nigeria.tests import utils
+from vumi.tests.helpers import VumiTestCase
 
 
 class ToyXmlOverTcpClient(XmlOverTcpClient, utils.WaitForDataMixin):
@@ -63,8 +63,7 @@ class XmlOverTcpClientServerMixin(utils.MockClientServerMixin):
     server_protocol = utils.MockXmlOverTcpServer
 
 
-class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
-    timeout = 5
+class XmlOverTcpClientTestCase(VumiTestCase, XmlOverTcpClientServerMixin):
 
     def setUp(self):
         errors = dict(CodedXmlOverTcpError.ERRORS)
@@ -76,10 +75,8 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
         self.patch(log, 'err', lambda *a: self.append_to_log('err', *a))
         self.patch(log, 'debug', lambda *a: self.append_to_log('debug', *a))
 
+        self.add_cleanup(self.stop_protocols)
         return self.start_protocols()
-
-    def tearDown(self):
-        return self.stop_protocols()
 
     def append_to_log(self, log_name, *args):
         self.logs[log_name].append(' '.join(str(a) for a in args))

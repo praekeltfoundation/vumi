@@ -5,20 +5,19 @@ import time
 from datetime import datetime, timedelta
 
 from twisted.internet.defer import inlineCallbacks, returnValue
-from twisted.trial.unittest import TestCase
 
 from vumi.message import TransportEvent
 from vumi.tests.utils import import_skip, PersistenceMixin
-from vumi.tests.helpers import MessageHelper
+from vumi.tests.helpers import VumiTestCase, MessageHelper
 
 
-class TestMessageStoreBase(TestCase, PersistenceMixin):
-    timeout = 5
+class TestMessageStoreBase(VumiTestCase, PersistenceMixin):
     use_riak = True
 
     @inlineCallbacks
     def setUp(self):
         self._persist_setUp()
+        self.add_cleanup(self._persist_tearDown)
         super(TestMessageStoreBase, self).setUp()
         try:
             from vumi.components.message_store import MessageStore
@@ -28,11 +27,6 @@ class TestMessageStoreBase(TestCase, PersistenceMixin):
         self.manager = self.get_riak_manager()
         self.store = MessageStore(self.manager, self.redis)
         self.msg_helper = MessageHelper()
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield super(TestMessageStoreBase, self).tearDown()
-        yield self._persist_tearDown()
 
     @inlineCallbacks
     def _maybe_batch(self, tag, by_batch):

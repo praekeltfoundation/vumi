@@ -28,7 +28,7 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
         if callback is None:
             callback = lambda r: self.fail("No RapidSMS requests expected.")
         self.mock_server = MockHttpServer(callback)
-        self.addCleanup(self.mock_server.stop)
+        self.add_cleanup(self.mock_server.stop)
         yield self.mock_server.start()
         url = '%s%s' % (self.mock_server.url, self.path)
         self.app = yield self.setup_app(url, auth=auth)

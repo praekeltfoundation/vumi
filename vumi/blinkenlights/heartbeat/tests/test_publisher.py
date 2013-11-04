@@ -4,13 +4,13 @@
 
 import json
 
-from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.tests.utils import get_stubbed_channel
 from vumi.tests.fake_amqp import FakeAMQPBroker
 from vumi.blinkenlights.heartbeat import publisher
 from vumi.errors import MissingMessageField
+from vumi.tests.helpers import VumiTestCase
 
 
 class MockHeartBeatPublisher(publisher.HeartBeatPublisher):
@@ -20,13 +20,7 @@ class MockHeartBeatPublisher(publisher.HeartBeatPublisher):
         self._task = None
 
 
-class TestHeartBeatPublisher(TestCase):
-
-    def setUp(self):
-        pass
-
-    def tearDown(self):
-        pass
+class TestHeartBeatPublisher(VumiTestCase):
 
     def gen_fake_attrs(self):
         attrs = {

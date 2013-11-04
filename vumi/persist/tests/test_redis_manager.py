@@ -1,11 +1,10 @@
 """Tests for vumi.persist.redis_manager."""
 
-from twisted.trial.unittest import TestCase
-
 from vumi.tests.utils import import_skip
+from vumi.tests.helpers import VumiTestCase
 
 
-class RedisManagerTestCase(TestCase):
+class RedisManagerTestCase(VumiTestCase):
     def setUp(self):
         try:
             from vumi.persist.redis_manager import RedisManager
@@ -15,11 +14,10 @@ class RedisManagerTestCase(TestCase):
         self.manager = RedisManager.from_config(
             {'FAKE_REDIS': 'yes',
              'key_prefix': 'redistest'})
+        # These get run in the reverse of the order in which they're added.
+        self.add_cleanup(self.manager._close)
+        self.add_cleanup(self.manager._purge_all)
         self.manager._purge_all()
-
-    def tearDown(self):
-        self.manager._purge_all()
-        self.manager._close()
 
     def test_key_unkey(self):
         self.assertEqual('redistest:foo', self.manager._key('foo'))

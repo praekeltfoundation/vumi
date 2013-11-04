@@ -1,11 +1,10 @@
-from twisted.trial.unittest import TestCase
-
 from vumi.servicemaker import (
     VumiOptions, StartWorkerOptions, VumiWorkerServiceMaker)
 from vumi import servicemaker
+from .helpers import VumiTestCase
 
 
-class OptionsTestCase(TestCase):
+class OptionsTestCase(VumiTestCase):
     "Base class for handling options files"
 
     def mk_config_file(self, name, lines=None):

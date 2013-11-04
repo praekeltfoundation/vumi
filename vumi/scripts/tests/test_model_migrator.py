@@ -1,12 +1,12 @@
 """Tests for vumi.scripts.model_migrator."""
 
 from twisted.python import usage
-from twisted.trial.unittest import TestCase
 
 from vumi.persist.model import Model
 from vumi.persist.fields import Unicode
 from vumi.scripts.model_migrator import ModelMigrator, Options
 from vumi.tests.utils import PersistenceMixin
+from vumi.tests.helpers import VumiTestCase
 
 
 class SimpleModel(Model):
@@ -26,12 +26,13 @@ class TestModelMigrator(ModelMigrator):
         return self.testcase.get_sub_riak(riak_config)
 
 
-class ModelMigratorTestCase(TestCase, PersistenceMixin):
+class ModelMigratorTestCase(VumiTestCase, PersistenceMixin):
     sync_persistence = True
     use_riak = True
 
     def setUp(self):
         self._persist_setUp()
+        self.add_cleanup(self._persist_tearDown)
         self.riak_manager = self.get_riak_manager()
         self.model = self.riak_manager.proxy(SimpleModel)
         self.model_cls_path = ".".join([
@@ -41,9 +42,6 @@ class ModelMigratorTestCase(TestCase, PersistenceMixin):
             "-m", self.model_cls_path,
             "-b", self.expected_bucket_prefix,
         ]
-
-    def tearDown(self):
-        return self._persist_tearDown()
 
     def make_migrator(self, args=None):
         if args is None:
