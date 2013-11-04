@@ -2,7 +2,7 @@ from vumi.service import Worker
 from vumi.tests.utils import get_stubbed_worker, LogCatcher
 from vumi.tests.fake_amqp import FakeAMQClient
 from vumi import log
-from .helpers import VumiTestCase
+from vumi.tests.helpers import VumiTestCase
 
 
 class ToyWorker(Worker):

@@ -14,7 +14,7 @@ from twisted.python.log import LogPublisher
 from vumi.tests.utils import MockHttpServer, LogCatcher, import_skip
 from vumi.sentry import (quiet_get_page, SentryLogObserver, vumi_raven_client,
                          SentryLoggerService)
-from .helpers import VumiTestCase
+from vumi.tests.helpers import VumiTestCase
 
 
 class TestQuietGetPage(VumiTestCase):

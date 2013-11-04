@@ -3,7 +3,7 @@ from twisted.internet.defer import inlineCallbacks
 from vumi.service import Worker, WorkerCreator
 from vumi.tests.utils import (fake_amq_message, get_stubbed_worker)
 from vumi.message import Message
-from .helpers import VumiTestCase
+from vumi.tests.helpers import VumiTestCase
 
 
 class ServiceTestCase(VumiTestCase):

@@ -1,7 +1,7 @@
 from vumi.tests.utils import RegexMatcher, UTCNearNow
 from vumi.message import (Message, TransportMessage, TransportEvent,
                           TransportUserMessage)
-from .helpers import VumiTestCase
+from vumi.tests.helpers import VumiTestCase
 
 
 class MessageTest(VumiTestCase):

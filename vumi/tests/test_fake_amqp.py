@@ -3,7 +3,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from vumi.service import get_spec, Worker
 from vumi.utils import vumi_resource_path
 from vumi.tests import fake_amqp
-from .helpers import VumiTestCase
+from vumi.tests.helpers import VumiTestCase
 
 
 def mkmsg(body):

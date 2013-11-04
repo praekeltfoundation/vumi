@@ -5,7 +5,7 @@
 from vumi.rpc import (
     RpcCheckError, Signature, signature, RpcType, Null, Unicode, Int, List,
     Dict, Tag)
-from .helpers import VumiTestCase
+from vumi.tests.helpers import VumiTestCase
 
 
 class TestSignature(VumiTestCase):

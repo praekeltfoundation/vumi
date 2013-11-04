@@ -1,7 +1,7 @@
 from vumi.servicemaker import (
     VumiOptions, StartWorkerOptions, VumiWorkerServiceMaker)
 from vumi import servicemaker
-from .helpers import VumiTestCase
+from vumi.tests.helpers import VumiTestCase
 
 
 class OptionsTestCase(VumiTestCase):

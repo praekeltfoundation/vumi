@@ -14,7 +14,7 @@ from vumi.utils import (normalize_msisdn, vumi_resource_path, cleanup_msisdn,
                         LogFilterSite)
 from vumi.persist.fake_redis import FakeRedis
 from vumi.tests.utils import import_skip
-from .helpers import VumiTestCase
+from vumi.tests.helpers import VumiTestCase
 
 
 class DummyRequest(object):

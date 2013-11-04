@@ -2,7 +2,7 @@ import logging
 
 from vumi.tests.utils import LogCatcher
 from vumi import log
-from .helpers import VumiTestCase
+from vumi.tests.helpers import VumiTestCase
 
 
 class TestException(Exception):

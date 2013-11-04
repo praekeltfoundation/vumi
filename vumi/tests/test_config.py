@@ -5,7 +5,7 @@ from vumi.config import (
     Config, ConfigField, ConfigText, ConfigInt, ConfigFloat, ConfigBool,
     ConfigList, ConfigDict, ConfigUrl, ConfigRegex, ConfigServerEndpoint,
     ConfigClientEndpoint)
-from .helpers import VumiTestCase
+from vumi.tests.helpers import VumiTestCase
 
 
 class ConfigTest(VumiTestCase):
