@@ -12,10 +12,13 @@ class RedisManagerTestCase(VumiTestCase):
         self.manager = yield TxRedisManager.from_config(
             {'FAKE_REDIS': 'yes',
              'key_prefix': 'redistest'})
-        # These get run in the reverse of the order in which they're added.
-        self.add_cleanup(self.manager._close)
-        self.add_cleanup(self.manager._purge_all)
+        self.add_cleanup(self.cleanup_manager)
         yield self.manager._purge_all()
+
+    @inlineCallbacks
+    def cleanup_manager(self):
+        yield self.manager._purge_all()
+        yield self.manager._close()
 
     def test_key_unkey(self):
         self.assertEqual('redistest:foo', self.manager._key('foo'))

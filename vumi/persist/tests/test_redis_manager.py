@@ -14,10 +14,12 @@ class RedisManagerTestCase(VumiTestCase):
         self.manager = RedisManager.from_config(
             {'FAKE_REDIS': 'yes',
              'key_prefix': 'redistest'})
-        # These get run in the reverse of the order in which they're added.
-        self.add_cleanup(self.manager._close)
-        self.add_cleanup(self.manager._purge_all)
+        self.add_cleanup(self.cleanup_manager)
         self.manager._purge_all()
+
+    def cleanup_manager(self):
+        self.manager._purge_all()
+        self.manager._close()
 
     def test_key_unkey(self):
         self.assertEqual('redistest:foo', self.manager._key('foo'))

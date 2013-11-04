@@ -562,12 +562,6 @@ class ResourceTestCaseBase(VumiTestCase):
         self.api = self.app_worker.create_sandbox_api()
         self.sandbox = self.app_worker.create_sandbox_protocol(self.sandbox_id,
                                                                self.api)
-        self.add_cleanup(self.cleanup_resource)
-
-    @inlineCallbacks
-    def cleanup_resource(self):
-        if self.resource is not None:
-            yield self.resource.teardown()
 
     @inlineCallbacks
     def create_resource(self, config):
@@ -578,6 +572,7 @@ class ResourceTestCaseBase(VumiTestCase):
         resource = self.resource_cls(self.resource_name,
                                      self.app_worker,
                                      config)
+        self.add_cleanup(resource.teardown)
         yield resource.setup()
         self.resource = resource
 

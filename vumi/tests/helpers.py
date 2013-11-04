@@ -23,12 +23,12 @@ class VumiTestCase(TestCase):
         # Run any cleanup code we've registered with .add_cleanup().
         # We do this ourselves instead of using trial's .addCleanup() because
         # that doesn't have timeouts applied to it.
-        if self._cleanup_funcs:
+        if self._cleanup_funcs is not None:
             for cleanup, args, kw in reversed(self._cleanup_funcs):
                 yield cleanup(*args, **kw)
 
     def add_cleanup(self, func, *args, **kw):
-        if not self._cleanup_funcs:
+        if self._cleanup_funcs is None:
             self._cleanup_funcs = []
         self._cleanup_funcs.append((func, args, kw))
 
