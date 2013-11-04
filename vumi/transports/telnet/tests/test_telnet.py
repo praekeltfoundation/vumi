@@ -55,7 +55,7 @@ class BaseTelnetServerTransortTestCase(TransportTestCase):
             self.client.transport.loseConnection()
             yield self.client.disconnect_d
             # Kick off the delivery of the deregistration message.
-            yield self._amqp.kick_delivery()
+            yield self.tx_helper.kick_delivery()
         yield super(BaseTelnetServerTransortTestCase, self).tearDown()
 
     def wait_for_client_start(self):
