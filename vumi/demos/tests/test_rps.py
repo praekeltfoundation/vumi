@@ -1,13 +1,12 @@
-from twisted.trial import unittest
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.application.tests.utils import ApplicationTestCase
 from vumi.message import TransportUserMessage
 from vumi.demos.rps import RockPaperScissorsGame, RockPaperScissorsWorker
-from vumi.tests.helpers import MessageHelper
+from vumi.tests.helpers import VumiTestCase, MessageHelper
 
 
-class TestRockPaperScissorsGame(unittest.TestCase):
+class TestRockPaperScissorsGame(VumiTestCase):
     def get_game(self, scores=None):
         game = RockPaperScissorsGame(5, 'p1')
         game.set_player_2('p2')

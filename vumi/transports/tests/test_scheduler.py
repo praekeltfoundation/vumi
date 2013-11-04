@@ -2,24 +2,24 @@ import time
 from datetime import datetime
 
 from twisted.internet.defer import inlineCallbacks
-from twisted.trial.unittest import TestCase
 
 from vumi.persist.fake_redis import FakeRedis
 from vumi.transports.scheduler import Scheduler
 from vumi.message import TransportUserMessage
 from vumi.utils import to_kwargs
-from vumi.tests.helpers import MessageHelper
+from vumi.tests.helpers import VumiTestCase, MessageHelper
 
 
-class SchedulerTestCase(TestCase):
+class SchedulerTestCase(VumiTestCase):
 
     def setUp(self):
         self.r_server = FakeRedis()
         self.scheduler = Scheduler(self.r_server, self._scheduler_callback)
+        self.add_cleanup(self.stop_scheduler)
         self._delivery_history = []
         self.msg_helper = MessageHelper()
 
-    def tearDown(self):
+    def stop_scheduler(self):
         if self.scheduler.is_running:
             self.scheduler.stop()
 

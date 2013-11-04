@@ -2,14 +2,13 @@ import re
 from xml.etree import ElementTree
 from urllib import urlencode
 
-from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
 from vumi.transports.tests.utils import TransportTestCase
 from vumi.utils import http_request
 from vumi.transports.vodacom_messaging import (VodacomMessagingResponse,
     VodacomMessagingTransport)
 from vumi.message import TransportUserMessage
-from vumi.tests.helpers import MessageHelper
+from vumi.tests.helpers import VumiTestCase, MessageHelper
 
 
 class TestVodacomMessagingTransport(TransportTestCase):
@@ -143,7 +142,7 @@ class TestVodacomMessagingTransport(TransportTestCase):
             'Missing fields: in_reply_to')
 
 
-class VodacomMessagingResponseTest(TestCase):
+class VodacomMessagingResponseTest(VumiTestCase):
     '''
     Test the construction of XML replies for Vodacom Messaging
     '''
@@ -151,9 +150,6 @@ class VodacomMessagingResponseTest(TestCase):
     def setUp(self):
         self.web_host = 'vumi.p.org'
         self.web_path = '/api/v1/ussd/vmes/'
-
-    def tearDown(self):
-        pass
 
     def stdXML(self, obj):
         string = ElementTree.tostring(ElementTree.fromstring(str(obj)))

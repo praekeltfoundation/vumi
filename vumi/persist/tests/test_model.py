@@ -2,7 +2,6 @@
 
 from datetime import datetime
 
-from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.persist.model import (
@@ -12,6 +11,7 @@ from vumi.persist.fields import (
     ForeignKey, ManyToMany, Timestamp)
 from vumi.message import TransportUserMessage
 from vumi.tests.utils import import_skip
+from vumi.tests.helpers import VumiTestCase
 
 
 class SimpleModel(Model):
@@ -114,7 +114,7 @@ class UnknownVersionedModel(Model):
     d = Integer()
 
 
-class TestModelOnTxRiak(TestCase):
+class TestModelOnTxRiak(VumiTestCase):
 
     # TODO: all copies of mkmsg must be unified!
     def mkmsg(self, **kw):
@@ -131,10 +131,7 @@ class TestModelOnTxRiak(TestCase):
         except ImportError, e:
             import_skip(e, 'riakasaurus', 'riakasaurus.riak')
         self.manager = TxRiakManager.from_config({'bucket_prefix': 'test.'})
-        yield self.manager.purge_all()
-
-    @Manager.calls_manager
-    def tearDown(self):
+        self.add_cleanup(self.manager.purge_all)
         yield self.manager.purge_all()
 
     @Manager.calls_manager

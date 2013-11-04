@@ -13,7 +13,6 @@ from vumi.tests.helpers import MessageHelper
 class MessageStoreAPITestCase(VumiWorkerTestCase, PersistenceMixin):
 
     use_riak = True
-    timeout = 5
     # Needed for the MessageMakerMixin
     transport_type = 'sms'
     transport_name = 'sphex'

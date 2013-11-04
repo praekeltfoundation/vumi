@@ -7,7 +7,6 @@ from twisted.web.resource import Resource
 from twisted.web.server import NOT_DONE_YET
 from twisted.web.client import Agent
 from twisted.web.http_headers import Headers
-from twisted.trial import unittest
 from twisted.python import log
 from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, Deferred
@@ -18,6 +17,7 @@ from vumi.service import Worker
 from vumi.transports.vas2nets.transport_stubs import (
     FakeVas2NetsHandler, FakeVas2NetsWorker)
 from vumi.utils import StringProducer
+from vumi.tests.helpers import VumiTestCase
 
 
 def create_request(params={}, path='/', method='POST'):
@@ -72,9 +72,7 @@ class TestFakeVas2NetsWorker(FakeVas2NetsWorker):
     delay_choices = (0,)
 
 
-class FakeVas2NetsWorkerTestCase(unittest.TestCase):
-
-    timeout = 5
+class FakeVas2NetsWorkerTestCase(VumiTestCase):
 
     def setUp(self):
         self.config = {
@@ -84,12 +82,10 @@ class FakeVas2NetsWorkerTestCase(unittest.TestCase):
             'url': 'http://localhost:9998/t/send',
         }
         self.worker = get_stubbed_worker(TestFakeVas2NetsWorker, self.config)
+        self.add_cleanup(self.worker.stopWorker)
         self.test_worker = get_stubbed_worker(TestWorker, self.config)
+        self.add_cleanup(self.test_worker.stopWorker)
         self.today = datetime.utcnow().date()
-
-    def tearDown(self):
-        self.worker.stopWorker()
-        self.test_worker.stopWorker()
 
     def render_request(self, resource, request):
         d = request.notifyFinish()

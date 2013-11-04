@@ -1,21 +1,20 @@
-from twisted.trial.unittest import TestCase
+import time
+
 from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
+
 from vumi.blinkenlights import metrics
 from vumi.tests.utils import get_stubbed_worker, get_stubbed_channel
 from vumi.message import Message
 from vumi.service import Worker
+from vumi.tests.helpers import VumiTestCase
 
-import time
 
-
-class TestMetricManager(TestCase):
+class TestMetricManager(VumiTestCase):
 
     def setUp(self):
         self._next_publish = Deferred()
-
-    def tearDown(self):
-        self._next_publish.callback(None)
+        self.add_cleanup(lambda: self._next_publish.callback(None))
 
     def on_publish(self, mm):
         d, self._next_publish = self._next_publish, Deferred()
@@ -28,9 +27,9 @@ class TestMetricManager(TestCase):
     def start_manager(self, manager):
         channel = yield get_stubbed_channel()
         broker = channel.broker
-        self.addCleanup(broker.wait_delivery)
+        self.add_cleanup(broker.wait_delivery)
         manager.start(channel)
-        self.addCleanup(manager.stop)
+        self.add_cleanup(manager.stop)
         returnValue(broker)
 
     def _sleep(self, delay):
@@ -135,7 +134,7 @@ class TestMetricManager(TestCase):
     def test_in_worker(self):
         worker = get_stubbed_worker(Worker)
         broker = worker._amqp_client.broker
-        self.addCleanup(broker.wait_delivery)
+        self.add_cleanup(broker.wait_delivery)
         mm = yield worker.start_publisher(metrics.MetricManager,
                                           "vumi.test.", 0.1, self.on_publish)
         acc = mm.register(metrics.Metric("my.acc"))
@@ -172,7 +171,7 @@ class TestMetricManager(TestCase):
         self.assertTrue(error.type is BadMetricError)
 
 
-class TestAggregators(TestCase):
+class TestAggregators(VumiTestCase):
     def test_sum(self):
         self.assertEqual(metrics.SUM([]), 0.0)
         self.assertEqual(metrics.SUM([1.0, 2.0]), 3.0)
@@ -239,7 +238,7 @@ class CheckValuesMixin(object):
         self.assertEqual(actual_values, expected_values)
 
 
-class TestMetric(TestCase, CheckValuesMixin):
+class TestMetric(VumiTestCase, CheckValuesMixin):
     def test_manage(self):
         mm = metrics.MetricManager("vumi.test.")
         metric = metrics.Metric("foo")
@@ -264,7 +263,7 @@ class TestMetric(TestCase, CheckValuesMixin):
         self.check_poll(metric, [1.0, 2.0])
 
 
-class TestCount(TestCase, CheckValuesMixin):
+class TestCount(VumiTestCase, CheckValuesMixin):
     def test_inc_and_poll(self):
         metric = metrics.Count("foo")
         self.check_poll(metric, [])
@@ -276,7 +275,7 @@ class TestCount(TestCase, CheckValuesMixin):
         self.check_poll(metric, [1.0, 1.0])
 
 
-class TestTimer(TestCase, CheckValuesMixin):
+class TestTimer(VumiTestCase, CheckValuesMixin):
 
     def patch_time(self, starting_value):
         def fake_time():
@@ -321,7 +320,7 @@ class TestTimer(TestCase, CheckValuesMixin):
         self.check_poll(timer, [])
 
 
-class TestMetricsConsumer(TestCase):
+class TestMetricsConsumer(VumiTestCase):
     def test_consume_message(self):
         expected_datapoints = [
             ("vumi.test.v1", 1234, 1.0),

@@ -1,4 +1,3 @@
-from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks, DeferredQueue
 from twisted.web.server import NOT_DONE_YET
 from twisted.web.client import ResponseDone
@@ -7,14 +6,15 @@ from vumi.tests.utils import MockHttpServer
 from vumi.transports.vumi_bridge.client import (
     StreamingClient, VumiBridgeInvalidJsonError)
 from vumi.message import Message
+from vumi.tests.helpers import VumiTestCase
 
 
-class ClientTestCase(TestCase):
-    timeout = 5
+class ClientTestCase(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
         self.mock_server = MockHttpServer(self.handle_request)
+        self.add_cleanup(self.mock_server.stop)
         yield self.mock_server.start()
         self.url = self.mock_server.url
         self.client = StreamingClient()
@@ -30,9 +30,6 @@ class ClientTestCase(TestCase):
             Message,
             self.messages_received.put, self.errors_received.put,
             self.url, on_disconnect=reason_trapper)
-
-    def tearDown(self):
-        return self.mock_server.stop()
 
     def handle_request(self, request):
         self.mock_server.queue.put(request)

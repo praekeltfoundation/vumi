@@ -4,12 +4,12 @@
 
 import json
 
-from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.persist.txredis_manager import TxRedisManager
 from vumi.blinkenlights.heartbeat import storage
 from vumi.blinkenlights.heartbeat import monitor
+from vumi.tests.helpers import VumiTestCase
 
 
 class DummySystem:
@@ -20,7 +20,7 @@ class DummySystem:
         return "Ha!"
 
 
-class TestStorage(TestCase):
+class TestStorage(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
@@ -30,10 +30,11 @@ class TestStorage(TestCase):
             'FAKE_REDIS': True,
         }
         self.redis = yield TxRedisManager.from_config(config)
+        self.add_cleanup(self.cleanup_redis)
         self.stg = storage.Storage(self.redis)
 
     @inlineCallbacks
-    def tearDown(self):
+    def cleanup_redis(self):
         yield self.redis._purge_all()
         yield self.redis.close_manager()
 

@@ -1,6 +1,5 @@
 import os.path
 
-from twisted.trial.unittest import TestCase
 from twisted.internet import reactor
 from twisted.internet.defer import Deferred, inlineCallbacks
 from twisted.web.server import Site, NOT_DONE_YET
@@ -15,6 +14,7 @@ from vumi.utils import (normalize_msisdn, vumi_resource_path, cleanup_msisdn,
                         LogFilterSite)
 from vumi.persist.fake_redis import FakeRedis
 from vumi.tests.utils import import_skip
+from vumi.tests.helpers import VumiTestCase
 
 
 class DummyRequest(object):
@@ -23,13 +23,7 @@ class DummyRequest(object):
         self.prepath = prepath
 
 
-class UtilsTestCase(TestCase):
-    def setUp(self):
-        pass
-
-    def tearDown(self):
-        pass
-
+class UtilsTestCase(VumiTestCase):
     def test_normalize_msisdn(self):
         self.assertEqual(normalize_msisdn('0761234567', '27'),
                          '+27761234567')
@@ -119,9 +113,7 @@ class FakeHTTP10(Protocol):
         self.transport.loseConnection()
 
 
-class HttpUtilsTestCase(TestCase):
-
-    timeout = 3
+class HttpUtilsTestCase(VumiTestCase):
 
     class InterruptHttp(Exception):
         """Indicates that test server should halt http reply"""
@@ -133,12 +125,10 @@ class HttpUtilsTestCase(TestCase):
         self.root.isLeaf = True
         site_factory = Site(self.root)
         self.webserver = yield reactor.listenTCP(0, site_factory)
+        # This is a lambda because we replace self.webserver in a test.
+        self.add_cleanup(lambda: self.webserver.loseConnection())
         addr = self.webserver.getHost()
         self.url = "http://%s:%s/" % (addr.host, addr.port)
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield self.webserver.loseConnection()
 
     def set_render(self, f, d=None):
         def render(request):

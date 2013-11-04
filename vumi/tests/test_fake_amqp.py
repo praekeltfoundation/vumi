@@ -1,9 +1,9 @@
-from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.service import get_spec, Worker
 from vumi.utils import vumi_resource_path
 from vumi.tests import fake_amqp
+from vumi.tests.helpers import VumiTestCase
 
 
 def mkmsg(body):
@@ -24,14 +24,10 @@ class TestWorker(Worker):
         self.msgs.append(msg)
 
 
-class FakeAMQPTestCase(TestCase):
-    timeout = 5
-
+class FakeAMQPTestCase(VumiTestCase):
     def setUp(self):
         self.broker = fake_amqp.FakeAMQPBroker()
-
-    def tearDown(self):
-        return self.broker.wait_delivery()
+        self.add_cleanup(self.broker.wait_delivery)
 
     def make_exchange(self, exchange, exchange_type):
         self.broker.exchange_declare(exchange, exchange_type)

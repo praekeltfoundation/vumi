@@ -5,19 +5,18 @@
 from datetime import datetime, timedelta
 
 from twisted.internet.defer import inlineCallbacks, returnValue
-from twisted.trial.unittest import TestCase
 
 from vumi.tests.utils import PersistenceMixin, import_skip
-from vumi.tests.helpers import MessageHelper
+from vumi.tests.helpers import VumiTestCase, MessageHelper
 
 
-class TestMessageStoreCache(TestCase, PersistenceMixin):
-    timeout = 5
+class TestMessageStoreCache(VumiTestCase, PersistenceMixin):
     use_riak = True
 
     @inlineCallbacks
     def setUp(self):
         yield self._persist_setUp()
+        self.add_cleanup(self._persist_tearDown)
         try:
             from vumi.components.message_store import MessageStore
         except ImportError, e:
@@ -29,9 +28,6 @@ class TestMessageStoreCache(TestCase, PersistenceMixin):
         self.batch_id = 'a-batch-id'
         self.cache.batch_start(self.batch_id)
         self.msg_helper = MessageHelper()
-
-    def tearDown(self):
-        return self._persist_tearDown()
 
     @inlineCallbacks
     def add_messages(self, batch_id, callback, count=10):

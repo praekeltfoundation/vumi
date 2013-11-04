@@ -1,19 +1,12 @@
-from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.service import Worker, WorkerCreator
 from vumi.tests.utils import (fake_amq_message, get_stubbed_worker)
 from vumi.message import Message
+from vumi.tests.helpers import VumiTestCase
 
 
-class ServiceTestCase(TestCase):
-
-    def setUp(self):
-        pass
-
-    def tearDown(self):
-        pass
-
+class ServiceTestCase(VumiTestCase):
     @inlineCallbacks
     def test_consume(self):
         """The consume helper should direct all incoming messages matching the
@@ -60,7 +53,7 @@ class NoQueueWorkerCreator(WorkerCreator):
         pass
 
 
-class TestWorkerCreator(TestCase):
+class TestWorkerCreator(VumiTestCase):
     def get_creator(self, **options):
         vumi_options = {
             "hostname": "localhost",

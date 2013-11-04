@@ -8,8 +8,8 @@ import warnings
 from functools import wraps
 
 import pytz
-from twisted.trial.unittest import TestCase, SkipTest
-from twisted.internet import defer, reactor
+from twisted.trial.unittest import SkipTest
+from twisted.internet import reactor
 from twisted.internet.error import ConnectionRefusedError
 from twisted.web.resource import Resource
 from twisted.internet.defer import DeferredQueue, inlineCallbacks, returnValue
@@ -17,9 +17,10 @@ from twisted.python import log
 from twisted.python.monkey import MonkeyPatcher
 
 from vumi.utils import vumi_resource_path, flatten_generator, LogFilterSite
-from vumi.service import get_spec, Worker, WorkerCreator
+from vumi.service import get_spec, WorkerCreator
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.tests.fake_amqp import FakeAMQPBroker, FakeAMQClient
+from vumi.tests.helpers import VumiTestCase
 
 
 def import_filter(exc, *expected):
@@ -453,13 +454,12 @@ class PersistenceMixin(object):
         return RedisManager.from_config(config)
 
 
-class VumiWorkerTestCase(TestCase):
+class VumiWorkerTestCase(VumiTestCase):
     """Base test class for vumi workers.
 
     This (or a subclass of this) should be the starting point for any test
     cases that involve vumi workers.
     """
-    timeout = 5
 
     transport_name = "sphex"
     transport_type = None
@@ -472,6 +472,7 @@ class VumiWorkerTestCase(TestCase):
 
     @inlineCallbacks
     def tearDown(self):
+        yield super(VumiWorkerTestCase, self).tearDown()
         # Wait for any pending message deliveries to avoid a race with a dirty
         # reactor.
         yield self._amqp.wait_delivery()

@@ -1,13 +1,12 @@
-from twisted.trial import unittest
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.demos.tictactoe import TicTacToeGame, TicTacToeWorker
 from vumi.application.tests.utils import ApplicationTestCase
 from vumi.message import TransportUserMessage
-from vumi.tests.helpers import MessageHelper
+from vumi.tests.helpers import VumiTestCase, MessageHelper
 
 
-class TestTicTacToeGame(unittest.TestCase):
+class TestTicTacToeGame(VumiTestCase):
     def get_game(self, moves=()):
         game = TicTacToeGame('pX')
         game.set_player_O('pO')

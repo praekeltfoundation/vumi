@@ -2,7 +2,6 @@
 
 from StringIO import StringIO
 
-from twisted.trial import unittest
 from twisted.internet.defer import (inlineCallbacks, returnValue,
                                     DeferredQueue, Deferred)
 from twisted.internet.protocol import FileWrapper
@@ -12,10 +11,10 @@ from vumi.transports.failures import FailureMessage, TemporaryFailure
 from vumi.transports.irc.irc import IrcMessage, VumiBotProtocol
 from vumi.transports.irc import IrcTransport
 from vumi.transports.tests.utils import TransportTestCase
-from vumi.tests.helpers import MessageHelper
+from vumi.tests.helpers import VumiTestCase, MessageHelper
 
 
-class TestIrcMessage(unittest.TestCase):
+class TestIrcMessage(VumiTestCase):
 
     def test_message(self):
         msg = IrcMessage('user!userfoo@example.com', 'PRIVMSG', '#bar',
@@ -69,7 +68,7 @@ class TestIrcMessage(unittest.TestCase):
         self.assertEqual(canonical("userfoo"), "userfoo")
 
 
-class TestVumiBotProtocol(unittest.TestCase):
+class TestVumiBotProtocol(VumiTestCase):
 
     nick = "testnick"
     channel = "#test1"

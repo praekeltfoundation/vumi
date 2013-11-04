@@ -3,7 +3,6 @@ import binascii
 
 from twisted.internet.defer import Deferred, inlineCallbacks, succeed
 from twisted.internet.task import Clock
-from twisted.trial.unittest import TestCase
 from smpp.pdu_builder import SubmitSMResp, DeliverSM
 
 from vumi.config import ConfigError
@@ -18,10 +17,10 @@ from vumi.transports.smpp.clientserver.client import unpacked_pdu_opts
 from vumi.transports.smpp.clientserver.tests.utils import SmscTestServer
 from vumi.transports.tests.utils import TransportTestCase
 from vumi.tests.utils import LogCatcher
-from vumi.tests.helpers import MessageHelper
+from vumi.tests.helpers import VumiTestCase, MessageHelper
 
 
-class TestSmppTransportConfig(TestCase):
+class TestSmppTransportConfig(VumiTestCase):
     def required_config(self, config_params):
         config = {
             "transport_name": "sphex",

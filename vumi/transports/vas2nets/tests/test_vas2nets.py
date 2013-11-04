@@ -71,7 +71,7 @@ class Vas2NetsTransportTestCase(TransportTestCase):
     def start_mock_server(self, msg_id, msg, code=http.OK, send_id=None):
         self.mock_server = MockHttpServer(
             self._make_handler(msg_id, msg, code, send_id))
-        self.addCleanup(self.mock_server.stop)
+        self.add_cleanup(self.mock_server.stop)
         yield self.mock_server.start()
         self.transport.config['url'] = self.mock_server.url
 

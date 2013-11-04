@@ -11,7 +11,7 @@ from collections import defaultdict
 from twisted.internet.defer import (
     inlineCallbacks, fail, succeed, DeferredQueue)
 from twisted.internet.error import ProcessTerminated
-from twisted.trial.unittest import TestCase, SkipTest
+from twisted.trial.unittest import SkipTest
 
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.application.tests.utils import ApplicationTestCase
@@ -21,6 +21,7 @@ from vumi.application.sandbox import (
     LoggingResource, HttpClientResource, JsSandbox, JsFileSandbox,
     HttpClientContextFactory)
 from vumi.tests.utils import LogCatcher, PersistenceMixin
+from vumi.tests.helpers import VumiTestCase
 
 from OpenSSL.SSL import (
     VERIFY_PEER, VERIFY_FAIL_IF_NO_PEER_CERT, VERIFY_NONE)
@@ -516,7 +517,7 @@ class DummyAppWorker(object):
         return mock_method
 
 
-class SandboxApiTestCase(TestCase):
+class SandboxApiTestCase(VumiTestCase):
     def setUp(self):
         self.sent_messages = DeferredQueue()
         self.patch(SandboxApi, 'sandbox_send',
@@ -548,7 +549,7 @@ class SandboxApiTestCase(TestCase):
         self.assertEqual(logged_error.type, Exception)
 
 
-class ResourceTestCaseBase(TestCase):
+class ResourceTestCaseBase(VumiTestCase):
 
     app_worker_cls = DummyAppWorker
     resource_cls = None
@@ -563,11 +564,6 @@ class ResourceTestCaseBase(TestCase):
                                                                self.api)
 
     @inlineCallbacks
-    def tearDown(self):
-        if self.resource is not None:
-            yield self.resource.teardown()
-
-    @inlineCallbacks
     def create_resource(self, config):
         if self.resource is not None:
             # clean-up any existing resource so
@@ -576,6 +572,7 @@ class ResourceTestCaseBase(TestCase):
         resource = self.resource_cls(self.resource_name,
                                      self.app_worker,
                                      config)
+        self.add_cleanup(resource.teardown)
         yield resource.setup()
         self.resource = resource
 

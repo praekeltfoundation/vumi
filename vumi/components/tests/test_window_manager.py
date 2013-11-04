@@ -1,16 +1,17 @@
-from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet.task import Clock
 
 from vumi.components.window_manager import WindowManager, WindowException
 from vumi.tests.utils import PersistenceMixin
+from vumi.tests.helpers import VumiTestCase
 
 
-class WindowManagerTestCase(TestCase, PersistenceMixin):
+class WindowManagerTestCase(VumiTestCase, PersistenceMixin):
 
     @inlineCallbacks
     def setUp(self):
         self._persist_setUp()
+        self.add_cleanup(self._persist_tearDown)
         redis = yield self.get_redis_manager()
         self.window_id = 'window_id'
 
@@ -19,13 +20,9 @@ class WindowManagerTestCase(TestCase, PersistenceMixin):
         self.patch(WindowManager, 'get_clock', lambda _: self.clock)
 
         self.wm = WindowManager(redis, window_size=10, flight_lifetime=10)
+        self.add_cleanup(self.wm.stop)
         yield self.wm.create_window(self.window_id)
         self.redis = self.wm.redis
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield self._persist_tearDown()
-        self.wm.stop()
 
     @inlineCallbacks
     def test_windows(self):
@@ -214,11 +211,12 @@ class WindowManagerTestCase(TestCase, PersistenceMixin):
         self.assertEqual(set(cleanup_callbacks), set(window_ids))
 
 
-class ConcurrentWindowManagerTestCase(TestCase, PersistenceMixin):
+class ConcurrentWindowManagerTestCase(VumiTestCase, PersistenceMixin):
 
     @inlineCallbacks
     def setUp(self):
         self._persist_setUp()
+        self.add_cleanup(self._persist_tearDown)
         redis = yield self.get_redis_manager()
         self.window_id = 'window_id'
 
@@ -227,13 +225,9 @@ class ConcurrentWindowManagerTestCase(TestCase, PersistenceMixin):
         self.patch(WindowManager, 'count_waiting', lambda _, window_id: 100)
 
         self.wm = WindowManager(redis, window_size=10, flight_lifetime=10)
+        self.add_cleanup(self.wm.stop)
         yield self.wm.create_window(self.window_id)
         self.redis = self.wm.redis
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield self._persist_tearDown()
-        self.wm.stop()
 
     @inlineCallbacks
     def test_race_condition(self):
