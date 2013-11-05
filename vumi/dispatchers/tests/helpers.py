@@ -5,8 +5,12 @@ from vumi.tests.helpers import (
 
 class DispatcherHelper(object):
     # TODO: Decide if we actually want to pass the test case in here.
-    def __init__(self, test_case, msg_helper_args=None):
+    #       We currently do this because we need to get at .mk_config from the
+    #       persistence mixin. This should be going away soon when the
+    #       persistence stuff becomes a helper.
+    def __init__(self, dispatcher_class, test_case, msg_helper_args=None):
         self._test_case = test_case
+        self._dispatcher_class = dispatcher_class
         self.amqp_helper = AMQPHelper()
         msg_helper_kw = {}
         if msg_helper_args is not None:
@@ -25,7 +29,7 @@ class DispatcherHelper(object):
 
     def get_dispatcher(self, config, cls=None, start=True):
         if cls is None:
-            cls = self._test_case.dispatcher_class
+            cls = self._dispatcher_class
         # We might need to do persistence config mangling.
         if hasattr(self._test_case, 'mk_config'):
             config = self._test_case.mk_config(config)

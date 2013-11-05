@@ -5,6 +5,13 @@ from vumi.tests.helpers import (
 
 class ApplicationHelper(object):
     # TODO: Decide if we actually want to pass the test case in here.
+    #       We currently do this for two reasons:
+    #       1. We need to get at .mk_config from the persistence mixin. This
+    #          should be going away soon when the persistence stuff becomes a
+    #          helper.
+    #       2. We look at all the test setup class attributes (.transport_name,
+    #          .application_class, etc.) to avoid passing them into various
+    #          methods. This can probably be avoided with a little effort.
     def __init__(self, test_case, msg_helper_args=None):
         self._test_case = test_case
         self.amqp_helper = AMQPHelper(self._test_case.transport_name)

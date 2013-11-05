@@ -9,10 +9,8 @@ from vumi.dispatchers.tests.helpers import DispatcherHelper
 
 
 class TestBaseDispatchWorker(VumiWorkerTestCase):
-    dispatcher_class = BaseDispatchWorker
-
     def setUp(self):
-        self.disp_helper = DispatcherHelper(self)
+        self.disp_helper = DispatcherHelper(BaseDispatchWorker, self)
         self.addCleanup(self.disp_helper.cleanup)
         return super(TestBaseDispatchWorker, self).setUp()
 
@@ -285,7 +283,7 @@ class TestTransportToTransportRouter(VumiWorkerTestCase):
     @inlineCallbacks
     def setUp(self):
         yield super(TestTransportToTransportRouter, self).setUp()
-        self.disp_helper = DispatcherHelper(self)
+        self.disp_helper = DispatcherHelper(BaseDispatchWorker, self)
         self.addCleanup(self.disp_helper.cleanup)
         self.worker = yield self.disp_helper.get_worker(BaseDispatchWorker, {
             "transport_names": [
@@ -380,12 +378,10 @@ class TestFromAddrMultiplexRouter(VumiWorkerTestCase):
 
 class UserGroupingRouterTestCase(DispatcherTestCase):
 
-    dispatcher_class = BaseDispatchWorker
-
     @inlineCallbacks
     def setUp(self):
         yield super(UserGroupingRouterTestCase, self).setUp()
-        self.disp_helper = DispatcherHelper(self)
+        self.disp_helper = DispatcherHelper(BaseDispatchWorker, self)
         self.addCleanup(self.disp_helper.cleanup)
         self.dispatcher = yield self.disp_helper.get_dispatcher({
             'dispatcher_name': 'user_group_dispatcher',
@@ -477,12 +473,10 @@ class UserGroupingRouterTestCase(DispatcherTestCase):
 
 class TestContentKeywordRouter(DispatcherTestCase):
 
-    dispatcher_class = BaseDispatchWorker
-
     @inlineCallbacks
     def setUp(self):
         yield super(TestContentKeywordRouter, self).setUp()
-        self.disp_helper = DispatcherHelper(self)
+        self.disp_helper = DispatcherHelper(BaseDispatchWorker, self)
         self.addCleanup(self.disp_helper.cleanup)
         self.dispatcher = yield self.disp_helper.get_dispatcher({
             'dispatcher_name': 'keyword_dispatcher',
@@ -596,12 +590,11 @@ class TestRedirectOutboundRouterForSMPP(DispatcherTestCase):
     as arriving from the dispatcher and so the `transport_name` should be
     overwritten.
     """
-    dispatcher_class = BaseDispatchWorker
 
     @inlineCallbacks
     def setUp(self):
         yield super(TestRedirectOutboundRouterForSMPP, self).setUp()
-        self.disp_helper = DispatcherHelper(self)
+        self.disp_helper = DispatcherHelper(BaseDispatchWorker, self)
         self.addCleanup(self.disp_helper.cleanup)
         self.dispatcher = yield self.disp_helper.get_dispatcher({
             'dispatcher_name': 'redirect_outbound_dispatcher',
@@ -665,13 +658,10 @@ class TestRedirectOutboundRouterForSMPP(DispatcherTestCase):
 
 class TestRedirectOutboundRouter(DispatcherTestCase):
 
-    dispatcher_class = BaseDispatchWorker
-    transport_name = 'test_transport'
-
     @inlineCallbacks
     def setUp(self):
         yield super(TestRedirectOutboundRouter, self).setUp()
-        self.disp_helper = DispatcherHelper(self)
+        self.disp_helper = DispatcherHelper(BaseDispatchWorker, self)
         self.addCleanup(self.disp_helper.cleanup)
         self.dispatcher = yield self.disp_helper.get_dispatcher({
             'dispatcher_name': 'redirect_outbound_dispatcher',

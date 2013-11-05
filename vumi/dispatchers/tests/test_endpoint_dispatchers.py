@@ -8,7 +8,7 @@ from vumi.dispatchers.tests.helpers import DispatcherHelper
 class TestRoutingTableDispatcher(VumiWorkerTestCase):
 
     def setUp(self):
-        self.disp_helper = DispatcherHelper(self)
+        self.disp_helper = DispatcherHelper(RoutingTableDispatcher, self)
         self.addCleanup(self.disp_helper.cleanup)
         return super(TestRoutingTableDispatcher, self).setUp()
 
@@ -34,7 +34,7 @@ class TestRoutingTableDispatcher(VumiWorkerTestCase):
                 },
             }
         config.update(config_extras)
-        return self.disp_helper.get_worker(RoutingTableDispatcher, config)
+        return self.disp_helper.get_dispatcher(config)
 
     def ch(self, connector_name):
         return self.disp_helper.get_connector_helper(connector_name)
