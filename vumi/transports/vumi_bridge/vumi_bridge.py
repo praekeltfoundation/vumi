@@ -194,7 +194,6 @@ class GoConversationTransport(Transport):
             yield self.publish_nack(message['message_id'],
                                     reason='Unexpected status code: %s' % (
                                         resp.code,))
-            print 'nack sent!'
             return
 
         remote_message = json.loads(resp.delivered_body)
