@@ -17,7 +17,7 @@ class TestHelperHelpers(TestCase):
         self.assertFalse(hasattr(not_proxyable, 'proxyable'))
 
     def test_generate_proxies(self):
-        "generate_proxies() should copy proxyable attrs from source to target."
+        """generate_proxies() should copy proxyable source attrs to target."""
 
         class Source(object):
             @proxyable
@@ -47,7 +47,7 @@ class TestHelperHelpers(TestCase):
         self.assertEqual(source, target.is_proxyable())
 
     def test_generate_proxies_multiple_sources(self):
-        "generate_proxies() should copy proxyable attrs multiple sources."
+        """generate_proxies() should copy attrs from multiple sources."""
 
         class Source1(object):
             @proxyable
@@ -80,7 +80,7 @@ class TestHelperHelpers(TestCase):
         self.assertEqual(source2, target.is_proxyable_2())
 
     def test_generate_proxies_multiple_sources_overlap(self):
-        "generate_proxies() shouldn't copy proxyables with existing names."
+        """generate_proxies() shouldn't copy proxyables with existing names."""
 
         class Source1(object):
             @proxyable
