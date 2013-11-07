@@ -20,20 +20,16 @@ def proxyable(func):
     return func
 
 
-def generate_proxies(target, source, suffix=None):
+def generate_proxies(target, source):
     for name in dir(source):
         attribute = getattr(source, name)
         if not getattr(attribute, 'proxyable', False):
             continue
 
-        target_name = name
-        if suffix is not None:
-            target_name = '_'.join([target_name, suffix])
-
-        if hasattr(target, target_name):
+        if hasattr(target, name):
             raise Exception(
-                'Attribute already exists: %s' % (target_name,))
-        setattr(target, target_name, attribute)
+                'Attribute already exists: %s' % (name,))
+        setattr(target, name, attribute)
 
 
 def get_timeout():

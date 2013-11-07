@@ -102,25 +102,3 @@ class TestHelperHelpers(TestCase):
         generate_proxies(target, source1)
         err = self.assertRaises(Exception, generate_proxies, target, source2)
         self.assertTrue('is_proxyable' in err.message)
-
-    def test_generate_proxies_with_suffix(self):
-        "generate_proxies() should append the provided suffix to attr names."
-
-        class Source(object):
-            @proxyable
-            def is_proxyable(self):
-                return self
-
-        class Target(object):
-            pass
-
-        source = Source()
-        target = Target()
-
-        self.assertFalse(hasattr(target, 'is_proxyable'))
-        self.assertFalse(hasattr(target, 'is_proxyable_src'))
-
-        generate_proxies(target, source, suffix='src')
-
-        self.assertFalse(hasattr(target, 'is_proxyable'))
-        self.assertTrue(hasattr(target, 'is_proxyable_src'))
