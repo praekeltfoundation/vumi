@@ -20,7 +20,7 @@ class TestMessageInjector(VumiWorkerTestCase):
 
     def setUp(self):
         self.worker_helper = WorkerHelper('sphex')
-        self.addCleanup(self.worker_helper.cleanup)
+        self.add_cleanup(self.worker_helper.cleanup)
         super(TestMessageInjector, self).setUp()
 
     def get_worker(self, direction):

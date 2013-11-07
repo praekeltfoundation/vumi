@@ -51,7 +51,7 @@ class TestAppositTransport(TransportTestCase):
             'transport_addr': '8123',
             'mobile_addr': '251911223344',
         })
-        self.addCleanup(self.tx_helper.cleanup)
+        self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(config)
         self.transport_url = self.transport.get_transport_url()
         self.web_path = config['web_path']

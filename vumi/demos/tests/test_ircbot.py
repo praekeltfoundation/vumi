@@ -17,7 +17,7 @@ class TestMemoWorker(ApplicationTestCase):
     def setUp(self):
         super(TestMemoWorker, self).setUp()
         self.app_helper = ApplicationHelper(self)
-        self.addCleanup(self.app_helper.cleanup)
+        self.add_cleanup(self.app_helper.cleanup)
         self.worker = yield self.app_helper.get_application(
             {'worker_name': 'testmemo'})
         yield self.worker.redis._purge_all()  # just in case

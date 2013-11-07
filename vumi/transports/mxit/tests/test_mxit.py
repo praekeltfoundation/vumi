@@ -44,7 +44,7 @@ class TestMxitTransportTestCase(TransportTestCase):
             self.sample_menu_resp.replace('o', slashed_o), 'utf-8')
 
         self.tx_helper = TransportHelper(self)
-        self.addCleanup(self.tx_helper.cleanup)
+        self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(self.config)
         self.url = self.transport.get_transport_url(self.config['web_path'])
 

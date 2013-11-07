@@ -30,7 +30,7 @@ class OperaTransportTestCase(TransportTestCase):
         self.tx_helper = TransportHelper(self, msg_helper_args={
             'mobile_addr': '27761234567',
         })
-        self.addCleanup(self.tx_helper.cleanup)
+        self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport({
             'url': 'http://testing.domain',
             'channel': 'channel',

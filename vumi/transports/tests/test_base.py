@@ -19,7 +19,7 @@ class BaseTransportTestCase(TransportTestCase):
     def setUp(self):
         super(BaseTransportTestCase, self).setUp()
         self.tx_helper = TransportHelper(self)
-        self.addCleanup(self.tx_helper.cleanup)
+        self.add_cleanup(self.tx_helper.cleanup)
 
     @inlineCallbacks
     def test_start_transport(self):

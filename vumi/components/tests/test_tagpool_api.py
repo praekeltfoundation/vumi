@@ -185,7 +185,7 @@ class TestTagpoolApiWorker(VumiWorkerTestCase, PersistenceMixin):
     def setUp(self):
         self._persist_setUp()
         self.worker_helper = WorkerHelper()
-        self.addCleanup(self.worker_helper.cleanup)
+        self.add_cleanup(self.worker_helper.cleanup)
         super(TestTagpoolApiWorker, self).setUp()
 
     @inlineCallbacks
@@ -205,7 +205,7 @@ class TestTagpoolApiWorker(VumiWorkerTestCase, PersistenceMixin):
         config = self.mk_config(config)
         worker = yield self.worker_helper.get_worker(
             TagpoolApiWorker, config, start)
-        self.addCleanup(self.cleanup_worker, worker)
+        self.add_cleanup(self.cleanup_worker, worker)
         if not start:
             returnValue(worker)
         yield worker.startService()

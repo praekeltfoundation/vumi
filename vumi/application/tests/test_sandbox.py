@@ -51,7 +51,7 @@ class SandboxTestCaseBase(ApplicationTestCase):
     def setUp(self):
         super(SandboxTestCaseBase, self).setUp()
         self.app_helper = ApplicationHelper(self)
-        self.addCleanup(self.app_helper.cleanup)
+        self.add_cleanup(self.app_helper.cleanup)
 
     def setup_app(self, executable=None, args=None, extra_config=None):
         tmp_path = self.mktemp()

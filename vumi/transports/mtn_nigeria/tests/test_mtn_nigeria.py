@@ -110,7 +110,7 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
             'user_termination_response': 'Bye',
         }
         self.tx_helper = TransportHelper(self)
-        self.addCleanup(self.tx_helper.cleanup)
+        self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(config)
         yield deferred_server
 

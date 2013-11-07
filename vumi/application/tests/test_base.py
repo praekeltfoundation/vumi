@@ -53,7 +53,7 @@ class TestApplicationWorker(ApplicationTestCase):
         self.transport_name = 'test'
         self.config = {'transport_name': self.transport_name}
         self.app_helper = ApplicationHelper(self)
-        self.addCleanup(self.app_helper.cleanup)
+        self.add_cleanup(self.app_helper.cleanup)
         self.worker = yield self.app_helper.get_application(self.config)
 
     def assert_msgs_match(self, msgs, expected_msgs):
@@ -222,7 +222,7 @@ class TestApplicationWorkerWithSendToConfig(ApplicationTestCase):
                 },
             }
         self.app_helper = ApplicationHelper(self)
-        self.addCleanup(self.app_helper.cleanup)
+        self.add_cleanup(self.app_helper.cleanup)
         self.worker = yield self.app_helper.get_application(self.config)
 
     def assert_msgs_match(self, msgs, expected_msgs):
@@ -296,7 +296,7 @@ class TestApplicationMiddlewareHooks(ApplicationTestCase):
     def setUp(self):
         yield super(TestApplicationMiddlewareHooks, self).setUp()
         self.app_helper = ApplicationHelper(self)
-        self.addCleanup(self.app_helper.cleanup)
+        self.add_cleanup(self.app_helper.cleanup)
 
     @inlineCallbacks
     def test_middleware_for_inbound_messages(self):

@@ -156,7 +156,7 @@ class TestHangmanWorker(ApplicationTestCase):
         random_word_url = "http://%s:%s/word" % (addr.host, addr.port)
 
         self.app_helper = ApplicationHelper(self)
-        self.addCleanup(self.app_helper.cleanup)
+        self.add_cleanup(self.app_helper.cleanup)
 
         self.worker = yield self.app_helper.get_application({
             'worker_name': 'test_hangman',

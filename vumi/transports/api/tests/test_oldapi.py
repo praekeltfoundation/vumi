@@ -26,7 +26,7 @@ class TestOldSimpleHttpTransport(TransportTestCase):
             'web_port': 0,
         }
         self.tx_helper = TransportHelper(self)
-        self.addCleanup(self.tx_helper.cleanup)
+        self.add_cleanup(self.tx_helper.cleanup)
 
         self.transport = yield self.tx_helper.get_transport(self.config)
         addr = self.transport.web_resource.getHost()
@@ -121,7 +121,7 @@ class TestOldTemplateHttpTransport(TransportTestCase):
             'web_port': 0,
         }
         self.tx_helper = TransportHelper(self)
-        self.addCleanup(self.tx_helper.cleanup)
+        self.add_cleanup(self.tx_helper.cleanup)
 
         self.transport = yield self.tx_helper.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url()

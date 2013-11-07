@@ -44,7 +44,7 @@ class BaseTelnetServerTransortTestCase(TransportTestCase):
     def setUp(self):
         super(BaseTelnetServerTransortTestCase, self).setUp()
         self.tx_helper = TransportHelper(self)
-        self.addCleanup(self.tx_helper.cleanup)
+        self.add_cleanup(self.tx_helper.cleanup)
         self.worker = yield self.tx_helper.get_transport({'telnet_port': 0})
         self.client = yield self.make_client()
         yield self.wait_for_client_start()
@@ -192,7 +192,7 @@ class AddressedTelnetServerTransportTestCase(BaseTelnetServerTransortTestCase):
     def setUp(self):
         super(BaseTelnetServerTransortTestCase, self).setUp()
         self.tx_helper = TransportHelper(self)
-        self.addCleanup(self.tx_helper.cleanup)
+        self.add_cleanup(self.tx_helper.cleanup)
         self.worker = yield self.tx_helper.get_transport({'telnet_port': 0})
         self.client = yield self.make_client()
 

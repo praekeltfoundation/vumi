@@ -27,7 +27,7 @@ class TestInfobipUssdTransport(TransportTestCase):
             'web_port': 0,
             }
         self.tx_helper = TransportHelper(self)
-        self.addCleanup(self.tx_helper.cleanup)
+        self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(config)
         self.transport_url = self.transport.get_transport_url()
         yield self.transport.session_manager.redis._purge_all()  # just in case

@@ -20,7 +20,7 @@ class HTTPRelayTestCase(ApplicationTestCase):
         yield super(HTTPRelayTestCase, self).setUp()
         self.path = '/path'
         self.app_helper = ApplicationHelper(self)
-        self.addCleanup(self.app_helper.cleanup)
+        self.add_cleanup(self.app_helper.cleanup)
 
     @inlineCallbacks
     def setup_resource_with_callback(self, callback):

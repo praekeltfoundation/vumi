@@ -22,7 +22,7 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
     def setUp(self):
         yield super(TestAirtelUSSDTransportTestCase, self).setUp()
         self.tx_helper = TransportHelper(self)
-        self.addCleanup(self.tx_helper.cleanup)
+        self.add_cleanup(self.tx_helper.cleanup)
         self.config = {
             'web_port': 0,
             'web_path': '/api/v1/airtel/ussd/',
@@ -347,7 +347,7 @@ class LoadBalancedAirtelUSSDTransportTestCase(TransportTestCase):
             'validation_mode': 'permissive',
         }
         self.tx_helper = TransportHelper(self)
-        self.addCleanup(self.tx_helper.cleanup)
+        self.add_cleanup(self.tx_helper.cleanup)
 
     @inlineCallbacks
     def test_session_prefixes(self):

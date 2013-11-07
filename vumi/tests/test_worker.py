@@ -58,7 +58,7 @@ class TestBaseWorker(VumiWorkerTestCase):
         yield super(TestBaseWorker, self).setUp()
         self.msg_helper = MessageHelper()
         self.worker_helper = WorkerHelper()
-        self.addCleanup(self.worker_helper.cleanup)
+        self.add_cleanup(self.worker_helper.cleanup)
         self.worker = yield self.worker_helper.get_worker(
             DummyWorker, {}, False)
 

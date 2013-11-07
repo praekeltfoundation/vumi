@@ -58,7 +58,7 @@ class MultiWorkerTestCase(VumiWorkerTestCase):
         super(MultiWorkerTestCase, self).setUp()
         self.msg_helper = MessageHelper()
         self.worker_helper = WorkerHelper()
-        self.addCleanup(self.worker_helper.cleanup)
+        self.add_cleanup(self.worker_helper.cleanup)
         ToyWorker.events[:] = []
 
     @inlineCallbacks

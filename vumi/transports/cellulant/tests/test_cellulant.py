@@ -22,7 +22,7 @@ class TestCellulantTransportTestCase(TransportTestCase):
             'ussd_session_timeout': 60,
         }
         self.tx_helper = TransportHelper(self)
-        self.addCleanup(self.tx_helper.cleanup)
+        self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url(
             self.config['web_path'])

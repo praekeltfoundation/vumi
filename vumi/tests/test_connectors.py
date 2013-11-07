@@ -28,7 +28,7 @@ class BaseConnectorTestCase(VumiWorkerTestCase):
     def setUp(self):
         self.msg_helper = MessageHelper()
         self.worker_helper = WorkerHelper()
-        self.addCleanup(self.worker_helper.cleanup)
+        self.add_cleanup(self.worker_helper.cleanup)
         return super(BaseConnectorTestCase, self).setUp()
 
     @inlineCallbacks

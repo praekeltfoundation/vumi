@@ -9,7 +9,7 @@ class TestRoutingTableDispatcher(VumiWorkerTestCase):
 
     def setUp(self):
         self.disp_helper = DispatcherHelper(RoutingTableDispatcher, self)
-        self.addCleanup(self.disp_helper.cleanup)
+        self.add_cleanup(self.disp_helper.cleanup)
         return super(TestRoutingTableDispatcher, self).setUp()
 
     def get_dispatcher(self, **config_extras):

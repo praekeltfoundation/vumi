@@ -26,7 +26,7 @@ class MessageStoreAPITestCase(VumiWorkerTestCase, PersistenceMixin):
 
         self.msg_helper = MessageHelper()
         self.worker_helper = WorkerHelper()
-        self.addCleanup(self.worker_helper.cleanup)
+        self.add_cleanup(self.worker_helper.cleanup)
 
         self.match_resource = MatchResource
         self.base_path = '/api/v1/'

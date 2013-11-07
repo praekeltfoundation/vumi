@@ -63,7 +63,7 @@ class TwitterTransportTestCase(TransportTestCase):
             'terms': ['some', 'trending', 'topic'],
         }
         self.tx_helper = TransportHelper(self)
-        self.addCleanup(self.tx_helper.cleanup)
+        self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(
             self.config, start=False)
         self.transport._twitter_class = FakeTwitter

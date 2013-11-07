@@ -46,7 +46,7 @@ class TestTransport(TransportTestCase):
             'request_timeout_body': 'I am a teapot',
             }
         self.tx_helper = TransportHelper(self)
-        self.addCleanup(self.tx_helper.cleanup)
+        self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(config)
         self.transport_url = self.transport.get_transport_url()
 
@@ -121,7 +121,7 @@ class TestJSONTransport(TransportTestCase):
             'password': 'testpass',
             }
         self.tx_helper = TransportHelper(self)
-        self.addCleanup(self.tx_helper.cleanup)
+        self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(config)
         self.transport_url = self.transport.get_transport_url()
 
@@ -168,7 +168,7 @@ class TestCustomOutboundTransport(TransportTestCase):
             'password': 'testpass',
             }
         self.tx_helper = TransportHelper(self)
-        self.addCleanup(self.tx_helper.cleanup)
+        self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(config)
         self.transport_url = self.transport.get_transport_url()
 

@@ -27,7 +27,7 @@ class TestMtechUssdTransport(TransportTestCase):
             'password': 'testpass',
         }
         self.tx_helper = TransportHelper(self)
-        self.addCleanup(self.tx_helper.cleanup)
+        self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url().rstrip('/')
         self.url = "%s%s" % (self.transport_url, self.config['web_path'])

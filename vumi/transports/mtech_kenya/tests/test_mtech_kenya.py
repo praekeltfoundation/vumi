@@ -38,7 +38,7 @@ class TestMTechKenyaTransport(TransportTestCase):
         self.tx_helper = TransportHelper(self, msg_helper_args={
             'mobile_addr': '2371234567',
         })
-        self.addCleanup(self.tx_helper.cleanup)
+        self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url()
 

@@ -34,7 +34,7 @@ class TestHttpApiTransport(TransportTestCase):
         config_override = getattr(test_method, 'config_override', {})
         self.config.update(config_override)
         self.tx_helper = TransportHelper(self)
-        self.addCleanup(self.tx_helper.cleanup)
+        self.add_cleanup(self.tx_helper.cleanup)
 
         self.transport = yield self.tx_helper.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url()

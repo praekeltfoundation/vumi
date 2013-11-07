@@ -13,7 +13,7 @@ class DevNullTransportTestCase(TransportTestCase):
     def setUp(self):
         super(DevNullTransportTestCase, self).setUp()
         self.tx_helper = TransportHelper(self)
-        self.addCleanup(self.tx_helper.cleanup)
+        self.add_cleanup(self.tx_helper.cleanup)
 
     @inlineCallbacks
     def test_outbound_logging(self):

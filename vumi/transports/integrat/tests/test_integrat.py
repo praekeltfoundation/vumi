@@ -148,7 +148,7 @@ class TestIntegratTransport(TransportTestCase):
             'password': 'testpass',
             }
         self.tx_helper = TransportHelper(self)
-        self.addCleanup(self.tx_helper.cleanup)
+        self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(config)
         addr = self.transport.web_resource.getHost()
         self.transport_url = "http://%s:%s/" % (addr.host, addr.port)

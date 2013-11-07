@@ -22,7 +22,7 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
     def setUp(self):
         yield super(RapidSMSRelayTestCase, self).setUp()
         self.app_helper = ApplicationHelper(self)
-        self.addCleanup(self.app_helper.cleanup)
+        self.add_cleanup(self.app_helper.cleanup)
 
     @inlineCallbacks
     def setup_resource(self, callback=None, auth=None):

@@ -81,7 +81,7 @@ class SmppTransportTestCase(TransportTestCase):
 
         # hack a lot of transport setup
         self.tx_helper = TransportHelper(self)
-        self.addCleanup(self.tx_helper.cleanup)
+        self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(
             self.config, start=False)
         self.transport.esme_client = None
@@ -387,7 +387,7 @@ class EsmeToSmscTestCase(TransportTestCase):
         client_config['twisted_endpoint'] = 'tcp:host=%s:port=%s' % (
             host.host, host.port)
         self.tx_helper = TransportHelper(self)
-        self.addCleanup(self.tx_helper.cleanup)
+        self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(
             client_config, start=False)
         self.expected_delivery_status = 'delivered'
@@ -809,7 +809,7 @@ class EsmeToSmscTestCaseDeliveryYo(EsmeToSmscTestCase):
         self.service.factory.protocol = SmscTestServer
         self.config['port'] = self.service.listening.getHost().port
         self.tx_helper = TransportHelper(self)
-        self.addCleanup(self.tx_helper.cleanup)
+        self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(
             self.config, start=False)
         self.expected_delivery_status = 'delivered'  # stat:0 means delivered
@@ -839,7 +839,7 @@ class EsmeToSmscTestCaseDeliveryOverrideMapping(EsmeToSmscTestCase):
         self.service.factory.protocol = SmscTestServer
         self.config['port'] = self.service.listening.getHost().port
         self.tx_helper = TransportHelper(self)
-        self.addCleanup(self.tx_helper.cleanup)
+        self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(
             self.config, start=False)
         self.expected_delivery_status = 'delivered'  # stat:0 means delivered
@@ -876,7 +876,7 @@ class TxEsmeToSmscTestCase(TransportTestCase):
         self.service.factory.protocol = SmscTestServer
         self.config['port'] = self.service.listening.getHost().port
         self.tx_helper = TransportHelper(self)
-        self.addCleanup(self.tx_helper.cleanup)
+        self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(
             self.config, start=False)
         self.expected_delivery_status = 'delivered'
@@ -951,7 +951,7 @@ class RxEsmeToSmscTestCase(TransportTestCase):
         self.service.factory.protocol = SmscTestServer
         self.config['port'] = self.service.listening.getHost().port
         self.tx_helper = TransportHelper(self)
-        self.addCleanup(self.tx_helper.cleanup)
+        self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(
             self.config, start=False)
         self.expected_delivery_status = 'delivered'

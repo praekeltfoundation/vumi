@@ -32,7 +32,7 @@ class GoConversationTransportTestCase(TransportTestCase):
         })
         self.clock = Clock()
         self.tx_helper = TransportHelper(self)
-        self.addCleanup(self.tx_helper.cleanup)
+        self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(config)
         self.transport.clock = self.clock
         self._pending_reqs = []

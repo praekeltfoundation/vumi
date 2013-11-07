@@ -78,7 +78,7 @@ class TestTicTacToeWorker(ApplicationTestCase):
     def setUp(self):
         yield super(TestTicTacToeWorker, self).setUp()
         self.app_helper = ApplicationHelper(self)
-        self.addCleanup(self.app_helper.cleanup)
+        self.add_cleanup(self.app_helper.cleanup)
         self.worker = yield self.app_helper.get_application({})
 
     def dispatch_start_message(self, from_addr):

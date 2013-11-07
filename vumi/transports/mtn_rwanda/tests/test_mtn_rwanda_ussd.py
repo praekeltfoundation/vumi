@@ -47,7 +47,7 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
             'timeout': '30',
         })
         self.tx_helper = TransportHelper(self)
-        self.addCleanup(self.tx_helper.cleanup)
+        self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(config)
         self.transport.callLater = self.clock.callLater
         self.session_manager = self.transport.session_manager
