@@ -177,7 +177,7 @@ def _start_and_return_worker(worker):
     return worker.startWorker().addCallback(lambda r: worker)
 
 
-class AMQPHelper(object):
+class WorkerHelper(object):
     def __init__(self, connector_name=None, broker=None):
         self._connector_name = connector_name
         self.broker = broker if broker is not None else FakeAMQPBroker()
@@ -330,49 +330,49 @@ class AMQPHelper(object):
 class MessageDispatchHelper(object):
     """Helper for creating and immediately dispatching messages.
 
-    This builds on top of :class:`MessageHelper` and :class:`AMQPHelper`.
+    This builds on top of :class:`MessageHelper` and :class:`WorkerHelper`.
 
     It does not allow dispatching to nonstandard connectors. If you need to do
-    that, either use :class:`MessageHelper` and :class:`AMQPHelper` directly or
-    build a second :class:`MessageDispatchHelper` with a second
-    :class:`AMQPHelper`.
+    that, either use :class:`MessageHelper` and :class:`WorkerHelper` directly
+    or build a second :class:`MessageDispatchHelper` with a second
+    :class:`WorkerHelper`.
     """
-    def __init__(self, msg_helper, amqp_helper):
+    def __init__(self, msg_helper, worker_helper):
         self.msg_helper = msg_helper
-        self.amqp_helper = amqp_helper
+        self.worker_helper = worker_helper
 
     @proxyable
     def make_dispatch_inbound(self, *args, **kw):
         msg = self.msg_helper.make_inbound(*args, **kw)
-        d = self.amqp_helper.dispatch_inbound(msg)
+        d = self.worker_helper.dispatch_inbound(msg)
         return d.addCallback(lambda r: msg)
 
     @proxyable
     def make_dispatch_outbound(self, *args, **kw):
         msg = self.msg_helper.make_outbound(*args, **kw)
-        d = self.amqp_helper.dispatch_outbound(msg)
+        d = self.worker_helper.dispatch_outbound(msg)
         return d.addCallback(lambda r: msg)
 
     @proxyable
     def make_dispatch_ack(self, *args, **kw):
         msg = self.msg_helper.make_ack(*args, **kw)
-        d = self.amqp_helper.dispatch_event(msg)
+        d = self.worker_helper.dispatch_event(msg)
         return d.addCallback(lambda r: msg)
 
     @proxyable
     def make_dispatch_nack(self, *args, **kw):
         msg = self.msg_helper.make_nack(*args, **kw)
-        d = self.amqp_helper.dispatch_event(msg)
+        d = self.worker_helper.dispatch_event(msg)
         return d.addCallback(lambda r: msg)
 
     @proxyable
     def make_dispatch_delivery_report(self, *args, **kw):
         msg = self.msg_helper.make_delivery_report(*args, **kw)
-        d = self.amqp_helper.dispatch_event(msg)
+        d = self.worker_helper.dispatch_event(msg)
         return d.addCallback(lambda r: msg)
 
     @proxyable
     def make_dispatch_reply(self, *args, **kw):
         msg = self.msg_helper.make_reply(*args, **kw)
-        d = self.amqp_helper.dispatch_outbound(msg)
+        d = self.worker_helper.dispatch_outbound(msg)
         return d.addCallback(lambda r: msg)

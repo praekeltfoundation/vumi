@@ -12,7 +12,7 @@ from vumi.components.tagpool_api import TagpoolApiServer, TagpoolApiWorker
 from vumi.components.tagpool import TagpoolManager
 from vumi.tests.utils import VumiWorkerTestCase, PersistenceMixin
 from vumi.utils import http_request
-from vumi.tests.helpers import VumiTestCase, AMQPHelper
+from vumi.tests.helpers import VumiTestCase, WorkerHelper
 
 
 class TestTagpoolApiServer(VumiTestCase, PersistenceMixin):
@@ -184,8 +184,8 @@ class TestTagpoolApiWorker(VumiWorkerTestCase, PersistenceMixin):
 
     def setUp(self):
         self._persist_setUp()
-        self.amqp_helper = AMQPHelper()
-        self.addCleanup(self.amqp_helper.cleanup)
+        self.worker_helper = WorkerHelper()
+        self.addCleanup(self.worker_helper.cleanup)
         super(TestTagpoolApiWorker, self).setUp()
 
     @inlineCallbacks
@@ -203,7 +203,7 @@ class TestTagpoolApiWorker(VumiWorkerTestCase, PersistenceMixin):
         config.setdefault('web_path', 'api')
         config.setdefault('health_path', 'health')
         config = self.mk_config(config)
-        worker = yield self.amqp_helper.get_worker(
+        worker = yield self.worker_helper.get_worker(
             TagpoolApiWorker, config, start)
         self.addCleanup(self.cleanup_worker, worker)
         if not start:

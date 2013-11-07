@@ -4,7 +4,7 @@ from vumi.worker import BaseConfig, BaseWorker
 from vumi.connectors import ReceiveInboundConnector, ReceiveOutboundConnector
 from vumi.tests.utils import VumiWorkerTestCase, LogCatcher
 from vumi.middleware.base import BaseMiddleware
-from vumi.tests.helpers import VumiTestCase, MessageHelper, AMQPHelper
+from vumi.tests.helpers import VumiTestCase, MessageHelper, WorkerHelper
 
 
 class DummyWorker(BaseWorker):
@@ -57,9 +57,10 @@ class TestBaseWorker(VumiWorkerTestCase):
     def setUp(self):
         yield super(TestBaseWorker, self).setUp()
         self.msg_helper = MessageHelper()
-        self.amqp_helper = AMQPHelper()
-        self.addCleanup(self.amqp_helper.cleanup)
-        self.worker = yield self.amqp_helper.get_worker(DummyWorker, {}, False)
+        self.worker_helper = WorkerHelper()
+        self.addCleanup(self.worker_helper.cleanup)
+        self.worker = yield self.worker_helper.get_worker(
+            DummyWorker, {}, False)
 
     @inlineCallbacks
     def test_start_worker(self):
@@ -105,7 +106,7 @@ class TestBaseWorker(VumiWorkerTestCase):
         ])
 
     def test_setup_connectors_raises(self):
-        worker = self.amqp_helper.get_worker_raw(BaseWorker, {})
+        worker = self.worker_helper.get_worker_raw(BaseWorker, {})
         self.assertRaises(NotImplementedError, worker.setup_connectors)
 
     @inlineCallbacks
@@ -116,16 +117,16 @@ class TestBaseWorker(VumiWorkerTestCase):
         self.assertFalse(connector._consumers['inbound'].keep_consuming)
 
     def test_setup_worker_raises(self):
-        worker = self.amqp_helper.get_worker_raw(BaseWorker, {})
+        worker = self.worker_helper.get_worker_raw(BaseWorker, {})
         self.assertRaises(NotImplementedError, worker.setup_worker)
 
     def test_teardown_worker_raises(self):
-        worker = self.amqp_helper.get_worker_raw(BaseWorker, {})
+        worker = self.worker_helper.get_worker_raw(BaseWorker, {})
         self.assertRaises(NotImplementedError, worker.teardown_worker)
 
     @inlineCallbacks
     def test_setup_middleware(self):
-        worker = self.amqp_helper.get_worker_raw(DummyWorker, {
+        worker = self.worker_helper.get_worker_raw(DummyWorker, {
             'middleware': [{'mw': 'vumi.tests.test_worker'
                                   '.DummyMiddleware'}],
         })
@@ -135,7 +136,7 @@ class TestBaseWorker(VumiWorkerTestCase):
 
     @inlineCallbacks
     def test_teardown_middleware(self):
-        worker = self.amqp_helper.get_worker_raw(DummyWorker, {
+        worker = self.worker_helper.get_worker_raw(DummyWorker, {
             'middleware': [{'mw': 'vumi.tests.test_worker'
                                   '.DummyMiddleware'}],
         })
@@ -223,7 +224,7 @@ class TestBaseWorker(VumiWorkerTestCase):
         connector = yield self.worker.setup_ri_connector('foo')
         connector.set_default_inbound_handler(handler)
         connector.unpause()
-        self.amqp_helper.dispatch_inbound(
+        self.worker_helper.dispatch_inbound(
             self.msg_helper.make_inbound("inbound"), 'foo')
 
         yield handler_wait

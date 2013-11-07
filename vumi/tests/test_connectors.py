@@ -7,7 +7,7 @@ from vumi.tests.utils import VumiWorkerTestCase, LogCatcher
 from vumi.worker import BaseWorker
 from vumi.message import TransportUserMessage
 from vumi.middleware.tests.utils import RecordingMiddleware
-from vumi.tests.helpers import MessageHelper, AMQPHelper
+from vumi.tests.helpers import MessageHelper, WorkerHelper
 
 
 class DummyWorker(BaseWorker):
@@ -27,15 +27,15 @@ class BaseConnectorTestCase(VumiWorkerTestCase):
 
     def setUp(self):
         self.msg_helper = MessageHelper()
-        self.amqp_helper = AMQPHelper()
-        self.addCleanup(self.amqp_helper.cleanup)
+        self.worker_helper = WorkerHelper()
+        self.addCleanup(self.worker_helper.cleanup)
         return super(BaseConnectorTestCase, self).setUp()
 
     @inlineCallbacks
     def mk_connector(self, worker=None, connector_name=None,
                      prefetch_count=None, middlewares=None, setup=False):
         if worker is None:
-            worker = yield self.amqp_helper.get_worker(DummyWorker, {})
+            worker = yield self.worker_helper.get_worker(DummyWorker, {})
         if connector_name is None:
             connector_name = "dummy_connector"
         connector = self.connector_class(worker, connector_name,
@@ -65,7 +65,7 @@ class TestBaseConnector(BaseConnectorTestCase):
 
     @inlineCallbacks
     def test_middlewares_consume(self):
-        worker = yield self.amqp_helper.get_worker(DummyWorker, {})
+        worker = yield self.worker_helper.get_worker(DummyWorker, {})
         middlewares = [RecordingMiddleware(str(i), {}, worker)
                        for i in range(3)]
         conn, consumer = yield self.mk_consumer(
@@ -74,7 +74,7 @@ class TestBaseConnector(BaseConnectorTestCase):
         msgs = []
         conn._set_default_endpoint_handler('inbound', msgs.append)
         msg = self.msg_helper.make_inbound("inbound")
-        yield self.amqp_helper.dispatch_inbound(msg, 'foo')
+        yield self.worker_helper.dispatch_inbound(msg, 'foo')
         record = msgs[0].payload.pop('record')
         self.assertEqual(record,
                          [(str(i), 'inbound', 'foo')
@@ -82,7 +82,7 @@ class TestBaseConnector(BaseConnectorTestCase):
 
     @inlineCallbacks
     def test_middlewares_publish(self):
-        worker = yield self.amqp_helper.get_worker(DummyWorker, {})
+        worker = yield self.worker_helper.get_worker(DummyWorker, {})
         middlewares = [RecordingMiddleware(str(i), {}, worker)
                        for i in range(3)]
         conn = yield self.mk_connector(
@@ -90,7 +90,7 @@ class TestBaseConnector(BaseConnectorTestCase):
         yield conn._setup_publisher('outbound')
         msg = self.msg_helper.make_outbound("outbound")
         yield conn._publish_message('outbound', msg, 'dummy_endpoint')
-        msgs = self.amqp_helper.get_dispatched_outbound('foo')
+        msgs = self.worker_helper.get_dispatched_outbound('foo')
         record = msgs[0].payload.pop('record')
         self.assertEqual(record,
                          [[str(i), 'outbound', 'foo']
@@ -158,7 +158,7 @@ class TestBaseConnector(BaseConnectorTestCase):
         conn._set_endpoint_handler('inbound', msgs.append, 'dummy_endpoint')
         msg = self.msg_helper.make_inbound("inbound")
         msg.set_routing_endpoint('dummy_endpoint')
-        yield self.amqp_helper.dispatch_inbound(msg, 'foo')
+        yield self.worker_helper.dispatch_inbound(msg, 'foo')
         self.assertEqual(msgs, [msg])
 
     @inlineCallbacks
@@ -168,7 +168,7 @@ class TestBaseConnector(BaseConnectorTestCase):
         msgs = []
         conn._set_endpoint_handler('inbound', msgs.append, None)
         msg = self.msg_helper.make_inbound("inbound")
-        yield self.amqp_helper.dispatch_inbound(msg, 'foo')
+        yield self.worker_helper.dispatch_inbound(msg, 'foo')
         self.assertEqual(msgs, [msg])
 
     @inlineCallbacks
@@ -178,7 +178,7 @@ class TestBaseConnector(BaseConnectorTestCase):
         msgs = []
         conn._set_default_endpoint_handler('inbound', msgs.append)
         msg = self.msg_helper.make_inbound("inbound")
-        yield self.amqp_helper.dispatch_inbound(msg, 'foo')
+        yield self.worker_helper.dispatch_inbound(msg, 'foo')
         self.assertEqual(msgs, [msg])
 
     @inlineCallbacks
@@ -187,7 +187,7 @@ class TestBaseConnector(BaseConnectorTestCase):
         yield conn._setup_publisher('outbound')
         msg = self.msg_helper.make_outbound("outbound")
         yield conn._publish_message('outbound', msg, 'dummy_endpoint')
-        msgs = self.amqp_helper.get_dispatched_outbound('foo')
+        msgs = self.worker_helper.get_dispatched_outbound('foo')
         self.assertEqual(msgs, [msg])
 
 
@@ -203,19 +203,19 @@ class TestReceiveInboundConnector(BaseConnectorTestCase):
 
         with LogCatcher() as lc:
             msg = self.msg_helper.make_inbound("inbound")
-            yield self.amqp_helper.dispatch_inbound(msg, 'foo')
+            yield self.worker_helper.dispatch_inbound(msg, 'foo')
             [msg_log] = lc.messages()
             self.assertTrue(msg_log.startswith("No inbound handler for 'foo'"))
 
         with LogCatcher() as lc:
             event = self.msg_helper.make_ack()
-            yield self.amqp_helper.dispatch_event(event, 'foo')
+            yield self.worker_helper.dispatch_event(event, 'foo')
             [event_log] = lc.messages()
             self.assertTrue(event_log.startswith("No event handler for 'foo'"))
 
         msg = self.msg_helper.make_outbound("outbound")
         yield conn.publish_outbound(msg)
-        msgs = self.amqp_helper.get_dispatched_outbound('foo')
+        msgs = self.worker_helper.get_dispatched_outbound('foo')
         self.assertEqual(msgs, [msg])
 
     @inlineCallbacks
@@ -242,7 +242,7 @@ class TestReceiveInboundConnector(BaseConnectorTestCase):
         conn.unpause()
         conn.set_inbound_handler(msgs.append)
         msg = self.msg_helper.make_inbound("inbound")
-        yield self.amqp_helper.dispatch_inbound(msg, 'foo')
+        yield self.worker_helper.dispatch_inbound(msg, 'foo')
         self.assertEqual(msgs, [msg])
 
     @inlineCallbacks
@@ -252,7 +252,7 @@ class TestReceiveInboundConnector(BaseConnectorTestCase):
         conn.unpause()
         conn.set_default_inbound_handler(msgs.append)
         msg = self.msg_helper.make_inbound("inbound")
-        yield self.amqp_helper.dispatch_inbound(msg, 'foo')
+        yield self.worker_helper.dispatch_inbound(msg, 'foo')
         self.assertEqual(msgs, [msg])
 
     @inlineCallbacks
@@ -262,7 +262,7 @@ class TestReceiveInboundConnector(BaseConnectorTestCase):
         conn.unpause()
         conn.set_event_handler(msgs.append)
         msg = self.msg_helper.make_ack()
-        yield self.amqp_helper.dispatch_event(msg, 'foo')
+        yield self.worker_helper.dispatch_event(msg, 'foo')
         self.assertEqual(msgs, [msg])
 
     @inlineCallbacks
@@ -272,7 +272,7 @@ class TestReceiveInboundConnector(BaseConnectorTestCase):
         conn.unpause()
         conn.set_default_event_handler(msgs.append)
         msg = self.msg_helper.make_ack()
-        yield self.amqp_helper.dispatch_event(msg, 'foo')
+        yield self.worker_helper.dispatch_event(msg, 'foo')
         self.assertEqual(msgs, [msg])
 
     @inlineCallbacks
@@ -280,7 +280,7 @@ class TestReceiveInboundConnector(BaseConnectorTestCase):
         conn = yield self.mk_connector(connector_name='foo', setup=True)
         msg = self.msg_helper.make_outbound("outbound")
         yield conn.publish_outbound(msg)
-        msgs = self.amqp_helper.get_dispatched_outbound('foo')
+        msgs = self.worker_helper.get_dispatched_outbound('foo')
         self.assertEqual(msgs, [msg])
 
     @inlineCallbacks
@@ -293,7 +293,7 @@ class TestReceiveInboundConnector(BaseConnectorTestCase):
         conn.set_default_inbound_handler(im_handler)
         msg = self.msg_helper.make_inbound("inbound")
         with LogCatcher() as lc:
-            yield self.amqp_helper.dispatch_inbound(msg, 'foo')
+            yield self.worker_helper.dispatch_inbound(msg, 'foo')
             [log] = lc.messages()
             self.assertTrue(log.startswith(
                 "Ignoring msg due to IgnoreMessage(): <Message"))
@@ -311,18 +311,18 @@ class TestReceiveOutboundConnector(BaseConnectorTestCase):
 
         with LogCatcher() as lc:
             msg = self.msg_helper.make_outbound("outbound")
-            yield self.amqp_helper.dispatch_outbound(msg, 'foo')
+            yield self.worker_helper.dispatch_outbound(msg, 'foo')
             [log] = lc.messages()
             self.assertTrue(log.startswith("No outbound handler for 'foo'"))
 
         msg = self.msg_helper.make_inbound("inbound")
         yield conn.publish_inbound(msg)
-        msgs = self.amqp_helper.get_dispatched_inbound('foo')
+        msgs = self.worker_helper.get_dispatched_inbound('foo')
         self.assertEqual(msgs, [msg])
 
         msg = self.msg_helper.make_ack()
         yield conn.publish_event(msg)
-        msgs = self.amqp_helper.get_dispatched_events('foo')
+        msgs = self.worker_helper.get_dispatched_events('foo')
         self.assertEqual(msgs, [msg])
 
     @inlineCallbacks
@@ -341,7 +341,7 @@ class TestReceiveOutboundConnector(BaseConnectorTestCase):
         conn.unpause()
         conn.set_outbound_handler(msgs.append)
         msg = self.msg_helper.make_outbound("outbound")
-        yield self.amqp_helper.dispatch_outbound(msg, 'foo')
+        yield self.worker_helper.dispatch_outbound(msg, 'foo')
         self.assertEqual(msgs, [msg])
 
     @inlineCallbacks
@@ -351,7 +351,7 @@ class TestReceiveOutboundConnector(BaseConnectorTestCase):
         conn.unpause()
         conn.set_default_outbound_handler(msgs.append)
         msg = self.msg_helper.make_outbound("outbound")
-        yield self.amqp_helper.dispatch_outbound(msg, 'foo')
+        yield self.worker_helper.dispatch_outbound(msg, 'foo')
         self.assertEqual(msgs, [msg])
 
     @inlineCallbacks
@@ -359,7 +359,7 @@ class TestReceiveOutboundConnector(BaseConnectorTestCase):
         conn = yield self.mk_connector(connector_name='foo', setup=True)
         msg = self.msg_helper.make_inbound("inbound")
         yield conn.publish_inbound(msg)
-        msgs = self.amqp_helper.get_dispatched_inbound('foo')
+        msgs = self.worker_helper.get_dispatched_inbound('foo')
         self.assertEqual(msgs, [msg])
 
     @inlineCallbacks
@@ -367,7 +367,7 @@ class TestReceiveOutboundConnector(BaseConnectorTestCase):
         conn = yield self.mk_connector(connector_name='foo', setup=True)
         msg = self.msg_helper.make_ack()
         yield conn.publish_event(msg)
-        msgs = self.amqp_helper.get_dispatched_events('foo')
+        msgs = self.worker_helper.get_dispatched_events('foo')
         self.assertEqual(msgs, [msg])
 
     @inlineCallbacks
@@ -380,9 +380,9 @@ class TestReceiveOutboundConnector(BaseConnectorTestCase):
         conn.set_default_outbound_handler(im_handler)
         msg = self.msg_helper.make_inbound("inbound")
         with LogCatcher() as lc:
-            yield self.amqp_helper.dispatch_outbound(msg, 'foo')
+            yield self.worker_helper.dispatch_outbound(msg, 'foo')
             [log] = lc.messages()
             self.assertTrue(log.startswith(
                 "Ignoring msg (with NACK) due to IgnoreMessage(): <Message"))
-        [event] = self.amqp_helper.get_dispatched_events('foo')
+        [event] = self.worker_helper.get_dispatched_events('foo')
         self.assertEqual(event['event_type'], 'nack')

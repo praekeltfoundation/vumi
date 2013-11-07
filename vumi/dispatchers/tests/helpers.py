@@ -1,5 +1,5 @@
 from vumi.tests.helpers import (
-    MessageHelper, AMQPHelper, MessageDispatchHelper, generate_proxies,
+    MessageHelper, WorkerHelper, MessageDispatchHelper, generate_proxies,
 )
 
 
@@ -11,21 +11,21 @@ class DispatcherHelper(object):
     def __init__(self, dispatcher_class, test_case, msg_helper_args=None):
         self._test_case = test_case
         self._dispatcher_class = dispatcher_class
-        self.amqp_helper = AMQPHelper()
+        self.worker_helper = WorkerHelper()
         msg_helper_kw = {}
         if msg_helper_args is not None:
             msg_helper_kw.update(msg_helper_args)
         self.msg_helper = MessageHelper(**msg_helper_kw)
         self.dispatch_helper = MessageDispatchHelper(
-            self.msg_helper, self.amqp_helper)
+            self.msg_helper, self.worker_helper)
 
         # Proxy methods from our helpers.
         generate_proxies(self, self.msg_helper)
-        generate_proxies(self, self.amqp_helper)
+        generate_proxies(self, self.worker_helper)
         generate_proxies(self, self.dispatch_helper)
 
     def cleanup(self):
-        return self.amqp_helper.cleanup()
+        return self.worker_helper.cleanup()
 
     def get_dispatcher(self, config, cls=None, start=True):
         if cls is None:
@@ -42,12 +42,12 @@ class DispatcherHelper(object):
 class DispatcherConnectorHelper(object):
     def __init__(self, dispatcher_helper, connector_name):
         self.msg_helper = dispatcher_helper.msg_helper
-        self.amqp_helper = AMQPHelper(
-            connector_name, dispatcher_helper.amqp_helper.broker)
+        self.worker_helper = WorkerHelper(
+            connector_name, dispatcher_helper.worker_helper.broker)
         self.dispatch_helper = MessageDispatchHelper(
-            self.msg_helper, self.amqp_helper)
+            self.msg_helper, self.worker_helper)
 
-        generate_proxies(self, self.amqp_helper)
+        generate_proxies(self, self.worker_helper)
         generate_proxies(self, self.dispatch_helper)
 
         # We don't want to be able to make workers with this helper.

@@ -7,7 +7,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
 from vumi.utils import http_request_full
 from vumi.message import TransportUserMessage
 from vumi.tests.utils import PersistenceMixin, VumiWorkerTestCase, import_skip
-from vumi.tests.helpers import MessageHelper, AMQPHelper
+from vumi.tests.helpers import MessageHelper, WorkerHelper
 
 
 class MessageStoreAPITestCase(VumiWorkerTestCase, PersistenceMixin):
@@ -25,12 +25,12 @@ class MessageStoreAPITestCase(VumiWorkerTestCase, PersistenceMixin):
             import_skip(e, 'riakasaurus', 'riakasaurus.riak')
 
         self.msg_helper = MessageHelper()
-        self.amqp_helper = AMQPHelper()
-        self.addCleanup(self.amqp_helper.cleanup)
+        self.worker_helper = WorkerHelper()
+        self.addCleanup(self.worker_helper.cleanup)
 
         self.match_resource = MatchResource
         self.base_path = '/api/v1/'
-        self.worker = yield self.amqp_helper.get_worker(
+        self.worker = yield self.worker_helper.get_worker(
             MessageStoreAPIWorker, self.mk_config({
                 'web_path': self.base_path,
                 'web_port': 0,

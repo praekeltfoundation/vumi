@@ -5,7 +5,7 @@ from twisted.internet.defer import inlineCallbacks
 
 from vumi.scripts.inject_messages import MessageInjector
 from vumi.tests.utils import VumiWorkerTestCase
-from vumi.tests.helpers import AMQPHelper
+from vumi.tests.helpers import WorkerHelper
 
 
 class TestMessageInjector(VumiWorkerTestCase):
@@ -19,12 +19,12 @@ class TestMessageInjector(VumiWorkerTestCase):
     }
 
     def setUp(self):
-        self.amqp_helper = AMQPHelper('sphex')
-        self.addCleanup(self.amqp_helper.cleanup)
+        self.worker_helper = WorkerHelper('sphex')
+        self.addCleanup(self.worker_helper.cleanup)
         super(TestMessageInjector, self).setUp()
 
     def get_worker(self, direction):
-        return self.amqp_helper.get_worker(MessageInjector, {
+        return self.worker_helper.get_worker(MessageInjector, {
             'transport-name': 'sphex',
             'direction': direction,
         })
@@ -42,7 +42,7 @@ class TestMessageInjector(VumiWorkerTestCase):
         worker = yield self.get_worker('inbound')
         data = self.make_data()
         worker.process_line(json.dumps(data))
-        [msg] = self.amqp_helper.get_dispatched_inbound()
+        [msg] = self.worker_helper.get_dispatched_inbound()
         self.check_msg(msg, data)
 
     @inlineCallbacks
@@ -50,7 +50,7 @@ class TestMessageInjector(VumiWorkerTestCase):
         worker = yield self.get_worker('outbound')
         data = self.make_data()
         worker.process_line(json.dumps(data))
-        [msg] = self.amqp_helper.get_dispatched_outbound()
+        [msg] = self.worker_helper.get_dispatched_outbound()
         self.check_msg(msg, data)
 
     @inlineCallbacks
@@ -61,7 +61,7 @@ class TestMessageInjector(VumiWorkerTestCase):
         in_file = StringIO.StringIO(data_string)
         out_file = StringIO.StringIO()
         yield worker.process_file(in_file, out_file)
-        msgs = self.amqp_helper.get_dispatched_inbound()
+        msgs = self.worker_helper.get_dispatched_inbound()
         for msg, datum in zip(msgs, data):
             self.check_msg(msg, datum)
         self.assertEqual(out_file.getvalue(), data_string + "\n")
@@ -74,7 +74,7 @@ class TestMessageInjector(VumiWorkerTestCase):
         in_file = StringIO.StringIO(data_string)
         out_file = StringIO.StringIO()
         yield worker.process_file(in_file, out_file)
-        msgs = self.amqp_helper.get_dispatched_outbound()
+        msgs = self.worker_helper.get_dispatched_outbound()
         for msg, datum in zip(msgs, data):
             self.check_msg(msg, datum)
         self.assertEqual(out_file.getvalue(), data_string + "\n")

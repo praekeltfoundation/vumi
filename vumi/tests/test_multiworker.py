@@ -5,7 +5,7 @@ from vumi.tests.utils import StubbedWorkerCreator, VumiWorkerTestCase
 from vumi.service import Worker
 from vumi.message import TransportUserMessage
 from vumi.multiworker import MultiWorker
-from vumi.tests.helpers import MessageHelper, AMQPHelper
+from vumi.tests.helpers import MessageHelper, WorkerHelper
 
 
 class ToyWorker(Worker):
@@ -57,8 +57,8 @@ class MultiWorkerTestCase(VumiWorkerTestCase):
     def setUp(self):
         super(MultiWorkerTestCase, self).setUp()
         self.msg_helper = MessageHelper()
-        self.amqp_helper = AMQPHelper()
-        self.addCleanup(self.amqp_helper.cleanup)
+        self.worker_helper = WorkerHelper()
+        self.addCleanup(self.worker_helper.cleanup)
         ToyWorker.events[:] = []
 
     @inlineCallbacks
@@ -67,15 +67,15 @@ class MultiWorkerTestCase(VumiWorkerTestCase):
         ToyWorker.events[:] = []
 
     def dispatch(self, msg, connector_name):
-        return self.amqp_helper.dispatch_inbound(msg, connector_name)
+        return self.worker_helper.dispatch_inbound(msg, connector_name)
 
     def get_replies(self, connector_name):
-        msgs = self.amqp_helper.get_dispatched_outbound(connector_name)
+        msgs = self.worker_helper.get_dispatched_outbound(connector_name)
         return [msg['content'] for msg in msgs]
 
     @inlineCallbacks
     def get_multiworker(self, config):
-        self.worker = yield self.amqp_helper.get_worker(
+        self.worker = yield self.worker_helper.get_worker(
             StubbedMultiWorker, config, start=False)
         yield self.worker.startService()
         yield self.worker.wait_for_workers()

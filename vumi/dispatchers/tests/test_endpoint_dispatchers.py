@@ -40,7 +40,7 @@ class TestRoutingTableDispatcher(VumiWorkerTestCase):
         return self.disp_helper.get_connector_helper(connector_name)
 
     def assert_rkeys_used(self, *rkeys):
-        broker = self.disp_helper.amqp_helper.broker
+        broker = self.disp_helper.worker_helper.broker
         self.assertEqual(set(rkeys), set(broker.dispatched['vumi'].keys()))
 
     def assert_dispatched_endpoint(self, msg, endpoint, dispatched_msgs):
