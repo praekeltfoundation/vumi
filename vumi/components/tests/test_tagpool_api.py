@@ -12,7 +12,7 @@ from vumi.components.tagpool_api import TagpoolApiServer, TagpoolApiWorker
 from vumi.components.tagpool import TagpoolManager
 from vumi.tests.utils import VumiWorkerTestCase, PersistenceMixin
 from vumi.utils import http_request
-from vumi.tests.helpers import VumiTestCase
+from vumi.tests.helpers import VumiTestCase, WorkerHelper
 
 
 class TestTagpoolApiServer(VumiTestCase, PersistenceMixin):
@@ -184,16 +184,16 @@ class TestTagpoolApiWorker(VumiWorkerTestCase, PersistenceMixin):
 
     def setUp(self):
         self._persist_setUp()
+        self.worker_helper = WorkerHelper()
+        self.add_cleanup(self.worker_helper.cleanup)
         super(TestTagpoolApiWorker, self).setUp()
 
     @inlineCallbacks
-    def tearDown(self):
-        for worker in self._workers:
-            if worker.running:
-                yield worker.redis_manager._purge_all()
-                yield worker.redis_manager.close_manager()
-                yield worker.stopService()
-        yield super(TestTagpoolApiWorker, self).tearDown()
+    def cleanup_worker(self, worker):
+        if worker.running:
+            yield worker.redis_manager._purge_all()
+            yield worker.redis_manager.close_manager()
+            yield worker.stopService()
 
     @inlineCallbacks
     def get_api_worker(self, config=None, start=True):
@@ -203,7 +203,9 @@ class TestTagpoolApiWorker(VumiWorkerTestCase, PersistenceMixin):
         config.setdefault('web_path', 'api')
         config.setdefault('health_path', 'health')
         config = self.mk_config(config)
-        worker = yield self.get_worker(config, TagpoolApiWorker, start)
+        worker = yield self.worker_helper.get_worker(
+            TagpoolApiWorker, config, start)
+        self.add_cleanup(self.cleanup_worker, worker)
         if not start:
             returnValue(worker)
         yield worker.startService()

@@ -7,15 +7,12 @@ from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
 from vumi.utils import http_request_full
 from vumi.message import TransportUserMessage
 from vumi.tests.utils import PersistenceMixin, VumiWorkerTestCase, import_skip
-from vumi.tests.helpers import MessageHelper
+from vumi.tests.helpers import MessageHelper, WorkerHelper
 
 
 class MessageStoreAPITestCase(VumiWorkerTestCase, PersistenceMixin):
 
     use_riak = True
-    # Needed for the MessageMakerMixin
-    transport_type = 'sms'
-    transport_name = 'sphex'
 
     @inlineCallbacks
     def setUp(self):
@@ -26,13 +23,19 @@ class MessageStoreAPITestCase(VumiWorkerTestCase, PersistenceMixin):
                 MatchResource, MessageStoreAPIWorker)
         except ImportError, e:
             import_skip(e, 'riakasaurus', 'riakasaurus.riak')
+
+        self.msg_helper = MessageHelper()
+        self.worker_helper = WorkerHelper()
+        self.add_cleanup(self.worker_helper.cleanup)
+
         self.match_resource = MatchResource
         self.base_path = '/api/v1/'
-        self.worker = yield self.get_worker(self.mk_config({
+        self.worker = yield self.worker_helper.get_worker(
+            MessageStoreAPIWorker, self.mk_config({
                 'web_path': self.base_path,
                 'web_port': 0,
                 'health_path': '/health/',
-            }), MessageStoreAPIWorker)
+            }))
         self.store = self.worker.store
         self.addr = self.worker.webserver.getHost()
         self.url = 'http://%s:%s%s' % (self.addr.host, self.addr.port,
@@ -40,9 +43,6 @@ class MessageStoreAPITestCase(VumiWorkerTestCase, PersistenceMixin):
 
         self.tag = ("pool", "tag")
         self.batch_id = yield self.store.batch_start([self.tag])
-        self.msg_helper = MessageHelper(
-            transport_name=self.transport_name,
-            transport_type=self.transport_type)
 
     @inlineCallbacks
     def create_inbound(self, batch_id, count, content_template):

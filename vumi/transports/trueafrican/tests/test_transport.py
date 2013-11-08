@@ -7,12 +7,11 @@ from vumi.transports.tests.utils import TransportTestCase
 from vumi.message import TransportUserMessage
 from vumi.transports.trueafrican.transport import TrueAfricanUssdTransport
 from vumi.tests.utils import LogCatcher
-from vumi.tests.helpers import MessageHelper
+from vumi.transports.tests.helpers import TransportHelper
 
 
 class TestTrueAfricanUssdTransport(TransportTestCase):
 
-    transport_name = 'trueafrican_ussd'
     transport_class = TrueAfricanUssdTransport
 
     SESSION_INIT_BODY = {
@@ -31,9 +30,10 @@ class TestTrueAfricanUssdTransport(TransportTestCase):
         }
         self.clock = Clock()
         self.patch(TrueAfricanUssdTransport, 'get_clock', lambda _: self.clock)
-        self.transport = yield self.get_transport(self.config)
+        self.tx_helper = TransportHelper(self)
+        self.add_cleanup(self.tx_helper.cleanup)
+        self.transport = yield self.tx_helper.get_transport(self.config)
         self.service_url = self.get_service_url(self.transport)
-        self.msg_helper = MessageHelper()
 
     def get_service_url(self, transport):
         """
@@ -45,18 +45,13 @@ class TestTrueAfricanUssdTransport(TransportTestCase):
     def web_client(self):
         return Proxy(self.service_url)
 
-    def reply(self, msg, *args, **kw):
-        msg_out = TransportUserMessage(**msg.payload).reply(*args, **kw)
-        self.dispatch(msg_out)
-        return msg_out
-
     @inlineCallbacks
     def test_session_new(self):
         client = self.web_client()
         resp_d = client.callRemote('USSD.INIT', self.SESSION_INIT_BODY)
 
-        [msg] = yield self.wait_for_dispatched_inbound(1)
-        self.reply(msg, "Oh Hai!")
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        self.tx_helper.make_dispatch_reply(msg, "Oh Hai!")
 
         # verify the transport -> application message
         self.assertEqual(msg['transport_name'], self.transport_name)
@@ -84,11 +79,11 @@ class TestTrueAfricanUssdTransport(TransportTestCase):
         # initiate session
         resp_d = client.callRemote('USSD.INIT', self.SESSION_INIT_BODY)
 
-        [msg] = yield self.wait_for_dispatched_inbound(1)
-        self.reply(msg, "pong")
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        self.tx_helper.make_dispatch_reply(msg, "pong")
 
         yield resp_d
-        yield self.clear_dispatched_messages()
+        yield self.tx_helper.clear_dispatched_inbound()
 
         # resume session
         resp_d = client.callRemote(
@@ -97,8 +92,8 @@ class TestTrueAfricanUssdTransport(TransportTestCase):
              'response': 'pong'}
         )
 
-        [msg] = yield self.wait_for_dispatched_inbound(1)
-        self.reply(msg, "ping")
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        self.tx_helper.make_dispatch_reply(msg, "ping")
 
         # verify the dispatched inbound message
         self.assertEqual(msg['transport_name'], self.transport_name)
@@ -126,11 +121,11 @@ class TestTrueAfricanUssdTransport(TransportTestCase):
         # initiate session
         resp_d = client.callRemote('USSD.INIT', self.SESSION_INIT_BODY)
 
-        [msg] = yield self.wait_for_dispatched_inbound(1)
-        self.reply(msg, "ping")
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        self.tx_helper.make_dispatch_reply(msg, "ping")
 
         yield resp_d
-        yield self.clear_dispatched_messages()
+        yield self.tx_helper.clear_dispatched_inbound()
 
         # user initiated session termination
         resp_d = client.callRemote(
@@ -138,7 +133,7 @@ class TestTrueAfricanUssdTransport(TransportTestCase):
             {'session': '1'}
         )
 
-        [msg] = yield self.wait_for_dispatched_inbound(1)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assertEqual(msg['transport_name'], self.transport_name)
         self.assertEqual(msg['transport_type'], "ussd")
         self.assertEqual(msg['session_event'],
@@ -156,11 +151,11 @@ class TestTrueAfricanUssdTransport(TransportTestCase):
 
         # initiate session
         resp_d = client.callRemote('USSD.INIT', self.SESSION_INIT_BODY)
-        [msg] = yield self.wait_for_dispatched_inbound(1)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
 
-        self.reply(msg, "ping")
+        self.tx_helper.make_dispatch_reply(msg, "ping")
         yield resp_d
-        yield self.clear_dispatched_messages()
+        yield self.tx_helper.clear_dispatched_inbound()
 
         # end session
         resp_d = client.callRemote(
@@ -169,9 +164,9 @@ class TestTrueAfricanUssdTransport(TransportTestCase):
              'response': 'o rly?'}
         )
 
-        [msg] = yield self.wait_for_dispatched_inbound(1)
-        self.reply(msg, "kthxbye",
-                         session_event=TransportUserMessage.SESSION_CLOSE)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        self.tx_helper.make_dispatch_reply(
+            msg, "kthxbye", continue_session=False)
 
         resp = yield resp_d
         self.assertEqual(
@@ -191,11 +186,11 @@ class TestTrueAfricanUssdTransport(TransportTestCase):
         resp_d = client.callRemote('USSD.INIT', self.SESSION_INIT_BODY)
 
         # send response
-        [msg] = yield self.wait_for_dispatched_inbound(1)
-        rep = self.reply(msg, "ping")
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        rep = yield self.tx_helper.make_dispatch_reply(msg, "ping")
         yield resp_d
 
-        [ack] = yield self.wait_for_dispatched_events(1)
+        [ack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assertEqual(ack['event_type'], 'ack')
         self.assertEqual(ack['user_message_id'], rep['message_id'])
         self.assertEqual(ack['sent_message_id'], rep['message_id'])
@@ -207,7 +202,7 @@ class TestTrueAfricanUssdTransport(TransportTestCase):
         # initiate session
         resp_d = client.callRemote('USSD.INIT', self.SESSION_INIT_BODY)
 
-        [msg] = yield self.wait_for_dispatched_messages(1)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
 
         # cancel the request and mute the resulting error.
         request = self.transport._requests[msg['message_id']]
@@ -216,11 +211,8 @@ class TestTrueAfricanUssdTransport(TransportTestCase):
         resp_d.addErrback(lambda f: None)
 
         # send response
-        tum = TransportUserMessage(**msg.payload)
-        rep = tum.reply("ping")
-
-        yield self.dispatch(rep)
-        [nack] = yield self.wait_for_dispatched_events(1)
+        rep = yield self.tx_helper.make_dispatch_reply(msg, "ping")
+        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
 
         self.assertEqual(nack['event_type'], 'nack')
         self.assertEqual(nack['user_message_id'], rep['message_id'])
@@ -233,14 +225,14 @@ class TestTrueAfricanUssdTransport(TransportTestCase):
         # initiate session
         resp_d = client.callRemote('USSD.INIT', self.SESSION_INIT_BODY)
 
-        [msg] = yield self.wait_for_dispatched_inbound(1)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
 
         self.clock.advance(10.1)  # .1 second after timeout
 
-        rep = self.reply(msg, "ping")
+        rep = yield self.tx_helper.make_dispatch_reply(msg, "ping")
         yield resp_d
 
-        [nack] = yield self.wait_for_dispatched_events(1)
+        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assertEqual(nack['event_type'], 'nack')
         self.assertEqual(nack['user_message_id'], rep['message_id'])
         self.assertEqual(nack['sent_message_id'], rep['message_id'])
@@ -248,9 +240,8 @@ class TestTrueAfricanUssdTransport(TransportTestCase):
 
     @inlineCallbacks
     def test_nack_for_invalid_outbound_message(self):
-        msg = self.msg_helper.make_outbound("outbound")
-        yield self.dispatch(msg)
-        [nack] = yield self.wait_for_dispatched_events(1)
+        msg = yield self.tx_helper.make_dispatch_outbound("outbound")
+        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assertEqual(nack['user_message_id'], msg['message_id'])
         self.assertEqual(nack['sent_message_id'], msg['message_id'])
         self.assertEqual(nack['nack_reason'],
@@ -263,7 +254,7 @@ class TestTrueAfricanUssdTransport(TransportTestCase):
         # initiate session
         resp_d = client.callRemote('USSD.INIT', self.SESSION_INIT_BODY)
 
-        [msg] = yield self.wait_for_dispatched_inbound(1)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         with LogCatcher(message='Timing out') as lc:
             self.assertTrue(msg['message_id'] in self.transport._requests)
             self.clock.advance(10.1)  # .1 second after timeout
@@ -289,8 +280,8 @@ class TestTrueAfricanUssdTransport(TransportTestCase):
         client = self.web_client()
         resp_d = client.callRemote('USSD.INIT', self.SESSION_INIT_BODY)
 
-        [msg] = yield self.wait_for_dispatched_inbound(1)
-        self.reply(msg, "pong")
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        self.tx_helper.make_dispatch_reply(msg, "pong")
         self.assertTrue(msg['message_id'] in self.transport._requests)
         yield resp_d
         self.assertFalse(msg['message_id'] in self.transport._requests)
@@ -304,10 +295,10 @@ class TestTrueAfricanUssdTransport(TransportTestCase):
         client = self.web_client()
         resp_d = client.callRemote('USSD.INIT', self.SESSION_INIT_BODY)
 
-        [msg] = yield self.wait_for_dispatched_inbound(1)
-        self.reply(msg, "pong")
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        self.tx_helper.make_dispatch_reply(msg, "pong")
         yield resp_d
-        yield self.clear_dispatched_messages()
+        yield self.tx_helper.clear_dispatched_inbound()
 
         # simulate Redis falling over
         yield self.transport.session_manager.redis._purge_all()

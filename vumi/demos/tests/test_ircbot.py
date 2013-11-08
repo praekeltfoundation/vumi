@@ -6,7 +6,7 @@ from vumi.application.tests.utils import ApplicationTestCase
 
 from vumi.demos.ircbot import MemoWorker
 from vumi.message import TransportUserMessage
-from vumi.tests.helpers import MessageHelper
+from vumi.application.tests.helpers import ApplicationHelper
 
 
 class TestMemoWorker(ApplicationTestCase):
@@ -16,11 +16,12 @@ class TestMemoWorker(ApplicationTestCase):
     @inlineCallbacks
     def setUp(self):
         super(TestMemoWorker, self).setUp()
-        self.worker = yield self.get_application({'worker_name': 'testmemo'})
+        self.app_helper = ApplicationHelper(self)
+        self.add_cleanup(self.app_helper.cleanup)
+        self.worker = yield self.app_helper.get_application(
+            {'worker_name': 'testmemo'})
         yield self.worker.redis._purge_all()  # just in case
-        self.msg_helper = MessageHelper()
 
-    @inlineCallbacks
     def send(self, content, from_addr='testnick', channel=None):
         transport_metadata = {}
         helper_metadata = {}
@@ -28,14 +29,13 @@ class TestMemoWorker(ApplicationTestCase):
             transport_metadata['irc_channel'] = channel
             helper_metadata['irc'] = {'irc_channel': channel}
 
-        msg = self.msg_helper.make_inbound(
+        return self.app_helper.make_dispatch_inbound(
             content, from_addr=from_addr, helper_metadata=helper_metadata,
             transport_metadata=transport_metadata)
-        yield self.dispatch(msg)
 
     @inlineCallbacks
     def recv(self, n=0):
-        msgs = yield self.wait_for_dispatched_messages(n)
+        msgs = yield self.app_helper.wait_for_dispatched_outbound(n)
 
         def reply_code(msg):
             if msg['session_event'] == TransportUserMessage.SESSION_CLOSE:
@@ -75,7 +75,7 @@ class TestMemoWorker(ApplicationTestCase):
 
         # replies to setting memos
         replies = yield self.recv(3)
-        self.clear_dispatched_outbound()
+        self.app_helper.clear_dispatched_outbound()
 
         yield self.send('ping', channel='#test', from_addr='testmemo')
         replies = yield self.recv(2)
@@ -85,7 +85,7 @@ class TestMemoWorker(ApplicationTestCase):
             ('reply', 'testmemo, testnick asked me tell you:'
              ' this is memo 2'),
             ])
-        self.clear_dispatched_outbound()
+        self.app_helper.clear_dispatched_outbound()
 
         yield self.send('ping', channel='#another', from_addr='testmemo')
         replies = yield self.recv(1)

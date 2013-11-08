@@ -7,7 +7,8 @@ from vumi.application.tests.utils import ApplicationTestCase
 from vumi.tests.utils import MockHttpServer
 from vumi.application.http_relay import HTTPRelayApplication
 from vumi.message import TransportEvent
-from vumi.tests.helpers import MessageHelper
+
+from vumi.application.tests.helpers import ApplicationHelper
 
 
 class HTTPRelayTestCase(ApplicationTestCase):
@@ -18,14 +19,15 @@ class HTTPRelayTestCase(ApplicationTestCase):
     def setUp(self):
         yield super(HTTPRelayTestCase, self).setUp()
         self.path = '/path'
-        self.msg_helper = MessageHelper()
+        self.app_helper = ApplicationHelper(self)
+        self.add_cleanup(self.app_helper.cleanup)
 
     @inlineCallbacks
     def setup_resource_with_callback(self, callback):
         self.mock_server = MockHttpServer(callback)
         self.add_cleanup(self.mock_server.stop)
         yield self.mock_server.start()
-        self.app = yield self.get_application({
+        self.app = yield self.app_helper.get_application({
             'url': '%s%s' % (self.mock_server.url, self.path),
             'username': 'username',
             'password': 'password',
@@ -43,18 +45,16 @@ class HTTPRelayTestCase(ApplicationTestCase):
     @inlineCallbacks
     def test_http_relay_success_with_no_reply(self):
         yield self.setup_resource(http.OK, '', {})
-        msg = self.msg_helper.make_inbound("hi")
-        yield self.dispatch(msg)
-        self.assertEqual([], self.get_dispatched_messages())
+        yield self.app_helper.make_dispatch_inbound("hi")
+        self.assertEqual([], self.app_helper.get_dispatched_outbound())
 
     @inlineCallbacks
     def test_http_relay_success_with_reply_header_true(self):
         yield self.setup_resource(http.OK, 'thanks!', {
             HTTPRelayApplication.reply_header: 'true',
         })
-        msg = self.msg_helper.make_inbound("hi")
-        yield self.dispatch(msg)
-        [response] = self.get_dispatched_messages()
+        msg = yield self.app_helper.make_dispatch_inbound("hi")
+        [response] = self.app_helper.get_dispatched_outbound()
         self.assertEqual(response['content'], 'thanks!')
         self.assertEqual(response['to_addr'], msg['from_addr'])
 
@@ -63,21 +63,21 @@ class HTTPRelayTestCase(ApplicationTestCase):
         yield self.setup_resource(http.OK, 'thanks!', {
             HTTPRelayApplication.reply_header: 'untrue!',
         })
-        yield self.dispatch(self.msg_helper.make_inbound("hi"))
-        self.assertEqual([], self.get_dispatched_messages())
+        yield self.app_helper.make_dispatch_inbound("hi")
+        self.assertEqual([], self.app_helper.get_dispatched_outbound())
 
     @inlineCallbacks
     def test_http_relay_success_with_bad_reply(self):
         yield self.setup_resource(http.NOT_FOUND, '', {})
-        yield self.dispatch(self.msg_helper.make_inbound("hi"))
-        self.assertEqual([], self.get_dispatched_messages())
+        yield self.app_helper.make_dispatch_inbound("hi")
+        self.assertEqual([], self.app_helper.get_dispatched_outbound())
 
     @inlineCallbacks
     def test_http_relay_success_with_bad_header(self):
         yield self.setup_resource(http.OK, 'thanks!', {
             'X-Other-Bad-Header': 'true',
         })
-        self.assertEqual([], self.get_dispatched_messages())
+        self.assertEqual([], self.app_helper.get_dispatched_outbound())
 
     @inlineCallbacks
     def test_http_relay_with_basic_auth(self):
@@ -92,8 +92,8 @@ class HTTPRelayTestCase(ApplicationTestCase):
             return 'thanks!'
 
         yield self.setup_resource_with_callback(cb)
-        yield self.dispatch(self.msg_helper.make_inbound("hi"))
-        [msg] = self.get_dispatched_messages()
+        yield self.app_helper.make_dispatch_inbound("hi")
+        [msg] = self.app_helper.get_dispatched_outbound()
         self.assertEqual(msg['content'], 'thanks!')
 
     @inlineCallbacks
@@ -103,8 +103,8 @@ class HTTPRelayTestCase(ApplicationTestCase):
             return 'Not Authorized'
 
         yield self.setup_resource_with_callback(cb)
-        yield self.dispatch(self.msg_helper.make_inbound("hi"))
-        self.assertEqual([], self.get_dispatched_messages())
+        yield self.app_helper.make_dispatch_inbound("hi")
+        self.assertEqual([], self.app_helper.get_dispatched_outbound())
 
     @inlineCallbacks
     def test_http_relay_of_events(self):
@@ -115,7 +115,6 @@ class HTTPRelayTestCase(ApplicationTestCase):
             return ''
 
         yield self.setup_resource_with_callback(cb)
-        delivery_report = self.msg_helper.make_delivery_report()
-        yield self.dispatch(delivery_report, rkey=self.rkey('event'))
-        self.assertEqual([], self.get_dispatched_messages())
-        self.assertEqual([delivery_report], events)
+        dr = yield self.app_helper.make_dispatch_delivery_report()
+        self.assertEqual([], self.app_helper.get_dispatched_outbound())
+        self.assertEqual([dr], events)

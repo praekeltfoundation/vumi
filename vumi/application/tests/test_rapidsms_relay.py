@@ -10,7 +10,7 @@ from vumi.tests.utils import LogCatcher, MockHttpServer
 from vumi.application.rapidsms_relay import RapidSMSRelay, BadRequestError
 from vumi.utils import http_request_full, basic_auth_string, to_kwargs
 from vumi.message import TransportUserMessage, from_json
-from vumi.tests.helpers import MessageHelper
+from vumi.application.tests.helpers import ApplicationHelper
 
 
 class RapidSMSRelayTestCase(ApplicationTestCase):
@@ -21,7 +21,8 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
     @inlineCallbacks
     def setUp(self):
         yield super(RapidSMSRelayTestCase, self).setUp()
-        self.msg_helper = MessageHelper()
+        self.app_helper = ApplicationHelper(self)
+        self.add_cleanup(self.app_helper.cleanup)
 
     @inlineCallbacks
     def setup_resource(self, callback=None, auth=None):
@@ -35,7 +36,7 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
 
     def setup_app(self, url, auth=None):
         vumi_username, vumi_password = auth if auth else (None, None)
-        return self.get_application({
+        return self.app_helper.get_application({
             'rapidsms_url': url,
             'web_path': '/send/',
             'web_port': '0',
@@ -60,8 +61,8 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
             return 'OK'
 
         yield self.setup_resource(cb)
-        yield self.dispatch(self.msg_helper.make_inbound("hello world"))
-        self.assertEqual([], self.get_dispatched_messages())
+        yield self.app_helper.make_dispatch_inbound("hello world")
+        self.assertEqual([], self.app_helper.get_dispatched_outbound())
 
     @inlineCallbacks
     def test_rapidsms_relay_unicode(self):
@@ -71,8 +72,8 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
             return 'OK'
 
         yield self.setup_resource(cb)
-        yield self.dispatch(self.msg_helper.make_inbound(u'h\xc6llo'))
-        self.assertEqual([], self.get_dispatched_messages())
+        yield self.app_helper.make_dispatch_inbound(u'h\xc6llo')
+        self.assertEqual([], self.app_helper.get_dispatched_outbound())
 
     @inlineCallbacks
     def test_rapidsms_relay_with_basic_auth(self):
@@ -86,9 +87,9 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
             return 'OK'
 
         yield self.setup_resource(cb)
-        yield self.dispatch(self.msg_helper.make_inbound(
-            "hello world", message_id="abc"))
-        self.assertEqual([], self.get_dispatched_messages())
+        yield self.app_helper.make_dispatch_inbound(
+            "hello world", message_id="abc")
+        self.assertEqual([], self.app_helper.get_dispatched_outbound())
 
     @inlineCallbacks
     def test_rapidsms_relay_with_bad_basic_auth(self):
@@ -97,25 +98,23 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
             return 'Not Authorized'
 
         yield self.setup_resource(cb)
-        yield self.dispatch(self.msg_helper.make_inbound("hi"))
-        self.assertEqual([], self.get_dispatched_messages())
+        yield self.app_helper.make_dispatch_inbound("hi")
+        self.assertEqual([], self.app_helper.get_dispatched_outbound())
 
     @inlineCallbacks
     def test_rapidsms_relay_logs_events(self):
         yield self.setup_resource()
         with LogCatcher() as lc:
-            msg = self.msg_helper.make_outbound("foo", message_id="abc")
-            yield self.dispatch(self.msg_helper.make_delivery_report(msg),
-                                rkey=self.rkey('event'))
-            msg = self.msg_helper.make_outbound("foo", message_id="1")
-            yield self.dispatch(self.msg_helper.make_ack(msg),
-                                rkey=self.rkey('event'))
+            yield self.app_helper.make_dispatch_delivery_report(
+                self.app_helper.make_outbound("foo", message_id="abc"))
+            yield self.app_helper.make_dispatch_ack(
+                self.app_helper.make_outbound("foo", message_id="1"))
             self.assertEqual(lc.messages(), [
                 "Delivery report received for message u'abc',"
                 " status u'delivered'",
                 "Acknowledgement received for message u'1'",
             ])
-        self.assertEqual([], self.get_dispatched_messages())
+        self.assertEqual([], self.app_helper.get_dispatched_outbound())
 
     def _call_relay(self, data, auth=None):
         data = json.dumps(data)
@@ -128,7 +127,7 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
 
     def _check_messages(self, response, expecteds):
         response_msgs = self.get_response_msgs(response)
-        msgs = self.get_dispatched_messages()
+        msgs = self.app_helper.get_dispatched_outbound()
         for rmsg, msg, expected in zip(response_msgs, msgs, expecteds):
             self.assertEqual(msg, rmsg)
             for k, v in expected.items():
@@ -146,7 +145,7 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
         self.assertEqual(response.headers.getRawHeaders('content-type'),
                          ['application/json; charset=utf-8'])
         self._check_messages(response, [
-            {'to_addr': '+123456', 'content':  u'foo'}])
+            {'to_addr': '+123456', 'content': u'foo'}])
 
     @inlineCallbacks
     def test_rapidsms_relay_outbound_unicode(self):
@@ -156,7 +155,7 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
             'content': u'f\xc6r',
         })
         self._check_messages(response, [
-            {'to_addr': '+123456', 'content':  u'f\xc6r'}])
+            {'to_addr': '+123456', 'content': u'f\xc6r'}])
 
     @inlineCallbacks
     def test_rapidsms_relay_multiple_outbound(self):
@@ -167,22 +166,22 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
             'content': 'foo',
         })
         self._check_messages(response, [
-            {'to_addr': addr, 'content':  u'foo'}
+            {'to_addr': addr, 'content': u'foo'}
             for addr in addresses])
 
     @inlineCallbacks
     def test_rapidsms_relay_reply(self):
         msg_id, to_addr = 'abc', '+1234'
         yield self.setup_resource(lambda r: 'OK')
-        yield self.dispatch(self.msg_helper.make_inbound(
-            "foo", message_id=msg_id, from_addr=to_addr))
+        yield self.app_helper.make_dispatch_inbound(
+            "foo", message_id=msg_id, from_addr=to_addr)
         response = yield self._call_relay({
             'to_addr': [to_addr],
             'content': 'foo',
             'in_reply_to': msg_id,
         })
         self._check_messages(response, [
-            {'to_addr': to_addr, 'content':  u'foo', 'in_reply_to': msg_id}])
+            {'to_addr': to_addr, 'content': u'foo', 'in_reply_to': msg_id}])
 
     @inlineCallbacks
     def test_rapidsms_relay_reply_unknown_msg(self):

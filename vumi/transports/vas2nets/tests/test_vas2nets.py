@@ -15,8 +15,8 @@ from vumi.transports.base import FailureMessage
 from vumi.transports.vas2nets.vas2nets import (
     Vas2NetsTransport, validate_characters, Vas2NetsTransportError,
     Vas2NetsEncodingError, normalize_outbound_msisdn)
-from vumi.tests.helpers import MessageHelper
 from vumi.tests.utils import MockHttpServer
+from vumi.transports.tests.helpers import TransportHelper
 
 
 class Vas2NetsTransportTestCase(TransportTestCase):
@@ -40,10 +40,11 @@ class Vas2NetsTransportTestCase(TransportTestCase):
             'web_receipt_path': '/receipt',
             'web_port': 0,
         }
-        self.transport = yield self.get_transport(self.config)
+        self.tx_helper = TransportHelper(self)
+        self.add_cleanup(self.tx_helper.cleanup)
+        self.transport = yield self.tx_helper.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url()
         self.today = datetime.utcnow().date()
-        self.msg_helper = MessageHelper(transport_name=self.transport_name)
 
     def _make_handler(self, message_id, message, code, send_id):
         def handler(request):
@@ -103,23 +104,12 @@ class Vas2NetsTransportTestCase(TransportTestCase):
             'network_id': 'provider',
             'timestamp': self.today.strftime('%Y-%m-%dT%H:%M:%S'),
             }
-        return self.msg_helper.make_delivery_report(
-            self.make_outbound("foo", message_id="vas2nets.abc"),
+        return self.tx_helper.make_delivery_report(
+            self.tx_helper.make_outbound("foo", message_id="vas2nets.abc"),
             to_addr="+41791234567", delivery_status=status,
             transport_metadata=transport_metadata)
 
-    def make_inbound(self):
-        transport_metadata = {
-            'original_message_id': 'vas2nets.abc',
-            'keyword': '',
-            'network_id': 'provider',
-            'timestamp': self.today.strftime('%Y-%m-%dT%H:%M:%S'),
-            }
-        return self.msg_helper.make_inbound(
-            "hello world", message_id='vas2nets.abc',
-            transport_metadata=transport_metadata)
-
-    def make_outbound(self, content, **kw):
+    def make_dispatch_outbound(self, content, **kw):
         transport_metadata = {
             'original_message_id': 'vas2nets.def',
             'keyword': '',
@@ -127,7 +117,7 @@ class Vas2NetsTransportTestCase(TransportTestCase):
             'timestamp': self.today.strftime('%Y-%m-%dT%H:%M:%S'),
             }
         kw.setdefault('transport_metadata', transport_metadata)
-        return self.msg_helper.make_outbound(content, **kw)
+        return self.tx_helper.make_dispatch_outbound(content, **kw)
 
     def assert_events_equal(self, expected, received):
         to_payload = lambda m: dict(
@@ -159,8 +149,16 @@ class Vas2NetsTransportTestCase(TransportTestCase):
         self.assertEqual(response.headers.getRawHeaders('content-type'),
                          ['text/plain'])
         self.assertEqual(response.code, http.OK)
-        [msg] = self.get_dispatched_inbound()
-        self.assert_messages_equal(self.make_inbound(), msg)
+        [msg] = self.tx_helper.get_dispatched_inbound()
+        expected_msg = self.tx_helper.make_inbound(
+            "hello world", message_id='vas2nets.abc',
+            transport_metadata={
+                'original_message_id': 'vas2nets.abc',
+                'keyword': '',
+                'network_id': 'provider',
+                'timestamp': self.today.strftime('%Y-%m-%dT%H:%M:%S'),
+            })
+        self.assert_messages_equal(expected_msg, msg)
 
     @inlineCallbacks
     def test_delivery_receipt_pending(self):
@@ -177,7 +175,7 @@ class Vas2NetsTransportTestCase(TransportTestCase):
         self.assertEqual(response.code, http.OK)
         msg = self.make_delivery_report(
             'pending', '1', 'Message submitted to Provider for delivery.')
-        [dr] = self.get_dispatched_events()
+        [dr] = self.tx_helper.get_dispatched_events()
         self.assert_events_equal(msg, dr)
 
     @inlineCallbacks
@@ -195,7 +193,7 @@ class Vas2NetsTransportTestCase(TransportTestCase):
         self.assertEqual(response.code, http.OK)
         msg = self.make_delivery_report(
             'failed', '-9', 'Message could not be delivered.')
-        [dr] = self.get_dispatched_events()
+        [dr] = self.tx_helper.get_dispatched_events()
         self.assert_events_equal(msg, dr)
 
     @inlineCallbacks
@@ -213,7 +211,7 @@ class Vas2NetsTransportTestCase(TransportTestCase):
         self.assertEqual(response.code, http.OK)
         msg = self.make_delivery_report(
             'delivered', '2', 'Message delivered to MSISDN.')
-        [dr] = self.get_dispatched_events()
+        [dr] = self.tx_helper.get_dispatched_events()
         self.assert_events_equal(msg, dr)
 
     def test_validate_characters(self):
@@ -237,12 +235,11 @@ class Vas2NetsTransportTestCase(TransportTestCase):
         # duration of this test
         yield self.start_mock_server(mocked_message_id, mocked_message)
 
-        sent_msg = self.make_outbound("hello")
-        yield self.dispatch(sent_msg)
+        sent_msg = yield self.make_dispatch_outbound("hello")
 
-        msg = self.msg_helper.make_ack(
+        msg = self.tx_helper.make_ack(
             sent_msg, sent_message_id=mocked_message_id)
-        [ack] = self.get_dispatched_events()
+        [ack] = self.tx_helper.get_dispatched_events()
         self.assert_events_equal(msg, ack)
 
     @inlineCallbacks
@@ -256,12 +253,12 @@ class Vas2NetsTransportTestCase(TransportTestCase):
         yield self.start_mock_server(mocked_message_id, mocked_message,
                                         send_id=reply_to_msgid)
 
-        sent_msg = self.make_outbound("hello", in_reply_to=reply_to_msgid)
-        yield self.dispatch(sent_msg)
+        sent_msg = yield self.make_dispatch_outbound(
+            "hello", in_reply_to=reply_to_msgid)
 
-        msg = self.msg_helper.make_ack(
+        msg = self.tx_helper.make_ack(
             sent_msg, sent_message_id=mocked_message_id)
-        [ack] = self.get_dispatched_events()
+        [ack] = self.tx_helper.get_dispatched_events()
         self.assert_events_equal(msg, ack)
 
     @inlineCallbacks
@@ -271,20 +268,18 @@ class Vas2NetsTransportTestCase(TransportTestCase):
                           "while processing message")
         yield self.start_mock_server(mocked_message_id, mocked_message)
 
-        msg = self.make_outbound("hello")
-        d = self.dispatch(msg)
-        yield d
+        msg = yield self.make_dispatch_outbound("hello")
 
         [twisted_failure] = self.flushLoggedErrors(Vas2NetsTransportError)
         failure = twisted_failure.value
         self.assertTrue("No SmsId Header" in str(failure))
 
-        [fmsg] = self.get_dispatched_failures()
+        [fmsg] = self.tx_helper.get_dispatched_failures()
         self.assertEqual(msg.payload, fmsg['message'])
         self.assertTrue(
             "Vas2NetsTransportError: No SmsId Header" in fmsg['reason'])
 
-        [nack] = yield self.wait_for_dispatched_events(1)
+        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assertEqual(nack['user_message_id'], msg['message_id'])
         self.assertEqual(nack['sent_message_id'], msg['message_id'])
         self.assertTrue("No SmsId Header" in nack['nack_reason'])
@@ -294,15 +289,13 @@ class Vas2NetsTransportTestCase(TransportTestCase):
         # TODO: Figure out a solution that doesn't require hoping that
         #       nothing's listening on this port.
         self.transport.config['url'] = 'http://localhost:9999/'
-        msg = self.make_outbound("hello")
-        d = self.dispatch(msg)
-        yield d
+        msg = yield self.make_dispatch_outbound("hello")
 
         [twisted_failure] = self.flushLoggedErrors(TemporaryFailure)
         failure = twisted_failure.value
         self.assertTrue("connection refused" in str(failure))
 
-        [fmsg] = self.get_dispatched_failures()
+        [fmsg] = self.tx_helper.get_dispatched_failures()
         self.assertEqual(msg.payload, fmsg['message'])
         self.assertEqual(fmsg['failure_code'],
                          FailureMessage.FC_TEMPORARY)
@@ -313,15 +306,13 @@ class Vas2NetsTransportTestCase(TransportTestCase):
         mocked_message = "Page not found."
         yield self.start_mock_server(None, mocked_message, http.NOT_FOUND)
 
-        msg = self.make_outbound("hello")
-        deferred = self.dispatch(msg)
-        yield deferred
+        msg = yield self.make_dispatch_outbound("hello")
 
         [twisted_failure] = self.flushLoggedErrors(PermanentFailure)
         failure = twisted_failure.value
         self.assertTrue("server error: HTTP 404:" in str(failure))
 
-        [fmsg] = self.get_dispatched_failures()
+        [fmsg] = self.tx_helper.get_dispatched_failures()
         self.assertEqual(msg.payload, fmsg['message'])
         self.assertEqual(fmsg['failure_code'],
                          FailureMessage.FC_PERMANENT)

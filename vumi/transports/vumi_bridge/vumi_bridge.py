@@ -111,7 +111,7 @@ class GoConversationTransport(Transport):
         config = self.get_static_config()
         self.retries += 1
         if (config.max_retries is not None
-            and (self.retries > config.max_retries)):
+                and (self.retries > config.max_retries)):
             log.warning('Abandoning reconnecting after %s attempts.' % (
                 self.retries))
             return

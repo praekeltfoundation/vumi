@@ -13,7 +13,7 @@ from vumi.message import TransportUserMessage
 from vumi.transports.tests.utils import TransportTestCase
 from vumi.transports.truteq.truteq import TruteqTransport
 from vumi.tests.utils import LogCatcher
-from vumi.tests.helpers import MessageHelper
+from vumi.transports.tests.helpers import TransportHelper
 
 
 # To reduce verbosity.
@@ -77,8 +77,9 @@ class TestTruteqTransport(TransportTestCase):
             'host': addr.host,
             'port': addr.port,
             }
-        self.transport = yield self.get_transport(self.config, start=True)
-        self.msg_helper = MessageHelper()
+        self.tx_helper = TransportHelper(self)
+        self.add_cleanup(self.tx_helper.cleanup)
+        self.transport = yield self.tx_helper.get_transport(self.config)
 
     @inlineCallbacks
     def tearDown(self):
@@ -97,7 +98,7 @@ class TestTruteqTransport(TransportTestCase):
     def _check_msg(self, from_addr="+12345", to_addr="*678#", content=None,
                    session_event=None, helper_metadata=None):
         default_hmd = {'truteq': {'genfields': {}}}
-        [msg] = yield self.wait_for_dispatched_messages(1)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assertEqual(msg['transport_name'], self.transport_name)
         self.assertEqual(msg['transport_type'], 'ussd')
         self.assertEqual(msg['transport_metadata'], {})
@@ -107,7 +108,7 @@ class TestTruteqTransport(TransportTestCase):
         self.assertEqual(msg['to_addr'], to_addr)
         self.assertEqual(msg['content'], content)
         self.assertEqual(msg['session_event'], session_event)
-        self.clear_dispatched_messages()
+        self.tx_helper.clear_dispatched_inbound()
 
     @inlineCallbacks
     def test_handle_inbound_ussd_new(self):
@@ -156,9 +157,8 @@ class TestTruteqTransport(TransportTestCase):
     @inlineCallbacks
     def _test_outbound_ussd(self, vumi_session_type, ssmi_session_type,
                             content="Test", encoding="utf-8"):
-        msg = self.msg_helper.make_outbound(
+        yield self.tx_helper.make_dispatch_outbound(
             content, to_addr=u"+1234", session_event=vumi_session_type)
-        yield self.dispatch(msg)
         ussd_call = yield self.server_factory.ussd_calls.get()
         data = content.encode(encoding) if content else ""
         self.assertFalse(
@@ -189,9 +189,8 @@ class TestTruteqTransport(TransportTestCase):
 
     @inlineCallbacks
     def _test_content_wrangling(self, submitted, expected):
-        msg = self.msg_helper.make_outbound(
+        yield self.tx_helper.make_dispatch_outbound(
             submitted, to_addr=u"+1234", session_event=SESSION_NONE)
-        yield self.dispatch(msg)
         # Grab what was sent to Truteq
         ussd_call = yield self.server_factory.ussd_calls.get()
         data = expected.encode("utf-8")

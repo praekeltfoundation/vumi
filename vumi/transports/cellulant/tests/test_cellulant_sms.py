@@ -9,7 +9,7 @@ from vumi.utils import http_request, http_request_full
 from vumi.tests.utils import MockHttpServer
 from vumi.transports.tests.utils import TransportTestCase
 from vumi.transports.cellulant import CellulantSmsTransport
-from vumi.tests.helpers import MessageHelper
+from vumi.transports.tests.helpers import TransportHelper
 
 
 class TestCellulantSmsTransport(TransportTestCase):
@@ -41,9 +41,10 @@ class TestCellulantSmsTransport(TransportTestCase):
             },
             'outbound_url': self.mock_cellulant_sms.url,
         }
-        self.transport = yield self.get_transport(self.config)
+        self.tx_helper = TransportHelper(self)
+        self.add_cleanup(self.tx_helper.cleanup)
+        self.transport = yield self.tx_helper.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url()
-        self.msg_helper = MessageHelper(transport_name=self.transport_name)
 
     @inlineCallbacks
     def tearDown(self):
@@ -81,7 +82,7 @@ class TestCellulantSmsTransport(TransportTestCase):
     def test_inbound(self):
         url = self.mkurl('hello')
         response = yield http_request(url, '', method='GET')
-        [msg] = self.get_dispatched_messages()
+        [msg] = self.tx_helper.get_dispatched_inbound()
         self.assertEqual(msg['transport_name'], self.transport_name)
         self.assertEqual(msg['to_addr'], "12345")
         self.assertEqual(msg['from_addr'], "2371234567")
@@ -91,8 +92,8 @@ class TestCellulantSmsTransport(TransportTestCase):
 
     @inlineCallbacks
     def test_outbound(self):
-        yield self.dispatch(self.msg_helper.make_outbound(
-            "hello world", to_addr="2371234567"))
+        yield self.tx_helper.make_dispatch_outbound(
+            "hello world", to_addr="2371234567")
         req = yield self.cellulant_sms_calls.get()
         self.assertEqual(req.path, '/')
         self.assertEqual(req.method, 'GET')
@@ -106,8 +107,8 @@ class TestCellulantSmsTransport(TransportTestCase):
 
     @inlineCallbacks
     def test_outbound_creds_selection(self):
-        yield self.dispatch(self.msg_helper.make_outbound(
-            "hello world", to_addr="2371234567", from_addr='2371234567'))
+        yield self.tx_helper.make_dispatch_outbound(
+            "hello world", to_addr="2371234567", from_addr='2371234567')
         req = yield self.cellulant_sms_calls.get()
         self.assertEqual(req.path, '/')
         self.assertEqual(req.method, 'GET')
@@ -119,8 +120,8 @@ class TestCellulantSmsTransport(TransportTestCase):
                 'message': ['hello world'],
                 }, req.args)
 
-        yield self.dispatch(self.msg_helper.make_outbound(
-            "hello world", to_addr="2371234567", from_addr='9292'))
+        yield self.tx_helper.make_dispatch_outbound(
+            "hello world", to_addr="2371234567", from_addr='9292')
         req = yield self.cellulant_sms_calls.get()
         self.assertEqual(req.path, '/')
         self.assertEqual(req.method, 'GET')
@@ -136,7 +137,7 @@ class TestCellulantSmsTransport(TransportTestCase):
     def test_handle_non_ascii_input(self):
         url = self.mkurl(u"öæł".encode("utf-8"))
         response = yield http_request(url, '', method='GET')
-        [msg] = self.get_dispatched_messages()
+        [msg] = self.tx_helper.get_dispatched_inbound()
         self.assertEqual(msg['transport_name'], self.transport_name)
         self.assertEqual(msg['to_addr'], "12345")
         self.assertEqual(msg['from_addr'], "2371234567")
@@ -165,7 +166,7 @@ class TestCellulantSmsTransport(TransportTestCase):
         url = self.mkurl('hello', channelID='a', keyword='b', CHANNELID='c',
                          serviceID='d', SERVICEID='e', unsub='f')
         response = yield http_request(url, '', method='GET')
-        [msg] = self.get_dispatched_messages()
+        [msg] = self.tx_helper.get_dispatched_inbound()
         self.assertEqual(msg['content'], "hello")
         self.assertEqual(json.loads(response),
                          {'message_id': msg['message_id']})
@@ -201,9 +202,10 @@ class TestAcksCellulantSmsTransport(TransportTestCase):
             'outbound_url': self.mock_cellulant_sms.url,
             'validation_mode': 'permissive',
         }
-        self.transport = yield self.get_transport(self.config)
+        self.tx_helper = TransportHelper(self)
+        self.add_cleanup(self.tx_helper.cleanup)
+        self.transport = yield self.tx_helper.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url()
-        self.msg_helper = MessageHelper(transport_name=self.transport_name)
 
     @inlineCallbacks
     def tearDown(self):
@@ -220,10 +222,10 @@ class TestAcksCellulantSmsTransport(TransportTestCase):
     @inlineCallbacks
     def mock_event(self, msg, nr_events):
         self.mock_response(msg)
-        yield self.dispatch(self.msg_helper.make_outbound(
-            "foo", to_addr='2371234567', message_id='id_%s' % (msg,)))
+        yield self.tx_helper.make_dispatch_outbound(
+            "foo", to_addr='2371234567', message_id='id_%s' % (msg,))
         yield self.cellulant_sms_calls.get()
-        events = yield self.wait_for_dispatched_events(nr_events)
+        events = yield self.tx_helper.wait_for_dispatched_events(nr_events)
         returnValue(events)
 
     @inlineCallbacks
@@ -303,7 +305,9 @@ class TestPermissiveCellulantSmsTransport(TransportTestCase):
             'outbound_url': self.mock_cellulant_sms.url,
             'validation_mode': 'permissive',
         }
-        self.transport = yield self.get_transport(self.config)
+        self.tx_helper = TransportHelper(self)
+        self.add_cleanup(self.tx_helper.cleanup)
+        self.transport = yield self.tx_helper.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url()
 
     def handle_request(self, request):
@@ -336,7 +340,7 @@ class TestPermissiveCellulantSmsTransport(TransportTestCase):
     def test_bad_parameter_in_permissive_mode(self):
         url = self.mkurl('hello', foo='bar')
         response = yield http_request_full(url, '', method='GET')
-        [msg] = self.get_dispatched_messages()
+        [msg] = self.tx_helper.get_dispatched_inbound()
         self.assertEqual(200, response.code)
         self.assertEqual(json.loads(response.delivered_body),
                          {'message_id': msg['message_id']})
@@ -354,7 +358,7 @@ class TestPermissiveCellulantSmsTransport(TransportTestCase):
         url = self.mkurl('hello', channelID='a', keyword='b', CHANNELID='c',
                          serviceID='d', SERVICEID='e', unsub='f')
         response = yield http_request(url, '', method='GET')
-        [msg] = self.get_dispatched_messages()
+        [msg] = self.tx_helper.get_dispatched_inbound()
         self.assertEqual(msg['content'], "hello")
         self.assertEqual(json.loads(response),
                          {'message_id': msg['message_id']})

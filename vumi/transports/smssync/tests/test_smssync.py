@@ -9,13 +9,12 @@ from urllib import urlencode
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet.task import Clock
 
-from vumi.message import TransportUserMessage
 from vumi.utils import http_request
 from vumi.transports.tests.utils import TransportTestCase
 from vumi.transports.smssync import SingleSmsSync, MultiSmsSync
 from vumi.transports.smssync.smssync import SmsSyncMsgInfo
 from vumi.transports.failures import PermanentFailure
-from vumi.tests.helpers import MessageHelper
+from vumi.transports.tests.helpers import TransportHelper
 
 
 class TestSingleSmsSync(TransportTestCase):
@@ -37,10 +36,11 @@ class TestSingleSmsSync(TransportTestCase):
             'reply_delay': self.reply_delay,
         }
         self.add_transport_config()
-        self.transport = yield self.get_transport(self.config)
+        self.tx_helper = TransportHelper(self)
+        self.add_cleanup(self.tx_helper.cleanup)
+        self.transport = yield self.tx_helper.get_transport(self.config)
         self.transport.callLater = self._dummy_call_later
         self.transport_url = self.transport.get_transport_url()
-        self.msg_helper = MessageHelper()
 
     def _dummy_call_later(self, *args, **kw):
         self.clock.callLater(*args, **kw)
@@ -105,7 +105,7 @@ class TestSingleSmsSync(TransportTestCase):
         self.assertEqual(response, {"payload": {"success": "true",
                                                 "messages": []}})
 
-        [msg] = self.get_dispatched_messages()
+        [msg] = self.tx_helper.get_dispatched_inbound()
         self.assertEqual(msg['transport_name'], self.transport_name)
         self.assertEqual(msg['to_addr'], "555")
         self.assertEqual(msg['from_addr'], "123")
@@ -120,7 +120,7 @@ class TestSingleSmsSync(TransportTestCase):
                                               timestamp=smssync_ms)
         self.assertEqual(response, {"payload": {"success": "true",
                                                 "messages": []}})
-        [msg] = self.get_dispatched_messages()
+        [msg] = self.tx_helper.get_dispatched_inbound()
         self.assertEqual(msg['timestamp'], now)
 
     @inlineCallbacks
@@ -129,10 +129,8 @@ class TestSingleSmsSync(TransportTestCase):
         now = datetime.datetime.utcnow().replace(second=0, microsecond=0)
         inbound_d = self.smssync_inbound(content=u'hællo', timestamp=now)
 
-        [msg] = yield self.wait_for_dispatched_messages(1)
-        msg = TransportUserMessage.from_json(msg.to_json())
-        reply = msg.reply(content=u'ræply')
-        yield self.dispatch(reply)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        reply = yield self.tx_helper.make_dispatch_reply(msg, u'ræply')
 
         self.clock.advance(self.reply_delay)
         response = yield inbound_d
@@ -147,7 +145,7 @@ class TestSingleSmsSync(TransportTestCase):
     def test_normalize_msisdn(self):
         yield self.smssync_inbound(content="hi", from_addr="0555-7171",
                                    to_addr="0555-7272")
-        [msg] = self.get_dispatched_messages()
+        [msg] = self.tx_helper.get_dispatched_inbound()
         self.assertEqual(msg['from_addr'], "+275557171")
         self.assertEqual(msg['to_addr'], "+275557272")
 
@@ -168,10 +166,10 @@ class TestSingleSmsSync(TransportTestCase):
 
     @inlineCallbacks
     def test_poll_outbound(self):
-        outbound_msg = self.msg_helper.make_outbound(u'hællo')
+        outbound_msg = self.tx_helper.make_outbound(u'hællo')
         msginfo = self.default_msginfo()
         self.transport.add_msginfo_metadata(outbound_msg.payload, msginfo)
-        yield self.dispatch(outbound_msg)
+        yield self.tx_helper.dispatch_outbound(outbound_msg)
         response = yield self.smssync_poll()
         self.assertEqual(response, {
             "payload": {
@@ -184,7 +182,7 @@ class TestSingleSmsSync(TransportTestCase):
                 ],
             },
         })
-        [event] = yield self.get_dispatched_events()
+        [event] = yield self.tx_helper.get_dispatched_events()
         self.assertEqual(event['event_type'], 'ack')
         self.assertEqual(event['user_message_id'], outbound_msg['message_id'])
 
@@ -194,9 +192,8 @@ class TestSingleSmsSync(TransportTestCase):
         # non-trivial because the transport metadata needs to be correct for
         # this to work).
         yield self.smssync_inbound(content=u'Hi')
-        [msg] = self.get_dispatched_messages()
-        msg = TransportUserMessage.from_json(msg.to_json())
-        yield self.dispatch(msg.reply(content='Hi back!'))
+        [msg] = self.tx_helper.get_dispatched_inbound()
+        yield self.tx_helper.make_dispatch_reply(msg, 'Hi back!')
         response = yield self.smssync_poll()
         self.assertEqual(response["payload"]["messages"], [{
             "to": msg['from_addr'],
@@ -220,11 +217,10 @@ class TestMultiSmsSync(TestSingleSmsSync):
 
     @inlineCallbacks
     def test_nack(self):
-        msg = self.msg_helper.make_outbound("hello world")
         # we intentionally skip adding the msg info to force the transport
         # to reply with a nack
-        yield self.dispatch(msg)
-        [nack] = yield self.wait_for_dispatched_events(1)
+        msg = yield self.tx_helper.make_dispatch_outbound("hello world")
+        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
         [twisted_failure] = self.flushLoggedErrors(PermanentFailure)
         self.assertEqual(nack['event_type'], 'nack')
         self.assertEqual(nack['user_message_id'], msg['message_id'])

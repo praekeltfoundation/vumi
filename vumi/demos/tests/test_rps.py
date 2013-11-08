@@ -3,7 +3,8 @@ from twisted.internet.defer import inlineCallbacks
 from vumi.application.tests.utils import ApplicationTestCase
 from vumi.message import TransportUserMessage
 from vumi.demos.rps import RockPaperScissorsGame, RockPaperScissorsWorker
-from vumi.tests.helpers import VumiTestCase, MessageHelper
+from vumi.application.tests.helpers import ApplicationHelper
+from vumi.tests.helpers import VumiTestCase
 
 
 class TestRockPaperScissorsGame(VumiTestCase):
@@ -65,11 +66,12 @@ class TestRockPaperScissorsWorker(ApplicationTestCase):
     @inlineCallbacks
     def setUp(self):
         super(TestRockPaperScissorsWorker, self).setUp()
-        self.worker = yield self.get_application({})
-        self.msg_helper = MessageHelper()
+        self.app_helper = ApplicationHelper(self)
+        self.add_cleanup(self.app_helper.cleanup)
+        self.worker = yield self.app_helper.get_application({})
 
-    def make_start_message(self, from_addr):
-        return self.msg_helper.make_inbound(
+    def dispatch_start_message(self, from_addr):
+        return self.app_helper.make_dispatch_inbound(
             None, from_addr=from_addr,
             session_event=TransportUserMessage.SESSION_NEW)
 
@@ -81,31 +83,31 @@ class TestRockPaperScissorsWorker(ApplicationTestCase):
         user1 = '+27831234567'
         user2 = '+27831234568'
 
-        yield self.dispatch(self.make_start_message(user1))
+        yield self.dispatch_start_message(user1)
         self.assertNotEquals(None, self.worker.open_game)
         game = self.worker.open_game
         self.assertEquals({user1: game}, self.worker.games)
 
-        yield self.dispatch(self.make_start_message(user2))
+        yield self.dispatch_start_message(user2)
         self.assertEquals(None, self.worker.open_game)
         self.assertEquals({user1: game, user2: game}, self.worker.games)
 
-        self.assertEquals(2, len(self.get_dispatched_messages()))
+        self.assertEquals(2, len(self.app_helper.get_dispatched_outbound()))
 
     @inlineCallbacks
     def test_moves(self):
         user1 = '+27831234567'
         user2 = '+27831234568'
 
-        yield self.dispatch(self.make_start_message(user1))
+        yield self.dispatch_start_message(user1)
         game = self.worker.open_game
-        yield self.dispatch(self.make_start_message(user2))
+        yield self.dispatch_start_message(user2)
 
-        self.assertEquals(2, len(self.get_dispatched_messages()))
-        yield self.dispatch(self.msg_helper.make_inbound('1', from_addr=user2))
-        self.assertEquals(2, len(self.get_dispatched_messages()))
-        yield self.dispatch(self.msg_helper.make_inbound('2', from_addr=user1))
-        self.assertEquals(4, len(self.get_dispatched_messages()))
+        self.assertEquals(2, len(self.app_helper.get_dispatched_outbound()))
+        yield self.app_helper.make_dispatch_inbound('1', from_addr=user2)
+        self.assertEquals(2, len(self.app_helper.get_dispatched_outbound()))
+        yield self.app_helper.make_dispatch_inbound('2', from_addr=user1)
+        self.assertEquals(4, len(self.app_helper.get_dispatched_outbound()))
         self.assertEquals((0, 1), game.scores)
 
     @inlineCallbacks
@@ -113,16 +115,16 @@ class TestRockPaperScissorsWorker(ApplicationTestCase):
         user1 = '+27831234567'
         user2 = '+27831234568'
 
-        yield self.dispatch(self.make_start_message(user1))
+        yield self.dispatch_start_message(user1)
         game = self.worker.open_game
-        yield self.dispatch(self.make_start_message(user2))
+        yield self.dispatch_start_message(user2)
 
         for user, content in [(user1, '1'), (user2, '2')] * 5:  # best-of 5
-            yield self.dispatch(self.msg_helper.make_inbound(
-                content, from_addr=user))
+            yield self.app_helper.make_dispatch_inbound(
+                content, from_addr=user)
 
         self.assertEqual((5, 0), game.scores)
-        [end1, end2] = self.get_dispatched_messages()[-2:]
+        [end1, end2] = self.app_helper.get_dispatched_outbound()[-2:]
         self.assertEqual("You won! :-)", end1["content"])
         self.assertEqual(user1, end1["to_addr"])
         self.assertEqual("You lost. :-(", end2["content"])

@@ -8,6 +8,7 @@ from vumi.transports.tests.utils import TransportTestCase
 from vumi.transports.airtel import AirtelUSSDTransport
 from vumi.message import TransportUserMessage
 from vumi.utils import http_request_full
+from vumi.transports.tests.helpers import TransportHelper
 
 
 class TestAirtelUSSDTransportTestCase(TransportTestCase):
@@ -20,6 +21,8 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
     @inlineCallbacks
     def setUp(self):
         yield super(TestAirtelUSSDTransportTestCase, self).setUp()
+        self.tx_helper = TransportHelper(self)
+        self.add_cleanup(self.tx_helper.cleanup)
         self.config = {
             'web_port': 0,
             'web_path': '/api/v1/airtel/ussd/',
@@ -27,7 +30,7 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
             'airtel_password': self.airtel_password,
             'validation_mode': 'permissive',
         }
-        self.transport = yield self.get_transport(self.config)
+        self.transport = yield self.tx_helper.get_transport(self.config)
         self.session_manager = self.transport.session_manager
         self.transport_url = self.transport.get_transport_url(
             self.config['web_path'])
@@ -77,7 +80,7 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
     def test_inbound_begin(self):
         # Second connect is the actual start of the session
         deferred = self.mk_ussd_request('121')
-        [msg] = yield self.wait_for_dispatched_messages(1)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assertEqual(msg['content'], '')
         self.assertEqual(msg['to_addr'], '*121#')
         self.assertEqual(msg['from_addr'], '27761234567'),
@@ -89,8 +92,7 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
             },
         })
 
-        reply = TransportUserMessage(**msg.payload).reply("ussd message")
-        self.dispatch(reply)
+        yield self.tx_helper.make_dispatch_reply(msg, "ussd message")
         response = yield deferred
         self.assertEqual(response.delivered_body, 'ussd message')
         self.assertEqual(response.headers.getRawHeaders('Freeflow'), ['FC'])
@@ -108,16 +110,15 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
         # The last submitted bit of content is the last value delimited by '*'
         deferred = self.mk_ussd_request('c')
 
-        [msg] = yield self.wait_for_dispatched_messages(1)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assertEqual(msg['content'], 'c')
         self.assertEqual(msg['to_addr'], '*167*7#')
         self.assertEqual(msg['from_addr'], '27761234567')
         self.assertEqual(msg['session_event'],
                          TransportUserMessage.SESSION_RESUME)
 
-        reply = TransportUserMessage(**msg.payload).reply("hello world",
-            continue_session=False)
-        self.dispatch(reply)
+        yield self.tx_helper.make_dispatch_reply(
+            msg, "hello world", continue_session=False)
         response = yield deferred
         self.assertEqual(response.delivered_body, 'hello world')
         self.assertEqual(response.headers.getRawHeaders('Freeflow'), ['FB'])
@@ -134,51 +135,44 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
     @inlineCallbacks
     def test_to_addr_handling(self):
         d1 = self.mk_ussd_request('167*7*1')
-        [msg1] = yield self.wait_for_dispatched_messages(1)
+        [msg1] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assertEqual(msg1['to_addr'], '*167*7*1#')
         self.assertEqual(msg1['content'], '')
         self.assertEqual(msg1['session_event'],
             TransportUserMessage.SESSION_NEW)
-        reply = TransportUserMessage(**msg1.payload).reply("hello world",
-            continue_session=True)
-        yield self.dispatch(reply)
+        yield self.tx_helper.make_dispatch_reply(msg1, "hello world")
         yield d1
 
         # follow up with the user submitting 'a'
         d2 = self.mk_ussd_request('a')
-        [msg1, msg2] = yield self.wait_for_dispatched_messages(2)
+        [msg1, msg2] = yield self.tx_helper.wait_for_dispatched_inbound(2)
         self.assertEqual(msg2['to_addr'], '*167*7*1#')
         self.assertEqual(msg2['content'], 'a')
         self.assertEqual(msg2['session_event'],
             TransportUserMessage.SESSION_RESUME)
-        reply = TransportUserMessage(**msg2.payload).reply("hello world",
-            continue_session=False)
-        self.dispatch(reply)
+        yield self.tx_helper.make_dispatch_reply(
+            msg2, "hello world", continue_session=False)
         yield d2
 
     @inlineCallbacks
     def test_hitting_url_twice_without_content(self):
         d1 = self.mk_ussd_request('167*7*3')
-        [msg1] = yield self.wait_for_dispatched_messages(1)
+        [msg1] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assertEqual(msg1['to_addr'], '*167*7*3#')
         self.assertEqual(msg1['content'], '')
         self.assertEqual(msg1['session_event'],
             TransportUserMessage.SESSION_NEW)
-        reply = TransportUserMessage(**msg1.payload).reply('Hello',
-            continue_session=True)
-        self.dispatch(reply)
+        yield self.tx_helper.make_dispatch_reply(msg1, 'Hello')
         yield d1
 
         # make the exact same request again
         d2 = self.mk_ussd_request('')
-        [msg1, msg2] = yield self.wait_for_dispatched_messages(2)
+        [msg1, msg2] = yield self.tx_helper.wait_for_dispatched_inbound(2)
         self.assertEqual(msg2['to_addr'], '*167*7*3#')
         self.assertEqual(msg2['content'], '')
         self.assertEqual(msg2['session_event'],
             TransportUserMessage.SESSION_RESUME)
-        reply = TransportUserMessage(**msg2.payload).reply('Hello',
-            continue_session=True)
-        self.dispatch(reply)
+        yield self.tx_helper.make_dispatch_reply(msg2, 'Hello')
         yield d2
 
     @inlineCallbacks
@@ -188,12 +182,10 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
         # we're submitting a bunch of *s
         deferred = self.mk_ussd_request('****')
 
-        [msg] = yield self.wait_for_dispatched_messages(1)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assertEqual(msg['content'], '****')
 
-        reply = TransportUserMessage(**msg.payload).reply('Hello',
-            continue_session=True)
-        self.dispatch(reply)
+        yield self.tx_helper.make_dispatch_reply(msg, 'Hello')
         yield deferred
 
     @inlineCallbacks
@@ -203,49 +195,42 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
         # we're submitting a bunch of *s
         deferred = self.mk_ussd_request('**')
 
-        [msg] = yield self.wait_for_dispatched_messages(1)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assertEqual(msg['content'], '**')
 
-        reply = TransportUserMessage(**msg.payload).reply('Hello',
-            continue_session=True)
-        self.dispatch(reply)
+        yield self.tx_helper.make_dispatch_reply(msg, 'Hello')
         yield deferred
 
     @inlineCallbacks
     def test_submitting_with_base_code_empty_ussd_params(self):
         d1 = self.mk_ussd_request('167')
-        [msg1] = yield self.wait_for_dispatched_messages(1)
+        [msg1] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assertEqual(msg1['to_addr'], '*167#')
         self.assertEqual(msg1['content'], '')
         self.assertEqual(msg1['session_event'],
             TransportUserMessage.SESSION_NEW)
-        reply = TransportUserMessage(**msg1.payload).reply('Hello',
-            continue_session=True)
-        self.dispatch(reply)
+        yield self.tx_helper.make_dispatch_reply(msg1, 'Hello')
         yield d1
 
         # ask for first menu
         d2 = self.mk_ussd_request('1')
-        [msg1, msg2] = yield self.wait_for_dispatched_messages(2)
+        [msg1, msg2] = yield self.tx_helper.wait_for_dispatched_inbound(2)
         self.assertEqual(msg2['to_addr'], '*167#')
         self.assertEqual(msg2['content'], '1')
         self.assertEqual(msg2['session_event'],
             TransportUserMessage.SESSION_RESUME)
-        reply = TransportUserMessage(**msg2.payload).reply('Hello',
-            continue_session=True)
-        self.dispatch(reply)
+        yield self.tx_helper.make_dispatch_reply(msg2, 'Hello')
         yield d2
 
         # ask for second menu
         d3 = self.mk_ussd_request('1')
-        [msg1, msg2, msg3] = yield self.wait_for_dispatched_messages(3)
+        [msg1, msg2, msg3] = (
+            yield self.tx_helper.wait_for_dispatched_inbound(3))
         self.assertEqual(msg3['to_addr'], '*167#')
         self.assertEqual(msg3['content'], '1')
         self.assertEqual(msg3['session_event'],
             TransportUserMessage.SESSION_RESUME)
-        reply = TransportUserMessage(**msg3.payload).reply('Hello',
-            continue_session=True)
-        self.dispatch(reply)
+        yield self.tx_helper.make_dispatch_reply(msg3, 'Hello')
         yield d3
 
     @inlineCallbacks
@@ -261,7 +246,7 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
         response = yield self.mk_cleanup_request(msisdn='27761234567')
         self.assertEqual(response.code, http.OK)
         self.assertEqual(response.delivered_body, '')
-        [msg] = yield self.wait_for_dispatched_messages(1)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assertEqual(msg['session_event'],
             TransportUserMessage.SESSION_CLOSE)
         self.assertEqual(msg['to_addr'], '*167*7#')
@@ -295,7 +280,7 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
             data='', method='GET')
         self.assertEqual(response.code, http.OK)
         self.assertEqual(response.delivered_body, '')
-        [msg] = yield self.wait_for_dispatched_messages(1)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assertEqual(msg['session_event'],
                          TransportUserMessage.SESSION_CLOSE)
         self.assertEqual(msg['to_addr'], '*167*7#')
@@ -336,7 +321,7 @@ class TestAirtelUSSDTransportTestCaseWithAuth(TestAirtelUSSDTransportTestCase):
             data='', method='GET')
         self.assertEqual(response.code, http.OK)
         self.assertEqual(response.delivered_body, '')
-        [msg] = yield self.wait_for_dispatched_messages(1)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assertEqual(msg['session_event'],
                          TransportUserMessage.SESSION_CLOSE)
         self.assertEqual(msg['to_addr'], '*167*7#')
@@ -347,6 +332,7 @@ class TestAirtelUSSDTransportTestCaseWithAuth(TestAirtelUSSDTransportTestCase):
                 'error': '523',
             }
         })
+
 
 class LoadBalancedAirtelUSSDTransportTestCase(TransportTestCase):
 
@@ -360,6 +346,8 @@ class LoadBalancedAirtelUSSDTransportTestCase(TransportTestCase):
             'web_path': '/api/v1/airtel/ussd/',
             'validation_mode': 'permissive',
         }
+        self.tx_helper = TransportHelper(self)
+        self.add_cleanup(self.tx_helper.cleanup)
 
     @inlineCallbacks
     def test_session_prefixes(self):
@@ -371,9 +359,10 @@ class LoadBalancedAirtelUSSDTransportTestCase(TransportTestCase):
         config2['transport_name'] = 'transport_2'
         config2['session_key_prefix'] = 'foo'
 
-        self.transport1 = yield self.get_transport(config1)
-        self.transport2 = yield self.get_transport(config2)
-        self.transport3 = yield self.get_transport(self.default_config)
+        self.transport1 = yield self.tx_helper.get_transport(config1)
+        self.transport2 = yield self.tx_helper.get_transport(config2)
+        self.transport3 = yield self.tx_helper.get_transport(
+            self.default_config)
 
         self.assertEqual(self.transport1.get_session_key_prefix(), 'foo')
         self.assertEqual(self.transport2.get_session_key_prefix(), 'foo')

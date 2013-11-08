@@ -1,6 +1,5 @@
 import base64
 import json
-from datetime import datetime
 
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet.error import ConnectionLost
@@ -11,9 +10,8 @@ from twisted.python.failure import Failure
 from vumi.tests.utils import MockHttpServer
 from vumi.transports.tests.utils import TransportTestCase
 from vumi.message import TransportUserMessage
-
 from vumi.transports.vumi_bridge import GoConversationTransport
-from vumi.tests.helpers import MessageHelper
+from vumi.transports.tests.helpers import TransportHelper
 
 
 class GoConversationTransportTestCase(TransportTestCase):
@@ -33,7 +31,9 @@ class GoConversationTransportTestCase(TransportTestCase):
             'access_token': 'access-token',
         })
         self.clock = Clock()
-        self.transport = yield self.get_transport(config)
+        self.tx_helper = TransportHelper(self)
+        self.add_cleanup(self.tx_helper.cleanup)
+        self.transport = yield self.tx_helper.get_transport(config)
         self.transport.clock = self.clock
         self._pending_reqs = []
         # when the transport fires up it starts two new connections,
@@ -50,7 +50,6 @@ class GoConversationTransportTestCase(TransportTestCase):
         # put some data on the wire to have connectionMade called
         self.message_req.write('')
         self.event_req.write('')
-        self.msg_helper = MessageHelper()
 
     @inlineCallbacks
     def tearDown(self):
@@ -92,28 +91,28 @@ class GoConversationTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_receiving_messages(self):
-        msg = self.msg_helper.make_inbound("inbound")
+        msg = self.tx_helper.make_inbound("inbound")
         self.message_req.write(msg.to_json().encode('utf-8') + '\n')
-        [received_msg] = yield self.wait_for_dispatched_messages(1)
+        [received_msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assertEqual(received_msg['message_id'], msg['message_id'])
 
     @inlineCallbacks
     def test_receiving_events(self):
         # prime the mapping
         yield self.transport.map_message_id('remote', 'local')
-        ack = self.msg_helper.make_ack(event_id='event-id')
+        ack = self.tx_helper.make_ack(event_id='event-id')
         ack['user_message_id'] = 'remote'
         self.event_req.write(ack.to_json().encode('utf-8') + '\n')
-        [received_ack] = yield self.wait_for_dispatched_events(1)
+        [received_ack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assertEqual(received_ack['event_id'], ack['event_id'])
         self.assertEqual(received_ack['user_message_id'], 'local')
         self.assertEqual(received_ack['sent_message_id'], 'remote')
 
     @inlineCallbacks
     def test_sending_messages(self):
-        msg = self.msg_helper.make_outbound(
+        msg = self.tx_helper.make_outbound(
             "outbound", session_event=TransportUserMessage.SESSION_CLOSE)
-        d = self.dispatch(msg)
+        d = self.tx_helper.dispatch_outbound(msg)
         req = yield self.get_next_request()
         received_msg = json.loads(req.content.read())
         self.assertEqual(received_msg, {
@@ -132,7 +131,7 @@ class GoConversationTransportTestCase(TransportTestCase):
         req.finish()
         yield d
 
-        [ack] = yield self.wait_for_dispatched_events(1)
+        [ack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assertEqual(ack['user_message_id'], msg['message_id'])
         self.assertEqual(ack['sent_message_id'], remote_id)
 
@@ -159,4 +158,3 @@ class GoConversationTransportTestCase(TransportTestCase):
         self.assertEqual(self.transport.delay, config.initial_delay)
         self.assertEqual(self.transport.retries, 0)
         self.assertFalse(self.transport.reconnect_call)
-

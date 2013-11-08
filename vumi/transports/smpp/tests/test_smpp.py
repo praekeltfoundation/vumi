@@ -17,7 +17,8 @@ from vumi.transports.smpp.clientserver.client import unpacked_pdu_opts
 from vumi.transports.smpp.clientserver.tests.utils import SmscTestServer
 from vumi.transports.tests.utils import TransportTestCase
 from vumi.tests.utils import LogCatcher
-from vumi.tests.helpers import VumiTestCase, MessageHelper
+from vumi.transports.tests.helpers import TransportHelper
+from vumi.tests.helpers import VumiTestCase
 
 
 class TestSmppTransportConfig(VumiTestCase):
@@ -79,14 +80,16 @@ class SmppTransportTestCase(TransportTestCase):
         })
 
         # hack a lot of transport setup
-        self.transport = yield self.get_transport(self.config, start=False)
+        self.tx_helper = TransportHelper(self)
+        self.add_cleanup(self.tx_helper.cleanup)
+        self.transport = yield self.tx_helper.get_transport(
+            self.config, start=False)
         self.transport.esme_client = None
         yield self.transport.startWorker()
 
         self._make_esme()
         self.transport.esme_client = self.esme
         self.transport.esme_connected(self.esme)
-        self.msg_helper = MessageHelper()
 
     def _make_esme(self):
         self.esme_callbacks = EsmeCallbacks(
@@ -110,8 +113,7 @@ class SmppTransportTestCase(TransportTestCase):
     @inlineCallbacks
     def test_message_persistence(self):
         # A simple test of set -> get -> delete for redis message persistence
-        message1 = self.msg_helper.make_outbound(
-            "hello world", message_id='12345abcde', to_addr="far-far-away")
+        message1 = self.tx_helper.make_outbound("hello world")
         original_json = message1.to_json()
         yield self.transport.r_set_message(message1)
         retrieved_json = yield self.transport.r_get_message_json(
@@ -146,20 +148,18 @@ class SmppTransportTestCase(TransportTestCase):
     @inlineCallbacks
     def test_out_of_order_responses(self):
         # Sequence numbers are hardcoded, assuming we start fresh from 0.
-        message1 = self.msg_helper.make_outbound("message 1", message_id='444')
+        yield self.tx_helper.make_dispatch_outbound("msg 1", message_id='444')
         response1 = SubmitSMResp(1, "3rd_party_id_1")
-        yield self.dispatch(message1)
 
-        message2 = self.msg_helper.make_outbound("message 2", message_id='445')
+        yield self.tx_helper.make_dispatch_outbound("msg 2", message_id='445')
         response2 = SubmitSMResp(2, "3rd_party_id_2")
-        yield self.dispatch(message2)
 
-        self.assert_sent_contents(["message 1", "message 2"])
+        self.assert_sent_contents(["msg 1", "msg 2"])
         # respond out of order - just to keep things interesting
         yield self.esme.handle_data(response2.get_bin())
         yield self.esme.handle_data(response1.get_bin())
 
-        [ack1, ack2] = self.get_dispatched_events()
+        [ack1, ack2] = self.tx_helper.get_dispatched_events()
         self.assertEqual(ack1['user_message_id'], '445')
         self.assertEqual(ack1['sent_message_id'], '3rd_party_id_2')
         self.assertEqual(ack2['user_message_id'], '444')
@@ -167,45 +167,42 @@ class SmppTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_failed_submit(self):
-        message = self.msg_helper.make_outbound("message", message_id='446')
-        response = SubmitSMResp(1, "3rd_party_id_3",
-                                command_status="ESME_RSUBMITFAIL")
-        yield self.dispatch(message)
+        message = yield self.tx_helper.make_dispatch_outbound(
+            "message", message_id='446')
+        response = SubmitSMResp(
+            1, "3rd_party_id_3", command_status="ESME_RSUBMITFAIL")
         yield self.esme.handle_data(response.get_bin())
 
         self.assert_sent_contents(["message"])
         # There should be a nack
-        [nack] = yield self.wait_for_dispatched_events(1)
+        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assertEqual(nack['user_message_id'], message['message_id'])
         self.assertEqual(nack['nack_reason'], 'ESME_RSUBMITFAIL')
 
-        comparison = self.mkmsg_fail(message.payload, 'ESME_RSUBMITFAIL')
-        [actual] = yield self.get_dispatched_failures()
-        self.assertEqual(actual, comparison)
+        [failure] = yield self.tx_helper.get_dispatched_failures()
+        self.assertEqual(failure['reason'], 'ESME_RSUBMITFAIL')
 
     @inlineCallbacks
     def test_failed_submit_with_no_reason(self):
-        message = self.msg_helper.make_outbound("message", message_id='446')
+        message = yield self.tx_helper.make_dispatch_outbound(
+            "message", message_id='446')
         # Equivalent of SubmitSMResp(1, "3rd_party_id_3", command_status='XXX')
         # but with a bad command_status (pdu_builder can't produce binary with
-        # command_statuses' it doesn't understand). Use
+        # command_statuses it doesn't understand). Use
         # smpp.pdu.unpack(response_bin) to get a PDU object:
         response_hex = ("0000001f80000004"
                         "0000ffff"  # unknown command status
                         "000000013372645f70617274795f69645f3300")
-        response_bin = binascii.a2b_hex(response_hex)
-        yield self.dispatch(message)
-        yield self.esme.handle_data(response_bin)
+        yield self.esme.handle_data(binascii.a2b_hex(response_hex))
 
         self.assert_sent_contents(["message"])
         # There should be a nack
-        [nack] = yield self.wait_for_dispatched_events(1)
+        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assertEqual(nack['user_message_id'], message['message_id'])
         self.assertEqual(nack['nack_reason'], 'Unspecified')
 
-        comparison = self.mkmsg_fail(message.payload, 'Unspecified')
-        [actual] = yield self.get_dispatched_failures()
-        self.assertEqual(actual, comparison)
+        [failure] = yield self.tx_helper.get_dispatched_failures()
+        self.assertEqual(failure['reason'], 'Unspecified')
 
     @inlineCallbacks
     def test_delivery_report_for_unknown_message(self):
@@ -230,15 +227,15 @@ class SmppTransportTestCase(TransportTestCase):
             self.assert_sent_contents(messages)
             self.assertEqual(acks, [
                 (m['user_message_id'], m['sent_message_id'])
-                for m in self.get_dispatched_events()])
-            self.assertEqual([], self.get_dispatched_failures())
+                for m in self.tx_helper.get_dispatched_events()])
+            self.assertEqual([], self.tx_helper.get_dispatched_failures())
 
         assert_throttled_status(False, [], [])
 
-        message = self.msg_helper.make_outbound("Heimlich", message_id="447")
+        yield self.tx_helper.make_dispatch_outbound(
+            "Heimlich", message_id="447")
         response = SubmitSMResp(1, "3rd_party_id_4",
                                 command_status="ESME_RTHROTTLED")
-        yield self.dispatch(message)
         yield self.esme.handle_data(response.get_bin())
 
         assert_throttled_status(True, ["Heimlich"], [])
@@ -246,8 +243,7 @@ class SmppTransportTestCase(TransportTestCase):
         clock.advance(0.05)
         yield self.transport.redis.exists('wait for redis')
         assert_throttled_status(True, ["Heimlich"], [])
-        message2 = self.msg_helper.make_outbound("Other", message_id="448")
-        yield self.dispatch(message2)
+        yield self.tx_helper.make_dispatch_outbound("Other", message_id="448")
         assert_throttled_status(True, ["Heimlich"], [])
         # Resent
         clock.advance(0.05)
@@ -255,7 +251,7 @@ class SmppTransportTestCase(TransportTestCase):
         assert_throttled_status(True, ["Heimlich", "Heimlich"], [])
         # And acknowledged by the other side
         yield self.esme.handle_data(SubmitSMResp(2, "3rd_party_5").get_bin())
-        yield self._amqp.kick_delivery()
+        yield self.tx_helper.kick_delivery()
         yield self.esme.handle_data(SubmitSMResp(3, "3rd_party_6").get_bin())
         assert_throttled_status(
             False, ["Heimlich", "Heimlich", "Other"],
@@ -271,15 +267,15 @@ class SmppTransportTestCase(TransportTestCase):
             self.assert_sent_contents(messages)
             self.assertEqual(acks, [
                 (m['user_message_id'], m['sent_message_id'])
-                for m in self.get_dispatched_events()])
-            self.assertEqual([], self.get_dispatched_failures())
+                for m in self.tx_helper.get_dispatched_events()])
+            self.assertEqual([], self.tx_helper.get_dispatched_failures())
 
         assert_throttled_status(False, [], [])
 
-        message = self.msg_helper.make_outbound("Heimlich", message_id="447")
+        yield self.tx_helper.make_dispatch_outbound(
+            "Heimlich", message_id="447")
         response = SubmitSMResp(1, "3rd_party_id_4",
                                 command_status="ESME_RMSGQFUL")
-        yield self.dispatch(message)
         yield self.esme.handle_data(response.get_bin())
 
         assert_throttled_status(True, ["Heimlich"], [])
@@ -287,8 +283,7 @@ class SmppTransportTestCase(TransportTestCase):
         clock.advance(0.05)
         yield self.transport.redis.exists('wait for redis')
         assert_throttled_status(True, ["Heimlich"], [])
-        message2 = self.msg_helper.make_outbound("Other", message_id="448")
-        yield self.dispatch(message2)
+        yield self.tx_helper.make_dispatch_outbound("Other", message_id="448")
         assert_throttled_status(True, ["Heimlich"], [])
         # Resent
         clock.advance(0.05)
@@ -296,7 +291,7 @@ class SmppTransportTestCase(TransportTestCase):
         assert_throttled_status(True, ["Heimlich", "Heimlich"], [])
         # And acknowledged by the other side
         yield self.esme.handle_data(SubmitSMResp(2, "3rd_party_5").get_bin())
-        yield self._amqp.kick_delivery()
+        yield self.tx_helper.kick_delivery()
         yield self.esme.handle_data(SubmitSMResp(3, "3rd_party_6").get_bin())
         assert_throttled_status(
             False, ["Heimlich", "Heimlich", "Other"],
@@ -391,7 +386,10 @@ class EsmeToSmscTestCase(TransportTestCase):
         client_config = server_config.copy()
         client_config['twisted_endpoint'] = 'tcp:host=%s:port=%s' % (
             host.host, host.port)
-        self.transport = yield self.get_transport(client_config, start=False)
+        self.tx_helper = TransportHelper(self)
+        self.add_cleanup(self.tx_helper.cleanup)
+        self.transport = yield self.tx_helper.get_transport(
+            client_config, start=False)
         self.expected_delivery_status = 'delivered'
 
     @inlineCallbacks
@@ -447,17 +445,7 @@ class EsmeToSmscTestCase(TransportTestCase):
         # Next the Client submits a SMS to the Server
         # and recieves an ack and a delivery_report
 
-        msg = TransportUserMessage(
-                to_addr="2772222222",
-                from_addr="2772000000",
-                content='hello world',
-                transport_name=self.transport_name,
-                transport_type='smpp',
-                transport_metadata={},
-                rkey='%s.outbound' % self.transport_name,
-                timestamp='0',
-                )
-        yield self.dispatch(msg)
+        msg = yield self.tx_helper.make_dispatch_outbound("hello world")
 
         for expected_message in expected_pdus_2:
             actual_message = yield pdu_queue.get()
@@ -466,7 +454,7 @@ class EsmeToSmscTestCase(TransportTestCase):
         # We need the user_message_id to check the ack
         user_message_id = msg["message_id"]
 
-        [ack, delv] = yield self.wait_for_dispatched_events(2)
+        [ack, delv] = yield self.tx_helper.wait_for_dispatched_events(2)
 
         self.assertEqual(ack['message_type'], 'event')
         self.assertEqual(ack['event_type'], 'ack')
@@ -492,13 +480,13 @@ class EsmeToSmscTestCase(TransportTestCase):
             actual_message = yield pdu_queue.get()
             self.assert_server_pdu(expected_message, actual_message)
 
-        [mess] = self.get_dispatched_messages()
+        [mess] = self.tx_helper.get_dispatched_inbound()
 
         self.assertEqual(mess['message_type'], 'user_message')
         self.assertEqual(mess['transport_name'], self.transport_name)
         self.assertEqual(mess['content'], "SMS from server")
 
-        dispatched_failures = self.get_dispatched_failures()
+        dispatched_failures = self.tx_helper.get_dispatched_failures()
         self.assertEqual(dispatched_failures, [])
 
     def send_out_of_order_multipart(self, smsc, to_addr, from_addr):
@@ -539,22 +527,12 @@ class EsmeToSmscTestCase(TransportTestCase):
         # Next the Client submits a SMS to the Server
         # and recieves an ack and a delivery_report
 
-        msg = TransportUserMessage(
-                to_addr="2772222222",
-                from_addr="2772000000",
-                content='hello world',
-                transport_name=self.transport_name,
-                transport_type='smpp',
-                transport_metadata={},
-                rkey='%s.outbound' % self.transport_name,
-                timestamp='0',
-                )
-        yield self.dispatch(msg)
+        msg = yield self.tx_helper.make_dispatch_outbound("hello world")
 
         # We need the user_message_id to check the ack
         user_message_id = msg["message_id"]
 
-        [ack, delv] = yield self.wait_for_dispatched_events(2)
+        [ack, delv] = yield self.tx_helper.wait_for_dispatched_events(2)
 
         self.assertEqual(ack['message_type'], 'event')
         self.assertEqual(ack['event_type'], 'ack')
@@ -581,7 +559,7 @@ class EsmeToSmscTestCase(TransportTestCase):
                                          to_addr="2772222222",
                                          from_addr="2772000000")
 
-        [mess, multipart] = yield self.wait_for_dispatched_messages(2)
+        [mess, multipart] = yield self.tx_helper.wait_for_dispatched_inbound(2)
 
         self.assertEqual(mess['message_type'], 'user_message')
         self.assertEqual(mess['transport_name'], self.transport_name)
@@ -592,7 +570,7 @@ class EsmeToSmscTestCase(TransportTestCase):
         self.assertEqual(multipart['transport_name'], self.transport_name)
         self.assertEqual(multipart['content'], "back at you")
 
-        dispatched_failures = self.get_dispatched_failures()
+        dispatched_failures = self.tx_helper.get_dispatched_failures()
         self.assertEqual(dispatched_failures, [])
 
     @inlineCallbacks
@@ -603,17 +581,7 @@ class EsmeToSmscTestCase(TransportTestCase):
         yield self.transport._block_till_bind
         yield self.clear_link_pdus()
 
-        msg = TransportUserMessage(
-                to_addr="2772222222",
-                from_addr="2772000000",
-                content=u'Zoë destroyer of Ascii!',
-                transport_name=self.transport_name,
-                transport_type='ussd',
-                transport_metadata={},
-                rkey='%s.outbound' % self.transport_name,
-                timestamp='0',
-                )
-        yield self.dispatch(msg)
+        yield self.tx_helper.make_dispatch_outbound(u'Zoë destroyer of Ascii!')
 
         pdu_queue = self.service.factory.smsc.pdu_queue
 
@@ -624,7 +592,7 @@ class EsmeToSmscTestCase(TransportTestCase):
             u'Zoë destroyer of Ascii!'.encode('latin-1'))
 
         # clear ack and nack
-        yield self.wait_for_dispatched_events(2)
+        yield self.tx_helper.wait_for_dispatched_events(2)
 
     @inlineCallbacks
     def test_submit_sm_data_coding(self):
@@ -634,17 +602,7 @@ class EsmeToSmscTestCase(TransportTestCase):
         yield self.transport._block_till_bind
         yield self.clear_link_pdus()
 
-        msg = TransportUserMessage(
-                to_addr="2772222222",
-                from_addr="2772000000",
-                content=u'hello world',
-                transport_name=self.transport_name,
-                transport_type='ussd',
-                transport_metadata={},
-                rkey='%s.outbound' % self.transport_name,
-                timestamp='0',
-                )
-        yield self.dispatch(msg)
+        yield self.tx_helper.make_dispatch_outbound("hello world")
 
         pdu_queue = self.service.factory.smsc.pdu_queue
 
@@ -653,7 +611,7 @@ class EsmeToSmscTestCase(TransportTestCase):
         self.assertEqual(sms['data_coding'], 8)
 
         # clear ack and nack
-        yield self.wait_for_dispatched_events(2)
+        yield self.tx_helper.wait_for_dispatched_events(2)
 
     @inlineCallbacks
     def test_submit_and_deliver_ussd_continue(self):
@@ -665,17 +623,8 @@ class EsmeToSmscTestCase(TransportTestCase):
         # Next the Client submits a USSD message to the Server
         # and recieves an ack
 
-        msg = TransportUserMessage(
-                to_addr="2772222222",
-                from_addr="2772000000",
-                content='hello world',
-                transport_name=self.transport_name,
-                transport_type='ussd',
-                transport_metadata={},
-                rkey='%s.outbound' % self.transport_name,
-                timestamp='0',
-                )
-        yield self.dispatch(msg)
+        msg = yield self.tx_helper.make_dispatch_outbound(
+            "hello world", transport_type="ussd")
 
         # First we make sure the Client binds to the Server
         # and enquire_link pdu's are exchanged as expected
@@ -691,7 +640,7 @@ class EsmeToSmscTestCase(TransportTestCase):
         # We need the user_message_id to check the ack
         user_message_id = msg.payload["message_id"]
 
-        [ack, delv] = yield self.wait_for_dispatched_events(2)
+        [ack, delv] = yield self.tx_helper.wait_for_dispatched_events(2)
 
         self.assertEqual(ack['message_type'], 'event')
         self.assertEqual(ack['event_type'], 'ack')
@@ -715,7 +664,7 @@ class EsmeToSmscTestCase(TransportTestCase):
         pdu._PDU__add_optional_parameter('its_session_info', '0000')
         self.service.factory.smsc.send_pdu(pdu)
 
-        [mess] = yield self.wait_for_dispatched_messages(1)
+        [mess] = yield self.tx_helper.wait_for_dispatched_inbound(1)
 
         self.assertEqual(mess['message_type'], 'user_message')
         self.assertEqual(mess['transport_name'], self.transport_name)
@@ -724,7 +673,7 @@ class EsmeToSmscTestCase(TransportTestCase):
         self.assertEqual(mess['session_event'],
                          TransportUserMessage.SESSION_RESUME)
 
-        self.assertEqual([], self.get_dispatched_failures())
+        self.assertEqual([], self.tx_helper.get_dispatched_failures())
 
     @inlineCallbacks
     def test_submit_and_deliver_ussd_close(self):
@@ -736,18 +685,9 @@ class EsmeToSmscTestCase(TransportTestCase):
         # Next the Client submits a USSD message to the Server
         # and recieves an ack
 
-        msg = TransportUserMessage(
-                to_addr="2772222222",
-                from_addr="2772000000",
-                content='hello world',
-                transport_name=self.transport_name,
-                transport_type='ussd',
-                transport_metadata={},
-                rkey='%s.outbound' % self.transport_name,
-                timestamp='0',
-                session_event=TransportUserMessage.SESSION_CLOSE,
-                )
-        yield self.dispatch(msg)
+        msg = yield self.tx_helper.make_dispatch_outbound(
+            "hello world", transport_type="ussd",
+            session_event=TransportUserMessage.SESSION_CLOSE)
 
         # First we make sure the Client binds to the Server
         # and enquire_link pdu's are exchanged as expected
@@ -763,7 +703,7 @@ class EsmeToSmscTestCase(TransportTestCase):
         # We need the user_message_id to check the ack
         user_message_id = msg.payload["message_id"]
 
-        [ack, delv] = yield self.wait_for_dispatched_events(2)
+        [ack, delv] = yield self.tx_helper.wait_for_dispatched_events(2)
 
         self.assertEqual(ack['message_type'], 'event')
         self.assertEqual(ack['event_type'], 'ack')
@@ -787,7 +727,7 @@ class EsmeToSmscTestCase(TransportTestCase):
         pdu._PDU__add_optional_parameter('its_session_info', '0001')
         self.service.factory.smsc.send_pdu(pdu)
 
-        [mess] = yield self.wait_for_dispatched_messages(1)
+        [mess] = yield self.tx_helper.wait_for_dispatched_inbound(1)
 
         self.assertEqual(mess['message_type'], 'user_message')
         self.assertEqual(mess['transport_name'], self.transport_name)
@@ -796,7 +736,7 @@ class EsmeToSmscTestCase(TransportTestCase):
         self.assertEqual(mess['session_event'],
                          TransportUserMessage.SESSION_CLOSE)
 
-        self.assertEqual([], self.get_dispatched_failures())
+        self.assertEqual([], self.tx_helper.get_dispatched_failures())
 
     @inlineCallbacks
     def test_submit_and_deliver_with_missing_id_lookup(self):
@@ -812,24 +752,12 @@ class EsmeToSmscTestCase(TransportTestCase):
         # Next the Client submits a SMS to the Server
         # and recieves an ack and a delivery_report
 
-        msg = TransportUserMessage(
-                to_addr="2772222222",
-                from_addr="2772000000",
-                content='hello world',
-                transport_name=self.transport_name,
-                transport_type='smpp',
-                transport_metadata={},
-                rkey='%s.outbound' % self.transport_name,
-                timestamp='0',
-                )
-
-        # We need the user_message_id to check the ack
-        user_message_id = msg["message_id"]
-
         lc = LogCatcher(message="Failed to retrieve message id")
         with lc:
-            yield self.dispatch(msg)
-            [ack] = yield self.wait_for_dispatched_events(1)
+            msg = yield self.tx_helper.make_dispatch_outbound("hello world")
+            # We need the user_message_id to check the ack
+            user_message_id = msg["message_id"]
+            [ack] = yield self.tx_helper.wait_for_dispatched_events(1)
 
         self.assertEqual(ack['message_type'], 'event')
         self.assertEqual(ack['event_type'], 'ack')
@@ -880,7 +808,10 @@ class EsmeToSmscTestCaseDeliveryYo(EsmeToSmscTestCase):
         yield self.service.startWorker()
         self.service.factory.protocol = SmscTestServer
         self.config['port'] = self.service.listening.getHost().port
-        self.transport = yield self.get_transport(self.config, start=False)
+        self.tx_helper = TransportHelper(self)
+        self.add_cleanup(self.tx_helper.cleanup)
+        self.transport = yield self.tx_helper.get_transport(
+            self.config, start=False)
         self.expected_delivery_status = 'delivered'  # stat:0 means delivered
 
 
@@ -907,7 +838,10 @@ class EsmeToSmscTestCaseDeliveryOverrideMapping(EsmeToSmscTestCase):
         yield self.service.startWorker()
         self.service.factory.protocol = SmscTestServer
         self.config['port'] = self.service.listening.getHost().port
-        self.transport = yield self.get_transport(self.config, start=False)
+        self.tx_helper = TransportHelper(self)
+        self.add_cleanup(self.tx_helper.cleanup)
+        self.transport = yield self.tx_helper.get_transport(
+            self.config, start=False)
         self.expected_delivery_status = 'delivered'  # stat:0 means delivered
 
 
@@ -941,7 +875,10 @@ class TxEsmeToSmscTestCase(TransportTestCase):
         yield self.service.startWorker()
         self.service.factory.protocol = SmscTestServer
         self.config['port'] = self.service.listening.getHost().port
-        self.transport = yield self.get_transport(self.config, start=False)
+        self.tx_helper = TransportHelper(self)
+        self.add_cleanup(self.tx_helper.cleanup)
+        self.transport = yield self.tx_helper.get_transport(
+            self.config, start=False)
         self.expected_delivery_status = 'delivered'
 
     @inlineCallbacks
@@ -964,29 +901,19 @@ class TxEsmeToSmscTestCase(TransportTestCase):
         # Next the Client submits a SMS to the Server
         # and recieves an ack
 
-        msg = TransportUserMessage(
-                to_addr="2772222222",
-                from_addr="2772000000",
-                content='hello world',
-                transport_name=self.transport_name,
-                transport_type='smpp',
-                transport_metadata={},
-                rkey='%s.outbound' % self.transport_name,
-                timestamp='0',
-                )
-        yield self.dispatch(msg)
+        msg = yield self.tx_helper.make_dispatch_outbound("hello world")
 
         # We need the user_message_id to check the ack
         user_message_id = msg["message_id"]
 
-        [ack] = yield self.wait_for_dispatched_events(1)
+        [ack] = yield self.tx_helper.wait_for_dispatched_events(1)
 
         self.assertEqual(ack['message_type'], 'event')
         self.assertEqual(ack['event_type'], 'ack')
         self.assertEqual(ack['transport_name'], self.transport_name)
         self.assertEqual(ack['user_message_id'], user_message_id)
 
-        dispatched_failures = self.get_dispatched_failures()
+        dispatched_failures = self.tx_helper.get_dispatched_failures()
         self.assertEqual(dispatched_failures, [])
 
 
@@ -1023,7 +950,10 @@ class RxEsmeToSmscTestCase(TransportTestCase):
         yield self.service.startWorker()
         self.service.factory.protocol = SmscTestServer
         self.config['port'] = self.service.listening.getHost().port
-        self.transport = yield self.get_transport(self.config, start=False)
+        self.tx_helper = TransportHelper(self)
+        self.add_cleanup(self.tx_helper.cleanup)
+        self.transport = yield self.tx_helper.get_transport(
+            self.config, start=False)
         self.expected_delivery_status = 'delivered'
 
     @inlineCallbacks
@@ -1050,13 +980,13 @@ class RxEsmeToSmscTestCase(TransportTestCase):
                         source_addr="2772000000")
         self.service.factory.smsc.send_pdu(pdu)
 
-        [mess] = yield self.wait_for_dispatched_messages(1)
+        [mess] = yield self.tx_helper.wait_for_dispatched_inbound(1)
 
         self.assertEqual(mess['message_type'], 'user_message')
         self.assertEqual(mess['transport_name'], self.transport_name)
         self.assertEqual(mess['content'], "SMS from server")
 
-        dispatched_failures = self.get_dispatched_failures()
+        dispatched_failures = self.tx_helper.get_dispatched_failures()
         self.assertEqual(dispatched_failures, [])
 
     @inlineCallbacks
@@ -1078,13 +1008,13 @@ class RxEsmeToSmscTestCase(TransportTestCase):
 
         self.service.factory.smsc.send_pdu(bad_pdu)
         self.service.factory.smsc.send_pdu(good_pdu)
-        [mess] = yield self.wait_for_dispatched_messages(1)
+        [mess] = yield self.tx_helper.wait_for_dispatched_inbound(1)
 
         self.assertEqual(mess['message_type'], 'user_message')
         self.assertEqual(mess['transport_name'], self.transport_name)
         self.assertEqual(mess['content'], "Next message")
 
-        dispatched_failures = self.get_dispatched_failures()
+        dispatched_failures = self.tx_helper.get_dispatched_failures()
         self.assertEqual(dispatched_failures, [])
 
         [failure] = self.flushLoggedErrors(UnicodeDecodeError)
@@ -1107,7 +1037,7 @@ class RxEsmeToSmscTestCase(TransportTestCase):
         pdu._PDU__add_optional_parameter('its_session_info', '0000')
         self.service.factory.smsc.send_pdu(pdu)
 
-        [mess] = yield self.wait_for_dispatched_messages(1)
+        [mess] = yield self.tx_helper.wait_for_dispatched_inbound(1)
 
         self.assertEqual(mess['transport_type'], 'ussd')
         self.assertEqual(mess['transport_name'], self.transport_name)
@@ -1115,5 +1045,5 @@ class RxEsmeToSmscTestCase(TransportTestCase):
         self.assertEqual(mess['session_event'],
                          TransportUserMessage.SESSION_NEW)
 
-        dispatched_failures = self.get_dispatched_failures()
+        dispatched_failures = self.tx_helper.get_dispatched_failures()
         self.assertEqual(dispatched_failures, [])

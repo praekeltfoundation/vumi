@@ -10,12 +10,11 @@ from vumi.utils import http_request, http_request_full
 from vumi.tests.utils import MockHttpServer
 from vumi.transports.tests.utils import TransportTestCase
 from vumi.transports.mediafonemc import MediafoneTransport
-from vumi.tests.helpers import MessageHelper
+from vumi.transports.tests.helpers import TransportHelper
 
 
 class TestMediafoneTransport(TransportTestCase):
 
-    transport_name = 'test_mediafone_transport'
     transport_class = MediafoneTransport
 
     @inlineCallbacks
@@ -34,11 +33,12 @@ class TestMediafoneTransport(TransportTestCase):
             'password': 'pass',
             'outbound_url': self.mock_mediafone.url,
         }
-        self.transport = yield self.get_transport(self.config)
+        self.tx_helper = TransportHelper(self)
+        self.add_cleanup(self.tx_helper.cleanup)
+        self.transport = yield self.tx_helper.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url()
         self.mediafonemc_response = ''
         self.mediafonemc_response_code = http.OK
-        self.msg_helper = MessageHelper(transport_name=self.transport_name)
 
     @inlineCallbacks
     def tearDown(self):
@@ -76,7 +76,7 @@ class TestMediafoneTransport(TransportTestCase):
     def test_inbound(self):
         url = self.mkurl('hello')
         response = yield http_request(url, '', method='GET')
-        [msg] = self.get_dispatched_messages()
+        [msg] = self.tx_helper.get_dispatched_inbound()
         self.assertEqual(msg['transport_name'], self.transport_name)
         self.assertEqual(msg['to_addr'], "12345")
         self.assertEqual(msg['from_addr'], "2371234567")
@@ -86,8 +86,8 @@ class TestMediafoneTransport(TransportTestCase):
 
     @inlineCallbacks
     def test_outbound(self):
-        yield self.dispatch(self.msg_helper.make_outbound(
-            "hello world", to_addr="2371234567"))
+        yield self.tx_helper.make_dispatch_outbound(
+            "hello world", to_addr="2371234567")
         req = yield self.mediafone_calls.get()
         self.assertEqual(req.path, '/')
         self.assertEqual(req.method, 'GET')
@@ -103,11 +103,11 @@ class TestMediafoneTransport(TransportTestCase):
         self.mediafonemc_response_code = http.NOT_FOUND
         self.mediafonemc_response = 'Not Found'
 
-        msg = self.msg_helper.make_outbound("outbound", to_addr="2371234567")
-        yield self.dispatch(msg)
+        msg = yield self.tx_helper.make_dispatch_outbound(
+            "outbound", to_addr="2371234567")
 
         yield self.mediafone_calls.get()
-        [nack] = yield self.wait_for_dispatched_events(1)
+        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assertEqual(nack['user_message_id'], msg['message_id'])
         self.assertEqual(nack['sent_message_id'], msg['message_id'])
         self.assertEqual(nack['nack_reason'],
@@ -117,7 +117,7 @@ class TestMediafoneTransport(TransportTestCase):
     def test_handle_non_ascii_input(self):
         url = self.mkurl(u"öæł".encode("utf-8"))
         response = yield http_request(url, '', method='GET')
-        [msg] = self.get_dispatched_messages()
+        [msg] = self.tx_helper.get_dispatched_inbound()
         self.assertEqual(msg['transport_name'], self.transport_name)
         self.assertEqual(msg['to_addr'], "12345")
         self.assertEqual(msg['from_addr'], "2371234567")
